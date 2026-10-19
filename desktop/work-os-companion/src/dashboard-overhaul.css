@@ -481,7 +481,55 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .agenda-strip-chip { border-color: transparent; border-radius: 9px; background: transparent; color: var(--dash-muted); }
 .agenda-strip-chip:hover { background: #f0f5ed; }
 .agenda-strip-chip.active { border-color: #c9dabb; background: #edf5e7; color: #315d22; box-shadow: inset 0 0 0 1px rgba(94, 157, 39, 0.08); }
-.agenda-strip-carry { min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
+.agenda-strip-carry { position: relative; min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
+
+/* The unfinished count rides on the carry pill as a compact badge in the same
+   amber as the notifications badge. It sits outside the button's box, in strip
+   space that is already empty, so expanding it never reflows the row and the
+   pill never moves. Collapsed it is the number alone; the phrase fills in on
+   hover over the strip or the pill, and on keyboard focus, so the count is
+   reachable without a pointer (it is also in the button's accessible name). */
+.carry-count {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--white, #fff);
+  border-radius: 999px;
+  background: #d99216;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.carry-count b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.carry-count small {
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  opacity: 0;
+  transition: max-width 200ms var(--ease-product, ease), opacity 140ms ease, margin-left 200ms var(--ease-product, ease);
+}
+/* Below 481px there is no strip space for the pill to grow into, so the badge
+   keeps the number and the phrase stays in the button's accessible name. */
+@media (min-width: 481px) {
+  .task-agenda-strip:hover .carry-count small,
+  .agenda-strip-carry:hover .carry-count small,
+  .agenda-strip-carry:focus-visible .carry-count small {
+    max-width: 140px;
+    margin-left: 5px;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carry-count small { transition: none; }
+}
 
 /* One toolbar row: the view chips, search, and the date/add controls. The
    controls sit in the space the chips leave; when the row runs out of width

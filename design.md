@@ -474,7 +474,16 @@ Due today, Due date) before anything is hidden; then the project name and
 description drop, so the title, completion control, and due signal always
 survive. The agenda strip stays one compact row down to 780px — the focus
 statement and the carry action — and becomes a two-line stack below. The counts
-it once restated live in the view chips and the per-group headers.
+live in the view chips.
+
+The carry action reports the unfinished count as a compact amber badge in the
+same language as the notifications badge: the number alone in a circle, growing
+into one pill that reads "N unfinished tasks" when the strip or the action is
+hovered or the action takes keyboard focus. The badge sits outside the action's
+box, so the expansion never reflows the row and never moves the action itself,
+and below 481px it keeps the number alone because there is no strip space to grow
+into. The count is also in the action's accessible name, so it is never
+hover-only information.
 
 Rows:
 

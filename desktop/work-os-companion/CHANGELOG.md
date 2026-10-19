@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.63 — 2026-10-19
+
+- The Review unfinished work button now shows a small amber count of open tasks from earlier days, and expands to the full phrase when you hover or focus it.
+
 ## 0.4.62 — 2026-10-17
 
 - My day is one clean list now: the OVERDUE, DUE TODAY, LATER and NO DATE bands above each block are gone, and every task still shows its own status.
