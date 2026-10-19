@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NextResponse } from "next/server";
-import { handleRecapSpeech, type RecapSpeechRouteDeps } from "../src/app/api/work-os/voice/recap/route.ts";
+import { handleRecapSpeech, type RecapSpeechRouteDeps } from "../src/lib/work-os-recap-route.ts";
 import type { WorkOsAccess } from "../src/lib/work-os-api.ts";
 
 const row = {
