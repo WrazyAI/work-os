@@ -131,4 +131,36 @@ describe("personal settings", () => {
     expect(downloading).toContain("Downloading");
     expect(downloading).not.toContain(">Download</button>");
   });
+
+  it("keeps every group's content in the content column", () => {
+    // The settings group is a two-column grid: the heading in the label
+    // column, the group's own content in the content column. A group that
+    // puts two children straight into that grid has its second child pushed
+    // into the label column and the third stranded in an empty one, so the
+    // content of every group is exactly one grid child.
+    const markup = render();
+    const groups = markup.split('<section class="settings-group"').slice(1);
+    expect(groups.length).toBeGreaterThan(4);
+    for (const group of groups) {
+      // The head and the content are the group's two children.
+      expect(group.startsWith(' aria-labelledby=')).toBe(true);
+      const body = group.slice(group.indexOf("</header>") + "</header>".length);
+      const head = group.slice(0, group.indexOf("</header>"));
+      // One content child, and it is a container rather than a bare note or
+      // a bare list, so nothing lands in the label column by accident.
+      expect(head).not.toContain("settings-group-note");
+      expect(body.startsWith('<div class="settings-voice">') || body.startsWith('<section class="settings-panel">')).toBe(true);
+    }
+  });
+
+  it("keeps the voice group's note and its four choices in one content column", () => {
+    // The note and the picker travel together: the note leads the choices,
+    // and neither can be split off into the label column on its own.
+    const markup = render();
+    const voice = markup.slice(markup.indexOf('aria-labelledby="settings-voice-title"'));
+    const group = voice.slice(0, voice.indexOf("</section>"));
+    expect(group).toContain('<div class="settings-voice">');
+    expect(group.indexOf("settings-group-note")).toBeLessThan(group.indexOf("voice-picker"));
+    expect(group.indexOf("settings-group-note")).toBeGreaterThan(group.indexOf("</header>"));
+  });
 });

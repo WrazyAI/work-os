@@ -324,7 +324,9 @@ export const GUIDE_SHOTS = {
 
   /*
    * Settings: the three steps are the three bands, so the camera walks down the
-   * page the way the reader would.
+   * page the way the reader would. Every band aims at the group it names by
+   * its own heading, never at a pixel offset — a group that moves, or a new
+   * group that arrives, must not leave the camera filming empty canvas.
    */
   settings: {
     1: {
@@ -350,16 +352,16 @@ export const GUIDE_SHOTS = {
       url: "/?offline",
       nav: "Settings",
       await: [".settings-lead"],
-      opening: { band: 336, scale: 1.2 },
+      opening: { band: '[aria-labelledby="settings-device-title"]', anchor: "top", scale: 1.2 },
       entry: { x: 930, y: 430 },
       hold: 400,
       tail: 300,
       shots: [
-        { cam: { band: 336, scale: 1.2, ms: 900 } },
-        { point: ".settings-switch:nth-of-type(1)", ms: 640 },
+        { cam: { band: '[aria-labelledby="settings-device-title"]', anchor: "top", scale: 1.2, ms: 900 } },
+        { point: '[aria-labelledby="settings-device-title"] .settings-switch', ms: 640 },
         { wait: 240 },
         // A real preference change on this device.
-        { click: ".settings-switch", ms: 620, after: 820 },
+        { click: '[aria-labelledby="settings-device-title"] .settings-switch', ms: 620, after: 820 },
         { wait: 300 },
       ],
     },
@@ -368,15 +370,15 @@ export const GUIDE_SHOTS = {
       url: "/?offline",
       nav: "Settings",
       await: [".settings-lead"],
-      opening: { band: 1010, scale: 1.16 },
+      opening: { band: '[aria-labelledby="settings-workday-title"]', anchor: "top", scale: 1.16 },
       entry: { x: 930, y: 430 },
       hold: 400,
       tail: 320,
       shots: [
-        { cam: { band: 674, scale: 1.16, ms: 1300 } },
+        { cam: { band: '[aria-labelledby="settings-workday-title"]', anchor: "center", scale: 1.16, ms: 1300 } },
         { wait: 240 },
-        { point: ".settings-group:nth-of-type(5)", ms: 620 },
-        { cam: { band: 1010, scale: 1.16, ms: 1300 } },
+        { point: '[aria-labelledby="settings-workday-title"]', ms: 620 },
+        { cam: { band: '[aria-labelledby="settings-sync-title"]', anchor: "top", scale: 1.16, ms: 1300 } },
         { wait: 420 },
       ],
     },

@@ -1324,6 +1324,31 @@ so instead of offering a draft that would describe an unfinished shift.
   that is already with a manager. A deletion is written to the audit log; the
   report's versions go with it.
 
+### 8.17 Settings groups: one label column, one content column
+
+Every group on the Settings page is a two-column pair: a narrow label column
+holding the group's name, and a wide content column holding everything that
+group offers. The group is one grid, and a group's content is **one** child of
+it — never two. A group that offered a note and its choices as separate
+children would have the second child pushed into the label column and the
+third stranded in an empty one, which is how Otto's voice came to list four
+voices in a 164px rail.
+
+- **The content column** holds the group's own controls in reading order: the
+  group's note first, then its choices. A group with several controls keeps
+  them in one wrapper, so they travel together and the label column stays a
+  label column. The employee and administration surfaces render the same
+  groups from the one shared component, so the rule holds on both.
+- **Choices that belong together** read as peers across the content column,
+  not stacked into a narrow rail: the four voices sit side by side, each one
+  surface carrying its sample control and its name, with the chosen voice
+  marked by the current-state outline the rest of the product uses for a
+  selected row and the other three left quiet.
+- **The guide films follow the page, not a pixel.** A guide that films this
+  page aims its camera at the group it names by that group's own heading, so
+  a group that moves, or a group that arrives, cannot leave the film showing
+  the wrong band or filming empty canvas.
+
 ## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
 

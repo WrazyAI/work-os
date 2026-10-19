@@ -1529,6 +1529,96 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .settings-group.danger .settings-group-head h3 { color: #8e3a2f; }
 
+/* Otto's voice: the group's own note leads its choices, and the four voices
+   read across the content column as one set of peers instead of a stack of
+   cards in the label rail. Every other group keeps the same two-part shape —
+   the heading in the label column, the choices in the content column — so the
+   group's own content is one grid child, never two that the two-column grid
+   would push apart. */
+.settings-voice {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+  /* The note's baseline sits on the group heading's baseline. */
+  padding-top: 17px;
+}
+.settings-group-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.voice-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* One surface per voice: the sample control and the choice live on the same
+   surface, so the employee sees four peers rather than a box inside a box. */
+.voice-picker-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.voice-picker-row:hover { border-color: #b8b9af; }
+.voice-picker-play {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.voice-picker-play:hover { border-color: #b8b9af; background: #fffef8; }
+.voice-picker-play:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 1px; }
+.voice-picker-choose {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.voice-picker-choose strong { font-size: 12.5px; font-weight: 700; }
+.voice-picker-choose small { color: var(--muted); font-size: 10.5px; line-height: 1.4; }
+.voice-picker-choose:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 3px; border-radius: 6px; }
+/* The chosen voice carries the current-state outline the rest of the product
+   uses for a selected row; the other three stay quiet. */
+.voice-picker-row.is-selected {
+  border-color: #9fc24d;
+  box-shadow: inset 0 0 0 1px rgba(159, 194, 77, 0.4);
+}
+/* Four voices read across the content column while the group keeps its
+   two-part shape; two when the content column narrows, one on a phone. The
+   breakpoints follow the page's own settings breakpoints (850px collapses
+   the group to one column, 640px stacks the rows). */
+@media (max-width: 1240px) {
+  .voice-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 850px) {
+  .settings-voice { padding-top: 0; }
+}
+@media (max-width: 640px) {
+  .voice-picker { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Profile settings use the same restrained hierarchy as the main Settings
    surface: one section heading, flat controls, subtle separators, and no
    card-within-card chrome. Modal-specific selectors intentionally outrank the

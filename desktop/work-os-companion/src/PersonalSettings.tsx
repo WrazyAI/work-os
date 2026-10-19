@@ -142,8 +142,10 @@ export function PersonalSettings({
 
       <section className="settings-group" aria-labelledby="settings-voice-title">
         <header className="settings-group-head"><h3 id="settings-voice-title">Otto's voice</h3></header>
-        <p className="settings-group-note">How recaps are read to you, on this device.</p>
-        <VoicePicker value={recapVoice} onChange={onRecapVoice} />
+        <div className="settings-voice">
+          <p className="settings-group-note">How recaps are read to you, on this device.</p>
+          <VoicePicker value={recapVoice} onChange={onRecapVoice} />
+        </div>
       </section>
 
       <section className="settings-group" aria-labelledby="settings-guides-title">
