@@ -383,9 +383,10 @@ body {
 /* The unfinished count rides on the carry pill as a compact badge in the same
    amber as the notifications badge. It sits outside the button's box, in strip
    space that is already empty, so expanding it never reflows the row and the
-   pill never moves. Collapsed it is the number alone; the phrase fills in on
-   hover over the strip or the pill, and on keyboard focus, so the count is
-   reachable without a pointer (it is also in the button's accessible name). */
+   pill never moves. Collapsed it is the number alone; the phrase fills in only
+   while the pill itself is hovered or focused, so reading the focus line never
+   expands a count the pointer is not on (the count is also in the button's
+   accessible name). */
 .carry-count {
   position: absolute;
   right: calc(100% + 8px);
@@ -416,7 +417,6 @@ body {
 /* Below 481px there is no strip space for the pill to grow into, so the badge
    keeps the number and the phrase stays in the button's accessible name. */
 @media (min-width: 481px) {
-  .task-agenda-strip:hover .carry-count small,
   .agenda-strip-carry:hover .carry-count small,
   .agenda-strip-carry:focus-visible .carry-count small {
     max-width: 140px;
@@ -629,7 +629,9 @@ body {
    while the line is hovered, at which point the start has scrolled out of view
    and the fade flips to the left edge. Leaving the line snaps it straight back,
    so the transition is declared only inside the hover rule. The travel distance
-   is measured in the component and handed over as --focus-shift. */
+   is measured in the component and handed over as --focus-shift; the duration
+   scales with it as --focus-pan-duration, so a long goal glides at the same
+   reading pace as a short one instead of sprinting. */
 .agenda-strip-focus-scroll {
   display: block;
   min-width: 0;
@@ -647,7 +649,7 @@ body {
 .agenda-strip-focus-scroll.is-overflowing .agenda-strip-text { transform: none; transition: none; }
 .agenda-strip-focus-scroll.is-overflowing:hover .agenda-strip-text {
   transform: translateX(var(--focus-shift, 0px));
-  transition: transform 2200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--focus-pan-duration, 2600ms) linear 120ms;
 }
 /* Reduced motion still reaches the end of the line; it just gets there without
    animating, so the clipped text is never unreachable. */

@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.70 — 2026-10-19
+
+- The unfinished count now waits for you to hover its own pill, and today's focus glides at a readable pace instead of racing.
+
 ## 0.4.69 — 2026-10-19
 
 - Today is a little tighter: the extra clock and footer lines are gone, the queue's actions line up, and the Focus panel collapses to its heading.

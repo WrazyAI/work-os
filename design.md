@@ -514,8 +514,8 @@ live in the view chips.
 
 The carry action reports the unfinished count as a compact amber badge in the
 same language as the notifications badge: the number alone in a circle, growing
-into one pill that reads "N unfinished tasks" when the strip or the action is
-hovered or the action takes keyboard focus. The badge sits outside the action's
+into one pill that reads "N unfinished tasks" when the action is hovered or
+takes keyboard focus — never when the pointer is merely over the focus line. The badge sits outside the action's
 box, so the expansion never reflows the row and never moves the action itself,
 and below 481px it keeps the number alone because there is no strip space to grow
 into. The count is also in the action's accessible name, so it is never
@@ -524,8 +524,10 @@ hover-only information.
 The focus statement keeps a fixed readable measure rather than filling the
 strip. A longer goal is clipped there and fades at the edge it clips at: the
 right edge at rest, the left edge once it has panned. Hovering the line pans it
-to its end and stops, and leaving returns it to the start at once — the
-transition lives only in the hover state, so the return never animates. Reduced
+to its end at a steady reading pace — the duration scales with the distance, so a
+long goal takes longer than a short one — and stops there. Leaving returns it to
+the start at once; the transition lives only in the hover state, so the return
+never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
 A surface without hover (below 481px) wraps the goal instead of clipping it,
 because a pointer-only reveal is not a reveal on a touch screen.

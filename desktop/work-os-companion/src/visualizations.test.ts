@@ -757,6 +757,17 @@ describe("operational visualizations", () => {
     expect(synthesisCard).not.toContain("Selects only from the verified facts below");
   });
 
+  it("scopes the carry badge to its pill and paces the focus pan", () => {
+    // The badge used to expand whenever the agenda strip was hovered, so reading
+    // the focus line revealed the unfinished count. The pill owns it now.
+    expect(dashboardStyles).not.toContain(".task-agenda-strip:hover .carry-count");
+    expect(dashboardStyles).toContain(".agenda-strip-carry:hover .carry-count small");
+    // The pan duration scales with the measured distance; the fixed 2.2s glide
+    // read as a sprint on a long goal.
+    expect(dashboardStyles).toContain("var(--focus-pan-duration");
+    expect(readText(resolve(root, "src/OverflowPan.tsx"))).toContain("--focus-pan-duration");
+  });
+
   it("keeps the active day to one attendance band, one focus line, and the queue", () => {
     // The 132px ring and the timeline bar encoded the same window percentage
     // twice, and the focus card restated the summary card's completed/open

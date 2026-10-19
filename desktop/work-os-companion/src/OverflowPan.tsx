@@ -24,11 +24,14 @@ export function OverflowPanText({ children, className }: { children: ReactNode; 
     observer.observe(el);
     return () => observer.disconnect();
   }, [children]);
+  // A steady ~45px/s glide, bounded so a short line is not sluggish and a very
+  // long one still finishes. The CSS owns the easing and the instant return.
+  const panMs = overflow > 0 ? Math.min(7000, Math.max(2600, Math.round((overflow / 45) * 1000))) : 0;
   return (
     <span
       ref={ref}
       className={`agenda-strip-focus-scroll${overflow > 0 ? " is-overflowing" : ""}${className ? ` ${className}` : ""}`}
-      style={{ "--focus-shift": `${-overflow}px` } as CSSProperties}
+      style={{ "--focus-shift": `${-overflow}px`, "--focus-pan-duration": `${panMs}ms` } as CSSProperties}
     >
       <span className="agenda-strip-text">{children}</span>
     </span>
