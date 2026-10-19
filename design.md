@@ -1113,7 +1113,9 @@ there is never more than one guide per page.
   sections in order and moves the real workspace. Every administration page is
   filmed like the employee pages — shot through the admin-shell fixtures boot —
   so all twelve guides play film; the modal, flags, and opt-out are shared,
-  never a second copy.
+  never a second copy, and the administration Settings page carries the same
+  Page guides group — the automatic-guides switch and `Replay the full tour`,
+  which walks the administration workspace.
 
 ### 8.12 Review notifications, the notifications panel, and suggestion review
 
@@ -1167,7 +1169,7 @@ Shortcut inventory:
 
 | Shortcut | Action | Scope |
 |---|---|---|
-| `Ctrl + ,` (`Cmd + ,` on macOS) | Open Settings | Either companion window while it is focused; never system-wide |
+| `Ctrl + ,` (`Cmd + ,` on macOS) | Open Settings — the administration workspace's own Settings section while that workspace is on screen | Either companion window while it is focused; never system-wide |
 | Hold `Ctrl + M` | Hold-to-talk | System-wide in the companion; in the browser while the page has focus (§8.8) |
 | `Escape` | Dismiss the topmost menu, drawer, sheet, or modal and return focus to its trigger | Every detached surface (§8.3) |
 
@@ -1896,9 +1898,15 @@ instead of the header.
   controls row and the local add-task flow: one flat list, never grouped or
   ordered by project, which stays a small per-task detail beside the task's
   priority and labels.
-  **Settings** groups system status, features, memberships, teams, provider
-  connections, field mappings, and blueprints into sections with one action
-  per decision area.
+  **Settings** leads with the account's own settings — the same groups the
+  employee Settings page carries (profile, this device, page guides, reading
+  & display, workday, sync & session, memory, suggestions, diagnostics, and
+  reset), rendered by the one shared component so the two surfaces can never
+  drift — then groups the workspace's system status, features, memberships,
+  teams, provider connections, field mappings, and blueprints into sections
+  with one action per decision area. The record-dependent groups appear only
+  for accounts with a personal workday; the device, display, guides, and
+  diagnostics half always shows.
 
 **EOD Review order and range.** The review queue reads newest submission
 first: a report's submission time is its clock, a row that was never submitted

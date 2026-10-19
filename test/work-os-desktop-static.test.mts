@@ -53,6 +53,7 @@ const boot = read("src/BootHandoff.tsx");
 const bootModel = read("src/bootSurface.ts");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
+const personalSettings = read("src/PersonalSettings.tsx");
 
 // First run is the one place the employee meets the product, so the companion
 // hosts it: the stage carries Otto and his spoken line, and the loading screen
@@ -196,7 +197,7 @@ assert.match(queries, /\/api\/work-os\/me\/insights\?range=/);
 assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 assert.match(app, /secureState\.clearAccount\(\)/);
-assert.match(app, /Account session/);
+assert.match(personalSettings, /Account session/);
 assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
 assert.match(app, /shiftPulse/);
@@ -246,7 +247,7 @@ assert.match(notificationsBell, /role="dialog"/);
 assert.match(notificationsBell, /eod-pill/);
 assert.match(notificationsBell, /remembers about you so far/);
 assert.match(notificationsBell, /notifications-mascot/);
-assert.match(app, /<SuggestionReview \/>/);
+assert.match(personalSettings, /<SuggestionReview \/>/);
 assert.match(app, /useMemoryQuery/);
 assert.match(app, /work-os:\/\/open-memory/);
 const queryLayer = read("src/workOsQueries.ts");
@@ -326,7 +327,7 @@ const sidebarNav = read("src/SidebarNav.tsx");
 assert.match(sidebarNav, /What's new/);
 assert.match(sidebarNav, /onWhatsNew/);
 assert.match(app, /onOpenWhatsNew=\{openChangelogFromAdmin\}/);
-assert.equal((app.match(/onOpenWhatsNew/g) ?? []).length, 1);
+assert.equal((app.match(/onOpenWhatsNew=\{openChangelogFromAdmin\}/g) ?? []).length, 1);
 assert.match(app, /work-os\.workspace-mode/);
 assert.match(app, /observedSeconds/);
 assert.doesNotMatch(app, /width: "(?:76|52|34)%"/);

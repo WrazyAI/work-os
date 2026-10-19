@@ -16,7 +16,7 @@ import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnno
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
@@ -72,15 +72,12 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
 import { isMacOS } from "./platform";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
-import { MemoryModal, MemorySummary } from "./MemorySettings";
-import { SuggestionReview } from "./SuggestionReview";
-import { SettingsSwitch } from "./SettingsSwitch";
+import { MemoryModal } from "./MemorySettings";
+import { PersonalSettings } from "./PersonalSettings";
 import PageGuide from "./PageGuide";
 import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
-import { Setting } from "./Setting";
-import { AppearanceSettings } from "./AppearanceSettings";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
@@ -1626,16 +1623,19 @@ export default function App() {
     return () => unlisten?.();
   }, [refresh]);
 
-  // Ctrl + , (Cmd + , on macOS) opens Settings from anywhere in the window.
+  // Ctrl + , (Cmd + , on macOS) opens Settings from anywhere in the window:
+  // the employee page, or the administration workspace's own Settings section
+  // while that workspace is the one on screen.
   useEffect(() => {
     const onSettingsHotkey = (event: KeyboardEvent) => {
       if (!isSettingsHotkey(event)) return;
       event.preventDefault();
-      setView("settings");
+      if (adminWorkspaceBranch) navigateAdmin("settings");
+      else setView("settings");
     };
     window.addEventListener("keydown", onSettingsHotkey);
     return () => window.removeEventListener("keydown", onSettingsHotkey);
-  }, []);
+  }, [adminWorkspaceBranch, navigateAdmin]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setPulseNow(new Date()), 30_000);
@@ -3735,6 +3735,56 @@ export default function App() {
     setWhatsNew({ version: installedVersionRaw ?? changelogHistory(CHANGELOG_RAW)[0]?.version ?? "0.0.0" });
   };
 
+  /* The account's own settings, rendered by one shared component on both
+   * surfaces: the employee Settings page and the administration shell's
+   * Settings section. Only the surface-specific openers differ — whose profile
+   * modal the row opens, whose tour the replay launches, and whether the
+   * changelog action goes through the administration menu's fallback-aware
+   * opener. */
+  const renderPersonalSettings = (surface: "employee" | "admin") => (
+    <PersonalSettings
+      hasPersonalRecord={!!visibleOnboarding}
+      tourScope={surface}
+      onReplayTour={() => setTourScope(surface)}
+      onOpenProfile={surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true)}
+      autoStart={autoStart}
+      onAutoStart={(value) => void toggleAutoStart(value)}
+      voiceHotkeyEnabled={voiceHotkeyEnabled}
+      voiceHotkeyError={voiceHotkeyError}
+      onVoiceHotkey={(value) => void toggleVoiceHotkey(value)}
+      autoCheckUpdates={autoCheckUpdates}
+      onAutoCheckUpdates={(value) => void toggleAutoCheckUpdates(value)}
+      updateDetail={updateRowCopy(updateRowSummary, installedVersion)}
+      updateStatus={updateFlow.status}
+      installedVersion={installedVersionRaw}
+      onCheckForUpdates={() => void checkForUpdates()}
+      onDownloadUpdate={() => void beginUpdateDownload()}
+      onInstallUpdate={() => void installDownloadedUpdate()}
+      onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}
+      pageGuideAutoOpen={pageGuideAutoOpen}
+      onPageGuideAutoOpen={setPageGuideAutoOpen}
+      textSize={textSize}
+      mascotSize={mascotSize}
+      onTextSize={(value) => void chooseTextSize(value)}
+      onMascotSize={(value) => void chooseMascotSize(value)}
+      queueCount={queueCount}
+      queueAttentionCount={queueAttentionCount}
+      sessionApiBase={visibleSession?.apiBase ?? ""}
+      onSignOut={() => void logout()}
+      memory={{
+        facts: memoryQuery.data?.facts ?? [],
+        loading: memoryQuery.isPending && !memoryQuery.data,
+        error: !memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null,
+      }}
+      onOpenMemory={() => setMemoryOpen(true)}
+      onRetryMemory={() => void memoryQuery.refetch()}
+      onOpenDebugger={() => void openDebugger()}
+      onExportDiagnostics={() => void exportAppDiagnostics()}
+      onResetOnboarding={() => void resetOnboarding()}
+      busy={busy}
+    />
+  );
+
   /* Only a branch that mounts an overlay may hold the lock or trap focus for
    * it: nothing counts on the boot screens, and within a workspace branch the
    * employee-only flags count only where they render (design §9). */
@@ -3838,6 +3888,7 @@ export default function App() {
         onNavigate={navigateAdmin}
         guideView={pageGuideView}
         onOpenGuide={openGuide}
+        personalSettings={renderPersonalSettings("admin")}
         profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}
         onOpenWhatsNew={openChangelogFromAdmin}
         onSwitchToEmployee={() => setWorkspaceMode("employee")}
@@ -4139,96 +4190,7 @@ export default function App() {
        {view === "settings" && (
         <main className="page settings-page">
            <p className="settings-lead">Personalize Work OS on this device and keep account, sync, and privacy controls in one calm place.</p>
-           <section className="settings-group" aria-labelledby="settings-profile-title">
-             <header className="settings-group-head"><h3 id="settings-profile-title">Profile settings</h3></header>
-            <section className="settings-panel">
-              <Setting title="Workspace settings" detail="Name, photo, workday preferences, notifications, privacy, and work profile."><button type="button" className="quiet-action" onClick={() => setProfileOpen(true)}>Open profile settings <ChevronRight size={14} /></button></Setting>
-            </section>
-           </section>
-           <section className="settings-group" aria-labelledby="settings-device-title">
-             <header className="settings-group-head"><h3 id="settings-device-title">This device</h3></header>
-            <section className="settings-panel">
-              <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
-              <Setting
-                title="Hold-to-talk (Ctrl + M)"
-                detail={voiceHotkeyError ?? "Hold Ctrl + M anywhere to record a voice update. Release to transcribe it."}
-              >
-                <SettingsSwitch label="Hold-to-talk (Ctrl + M)" checked={voiceHotkeyEnabled} onChange={(value) => void toggleVoiceHotkey(value)} />
-              </Setting>
-              <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}. We'll let you know when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
-              <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
-                <span className="setting-controls">
-                  {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
-                  {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
-                  {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
-                  {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
-                  {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
-                  {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
-                  {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
-                </span>
-              </Setting>
-            </section>
-           </section>
-
-           <section className="settings-group" aria-labelledby="settings-guides-title">
-             <header className="settings-group-head"><h3 id="settings-guides-title">Page guides</h3></header>
-             <section className="settings-panel">
-               <Setting title="Show page guides automatically" detail="Each page's guide opens once the first time you visit it. Open any page's guide again from the ? in the header.">
-                 <SettingsSwitch label="Show page guides automatically" checked={pageGuideAutoOpen} onChange={setPageGuideAutoOpen} />
-               </Setting>
-               <Setting title="Walk through the workspace again" detail="Plays every page's film in order — the same pass a new workspace starts with. It moves the app to each page as it goes, and leaves you on the last one.">
-                 <button type="button" className="quiet-action" onClick={() => setTourScope("employee")}>Replay the full tour</button>
-               </Setting>
-             </section>
-           </section>
-
-           <AppearanceSettings
-            textSize={textSize}
-            mascotSize={mascotSize}
-            onTextSize={(value) => void chooseTextSize(value)}
-            onMascotSize={(value) => void chooseMascotSize(value)}
-          />
-
-          <section className="settings-group" aria-labelledby="settings-workday-title">
-             <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3></header>
-            <section className="settings-panel">
-              <Setting title="Scheduled check-ins" detail="Check-ins appear with Otto when they're due. Snooze them from the floating companion."><span className="status-chip">Avatar</span></Setting>
-              <Setting title="Evidence" detail="Output evidence is temporarily hidden while the surface is being prepared."><span className="status-chip">Hidden</span></Setting>
-            </section>
-           </section>
-
-           <section className="settings-group" aria-labelledby="settings-sync-title">
-             <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3></header>
-            <section className="settings-panel">
-              <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className={`status-chip${queueAttentionCount ? " attention" : ""}`}>{queueAttentionCount ? "Needs attention" : "Ready"}</span></Setting>
-              <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
-            </section>
-           </section>
-
-           <MemorySummary
-             facts={memoryQuery.data?.facts ?? []}
-             loading={memoryQuery.isPending && !memoryQuery.data}
-             error={!memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null}
-             onOpen={() => setMemoryOpen(true)}
-             onRetry={() => void memoryQuery.refetch()}
-           />
-
-           <SuggestionReview />
-
-           <section className="settings-group" aria-labelledby="settings-diagnostics-title">
-             <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3></header>
-            <section className="settings-panel">
-              <Setting title="Scenario debugger" detail="Open the diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
-              <Setting title="Export diagnostics" detail="Create a redacted ZIP of recent events. Tokens and queue bodies stay out."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
-            </section>
-           </section>
-
-           <section className="settings-group danger" aria-labelledby="settings-danger-title">
-             <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3></header>
-            <section className="settings-panel">
-              <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
-            </section>
-          </section>
+           {renderPersonalSettings("employee")}
         </main>
       )}
       {dockVisible && <ProgressComposer

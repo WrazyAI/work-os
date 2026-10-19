@@ -68,9 +68,9 @@ export const GUIDE_FILMS: Record<GuideView, GuideFilm[]> = {
     { file: "guides/admin_evidence-3.mp4", poster: "guides/admin_evidence-3.jpg", chapter: "Open a flagged frame", seconds: 3.47 },
   ],
   admin_settings: [
-    { file: "guides/admin_settings-1.mp4", poster: "guides/admin_settings-1.jpg", chapter: "Features and status", seconds: 4.03 },
-    { file: "guides/admin_settings-2.mp4", poster: "guides/admin_settings-2.jpg", chapter: "Members and teams", seconds: 4.57 },
-    { file: "guides/admin_settings-3.mp4", poster: "guides/admin_settings-3.jpg", chapter: "Provider connections", seconds: 4.03 },
+    { file: "guides/admin_settings-1.mp4", poster: "guides/admin_settings-1.jpg", chapter: "Your settings first", seconds: 3.97 },
+    { file: "guides/admin_settings-2.mp4", poster: "guides/admin_settings-2.jpg", chapter: "Features and status", seconds: 4.03 },
+    { file: "guides/admin_settings-3.mp4", poster: "guides/admin_settings-3.jpg", chapter: "Members, teams, and connections", seconds: 5.87 },
   ],
 };
 

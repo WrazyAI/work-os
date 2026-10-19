@@ -2,7 +2,7 @@ import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
-import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData } from "../types";
+import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData, PendingSuggestion } from "../types";
 import type {
   AdminInsights,
   AdminInsightRange,
@@ -293,6 +293,10 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   const today = todayIso();
   const evidenceFrom = isoDaysAgo(13);
   const reportFrom = isoDaysAgo(30);
+  // The personal settings' suggestions read mounts inside the administration
+  // shell's Settings section; seed it empty so the fixture boot never shows a
+  // failure the harness has no backend to answer.
+  queryClient.setQueryData(workOsKeys.suggestions(), [] satisfies PendingSuggestion[]);
   if (state === "sparse") {
     seedSparseFixtures(queryClient, today);
     return;

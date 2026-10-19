@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowLeftRight, CircleHelp, RefreshCw } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import SidebarNav from "../SidebarNav";
@@ -25,7 +26,7 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose: stri
   review: { title: "EOD Review", purpose: "Submitted end-of-day reports and the decision they need." },
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
   evidence: { title: "Evidence", purpose: "Observations and output evidence, with their provenance." },
-  settings: { title: "Settings", purpose: "Workspace configuration, members, and provider connections." },
+  settings: { title: "Settings", purpose: "Your own settings, then the workspace's configuration, members, and provider connections." },
 };
 
 type Focus = AdminSectionFocus;
@@ -58,7 +59,7 @@ export type AdminProfileEntry = {
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide, personalSettings }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -77,6 +78,9 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The page guide for the current section, and how to reopen it. */
   guideView?: GuideView | null;
   onOpenGuide?: (view: GuideView) => void;
+  /** The signed-in account's own settings, rendered at the top of the
+   * administration Settings page (see SettingsPage). */
+  personalSettings?: ReactNode;
 }) {
   const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
   const meta = ADMIN_SECTIONS[section];
@@ -103,7 +107,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
               ? <EvidencePage key={focus.evidenceTab ?? "evidence"} initialTab={focus.evidenceTab} />
-              : <SettingsPage />;
+              : <SettingsPage personalSettings={personalSettings} />;
 
   return (
     <div className="workspace admin-workspace">

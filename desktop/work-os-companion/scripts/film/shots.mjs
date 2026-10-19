@@ -786,10 +786,29 @@ export const GUIDE_SHOTS = {
   },
 
   /*
-   * Settings: features and status, members and teams, connections.
+   * Settings: the account's own settings first, then features and status,
+   * then members, teams, and connections.
    */
   admin_settings: {
     1: {
+      chapter: "Your settings first",
+      url: ADMIN_BOOT,
+      nav: "Settings",
+      await: [".admin-personal-settings"],
+      before: adminBefore(),
+      opening: { fit: '.admin-personal-settings [aria-labelledby="settings-profile-title"]', anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { fit: '.admin-personal-settings [aria-labelledby="settings-profile-title"]', anchor: "top", ms: 1100 } },
+        { point: '.admin-personal-settings [aria-labelledby="settings-profile-title"] .quiet-action', ms: 640 },
+        { wait: 240 },
+        { cam: { fit: '.admin-personal-settings [aria-labelledby="settings-display-title"]', anchor: "top", ms: 1000 } },
+        { wait: 300 },
+      ],
+    },
+    2: {
       chapter: "Features and status",
       url: ADMIN_BOOT,
       nav: "Settings",
@@ -807,8 +826,8 @@ export const GUIDE_SHOTS = {
         { wait: 300 },
       ],
     },
-    2: {
-      chapter: "Members and teams",
+    3: {
+      chapter: "Members, teams, and connections",
       url: ADMIN_BOOT,
       nav: "Settings",
       await: [".admin-grid > .admin-card:nth-of-type(3)"],
@@ -818,30 +837,14 @@ export const GUIDE_SHOTS = {
       hold: 400,
       tail: 320,
       shots: [
+        // Members and teams, then the connections band that feeds the record.
         { cam: { fit: ".admin-grid > .admin-card:nth-of-type(3)", anchor: "top", ms: 1100 } },
         { point: ".admin-grid > .admin-card:nth-of-type(3) .admin-table tbody tr", ms: 640 },
-        { wait: 200 },
+        { wait: 220 },
         { cam: { fit: ".admin-grid > .admin-card:nth-of-type(4)", anchor: "top", ms: 1000 } },
         { point: ".admin-grid > .admin-card:nth-of-type(4) .admin-rows li", ms: 620 },
-        { wait: 300 },
-      ],
-    },
-    3: {
-      chapter: "Provider connections",
-      url: ADMIN_BOOT,
-      nav: "Settings",
-      await: [".admin-grid > .admin-card:nth-of-type(5)"],
-      before: adminBefore(),
-      opening: { fit: ".admin-grid > .admin-card:nth-of-type(5)", anchor: "top" },
-      entry: { x: 930, y: 470 },
-      hold: 400,
-      tail: 320,
-      shots: [
-        // Connections and field mappings share one band; blueprints follow it.
-        { cam: { fit: ".admin-grid > .admin-band", anchor: "top", ms: 1150 } },
-        { point: ".admin-grid > .admin-band .admin-rows li", ms: 640 },
         { wait: 200 },
-        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(5)", anchor: "top", ms: 1000 } },
+        { cam: { fit: ".admin-grid > .admin-band", anchor: "top", ms: 1050 } },
         { wait: 320 },
       ],
     },

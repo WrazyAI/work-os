@@ -59,6 +59,16 @@ describe("administration masthead profile entry", () => {
   });
 });
 
+describe("administration settings personal half", () => {
+  it("forwards the supplied personal settings into the settings section only", () => {
+    const personalSettings = createElement("p", null, "PERSONAL-HALF-MARKER");
+    const settings = render({ section: "settings", personalSettings });
+    expect(settings).toContain("PERSONAL-HALF-MARKER");
+    const overview = render({ section: "overview", personalSettings });
+    expect(overview).not.toContain("PERSONAL-HALF-MARKER");
+  });
+});
+
 describe("administration masthead refresh control", () => {
   const REFRESH_SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence"];
 

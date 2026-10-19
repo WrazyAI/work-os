@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, PlugZap, RefreshCw, ShieldCheck, Users, UsersRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
@@ -39,8 +39,13 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
 
 /** Workspace settings: what the organization has switched on, who belongs to
  * it, and the provider connections that feed the record. Credentials and
- * mapping writes stay in the web console; the desktop reads their state. */
-export default function SettingsPage() {
+ * mapping writes stay in the web console; the desktop reads their state.
+ *
+ * The page leads with the account's own settings when the shell supplies them
+ * — the same groups the employee Settings page carries, one shared component —
+ * so an administrator never has to switch workspaces to change their own
+ * device, appearance, or guide preferences. */
+export default function SettingsPage({ personalSettings }: { personalSettings?: ReactNode }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [memberEmail, setMemberEmail] = useState("");
@@ -137,6 +142,7 @@ export default function SettingsPage() {
 
   return (
     <div className="admin-grid">
+      {personalSettings ? <div className="admin-personal-settings">{personalSettings}</div> : null}
       {error ? <Notice tone="err">{(error as Error).message}</Notice> : null}
 
       <AdminCard

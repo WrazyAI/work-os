@@ -352,7 +352,8 @@ test("hold-to-talk is a stored, truthful per-device preference", () => {
   const app = read("desktop/work-os-companion/src/App.tsx");
   assert.match(app, /void applyVoiceHotkey\(settings\.voiceHotkey\)/);
   assert.match(app, /invoke<\{ enabled: boolean; error: string \| null \}>\("set_voice_hotkey", \{ enabled \}\)/);
-  assert.match(app, /Hold-to-talk \(Ctrl \+ M\)/);
+  const personalSettings = read("desktop/work-os-companion/src/PersonalSettings.tsx");
+  assert.match(personalSettings, /Hold-to-talk \(Ctrl \+ M\)/);
   /* A refused registration reports the real state instead of toggling anyway. */
   assert.match(app, /if \(applied !== enabled\) return;/);
 });

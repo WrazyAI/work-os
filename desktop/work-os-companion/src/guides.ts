@@ -13,7 +13,6 @@ import {
   Gauge,
   Images,
   Layers,
-  Link2,
   ListChecks,
   ListTodo,
   MessageSquareText,
@@ -287,22 +286,22 @@ export const PAGE_GUIDES: Record<GuideView, GuideDefinition> = {
   },
   admin_settings: {
     title: "How Settings works",
-    promise: "Features, members, teams, and connections, one decision area at a time.",
+    promise: "Your own settings first, then the workspace's features, members, and connections.",
     steps: [
+      {
+        icon: UserRound,
+        title: "Your settings first",
+        body: "Profile, this device, appearance, and page guides sit at the top of Settings, before the workspace's own.",
+      },
       {
         icon: SlidersHorizontal,
         title: "Features and status",
-        body: "System status and feature switches live at the top of the workspace settings.",
+        body: "System status and feature switches sit in the workspace settings, below your own.",
       },
       {
         icon: Users,
-        title: "Members and teams",
-        body: "Memberships, roles, and teams group people for the record and assignments.",
-      },
-      {
-        icon: Link2,
-        title: "Provider connections",
-        body: "Connections, field mappings, and blueprints decide what flows into the workspace.",
+        title: "Members, teams, and connections",
+        body: "Memberships, roles, teams, and the provider connections that feed the record.",
       },
     ],
   },

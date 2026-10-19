@@ -30,6 +30,7 @@ const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
+const personalSettings = readText(resolve(root, "src/PersonalSettings.tsx"));
 const memoryStyles = readText(resolve(root, "src/workspace-redesign.css"));
 const listShift = readText(resolve(root, "src/listShift.ts"));
 
@@ -433,23 +434,28 @@ describe("operational visualizations", () => {
     expect(app).toContain('className="page settings-page"');
     expect(app).toContain('className="settings-lead"');
     expect(app).not.toContain("Your companion, your boundaries.");
-    expect(app).toContain('className="settings-group"');
-    expect(app).toContain('className="settings-group danger"');
+    // The groups themselves live in the shared personal-settings component,
+    // rendered by both the employee page and the administration shell.
+    expect(personalSettings).toContain('className="settings-group"');
+    expect(personalSettings).toContain('className="settings-group danger"');
     // Four switches: start with Windows, automatic update checks, the
     // hold-to-talk shortcut, and automatic page guides. Each one is a real
     // registration, not a stored wish, so none of them can be a bare checkbox.
-    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(4);
-    expect(app).toContain('title="Hold-to-talk (Ctrl + M)"');
-    expect(app).toContain('title="Show page guides automatically"');
-    expect(app).toContain('from "./SettingsSwitch"');
+    expect((personalSettings.match(/<SettingsSwitch/g) ?? []).length).toBe(4);
+    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(0);
+    expect(personalSettings).toContain('title="Hold-to-talk (Ctrl + M)"');
+    expect(personalSettings).toContain('title="Show page guides automatically"');
+    expect(personalSettings).toContain('from "./SettingsSwitch"');
     expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
     const settingSource = readFileSync(resolve(root, "src/Setting.tsx"), "utf8");
     expect(settingSource).toContain('className="setting-copy"');
     expect(settingSource).toContain('className="setting-action"');
-    expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
-    expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
-    expect(app).not.toContain('<input type="checkbox" checked={voiceHotkeyEnabled}');
-    expect(app).toContain('className="status-chip"');
+    for (const source of [app, personalSettings]) {
+      expect(source).not.toContain('<input type="checkbox" checked={autoStart}');
+      expect(source).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
+      expect(source).not.toContain('<input type="checkbox" checked={voiceHotkeyEnabled}');
+    }
+    expect(personalSettings).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-page");
     expect(styles).toContain(".settings-lead");
@@ -461,17 +467,17 @@ describe("operational visualizations", () => {
     expect(styles).toContain(".setting-copy");
     expect(styles).toContain(".setting-action");
     expect(styles).toContain(".setting-controls");
-    const controlStart = app.indexOf('className="setting-controls"');
-    const updateRow = app.slice(controlStart, app.indexOf("</Setting>", controlStart));
-    expect(updateRow).toContain("checkForUpdates()");
-    expect(updateRow).toContain("setWhatsNew(");
+    const controlStart = personalSettings.indexOf('className="setting-controls"');
+    const updateRow = personalSettings.slice(controlStart, personalSettings.indexOf("</Setting>", controlStart));
+    expect(updateRow).toContain("onCheckForUpdates");
+    expect(updateRow).toContain("onOpenWhatsNew(installedVersion)");
     expect(styles).toContain(".settings-switch-track");
     expect(styles).toContain(".status-chip.attention");
     expect(styles).toContain(".settings-group.danger");
     expect(styles).not.toContain(".settings-panel .status-dot");
-    const memoryIndex = app.indexOf("<MemorySummary");
-    const suggestionsIndex = app.indexOf("<SuggestionReview />");
-    const diagnosticsIndex = app.indexOf('aria-labelledby="settings-diagnostics-title"');
+    const memoryIndex = personalSettings.indexOf("<MemorySummary");
+    const suggestionsIndex = personalSettings.indexOf("<SuggestionReview />");
+    const diagnosticsIndex = personalSettings.indexOf('aria-labelledby="settings-diagnostics-title"');
     expect(memoryIndex).toBeGreaterThan(-1);
     expect(suggestionsIndex).toBeGreaterThan(memoryIndex);
     expect(suggestionsIndex).toBeLessThan(diagnosticsIndex);
@@ -681,7 +687,7 @@ describe("operational visualizations", () => {
     expect(sidebar).toContain("{onWhatsNew ? (");
     expect(adminWorkspace).toContain("onWhatsNew={onOpenWhatsNew}");
     expect(app).toContain("onOpenWhatsNew={openChangelogFromAdmin}");
-    expect((app.match(/onOpenWhatsNew/g) ?? []).length).toBe(1);
+    expect((app.match(/onOpenWhatsNew=\{openChangelogFromAdmin\}/g) ?? []).length).toBe(1);
     // The menu names the running build when the desktop reports one; offline
     // and in the browser preview it opens the newest logged release instead of
     // an empty modal.
@@ -690,6 +696,38 @@ describe("operational visualizations", () => {
     // owns the layer above the receipt stack while open, so it could otherwise
     // float above the modal scrim.
     expect((app.match(/setNotificationsOpen\(false\);\n    set(?:ProfileOpen\(true\)|WhatsNew\()/g) ?? []).length).toBe(2);
+  });
+
+  it("leads the administration settings with the account's own settings", () => {
+    // One shared component renders the personal groups on both surfaces, so
+    // they can never drift: the employee Settings page and the administration
+    // shell's Settings section mount the same component shape.
+    expect(personalSettings).toContain("export function PersonalSettings");
+    expect(app).toContain('import { PersonalSettings } from "./PersonalSettings"');
+    expect(app).toContain('const renderPersonalSettings = (surface: "employee" | "admin")');
+    expect(app).toContain('renderPersonalSettings("employee")');
+    expect(app).toContain('personalSettings={renderPersonalSettings("admin")}');
+    expect(adminWorkspace).toContain("personalSettings?: ReactNode");
+    expect(adminWorkspace).toContain("<SettingsPage personalSettings={personalSettings} />");
+    // The tour replay follows the surface it was rendered on.
+    expect(app).toContain("onReplayTour={() => setTourScope(surface)}");
+    // The profile row and the changelog action use the administration openers
+    // while that surface is on screen.
+    expect(app).toContain('onOpenProfile={surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true)}');
+    expect(app).toContain('onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}');
+  });
+
+  it("opens the administration Settings from the settings shortcut there", () => {
+    // Ctrl+, opens Settings of whichever workspace is on screen: the employee
+    // page, or the administration section.
+    const start = app.indexOf("const onSettingsHotkey");
+    const end = app.indexOf('window.addEventListener("keydown", onSettingsHotkey)', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const handler = app.slice(start, end);
+    expect(handler).toContain("adminWorkspaceBranch");
+    expect(handler).toContain('navigateAdmin("settings")');
+    expect(handler).toContain('setView("settings")');
   });
 
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {
