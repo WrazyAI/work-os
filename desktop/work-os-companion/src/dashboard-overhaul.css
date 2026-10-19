@@ -630,8 +630,10 @@ body {
    and the fade flips to the left edge. Leaving the line snaps it straight back,
    so the transition is declared only inside the hover rule. The travel distance
    is measured in the component and handed over as --focus-shift; the duration
-   scales with it as --focus-pan-duration, so a long line glides at the same
-   reading pace as a short one instead of sprinting.
+   is derived from it at one constant rate (PAN_PX_PER_SECOND in
+   OverflowPan.tsx), so a long line glides at the same pace as a short one. The
+   fallback is the component's 7s ceiling, not a second rate: every clipped line
+   gets its measured duration inline.
 
    The same line serves the focus statements and the chat task titles. A caller
    can mark the row with data-pan-row when the whole row should be the hover and
@@ -658,7 +660,7 @@ body {
 [data-pan-row]:hover .overflow-pan.is-overflowing .overflow-pan-line,
 [data-pan-row]:focus-within .overflow-pan.is-overflowing .overflow-pan-line {
   transform: translateX(var(--focus-shift, 0px));
-  transition: transform var(--focus-pan-duration, 2600ms) linear 120ms;
+  transition: transform var(--focus-pan-duration, 7000ms) linear 120ms;
 }
 /* Reduced motion still reaches the end of the line; it just gets there without
    animating, so the clipped text is never unreachable. */

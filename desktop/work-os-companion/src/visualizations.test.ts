@@ -757,15 +757,41 @@ describe("operational visualizations", () => {
     expect(synthesisCard).not.toContain("Selects only from the verified facts below");
   });
 
-  it("scopes the carry badge to its pill and paces the focus pan", () => {
+  it("scopes the carry badge to its pill and paces the focus pan", async () => {
     // The badge used to expand whenever the agenda strip was hovered, so reading
     // the focus line revealed the unfinished count. The pill owns it now.
     expect(dashboardStyles).not.toContain(".task-agenda-strip:hover .carry-count");
     expect(dashboardStyles).toContain(".agenda-strip-carry:hover .carry-count small");
-    // The pan duration scales with the measured distance; the fixed 2.2s glide
-    // read as a sprint on a long goal.
+    // The pan runs at one constant rate for every clipped length. The retired
+    // 2.6s floor made short lines crawl and the 7s cap made long ones dash;
+    // 100px/s reveals 20px in 200ms, 100px in 1s, and the 496px measured
+    // ordinary maximum in 4.96s. The only bound is the old 7s ceiling, past
+    // the measured ordinary range.
+    const { panDurationMs, PAN_PX_PER_SECOND, PAN_MAX_MS, PAN_MAX_OVERFLOW_PX } = await import("./OverflowPan");
+    expect(PAN_PX_PER_SECOND).toBe(100);
+    expect(panDurationMs(0)).toBe(0);
+    expect(panDurationMs(20)).toBe(200);
+    expect(panDurationMs(20)).toBeLessThan(500);
+    // Same rate, not a floor or a cap, across the ordinary range.
+    for (const overflow of [20, 117, 315, 496, PAN_MAX_OVERFLOW_PX - 1]) {
+      expect(panDurationMs(overflow) / overflow).toBeCloseTo(10, 5);
+    }
+    const oldDurationMs = (overflow: number) => Math.min(7000, Math.max(2600, Math.round((overflow / 45) * 1000)));
+    for (const overflow of [1, 20, 40, 80, 117, 150, 315, 400, 496, 700, 800, 1200, 2000, 5000]) {
+      expect(panDurationMs(overflow)).toBeLessThanOrEqual(oldDurationMs(overflow));
+    }
+    // The residual bound only engages past the measured ordinary range and
+    // never runs longer than the old 7s ceiling.
+    expect(PAN_MAX_OVERFLOW_PX).toBe(700);
+    expect(panDurationMs(496)).toBe(4960);
+    expect(panDurationMs(701)).toBe(PAN_MAX_MS);
+    expect(panDurationMs(2581)).toBe(PAN_MAX_MS);
+    // The CSS keeps its linear easing and 120ms delay, and its fallback is the
+    // component's ceiling rather than the retired 2.6s floor.
+    expect(dashboardStyles).toContain("var(--focus-pan-duration, 7000ms) linear 120ms");
     expect(dashboardStyles).toContain("var(--focus-pan-duration");
     expect(readText(resolve(root, "src/OverflowPan.tsx"))).toContain("--focus-pan-duration");
+    expect(readText(resolve(root, "src/OverflowPan.tsx"))).not.toContain("Math.max(2600");
   });
 
   it("keeps the active day to one attendance band, one focus line, and the queue", () => {
