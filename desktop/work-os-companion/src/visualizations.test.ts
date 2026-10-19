@@ -16,6 +16,7 @@ const taskSurfaces = readText(resolve(root, "src/taskSurfaces.tsx"));
 const styles = readText(resolve(root, "src/styles.css"));
 const workspaceStyles = readText(resolve(root, "src/workspace-redesign.css"));
 const dashboardStyles = readText(resolve(root, "src/dashboard-overhaul.css"));
+const dashboardSurface = readText(resolve(root, "src/DashboardSurface.tsx"));
 const insightStyles = readText(resolve(root, "src/plan-insights.css"));
 const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
 const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
@@ -718,10 +719,22 @@ describe("operational visualizations", () => {
     expect(synthesisCard).not.toContain("Selects only from the verified facts below");
   });
 
-  it("keeps the active focus card's flow off the card floor", () => {
-    // A long focus statement used to push the workday flow legend onto the
-    // card's bottom border; the flow now owns the card's floor with clearance.
-    expect(dashboardStyles).toContain(".active-focus-panel { display: flex; flex-direction: column; padding-bottom: 20px; }");
-    expect(dashboardStyles).toContain(".active-focus-panel .dashboard-flow-visual { margin-top: auto; padding-top: 22px; }");
+  it("keeps the active day to one attendance band, one focus line, and the queue", () => {
+    // The 132px ring and the timeline bar encoded the same window percentage
+    // twice, and the focus card restated the summary card's completed/open
+    // counts. The band keeps the bar as its one instrument, the focus card's
+    // duplicate flow legend is gone, and the four counts have a single owner.
+    expect(dashboardStyles).toContain(".active-band {");
+    expect(dashboardStyles).toContain(".active-focus-strip {");
+    expect(dashboardStyles).not.toContain(".active-progress-orb");
+    expect(dashboardStyles).not.toContain(".active-summary-facts");
+    expect(dashboardSurface).toContain('<section className="active-band">');
+    expect(dashboardSurface).toContain('className="active-focus-strip"');
+    expect(dashboardSurface).not.toContain("Workday at a glance");
+    expect(dashboardSurface).not.toContain("Keep the queue moving.");
+    // One count per fact on the active surface, not a flow legend and a facts
+    // row that disagree about which numbers the day is made of.
+    expect(dashboardSurface).not.toContain("active-focus-panel");
+    expect(dashboardSurface).toContain('aria-label="Workday counts"');
   });
 });

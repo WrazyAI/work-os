@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.66 — 2026-10-19
+
+- My Day now leads with one compact workday band and a one-line focus, so your task queue is on screen when the page opens.
+
 ## 0.4.65 — 2026-10-19
 
 - Holding Ctrl + M now records into the floating companion when the app window is minimized, so you can see that it worked.

@@ -55,16 +55,31 @@ describe("dashboard surfaces", () => {
     const model = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: activeAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, activeAttendance), tasks: [task], carryover: [{ id: "carry-1", title: "Resolve carryover", due_date: "2026-08-25", completed: false }], focus: "Make the first task visible", focusSource: "Your focus note", niftySync: { fresh: true, syncedAt: "2026-08-26T13:40:00Z" } }, now);
     const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [{ id: "carry-1", title: "Resolve carryover", due_date: "2026-08-25", completed: false }], otherTasks: [], currentDate: "2026-08-26", canPause: true, canClockOut: true, taskFlight: new Map([["task-1", "completing" as const]]), onPause: noop, onClockOut: noop, onAddTask: noop }));
 
-    expect(markup).toContain("active-command-panel");
+    expect(markup).toContain("active-band");
     expect(markup).toContain("4:46");
     expect(markup).toContain("3h 14m");
-    expect(markup).toContain("Today’s queue");
+    // The tabs are the panel's title; there is no second heading restating the
+    // selected view.
+    expect(markup).toContain("active-task-tabs");
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).not.toContain("Today’s queue");
     expect(markup).toContain("Yesterday");
     expect(markup).toContain("Clock out");
-    expect(markup).toContain("Worktivity confirms you are working; Work OS mirrors this session.");
+    // A confirmed session is already carried by the state line, the Worktivity
+    // chip, and the mirrored-time label, so the long mechanism sentence is not
+    // rendered again.
+    expect(markup).not.toContain("Worktivity confirms you are working; Work OS mirrors this session.");
     expect(markup).toContain("Mirrored Worktivity time");
+    expect(markup).toContain("Activity observed");
+    // The window bar's Now reads a clock time, not the elapsed duration.
+    expect(markup).toContain("1:46 PM");
     expect(markup).toContain("Make the first task visible");
-    expect(markup).toContain("active-summary-action");
+    // One owner per count, and each fact names where it goes.
+    expect(markup).toContain("0</strong><small>completed");
+    expect(markup).toContain('aria-label="1 open today. Review open tasks for today"');
+    expect(markup).toContain('aria-label="1 overdue. Review overdue work"');
+    expect(markup).toContain('aria-label="1 carried over. Review tasks carried over from earlier workdays"');
+    expect(markup).toContain("Showing 1 of 1 open");
     expect(markup).toContain('aria-label="Completing Make the first task visible"');
     expect(markup).toContain('aria-busy="true"');
 
@@ -72,6 +87,9 @@ describe("dashboard surfaces", () => {
     const observedModel = buildWorkdayDashboardModel({ active: true, observedOnly: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: observedAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, observedAttendance), tasks: [task], carryover: [], focus: "Make the first task visible", focusSource: "Observed context", niftySync: { fresh: true, syncedAt: "2026-08-26T13:40:00Z" } }, now);
     const observedMarkup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model: observedModel, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", observedOnly: true, canPause: false, canClockOut: false, onAddTask: noop }));
     expect(observedMarkup).toContain("03:46");
+    // Un-mirrored observation is the one case where the mechanism sentence
+    // still earns its place, because it says what has not happened yet.
+    expect(observedMarkup).toContain("Worktivity confirms active attendance; Work OS has not mirrored its session yet.");
     // A confirmed provider observation keeps the dashboard's Otto awake even
     // before Work OS mirrors the session.
     expect(observedMarkup).toContain('data-workday="active"');

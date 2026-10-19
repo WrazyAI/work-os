@@ -1,10 +1,11 @@
-import { useState, type CSSProperties } from "react";
-import { Activity, AlertTriangle, CalendarDays, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, ListChecks, MoreHorizontal, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
+import { Activity, AlertTriangle, CalendarDays, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, ListChecks, Pencil, Plus, RefreshCw, Sparkles, Target } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
 import { dashboardRemainingLabel, type WorkdayDashboardModel } from "./dashboardModel";
 import { MascotPet, MascotStatus } from "./MascotPet";
 import { ProgressRing } from "./ProgressRing";
 import { FadeArc } from "./LoadingUi";
+import { OverflowPanText } from "./OverflowPan";
 import { safeTaskText, subtaskProgress, taskState, type TaskRow } from "./taskWorkspace";
 
 export type DashboardTaskView = "today" | "unfinished" | "completed";
@@ -149,7 +150,7 @@ function PulseTimeline({ model }: { model: WorkdayDashboardModel }) {
   const progress = Math.max(0, Math.min(100, model.pulse.progressPercent));
   return <div className="dashboard-pulse-timeline">
     <div className="dashboard-pulse-line"><i style={{ width: `${progress}%` }} /><b style={{ left: `clamp(8px, ${progress}%, calc(100% - 8px))` }} /></div>
-    <div className="dashboard-pulse-labels"><span><small>Start</small><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span><span><small>Now</small><strong>{model.pulse.elapsedLabel}</strong></span><span><small>End</small><strong>{formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span></div>
+    <div className="dashboard-pulse-labels"><span><small>Start</small><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span><span><small>Now</small><strong>{formatWorkOsTime(new Date(model.asOf).toISOString(), model.schedule.timezone ?? undefined)}</strong></span><span><small>End</small><strong>{formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span></div>
   </div>;
 }
 
@@ -192,22 +193,109 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
 
 export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
-  const tabLabel = tab === "today" ? "Today’s queue" : tab === "previous" ? "Yesterday’s carryover" : "Older carryover";
+  const openInTab = sourceTasks.filter((task) => task.completed !== true).length;
+  const tabs = [
+    { id: "today" as const, label: "Today", count: tasks.filter((task) => task.completed !== true).length },
+    { id: "previous" as const, label: "Yesterday", count: previousTasks.length },
+    { id: "other" as const, label: "Older", count: otherTasks.length },
+  ];
+  // Peer-view contract (§8.13): one tab stop, arrows move and activate, Home
+  // and End jump to the ends, and each tab's accessible name includes its count.
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = tabs.findIndex((item) => item.id === tab);
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    setTab(tabs[next].id);
+    tabRefs.current[next]?.focus();
+  };
+  // The confirmed session is already carried by the state line, the Worktivity
+  // chip, and the mirrored-time label, so the long mirroring sentence only
+  // earns a place when the provider state is not confirmed.
+  const confirmed = model.stateTone === "signal";
+  const fact = (value: number, label: string, action: () => void, review: string, danger = false) => {
+    const body = <><strong className={danger && value > 0 ? "is-danger" : undefined}>{value}</strong><small>{label}</small></>;
+    // The accessible name starts with the visible value and label (WCAG 2.5.3),
+    // then names the destination, so a screen reader hears both the fact and
+    // what pressing it does. A zero has nowhere useful to go, so it is a plain
+    // fact rather than a disabled button.
+    return value > 0
+      ? <button type="button" className="active-fact" aria-label={`${value} ${label}. ${review}`} onClick={action}>{body}</button>
+      : <span className="active-fact is-empty">{body}</span>;
+  };
   return <main className="dashboard-shell active-dashboard">
-    <section className="dashboard-panel active-command-panel">
-      <header className="active-command-header"><div className="active-status-heading"><MascotPet className="dashboard-otto-active" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} /><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} /><div><span className="dashboard-eyebrow">{observedOnly ? "Worktivity status" : model.stateLabel}</span><h2>{model.stateDetail}</h2></div></div><div className="active-command-actions">{attendanceControlsSupported && canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} /> : <CirclePause size={14} />}{model.state === "paused" ? "Resume" : "Pause"}</button>}{attendanceControlsSupported && canClockOut && <button className="dashboard-danger-action" disabled={busy} onClick={onClockOut}>Clock out</button>}<button className="dashboard-icon-link" aria-label="Open today’s Tasks" onClick={() => onOpenTasks("today")}><MoreHorizontal size={17} /></button></div></header>
-      <div className="active-time-grid"><div><small>Elapsed</small><strong>{observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel}</strong><span>{observedOnly ? "Worktivity active time" : "Mirrored Worktivity time"}</span></div><div className="active-progress-orb" style={{ "--progress": `${model.pulse.progressPercent}%` } as CSSProperties}><span><strong>{Math.round(model.pulse.progressPercent)}%</strong><small>window elapsed</small></span></div><div><small>Remaining</small><strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong><span>{scheduleLabel(model)}</span></div></div>
-      <PulseTimeline model={model} />
-      {!attendanceControlsSupported && <p className="dashboard-activity-watch">Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status.</p>}
-      <footer className="dashboard-panel-footer"><span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span><small>{model.attendance?.message || "Observed context is unavailable."}</small>{model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}{goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} /> Retry focus save</button>}</footer>
+    <section className="active-band">
+      <div className="active-band-status">
+        <MascotPet className="dashboard-otto-band" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} />
+        <div className="active-band-state">
+          <span className="active-band-label"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" />{observedOnly ? "Worktivity status" : model.stateLabel}</span>
+          {(!confirmed || !attendanceControlsSupported) && <p className={`active-band-detail ${syncClass(model.stateTone)}`}>{attendanceControlsSupported ? model.stateDetail : "Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status."}</p>}
+        </div>
+        <div className="active-band-actions">
+          {attendanceControlsSupported && canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} aria-hidden="true" /> : <CirclePause size={14} aria-hidden="true" />}{model.state === "paused" ? "Resume" : "Pause"}</button>}
+          {attendanceControlsSupported && canClockOut && <button className="dashboard-danger-action" disabled={busy} onClick={onClockOut}>Clock out</button>}
+          <button className="dashboard-icon-link" aria-label="Open today’s Tasks" onClick={() => onOpenTasks("today")}><ChevronRight size={16} aria-hidden="true" /></button>
+        </div>
+      </div>
+      <div className="active-band-instrument">
+        <div className="active-reading">
+          <small>Elapsed</small>
+          <strong>{observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel}</strong>
+          <span>{observedOnly ? "Worktivity active time" : "Mirrored Worktivity time"}</span>
+        </div>
+        <PulseTimeline model={model} />
+        <div className="active-reading is-end">
+          <small>Remaining</small>
+          <strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong>
+        </div>
+      </div>
+      <div className="active-band-facts" aria-label="Workday counts">
+        {fact(model.metrics.completed, "completed", () => onOpenTasks("completed"), "Review completed tasks")}
+        {fact(model.metrics.open, "open today", () => onOpenTasks("today"), "Review open tasks for today")}
+        {fact(model.metrics.overdue, "overdue", () => onOpenTasks("unfinished"), "Review overdue work", true)}
+        {fact(model.metrics.carryover, "carried over", onOpenCarryover, "Review tasks carried over from earlier workdays")}
+      </div>
+      <footer className="active-band-footer">
+        <span className={`dashboard-sync-chip ${syncClass(model.stateTone)}`}><i />Worktivity</span>
+        <small>{model.attendance?.message || "Observed context is unavailable."}</small>
+        {model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}
+        {goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} aria-hidden="true" /> Retry focus save</button>}
+      </footer>
     </section>
 
-    <section className="active-summary-grid">
-      <section className="dashboard-panel active-focus-panel"><header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><Sparkles size={13} /> Today’s focus</span><h3>{model.focus.text}</h3></div><button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={13} /> Update</button></header><p>{model.focus.source}</p><WorkdayFlow model={model} /></section>
-      <section className="dashboard-panel active-summary-panel"><header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><ListChecks size={13} /> Workday at a glance</span><h3>Keep the queue moving.</h3></div></header><div className="active-summary-facts"><span><strong>{model.metrics.completed}</strong><small>completed</small></span><span><strong>{model.metrics.open}</strong><small>open</small></span><span><strong className={model.metrics.overdue ? "is-danger" : ""}>{model.metrics.overdue}</strong><small>overdue</small></span></div><button className="dashboard-inline-link active-summary-action" onClick={() => onOpenTasks("unfinished")}>Review unfinished work <ChevronRight size={14} /></button></section>
+    <section className="active-focus-strip" aria-label="Today’s focus">
+      <span className="active-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
+      <button type="button" className="active-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
+        <OverflowPanText>{model.focus.text}</OverflowPanText>
+        <Pencil size={12} aria-hidden="true" />
+      </button>
+      <small className="active-focus-source">{model.focus.source}</small>
     </section>
 
-    <section className="dashboard-panel active-task-panel"><header className="active-task-panel-header"><div><span className="dashboard-eyebrow"><ListChecks size={13} /> Task queue</span><h3>{tabLabel}</h3></div><div className="active-task-panel-actions"><button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} /> Add task</button><button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} /></button></div></header><div className="active-task-tabs" role="tablist" aria-label="Active workday tasks"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.filter((task) => task.completed !== true).length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Yesterday <em>{previousTasks.length}</em></button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Older <em>{otherTasks.length}</em></button></div><div className="active-task-queue"><DashboardTaskQueue tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} /></div><footer className="dashboard-panel-footer"><span>{model.metrics.carryover ? `${model.metrics.carryover} task${model.metrics.carryover === 1 ? "" : "s"} still needs a decision.` : "Changes save to your workday record."}</span><button className="dashboard-inline-link" onClick={onOpenCarryover}>Review carryover <ChevronRight size={14} /></button></footer></section>
+    <section className="dashboard-panel active-task-panel" aria-label="Work queue">
+      <header className="active-task-panel-header">
+        <div className="active-task-tabs" role="tablist" aria-label="Workday tasks">
+          {tabs.map((item, index) => <button key={item.id} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`active-task-tab-${item.id}`} aria-controls="active-task-queue" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} onKeyDown={onTabKeyDown}>{item.label} <em>{item.count}</em></button>)}
+        </div>
+        <div className="active-task-panel-actions">
+          <button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} aria-hidden="true" /> Add task</button>
+          <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
+        </div>
+      </header>
+      <div className="active-task-queue" role="tabpanel" id="active-task-queue" aria-labelledby={`active-task-tab-${tab}`}>
+        <DashboardTaskQueue tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
+      </div>
+      <footer className="dashboard-panel-footer">
+        <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
+        <small>{model.sync.detail}</small>
+        <span className="active-task-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
+      </footer>
+    </section>
   </main>;
 }

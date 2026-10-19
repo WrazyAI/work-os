@@ -4,8 +4,8 @@
 .mascot-pet[data-reduced-motion="true"] .studio-gaze { transform: none !important; }
 .dashboard-art-orbit > .mascot-pet.dashboard-otto { width: 120px; height: 135px; }
 .dashboard-art-orbit > .mascot-pet.dashboard-otto > .mascot-pet-art { width: 100%; height: 100%; }
-.active-status-heading > .mascot-pet.dashboard-otto-active { flex: 0 0 52px; width: 52px; height: 59px; }
-.active-status-heading > .mascot-pet.dashboard-otto-active > .mascot-pet-art { width: 100%; height: 100%; }
+.active-band-status > .mascot-pet.dashboard-otto-band { flex: 0 0 38px; width: 38px; height: 43px; }
+.active-band-status > .mascot-pet.dashboard-otto-band > .mascot-pet-art { width: 100%; height: 100%; }
 .debug-mascot-preview { display: flex; align-items: center; gap: 20px; padding: 16px; border: 1px solid var(--line, #d9ded5); border-radius: 12px; background: #fafaf6; color: #182018; margin-bottom: 16px; }
 .debug-mascot-preview .mascot-pet { flex: 0 0 112px; width: 112px; height: 126px; }
 .debug-mascot-preview .mascot-pet-art { width: 100%; height: 100%; }

@@ -410,22 +410,32 @@ start attendance.
 
 The active dashboard is organized around one command surface:
 
-1. Status header: On shift, Paused, or Worktivity status; elapsed time and
-   next update. Pause/Resume and Clock out appear in the connected Windows
-   Companion; Worktivity owns the state and confirms each change before Work OS
-   mirrors it. The web dashboard remains status-only.
-2. Time band: elapsed, a bounded progress orb/ring, remaining time, and
-   schedule. It is a calm instrument, not a gamified score.
-3. Focus and flow: today's focus, provenance/save state, and a completed /
-   carryover / open flow bar.
-4. Task queue: Today, Yesterday, Older tabs with live counts, Add task, and a
-   direct full-workspace path.
-5. Otto chat entry: a compact launcher outside page flow. Opening it creates
-   the shared bounded chat sheet and must not cover the queue.
+1. Attendance band: the state line (On shift, Paused, or Worktivity status), the
+   window instrument, Pause/Resume and Clock out in the connected Windows
+   Companion, and one freshness line naming Worktivity and the observation.
+   Worktivity owns the state and confirms each change before Work OS mirrors it.
+2. Window instrument: elapsed and remaining at the ends of one bounded progress
+   bar whose start, current clock time, and end label the axis. It is a calm
+   instrument, not a gamified score.
+3. Counts: completed, open today, overdue, and carried over sit in the band as
+   four linked facts. Each has a single owner on the page and opens the view it
+   measures; a zero is stated quietly and is not a control.
+4. Focus strip: today's focus as one line with its provenance and save state,
+   under the shared pan contract (§6.2).
+5. Task queue: Today, Yesterday, Older tabs with live counts, Add task, and a
+   direct full-workspace path. The tabs are the panel's title; no eyebrow or
+   heading restates the selected view.
+6. Otto chat entry: a compact launcher outside page flow. Opening it creates the
+   shared bounded chat sheet and must not cover the queue.
 
-The active dashboard may use a two-column focus/summary row above the queue, but
-it must not create several competing hero cards. The user's work queue is the
-visual anchor.
+The band and the focus strip stay deliberately compact: at 1024×768 the first
+task row is visible without scrolling, because the queue is the visual anchor
+and the attendance state is context, not a second hero. The 132px progress ring
+is a documented deviation from the earlier composition: it and the timeline bar
+encoded the same window percentage, so the bar is the one instrument and the
+ring's vertical space belongs to the work. The four counts have one owner — the
+band — rather than a flow legend and a facts row that disagreed about which
+numbers the day is made of.
 
 ### 5.3 Observed-only and degraded states
 
@@ -509,6 +519,8 @@ right edge at rest, the left edge once it has panned. Hovering the line pans it
 to its end and stops, and leaving returns it to the start at once — the
 transition lives only in the hover state, so the return never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
+A surface without hover (below 481px) wraps the goal instead of clipping it,
+because a pointer-only reveal is not a reveal on a touch screen.
 
 Rows:
 

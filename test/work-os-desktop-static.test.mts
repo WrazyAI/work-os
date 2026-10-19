@@ -144,7 +144,11 @@ assert.doesNotMatch(app, /label: "Plan"/);
 assert.doesNotMatch(app, /view === "plan"/);
 assert.doesNotMatch(app, /Add outcome/);
 assert.doesNotMatch(app, /Convert to Nifty/);
-  assert.match(app, /agenda-strip-text/);
+assert.match(app, /OverflowPanText/);
+// The clipped focus line lives in one module now; both surfaces mount it, and
+// the pan distance is still measured from the rendered overflow.
+assert.match(read("src/OverflowPan.tsx"), /agenda-strip-text/);
+assert.match(read("src/OverflowPan.tsx"), /scrollWidth - el\.clientWidth/);
 assert.match(app, /task-agenda-strip/);
 assert.match(app, /formatWorkOsDate\(task\.due_date\)/);
 assert.match(app, /Suggested from your tasks/);
