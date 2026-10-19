@@ -47,12 +47,13 @@ const RANGES: Array<{ id: Range; label: string }> = [
 ];
 
 /* Calm composition colors: completed stays the deepest signal, context keeps
- * the cool observation tone, and nothing here is danger red. */
+ * the cool observation tone, and nothing here is danger red. The carried hue
+ * comes from the theme-aware chart family so it reads on both grounds. */
 const FLOW_COLORS: Record<string, string> = {
   completed: "var(--accent-deep)",
   progressed: "var(--status-observed)",
   deferred: "var(--status-warn)",
-  carried: "#8d7fa8",
+  carried: "var(--chart-5)",
   unplanned: "var(--text-tertiary)",
 };
 

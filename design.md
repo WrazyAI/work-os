@@ -135,6 +135,16 @@ Do not use signal green to mean “good” in general. It means action, progress
 current state, or an explicitly confirmed result whose label says what was
 confirmed. Observation remains blue/cool-neutral even when activity is present.
 
+The dark variant re-materials the same roles on a neutral graphite ground so
+the workspace reads as one material inside the host console (see the dark
+material rule in §4.3). Reference values: ink `#e9eaed`, ink-soft `#b4b7be`,
+muted `#8b909a`, faint `#6b6f78`, canvas `#17181b`, stage `#1c1d21`, paper
+`#1a1b1e`, raised `#212227`, inset `#282930`, line `#34363d`, line-strong
+`#41444c`, signal `#a8f15b`, signal-deep `#8fd24a`, danger `#e57b6f`,
+warning `#e0a44a`, observed `#7fb3d1`. Categorical chart hues are
+theme-aware (`--chart-1` … `--chart-8`) so a series keeps its colour across
+themes without a light-paper hue turning sandy on graphite.
+
 Known gaps: `--color-faint` (2.7:1 on paper) must not carry text. `--color-danger`
 (4.3:1 on paper) and `--color-warning` (3.0:1 on white) fail AA as text on light
 surfaces, and the signal focus outline is 1.3:1 on paper. The conversation
@@ -280,6 +290,14 @@ page:
   actions, progress, and current state. The tokens are scoped to the workspace
   routes; the shell keeps its own palette around them. The dark variant keeps
   the same roles — the blueprint defines the light stack only.
+- The dark variant is a role-preserving re-material, never a hue-preserving
+  inversion of the light stack. Inverting the warm ivory stack keeps its warm
+  cast, so a dark workspace rendered that way reads as a warm island inside a
+  cold console. The dark scope therefore takes the console's neutral graphite
+  family and a clean near-white ink: same roles, one material with the host
+  application. Signal green stays the single accent; the categorical chart
+  family is theme-aware, because a hue tuned for ivory paper turns sandy on
+  graphite.
 - Each destination owns one masthead (context eyebrow, single title, compact
   utilities), one content axis, one panel family with hairline dividers, and at
   most one primary action per decision area. Task rows stay flat; task details

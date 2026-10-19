@@ -16,7 +16,7 @@ export function cx(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
 }
 
-const PANEL_SHADOW = "0 1px 2px rgba(20,30,18,.035), 0 10px 28px rgba(20,30,18,.045)";
+const PANEL_SHADOW = "var(--shadow-sm)";
 
 export function Panel({
   children,

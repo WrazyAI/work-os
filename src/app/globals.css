@@ -148,6 +148,17 @@
   --color-observed: #2e617d;
   --color-observed-soft: #edf6fb;
 
+  /* Categorical chart family — one hue per series, tuned for the light
+     paper. The dark variant re-picks the same hues for the dark ground. */
+  --chart-1: #4c801d;   /* signal deep */
+  --chart-2: #2e617d;   /* observed */
+  --chart-3: #a8833c;
+  --chart-4: #6f8d7c;
+  --chart-5: #8d7fa8;
+  --chart-6: #b06a4a;
+  --chart-7: var(--text-tertiary);
+  --chart-8: #5f7fa0;
+
   /* Legacy semantic names re-pointed at the blueprint palette */
   --bg-primary: var(--color-canvas);
   --bg-secondary: var(--color-stage);
@@ -195,25 +206,43 @@
 }
 
 [data-theme="dark"] [data-work-os-workspace] {
-  --color-ink: #eef1eb;
-  --color-ink-soft: #c6cfbc;
-  --color-muted: #8e9885;
-  --color-faint: #6f7868;
-  --color-canvas: #14170f;
-  --color-stage: #1a1e16;
-  --color-paper: #171b13;
-  --color-raised: #1d221a;
-  --color-inset: #232820;
-  --color-line: #2f3628;
-  --color-line-strong: #414a37;
+  /* The dark variant of the same roles. The light stack is warm ivory paper
+     with near-black green ink; this is the deliberate dark extension of it
+     (design.md §4.3) and keeps every role — it only changes the material
+     temperature. The surfaces stay one cool graphite family so the workspace
+     reads as one material inside the host console, and the ink is a clean
+     near-white rather than a cream cast, so no ivory survives into dark. */
+  --color-ink: #e9eaed;
+  --color-ink-soft: #b4b7be;
+  --color-muted: #8b909a;
+  --color-faint: #6b6f78;
+  --color-canvas: #17181b;
+  --color-stage: #1c1d21;
+  --color-paper: #1a1b1e;
+  --color-raised: #212227;
+  --color-inset: #282930;
+  --color-line: #34363d;
+  --color-line-strong: #41444c;
   --color-signal: #a8f15b;
   --color-signal-deep: #8fd24a;
   --color-danger: #e57b6f;
-  --color-danger-soft: #382320;
+  --color-danger-soft: #33201e;
   --color-warning: #e0a44a;
-  --color-warning-soft: #382f1d;
+  --color-warning-soft: #2e2718;
   --color-observed: #7fb3d1;
-  --color-observed-soft: #1d2b33;
+  --color-observed-soft: #1b2831;
+
+  /* The same categorical hues as the light stack, re-picked for the dark
+     ground so a series keeps its colour across themes without turning into
+     a warm sandy patch on graphite. */
+  --chart-1: #8fd24a;
+  --chart-2: #7fb3d1;
+  --chart-3: #c2a45c;
+  --chart-4: #7fa892;
+  --chart-5: #a294c4;
+  --chart-6: #c98a68;
+  --chart-7: var(--text-tertiary);
+  --chart-8: #7ea6c9;
 
   --bg-primary: var(--color-canvas);
   --bg-secondary: var(--color-stage);
@@ -224,10 +253,11 @@
   --text-primary: var(--color-ink);
   --text-secondary: var(--color-ink-soft);
   --text-tertiary: var(--color-muted);
-  --text-inverse: #131a10;
+  --text-faint: var(--color-faint);
+  --text-inverse: #14151a;
 
   --border: var(--color-line);
-  --border-subtle: #272d21;
+  --border-subtle: #262830;
   --border-hot: var(--color-line-strong);
 
   --accent: #8fd24a;
@@ -247,12 +277,12 @@
   --status-observed: var(--color-observed);
   --status-observed-soft: var(--color-observed-soft);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 10px 28px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 10px 28px rgba(0, 0, 0, 0.26);
   --shadow-md: 0 16px 48px rgba(0, 0, 0, 0.42);
 
   --scrollbar-track: var(--color-inset);
-  --scrollbar-thumb: #47523c;
-  --scrollbar-thumb-hover: #5b684e;
+  --scrollbar-thumb: #4a4d56;
+  --scrollbar-thumb-hover: #61656f;
 }
 
 /* One visible focus treatment for every interactive element inside the

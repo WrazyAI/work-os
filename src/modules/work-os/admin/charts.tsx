@@ -74,16 +74,18 @@ export function TrendBars({ data, series, ariaLabel }: {
 
 /** Categorical palette for stacked-by-person charts: a calm, desaturated
  * family that reads as one system in both themes. Danger red stays reserved
- * for alerts, so it is deliberately not part of this sequence. */
+ * for alerts, so it is deliberately not part of this sequence. The hues live
+ * in globals.css so each theme re-picks the same colours for its own ground
+ * — a hue tuned for ivory paper turns sandy on graphite. */
 export const CHART_PALETTE = [
-  "var(--color-signal-deep)",
-  "var(--status-observed)",
-  "#a8833c",
-  "#6f8d7c",
-  "#8d7fa8",
-  "#b06a4a",
-  "var(--text-tertiary)",
-  "#5f7fa0",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+  "var(--chart-7)",
+  "var(--chart-8)",
 ] as const;
 
 export interface StackedTimePerson {
