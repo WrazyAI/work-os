@@ -32,7 +32,8 @@ import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, TaskRemovalConfirmation } from "./taskSurfaces";
+import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, shiftStillOpen } from "../../../src/lib/work-os-shift-gate";
+import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -324,6 +325,11 @@ export default function App() {
   const [eodQueued, setEodQueued] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
+  /** The server refused a draft because the shift is still open. */
+  const [eodShiftRefused, setEodShiftRefused] = useState(false);
+  /** A draft is deleted only after the employee confirms the removal. */
+  const [eodDeleteConfirmation, setEodDeleteConfirmation] = useState(false);
+  const [eodDeleting, setEodDeleting] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -562,7 +568,7 @@ export default function App() {
    * mount no overlays) can never freeze the window with no modal to close.
    * Employee-only flags are ignored, not closed, so a half-finished draft or
    * confirmation survives a visit to administration (design §9). */
-  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
+  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || !!eodDeleteConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
   /** The profile modal needs the onboarding record it edits; without it the
    * flag renders nothing and must therefore count for nothing. */
   const profileModalOpen = profileOpen && !!visibleOnboarding;
@@ -650,6 +656,7 @@ export default function App() {
     if (moveMenuId) { setMoveMenuId(null); return; }
     if (subtaskMenuId) { setSubtaskMenuId(null); return; }
     if (deleteRequest) { setDeleteRequest(null); return; }
+    if (eodDeleteConfirmation) { setEodDeleteConfirmation(false); return; }
     if (editRequest) { setEditRequest(null); return; }
     if (clockInConfirmation) { setClockInConfirmation(null); return; }
     if (missedClockOut) { setMissedClockOut(null); return; }
@@ -660,7 +667,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourScope, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
@@ -1111,7 +1118,7 @@ export default function App() {
     eodPrepareCancelRef.current = true;
     eodPrepareAbandonRef.current = true;
     eodPrepareAbortRef.current?.abort();
-    setEodDraft(null); setEodSubmitted(false); setEodQueued(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null);
+    setEodDraft(null); setEodSubmitted(false); setEodQueued(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null); setEodShiftRefused(false); setEodDeleteConfirmation(false);
   }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
@@ -1733,6 +1740,13 @@ export default function App() {
       notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
     } catch (value) {
       if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
+        // The shift is still open: the day is not finished, so the draft is
+        // refused and the prompt explains it.
+        if ((value as { reason?: string | null }).reason === EOD_SHIFT_OPEN_REASON) {
+          setEodShiftRefused(true);
+          setEodDraft(null);
+          return;
+        }
         const message = value instanceof Error ? value.message : "EOD drafting is gated";
         setEodGate({ gate: /no tasks/i.test(message) ? "no_tasks" : "no_activity", detail: message });
         setEodDraft(null);
@@ -1866,8 +1880,43 @@ export default function App() {
         notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
       }
     } catch (value) {
+      // The shift is still open: the draft is refused and the prompt explains
+      // it instead of a failure.
+      if (value instanceof ApiRequestError && value.status === 409 && value.reason === EOD_SHIFT_OPEN_REASON) {
+        setEodShiftRefused(true);
+        return;
+      }
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
     } finally { setEodRedrafting(false); }
+  };
+
+  /** Deletes the current EOD draft after the employee confirms it. The
+   * server refuses a report that is already with a manager. */
+  const deleteEodDraft = async () => {
+    const reportId = String(reviewDay?.report?.id ?? "");
+    if (!reportId) {
+      setEodDeleteConfirmation(false);
+      notifications.info("There is no draft to delete.", "No draft");
+      return;
+    }
+    setEodDeleting(true);
+    try {
+      await apiRequest(`/api/work-os/reports/${encodeURIComponent(reportId)}`, { method: "DELETE" });
+      setEodDeleteConfirmation(false);
+      setEodDraft(null);
+      setEodRedrafting(false);
+      setEodClockedOut(false);
+      setEodLanding(true);
+      setEodScreenshotNotice(null);
+      if (eodDate) void queryClient.invalidateQueries({ queryKey: workOsKeys.reportDay(eodDate) });
+      else void refresh();
+      invalidateOutstandingEods();
+      notifications.success("Your EOD draft was deleted.", "Draft deleted");
+    } catch (value) {
+      showError(value, "Your EOD draft could not be deleted.", "Draft not deleted");
+    } finally {
+      setEodDeleting(false);
+    }
   };
 
 
@@ -2593,6 +2642,13 @@ export default function App() {
   useListShift(dashboardGridRef);
   const openTasks = visibleTodayTasks.filter((task) => !task.completed);
   const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
+  /* An open shift means the day is not finished, so its EOD cannot be
+     drafted. The server refuses the same draft; this is the prompt that
+     explains it before the employee reaches for the button. */
+  const reviewShiftOpen = shiftStillOpen({
+    session: reviewDay?.session ?? null,
+    attendance: reviewDay?.attendance ?? null,
+  }) || eodShiftRefused;
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
@@ -4165,6 +4221,9 @@ export default function App() {
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
                     onRefresh={reviewDay.report.status === "draft" || reviewDay.report.status === "rejected" ? () => void createEodDraft(reviewDay) : undefined}
+                    onDelete={() => setEodDeleteConfirmation(true)}
+                    shiftOpen={reviewShiftOpen}
+                    onOpenDashboard={() => setView("day")}
                     onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
                     onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
                   />
@@ -4194,11 +4253,13 @@ export default function App() {
                           })}</ul>
                           {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setNotificationsOpen(true)}>Show all {outstandingDays.length} days</button> : null}
                         </section> : null}
+                        {reviewShiftOpen ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companion} onClockOut={() => setView("day")} /> : null}
                         <div className="eod-start-actions">
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
-                          {reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
-                            ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
-                            : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Draft today’s EOD"}</button>}
+                          {reviewShiftOpen ? null
+                            : reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
+                              ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
+                              : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Draft today’s EOD"}</button>}
                         </div>
                       </section>
                       : null}
@@ -4256,6 +4317,7 @@ export default function App() {
     {taskComposerOpen && <TaskComposerModal closing={taskComposerClosing} busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={closeTaskComposer} onSubmit={submitTaskFromDesktop} />}
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => setTaskCompletion(taskDetails.task as TaskRow, true, true)} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
+    {eodDeleteConfirmation && <TaskRemovalConfirmation mode="delete" scope="draft" title={String(reviewDay?.report?.title ?? "Your EOD draft")} subtaskCount={0} busy={eodDeleting} onCancel={() => setEodDeleteConfirmation(false)} onConfirm={() => void deleteEodDraft()} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {renderGlobalOverlays()}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />

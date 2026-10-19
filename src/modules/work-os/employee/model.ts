@@ -259,17 +259,20 @@ export interface EodScreenshotGallery {
  * gated flows (409) differently from a plain failure. */
 export class HttpError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** A machine-readable reason the server attached to the refusal. */
+  reason?: string;
+  constructor(message: string, status: number, reason?: string) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.reason = reason;
   }
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new HttpError(body?.error || `Request failed: ${response.status}`, response.status);
+  if (!response.ok) throw new HttpError(body?.error || `Request failed: ${response.status}`, response.status, body?.reason);
   return body as T;
 }
 

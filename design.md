@@ -1293,6 +1293,37 @@ blurs them.
   Escape closes), and account pills are static text so nothing offers a control
   the employee cannot honor.
 
+### 8.16 EOD drafts while the shift is open, and deleting a draft
+
+An end-of-day report describes a finished day. While the workday is still
+running, today's report cannot be written yet, and both Work OS surfaces say
+so instead of offering a draft that would describe an unfinished shift.
+
+- **The gate.** A shift is open while the mirrored session is still running or
+  a fresh Worktivity observation says the employee is active or paused. One
+  predicate (`shiftStillOpen`) decides this for the server, the web workspace,
+  and the companion, so every surface tells the same story. The gate applies to
+  the day being drafted: today is blocked while the shift runs, and an earlier
+  day — whose shift already ended — stays draftable so a backlog is never
+  stranded.
+- **The server refuses it too.** Creating a report, and asking the assistant
+  for a fresh narrative, both answer `409` with the reason `shift_open`.
+  Refining a draft that already exists stays available: that day is already
+  recorded.
+- **The prompt.** The surface states that the shift has not ended and that the
+  employee should clock out first. The clock-out is inline text, underlined,
+  and behaves like the action it names: in the companion it returns to the
+  dashboard, where the Clock out button closes the shift; on the web it
+  returns to Today, which names the Windows Companion as the surface that
+  closes a shift. The prompt replaces the draft action rather than sitting
+  beside it.
+- **Deleting a draft.** The EOD composer carries one destructive action
+  beside its draft-building controls: `Delete draft`, in red, with a trash
+  glyph. It is offered only for an unsubmitted draft, it asks for confirmation
+  in the shared removal dialog, and it is refused by the server for a report
+  that is already with a manager. A deletion is written to the audit log; the
+  report's versions go with it.
+
 ## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
 

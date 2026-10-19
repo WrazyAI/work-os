@@ -4,6 +4,8 @@ import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/li
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
 import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
+import { eodDraftShiftGate } from "@/lib/work-os-eod-shift-gate";
+import { EOD_SHIFT_OPEN_REASON } from "@/lib/work-os-shift-gate";
 import type { EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
@@ -34,6 +36,16 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
       ? body.date
       : new Date().toISOString().slice(0, 10);
     const personId = auth.access.personId as string;
+    /* A fresh draft describes a finished day, so an open shift refuses it.
+       Refining a draft that already exists stays available: the day being
+       refined is already recorded. */
+    const isRefinement = typeof body.draft === "string" && body.draft.trim().length > 0;
+    if (!isRefinement) {
+      const gate = await eodDraftShiftGate(auth.access, personId, date);
+      if (gate.blocked) {
+        return NextResponse.json({ error: gate.message, reason: EOD_SHIFT_OPEN_REASON }, { status: 409 });
+      }
+    }
     const personResult = await createAdminClient().from("work_people").select("display_name")
       .eq("organization_id", auth.access.organizationId).eq("id", personId).maybeSingle();
     if (personResult.error) throw new Error(`load person for EOD draft: ${personResult.error.message}`);

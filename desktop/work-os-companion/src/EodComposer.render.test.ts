@@ -176,3 +176,38 @@ describe("EodComposer review surface", () => {
     expect(markup).not.toContain("Analyze and rebuild draft");
   });
 });
+
+  it("offers a delete-draft action beside the draft controls", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      onRefresh: () => undefined,
+      onDelete: () => undefined,
+    }));
+    expect(markup).toContain("Delete draft");
+    expect(markup).toContain("eod-delete-draft");
+    // The trash glyph rides the label, so the action reads without color.
+    expect(markup).toMatch(/eod-delete-draft[^>]*>[\s\S]*?<svg/);
+    // The draft-building actions stay in place next to it.
+    expect(markup).toContain("Refresh from record");
+    expect(markup).toContain("Draft with AI");
+  });
+
+  it("offers no delete action when the surface has no draft to delete", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, baseProps));
+    expect(markup).not.toContain("Delete draft");
+  });
+
+  it("prompts for a clock-out while the shift is still open", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      shiftOpen: true,
+      onOpenDashboard: () => undefined,
+    }));
+    expect(markup).toContain("Your shift has not ended yet");
+    expect(markup).toContain("eod-shift-open-notice");
+    // The clock-out reads as inline text and behaves like the action it names.
+    expect(markup).toMatch(/eod-inline-action[^>]*>clock out<\/button>/);
+    // A day that has not ended cannot be rebuilt from the record.
+    expect(markup).not.toContain("Refresh from record");
+    expect(markup).not.toContain("Draft with AI");
+  });

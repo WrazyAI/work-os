@@ -13,6 +13,7 @@ import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
 import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
+import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
@@ -332,17 +333,18 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
 }
 
 export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy, localTask = false, onCancel, onConfirm }: {
-  mode: "archive" | "delete"; scope: "task" | "subtask"; title: string; subtaskCount: number; busy: boolean; localTask?: boolean; onCancel: () => void; onConfirm: () => void;
+  mode: "archive" | "delete"; scope: "task" | "subtask" | "draft"; title: string; subtaskCount: number; busy: boolean; localTask?: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   const permanent = mode === "delete";
-  const source = localTask ? "Work OS" : "Nifty";
+  const draft = scope === "draft";
+  const source = draft ? "Work OS" : localTask ? "Work OS" : "Nifty";
   const dialogRef = useRef<HTMLElement | null>(null);
   useDialogFocus(dialogRef);
   return renderViewportSurface(<div className="task-modal-backdrop confirmation-backdrop"><section ref={dialogRef} className={`delete-confirmation ${permanent ? "" : "reversible"}`} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
     <span className={permanent ? "danger-icon" : "reversible-icon"}>{permanent ? <Trash2 size={18} /> : <Archive size={18} />}</span>
     <h2 id="delete-confirmation-title">{permanent ? "Permanently delete" : "Archive"} this {scope}?</h2>
     <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from {source} and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in {localTask ? "Work OS history" : `Nifty. It can be restored from Nifty’s archived tasks`}.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
-    <div><button disabled={busy} onClick={onCancel}>Cancel</button><button className={permanent ? "confirm-delete" : "confirm-archive"} disabled={busy} onClick={onConfirm}>{busy ? (permanent ? "Deleting…" : "Archiving…") : permanent ? "Delete permanently" : "Archive task"}</button></div>
+    <div><button disabled={busy} onClick={onCancel}>Cancel</button><button className={permanent ? "confirm-delete" : "confirm-archive"} disabled={busy} onClick={onConfirm}>{busy ? (permanent ? "Deleting…" : "Archiving…") : permanent ? (draft ? "Delete draft" : "Delete permanently") : "Archive task"}</button></div>
   </section></div>);
 }
 
@@ -450,8 +452,17 @@ export type LoomAttached = {
   url: string;
 };
 
-export function EodComposer({ initialMarkdown, source, dayLabel = "today", redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
-  initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+/** The prompt for a workday that has not ended. The clock-out reads as inline
+ * text, underlined, and behaves like the action it names: it takes the
+ * employee to the dashboard, where the Clock out button closes the shift. */
+export function EodShiftOpenNotice({ prefix, suffix, onClockOut }: { prefix: string; suffix: string; onClockOut: () => void }) {
+  return <p className="eod-shift-open-notice" role="status">
+    {prefix} <button type="button" className="eod-inline-action" onClick={onClockOut}>{EOD_SHIFT_OPEN_LINK_LABEL}</button>{suffix}
+  </p>;
+}
+
+export function EodComposer({ initialMarkdown, source, dayLabel = "today", redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onDelete, shiftOpen = false, onOpenDashboard, onRefine, onSubmit }: {
+  initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onDelete?: () => void; shiftOpen?: boolean; onOpenDashboard?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
   const hasGalleryFrames = (screenshotGallery?.viewable.length ?? 0) > 0 || (screenshotGallery?.processed ?? 0) > 0;
@@ -597,8 +608,9 @@ export function EodComposer({ initialMarkdown, source, dayLabel = "today", redra
     <header className="eod-composer-header">
       <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><h2>Record the day, then hand it to your manager.</h2>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}</div></div>
-      <div className="eod-composer-actions">{onRefresh && <button disabled={reportLocked} onClick={onRefresh}>Refresh from record</button>}<button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button></div>
+      <div className="eod-composer-actions">{onRefresh && !shiftOpen ? <button disabled={reportLocked} onClick={onRefresh}>Refresh from record</button> : null}{!shiftOpen ? <button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button> : null}{onDelete ? <button className="eod-delete-draft" disabled={reportLocked} onClick={onDelete}><Trash2 size={13} /> Delete draft</button> : null}</div>
     </header>
+    {shiftOpen && onOpenDashboard ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_REBUILD_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companionRebuild} onClockOut={onOpenDashboard} /> : null}
     {preparing && <div className="eod-screenshot-preparing" role="status">
       <FadeArc size={14} />
       <span>
