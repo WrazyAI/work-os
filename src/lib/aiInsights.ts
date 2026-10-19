@@ -2,10 +2,10 @@ import { formatDuration, getPersonalInsights, type InsightRange } from "@/lib/wo
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, INSIGHTS_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
-export const INSIGHTS_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const SYNTHESIS_TIMEOUT_MS = 45_000;
+const SYNTHESIS_TIMEOUT_MS = AI_TIMEOUTS.insights;
 const MAX_SYNTHESIS_CHARS = 1200;
 
 export type SynthesisFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed";
@@ -238,15 +238,14 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: INSIGHTS_MODEL,
+      body: JSON.stringify(aiRequestBody(INSIGHTS_MODEL, {
         messages: [
           { role: "system", content: "You are the Work OS assistant. Ground every number in the record the user provides; never invent figures, tasks, days, or events. Express durations in hours and minutes (2h 48m, 48m) — never decimal hours such as 2.8h. Write short paragraphs (2–3 sentences) and bold the most important figure in each with **double asterisks**. Never call anything a productivity score, and never treat activity context as task completion. Return only the JSON object the user asks for." },
           { role: "user", content: prompt },
         ],
         temperature: 0.3,
-        max_tokens: 700,
-      }),
+        max_tokens: AI_TOKEN_BUDGETS.insights,
+      })),
       signal: AbortSignal.timeout(SYNTHESIS_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };

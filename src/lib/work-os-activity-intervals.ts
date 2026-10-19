@@ -14,6 +14,7 @@ import {
 } from "@/lib/work-os-screenshots";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, ACTIVITY_INTERVAL_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 import {
   formatGithubActivityBlock,
   githubRecordedActivityAllowlist,
@@ -30,10 +31,6 @@ export const ACTIVITY_INTERVAL_PROMPT_VERSION = "work-os-activity-interval-v3";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const MAX_DETAIL_CHARS = 4_000;
 const MAX_FEEDBACK_CHARS = 4_000;
-const MODEL = process.env.WORK_OS_ACTIVITY_INTERVAL_MODEL
-  || process.env.WORK_OS_SCREENSHOT_MODEL
-  || process.env.WORK_OS_INTERPRET_MODEL
-  || "gpt-5.6-luna";
 
 function clampInt(value: unknown, fallback: number, min: number, max: number) {
   const parsed = Number(value);
@@ -67,7 +64,7 @@ export function activityIntervalConfig(env: NodeJS.ProcessEnv = process.env, cad
     maxFrames: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES, 12, 1, 24),
     maxRawFrames: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES, 5, 0, 12),
     maxPerDay,
-    model: MODEL,
+    model: ACTIVITY_INTERVAL_MODEL,
     promptVersion: ACTIVITY_INTERVAL_PROMPT_VERSION,
   };
 }
@@ -536,14 +533,13 @@ async function synthesizeInterval(input: {
     method: "POST",
     signal: AbortSignal.timeout(input.timeoutMs),
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: input.model,
+    body: JSON.stringify(aiRequestBody(input.model, {
       messages: intervalSynthesisMessages(input),
       tools: [intervalTool()],
       tool_choice: { type: "function", function: { name: "recordActivityInterval" } },
       temperature: 0.2,
-      max_tokens: 1_400,
-    }),
+      max_tokens: AI_TOKEN_BUDGETS.activityInterval,
+    })),
   });
   if (!response.ok) throw new Error(`activity interval AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json;
@@ -825,7 +821,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         githubBlock: githubBlock || undefined,
         recordedActivityAllowlist: githubActivity ? githubRecordedActivityAllowlist(githubActivity) : undefined,
         model: config.model,
-        timeoutMs: clampInt(process.env.WORK_OS_ACTIVITY_INTERVAL_TIMEOUT_MS, 45_000, 5_000, 120_000),
+        timeoutMs: clampInt(process.env.WORK_OS_ACTIVITY_INTERVAL_TIMEOUT_MS, AI_TIMEOUTS.activityInterval, 5_000, 120_000),
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "activity interval synthesis failed";

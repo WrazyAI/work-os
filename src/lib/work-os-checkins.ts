@@ -14,8 +14,10 @@ import {
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { recordWorkMemory, buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, CHECK_IN_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
-const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
+const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
+const CHECK_IN_TIMEOUT_MS = AI_TIMEOUTS.checkIn;
 const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
 
 interface ParsedProposal {
@@ -40,8 +42,8 @@ export function checkInCommitmentContext(rows: Json[]): CheckInCommitmentContext
 }
 
 async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[], context?: { todayBlock?: string; memoryBlock?: string }): Promise<{ model: string; proposals: ParsedProposal[] }> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is required to turn a check-in into task proposals");
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is required to turn a check-in into task proposals");
   const taskContext = tasks.map((task) => ({
     id: task.id,
     providerTaskId: task.provider_task_id,
@@ -79,11 +81,10 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
       },
     },
   };
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: CHECK_IN_MODEL,
+    body: JSON.stringify(aiRequestBody(CHECK_IN_MODEL, {
       messages: [
         {
           role: "system",
@@ -101,7 +102,10 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
-    }),
+      temperature: 0.2,
+      max_tokens: AI_TOKEN_BUDGETS.checkIn,
+    })),
+    signal: AbortSignal.timeout(CHECK_IN_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Work OS proposal AI failed (${response.status}): ${(await response.text()).slice(0, 180)}`);
   const json = await response.json() as Json;

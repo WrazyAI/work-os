@@ -1,4 +1,4 @@
-import { INTERPRET_MODEL } from "@/lib/aiInterpret";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, LOOM_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
 import {
   LOOM_TRANSCRIPT_MAX_AI,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/work-os-loom";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const LOOM_ANALYSIS_TIMEOUT_MS = 45_000;
+const LOOM_ANALYSIS_TIMEOUT_MS = AI_TIMEOUTS.loom;
 
 export interface LoomSuggestedTask {
   title: string;
@@ -89,8 +89,7 @@ export async function analyzeLoomNarrative(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: INTERPRET_MODEL,
+      body: JSON.stringify(aiRequestBody(LOOM_MODEL, {
         messages: [
           {
             role: "system",
@@ -112,9 +111,9 @@ export async function analyzeLoomNarrative(
           },
         ],
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: AI_TOKEN_BUDGETS.loom,
         response_format: { type: "json_schema", json_schema: LOOM_ANALYSIS_SCHEMA },
-      }),
+      })),
       signal: AbortSignal.timeout(LOOM_ANALYSIS_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
@@ -138,7 +137,7 @@ export async function analyzeLoomNarrative(
       }];
     }).slice(0, 12);
     const cautions = (Array.isArray(raw.cautions) ? raw.cautions : []).flatMap((caution) => typeof caution === "string" && caution.trim() ? [caution.trim().slice(0, 300)] : []).slice(0, 6);
-    return { ok: true, analysis: { summary, suggestedTasks, cautions }, model: INTERPRET_MODEL };
+    return { ok: true, analysis: { summary, suggestedTasks, cautions }, model: LOOM_MODEL };
   } catch (error) {
     if (error instanceof SyntaxError) return { ok: false, reason: "ai_malformed", detail: "invalid analysis JSON" };
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };

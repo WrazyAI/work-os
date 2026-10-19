@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { INTERPRET_MODEL } from "@/lib/aiInterpret";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, SCREENSHOT_HOUR_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { db } from "@/lib/work-os-internal";
 import { personTimezone } from "@/lib/work-os-screenshots";
 import { localDayBounds } from "@/modules/work-os/companion";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const HOUR_SUMMARY_TIMEOUT_MS = 45_000;
+const HOUR_SUMMARY_TIMEOUT_MS = AI_TIMEOUTS.screenshotHour;
 const PROMPT_VERSION = "work-os-screenshot-hours-v1";
 const MAX_HOURS = 16;
 const MAX_FRAMES_PER_HOUR = 12;
@@ -163,8 +163,7 @@ export async function summarizeScreenshotHours(groups: ScreenshotHourGroup[]): P
     const response = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: INTERPRET_MODEL,
+      body: JSON.stringify(aiRequestBody(SCREENSHOT_HOUR_MODEL, {
         messages: [
           {
             role: "system",
@@ -184,9 +183,9 @@ export async function summarizeScreenshotHours(groups: ScreenshotHourGroup[]): P
           },
         ],
         temperature: 0.2,
-        max_tokens: 900,
+        max_tokens: AI_TOKEN_BUDGETS.screenshotHour,
         response_format: { type: "json_schema", json_schema: HOUR_SUMMARY_SCHEMA },
-      }),
+      })),
       signal: AbortSignal.timeout(HOUR_SUMMARY_TIMEOUT_MS),
     });
     if (!response.ok) return null;
@@ -333,8 +332,8 @@ export async function ensureHourlyScreenshotSummaries(input: {
     if (fresh) {
       // A successful synthesis always records the hash for the frames it saw,
       // even when the sentence happens to read the same.
-      if (existing?.source_hash !== hash || existing?.summary !== fresh || existing?.model == null) persist(group, fresh, INTERPRET_MODEL);
-      else resolved.set(group.hourStart, { summary: fresh, model: INTERPRET_MODEL });
+      if (existing?.source_hash !== hash || existing?.summary !== fresh || existing?.model == null) persist(group, fresh, SCREENSHOT_HOUR_MODEL);
+      else resolved.set(group.hourStart, { summary: fresh, model: SCREENSHOT_HOUR_MODEL });
       continue;
     }
     if (existing && existing.model != null && existing.source_hash === hash) {

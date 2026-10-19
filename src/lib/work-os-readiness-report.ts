@@ -75,7 +75,7 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
     })),
     providerReady,
     runtime: {
-      openAiConfigured: !!process.env.OPENAI_API_KEY,
+      aiConfigured: !!process.env.OPENROUTER_API_KEY,
       providerSecretConfigured: !!process.env.WORK_OS_PROVIDER_SECRET_KEY,
       providerCredentialsPresent: (credentials.data ?? []).length > 0,
       screenshotEncryptionConfigured: !!process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY,

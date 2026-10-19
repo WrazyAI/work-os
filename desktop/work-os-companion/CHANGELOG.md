@@ -25,6 +25,9 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Your end-of-day draft, daily summaries and activity recaps are now written by a newer AI, so the wording has changed.
+- The descriptions attached to your screenshots are now written by a newer AI too.
+
 ## 0.4.71 — 2026-10-19
 
 - Recaps can be read aloud: press Listen, follow the words as they are spoken, and confirm right there when it ends.
@@ -34,6 +37,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## 0.4.70 — 2026-10-19
 
 - The unfinished count now waits for you to hover its own pill, and today's focus glides at a readable pace instead of racing.
+=======
+- Your end-of-day draft, daily summaries and activity recaps are now written by a newer AI, so the wording has changed.
+- The descriptions attached to your screenshots are now written by a newer AI too.
+>>>>>>> b20ddb62 (feat(work-os): move the AI stack to DeepSeek V4.1 Flash on Relace)
 
 ## 0.4.69 — 2026-10-19
 

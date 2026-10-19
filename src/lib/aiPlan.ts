@@ -1,8 +1,8 @@
 import type { PlanningContext, PlanningTask } from "@/lib/work-os-planning-context";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, PLAN_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
-const PLAN_MODEL = process.env.WORK_OS_PLAN_MODEL ?? process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const PLAN_TIMEOUT_MS = 45_000;
+const PLAN_TIMEOUT_MS = AI_TIMEOUTS.plan;
 const MAX_CLARIFICATIONS = 2;
 export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
 
@@ -196,16 +196,15 @@ export async function interpretDailyPlan(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: PLAN_MODEL,
+      body: JSON.stringify(aiRequestBody(PLAN_MODEL, {
         temperature: 0.2,
-        max_tokens: 1_400,
+        max_tokens: AI_TOKEN_BUDGETS.plan,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
           { role: "user", content: buildPlanningPrompt(rawIntent, context, conversation, memory, loom) },
         ],
         response_format: { type: "json_object" },
-      }),
+      })),
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
@@ -309,16 +308,15 @@ export async function refinePlanDraft(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: PLAN_MODEL,
+      body: JSON.stringify(aiRequestBody(PLAN_MODEL, {
         temperature: 0.2,
-        max_tokens: 1_400,
+        max_tokens: AI_TOKEN_BUDGETS.plan,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
           { role: "user", content: buildPlanRefinePrompt(rawIntent, { summary, commitments: draftCommitments }, annotations, edits, context, memory) },
         ],
         response_format: { type: "json_object" },
-      }),
+      })),
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };

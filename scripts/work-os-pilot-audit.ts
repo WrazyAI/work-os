@@ -78,7 +78,7 @@ async function auditOrganization(db: Db, organization: { id: string; name: strin
     tasks: tasks.rows.map((row) => ({ completed: row.completed, assigneePersonIds: row.assignee_person_ids, dueDate: row.due_date, priority: row.priority, estimatedEffort: row.estimated_effort, estimatedEffortMinutes: row.estimated_effort_minutes, expectedOutcome: row.expected_outcome, definitionOfDone: row.definition_of_done, taskGroupId: row.task_group_id })),
     providerReady,
     runtime: {
-      openAiConfigured: Boolean(process.env.OPENAI_API_KEY),
+      aiConfigured: Boolean(process.env.OPENROUTER_API_KEY),
       providerSecretConfigured: Boolean(process.env.WORK_OS_PROVIDER_SECRET_KEY),
       providerCredentialsPresent: credentialRows.length > 0,
       screenshotEncryptionConfigured: Boolean(process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY),

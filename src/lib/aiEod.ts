@@ -3,6 +3,7 @@ import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/w
 import { automationName, collapseAutomation, formatLocalTime, outsideShiftMarker, outsideWindowLabel } from "@/lib/work-os-eod-facts";
 import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, EOD_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
 async function screenshotTimezone(db: ReturnType<typeof createAdminClient>, organizationId: string, personId: string): Promise<string> {
@@ -12,9 +13,8 @@ async function screenshotTimezone(db: ReturnType<typeof createAdminClient>, orga
   return typeof data?.timezone === "string" && data.timezone ? data.timezone : "UTC";
 }
 
-export const EOD_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const EOD_TIMEOUT_MS = 60_000;
+const EOD_TIMEOUT_MS = AI_TIMEOUTS.eod;
 
 export type EodFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed";
 
@@ -324,16 +324,15 @@ export async function draftEodNarrative(grounding: EodGrounding): Promise<EodDra
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: EOD_MODEL,
+      body: JSON.stringify(aiRequestBody(EOD_MODEL, {
         messages: [
           { role: "system", content: "You are the Work OS assistant. Select only verified Work OS fact IDs. You never write report prose or invent facts." },
           { role: "user", content: buildEodPrompt(grounding) },
         ],
         temperature: 0.3,
-        max_tokens: 1400,
+        max_tokens: AI_TOKEN_BUDGETS.eodSelection,
         response_format: { type: "json_schema", json_schema: EOD_SELECTION_SCHEMA },
-      }),
+      })),
       signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
@@ -367,15 +366,14 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: EOD_MODEL,
+      body: JSON.stringify(aiRequestBody(EOD_MODEL, {
         messages: [
           { role: "system", content: "You refine Work OS EOD report wording. Apply the employee feedback, preserve truthful task and progress statements, and never add a Bottleneck section. Do not invent completion, evidence, timing, or outcomes." },
           { role: "user", content: `Known Work OS facts:\n${buildEodPrompt(grounding)}\n\nCurrent report:\n${withoutBottleneck(draft)}\n\nEmployee feedback:\n${feedback.trim() || "(none)"}\n${annotations.length ? `\nEmployee annotations on the draft:\n${formatEodAnnotations(annotations)}\n` : ""}\nReturn only the revised markdown report. Do not include a Bottleneck heading or content.` },
         ],
         temperature: 0.2,
-        max_tokens: 1800,
-      }),
+        max_tokens: AI_TOKEN_BUDGETS.eodRevision,
+      })),
       signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };

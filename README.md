@@ -146,7 +146,7 @@ Keep secrets **server-side**, never in desktop bundles or `NEXT_PUBLIC_*` variab
 | Configuration | Used for |
 | --- | --- |
 | `DATABASE_URL`, `BETTER_AUTH_SECRET` | PostgreSQL and authenticated web sessions |
-| `OPENROUTER_API_KEY` | AI planning, updates, activity interpretation and EOD drafts |
+| `OPENROUTER_API_KEY` | Every AI surface: planning, updates, activity interpretation, screenshot perception, recaps and EOD drafts |
 | `WORKTIVITY_API_KEY` | Provider-confirmed attendance and screenshot ingestion |
 | Nifty OAuth credentials | Task provider authorization and synchronization |
 | `OBJECT_STORAGE_DRIVER`, `R2_*` | Screenshot object storage (R2 in production; local adapter for development) |
@@ -154,6 +154,24 @@ Keep secrets **server-side**, never in desktop bundles or `NEXT_PUBLIC_*` variab
 | GitHub/GHL webhook secrets | Signed evidence ingestion when those integrations are enabled |
 
 The specific requirements depend on the feature being exercised. Do not run historical migrations against an established database; follow the explicit additive migration process described in [AGENTS.md](./AGENTS.md).
+
+### AI models and provider routing
+
+`src/lib/work-os-ai-model.ts` is the single place that decides which model answers each AI surface and how OpenRouter is asked to route it. Two models are in play:
+
+- **DeepSeek V4.1 Flash** (`deepseek/deepseek-v4.1-flash-1017`) answers every synthesis surface — recaps, summaries, extraction and proposals. Its requests are pinned to the `relace` provider with fallbacks disabled, so a payload is never handed to a different vendor than the deployment asked for.
+- **gpt-6-luna** (`openai/gpt-6-luna`) answers per-frame screenshot perception, where the job is to describe what is visibly on screen and nothing else.
+
+| Variable | Used for |
+| --- | --- |
+| `WORK_OS_INTERPRET_MODEL` | Deployment-wide override for the synthesis surfaces |
+| `WORK_OS_SCREENSHOT_MODEL` | Screenshot perception only |
+| `WORK_OS_ACTIVITY_INTERVAL_MODEL`, `WORK_OS_PLAN_MODEL`, `WORK_OS_NEXT_STEPS_MODEL`, `WORK_OS_AI_MODEL` | Individual synthesis surfaces |
+| `WORK_OS_AI_PROVIDER_ONLY` | Replaces the pinned provider list for pinned models |
+| `WORK_OS_AI_ALLOW_FALLBACKS` | Re-enables fallback providers for pinned models |
+| `WORK_OS_AI_REASONING_EFFORT` | Reasoning effort for the synthesis model (`minimal`, `low`, `medium`, `high`, or `none` to turn reasoning off) |
+
+The synthesis model reasons before it answers, and those reasoning tokens come out of the same completion budget as the answer. The effort is bounded so a reasoning pass cannot spend the whole budget and leave a truncated answer behind.
 
 ## Validate your changes
 

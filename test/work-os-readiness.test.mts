@@ -26,7 +26,7 @@ function baseInput(): WorkOsReadinessInput {
     tasks: [{ completed: false, assigneePersonIds: ["employee-a"], dueDate: "2026-08-12", priority: "high", estimatedEffortMinutes: 60, expectedOutcome: "Ship it", definitionOfDone: "Merged", taskGroupId: "group-a" }],
     providerReady: { nifty: true, worktivity: true },
     runtime: {
-      openAiConfigured: true,
+      aiConfigured: true,
       providerSecretConfigured: true,
       providerCredentialsPresent: true,
       screenshotEncryptionConfigured: false,
@@ -58,12 +58,12 @@ test("pilot readiness identifies setup gaps and blocks missing runtime prerequis
   input.connections = [];
   input.credentials = [];
   input.providerReady = {};
-  input.runtime.openAiConfigured = false;
+  input.runtime.aiConfigured = false;
   input.runtime.worktivityConfigured = false;
   const report = evaluateWorkOsReadiness(input);
   const codes = new Set(report.issues.map((issue) => issue.code));
   assert.equal(report.status, "blocked");
-  assert.ok(codes.has("runtime.openai_missing"));
+  assert.ok(codes.has("runtime.ai_key_missing"));
   assert.ok(!codes.has("people.nifty_mapping_missing"));
   assert.ok(codes.has("people.schedule_missing"));
 });

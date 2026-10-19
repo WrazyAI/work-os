@@ -1,8 +1,8 @@
 import { listPersonTasks } from "@/lib/work-os";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, INTERPRET_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
-export const INTERPRET_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const INTERPRET_TIMEOUT_MS = 45_000;
+const INTERPRET_TIMEOUT_MS = AI_TIMEOUTS.interpret;
 export const INTERPRET_RESPONSE_SCHEMA = {
   name: "work_os_candidate_update",
   strict: true,
@@ -458,16 +458,15 @@ export async function interpretWorkUpdate(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: INTERPRET_MODEL,
+      body: JSON.stringify(aiRequestBody(INTERPRET_MODEL, {
         messages: [
           { role: "system", content: "You are the Work OS assistant. You translate employee work updates into structured, reviewable operations. You never invent task ids and you output only valid JSON." },
           { role: "user", content: buildPrompt(input, tasks, planIntent, today, context) },
         ],
         temperature: 0.2,
-        max_tokens: 2400,
+        max_tokens: AI_TOKEN_BUDGETS.interpret,
         response_format: { type: "json_schema", json_schema: INTERPRET_RESPONSE_SCHEMA },
-      }),
+      })),
       signal: AbortSignal.timeout(INTERPRET_TIMEOUT_MS),
     });
     if (!response.ok) {

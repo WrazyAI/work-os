@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordWorkMemory, type MemoryScope } from "@/lib/work-memory";
 import { localDateForTimezone } from "@/modules/work-os/companion";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, MEMORY_FACT_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
-export const FACT_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const FACT_TIMEOUT_MS = 45_000;
+const FACT_TIMEOUT_MS = AI_TIMEOUTS.memoryFact;
 
 export interface FactDraft {
   key: string;
@@ -116,8 +116,7 @@ export async function extractProfileFactCandidates(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: FACT_MODEL,
+      body: JSON.stringify(aiRequestBody(MEMORY_FACT_MODEL, {
         messages: [
           {
             role: "system",
@@ -131,9 +130,9 @@ export async function extractProfileFactCandidates(
           { role: "user", content: `Recent work memory:\n${evidence}\n\nAlready known facts:\n${knownList}\n\nReturn JSON {"facts":[{"key":"snake_case_key","value":"..."}]} with 0-8 facts.` },
         ],
         temperature: 0.2,
-        max_tokens: 800,
+        max_tokens: AI_TOKEN_BUDGETS.memoryFact,
         response_format: { type: "json_schema", json_schema: FACT_SCHEMA },
-      }),
+      })),
       signal: AbortSignal.timeout(FACT_TIMEOUT_MS),
     });
     if (!response.ok) return { created: 0, considered: sources.length, reason: `provider ${response.status}` };

@@ -67,7 +67,7 @@ export interface WorkOsReadinessInput {
   }>;
   providerReady: Partial<Record<WorkOsProvider, boolean>>;
   runtime: {
-    openAiConfigured: boolean;
+    aiConfigured: boolean;
     providerSecretConfigured: boolean;
     providerCredentialsPresent: boolean;
     screenshotEncryptionConfigured: boolean;
@@ -240,7 +240,7 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   }
   if (features.github_evidence) addIssue("provider.github.identity_unverified", "needs_setup", verifiedAccounts.github ? 0 : 1, "At least one verified GitHub identity is required before GitHub evidence is attributable.");
   if (features.ghl_evidence) addIssue("provider.ghl.identity_unverified", "needs_setup", verifiedAccounts.ghl ? 0 : 1, "At least one verified GoHighLevel identity is required before CRM evidence is attributable.");
-  addIssue("runtime.openai_missing", "blocked", features.employee_companion && !input.runtime.openAiConfigured ? 1 : 0, "OPENAI_API_KEY is required for Work OS proposal generation.");
+  addIssue("runtime.ai_key_missing", "blocked", features.employee_companion && !input.runtime.aiConfigured ? 1 : 0, "OPENROUTER_API_KEY is required for Work OS AI generation.");
   addIssue("runtime.provider_secret_missing", "blocked", input.runtime.providerCredentialsPresent && !input.runtime.providerSecretConfigured ? 1 : 0, "WORK_OS_PROVIDER_SECRET_KEY is required to decrypt stored provider credentials.");
   addIssue("runtime.worktivity_key_missing", "needs_setup", requiredProviders.includes("worktivity") && !input.runtime.worktivityConfigured ? 1 : 0, "WORKTIVITY_API_KEY is required for Worktivity evidence synchronization.");
   addIssue("runtime.fal_key_missing", "needs_setup", features.voice_input && !input.runtime.falConfigured ? 1 : 0, "FAL_API_KEY is required for Work OS voice input and for reading recaps aloud.");

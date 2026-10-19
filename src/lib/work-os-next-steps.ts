@@ -3,6 +3,7 @@ import { getTaskByLocalOrProviderId } from "@/lib/work-os";
 import { listPersonTasks } from "@/lib/work-os-tasks";
 import { audit, db, ensureNoError, nonEmptyString, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, NEXT_STEPS_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 
 /* Recap-approved next steps.
  *
@@ -27,7 +28,6 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
  */
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = process.env.WORK_OS_NEXT_STEPS_MODEL || process.env.WORK_OS_ACTIVITY_INTERVAL_MODEL || process.env.WORK_OS_INTERPRET_MODEL || "gpt-5.6-luna";
 const PROMPT_VERSION = "recap-next-steps-v2";
 const MAX_SUGGESTIONS = 3;
 const MIN_CONFIDENCE = 0.6;
@@ -35,7 +35,7 @@ const MAX_TASK_LIST = 60;
 const MAX_EVIDENCE_LINES = 10;
 const MAX_TITLE_CHARS = 240;
 const MAX_RATIONALE_CHARS = 500;
-const GENERATION_TIMEOUT_MS = 45_000;
+const GENERATION_TIMEOUT_MS = AI_TIMEOUTS.nextSteps;
 /** A recap suggestion left undecided this long is expired so nothing piles up
  * in any queue after the chat moment ends. */
 const SUGGESTION_EXPIRY_HOURS = 24;
@@ -244,14 +244,13 @@ async function callNextStepModel(input: NextStepInputs): Promise<NextStepSuggest
     method: "POST",
     signal: AbortSignal.timeout(GENERATION_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
+    body: JSON.stringify(aiRequestBody(NEXT_STEPS_MODEL, {
       messages: nextStepsMessages(input),
       tools: [nextStepsTool()],
       tool_choice: { type: "function", function: { name: "recordNextSteps" } },
       temperature: 0.2,
-      max_tokens: 1_200,
-    }),
+      max_tokens: AI_TOKEN_BUDGETS.nextSteps,
+    })),
   });
   if (!response.ok) throw new Error(`recap next steps AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json2;
@@ -484,7 +483,7 @@ export async function ensureRecapNextStepsForInterval(access: WorkOsAccess, inte
         input_text: statement.slice(0, 3_000),
         before_state: beforeState,
         proposed_change: proposalChange(suggestion),
-        model: MODEL,
+        model: NEXT_STEPS_MODEL,
         prompt_version: PROMPT_VERSION,
         idempotency_key: idempotencyKey,
         created_by: userRow?.user_id ?? null,

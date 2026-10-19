@@ -10,6 +10,7 @@ import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { fetchScreenshotsForDay, framesWithinBounds, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, SCREENSHOT_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
 import { fingerprintScreenshot } from "@/lib/worktivityScreenshotRuns";
 import { saveFrameFingerprint } from "@/lib/worktivityFrameCache";
 import { localDateForTimezone, localDayBounds, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -23,7 +24,6 @@ type ScreenshotLog = Pick<WtActivityLog, "ID" | "Screenshot" | "CreateDate" | "T
 const captureAt = (log: ScreenshotLog) => log.CaptureDate || log.CreateDate;
 
 const BUCKET = "work-os-screenshots";
-const MODEL = process.env.WORK_OS_SCREENSHOT_MODEL || process.env.WORK_OS_INTERPRET_MODEL || "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const PROMPT_VERSION = "work-os-neutral-screenshot-v2";
 const DEFAULT_SCREENSHOTS_PER_RUN = 12;
@@ -36,13 +36,13 @@ const SCHEDULED_EOD_CAP = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Number(p
 const PREPARE_SCREENSHOTS_PER_REQUEST = 6;
 /** A hung provider call must never hold an interactive preparation open. */
 const SCREENSHOT_DOWNLOAD_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_DOWNLOAD_TIMEOUT_MS ?? 15_000) || 15_000);
-const SCREENSHOT_VISION_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_VISION_TIMEOUT_MS ?? 20_000) || 20_000);
+const SCREENSHOT_VISION_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_VISION_TIMEOUT_MS ?? AI_TIMEOUTS.screenshotVision) || AI_TIMEOUTS.screenshotVision);
 /** The observation is one small tool call; bound the completion budget so the
  * provider's credit pre-authorization checks the real cost. Without a limit the
  * request pre-authorizes the model's full context (e.g. 65536 tokens) and fails
  * with 402 whenever the account balance is lower, even though the call itself
  * costs a fraction of that. */
-const SCREENSHOT_VISION_MAX_TOKENS = Math.max(256, Number(process.env.WORK_OS_SCREENSHOT_VISION_MAX_TOKENS ?? 1_200) || 1_200);
+const SCREENSHOT_VISION_MAX_TOKENS = Math.max(256, Number(process.env.WORK_OS_SCREENSHOT_VISION_MAX_TOKENS ?? AI_TOKEN_BUDGETS.screenshotVision) || AI_TOKEN_BUDGETS.screenshotVision);
 
 function db() {
   return createAdminClient();
@@ -251,8 +251,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
     method: "POST",
     signal: AbortSignal.timeout(SCREENSHOT_VISION_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
+    body: JSON.stringify(aiRequestBody(SCREENSHOT_MODEL, {
       max_tokens: SCREENSHOT_VISION_MAX_TOKENS,
       messages: [
         {
@@ -276,7 +275,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "recordObservation" } },
-    }),
+    })),
   });
   if (!response.ok) throw new Error(`screenshot summary AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json;
@@ -388,7 +387,7 @@ async function processScreenshotLog(
         visible_context: { exclusionKind: "sensitive", sensitiveReason: observation.sensitiveReason },
         confidence: observation.confidence,
         processing_status: "excluded",
-        model: MODEL,
+        model: SCREENSHOT_MODEL,
         prompt_version: PROMPT_VERSION,
         failure_reason: observation.sensitiveReason
           ? `Excluded after sensitive-content detection: ${observation.sensitiveReason}.`
@@ -419,7 +418,7 @@ async function processScreenshotLog(
       confidence: observation.confidence,
       encryption_metadata: { algorithm: "AES-256-GCM", contentType, originalExtension: extension },
       processing_status: "processed",
-      model: MODEL,
+      model: SCREENSHOT_MODEL,
       prompt_version: PROMPT_VERSION,
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
       updated_at: new Date().toISOString(),
@@ -451,7 +450,7 @@ async function processScreenshotLog(
     }).eq("id", event.id);
     // The capture instant, not the provider's create date, decides the
     // evidence day — the same value the evidence event is recorded with.
-    await mirrorSummary(access, personId, event.id, captureAt(log), observation.summary, MODEL, timezone);
+    await mirrorSummary(access, personId, event.id, captureAt(log), observation.summary, SCREENSHOT_MODEL, timezone);
     return data;
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Screenshot analysis failed";
@@ -462,7 +461,7 @@ async function processScreenshotLog(
       source_reference: sourceReference,
       processing_status: "failed",
       failure_reason: reason,
-      model: MODEL,
+      model: SCREENSHOT_MODEL,
       prompt_version: PROMPT_VERSION,
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
       updated_at: new Date().toISOString(),

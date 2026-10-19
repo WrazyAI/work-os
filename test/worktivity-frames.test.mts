@@ -95,7 +95,7 @@ test("screenshot processing derives every day window from the workday window or 
   const eod = await source("src/lib/work-os-eod.ts");
   assert.match(eod, /listEodScreenshots\(access\.organizationId, personId, reportDate, timezone\)/, "the draft gallery resolves the employee's local day");
   assert.match(lib, /const bounds = window \? \{ startIso: window\.startIso, endIso: window\.endIso \} : localDayBounds\(date, resolvedTimezone\)/, "the EOD gallery follows the workday window with a local-day fallback");
-  assert.match(lib, /mirrorSummary\(access, personId, event\.id, captureAt\(log\), observation\.summary, MODEL, timezone\)/, "the mirror day follows the capture instant, not the provider create date");
+  assert.match(lib, /mirrorSummary\(access, personId, event\.id, captureAt\(log\), observation\.summary, SCREENSHOT_MODEL, timezone\)/, "the mirror day follows the capture instant, not the provider create date");
   assert.match(lib, /localDateForTimezone\(capturedAt, timezone\)/);
   assert.match(lib, /summarizeWorktivityScreenshots\(access, row\.person_id as string, shiftDate, \{ timezone \}\)/);
   assert.match(lib, /summarizeWorktivityScreenshots\(access, person\.id, localDate, \{ maxScreenshots: cap, timezone \}\)/);
