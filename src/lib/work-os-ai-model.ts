@@ -46,7 +46,7 @@ const REASONING_MODELS = new Set<string>([DEEPSEEK_MODEL]);
 const DEFAULT_REASONING_EFFORT = "low";
 
 /** Reads the first environment variable that carries a model slug. */
-function envModel(env: NodeJS.ProcessEnv, ...names: string[]): string | undefined {
+function envModel(env: AiEnvironment, ...names: string[]): string | undefined {
   for (const name of names) {
     const value = env[name]?.trim();
     if (value) return value;
@@ -54,11 +54,18 @@ function envModel(env: NodeJS.ProcessEnv, ...names: string[]): string | undefine
   return undefined;
 }
 
-function envFlag(env: NodeJS.ProcessEnv, name: string): boolean | undefined {
+function envFlag(env: AiEnvironment, name: string): boolean | undefined {
   const raw = env[name]?.trim().toLowerCase();
   if (!raw) return undefined;
   return !["0", "false", "off", "no"].includes(raw);
 }
+
+/**
+ * The environment a model policy is resolved from. Looser than
+ * `NodeJS.ProcessEnv` so a caller can resolve a policy against an explicit
+ * environment without having to supply every required variable.
+ */
+export type AiEnvironment = Record<string, string | undefined>;
 
 /**
  * The provider routing for a model, or undefined when the model is not pinned.
@@ -70,7 +77,7 @@ function envFlag(env: NodeJS.ProcessEnv, name: string): boolean | undefined {
  */
 export function providerRoute(
   model: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: AiEnvironment = process.env,
 ): { only: string[]; allow_fallbacks: boolean } | undefined {
   const pinned = PINNED_ROUTES[model];
   if (!pinned) return undefined;
@@ -102,7 +109,7 @@ const REASONING_EFFORTS = new Set(["minimal", "low", "medium", "high"]);
  */
 export function reasoningControl(
   model: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: AiEnvironment = process.env,
 ): { effort: string } | { enabled: false } | undefined {
   if (!REASONING_MODELS.has(model)) return undefined;
   const raw = (env.WORK_OS_AI_REASONING_EFFORT ?? DEFAULT_REASONING_EFFORT).trim().toLowerCase();
@@ -119,7 +126,7 @@ export function reasoningControl(
 export function aiRequestBody(
   model: string,
   body: Record<string, unknown>,
-  env: NodeJS.ProcessEnv = process.env,
+  env: AiEnvironment = process.env,
 ): Record<string, unknown> {
   const route = providerRoute(model, env);
   const reasoning = reasoningControl(model, env);
@@ -157,7 +164,7 @@ export type AiModelMap = {
  * synthesis surfaces, as it was before. A surface with its own variable wins
  * over it, so one surface can be moved without touching the rest.
  */
-export function resolveAiModels(env: NodeJS.ProcessEnv = process.env): AiModelMap {
+export function resolveAiModels(env: AiEnvironment = process.env): AiModelMap {
   return {
     interpret: envModel(env, "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
     plan: envModel(env, "WORK_OS_PLAN_MODEL", "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
