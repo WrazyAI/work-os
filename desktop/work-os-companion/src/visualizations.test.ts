@@ -635,6 +635,11 @@ describe("operational visualizations", () => {
     expect(insightChartStyles).not.toContain("grid-template-columns: repeat(7, minmax(76px, 1fr));");
     expect(sidebarStyles).toMatch(/@media \(max-width: 560px\) \{[\s\S]*?\.workspace,[\s\S]*?display: grid;[\s\S]*?grid-template-columns: var\(--sidebar-collapsed-width\) minmax\(0, 1fr\)/);
     expect(insightChartStyles).toContain(".scroll-fade-strip.top");
+    expect(insightChartStyles).toContain("max-height: min(56vh, 460px) !important;");
+    expect(insightChartStyles).toContain("border-spacing: 0;");
+    expect(insightChartStyles).toContain("print-color-adjust: exact;");
+    expect(insightChartStyles).toMatch(/\.trend-bar,[\s\S]*?\.daily-rhythm-outcomes \{[\s\S]*?animation: none !important;[\s\S]*?opacity: 1;/);
+    expect(insightChartStyles).toContain(".insights-page .card-title > small");
     expect(insightCharts).toContain("useScrollEdges");
     expect(insightCharts).toContain("trendLineSegments");
     expect(insightCharts).toContain("trendAxis");
