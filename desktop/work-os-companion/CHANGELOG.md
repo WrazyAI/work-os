@@ -29,6 +29,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 - The descriptions attached to your screenshots are now written by a newer AI too.
 - Your hourly activity recap now reaches the companion, instead of timing out before it was ready.
 
+## 0.4.75 — 2026-10-19
+
+- Drafting an earlier day's end-of-day report keeps working, even when that day's shift was never closed.
+
 ## 0.4.74 — 2026-10-19
 
 - You cannot draft today's end-of-day report while your shift is still running. Clock out first, then write it.
