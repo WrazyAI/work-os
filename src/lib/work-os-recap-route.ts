@@ -85,7 +85,12 @@ export async function handleRecapSpeech(
       | { intervalId?: unknown; revision?: unknown; voice?: unknown }
       | null;
     const intervalId = typeof body?.intervalId === "string" ? body.intervalId.trim() : "";
-    if (!intervalId) return fail("That recap is no longer available.", 404);
+    // A malformed id is answered as gone, exactly like an unknown one: the
+    // database must never be asked about a string that cannot be an id, and a
+    // caller must not learn the difference between "wrong" and "not yours".
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(intervalId)) {
+      return fail("That recap is no longer available.", 404);
+    }
     const requestedRevision = Number.isFinite(Number(body?.revision)) ? Math.floor(Number(body?.revision)) : null;
     const voice = typeof body?.voice === "string" && body.voice.trim() ? body.voice.trim() : DEFAULT_RECAP_VOICE;
 
