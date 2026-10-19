@@ -94,6 +94,19 @@ export function isVoiceTransportFailure(failure: unknown): boolean {
   return failure instanceof ApiRequestError && failure.status === null;
 }
 
+/** The employee-facing message for a failed upload.
+ *
+ * The raw transport text ("Failed to fetch") is not something an employee can
+ * act on, so a failure that never reached the workspace is described in plain
+ * words. A failure the workspace did answer keeps the workspace's own wording,
+ * because that is the one that says what to do next. */
+export function voiceFailureCopy(failure: unknown): string {
+  const aborted = failure instanceof DOMException && (failure.name === "AbortError" || failure.name === "TimeoutError");
+  if (aborted) return VOICE_FAILURE_COPY.transcribe;
+  if (isVoiceTransportFailure(failure)) return VOICE_FAILURE_COPY.network;
+  return failure instanceof Error && failure.message ? failure.message : VOICE_FAILURE_COPY.transcribe;
+}
+
 /** `0:07` — the recording clock, tabular by convention in the composer. */
 export function formatRecordingClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -362,8 +375,7 @@ export function useVoiceInput(options: {
       setReceipt(true);
     } catch (failure) {
       if (!mountedRef.current) return;
-      const message = failure instanceof Error ? failure.message : "";
-      setError(message || VOICE_FAILURE_COPY.network);
+      setError(voiceFailureCopy(failure));
     } finally {
       /* A newer hold may already own the composer by now. */
       if (mountedRef.current && captureId === captureIdRef.current) setState("idle");
