@@ -112,7 +112,7 @@ export default function EmployeeReview() {
      out brings the draft action back. */
   const [refusal, setRefusal] = useState<{ date: string; at: string | null } | null>(null);
   useEffect(() => { setRefusal(null); }, [selectedDate]);
-  const shiftOpen = shiftStillOpen({
+  const shiftOpen = !historical && shiftStillOpen({
     session: eodDay?.session ?? null,
     attendance: eodDay?.attendance ?? null,
   });
