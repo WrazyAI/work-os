@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.68 — 2026-10-19
+
 - The administration page's Settings now carries your own settings — profile, this device, appearance, and page guides — so you don't have to switch views.
 
 ## 0.4.67 — 2026-10-19
