@@ -4,6 +4,7 @@ import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText } from "./taskWorkspace";
 import { readStoredFlag, writeStoredFlag } from "./storedFlags";
 import { cx } from "./chat/cx";
+import { OverflowPanText } from "./OverflowPan";
 
 export type TaskSelectionCardSubtask = {
   id: string;
@@ -361,7 +362,7 @@ export function TaskSelectionCard({
               const proposed = proposedIds.has(child.id);
               const selected = selectedIds.has(child.id) && !proposed;
               return (
-                <li key={child.id} className={cx("chat-task-subtask", (selected || done) && "is-selected", proposed && "is-proposed")}>
+                <li key={child.id} className={cx("chat-task-subtask", (selected || done) && "is-selected", proposed && "is-proposed")} data-pan-row="true">
                   <label className={cx("chat-task-check", done || proposed || sending ? "cursor-default" : "cursor-pointer")}>
                     <input
                       type="checkbox"
@@ -373,7 +374,7 @@ export function TaskSelectionCard({
                     />
                     <span aria-hidden="true"><Check size={12} strokeWidth={3} /></span>
                   </label>
-                  <span className="chat-task-subtask-title">{childTitle}</span>
+                  <span className="chat-task-subtask-title"><OverflowPanText>{childTitle}</OverflowPanText></span>
                   <span className={statusChipClass(undefined, proposed)}>{proposed ? "Proposed" : done ? "Done" : "Open"}</span>
                 </li>
               );
@@ -413,14 +414,14 @@ export function TaskSelectionCard({
     ].filter(Boolean).join(" · ");
     const copy = (
       <>
-        <strong>{titleText}</strong>
+        <strong><OverflowPanText>{titleText}</OverflowPanText></strong>
         {task.description && <small className="chat-task-description">{safeTaskText(task.description, "No description added.")}</small>}
         <em className="chat-task-meta">{metadata}{total > 0 ? ` · ${completed}/${total} subtasks` : ""}</em>
       </>
     );
     return (
       <li key={task.id} className={cx("chat-task-row", selected && "is-selected", proposed && "is-proposed")}>
-        <div className="chat-task-row-main">
+        <div className="chat-task-row-main" data-pan-row="true">
           <label className={cx("chat-task-check", proposed || sending ? "cursor-default" : "cursor-pointer")}>
             <input
               type="checkbox"
@@ -462,7 +463,7 @@ export function TaskSelectionCard({
     const panelId = `${uid}-subtasks-${task.id}`;
     return (
       <Fragment key={task.id}>
-        <div role="row" className={cx("chat-task-table-row", selected && "is-selected", proposed && "is-proposed")}>
+        <div role="row" className={cx("chat-task-table-row", selected && "is-selected", proposed && "is-proposed")} data-pan-row="true">
           <span role="cell" className="chat-task-check">
             <label className={cx("chat-task-check-inner", proposed || sending ? "cursor-default" : "cursor-pointer")}>
               <input
@@ -476,14 +477,14 @@ export function TaskSelectionCard({
               <span aria-hidden="true"><Check size={12} strokeWidth={3} /></span>
             </label>
           </span>
-          <span role="cell" className="chat-task-table-title" title={task.description ? safeTaskText(task.description, "") : titleText}>
+          <span role="cell" className="chat-task-table-title">
             {expandable(task) ? (
               <button type="button" className="chat-task-row-head" aria-expanded={open} aria-controls={panelId} onClick={() => toggleExpanded(task)}>
-                <span className="chat-task-row-copy"><strong>{titleText}</strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</span>
+                <span className="chat-task-row-copy"><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</span>
                 <ChevronDown size={15} aria-hidden="true" className={cx("chat-task-chevron", open && "is-open")} />
               </button>
             ) : (
-              <><strong>{titleText}</strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</>
+              <><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</>
             )}
           </span>
           <span role="cell" className={overdue ? "is-overdue" : ""}>{task.dueDate ? formatWorkOsDate(task.dueDate) : "No date"}</span>

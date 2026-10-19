@@ -622,7 +622,7 @@ body {
 }
 .agenda-strip-edit svg { order: 2; color: var(--dash-signal-deep); }
 .agenda-strip-edit:hover .agenda-strip-text { text-decoration: none; }
-.agenda-strip-text { display: inline-block; overflow: visible; font-size: 15px; letter-spacing: -0.025em; text-overflow: clip; }
+.agenda-strip-text { overflow: visible; font-size: 15px; letter-spacing: -0.025em; text-overflow: clip; }
 
 /* Today's focus keeps a fixed readable measure, so a long goal is clipped. It
    fades at the edge it clips at — the right edge at rest — and pans to its end
@@ -630,32 +630,45 @@ body {
    and the fade flips to the left edge. Leaving the line snaps it straight back,
    so the transition is declared only inside the hover rule. The travel distance
    is measured in the component and handed over as --focus-shift; the duration
-   scales with it as --focus-pan-duration, so a long goal glides at the same
-   reading pace as a short one instead of sprinting. */
-.agenda-strip-focus-scroll {
+   scales with it as --focus-pan-duration, so a long line glides at the same
+   reading pace as a short one instead of sprinting.
+
+   The same line serves the focus statements and the chat task titles. A caller
+   can mark the row with data-pan-row when the whole row should be the hover and
+   focus target, so a task title reveals when the pointer is anywhere on it. */
+.overflow-pan {
   display: block;
   min-width: 0;
-  max-width: min(620px, 100%);
+  max-width: 100%;
   overflow: hidden;
 }
-.agenda-strip-focus-scroll.is-overflowing {
+.overflow-pan-line { display: inline-block; white-space: nowrap; }
+.overflow-pan.is-overflowing {
   -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
   mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
 }
-.agenda-strip-focus-scroll.is-overflowing:hover {
+.overflow-pan.is-overflowing:hover,
+[data-pan-row]:hover .overflow-pan.is-overflowing,
+[data-pan-row]:focus-within .overflow-pan.is-overflowing {
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
 }
-.agenda-strip-focus-scroll.is-overflowing .agenda-strip-text { transform: none; transition: none; }
-.agenda-strip-focus-scroll.is-overflowing:hover .agenda-strip-text {
+.overflow-pan.is-overflowing .overflow-pan-line { transform: none; transition: none; }
+.overflow-pan.is-overflowing:hover .overflow-pan-line,
+[data-pan-row]:hover .overflow-pan.is-overflowing .overflow-pan-line,
+[data-pan-row]:focus-within .overflow-pan.is-overflowing .overflow-pan-line {
   transform: translateX(var(--focus-shift, 0px));
   transition: transform var(--focus-pan-duration, 2600ms) linear 120ms;
 }
 /* Reduced motion still reaches the end of the line; it just gets there without
    animating, so the clipped text is never unreachable. */
 @media (prefers-reduced-motion: reduce) {
-  .agenda-strip-focus-scroll.is-overflowing:hover .agenda-strip-text { transition: none; }
+  .overflow-pan.is-overflowing:hover .overflow-pan-line,
+  [data-pan-row]:hover .overflow-pan.is-overflowing .overflow-pan-line,
+  [data-pan-row]:focus-within .overflow-pan.is-overflowing .overflow-pan-line { transition: none; }
 }
+/* The agenda strip owns its measure; the shared line owns the reveal. */
+.agenda-strip-focus-scroll { max-width: min(620px, 100%); }
 .agenda-strip-meta { padding-left: 0; }
 /* The strip's stat trio is gone: the overdue and due-today counts it repeated
    already lead the day-group headers and the view chips, and "done today" was a

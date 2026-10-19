@@ -28,6 +28,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Your end-of-day draft, daily summaries and activity recaps are now written by a newer AI, so the wording has changed.
 - The descriptions attached to your screenshots are now written by a newer AI too.
 
+## 0.4.72 — 2026-10-19
+
+- Long task and subtask names in Otto's task lists now scroll into view when you hover them, so you can read the whole name.
+
 ## 0.4.71 — 2026-10-19
 
 - Recaps can be read aloud: press Listen, follow the words as they are spoken, and confirm right there when it ends.

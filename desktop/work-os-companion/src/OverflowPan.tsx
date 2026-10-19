@@ -7,12 +7,16 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
  * always stops with the last character at the clip edge. Zero means the line
  * fits: no class is added, so nothing fades and nothing can move.
  *
+ * The caller supplies the typography (`className` on the clip box,
+ * `lineClassName` on the moving line); this owns the behaviour, so the focus
+ * statements and the chat task titles cannot drift apart.
+ *
  * The transition lives only in the `:hover` rule (see dashboard-overhaul.css),
  * which is what makes leaving snap straight back instead of animating. A
  * ResizeObserver re-measures when the copy, the text scale, or the window
  * changes, because a line can start or stop overflowing without a re-render.
  */
-export function OverflowPanText({ children, className }: { children: ReactNode; className?: string }) {
+export function OverflowPanText({ children, className, lineClassName }: { children: ReactNode; className?: string; lineClassName?: string }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   const [overflow, setOverflow] = useState(0);
   useEffect(() => {
@@ -30,10 +34,10 @@ export function OverflowPanText({ children, className }: { children: ReactNode; 
   return (
     <span
       ref={ref}
-      className={`agenda-strip-focus-scroll${overflow > 0 ? " is-overflowing" : ""}${className ? ` ${className}` : ""}`}
+      className={`overflow-pan${overflow > 0 ? " is-overflowing" : ""}${className ? ` ${className}` : ""}`}
       style={{ "--focus-shift": `${-overflow}px`, "--focus-pan-duration": `${panMs}ms` } as CSSProperties}
     >
-      <span className="agenda-strip-text">{children}</span>
+      <span className={`overflow-pan-line${lineClassName ? ` ${lineClassName}` : ""}`}>{children}</span>
     </span>
   );
 }

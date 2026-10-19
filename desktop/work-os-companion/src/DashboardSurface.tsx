@@ -186,7 +186,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
     <section className="day-focus-strip" aria-label="Today’s focus">
       <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
       <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
-        <OverflowPanText>{model.focus.text}</OverflowPanText>
+        <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
         <Pencil size={12} aria-hidden="true" />
       </button>
       <small className="day-focus-source">{model.focus.source}</small>
@@ -280,7 +280,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
     <section className="day-focus-strip" aria-label="Today’s focus">
       <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
       <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
-        <OverflowPanText>{model.focus.text}</OverflowPanText>
+        <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
         <Pencil size={12} aria-hidden="true" />
       </button>
       <small className="day-focus-source">{model.focus.source}</small>

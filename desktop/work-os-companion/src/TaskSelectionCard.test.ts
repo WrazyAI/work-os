@@ -51,6 +51,19 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("title=");
   });
 
+  it("reveals clipped task and subtask titles with the shared pan line", () => {
+    const withSubtasks = [{ ...tasks[0], subtasks: [{ id: "sub-1", title: "Write the verification notes" }], subtaskTotal: 1, subtaskCompleted: 0 }];
+    const card = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks: withSubtasks, onMarkSelectedDone: () => undefined }));
+    // Main title, subtask title, and the row that owns the hover target.
+    expect(card).toContain('class="overflow-pan"');
+    expect(card).toContain('<span class="overflow-pan-line">Finish release notes</span>');
+    expect(card).toContain('<span class="overflow-pan-line">Write the verification notes</span>');
+    expect(card).toContain('data-pan-row="true"');
+    const table = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, presentation: "table", onMarkSelectedDone: () => undefined }));
+    expect(table).toContain('<span class="overflow-pan-line">Repair provider sync</span>');
+    expect(table).toContain('data-pan-row="true"');
+  });
+
   it("uses a filterable task table for the in-app presentation", () => {
     const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, presentation: "table", onMarkSelectedDone: () => undefined }));
     expect(markup).toContain('role="table"');

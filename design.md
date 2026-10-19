@@ -529,8 +529,11 @@ long goal takes longer than a short one — and stops there. Leaving returns it 
 the start at once; the transition lives only in the hover state, so the return
 never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
-A surface without hover (below 481px) wraps the goal instead of clipping it,
-because a pointer-only reveal is not a reveal on a touch screen.
+The same line carries every clipped task and subtask title in the chat task
+cards, where the row is the hover and focus target, so a title reveals wherever
+the pointer rests on the task. A surface without hover (below 481px) wraps the
+goal instead of clipping it, because a pointer-only reveal is not a reveal on a
+touch screen.
 
 Rows:
 
@@ -670,6 +673,7 @@ Tool surfaces must preserve:
 - truthful queued/recorded/failed/skipped states;
 - per-item results for batches;
 - internal scroll for long task lists;
+- clipped task and subtask titles that reveal on the row's hover or focus (§6.2);
 - keyboard reachability and visible focus;
 - reduced-motion behavior;
 - copy controls that do not crowd the message bubble.
