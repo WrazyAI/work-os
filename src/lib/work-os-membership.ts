@@ -46,8 +46,11 @@ export function pickMembership<T extends WorkOsMembershipCandidate>(rows: readon
 }
 
 function compareCandidates(a: WorkOsMembershipCandidate, b: WorkOsMembershipCandidate): number {
-  const byCreated = createdAtMs(a) - createdAtMs(b);
-  if (byCreated !== 0) return byCreated;
+  // Compare rather than subtract: two unparseable timestamps are both Infinity,
+  // and Infinity - Infinity is NaN, which would skip every later tie-breaker.
+  const aCreated = createdAtMs(a);
+  const bCreated = createdAtMs(b);
+  if (aCreated !== bCreated) return aCreated < bCreated ? -1 : 1;
   const byRole = roleRank(a.role) - roleRank(b.role);
   if (byRole !== 0) return byRole;
   if (a.id === b.id) return 0;

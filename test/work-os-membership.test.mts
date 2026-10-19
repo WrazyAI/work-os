@@ -67,6 +67,15 @@ test("identical role and timestamp still resolve deterministically by id", () =>
   assert.equal(pickMembership([b, a])?.id, "aaa");
 });
 
+test("unparseable timestamps fall through to the role tie-break", () => {
+  // Infinity - Infinity is NaN, which would silently keep the first row and
+  // skip every later tie-breaker.
+  const brokenEmployee = member({ id: "bad-emp", role: "employee", created_at: "not-a-date" });
+  const brokenAdmin = member({ id: "bad-adm", role: "admin", created_at: "not-a-date" });
+
+  assert.equal(pickMembership([brokenEmployee, brokenAdmin])?.id, "bad-adm");
+});
+
 test("no candidates yields null", () => {
   assert.equal(pickMembership([]), null);
 });
