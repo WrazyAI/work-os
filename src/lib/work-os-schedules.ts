@@ -6,8 +6,125 @@ import {
   validateWorkOsTimezone,
 } from "@/lib/work-os-schedule-validation";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
-import { audit, db, nonEmptyString as text, type Json } from "@/lib/work-os-internal";
+import { audit, db, loadShiftData, nonEmptyString as text, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { resolveShiftWindowForDate, type WorkOsShiftWindow } from "@/modules/work-os/companion";
+
+/** The states whose day is still running. A closed session is history and
+ * keeps the hours it actually ran with. */
+const OPEN_SESSION_STATES = ["clocked_in", "active", "paused", "eod_due"] as const;
+
+/** Timestamptz columns arrive as Date objects through the Postgres client;
+ * compare them as instants, never as strings. */
+function instantKey(value: unknown): string | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  }
+  return null;
+}
+
+/** A date column arrives as a Date at UTC midnight or as a `YYYY-MM-DD` key. */
+function dateOnly(value: unknown): string | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : null;
+  if (typeof value === "string") {
+    const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+    return match ? match[0] : null;
+  }
+  return null;
+}
+
+/** The window an open session must carry after its schedule changes.
+ *
+ * A session stamps the scheduled window at clock-in so a closed day keeps the
+ * hours it ran with. While the day is still open the schedule is the live
+ * source: a same-day edit has to move the end-of-day reminder, the `eod_due`
+ * transition, and the activity window with it. Returns null when the session
+ * already matches the schedule, or when the day no longer resolves to a
+ * shift (a leave day keeps the window the day started with). */
+export function restampWindow(
+  session: { scheduled_starts_at?: unknown; scheduled_ends_at?: unknown; schedule_id?: unknown },
+  window: Pick<WorkOsShiftWindow, "startsAt" | "endsAt" | "scheduleId"> | null,
+): { scheduled_starts_at: string; scheduled_ends_at: string; schedule_id: string } | null {
+  if (!window) return null;
+  const startsAt = instantKey(window.startsAt);
+  const endsAt = instantKey(window.endsAt);
+  if (!startsAt || !endsAt) return null;
+  const currentStart = instantKey(session.scheduled_starts_at);
+  const currentEnd = instantKey(session.scheduled_ends_at);
+  const currentSchedule = typeof session.schedule_id === "string" ? session.schedule_id : null;
+  if (currentStart === startsAt && currentEnd === endsAt && (!currentSchedule || currentSchedule === window.scheduleId)) return null;
+  return { scheduled_starts_at: startsAt, scheduled_ends_at: endsAt, schedule_id: window.scheduleId };
+}
+
+/** Reconciles the person's open session with the schedule that now covers its
+ * day. Runs after a schedule or exception is saved, so the change reaches the
+ * session that the reminder and the EOD window are anchored to. Idempotent:
+ * an unchanged window writes nothing, and the event key names the edit, the
+ * previous window, and the new window so a retry dedupes while a later edit
+ * (even back to an earlier window) still lands in the ledger. */
+async function restampOpenSession(access: WorkOsAccess, personId: string, editToken: string) {
+  const { data, error } = await db()
+    .from("work_sessions")
+    .select("id,state,shift_date,scheduled_starts_at,scheduled_ends_at,schedule_id")
+    .eq("organization_id", access.organizationId)
+    .eq("person_id", personId)
+    .in("state", [...OPEN_SESSION_STATES])
+    .maybeSingle();
+  if (error) throw new Error(`load open Work OS session: ${error.message}`);
+  if (!data) return;
+  const session = data as Record<string, unknown>;
+  const shiftDate = dateOnly(session.shift_date);
+  if (!shiftDate) return;
+  const { rules, exceptions } = await loadShiftData(access, personId, new Date(`${shiftDate}T12:00:00Z`));
+  const window = resolveShiftWindowForDate(rules, exceptions, shiftDate);
+  const patch = restampWindow(session, window);
+  if (!patch) return;
+  const now = new Date().toISOString();
+  const { data: updated, error: updateError } = await db()
+    .from("work_sessions")
+    .update({ ...patch, updated_at: now })
+    .eq("organization_id", access.organizationId)
+    .eq("id", String(session.id))
+    .in("state", [...OPEN_SESSION_STATES])
+    .select("id");
+  if (updateError) throw new Error(`restamp open Work OS session: ${updateError.message}`);
+  /* The day may have closed between the read and the write: a closed session
+     keeps its stamp, and an event without a row would claim otherwise. */
+  if (!updated?.length) return;
+  const { error: eventError } = await db().from("work_session_events").insert({
+    organization_id: access.organizationId,
+    person_id: personId,
+    session_id: session.id,
+    event_type: "schedule_restamped",
+    from_state: session.state,
+    to_state: session.state,
+    source: "system",
+    observed_at: now,
+    actor_user_id: access.ctx.user.id,
+    idempotency_key: [
+      "schedule-restamp",
+      editToken,
+      String(session.id),
+      instantKey(session.scheduled_starts_at) ?? "none",
+      instantKey(session.scheduled_ends_at) ?? "none",
+      patch.scheduled_starts_at,
+      patch.scheduled_ends_at,
+      patch.schedule_id,
+    ].join(":"),
+    metadata: {
+      previousStartsAt: instantKey(session.scheduled_starts_at),
+      previousEndsAt: instantKey(session.scheduled_ends_at),
+      scheduledStartsAt: patch.scheduled_starts_at,
+      scheduledEndsAt: patch.scheduled_ends_at,
+      scheduleId: patch.schedule_id,
+    },
+  });
+  if (eventError && !/duplicate/i.test(eventError.message)) {
+    throw new Error(`record Work OS schedule restamp: ${eventError.message}`);
+  }
+}
 
 export async function listWorkOsSchedules(access: WorkOsAccess, personId?: string | string[] | null) {
   let query = db()
@@ -93,6 +210,19 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
   const { data, error } = await query.select("*").single();
   if (error) throw new Error(`save Work OS schedule: ${error.message}`);
   await audit(access, scheduleId ? "schedule.updated" : "schedule.created", "schedule", data.id as string, { personId });
+  /* A same-day edit reaches the day that is already running: the open session
+     anchors the EOD reminder and the eod_due transition to its window. The
+     schedule row is already committed, so a restamp failure must not report
+     the save as failed — a create retry would add a second schedule. */
+  try {
+    await restampOpenSession(access, personId, `${String(data.id)}:${String(data.updated_at ?? "")}`);
+  } catch (restampError) {
+    console.warn("[work-os] schedule saved but the open session was not restamped", {
+      personId,
+      scheduleId: data.id,
+      message: restampError instanceof Error ? restampError.message : "unknown",
+    });
+  }
   return data;
 }
 
@@ -129,5 +259,14 @@ export async function saveWorkOsScheduleException(access: WorkOsAccess, body: Js
     .single();
   if (error) throw new Error(`save Work OS schedule exception: ${error.message}`);
   await audit(access, "schedule.exception_saved", "schedule_exception", data.id as string, { personId, exceptionDate, kind });
+  try {
+    await restampOpenSession(access, personId, `${String(data.id)}:${String(data.updated_at ?? "")}`);
+  } catch (restampError) {
+    console.warn("[work-os] schedule exception saved but the open session was not restamped", {
+      personId,
+      exceptionId: data.id,
+      message: restampError instanceof Error ? restampError.message : "unknown",
+    });
+  }
   return data;
 }
