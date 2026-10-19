@@ -27,6 +27,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 - Your end-of-day draft, daily summaries and activity recaps are now written by a newer AI, so the wording has changed.
 - The descriptions attached to your screenshots are now written by a newer AI too.
+- Your hourly activity recap now reaches the companion, instead of timing out before it was ready.
 
 ## 0.4.72 — 2026-10-19
 
