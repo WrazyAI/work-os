@@ -410,12 +410,17 @@ test("the companion refreshes the capability from the server on every day load",
 test("hold-to-talk is routed by focus, so only the window in use records", () => {
   const rust = read("desktop/work-os-companion/src-tauri/src/lib.rs");
 
-  /* Focus, not visibility: the floating companion is visible almost always, so
-     a visibility test would hand it every hold and steal focus from the window
-     the employee was typing in. */
-  assert.match(rust, /let main_focused = app\s*\n?\s*\.get_webview_window\("main"\)/);
-  assert.match(rust, /if main_focused \{\s*\n\s*"main"\s*\n\s*\} else \{\s*\n\s*"avatar"\s*\n\s*\}/);
-  const routing = rust.slice(rust.indexOf("fn voice_target"), rust.indexOf("fn focus_voice_target"));
+  /* Focus, not the companion's visibility: the floating companion is visible
+     almost always, so a visibility test would hand it every hold and steal
+     focus from the window the employee was typing in. */
+  assert.match(rust, /fn main_window_state/);
+  assert.match(rust, /let focused = window\.is_focused\(\)/);
+  /* A window the employee cannot see is never the target: a minimized window
+     can still report focus on Windows, and a capture recorded there is
+     invisible and its suspended webview never finishes the upload. */
+  assert.match(rust, /fn main_window_state[\s\S]{0,400}is_minimized/);
+  assert.match(rust, /fn voice_route[\s\S]{0,400}focused && !hidden/);
+  const routing = rust.slice(rust.indexOf("fn voice_route"), rust.indexOf("fn focus_voice_target"));
   assert.doesNotMatch(routing, /is_visible/, "the routing rule must not depend on visibility");
 
   /* The non-target window is never raised: focusing the target only shows the

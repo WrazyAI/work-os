@@ -381,3 +381,33 @@ describe("app quit", () => {
     expect(app).toContain('listen("work-os://app-quit"');
   });
 });
+
+describe("hold-to-talk routing", () => {
+  it("never records into a window the employee cannot see", () => {
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    /* A minimized window can still report focus on Windows, so the hold has to
+       check that the app is on screen as well: otherwise the capture runs in a
+       window that shows nothing and its suspended webview leaves the
+       transcript stuck on "Transcribing…". */
+    expect(rust).toContain("fn main_window_state");
+    expect(rust).toMatch(/fn main_window_state[\s\S]*is_minimized/);
+    expect(rust).toMatch(/fn voice_route[\s\S]*focused && !hidden/);
+    expect(rust).not.toContain("fn voice_target");
+    /* The routing decision names what the host saw, so the log says which
+       window owned the capture and why. */
+    expect(rust).toContain("app focused={}, app on screen={}");
+  });
+
+  it("keeps a background webview working so an upload can finish", () => {
+    const config = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
+    expect(config.app.windows.length).toBeGreaterThan(0);
+    for (const window of config.app.windows) {
+      const args = String(window.additionalBrowserArgs ?? "");
+      /* Chromium suspends a webview that is not in front, and a suspended
+         webview never finishes an upload. Every window keeps running. */
+      expect(args).toContain("--disable-renderer-backgrounding");
+      expect(args).toContain("--disable-backgrounding-occluded-windows");
+      expect(args).toContain("--disable-background-timer-throttling");
+    }
+  });
+});

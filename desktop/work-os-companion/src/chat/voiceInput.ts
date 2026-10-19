@@ -218,10 +218,33 @@ export function useVoiceInput(options: {
          abandon a clip the route is still transcribing. */
       signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
     });
+    /* Where did the request stop? The resource timing says whether the clip
+       actually left this machine (encodedBodySize) and when the first byte of
+       the answer arrived (responseStart): a request that never left reads
+       differently from one the workspace answered late. */
+    const uploadTiming = (outcome: string) => {
+      const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+      const entry = entries.filter((item) => item.name.includes("/voice/transcribe")).pop();
+      if (!entry) {
+        diagnostics.warn("voice.upload.timing", "No timing entry for the voice upload", { surface, outcome });
+        return;
+      }
+      diagnostics.warn("voice.upload.timing", "Voice upload timing", {
+        surface,
+        outcome,
+        requestStartMs: Math.round(entry.requestStart),
+        responseStartMs: Math.round(entry.responseStart),
+        responseEndMs: Math.round(entry.responseEnd),
+        encodedBodySize: entry.encodedBodySize,
+        transferSize: entry.transferSize,
+        responseStatus: (entry as unknown as { responseStatus?: number }).responseStatus ?? null,
+      });
+    };
     try {
       let result: { text?: string };
       try {
         result = await send();
+        uploadTiming("completed");
       } catch (firstFailure) {
         if (!isVoiceTransportFailure(firstFailure)) throw firstFailure;
         /* The transport died before any response arrived, so the clip was never
@@ -236,6 +259,7 @@ export function useVoiceInput(options: {
           elapsedMs: firstMs,
           errorName: firstFailure instanceof Error ? firstFailure.name : typeof firstFailure,
         });
+        uploadTiming("transport-failed");
         const probeStarted = performance.now();
         try {
           await apiRequest("/api/work-os/session", { signal: AbortSignal.timeout(8_000) });
@@ -245,6 +269,7 @@ export function useVoiceInput(options: {
         }
         diagnostics.info("voice.upload.retry", "Retrying the voice upload once after a transport failure", { surface, bytes: blob.size });
         result = await send();
+        uploadTiming("retried");
       }
       const text = typeof result?.text === "string" ? result.text.trim() : "";
       if (!mountedRef.current) return;

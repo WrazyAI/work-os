@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.65 — 2026-10-19
+
+- Holding Ctrl + M now records into the floating companion when the app window is minimized, so you can see that it worked.
+- A voice update no longer gets stuck on "Transcribing…" while the app sits in the background.
+
 ## 0.4.64 — 2026-10-19
 
 - Today's focus keeps to a fixed width and fades where it's cut off; hover the line and it scrolls to the end, then snaps back the moment you move away.

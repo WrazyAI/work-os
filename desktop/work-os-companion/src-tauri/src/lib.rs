@@ -407,6 +407,32 @@ fn voice_shortcut() -> tauri_plugin_global_shortcut::Shortcut {
     Shortcut::new(Some(Modifiers::CONTROL), Code::KeyM)
 }
 
+/// What the host can see of the main window: whether it holds the keyboard
+/// focus, and whether it is on screen at all.
+///
+/// A minimized window can still report focus on Windows, so "focused" alone
+/// is not the same as "the employee can see it". A hold recorded into a
+/// minimized window is invisible, and its webview is suspended with the
+/// window, so the upload never completes until the window comes back.
+fn main_window_state(app: &tauri::AppHandle) -> (bool, bool) {
+    let Some(window) = app.get_webview_window("main") else {
+        return (false, true);
+    };
+    let focused = window.is_focused().unwrap_or(false);
+    let minimized = window.is_minimized().unwrap_or(false);
+    let visible = window.is_visible().unwrap_or(true);
+    (focused, minimized || !visible)
+}
+
+/// The window that owns a capture, and what the host saw when it chose.
+struct VoiceRoute {
+    target: &'static str,
+    /// The app window holds the keyboard focus.
+    app_focused: bool,
+    /// The app window is on screen (not minimized, not hidden).
+    app_on_screen: bool,
+}
+
 /// The window the employee is actually looking at owns the capture.
 ///
 /// Focus, not visibility: the floating companion is on screen almost always
@@ -415,15 +441,17 @@ fn voice_shortcut() -> tauri_plugin_global_shortcut::Shortcut {
 /// app — and steals focus from the window they were typing in. Only the
 /// focused window is chosen; when the app is in the background the hold goes
 /// to the small floating companion instead.
-fn voice_target(app: &tauri::AppHandle) -> &'static str {
-    let main_focused = app
-        .get_webview_window("main")
-        .and_then(|window| window.is_focused().ok())
-        .unwrap_or(false);
-    if main_focused {
-        "main"
-    } else {
-        "avatar"
+///
+/// A window the employee cannot see is never the target, even when the
+/// operating system still reports it as focused: the capture would run in a
+/// window that shows nothing, and its suspended webview would leave the
+/// transcript stuck on "Transcribing…" until the app is brought back.
+fn voice_route(app: &tauri::AppHandle) -> VoiceRoute {
+    let (focused, hidden) = main_window_state(app);
+    VoiceRoute {
+        target: if focused && !hidden { "main" } else { "avatar" },
+        app_focused: focused,
+        app_on_screen: !hidden,
     }
 }
 
@@ -570,7 +598,8 @@ pub fn run() {
                     let route = app.state::<VoiceHotkeyRoute>();
                     match event.state() {
                         ShortcutState::Pressed => {
-                            let target = voice_target(app);
+                            let decision = voice_route(app);
+                            let target = decision.target;
                             if let Ok(mut current) = route.0.lock() {
                                 *current = Some(target);
                             }
@@ -584,7 +613,10 @@ pub fn run() {
                             diagnostics::host_event(
                                 app,
                                 "voice.hotkey",
-                                &format!("Hold-to-talk start routed to the {target} window"),
+                                &format!(
+                                    "Hold-to-talk start routed to the {target} window (app focused={}, app on screen={})",
+                                    decision.app_focused, decision.app_on_screen
+                                ),
                                 diagnostics::DiagnosticLevel::Info,
                             );
                             let _ = app.emit_to(target, "work-os://voice/start", voice_event(target));
