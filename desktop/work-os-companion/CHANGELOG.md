@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.86 — 2026-10-20
+
+- Adding a task from administration no longer asks which project — it goes straight into TASKS.
+
 ## 0.4.85 — 2026-10-20
 
 - The admin task list now shows each task's description, and the people actually assigned to it.

@@ -249,7 +249,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const [sort, setSort] = useState<TaskSortState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialTaskId ?? null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", projectId: "", assignee: "", dueDate: "", priority: "" });
+  const [form, setForm] = useState({ name: "", description: "", assignee: "", dueDate: "", priority: "" });
 
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
   const projects = useQuery({ queryKey: adminKeys.projects(), queryFn: fetchProjects, select: normalizeProjects, staleTime: ADMIN_STALE_MS });
@@ -281,14 +281,16 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     mutationFn: () => createAdminTask({
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      project_id: form.projectId || undefined,
+      // Administration creates work in the one project that owns it; the
+      // picker is gone because a second project choice is noise, not a decision.
+      project_id: tasksProjectIdValue,
       assignee_person_ids: form.assignee ? [form.assignee] : [],
       due_date: form.dueDate || undefined,
       priority: form.priority || undefined,
     }),
     onSuccess: (result) => {
       setCreateOpen(false);
-      setForm({ name: "", description: "", projectId: "", assignee: "", dueDate: "", priority: "" });
+      setForm({ name: "", description: "", assignee: "", dueDate: "", priority: "" });
       void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
       const submitted = result?.task?.title ?? result?.task?.name;
       const title = String(submitted ?? (form.name.trim() || "The task"));
@@ -298,6 +300,11 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
 
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
   const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name ?? "Project") }));
+  // TASKS is the one project that owns organization work. It stays out of the
+  // form: the admin is choosing a person and a task, not a bucket.
+  const tasksProjectId = (projects.data?.projects ?? [])
+    .find((project) => String(project.name ?? "").trim().toUpperCase() === "TASKS")?.id;
+  const tasksProjectIdValue = tasksProjectId ? String(tasksProjectId) : undefined;
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     // The record returns assignee ids; resolve them against the roster so the
@@ -467,13 +474,12 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
         )}
       </Drawer>
 
-      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Add a task" subtitle="It lands in the organization task record immediately" width={520}>
+      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Add a task" subtitle="It lands in the TASKS project and the organization record immediately" width={520}>
         <div className="admin-grid admin-drawer-grid">
           <TextField label="Task" value={form.name} onChange={(next) => setForm((current) => ({ ...current, name: next }))} ariaLabel="Task name" placeholder="What needs doing" />
           <TextField label="Description" value={form.description} onChange={(next) => setForm((current) => ({ ...current, description: next }))} ariaLabel="Task description" />
           <div className="admin-inline-fields">
             <SelectField label="Assignee" ariaLabel="Task assignee" value={form.assignee} onChange={(next) => setForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={personOptions} />
-            <SelectField label="Project" ariaLabel="Task project" value={form.projectId} onChange={(next) => setForm((current) => ({ ...current, projectId: next }))} placeholder="No project" options={projectOptions} />
             <TextField label="Due" type="date" value={form.dueDate} onChange={(next) => setForm((current) => ({ ...current, dueDate: next }))} ariaLabel="Task due date" />
           </div>
           {create.error ? <Notice tone="err">{(create.error as Error).message}</Notice> : null}
