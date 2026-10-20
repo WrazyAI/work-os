@@ -1,5 +1,6 @@
 import Onboarding from "./Onboarding";
 import type { OnboardingData } from "./types";
+import { workProfileCatalog } from "../../../src/modules/work-os/onboarding";
 
 export const PREVIEW_DATA: OnboardingData = {
   onboardingRequired: true,
@@ -53,7 +54,9 @@ export const PREVIEW_DATA: OnboardingData = {
   draft: { step: "seen", updatedAt: null, revision: 1 },
   breakPolicy: { worktivityAuthoritative: true },
   screenshotPolicy: { retention: "30 day encrypted retention", limitation: "Not a productivity signal", sensitiveCapture: "Sensitive captures are deleted" },
-  catalog: { version: "preview", archetypes: [{ id: "engineering", name: "Engineering", description: "Build reliable software.", keywords: [], specialties: [{ id: "engineering:frontend", name: "Frontend" }], items: [{ id: "engineering:responsibility:product-engineering", kind: "responsibility", label: "Product engineering", source: "suggested" }] }, { id: "custom", name: "Something else", description: "Describe your work.", keywords: [], specialties: [], items: [] }] },
+  // Keep the actual nine-card scope step: a two-card stand-in never exercises
+  // the overflow that used to push the production footer out of the panel.
+  catalog: workProfileCatalog(),
 };
 
 export default function OnboardingPreview() {

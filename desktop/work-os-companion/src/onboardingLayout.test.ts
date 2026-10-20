@@ -15,10 +15,16 @@ const formStyles = readFileSync(fileURLToPath(new URL("./onboarding-form.css", i
  *  the panel's `overflow: hidden`, so Back/Saved/Continue disappeared — which
  *  is what a production employee saw while the debugger looked correct. */
 describe("setup panel column", () => {
+  const shellRule = styles.match(/\.guided-onboarding \{[\s\S]*?\n\}/)?.[0] ?? "";
   const workspaceRule = styles.match(/\.onboarding-workspace \{[\s\S]*?\n\}/)?.[0] ?? "";
   const headerRule = formStyles.match(/\.onboarding-workspace > header \{[\s\S]*?\n\}/)?.[0] ?? "";
   const contentRule = formStyles.match(/\.phase-content \{[\s\S]*?\n\}/)?.[0] ?? "";
   const actionsRule = formStyles.match(/\.phase-actions \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  it("fits the real webview even below the preferred native window height", () => {
+    expect(shellRule).toMatch(/height:\s*100vh;/);
+    expect(shellRule).toMatch(/min-height:\s*0;/);
+  });
 
   it("stacks the panel with flex, so an optional child cannot shift the rest", () => {
     expect(workspaceRule).toContain("display: flex");

@@ -3448,7 +3448,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .guided-onboarding {
   height: 100vh;
-  min-height: 600px;
+  /* The native window's preferred minimum is not a webview size guarantee
+     (screen constraints and zoom can leave less room). Never put the footer
+     below the real viewport; the step body already owns internal scrolling. */
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(290px, 40%) minmax(430px, 60%);
   background: #f5f3eb;
@@ -4630,4 +4633,3 @@ body.modal-open {
     transition: none;
   }
 }
-
