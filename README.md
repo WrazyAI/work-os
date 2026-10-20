@@ -185,6 +185,10 @@ Every model call reports its token accounting as one structured journal line:
 
 Read it back with `journalctl --user -u agentos-web | grep '\[ai-usage\]'`.
 
+### Conversation memory
+
+Each workday's chat sends its most recent turns verbatim and folds the older ones into a running summary stored beside the conversation (`work_conversations.summary` and `summarized_through`). Folding runs after the reply is flushed, so it never delays the chat, and a failure leaves the conversation exactly as it was. The summary records what was discussed and decided; it is conversation context, never evidence that work happened. `WORK_OS_CONVERSATION_SUMMARY_MODEL` overrides the model it uses.
+
 ## Validate your changes
 
 From the repository root:

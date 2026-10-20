@@ -329,6 +329,8 @@ export interface InterpretContext {
   todayBlock?: string;
   memoryBlock?: string;
   conversation?: Array<{ role: string; content: string }>;
+  /** Running summary of the turns that fell out of the verbatim window. */
+  conversationSummary?: string | null;
   /** Templates the employee can import as a whole task set. */
   blueprints?: Array<{ id: string; name: string; taskCount: number }>;
   /** Tool output from a Loom recording referenced in this update. */
@@ -347,7 +349,9 @@ export interface InterpretContext {
   };
 }
 
-function buildPrompt(
+/** Exported for its ordering contract: the reusable blocks lead and the
+ * employee's words trail them, which is what lets the provider cache a prefix. */
+export function buildPrompt(
   input: string,
   tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>,
   planIntent: string | null,
@@ -431,6 +435,7 @@ function buildPrompt(
     planIntent ? `Their stated plan for today: "${planIntent}".` : "",
     context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
     context?.memoryBlock ? `Memory context (confirmed facts, dated history, and same-day tentative context; never completion evidence):\n${context.memoryBlock}` : "",
+    context?.conversationSummary ? `Earlier in this conversation (summary of turns no longer shown; conversation context only, never evidence of work):\n${context.conversationSummary}` : "",
     conversation ? `Recent conversation:\n${conversation}` : "",
     loomBlock,
     "The employee wrote this update:",

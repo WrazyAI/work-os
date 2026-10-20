@@ -192,6 +192,7 @@ export type AiModelMap = {
   activityInterval: string;
   screenshotHour: string;
   checkIn: string;
+  conversationSummary: string;
   screenshot: string;
 };
 
@@ -218,6 +219,7 @@ export function resolveAiModels(env: AiEnvironment = process.env): AiModelMap {
     activityInterval: envModel(env, "WORK_OS_ACTIVITY_INTERVAL_MODEL", "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
     screenshotHour: envModel(env, "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
     checkIn: envModel(env, "WORK_OS_AI_MODEL") ?? DEEPSEEK_MODEL,
+    conversationSummary: envModel(env, "WORK_OS_CONVERSATION_SUMMARY_MODEL", "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
     screenshot: envModel(env, "WORK_OS_SCREENSHOT_MODEL", "WORK_OS_INTERPRET_MODEL") ?? SCREENSHOT_PERCEPTION_MODEL,
   };
 }
@@ -235,6 +237,7 @@ export const ACTIVITY_INTERVAL_MODEL = MODELS.activityInterval;
 export const SCREENSHOT_HOUR_MODEL = MODELS.screenshotHour;
 export const CHECK_IN_MODEL = MODELS.checkIn;
 export const SCREENSHOT_MODEL = MODELS.screenshot;
+export const CONVERSATION_SUMMARY_MODEL = MODELS.conversationSummary;
 
 /* ------------------------------------------------------------------ */
 /* Completion budgets                                                  */
@@ -263,6 +266,7 @@ export const AI_TOKEN_BUDGETS = {
   screenshotHour: 4_000,
   screenshotVision: 2_000,
   checkIn: 4_000,
+  conversationSummary: 1_500,
 } as const;
 
 /**
@@ -285,4 +289,5 @@ export const AI_TIMEOUTS = {
   screenshotHour: 60_000,
   screenshotVision: 30_000,
   checkIn: 60_000,
+  conversationSummary: 30_000,
 } as const;

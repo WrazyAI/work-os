@@ -14,7 +14,9 @@ export interface ConversationTurnInput {
   idempotencyKey?: string;
 }
 
-function conversationScopeKey(scope: ConversationScope): string {
+/** The per-workday conversation key, shared with the summary folder so both
+ * sides agree on which conversation a turn belongs to. */
+export function conversationScopeKey(scope: ConversationScope): string {
   return memoryScopeKey(scope.organizationId, scope.personId, scope.localDate);
 }
 

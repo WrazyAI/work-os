@@ -1,11 +1,12 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { interpretWorkUpdate, loadInterpretationTasks, type InterpretContext } from "@/lib/aiInterpret";
 import { buildLoomAttachment } from "@/lib/aiLoom";
 import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId, listBlueprints } from "@/lib/work-os";
 import { loadShiftData } from "@/lib/work-os-internal";
-import { persistInterpretHistory, recentConversationTurns } from "@/lib/work-conversations";
+import { persistInterpretHistory } from "@/lib/work-conversations";
+import { foldConversationSummary, loadConversationContext } from "@/lib/work-conversations-summary";
 import { annotateBatchStatusNames } from "@/lib/aiBatchLabels";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
@@ -48,7 +49,10 @@ export async function POST(req: Request) {
       ? {
           todayBlock: await buildTodaySnapshot(conversationScope),
           memoryBlock: await buildMemoryPromptBlock(conversationScope, body.input, { limit: 8 }),
-          conversation: await recentConversationTurns(conversationScope, 8),
+          ...await loadConversationContext(conversationScope).then((context) => ({
+            conversation: context.turns,
+            conversationSummary: context.summary,
+          })),
         }
       : {};
     // A Loom link anywhere in the update reaches the analyze tool; its output
@@ -101,6 +105,10 @@ export async function POST(req: Request) {
     // label at all — a raw column id must never reach the card.
     annotateBatchStatusNames(result.interpretation, tasks);
     await persistInterpretHistory(conversationScope, body.history, body.input);
+    // Fold the turns that have fallen out of the verbatim window after the
+    // response is flushed: an extra model call must never delay the reply, and
+    // a failure leaves the conversation untouched.
+    after(() => foldConversationSummary(conversationScope).catch(() => null));
     return NextResponse.json({ interpretation: result.interpretation, model: result.model });
   } catch (error) {
     return jsonError(error);
