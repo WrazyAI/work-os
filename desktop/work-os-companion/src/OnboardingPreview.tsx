@@ -57,5 +57,8 @@ export const PREVIEW_DATA: OnboardingData = {
 };
 
 export default function OnboardingPreview() {
-  return <Onboarding data={PREVIEW_DATA} simulated busy={false} onSubmit={async () => undefined} onSaveDraft={async () => undefined} onComplete={() => undefined} onOpenDebug={() => undefined} onLogout={() => undefined} onNotify={() => undefined} />;
+  // `?simulated=0` renders the production path: the scenario banner is a debug
+  // surface, so the panel must lay out correctly with and without it.
+  const simulated = typeof window === "undefined" || new URLSearchParams(window.location.search).get("simulated") !== "0";
+  return <Onboarding data={PREVIEW_DATA} simulated={simulated} busy={false} onSubmit={async () => undefined} onSaveDraft={async () => undefined} onComplete={() => undefined} onOpenDebug={() => undefined} onLogout={() => undefined} onNotify={() => undefined} />;
 }

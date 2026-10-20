@@ -21,20 +21,30 @@
   --ob-radius-field: 12px;
   --ob-radius-block: 14px;
   --ob-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* One column, optically centred while it fits and scrollable from the top
-     when it does not: a short step should look composed, not abandoned. */
-  grid-template-rows: 68px auto minmax(0, 1fr) auto;
 }
 
-/* The panel's only masthead label now that session controls live on the stage. */
+/* One column, optically centred while it fits and scrollable from the top
+   when it does not: a short step should look composed, not abandoned. The
+   weights are per-child rather than positional rows because the scenario
+   banner only renders in debug builds — every child keeps its role either
+   way, and the footer stays pinned. */
 .onboarding-workspace > header {
+  flex: 0 0 68px;
   border-bottom: 1px solid var(--ob-hairline);
+}
+
+.onboarding-workspace > .debug-notice {
+  flex: 0 0 auto;
 }
 
 .phase-content {
   display: grid;
   align-content: safe center;
   width: min(680px, calc(100% - 56px));
+  /* Let the step body be the flex child that shrinks and scrolls; `overflow`
+     itself stays in styles.css, where the narrow layout flips it to visible. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .phase-intro {
@@ -799,6 +809,7 @@
   height: auto;
   border-top: 1px solid var(--ob-hairline);
   background: rgba(251, 250, 246, 0.97);
+  flex: 0 0 auto;
 }
 
 .phase-actions .back {

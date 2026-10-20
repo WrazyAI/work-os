@@ -3496,8 +3496,14 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .onboarding-workspace {
   min-width: 0;
-  display: grid;
-  grid-template-rows: 68px auto 1fr auto auto;
+  /* One column: a fixed masthead, an optional scenario banner, the step body
+     that takes the leftover height and scrolls, and the actions pinned last.
+     Flex rather than fixed grid rows because the banner is conditional — a
+     positional row template silently hands the flexible row to whichever
+     child happens to land on it, so with the banner absent the footer became
+     the growing row and could be pushed out of the clipped panel. */
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .onboarding-workspace > header {
