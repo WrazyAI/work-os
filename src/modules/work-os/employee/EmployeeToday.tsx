@@ -42,6 +42,7 @@ import {
 } from "./ui";
 
 function goalProvenanceLabel(provenance: string | null | undefined, hasGoal: boolean) {
+  if (provenance === "suggested") return "suggested by Otto";
   if (provenance === "ai_draft") return "drafted with Otto";
   if (provenance === "accepted_suggestion") return "accepted suggestion";
   return hasGoal ? "written by you" : "optional";

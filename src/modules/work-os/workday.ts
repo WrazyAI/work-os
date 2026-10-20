@@ -28,6 +28,10 @@ export interface PromptContext {
   session: SessionShape | null;
   breaks: Array<{ startsAt: string; endsAt: string }>;
   hasConfirmedPlan?: boolean;
+  /** Whether the day already carries a goal — the employee's own, an accepted
+   * suggestion, or the suggested goal written when the first recap came due.
+   * The goal question stands down as soon as one exists. */
+  hasGoal?: boolean;
   planConfirmedAt?: string | null;
   firstFollowUpAt?: string | null;
   nextFallbackAt?: string | null;
@@ -213,21 +217,18 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
       ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }
       : { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
   }
-  // An unconfirmed plan keeps its required planning prompt only until the
-  // employee has engaged with the day. Once they record a substantive update
-  // or a check-in has been delivered, the workday is underway: the agenda
-  // review stays as the companion's inline banner instead of a prompt that
-  // keeps returning between check-ins.
-  if (!context.hasConfirmedPlan && !planningPromptAnswered(context)) {
-    const progressDue = progress.kind !== null && progress.nextPromptAt !== null && now >= Date.parse(progress.nextPromptAt);
-    if (!progressDue) {
-      return {
-        kind: "plan",
-        nextPromptAt: session.clockedInAt ?? context.at,
-        required: true,
-        reason: "Plan not confirmed.",
-      };
-    }
+  // The goal question is the day's first prompt. It holds until the employee
+  // has a goal — their own, an accepted suggestion, or the suggested goal the
+  // first recap writes — and a due check-in never preempts it. Its
+  // `nextPromptAt` is the first follow-up: the instant the hold expires and
+  // the recap (with that suggested goal) takes over.
+  if (!context.hasGoal && !planningPromptAnswered(context)) {
+    return {
+      kind: "plan",
+      nextPromptAt: new Date(firstAt).toISOString(),
+      required: true,
+      reason: "Goal not set.",
+    };
   }
   return progress;
 }

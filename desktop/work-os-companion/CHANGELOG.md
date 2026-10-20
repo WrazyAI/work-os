@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.82 — 2026-10-20
+
+- Otto now asks what you're working on before the first recap, and keeps asking until the day has a goal.
+- If you don't set a goal, Otto suggests one from your unfinished work and marks it as a suggestion.
+
 ## 0.4.81 — 2026-10-20
 
 - Listening to a recap now waits longer for the voice to be prepared, so a slow generation finishes instead of giving up.

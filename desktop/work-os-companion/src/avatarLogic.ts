@@ -337,6 +337,16 @@ export function promptNudgeDue(facts: CompanionDayFacts, now: number): boolean {
   return Number.isFinite(due) && due <= now;
 }
 
+/** Whether the goal question's hold has expired: the day is on shift, the
+ * prompt is still the planning prompt, and its hold instant — the first
+ * follow-up — has passed. The first run after that asks for the interval
+ * recap, which writes the suggested goal before it synthesizes. */
+export function planHoldExpired(facts: CompanionDayFacts, now: number): boolean {
+  if (!isOnShift(facts, now) || facts.promptKind !== "plan") return false;
+  const holdAt = facts.nextPromptAt ? Date.parse(facts.nextPromptAt) : Number.NaN;
+  return Number.isFinite(holdAt) && holdAt <= now;
+}
+
 /** Hourly prompt nudge: the server marked an update required and we have not
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {

@@ -695,3 +695,26 @@ test("an unfinished day cannot be drafted, and a draft can be deleted", async ()
   assert.match(deleteRoute, /requireWorkOsPersonAccess/, "the delete is scoped to the caller's person");
   assert.match(deleteRoute, /deleteWorkOsEodDraft/);
 });
+
+test("the goal question holds the day and the first recap suggests a goal", async () => {
+  const workday = await source("src/modules/work-os/workday.ts");
+  assert.match(workday, /Goal not set\./, "the goal question is the day's prompt");
+  assert.match(workday, /hasGoal/, "the prompt decision reads whether the day has a goal");
+  assert.match(workday, /nextPromptAt: new Date\(firstAt\)\.toISOString\(\)/, "the hold runs to the first follow-up");
+  const workdayService = await source("src/lib/work-os-workday.ts");
+  assert.match(workdayService, /hasGoal: Boolean\(dailyPlanGoalText\(plan\)\)/, "the day read passes its goal state");
+  assert.match(workdayService, /"suggested"/, "a suggested goal may be saved back");
+  const intervals = await source("src/lib/work-os-activity-intervals.ts");
+  assert.match(intervals, /holdExpired/, "the recap accepts the expired goal hold");
+  assert.match(intervals, /suggestWorkOsDayGoal/, "the first recap writes the suggested goal");
+  const suggestion = await source("src/lib/work-os-goal-suggestion.ts");
+  assert.match(suggestion, /goal_provenance: "suggested"/, "the suggestion is saved as a suggestion");
+  assert.match(suggestion, /plan\.goal_suggested/, "the suggestion is audited");
+  const avatar = await source("desktop/work-os-companion/src/AvatarApp.tsx");
+  assert.match(avatar, /planHoldExpired/, "the companion requests the held recap");
+  assert.match(avatar, /plan-hold:/, "the hold request is deduped per slot");
+  const companion = await source("desktop/work-os-companion/src/App.tsx");
+  assert.match(companion, /Suggested by \$\{MASCOT\.name\}/, "a suggested goal is labelled as one");
+  const web = await source("src/modules/work-os/employee/EmployeeToday.tsx");
+  assert.match(web, /provenance === "suggested"/, "the web labels a suggested goal as one");
+});

@@ -4,7 +4,8 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
 import { WorkOsConflictError } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
+import { dailyPlanGoalText, getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
+import { suggestWorkOsDayGoal } from "@/lib/work-os-goal-suggestion";
 import {
   personTimezone,
   prepareScreenshotWindow,
@@ -632,7 +633,14 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
   const workday = await getWorkday(access, at);
   const prompt = workday.prompt;
   const session = workday.session;
-  if (!session || !["follow_up", "hourly_fallback"].includes(String(prompt.kind)) || !prompt.nextPromptAt) {
+  /* The goal question holds the first recap until its `nextPromptAt`, the
+     first follow-up instant. From then on the recap (and the suggested goal it
+     writes) takes over, so the hold can never silence the cadence. */
+  const promptKind = String(prompt.kind);
+  const holdExpired = promptKind === "plan"
+    && Boolean(prompt.nextPromptAt)
+    && Date.parse(String(prompt.nextPromptAt)) <= at.getTime();
+  if (!session || (!["follow_up", "hourly_fallback"].includes(promptKind) && !holdExpired) || !prompt.nextPromptAt) {
     return { status: "no_prompt" as const, reason: "no_activity_prompt_due" };
   }
   const dueMs = Date.parse(prompt.nextPromptAt);
@@ -644,7 +652,9 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     : prompt.nextPromptAt;
   if (Date.parse(promptDueAt) > at.getTime() + 60_000) return { status: "no_prompt" as const, reason: "prompt_not_due" };
 
-  const promptKind = String(prompt.kind) as "follow_up" | "hourly_fallback";
+  // The row records the cadence slot, and the goal question's hold is the
+  // first follow-up slot.
+  const slotPromptKind = (holdExpired ? "follow_up" : promptKind) as "follow_up" | "hourly_fallback";
   const slotKey = activityIntervalSlotKey(String(session.id), promptDueAt);
   const existing = await loadIntervalBySlot(access.organizationId, personId, slotKey);
   if (existing && ["confirmed", "amended"].includes(String(existing.review_status))) {
@@ -688,7 +698,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         work_session_id: String(session.id),
         local_date: shiftDate,
         slot_key: slotKey,
-        prompt_kind: promptKind,
+        prompt_kind: slotPromptKind,
         prompt_due_at: promptDueAt,
         window_start: window.startIso,
         window_end: window.endIso,
@@ -719,6 +729,26 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       const reason = error instanceof Error ? error.message : "screenshot window preparation failed";
       const updated = await markIntervalUnavailable(row, reason, {});
       return { status: "unavailable" as const, reason, interval: updated };
+    }
+
+    /* A day that still has no goal gets one when its held first recap comes
+       due: the employee was asked first, so this is the fallback that keeps the
+       recap, the dashboard, and the EOD describing the same focus. It runs
+       before evidence selection so a day without usable frames still receives
+       a goal; a failure only leaves the day goal-less. */
+    let goalText = dailyPlanGoalText(workday.plan);
+    if (!goalText) {
+      try {
+        const suggested = await suggestWorkOsDayGoal(access, {
+          date: shiftDate,
+          activity: preparation.candidates
+            .map((candidate) => [candidate.visibleApp, candidate.summary].filter(Boolean).join(" — "))
+            .filter(Boolean),
+        });
+        if (suggested) goalText = suggested.goal;
+      } catch {
+        // The recap is the priority; a suggestion outage degrades to no goal.
+      }
     }
 
     const selection = selectIntervalEvidence(preparation.candidates, { maxFrames: config.maxFrames, maxRawFrames: config.maxRawFrames });
@@ -767,7 +797,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     let contextBlock = "";
     if (memoryEnabled(access.featureFlags)) {
       try {
-        const focus = [workday.plan?.focus_summary, workday.plan?.freeform_intent]
+        const focus = goalText ?? [workday.plan?.focus_summary, workday.plan?.freeform_intent]
           .map((value) => (typeof value === "string" ? value.trim() : ""))
           .find(Boolean) ?? null;
         const memoryScope = { organizationId: access.organizationId, personId, localDate: shiftDate };

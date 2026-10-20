@@ -47,7 +47,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, planHoldExpired, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -819,6 +819,10 @@ export default function AvatarApp(): React.ReactElement {
      move, so its due instant enters the scheduler's deps as its own boundary;
      that run is what requests the interval recap. */
   const promptDueNow = promptNudgeDue(facts, now);
+  /* The goal question holds the first recap until the first follow-up. That
+     instant is its own boundary too: the run after it requests the recap,
+     which writes the suggested goal before it synthesizes. */
+  const planHoldDue = planHoldExpired(facts, now);
 
   // ── Notification scheduler: hourly + clock-in + EOD, deduped per key ──
   useEffect(() => {
@@ -875,6 +879,30 @@ export default function AvatarApp(): React.ReactElement {
       fireNotification(nudge, notificationPermission.current);
     }
   }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow, promptDueNow]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Goal-question hold: the first recap takes over when it expires ──
+  // While the day has no goal the planning prompt holds the day, so the
+  // check-in scheduler never fires. Once the hold passes, the interval is
+  // requested anyway: the server writes the suggested goal before it
+  // synthesizes, and the next day read shows the recap.
+  useEffect(() => {
+    if (!facts.loaded || connected === false || !planHoldDue) return;
+    const key = `plan-hold:${facts.shiftDate}:${facts.nextPromptAt}`;
+    if (deliveryKeys.current.has(key)) return;
+    deliveryKeys.current.add(key);
+    void (async () => {
+      let recap: ActivityIntervalCardData | null = null;
+      try {
+        setActivityPreparing(true);
+        const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
+        if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
+      } catch { /* the goal question still stands; the next launch retries */ }
+      finally { setActivityPreparing(false); }
+      if (recap) setActivityPrompt(recap);
+      void loadDay();
+      if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
+    })();
+  }, [facts.loaded, facts.promptKind, facts.nextPromptAt, facts.shiftDate, connected, planHoldDue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Snooze expiry: re-prompt when the snooze window passes ──
   useEffect(() => {
