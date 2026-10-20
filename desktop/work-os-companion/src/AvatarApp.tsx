@@ -47,7 +47,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -817,6 +817,10 @@ export default function AvatarApp(): React.ReactElement {
   // then fires when the window opens, not when a server field happens to move.
   const eodAlertNow = eodAlertDue(facts, now);
   const clockInAlertNow = clockInAlertDue(facts, now);
+  /* A prompt that becomes due between two day polls has no server field to
+     move, so its due instant enters the scheduler's deps as its own boundary;
+     that run is what requests the interval recap. */
+  const promptDueNow = promptNudgeDue(facts, now);
 
   // ── Notification scheduler: hourly + clock-in + EOD, deduped per key ──
   useEffect(() => {
@@ -872,7 +876,7 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
       fireNotification(nudge, notificationPermission.current);
     }
-  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow, promptDueNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Snooze expiry: re-prompt when the snooze window passes ──
   useEffect(() => {

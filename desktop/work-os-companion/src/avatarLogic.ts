@@ -324,6 +324,19 @@ export function avatarBubble(input: { preparing: boolean; eodDue: boolean; recap
   return null;
 }
 
+/** Whether the current prompt instance has reached its due instant.
+ *
+ * The nudge scheduler re-runs on dependency changes, not on the five-second
+ * clock. A prompt that becomes due between two day polls has no server field
+ * to move, so the boundary itself has to be a dependency: without it the due
+ * prompt never requested its interval recap, and the generic check-in stood
+ * in for the recap the employee was waiting for. */
+export function promptNudgeDue(facts: CompanionDayFacts, now: number): boolean {
+  if (!isOnShift(facts, now) || !facts.promptRequired) return false;
+  const due = facts.nextPromptAt ? Date.parse(facts.nextPromptAt) : Number.NaN;
+  return Number.isFinite(due) && due <= now;
+}
+
 /** Hourly prompt nudge: the server marked an update required and we have not
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {

@@ -437,3 +437,15 @@ describe("hold-to-talk routing", () => {
     }
   });
 });
+
+describe("interval recap scheduler", () => {
+  it("re-arms the nudge at the prompt's due instant", () => {
+    const app = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    /* The scheduler runs on dependency changes, not on the clock tick. A prompt
+       that becomes due between two day polls needs the due boundary in its
+       deps, or the interval recap is never requested and the generic check-in
+       stands in for it. */
+    expect(app).toContain("promptNudgeDue(facts, now)");
+    expect(app).toMatch(/eodAlertNow, clockInAlertNow, promptDueNow\]/);
+  });
+});

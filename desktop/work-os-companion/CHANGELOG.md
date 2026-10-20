@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.78 — 2026-10-20
+
+- Your activity recap now appears when your check-in comes due, even if the companion was already open before that moment.
+
 ## 0.4.77 — 2026-10-19
 
 - Long task names and focus lines now scroll at one steady speed, so short ones no longer crawl and long ones no longer race.

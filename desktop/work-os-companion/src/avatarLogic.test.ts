@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand, overdueTasks,
@@ -20,6 +20,20 @@ const base: CompanionDayFacts = {
   clockedOutAt: null,
   pausedSeconds: 0,
 };
+
+describe("prompt nudge boundary", () => {
+  it("arms exactly when the due instant arrives, not before", () => {
+    const facts = { ...base, promptRequired: true, nextPromptAt: "2026-08-31T10:00:00Z" };
+    expect(promptNudgeDue(facts, Date.parse("2026-08-31T09:59:59Z"))).toBe(false);
+    expect(promptNudgeDue(facts, Date.parse("2026-08-31T10:00:00Z"))).toBe(true);
+  });
+  it("stays quiet off shift, without a prompt, or before the due instant", () => {
+    expect(promptNudgeDue({ ...base, promptRequired: true, nextPromptAt: null }, NOW)).toBe(false);
+    expect(promptNudgeDue({ ...base, promptRequired: true, nextPromptAt: "2026-08-31T10:30:00Z" }, NOW)).toBe(false);
+    expect(promptNudgeDue({ ...base, promptRequired: false, nextPromptAt: "2026-08-31T09:00:00Z" }, NOW)).toBe(false);
+    expect(promptNudgeDue({ ...base, sessionState: "paused", promptRequired: true, nextPromptAt: "2026-08-31T09:00:00Z" }, NOW)).toBe(false);
+  });
+});
 
 describe("isOnShift", () => {
   it("is true while clocked in and not paused", () => {
