@@ -791,6 +791,8 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toContain("var(--focus-pan-duration, 7000ms) linear 120ms");
     expect(dashboardStyles).toContain("var(--focus-pan-duration");
     expect(readText(resolve(root, "src/OverflowPan.tsx"))).toContain("--focus-pan-duration");
+    // Task descriptions use the fade-only mode: clipped, but never in motion.
+    expect(dashboardStyles).toContain(".overflow-pan.is-overflowing:not(.is-static):hover");
     expect(readText(resolve(root, "src/OverflowPan.tsx"))).not.toContain("Math.max(2600");
   });
 

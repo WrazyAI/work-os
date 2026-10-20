@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.83 — 2026-10-20
+
+- Only task names scroll on hover now: a long description stays put and fades at the edge, so a row reveals one thing at a time.
+
 ## 0.4.82 — 2026-10-20
 
 - Otto now asks what you're working on before the first recap, and keeps asking until the day has a goal.

@@ -23,6 +23,10 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
  * `lineClassName` on the moving line); this owns the behaviour, so the focus
  * statements and the chat task titles cannot drift apart.
  *
+ * `pan={false}` keeps the measured edge fade but never moves the line. Task
+ * descriptions use it: a title revealing while its description also slides
+ * competes for the reader's attention, so only the title pans.
+ *
  * The transition lives only in the `:hover` rule (see dashboard-overhaul.css),
  * which is what makes leaving snap straight back instead of animating. A
  * ResizeObserver re-measures when the copy, the text scale, or the window
@@ -39,7 +43,7 @@ export function panDurationMs(overflow: number) {
   if (overflow <= 0) return 0;
   return Math.min(PAN_MAX_MS, Math.round((overflow / PAN_PX_PER_SECOND) * 1000));
 }
-export function OverflowPanText({ children, className, lineClassName }: { children: ReactNode; className?: string; lineClassName?: string }) {
+export function OverflowPanText({ children, className, lineClassName, pan = true }: { children: ReactNode; className?: string; lineClassName?: string; pan?: boolean }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   const [overflow, setOverflow] = useState(0);
   useEffect(() => {
@@ -57,7 +61,7 @@ export function OverflowPanText({ children, className, lineClassName }: { childr
   return (
     <span
       ref={ref}
-      className={`overflow-pan${overflow > 0 ? " is-overflowing" : ""}${className ? ` ${className}` : ""}`}
+      className={`overflow-pan${overflow > 0 ? " is-overflowing" : ""}${pan ? "" : " is-static"}${className ? ` ${className}` : ""}`}
       style={{ "--focus-shift": `${-overflow}px`, "--focus-pan-duration": `${panMs}ms` } as CSSProperties}
     >
       <span className={`overflow-pan-line${lineClassName ? ` ${lineClassName}` : ""}`}>{children}</span>

@@ -64,6 +64,15 @@ describe("TaskSelectionCard", () => {
     expect(table).toContain('data-pan-row="true"');
   });
 
+  it("fades a clipped description without moving it", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, onMarkSelectedDone: () => undefined }));
+    // The description is the static variant: measured fade, no slide.
+    expect(markup).toContain('class="overflow-pan is-static"');
+    expect(markup).toContain('<span class="overflow-pan-line">Capture the verified changes.</span>');
+    // The title stays pannable.
+    expect(markup).toContain('<span class="overflow-pan-line">Finish release notes</span>');
+  });
+
   it("uses a filterable task table for the in-app presentation", () => {
     const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, presentation: "table", onMarkSelectedDone: () => undefined }));
     expect(markup).toContain('role="table"');

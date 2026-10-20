@@ -531,9 +531,12 @@ never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
 The same line carries every clipped task title — and the subtask titles in the
 chat cards — in the chat task cards and the inline task lists: the employee
-ledger's title and description, and the administration record's title. The row
-is the hover and focus target, so the text reveals wherever the pointer rests on
-the task. A surface without hover (below 481px) wraps the
+ledger's title and the administration record's title. The row is the hover and
+focus target, so the title reveals wherever the pointer rests on the task.
+A clipped task description uses the line's fade-only mode: it fades at the edge
+it clips at and never moves, because a title and its description sliding at once
+compete for the reader's attention. Reading the whole description belongs in the
+task drawer, not in the list. A surface without hover (below 481px) wraps the
 goal instead of clipping it, because a pointer-only reveal is not a reveal on a
 touch screen.
 

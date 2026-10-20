@@ -415,7 +415,7 @@ export function TaskSelectionCard({
     const copy = (
       <>
         <strong><OverflowPanText>{titleText}</OverflowPanText></strong>
-        {task.description && <small className="chat-task-description">{safeTaskText(task.description, "No description added.")}</small>}
+        {task.description && <small className="chat-task-description"><OverflowPanText pan={false}>{safeTaskText(task.description, "No description added.")}</OverflowPanText></small>}
         <em className="chat-task-meta">{metadata}{total > 0 ? ` · ${completed}/${total} subtasks` : ""}</em>
       </>
     );
@@ -480,11 +480,11 @@ export function TaskSelectionCard({
           <span role="cell" className="chat-task-table-title">
             {expandable(task) ? (
               <button type="button" className="chat-task-row-head" aria-expanded={open} aria-controls={panelId} onClick={() => toggleExpanded(task)}>
-                <span className="chat-task-row-copy"><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</span>
+                <span className="chat-task-row-copy"><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small><OverflowPanText pan={false}>{safeTaskText(task.description, "")}</OverflowPanText></small> : null}</span>
                 <ChevronDown size={15} aria-hidden="true" className={cx("chat-task-chevron", open && "is-open")} />
               </button>
             ) : (
-              <><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</>
+              <><strong><OverflowPanText>{titleText}</OverflowPanText></strong>{task.description ? <small><OverflowPanText pan={false}>{safeTaskText(task.description, "")}</OverflowPanText></small> : null}</>
             )}
           </span>
           <span role="cell" className={overdue ? "is-overdue" : ""}>{task.dueDate ? formatWorkOsDate(task.dueDate) : "No date"}</span>

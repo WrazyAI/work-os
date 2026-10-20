@@ -649,25 +649,25 @@ body {
   -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
   mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
 }
-.overflow-pan.is-overflowing:hover,
-[data-pan-row]:hover .overflow-pan.is-overflowing,
-[data-pan-row]:focus-within .overflow-pan.is-overflowing {
+.overflow-pan.is-overflowing:not(.is-static):hover,
+[data-pan-row]:hover .overflow-pan.is-overflowing:not(.is-static),
+[data-pan-row]:focus-within .overflow-pan.is-overflowing:not(.is-static) {
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
 }
 .overflow-pan.is-overflowing .overflow-pan-line { transform: none; transition: none; }
-.overflow-pan.is-overflowing:hover .overflow-pan-line,
-[data-pan-row]:hover .overflow-pan.is-overflowing .overflow-pan-line,
-[data-pan-row]:focus-within .overflow-pan.is-overflowing .overflow-pan-line {
+.overflow-pan.is-overflowing:not(.is-static):hover .overflow-pan-line,
+[data-pan-row]:hover .overflow-pan.is-overflowing:not(.is-static) .overflow-pan-line,
+[data-pan-row]:focus-within .overflow-pan.is-overflowing:not(.is-static) .overflow-pan-line {
   transform: translateX(var(--focus-shift, 0px));
   transition: transform var(--focus-pan-duration, 7000ms) linear 120ms;
 }
 /* Reduced motion still reaches the end of the line; it just gets there without
    animating, so the clipped text is never unreachable. */
 @media (prefers-reduced-motion: reduce) {
-  .overflow-pan.is-overflowing:hover .overflow-pan-line,
-  [data-pan-row]:hover .overflow-pan.is-overflowing .overflow-pan-line,
-  [data-pan-row]:focus-within .overflow-pan.is-overflowing .overflow-pan-line { transition: none; }
+  .overflow-pan.is-overflowing:not(.is-static):hover .overflow-pan-line,
+  [data-pan-row]:hover .overflow-pan.is-overflowing:not(.is-static) .overflow-pan-line,
+  [data-pan-row]:focus-within .overflow-pan.is-overflowing:not(.is-static) .overflow-pan-line { transition: none; }
 }
 /* The agenda strip owns its measure; the shared line owns the reveal. */
 .agenda-strip-focus-scroll { max-width: min(620px, 100%); }
