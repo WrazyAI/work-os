@@ -3,7 +3,7 @@ import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/w
 import { automationName, collapseAutomation, formatLocalTime, outsideShiftMarker, outsideWindowLabel } from "@/lib/work-os-eod-facts";
 import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, EOD_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, EOD_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
 async function screenshotTimezone(db: ReturnType<typeof createAdminClient>, organizationId: string, personId: string): Promise<string> {
@@ -337,6 +337,7 @@ export async function draftEodNarrative(grounding: EodGrounding): Promise<EodDra
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("eod_select", EOD_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");
@@ -378,6 +379,7 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("eod_revise", EOD_MODEL, payload);
     const markdown = withoutBottleneck(String(payload.choices?.[0]?.message?.content ?? ""));
     if (!markdown) return { ok: false, reason: "ai_malformed", detail: "empty refined report" };
     return { ok: true, markdown, model: EOD_MODEL };

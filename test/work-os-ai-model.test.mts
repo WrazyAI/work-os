@@ -9,6 +9,7 @@ import {
   aiRequestBody,
   providerRoute,
   reasoningControl,
+  recordAiUsage,
   resolveAiModels,
 } from "../src/lib/work-os-ai-model";
 
@@ -195,4 +196,24 @@ test("every surface timeout outlasts the budget it can spend", () => {
       `${surface} timeout ${timeout} cannot cover a full completion`,
     );
   }
+});
+
+test("usage reports the cached share of the prompt", () => {
+  const usage = recordAiUsage("interpret", "deepseek/deepseek-v4.1-flash-1017", {
+    usage: {
+      prompt_tokens: 9655,
+      prompt_tokens_details: { cached_tokens: 8935 },
+      completion_tokens: 180,
+    },
+  });
+  assert.deepEqual(usage, { promptTokens: 9655, cachedPromptTokens: 8935, completionTokens: 180 });
+});
+
+test("usage degrades to zeros instead of NaN when the provider reports none", () => {
+  assert.deepEqual(recordAiUsage("interpret", "m", {}), { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
+  assert.deepEqual(recordAiUsage("interpret", "m", null), { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
+  assert.deepEqual(
+    recordAiUsage("interpret", "m", { usage: { prompt_tokens: "nonsense" } }),
+    { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 },
+  );
 });

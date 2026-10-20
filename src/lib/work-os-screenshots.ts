@@ -10,7 +10,7 @@ import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { fetchScreenshotsForDay, framesWithinBounds, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, SCREENSHOT_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, recordAiUsage, SCREENSHOT_MODEL } from "@/lib/work-os-ai-model";
 import { fingerprintScreenshot } from "@/lib/worktivityScreenshotRuns";
 import { saveFrameFingerprint } from "@/lib/worktivityFrameCache";
 import { localDateForTimezone, localDayBounds, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -279,6 +279,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
   });
   if (!response.ok) throw new Error(`screenshot summary AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json;
+  recordAiUsage("screenshot_observe", SCREENSHOT_MODEL, json);
   const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
   const args = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
   if (!args) throw new Error("screenshot summary AI returned no structured observation");

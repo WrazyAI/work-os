@@ -1,4 +1,4 @@
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, LOOM_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, LOOM_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
 import {
   LOOM_TRANSCRIPT_MAX_AI,
@@ -118,6 +118,7 @@ export async function analyzeLoomNarrative(
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("loom", LOOM_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");

@@ -1,5 +1,5 @@
 import { listPersonTasks } from "@/lib/work-os";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, INTERPRET_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, INTERPRET_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const INTERPRET_TIMEOUT_MS = AI_TIMEOUTS.interpret;
@@ -390,18 +390,12 @@ function buildPrompt(
             : null,
         ].filter(Boolean).join("\n")
     : "";
+  // Order matters for the provider's prefix cache: everything a later turn can
+  // reuse comes first, and the employee's own words come last. The rules and
+  // the task list are the bulk of the prompt — with a few hundred tasks the
+  // task list alone is thousands of tokens — so putting them ahead of the
+  // update is what makes the prefix worth caching at all.
   return [
-    `Today is ${today}. The employee wrote this update:`,
-    `"""${input}"""`,
-    planIntent ? `Their stated plan for today: "${planIntent}".` : "",
-    context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
-    conversation ? `Recent conversation:\n${conversation}` : "",
-    context?.memoryBlock ? `Memory context (confirmed facts, dated history, and same-day tentative context; never completion evidence):\n${context.memoryBlock}` : "",
-    blueprintBlock,
-    loomBlock,
-    "Their tasks:",
-    taskList,
-    "",
     "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
     '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page|multi_task_add|multi_task_edit|multi_task_archive|multi_task_delete|multi_task_log|multi_task_reassign|plan_import","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review","tasks":null,"planImport":null}]}',
@@ -409,7 +403,7 @@ function buildPrompt(
     '- A multi_task_add entry is {"clientId":"t1","taskId":null,"title":"...","description":"...","taskGroupId":null,"completed":null,"assigneePersonId":null,"dueDate":null,"subtasks":[{"clientId":"s1","title":"...","description":"..."}]}. clientId is a short stable handle you choose; a subtask lists under the task it belongs to, and its clientId may be referenced by nothing else.',
     '- A multi_task_edit entry is the same shape with taskId set, carrying only the fields the employee asked to change. A multi_task_log entry sets taskId and carries the note in description; archive, delete, and reassign entries set only clientId, taskId, and (for reassign) assigneePersonId.',
     '- plan_import sets tasks to null and planImport to {"blueprintId":"<listed id>","clientName":"...","startDate":"YYYY-MM-DD"}, with nulls for anything the employee did not say.',
-    '- A multi_task_edit entry is {"clientId":"t1","taskId":"<existing task id>","title":null,"description":null,"taskGroupId":null,"completed":null,"subtasks":null}. Set only the fields the employee asked to change; every entry must reference an id from the list above.',
+    '- A multi_task_edit entry is {"clientId":"t1","taskId":"<existing task id>","title":null,"description":null,"taskGroupId":null,"completed":null,"subtasks":null}. Set only the fields the employee asked to change; every entry must reference an id from the task list.',
     "- Use multi_task_add when one update describes several new tasks, or one task with its own steps. Use taskId only to attach steps to a task that already exists; leave it null for a new task.",
     "- Use multi_task_edit when one update changes several existing tasks at once (statuses, wording, completion). A status move must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
     "- Prefer multi_task_add or multi_task_edit over repeating single create_task, add_subtask, or modify_task_status operations when an update names three or more of the same kind.",
@@ -419,7 +413,7 @@ function buildPrompt(
     "- Use plan_import only when the employee asks to import one of the listed templates: set tasks to null and planImport.blueprintId to that template's exact id. If none fits, use multi_task_add.",
     "- Archive, delete, log, and reassign batches never create a task: every entry must carry an existing taskId.",
     "- reply is 1-2 short, warm, plain sentences that acknowledge the update and point to the proposed next step. Never claim an action already happened or was approved.",
-    "- Only reference taskIds from the list above; never invent ids.",
+    "- Only reference taskIds from the task list; never invent ids.",
     "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",
     "- Use navigate_to_page when the employee should go somewhere in the app (page is one of: day, tasks, review, insights, evidence, settings). Attach it for time-sensitive destinations like a due EOD report so they get a direct button (page review).",
     "- Use task-management operations only for an explicit employee request. A status change must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
@@ -429,6 +423,18 @@ function buildPrompt(
     "- A Loom recording never proves completion or progress on its own; never create completion claims from it.",
     "- Statements must be plain, jargon-free sentences a manager can read.",
     "- If the update is empty of work information, return empty arrays.",
+    "",
+    "Their tasks:",
+    taskList,
+    blueprintBlock,
+    `Today is ${today}.`,
+    planIntent ? `Their stated plan for today: "${planIntent}".` : "",
+    context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
+    context?.memoryBlock ? `Memory context (confirmed facts, dated history, and same-day tentative context; never completion evidence):\n${context.memoryBlock}` : "",
+    conversation ? `Recent conversation:\n${conversation}` : "",
+    loomBlock,
+    "The employee wrote this update:",
+    `"""${input}"""`,
   ].filter(Boolean).join("\n");
 }
 
@@ -473,6 +479,7 @@ export async function interpretWorkUpdate(
       return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     }
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("interpret", INTERPRET_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const jsonStart = content.indexOf("{");
     const jsonEnd = content.lastIndexOf("}");

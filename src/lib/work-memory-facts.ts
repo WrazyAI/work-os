@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordWorkMemory, type MemoryScope } from "@/lib/work-memory";
 import { localDateForTimezone } from "@/modules/work-os/companion";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, MEMORY_FACT_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, MEMORY_FACT_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const FACT_TIMEOUT_MS = AI_TIMEOUTS.memoryFact;
@@ -137,6 +137,7 @@ export async function extractProfileFactCandidates(
     });
     if (!response.ok) return { created: 0, considered: sources.length, reason: `provider ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("memory_fact", MEMORY_FACT_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");

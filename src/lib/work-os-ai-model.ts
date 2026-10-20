@@ -139,6 +139,44 @@ export function aiRequestBody(
 }
 
 /* ------------------------------------------------------------------ */
+/* Usage                                                               */
+/* ------------------------------------------------------------------ */
+
+/** What one model call cost, as the provider reports it. */
+export type AiUsage = {
+  promptTokens: number;
+  cachedPromptTokens: number;
+  completionTokens: number;
+};
+
+/**
+ * Reports the provider's token accounting for one call.
+ *
+ * `cachedPromptTokens` is the part of the prompt the provider served from its
+ * own prefix cache. Without it a cache looks exactly like a cache miss, so a
+ * prompt-ordering change can only be judged from this number. The line is
+ * structured so it can be filtered out of the journal:
+ *
+ *   journalctl --user -u agentos-web | grep '\[ai-usage\]'
+ */
+export function recordAiUsage(surface: string, model: string, payload: unknown): AiUsage {
+  const usage = ((payload as { usage?: Record<string, unknown> } | null)?.usage ?? {}) as Record<string, any>;
+  const promptTokens = Number(usage.prompt_tokens ?? 0) || 0;
+  const cachedPromptTokens = Number(usage.prompt_tokens_details?.cached_tokens ?? 0) || 0;
+  const completionTokens = Number(usage.completion_tokens ?? 0) || 0;
+  const hitRate = promptTokens > 0 ? Math.round((cachedPromptTokens / promptTokens) * 100) : 0;
+  console.info(`[ai-usage] ${JSON.stringify({
+    surface,
+    model,
+    promptTokens,
+    cachedPromptTokens,
+    completionTokens,
+    cacheHitPercent: hitRate,
+  })}`);
+  return { promptTokens, cachedPromptTokens, completionTokens };
+}
+
+/* ------------------------------------------------------------------ */
 /* Per-surface models                                                  */
 /* ------------------------------------------------------------------ */
 

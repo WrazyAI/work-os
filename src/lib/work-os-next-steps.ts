@@ -3,7 +3,7 @@ import { getTaskByLocalOrProviderId } from "@/lib/work-os";
 import { listPersonTasks } from "@/lib/work-os-tasks";
 import { audit, db, ensureNoError, nonEmptyString, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, NEXT_STEPS_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, NEXT_STEPS_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 /* Recap-approved next steps.
  *
@@ -254,6 +254,7 @@ async function callNextStepModel(input: NextStepInputs): Promise<NextStepSuggest
   });
   if (!response.ok) throw new Error(`recap next steps AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json2;
+  recordAiUsage("next_steps", NEXT_STEPS_MODEL, json);
   const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
   const args = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
   if (!args) throw new Error("recap next steps AI returned no structured output");

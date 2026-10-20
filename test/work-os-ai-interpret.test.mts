@@ -107,3 +107,52 @@ test("interpretation context caps at the newest open work and skips malformed ro
   assert.equal(ordered[0]?.id, "task-319");
   assert.ok(!ordered.some((task) => task.title === "bad id"));
 });
+
+test("the prompt leads with the reusable blocks and ends with the employee's words", async () => {
+  // The provider caches a stable prefix. With a few hundred tasks the task list
+  // and the rules are the bulk of the prompt, so they must come before the
+  // update, the day state, the memory block and the recent conversation.
+  const { readFile } = await import("node:fs/promises");
+  const lib = await readFile(new URL("../src/lib/aiInterpret.ts", import.meta.url), "utf8");
+  const prompt = lib.slice(lib.indexOf("function buildPrompt("), lib.indexOf("export interface InterpretResult"));
+  const order = [
+    "Convert the update into structured operations",
+    "Their tasks:",
+    "taskList,",
+    "blueprintBlock,",
+    "`Today is ${today}.`",
+    "context?.todayBlock",
+    "context?.memoryBlock",
+    "Recent conversation:",
+    "loomBlock,",
+    "The employee wrote this update:",
+    '`"""${input}"""`',
+  ];
+  let cursor = -1;
+  for (const marker of order) {
+    const at = prompt.indexOf(marker);
+    assert.ok(at >= 0, `prompt is missing ${marker}`);
+    assert.ok(at > cursor, `${marker} must come after the block before it`);
+    cursor = at;
+  }
+});
+
+test("the prompt never points at a block by position", async () => {
+  // The rules used to say "the list above"; a reorder would silently falsify
+  // that. Name the block instead so the order can change safely.
+  const { readFile } = await import("node:fs/promises");
+  const lib = await readFile(new URL("../src/lib/aiInterpret.ts", import.meta.url), "utf8");
+  const prompt = lib.slice(lib.indexOf("function buildPrompt("), lib.indexOf("export interface InterpretResult"));
+  assert.doesNotMatch(prompt, /the list above/i);
+});
+
+test("the check-in prompt puts the reusable task list before the employee's words", async () => {
+  // Same prefix-cache reason as the interpret prompt: the task list repeats
+  // across check-ins, the employee's sentence does not.
+  const { readFile } = await import("node:fs/promises");
+  const lib = await readFile(new URL("../src/lib/work-os-checkins.ts", import.meta.url), "utf8");
+  const at = lib.indexOf('{ role: "user", content: JSON.stringify({');
+  assert.ok(at >= 0, "the check-in user turn must be a JSON payload");
+  const payload = lib.slice(at, lib.indexOf("}) },", at));
+  assert.ok(payload.indexOf("currentTasks") < payload.indexOf("employeeInput"), "the task list must lead the payload");
+});

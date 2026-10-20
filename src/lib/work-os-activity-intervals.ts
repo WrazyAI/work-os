@@ -14,7 +14,7 @@ import {
 } from "@/lib/work-os-screenshots";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, ACTIVITY_INTERVAL_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { ACTIVITY_INTERVAL_MODEL, AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, recordAiUsage } from "@/lib/work-os-ai-model";
 import {
   formatGithubActivityBlock,
   githubRecordedActivityAllowlist,
@@ -543,6 +543,7 @@ async function synthesizeInterval(input: {
   });
   if (!response.ok) throw new Error(`activity interval AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
   const json = await response.json() as Json;
+  recordAiUsage("activity_interval", input.model, json);
   const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
   const args = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
   if (!args) throw new Error("activity interval AI returned no structured recap");

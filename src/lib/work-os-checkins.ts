@@ -14,7 +14,7 @@ import {
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { recordWorkMemory, buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, CHECK_IN_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, CHECK_IN_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const CHECK_IN_TIMEOUT_MS = AI_TIMEOUTS.checkIn;
@@ -98,7 +98,10 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
             "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
           ].join("\n"),
         },
-        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments, ...(context?.todayBlock ? { todayContext: context.todayBlock } : {}), ...(context?.memoryBlock ? { memoryContext: context.memoryBlock } : {}) }) },
+        // The task list leads and the employee's own words come last, so the
+        // provider's prefix cache can reuse the list across check-ins. The
+        // model reads the same content either way.
+        { role: "user", content: JSON.stringify({ currentTasks: taskContext, dailyCommitments: commitments, ...(context?.todayBlock ? { todayContext: context.todayBlock } : {}), ...(context?.memoryBlock ? { memoryContext: context.memoryBlock } : {}), employeeInput: input }) },
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
@@ -109,6 +112,7 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
   });
   if (!response.ok) throw new Error(`Work OS proposal AI failed (${response.status}): ${(await response.text()).slice(0, 180)}`);
   const json = await response.json() as Json;
+  recordAiUsage("check_in", CHECK_IN_MODEL, json);
   const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
   const rawArgs = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "{}";
   let args: Json;

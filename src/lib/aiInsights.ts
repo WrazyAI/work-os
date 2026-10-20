@@ -2,7 +2,7 @@ import { formatDuration, getPersonalInsights, type InsightRange } from "@/lib/wo
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, INSIGHTS_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, INSIGHTS_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const SYNTHESIS_TIMEOUT_MS = AI_TIMEOUTS.insights;
@@ -250,6 +250,7 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("insights", INSIGHTS_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");

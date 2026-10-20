@@ -173,6 +173,18 @@ The specific requirements depend on the feature being exercised. Do not run hist
 
 The synthesis model reasons before it answers, and those reasoning tokens come out of the same completion budget as the answer. The effort is bounded so a reasoning pass cannot spend the whole budget and leave a truncated answer behind.
 
+### Prompt caching and usage
+
+The provider caches a stable request prefix automatically, so each chat prompt is ordered with the reusable blocks first — the rules, then the task list, then the available templates — and the employee's own words, the day state, the memory block and the recent conversation last. With a few hundred tasks that prefix is over ninety percent of the prompt, so a warm turn serves most of its input from cache. `npm run work-os:measure-prompt-cache` measures the hit rate against the real provider.
+
+Every model call reports its token accounting as one structured journal line:
+
+```
+[ai-usage] {"surface":"interpret","promptTokens":7164,"cachedPromptTokens":6656,"completionTokens":720,"cacheHitPercent":93}
+```
+
+Read it back with `journalctl --user -u agentos-web | grep '\[ai-usage\]'`.
+
 ## Validate your changes
 
 From the repository root:

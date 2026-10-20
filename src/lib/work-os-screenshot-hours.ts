@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, SCREENSHOT_HOUR_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, recordAiUsage, SCREENSHOT_HOUR_MODEL } from "@/lib/work-os-ai-model";
 import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { db } from "@/lib/work-os-internal";
 import { personTimezone } from "@/lib/work-os-screenshots";
@@ -190,6 +190,7 @@ export async function summarizeScreenshotHours(groups: ScreenshotHourGroup[]): P
     });
     if (!response.ok) return null;
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("screenshot_hours", SCREENSHOT_HOUR_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");

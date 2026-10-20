@@ -1,5 +1,5 @@
 import type { PlanningContext, PlanningTask } from "@/lib/work-os-planning-context";
-import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, PLAN_MODEL, aiRequestBody } from "@/lib/work-os-ai-model";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, PLAN_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const PLAN_TIMEOUT_MS = AI_TIMEOUTS.plan;
@@ -209,6 +209,7 @@ export async function interpretDailyPlan(
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("plan", PLAN_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const parsed = parsePlanInterpretation(JSON.parse(content), rawIntent, context);
     return parsed
@@ -321,6 +322,7 @@ export async function refinePlanDraft(
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("plan_refine", PLAN_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const parsed = parsePlanInterpretation(JSON.parse(content), rawIntent, context);
     return parsed
