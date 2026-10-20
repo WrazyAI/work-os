@@ -3,7 +3,7 @@ import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } fr
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
 import { RecapPrompter } from "./RecapPrompter";
-import { createRecapSpeechPlayer, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
+import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 import { DEFAULT_RECAP_VOICE, grownWindow, normalizeRecapVoice, RECAP_BUBBLE_RESTING, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { prefersReducedMotion } from "./listShift";
 import { apiRequestAudio } from "./api";
@@ -279,7 +279,7 @@ export default function AvatarApp(): React.ReactElement {
       : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
     toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
     releaseObjectUrl: (url) => URL.revokeObjectURL(url),
-    createAudio: (src) => new Audio(src),
+    createAudio: browserRecapAudio,
     onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
     onFailure: (message) => setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]),
     onStaleCard: () => { void loadDayRef.current?.(true); },

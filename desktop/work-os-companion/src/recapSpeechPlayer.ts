@@ -31,6 +31,8 @@ export interface RecapSpeechSnapshot {
 export interface RecapAudio {
   play(): Promise<void>;
   pause(): void;
+  /** Point the same element at new audio, keeping playback permission. */
+  setSource(src: string): void;
   currentTime: number;
   readonly duration: number;
   addEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
@@ -64,11 +66,55 @@ export interface RecapSpeechPlayer {
 
 const IDLE: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null };
 
+/** The real browser element behind `RecapAudio`. */
+export function browserRecapAudio(src: string): RecapAudio {
+  const element = new Audio(src);
+  return {
+    play: () => element.play(),
+    pause: () => element.pause(),
+    setSource(next) {
+      element.src = next;
+      element.load();
+    },
+    get currentTime() { return element.currentTime; },
+    get duration() { return element.duration; },
+    addEventListener: (type, handler) => element.addEventListener(type, handler),
+    removeEventListener: (type, handler) => element.removeEventListener(type, handler),
+  };
+}
+
+/** A quarter second of silence, as a valid PCM WAV. */
+function silentWav(): ArrayBuffer {
+  const sampleRate = 8000;
+  const samples = Math.floor(sampleRate / 4);
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const ascii = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples * 2, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  ascii(36, "data");
+  view.setUint32(40, samples * 2, true);
+  // The sample bytes stay zero: silence.
+  return buffer;
+}
+
 export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeechPlayer {
   let snapshot: RecapSpeechSnapshot = IDLE;
   let weights: number[] = [];
   let audio: RecapAudio | null = null;
   let objectUrl: string | null = null;
+  let primeUrl: string | null = null;
   /** Guards a slow clip arriving after the read was stopped. */
   let token = 0;
 
@@ -85,6 +131,26 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     if (objectUrl) {
       deps.releaseObjectUrl(objectUrl);
       objectUrl = null;
+    }
+    if (primeUrl) {
+      deps.releaseObjectUrl(primeUrl);
+      primeUrl = null;
+    }
+  };
+
+  /** Start a silent clip inside the press.
+   *
+   * A clip takes seconds to synthesize, and a webview only honours a gesture
+   * for a few seconds: by the time the audio arrives, `play()` is refused and
+   * the read is silent. Playing a silent source on the element that will carry
+   * the clip marks that element as allowed, so the real `play()` succeeds. */
+  const prime = () => {
+    try {
+      primeUrl = deps.toObjectUrl(silentWav(), "audio/wav");
+      audio = deps.createAudio(primeUrl);
+      void audio.play().catch(() => { /* best effort: the clip still tries */ });
+    } catch {
+      /* Priming is an optimisation; the real play reports its own failure. */
     }
   };
 
@@ -108,11 +174,16 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
   const start = async (input: { intervalId: string; revision: number | null; voice: string }) => {
     const mine = (token += 1);
     publish({ status: "loading", lines: [], progress: 0, activeIndex: 0, revision: input.revision, intervalId: input.intervalId });
+    // Before the await: this is still the press.
+    prime();
     let clip: Awaited<ReturnType<RecapSpeechPlayerDeps["fetchClip"]>>;
     try {
       clip = await deps.fetchClip(input);
     } catch (error) {
       if (mine !== token) return;
+      // A failed request still owns the primed element: stop it and free both
+      // sources, so a retry starts clean.
+      release();
       publish({ ...IDLE, intervalId: input.intervalId });
       deps.onFailure(error instanceof Error && error.message ? error.message : "Reading a recap is unavailable right now. Try again in a moment.");
       return;
@@ -120,11 +191,19 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     if (mine !== token) return;
     if (clip.stale) deps.onStaleCard(input.intervalId);
     weights = lineWeights(clip.lines);
-    release();
+    // Hand the clip to the element that was primed in the press; if priming
+    // failed there is no element yet, so make one.
+    const element = audio ?? deps.createAudio("");
+    element.pause();
+    if (primeUrl) {
+      deps.releaseObjectUrl(primeUrl);
+      primeUrl = null;
+    }
     objectUrl = deps.toObjectUrl(clip.bytes, clip.mimeType);
-    audio = deps.createAudio(objectUrl);
-    audio.addEventListener("timeupdate", onTick);
-    audio.addEventListener("ended", () => {
+    element.setSource(objectUrl);
+    audio = element;
+    element.addEventListener("timeupdate", onTick);
+    element.addEventListener("ended", () => {
       if (mine !== token) return;
       // The read is over, so the words stay on screen and the bubble asks for
       // the decision the employee pressed Listen to make — confirming a recap
@@ -134,7 +213,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
       release();
       publish({ status: "finished", progress: 1, activeIndex: Math.max(0, clip.lines.length - 1), lines: clip.lines, revision: clip.revision, intervalId: input.intervalId });
     });
-    audio.addEventListener("error", () => {
+    element.addEventListener("error", () => {
       if (mine !== token) return;
       release();
       publish({ ...IDLE, intervalId: input.intervalId });
@@ -142,12 +221,12 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     });
     publish({ status: "playing", lines: clip.lines, revision: clip.revision, intervalId: input.intervalId, progress: 0, activeIndex: 0 });
     try {
-      await audio.play();
+      await element.play();
     } catch {
       if (mine !== token) return;
       release();
       publish({ ...IDLE, intervalId: input.intervalId });
-      deps.onFailure("Reading a recap is unavailable right now. Try again in a moment.");
+      deps.onFailure("Your device blocked the audio. Press Listen again to play this recap.");
     }
   };
 
@@ -159,7 +238,14 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
         stop();
         return;
       }
-      if (!input.enabled || !input.intervalId) return;
+      if (!input.intervalId) {
+        deps.onFailure("That recap is no longer available.");
+        return;
+      }
+      if (!input.enabled) {
+        deps.onFailure("Reading recaps aloud is turned off for this workspace.");
+        return;
+      }
       stop();
       await start({ intervalId: input.intervalId, revision: input.revision, voice: input.voice });
     },

@@ -93,11 +93,14 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
 /** Self-contained stream for the in-app Focus tab: owns its decision calls and
  * cache invalidation so the dock can embed the same list without App-level
  * wiring. Renders only while a workday date is available. */
-export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs }: {
+export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs, onListen, listeningId }: {
   date: string | null;
   enabled?: boolean;
   timezone?: string | null;
   pollMs?: number;
+  /** Read a recap aloud. Offered on both surfaces, so both wire the control. */
+  onListen?: (id: string, revision: number | null) => void;
+  listeningId?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [decidingId, setDecidingId] = useState<string | null>(null);
@@ -116,6 +119,6 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs 
   };
   return <>
     {error ? <p className="chat-activity-error" role="alert">{error}</p> : null}
-    <ActivityIntervalList date={date} enabled={enabled} timezone={timezone} onDecide={decide} decidingId={decidingId} pollMs={pollMs} />
+    <ActivityIntervalList date={date} enabled={enabled} timezone={timezone} onDecide={decide} decidingId={decidingId} pollMs={pollMs} onListen={onListen} listeningId={listeningId} />
   </>;
 }

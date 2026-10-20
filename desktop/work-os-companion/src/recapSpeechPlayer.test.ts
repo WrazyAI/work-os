@@ -4,13 +4,16 @@ import { createRecapSpeechPlayer, type RecapAudio, type RecapSpeechSnapshot } fr
 
 function fakeAudio() {
   const listeners = new Map<string, Array<() => void>>();
-  const audio: RecapAudio & { currentTime: number; fire(type: string): void; played: number; paused: number } = {
+  const audio: RecapAudio & { currentTime: number; fire(type: string): void; played: number; paused: number; createdWith: string; sources: string[] } = {
     currentTime: 0,
     duration: 30,
     played: 0,
     paused: 0,
+    createdWith: "",
+    sources: [],
     async play() { audio.played += 1; },
     pause() { audio.paused += 1; },
+    setSource(src) { audio.sources.push(src); },
     addEventListener(type, handler) {
       listeners.set(type, [...(listeners.get(type) ?? []), handler]);
     },
@@ -44,10 +47,11 @@ function harness(overrides: Partial<Parameters<typeof createRecapSpeechPlayer>[0
       fetched.push(input);
       return clip;
     },
-    toObjectUrl: () => "blob:clip",
+    toObjectUrl: (bytes) => bytes.byteLength === 8 ? "blob:clip" : "blob:silence",
     releaseObjectUrl: (url) => { released.push(url); },
-    createAudio: () => {
+    createAudio: (src) => {
       const audio = fakeAudio();
+      audio.createdWith = src;
       audios.push(audio);
       return audio;
     },
@@ -65,7 +69,8 @@ describe("recap speech player", () => {
     await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
     expect(h.snapshots.map((snapshot) => snapshot.status)).toEqual(["loading", "playing"]);
     expect(h.player.snapshot().lines).toHaveLength(3);
-    expect(h.audios[0].played).toBe(1);
+    expect(h.audios[0].played).toBe(2); // the silent prime, then the clip
+    expect(h.audios[0].sources).toEqual(["blob:clip"]);
     h.audios[0].currentTime = 15;
     h.audios[0].fire("timeupdate");
     expect(h.player.snapshot().progress).toBeCloseTo(0.5, 5);
@@ -94,12 +99,31 @@ describe("recap speech player", () => {
     expect(h.fetched.map((call) => call.intervalId)).toEqual(["interval-1", "interval-2"]);
   });
 
-  it("says nothing and does nothing when the capability or the recap is missing", async () => {
+  it("explains a press it cannot serve instead of swallowing it", async () => {
     const h = harness();
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: false });
     await h.player.toggle({ intervalId: null, revision: null, voice: "Kore", enabled: true });
     expect(h.fetched).toHaveLength(0);
     expect(h.player.snapshot().status).toBe("idle");
+    expect(h.failures).toEqual([
+      "Reading recaps aloud is turned off for this workspace.",
+      "That recap is no longer available.",
+    ]);
+  });
+
+  it("primes playback inside the press, before the clip exists", async () => {
+    let resolve: (clip: RecapSpeechClip) => void = () => undefined;
+    const h = harness({ fetchClip: () => new Promise<RecapSpeechClip>((done) => { resolve = done; }) });
+    const pending = h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    // The element exists and has started while the network is still working:
+    // a webview that has played this element will let the clip play too.
+    expect(h.audios).toHaveLength(1);
+    expect(h.audios[0].createdWith).toBe("blob:silence");
+    expect(h.audios[0].played).toBe(1);
+    resolve({ bytes: new ArrayBuffer(8), mimeType: "audio/wav", lines: [{ text: "Lead", time: null }], revision: 1, stale: false });
+    await pending;
+    expect(h.audios[0].sources).toEqual(["blob:clip"]);
+    expect(h.player.snapshot().status).toBe("playing");
   });
 
   it("a failed read tells the employee, stays retryable, and leaves no audio behind", async () => {
@@ -113,7 +137,8 @@ describe("recap speech player", () => {
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
     expect(failuresOf(h)).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
     expect(h.player.snapshot().status).toBe("idle");
-    expect(h.audios).toHaveLength(0);
+    expect(h.released).toContain("blob:silence");
+    expect(h.audios[0].paused).toBeGreaterThan(0);
     fail = false;
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
     expect(h.player.snapshot().status).toBe("playing");
@@ -138,7 +163,7 @@ describe("recap speech player", () => {
     release({ bytes: new ArrayBuffer(8), mimeType: "audio/wav", lines: [{ text: "Too late", time: null }], revision: 1, stale: false });
     await pending;
     expect(h.player.snapshot().status).toBe("idle");
-    expect(h.audios).toHaveLength(0);
+    expect(h.audios[0].paused).toBeGreaterThan(0);
     expect(h.failures).toHaveLength(0);
   });
 

@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.79 — 2026-10-20
+
+- Pressing Listen now actually plays the recap: the voice took so long to prepare that the app blocked the sound before it began.
+- Recaps can be read aloud in the main window too, not only in the floating companion.
+
 ## 0.4.78 — 2026-10-20
 
 - Your activity recap now appears when your check-in comes due, even if the companion was already open before that moment.

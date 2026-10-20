@@ -17,7 +17,7 @@ import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
-import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { ApiRequestError, apiRequest, apiRequestAudio, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
@@ -80,6 +80,7 @@ import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
+import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
@@ -715,6 +716,7 @@ export default function App() {
   useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
 
   const queryClient = useQueryClient();
+
   /* Dev-only `?admin-shell` boot (see adminShell.ts): seed the administration
    * fixtures so the real shell renders its sections with data and without live
    * calls, seed the masthead bell's own reads for the states that flow through
@@ -4286,6 +4288,8 @@ export default function App() {
         </main>
       )}
       {dockVisible && <ProgressComposer
+        recapVoice={recapVoice}
+        onRecapStale={() => { void queryClient.invalidateQueries({ queryKey: ["work-os", "activity-intervals"] }); }}
         mode={sessionActive && view === "day" ? "progress" : "agenda"}
         displayName={visibleOnboarding.profile.displayName}
         input={input}
@@ -4651,11 +4655,15 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
+export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   activityDate?: string | null; activityTimezone?: string | null; activityPollMs?: number;
+  /** How recaps are read aloud on this device (provider voice id). */
+  recapVoice?: string;
+  /** The recap behind a clip changed while it was synthesized. */
+  onRecapStale?: () => void;
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onApplyGoal: (value: string, fromSuggestion: boolean) => void; onRetryGoalSave?: () => void;
   interpretation?: { status: "loading" | "ready"; reviewId?: string; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
@@ -4684,6 +4692,46 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   const [goalDraft, setGoalDraft] = useState(goal);
   const [goalFromSuggestion, setGoalFromSuggestion] = useState(false);
   const [pendingGoal, setPendingGoal] = useState<string | null>(null);
+
+  /* Recaps are read with the same one-player machine the floating companion
+     uses, so the Tasks tab's cards offer the same Listen control and the same
+     rules: one audio owner, a prime inside the press (a webview forgets the
+     gesture while the clip is synthesized), and a visible reason when a read
+     cannot start instead of a silent press. */
+  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>({
+    status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null,
+  });
+  const [recapSpeechError, setRecapSpeechError] = useState<string | null>(null);
+  const [recapPlayer] = useState(() => createRecapSpeechPlayer({
+    fetchClip: (input) => apiRequestAudio("/api/work-os/voice/recap", input),
+    toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
+    releaseObjectUrl: (url) => URL.revokeObjectURL(url),
+    createAudio: browserRecapAudio,
+    onSnapshot: (snapshot) => setRecapSpeech(snapshot),
+    onFailure: (message) => setRecapSpeechError(message),
+    // The card moved on while the clip was made: refresh the stream so the
+    // words on screen are the words that play next time.
+    // The card moved on while the clip was made: the host refreshes the stream
+    // so the words on screen are the words that play next time.
+    onStaleCard: () => { onRecapStale?.(); },
+  }));
+  const toggleRecapRead = useCallback((id: string, revision: number | null): void => {
+    setRecapSpeechError(null);
+    void recapPlayer.toggle({ intervalId: id, revision, voice: recapVoice, enabled: !!voice });
+  }, [recapPlayer, recapVoice, voice]);
+  /* One audio owner: a recording never starts on top of a read, and a hidden
+     window never speaks to an empty room. */
+  useEffect(() => {
+    if (voice && voice.state !== "idle") recapPlayer.stop();
+  }, [voice, recapPlayer]);
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === "hidden") recapPlayer.stop(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      recapPlayer.dispose();
+    };
+  }, [recapPlayer]);
   useEffect(() => {
     if (!goalPanelOpen || goalEditing) return;
     setGoalDraft(goal);
@@ -4785,7 +4833,8 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
          <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
                </>}</div>
           </section>
-          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
+          {recapSpeechError ? <p className="chat-activity-error" role="alert">{recapSpeechError}</p> : null}
+          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onListen={voice ? toggleRecapRead : undefined} listeningId={recapSpeech.status !== "idle" ? recapSpeech.intervalId : null} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
   {shouldShowChatDivider(visibleHistory, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
   <HistoryTurn
   turn={{
