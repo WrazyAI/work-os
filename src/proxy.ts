@@ -28,6 +28,10 @@ function addDesktopCors(response: NextResponse, origin: string | null) {
   response.headers.set("Access-Control-Allow-Origin", origin);
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Work-OS-Organization-Id");
+  // A cross-origin caller can read the body but not custom headers unless they
+  // are named here: the companion's prompter is built from these, and without
+  // them the clip plays with no words on screen.
+  response.headers.set("Access-Control-Expose-Headers", "X-Work-OS-Recap-Lines, X-Work-OS-Recap-Revision, X-Work-OS-Recap-Voice, X-Work-OS-Recap-Stale");
   response.headers.append("Vary", "Origin");
   return response;
 }

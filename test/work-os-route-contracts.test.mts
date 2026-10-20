@@ -392,6 +392,10 @@ test("auth proxy keeps desktop CORS and bearer bypass intact", async () => {
   const proxy = await source("src/proxy.ts");
   assert.match(proxy, /tauri:\/\/localhost/);
   assert.match(proxy, /Access-Control-Allow-Origin/);
+  /* Cross-origin JS cannot read custom response headers unless the response
+     names them; the companion's subtitles and stale check depend on these. */
+  assert.match(proxy, /Access-Control-Expose-Headers/);
+  assert.match(proxy, /X-Work-OS-Recap-Lines/);
   assert.match(proxy, /request\.method === "OPTIONS"/);
   assert.match(proxy, /workOsBearer/);
   assert.match(proxy, /Idempotency-Key/);
