@@ -85,8 +85,26 @@ fix materially changed the reviewed surface.
 
 ## Remaining acceptance
 
-Release 0.4.84 carries the short-viewport fix. Recheck the actual Mac after
-installing that build; until it is published, packaging remains pending. If the footer remains
+Release **0.4.84** was published on October 20 at 17:46:32 UTC from Work OS
+`9ae9a04a9ab8cb40ac1ed5a9a81b6f7461ed52b5`. Release workflow
+`39467530053` passed all Windows, universal macOS, packaged-Mac startup, and
+combined updater/asset verification jobs; all 12 release assets are uploaded.
+This is an explicitly unsigned internal prerelease with signed updater artifacts.
+An unauthenticated live updater probe redirected to sign-in; no employee session
+was available, so authenticated in-app update delivery is not verified here.
+
+The same runtime CSS and fixture/unit regression were ported by content into
+Agent OS `ae44b0ce`, preserving its independent version metadata and platform
+surfaces. Its companion suite passed **1,196 tests**, its Work OS suite passed
+**521 tests** in the TypeScript phase, and typecheck/build passed. No server
+redeployment was needed for this desktop-only fix. The standalone browser
+regression script and this release-verification report remain in Work OS.
+
+An extra WebKit check exercised normal motion at both default and 15% larger
+text at 1000×500: Back/Continue retained the selected specialty and the footer
+remained clickable.
+
+Recheck the affected Mac after installing 0.4.84. If the footer remains
 absent, capture that window's dimensions and screenshot before changing
 layout again. Resolve the separate vault failure through a user-approved
 recovery path; do not silently discard local queued work.
