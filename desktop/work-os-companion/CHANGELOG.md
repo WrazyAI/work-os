@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.87 — 2026-10-20
+
+- Clocking out from the companion works again — the app was blocking its own request before it reached the server.
+- The companion checks your Worktivity status as soon as it opens, so a clock-out you made in Worktivity shows up right away.
+
 ## 0.4.86 — 2026-10-20
 
 - Adding a task from administration no longer asks which project — it goes straight into TASKS.

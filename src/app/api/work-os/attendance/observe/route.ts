@@ -20,7 +20,10 @@ export async function POST(req: Request) {
       feature: "employee_companion",
     });
     if (auth.response) return auth.response;
-    const result = await observeAttendanceChange(auth.access);
+    const refresh = new URL(req.url).searchParams.get("refresh");
+    const result = await observeAttendanceChange(auth.access, new Date(), {
+      forceRefresh: refresh === "1" || refresh === "true",
+    });
     return NextResponse.json({
       attendance: result.attendance,
       session: result.session,

@@ -315,10 +315,13 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
  * the full day payload. It converges the session from fresh provider activity
  * (the same path a full refresh takes) and reports whether the tracked state
  * actually moved, so clients refresh their workspace only on a real transition. */
-export async function observeAttendanceChange(access: WorkOsAccess, at = new Date()) {
+export async function observeAttendanceChange(access: WorkOsAccess, at = new Date(), options: { forceRefresh?: boolean } = {}) {
   const beforeAttendance = await loadPersistedWorktivityAttendance(access, at);
   const beforeSession = await activeSession(access);
-  const result = await observeWorktivityAttendance(access, at);
+  // An explicit refresh asks Worktivity now: the short read cache is for the
+  // background cadence, and would otherwise hide a clock-out made in
+  // Worktivity for up to its lifetime.
+  const result = await observeWorktivityAttendance(access, at, options.forceRefresh === true ? { forceRefresh: true } : {});
   const changed = attendanceSignature(beforeAttendance, beforeSession) !== attendanceSignature(result.attendance, result.session);
   return { attendance: result.attendance, session: result.session, changed };
 }

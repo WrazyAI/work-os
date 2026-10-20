@@ -27,7 +27,11 @@ function addDesktopCors(response: NextResponse, origin: string | null) {
   if (!origin || !WORK_OS_DESKTOP_ORIGINS.has(origin)) return response;
   response.headers.set("Access-Control-Allow-Origin", origin);
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Work-OS-Organization-Id");
+  // The companion sends its own headers: the desktop control marker the
+  // attendance-control route requires, and the machine cadence overrides.
+  // A header missing here fails the preflight, and the webview reports the
+  // blocked request as "Failed to fetch" without ever reaching a route.
+  response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Work-OS-Organization-Id, X-Work-OS-Desktop-Control, X-Work-OS-Cadence-Minutes, X-Work-OS-First-Follow-Up-Minutes");
   // A cross-origin caller can read the body but not custom headers unless they
   // are named here: the companion's prompter is built from these, and without
   // them the clip plays with no words on screen.

@@ -59,7 +59,9 @@ export async function getWorkOsDay(
   // response: the dashboard renders current (timestamped, truthful) data and
   // the provider refresh lands in the background.
   const attendancePromise = options.refreshAttendance
-    ? observeWorktivityAttendance(access, at)
+    // An explicit attendance refresh is a request for fresh provider truth, so
+    // it bypasses the short observer cache the background cadence relies on.
+    ? observeWorktivityAttendance(access, at, { forceRefresh: true })
     : loadPersistedWorktivityAttendance(access, at).then((attendance) => ({ attendance, session: null }));
   const ownerIdPromise = organizationOwnerId(access.organizationId);
   const [attendance, authoritativeBreaks] = await Promise.all([

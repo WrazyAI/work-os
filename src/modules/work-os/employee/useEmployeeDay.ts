@@ -25,9 +25,18 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
   });
   // Activity alone can clock someone in or out. Re-check Worktivity on the
   // adaptive cadence and refresh the day only when the tracked state moved.
+  //
+  // The first check of a page load asks Worktivity directly instead of taking
+  // the short observer cache: a clock-out made in Worktivity must land on a
+  // reload, not on the next poll. Later checks keep the cache and cadence.
+  const firstAttendanceCheck = useRef(true);
   const attendanceWatch = useQuery<{ changed?: boolean }>({
     queryKey: ["work-os", "attendance-watch"],
-    queryFn: () => fetchJson("/api/work-os/attendance/observe", { method: "POST" }),
+    queryFn: () => {
+      const force = firstAttendanceCheck.current;
+      firstAttendanceCheck.current = false;
+      return fetchJson(`/api/work-os/attendance/observe${force ? "?refresh=1" : ""}`, { method: "POST" });
+    },
     enabled: enabled && !!day.data,
     refetchInterval: () => attendanceWatchInterval(attendanceWatchInput(day.data), Date.now()),
     staleTime: 0,
@@ -41,6 +50,10 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
   }, [attendanceWatch.data, attendanceWatch.dataUpdatedAt, queryClient]);
 
   const refresh = useCallback(async () => {
+    // An explicit refresh asks Worktivity now, in parallel with the data
+    // refetch: a clock-out made in Worktivity lands on this refresh instead of
+    // waiting for the watch cadence. A provider failure never blocks the UI.
+    const observed = fetchJson<{ changed?: boolean }>("/api/work-os/attendance/observe?refresh=1", { method: "POST" }).catch(() => null);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "task-day"] }),
@@ -48,6 +61,8 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
       queryClient.invalidateQueries({ queryKey: ["work-os", "employee-insights"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "eod-outstanding"] }),
     ]);
+    const attendance = await observed;
+    if (attendance?.changed) await queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
   }, [queryClient]);
 
   // The companion's explicit provider sync: ask the server to refresh Nifty
