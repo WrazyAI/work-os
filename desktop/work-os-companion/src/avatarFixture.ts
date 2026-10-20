@@ -47,6 +47,9 @@ export const AVATAR_RECAP_READING_DONE_FIXTURE = "recap-reading-done";
  * device, so the whole loop — press, listen, confirm or dismiss — can be driven
  * by hand without a session or a provider call. */
 export const AVATAR_RECAP_LIVE_FIXTURE = "recap-live";
+/** The same recap in a workspace where reading aloud is switched off: the
+ * bubble offers View more but no Listen, so the negative case is reviewable. */
+export const AVATAR_RECAP_NO_VOICE_FIXTURE = "recap-no-voice";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
@@ -122,7 +125,19 @@ export function avatarRecapReadingFixtureRequested(search: string): boolean {
   return fixture === AVATAR_RECAP_READING_FIXTURE
     || fixture === AVATAR_RECAP_READING_STILL_FIXTURE
     || fixture === AVATAR_RECAP_READING_DONE_FIXTURE
-    || fixture === AVATAR_RECAP_LIVE_FIXTURE;
+    || fixture === AVATAR_RECAP_LIVE_FIXTURE
+    || fixture === AVATAR_RECAP_NO_VOICE_FIXTURE;
+}
+
+/** True only for the no-voice preview. */
+export function avatarRecapNoVoiceFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NO_VOICE_FIXTURE;
+}
+
+/** The recap's facts with the capability off: the control must not appear. */
+export function avatarRecapNoVoiceFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return { ...avatarRecapFixtureFacts(now), voiceAvailable: false };
 }
 
 /** True only for the interactive preview, whose decisions stay on the device. */
