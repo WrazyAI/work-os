@@ -41,6 +41,18 @@ function db() {
   return createAdminClient();
 }
 
+/**
+ * Normalises a timestamp the database client returned.
+ *
+ * The client parses `timestamptz` into a Date, and `String(date)` produces
+ * "Mon Oct 20 2026 ..." — which is not a valid timestamp, so writing it back
+ * fails and the fold silently never lands.
+ */
+export function isoBoundary(value: unknown): string | null {
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 /** The conversation plus its running summary. Turns the summary covers are
  * dropped from the verbatim list, so nothing is sent twice. */
 export async function loadConversationContext(scope: ConversationScope, limit = CONVERSATION_VERBATIM_TURNS): Promise<{
@@ -148,7 +160,8 @@ export async function foldConversationSummary(scope: ConversationScope): Promise
 
   // The boundary is the last folded turn's own timestamp, so the reader can
   // tell exactly which turns the summary already covers.
-  const boundary = String(toFold[toFold.length - 1].created_at);
+  const boundary = isoBoundary(toFold[toFold.length - 1].created_at);
+  if (!boundary) return { folded: 0, reason: "unavailable" };
   let update = client
     .from("work_conversations")
     .update({ summary, summarized_through: boundary, updated_at: new Date().toISOString() })

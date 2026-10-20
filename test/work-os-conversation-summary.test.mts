@@ -6,6 +6,7 @@ import {
   CONVERSATION_FOLD_THRESHOLD,
   CONVERSATION_SUMMARY_PROMPT_VERSION,
   CONVERSATION_VERBATIM_TURNS,
+  isoBoundary,
 } from "../src/lib/work-conversations-summary";
 
 const root = new URL("../", import.meta.url);
@@ -85,4 +86,16 @@ test("the fold is guarded against a concurrent fold of the same span", async () 
   const lib = await source("src/lib/work-conversations-summary.ts");
   assert.match(lib, /update\.eq\("summarized_through", summarizedThrough\)/);
   assert.match(lib, /update\.is\("summarized_through", null\)/);
+});
+
+test("a boundary from the database client is normalised to a real timestamp", () => {
+  // The client parses timestamptz into a Date. String(date) is "Mon Oct 20
+  // 2026 ...", which the database rejects, so the fold would never land.
+  const fromDate = isoBoundary(new Date("2026-10-20T15:45:01.649Z"));
+  assert.equal(fromDate, "2026-10-20T15:45:01.649Z");
+  assert.equal(isoBoundary("2026-10-20T15:45:01.649Z"), "2026-10-20T15:45:01.649Z");
+  assert.equal(isoBoundary("Mon Oct 20 2026 15:45:01 GMT+0000"), "2026-10-20T15:45:01.000Z");
+  assert.equal(isoBoundary("not a date"), null);
+  assert.equal(isoBoundary(null), null);
+  assert.equal(isoBoundary(undefined), null);
 });
