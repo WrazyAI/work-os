@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.81 — 2026-10-20
+
+- Listening to a recap now waits longer for the voice to be prepared, so a slow generation finishes instead of giving up.
+
 ## 0.4.80 — 2026-10-20
 
 - Listen now actually plays the recap: the app was blocking the audio it had just made.

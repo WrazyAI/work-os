@@ -84,7 +84,10 @@ export type RecapSpeechResult =
   | { ok: false; reason: RecapSpeechFailure };
 
 const PROVIDER_URL = "https://fal.run/google/gemini-3.8-flash-lite-tts";
-const PROVIDER_TIMEOUT_MS = 25_000;
+/* Synthesis is usually a few seconds, but a cold provider call has been seen
+ * at close to half a minute. Give it room to finish: a completed clip is cached,
+ * while a timeout throws the work away and retries from scratch. */
+const PROVIDER_TIMEOUT_MS = 60_000;
 
 export function recapSpeechConfigured(): boolean {
   return Boolean(process.env.FAL_API_KEY?.trim());

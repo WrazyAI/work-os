@@ -182,7 +182,9 @@ export async function apiRequestAudio(
     try {
       response = await fetch(`${cleanBase(session.apiBase)}${path}`, {
         method: "POST",
-        signal: AbortSignal.timeout(40_000),
+        // Longer than the server's own provider budget: the clip is worth
+        // waiting for, and it is cached for every replay after the first.
+        signal: AbortSignal.timeout(90_000),
         cache: "no-store",
         headers: {
           Authorization: `Bearer ${session.token}`,
