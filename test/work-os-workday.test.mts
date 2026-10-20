@@ -17,40 +17,51 @@ test("session transitions reject impossible branches", () => {
   assert.throws(() => nextSessionState("clocked_out", "pause"));
 });
 
-test("prompt contract keeps the planning prompt until a progress check-in is due and suppresses breaks, final hour, and post clock-out", () => {
-  const firstPrompt = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T09:05:00.000Z" });
+test("the goal question holds the day's first prompt and suppresses breaks, final hour, and post clock-out", () => {
+  const firstPrompt = decideWorkdayPrompt({ session, breaks: [], at: "2026-08-12T09:05:00.000Z" });
   assert.equal(firstPrompt.kind, "plan");
-  assert.equal(firstPrompt.nextPromptAt, "2026-08-12T09:00:00.000Z");
-  // An unconfirmed plan no longer silences the cadence once the first follow-up is due.
-  const progressPrompt = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T10:20:00.000Z" });
+  assert.equal(firstPrompt.required, true);
+  // The hold runs to the first follow-up: a due check-in cannot preempt it.
+  assert.equal(firstPrompt.nextPromptAt, "2026-08-12T10:15:00.000Z");
+  const heldPrompt = decideWorkdayPrompt({ session, breaks: [], at: "2026-08-12T10:20:00.000Z" });
+  assert.equal(heldPrompt.kind, "plan");
+  assert.equal(heldPrompt.required, true);
+  // A day that already carries a goal lets the check-in cadence through.
+  const progressPrompt = decideWorkdayPrompt({ session, breaks: [], hasGoal: true, at: "2026-08-12T10:20:00.000Z" });
   assert.equal(progressPrompt.kind, "follow_up");
   assert.equal(progressPrompt.nextPromptAt, "2026-08-12T10:15:00.000Z");
   assert.equal(progressPrompt.required, false);
-  assert.equal(decideWorkdayPrompt({ session, breaks: [{ startsAt: "2026-08-12T12:00:00.000Z", endsAt: "2026-08-12T12:30:00.000Z" }], hasConfirmedPlan: true, at: "2026-08-12T12:05:00.000Z" }).kind, null);
-  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:15:00.000Z" }).kind, null);
-  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:51:00.000Z" }).kind, "eod");
-  assert.equal(decideWorkdayPrompt({ session: { ...session, state: "clocked_out" }, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T18:00:00.000Z" }).kind, null);
+  assert.equal(decideWorkdayPrompt({ session, breaks: [{ startsAt: "2026-08-12T12:00:00.000Z", endsAt: "2026-08-12T12:30:00.000Z" }], hasGoal: true, at: "2026-08-12T12:05:00.000Z" }).kind, null);
+  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasGoal: true, at: "2026-08-12T16:15:00.000Z" }).kind, null);
+  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasGoal: true, at: "2026-08-12T16:51:00.000Z" }).kind, "eod");
+  assert.equal(decideWorkdayPrompt({ session: { ...session, state: "clocked_out" }, breaks: [], hasGoal: true, at: "2026-08-12T18:00:00.000Z" }).kind, null);
 });
 
-test("the planning prompt stands down once the employee has engaged with the day", () => {
-  // No engagement yet: the planning prompt is required at clock-in.
-  const awaiting = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T09:05:00.000Z" });
+test("the goal question stands down as soon as the day has a goal", () => {
+  // A goal recorded in the Focus tab before the plan is confirmed is enough.
+  const early = decideWorkdayPrompt({ session, breaks: [], hasGoal: true, at: "2026-08-12T09:05:00.000Z" });
+  assert.equal(early.kind, "follow_up");
+  assert.equal(early.required, false);
+  // Without a goal the question is still the day's prompt.
+  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasGoal: false, at: "2026-08-12T09:05:00.000Z" }).kind, "plan");
+});
+
+test("working the day does not answer the goal question: only a goal ends it", () => {
+  // The question is required at clock-in.
+  const awaiting = decideWorkdayPrompt({ session, breaks: [], at: "2026-08-12T09:05:00.000Z" });
   assert.equal(awaiting.kind, "plan");
   assert.equal(awaiting.required, true);
-  // A substantive update recorded since clock-in answers the planning question:
-  // the returned prompt is the cadence's waiting state, never the required plan.
-  const engaged = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, lastSubstantiveUpdateAt: "2026-08-12T09:30:00.000Z", at: "2026-08-12T09:40:00.000Z" });
-  assert.notEqual(engaged.kind, "plan");
-  assert.equal(engaged.required, false);
+  // A substantive update records work, not a goal, so the question stays.
+  const engaged = decideWorkdayPrompt({ session, breaks: [], lastSubstantiveUpdateAt: "2026-08-12T09:30:00.000Z", at: "2026-08-12T09:40:00.000Z" });
+  assert.equal(engaged.kind, "plan");
+  assert.equal(engaged.required, true);
   assert.equal(engaged.nextPromptAt, "2026-08-12T10:15:00.000Z");
-  // An update from a previous shift does not count.
-  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, lastSubstantiveUpdateAt: "2026-08-11T09:30:00.000Z", at: "2026-08-12T09:40:00.000Z" }).kind, "plan");
-  // Once a check-in has been delivered, the plan prompt no longer returns between check-ins.
-  const afterCheckIn = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, lastPromptKind: "hourly_fallback", at: "2026-08-12T10:40:00.000Z" });
-  assert.equal(afterCheckIn.kind, null);
-  assert.equal(afterCheckIn.required, false);
-  // The cadence still wins when it is actually due.
-  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, lastSubstantiveUpdateAt: "2026-08-12T09:30:00.000Z", at: "2026-08-12T10:20:00.000Z" }).kind, "follow_up");
+  // A delivered check-in does not answer it either.
+  const afterCheckIn = decideWorkdayPrompt({ session, breaks: [], lastPromptKind: "hourly_fallback", at: "2026-08-12T10:40:00.000Z" });
+  assert.equal(afterCheckIn.kind, "plan");
+  // A goal — the employee's or the suggested one — lets the cadence through.
+  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasGoal: true, lastSubstantiveUpdateAt: "2026-08-12T09:30:00.000Z", at: "2026-08-12T10:20:00.000Z" }).kind, "follow_up");
+  assert.equal(decideWorkdayPrompt({ session, breaks: [], hasGoal: true, lastPromptKind: "hourly_fallback", at: "2026-08-12T10:40:00.000Z" }).kind, null);
 });
 
 test("planningPromptAnswered recognizes engagement without a confirmed plan", () => {
@@ -79,6 +90,7 @@ test("a reopened Worktivity interval restarts the cadence instead of replaying m
     session: reopened,
     breaks: [],
     hasConfirmedPlan: false,
+    hasGoal: true,
     lastPromptKind: "follow_up" as const,
     lastPromptAt: "2026-08-12T12:55:00.000Z",
     nextFallbackAt: "2026-08-12T13:25:00.000Z",
@@ -141,7 +153,7 @@ test("the first follow-up interval is deployment-configurable and bounded", () =
 });
 
 test("a submitted EOD suppresses any remaining workday prompt", () => {
-  const due = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:51:00.000Z" });
+  const due = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, hasGoal: true, at: "2026-08-12T16:51:00.000Z" });
   assert.deepEqual(suppressPromptForSubmittedEod(due, "2026-08-12T16:55:00.000Z"), {
     kind: null,
     nextPromptAt: null,
@@ -157,7 +169,7 @@ test("a substantive response schedules the next configured check-in", () => {
     lastPromptKind: "follow_up",
     lastPromptAt: "2026-08-12T09:05:00.000Z",
     lastSubstantiveUpdateAt: "2026-08-12T09:07:00.000Z",
-    hasConfirmedPlan: true,
+    hasConfirmedPlan: true, hasGoal: true,
     at: "2026-08-12T10:07:00.000Z",
   });
   assert.equal(prompt.kind, "hourly_fallback");
@@ -168,7 +180,7 @@ test("a confirmed plan anchors the first follow-up at seventy-five minutes", () 
   const prompt = decideWorkdayPrompt({
     session,
     breaks: [],
-    hasConfirmedPlan: true,
+    hasConfirmedPlan: true, hasGoal: true,
     planConfirmedAt: "2026-08-12T09:10:00.000Z",
     at: "2026-08-12T09:20:00.000Z",
   });
@@ -183,7 +195,7 @@ test("a resolved per-person cadence overrides the interval and first follow-up",
     lastPromptKind: "hourly_fallback" as const,
     lastPromptAt: "2026-08-12T09:05:00.000Z",
     lastSubstantiveUpdateAt: "2026-08-12T09:07:00.000Z",
-    hasConfirmedPlan: true,
+    hasConfirmedPlan: true, hasGoal: true,
   };
   // A 10-minute cadence makes the next check-in due at 09:17.
   const fast = decideWorkdayPrompt({ ...afterPrompt, checkInIntervalMinutes: 10, at: "2026-08-12T09:18:00.000Z" });
@@ -213,7 +225,7 @@ test("a cadence edit rebases the persisted next check-in deadline", () => {
     breaks: [],
     lastPromptKind: "hourly_fallback" as const,
     lastPromptAt: "2026-08-12T09:05:00.000Z",
-    hasConfirmedPlan: true,
+    hasConfirmedPlan: true, hasGoal: true,
   };
   // A persisted deadline that still matches the resolved cadence (within the
   // delivery lag) is preserved exactly.

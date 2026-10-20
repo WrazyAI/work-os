@@ -39,6 +39,16 @@ async function auditPlan(access: WorkOsAccess, action: string, planId: string, m
   if (error) throw new Error(`record daily plan audit: ${error.message}`);
 }
 
+/** The goal a day already carries: the displayed focus first, then the raw
+ * intent the employee typed. A day with no goal is what keeps the goal
+ * question on screen and what lets the first recap write a suggested one. */
+export function dailyPlanGoalText(plan: Record<string, any> | null | undefined): string | null {
+  const focus = typeof plan?.focus_summary === "string" ? plan.focus_summary.trim() : "";
+  if (focus) return focus;
+  const intent = typeof plan?.freeform_intent === "string" ? plan.freeform_intent.trim() : "";
+  return intent || null;
+}
+
 async function withGoalMetadata(access: WorkOsAccess, plan: Record<string, any> | null) {
   if (!plan || plan.goal_provenance) return plan;
   const auditResult = await db().from("work_audit_log").select("metadata").eq("organization_id", access.organizationId)
@@ -262,7 +272,9 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
       lastPromptKind: session.last_prompt_kind as "follow_up" | "hourly_fallback" | "eod" | null,
       lastPromptAt: session.last_prompt_at as string | null,
     } : null,
-    breaks: shift?.breaks ?? [], hasConfirmedPlan: plan?.status === "confirmed", planConfirmedAt: plan?.confirmed_at as string | null,
+    breaks: shift?.breaks ?? [], hasConfirmedPlan: plan?.status === "confirmed",
+    hasGoal: Boolean(dailyPlanGoalText(plan)),
+    planConfirmedAt: plan?.confirmed_at as string | null,
     firstFollowUpAt: session?.first_follow_up_at as string | null,
     nextFallbackAt: session?.next_fallback_at as string | null,
     lastPromptKind: session?.last_prompt_kind as "follow_up" | "hourly_fallback" | "eod" | null,
@@ -793,7 +805,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   if (buildId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(buildId)) throw new WorkOsValidationError("build_id must be a valid AI build id.");
   const intentFingerprint = confirm ? planIntentFingerprint(freeformIntent) : null;
   const requestedProvenance = body.goal_provenance === undefined ? value(plan.goal_provenance) : value(body.goal_provenance);
-  if (requestedProvenance && !["employee", "accepted_suggestion", "ai_draft"].includes(requestedProvenance)) throw new WorkOsValidationError("goal_provenance must identify an employee goal, an accepted suggestion, or an AI draft");
+  if (requestedProvenance && !["employee", "suggested", "accepted_suggestion", "ai_draft"].includes(requestedProvenance)) throw new WorkOsValidationError("goal_provenance must identify an employee goal, a suggested goal, an accepted suggestion, or an AI draft");
   const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
     ? [...new Set(body.suggestion_task_ids.filter((item): item is string => typeof item === "string" && !!item.trim()).map((item) => item.trim()))]
     : Array.isArray(plan.suggestion_task_ids) ? plan.suggestion_task_ids.filter((item: unknown): item is string => typeof item === "string") : [];

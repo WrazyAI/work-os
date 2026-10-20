@@ -345,7 +345,7 @@ export default function App() {
     return rows.map((task) => ({ id: String(task.id), title: String(task.title ?? "Untitled task") }));
   };
   const [planIntent, setPlanIntent] = useState("");
-  const [goalProvenance, setGoalProvenance] = useState<"employee" | "accepted_suggestion" | "ai_draft" | null>(null);
+  const [goalProvenance, setGoalProvenance] = useState<"employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null>(null);
   const [suggestionTaskIds, setSuggestionTaskIds] = useState<string[]>([]);
   const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
   const [planDirty, setPlanDirty] = useState(false);
@@ -705,7 +705,7 @@ export default function App() {
     if (!planDirtyRef.current && appliedPlanKeyRef.current !== planKey) {
       appliedPlanKeyRef.current = planKey;
       setPlanIntent(plan?.focus_summary ?? plan?.freeform_intent ?? "");
-      setGoalProvenance(plan?.goal_provenance === "ai_draft" ? "ai_draft" : plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : plan?.freeform_intent ? "employee" : null);
+      setGoalProvenance(plan?.goal_provenance === "suggested" ? "suggested" : plan?.goal_provenance === "ai_draft" ? "ai_draft" : plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : plan?.freeform_intent ? "employee" : null);
       setSuggestionTaskIds(plan?.suggestion_task_ids ?? []);
       setPlanItems([...(plan?.items ?? [])].sort((a, b) => a.rank - b.rank));
       setPlanDirty(false); setPlanSaveState("saved");
@@ -2592,7 +2592,7 @@ export default function App() {
   useEffect(() => {
     if (debugScenario.enabled && visibleDay?.plan) {
       setPlanIntent(visibleDay.plan.focus_summary ?? visibleDay.plan.freeform_intent ?? "");
-      setGoalProvenance(visibleDay.plan.goal_provenance === "ai_draft" ? "ai_draft" : visibleDay.plan.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : visibleDay.plan.freeform_intent ? "employee" : null);
+      setGoalProvenance(visibleDay.plan.goal_provenance === "suggested" ? "suggested" : visibleDay.plan.goal_provenance === "ai_draft" ? "ai_draft" : visibleDay.plan.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : visibleDay.plan.freeform_intent ? "employee" : null);
       setSuggestionTaskIds(visibleDay.plan.suggestion_task_ids ?? []);
       setPlanItems([...visibleDay.plan.items].sort((a, b) => a.rank - b.rank));
     }
@@ -2733,7 +2733,7 @@ export default function App() {
     overdueCount: backlogQuery.data?.counts?.overdue,
     focus: planIntent || goalSuggestion?.text || "Your open tasks define today’s work.",
     focusSource: planIntent
-      ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
+      ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
       : goalSuggestion ? "Suggested from today’s tasks" : "Task record",
     niftySync: visibleDay?.niftySync,
   }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, pulseNow, visibleTodayTasks, unfinishedCarryOver, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
@@ -2907,13 +2907,13 @@ export default function App() {
       if (!active) {
         setDay((current) => current ? { ...current, plan: saved } : current);
         setPlanIntent(saved.focus_summary ?? saved.freeform_intent ?? "");
-        setGoalProvenance(saved.goal_provenance === "ai_draft" ? "ai_draft" : saved.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : saved.freeform_intent ? "employee" : null);
+        setGoalProvenance(saved.goal_provenance === "suggested" ? "suggested" : saved.goal_provenance === "ai_draft" ? "ai_draft" : saved.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : saved.freeform_intent ? "employee" : null);
         setPlanItems(saved.items);
         return "saved";
       }
       setDay((current) => current ? { ...current, plan: saved } : current);
       setPlanIntent(saved.focus_summary ?? saved.freeform_intent ?? "");
-      setGoalProvenance(saved.goal_provenance === "ai_draft" ? "ai_draft" : saved.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : saved.freeform_intent ? "employee" : null);
+      setGoalProvenance(saved.goal_provenance === "suggested" ? "suggested" : saved.goal_provenance === "ai_draft" ? "ai_draft" : saved.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : saved.freeform_intent ? "employee" : null);
       setPlanItems(saved.items);
       setPlanSaveState("saved");
       void emit("work-os://main-day-changed");
@@ -4083,7 +4083,7 @@ export default function App() {
           <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}–${formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions"><button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button></div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay?.attendance?.message}</small>}
-            <div className="hero-focus-line"><small>Today’s focus</small><button onClick={openGoalComposer} aria-label="Update today’s focus"><span>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</span></button>{planSaveState === "saving" ? <FadeArc size={13} /> : planSaveState === "offline" || planSaveState === "conflict" ? <button type="button" className="goal-retry" title={planSaveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => setPlanDirty(true)}><RefreshCw size={13} /></button> : null}<em>{planIntent ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name} · tap to update` : goalProvenance === "accepted_suggestion" ? "Derived from your tasks · tap to update" : "Written by you · tap to update" : goalSuggestion ? "Suggested from your tasks" : "Task record · tap to set a focus"}</em></div>
+            <div className="hero-focus-line"><small>Today’s focus</small><button onClick={openGoalComposer} aria-label="Update today’s focus"><span>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</span></button>{planSaveState === "saving" ? <FadeArc size={13} /> : planSaveState === "offline" || planSaveState === "conflict" ? <button type="button" className="goal-retry" title={planSaveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => setPlanDirty(true)}><RefreshCw size={13} /></button> : null}<em>{planIntent ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name} · tap to update` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name} · tap to update` : goalProvenance === "accepted_suggestion" ? "Derived from your tasks · tap to update" : "Written by you · tap to update" : goalSuggestion ? "Suggested from your tasks" : "Task record · tap to set a focus"}</em></div>
           </div><div className="hero-companion-art"><MascotPet workday="off-shift" className="mascot-hero" artClassName="mascot-hero-art" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
@@ -4094,7 +4094,7 @@ export default function App() {
         </section>
       </main> : <ActiveDayWorkspace
         focus={planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}
-        focusSource={planIntent ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note" : goalSuggestion ? "Suggested from today’s tasks" : "Task record"}
+        focusSource={planIntent ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note" : goalSuggestion ? "Suggested from today’s tasks" : "Task record"}
         tasks={visibleTodayTasks}
         goalSaveState={planSaveState}
         onRetryGoalSave={() => setPlanDirty(true)}
@@ -4658,7 +4658,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
 export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
-  goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
+  goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   activityDate?: string | null; activityTimezone?: string | null; activityPollMs?: number;
   /** How recaps are read aloud on this device (provider voice id). */
   recapVoice?: string;
@@ -4813,7 +4813,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
     {open ? <div className="chat-surface is-open" id="conversation-panel">
     <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><span className="conversation-pane-title">{MASCOT.name}</span><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
-      {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
+      {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
         {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">
           <section className={`focus-goal${goalCollapsed ? " is-collapsed" : ""}`} aria-labelledby="focus-goal-heading">
             <header className="focus-goal-head">
@@ -4950,7 +4950,7 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
 /** Render the employee Tasks workspace with shared day history and sorted paginated views. */
 export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onTaskSearch, onFilterFrom, onFilterTo, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
-  goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
+  goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null; unfinishedHistory?: TaskRow[] | null;
   pageCounts?: { total: number; open: number; completed: number } | null; pageTotal?: number | null;
   taskSearch?: string; filterFrom?: string; filterTo?: string;
@@ -5059,8 +5059,8 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     ? shownPlan?.focus_summary ?? (shownPlan?.freeform_intent || "No focus note was recorded for this day.")
     : goal || suggestion?.text || "Your open tasks define today’s work.";
   const provenance = historical
-    ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
-    : goal ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
+    ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "suggested" ? `Suggested by ${MASCOT.name}` : shownPlan.goal_provenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
+    : goal ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   const dateFilterActive = !!filterFrom || !!filterTo;
   // One source for the day's groups: they are built from the same my-day list

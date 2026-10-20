@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, planHoldExpired, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand, overdueTasks,
@@ -32,6 +32,19 @@ describe("prompt nudge boundary", () => {
     expect(promptNudgeDue({ ...base, promptRequired: true, nextPromptAt: "2026-08-31T10:30:00Z" }, NOW)).toBe(false);
     expect(promptNudgeDue({ ...base, promptRequired: false, nextPromptAt: "2026-08-31T09:00:00Z" }, NOW)).toBe(false);
     expect(promptNudgeDue({ ...base, sessionState: "paused", promptRequired: true, nextPromptAt: "2026-08-31T09:00:00Z" }, NOW)).toBe(false);
+  });
+});
+
+describe("goal-question hold boundary", () => {
+  it("arms only while the planning prompt still holds the day", () => {
+    const facts = { ...base, promptKind: "plan" as const, nextPromptAt: "2026-08-31T10:00:00Z" };
+    expect(planHoldExpired(facts, Date.parse("2026-08-31T09:59:59Z"))).toBe(false);
+    expect(planHoldExpired(facts, Date.parse("2026-08-31T10:00:00Z"))).toBe(true);
+    // A due check-in or an off-shift day never asks for the held recap.
+    expect(planHoldExpired({ ...facts, promptKind: "follow_up" as const }, NOW)).toBe(false);
+    expect(planHoldExpired({ ...facts, sessionState: "paused" }, NOW)).toBe(false);
+    expect(planHoldExpired({ ...facts, clockedOutAt: "2026-08-31T09:30:00Z" }, NOW)).toBe(false);
+    expect(planHoldExpired({ ...facts, nextPromptAt: null }, NOW)).toBe(false);
   });
 });
 

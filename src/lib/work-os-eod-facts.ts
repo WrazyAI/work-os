@@ -72,6 +72,7 @@ export function humanizeGoalSource(provenance: unknown): string {
   const labels: Record<string, string> = {
     ai_draft: "AI draft",
     employee: "Employee",
+    suggested: "Suggested goal",
     accepted_suggestion: "Accepted suggestion",
   };
   return labels[key] ?? "Not recorded";

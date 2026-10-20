@@ -1349,6 +1349,31 @@ voices in a 164px rail.
   a group that moves, or a group that arrives, cannot leave the film showing
   the wrong band or filming empty canvas.
 
+### 8.17 The goal question and the suggested goal
+
+The day opens by asking what the employee is working on. That question is the
+day's first prompt — the crown bubble's agenda ask in the companion and the
+plan notice on the web — and it is **required** while the day carries no goal.
+A due check-in never preempts it: the question holds the day's prompt until a
+goal exists, and its hold instant is the first follow-up.
+
+When the hold expires and the day still has no goal, the first recap writes
+one:
+
+- **Source.** One short sentence from three bounded sources: unfinished work
+  carried from earlier days, work created or due today, and the interval's
+  recorded activity. The write is a small, tool-free model call; a failure
+  leaves the recap goal-less rather than blocking it.
+- **Provenance.** The goal is saved with `goal_provenance = suggested` and is
+  labelled as a suggestion everywhere — `Suggested by Otto` on the companion's
+  focus line, `suggested by Otto` in the web workspace, `Suggested goal` in the
+  EOD. It is never presented as the employee's own words.
+- **Precedence.** An employee goal always wins: the write is conditional on the
+  goal still being empty, so a goal typed while the model was running survives.
+- **The recap follows.** The interval synthesizes against that goal, so the
+  day, its recaps, and its EOD describe the same focus. The companion requests
+  the held recap once the hold instant passes, deduped per slot.
+
 ## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
 
