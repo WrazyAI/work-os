@@ -7,6 +7,7 @@ import { seedAdminFixtures } from "./admin/adminFixtures";
 import { isoDaysAgo } from "./admin/data";
 import { formatWorkOsFullDate, shiftWorkOsDate } from "./dateFormat";
 import TasksPage, { TaskTableHead, type TaskSortState } from "./admin/TasksPage";
+import { attachAdminAssigneeNames } from "./admin/data";
 
 function renderPageWithState(state: "dense" | "sparse") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -119,6 +120,22 @@ describe("administration task table sorting affordances", () => {
     // Another column's next activation starts at its own natural direction.
     expect(thFor(head, "Task")).toContain("Sort by Task, A to Z.");
     expect(thFor(head, "Task")).toContain("lucide-chevrons-up-down");
+  });
+
+  it("resolves assignee ids through the roster and shows the description", () => {
+    const [resolved] = attachAdminAssigneeNames(
+      [{ id: "t-1", title: "Fix it", assignee_person_ids: ["p-1"], assignees: [] }],
+      [{ id: "p-1", display_name: "Amara Okafor" }],
+    );
+    expect(resolved.assignees).toEqual([{ displayName: "Amara Okafor" }]);
+    // An identity embed always wins over the raw ids.
+    const [kept] = attachAdminAssigneeNames(
+      [{ id: "t-2", assignees: [{ displayName: "Daniel Osei" }] }],
+      [{ id: "p-1", display_name: "Amara Okafor" }],
+    );
+    expect(kept.assignees).toEqual([{ displayName: "Daniel Osei" }]);
+    // The record shows the task's description beneath its title.
+    expect(renderPage()).toContain("Add bounded retries with backoff for failed billing webhook deliveries.");
   });
 
   it("keeps the record in the default newest-created order until a column is activated", () => {

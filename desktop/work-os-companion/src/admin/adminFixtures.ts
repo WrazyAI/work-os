@@ -489,6 +489,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       due_date: index === 3 || index === 8 ? null : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
       ...taskCreated[index],
       priority: ["high", "medium", "low"][index % 3],
+      description: index === 0 ? "Add bounded retries with backoff for failed billing webhook deliveries." : null,
       labels: index % 2 === 0 ? ["platform"] : [],
       project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },
       assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],

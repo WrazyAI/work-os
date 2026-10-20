@@ -5,6 +5,7 @@ import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
   ADMIN_STALE_MS,
+  attachAdminAssigneeNames,
   type AdminTaskRow,
   completeAdminTask,
   createAdminTask,
@@ -299,10 +300,12 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name ?? "Project") }));
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    const list = tasks.data?.tasks ?? [];
+    // The record returns assignee ids; resolve them against the roster so the
+    // cell and its sort see the same names the employee lists do.
+    const list = attachAdminAssigneeNames(tasks.data?.tasks ?? [], people.data?.people ?? []);
     if (!needle) return list;
     return list.filter((task) => [task.name, task.title, task.project?.name].some((value) => String(value ?? "").toLowerCase().includes(needle)));
-  }, [tasks.data, search]);
+  }, [tasks.data, search, people.data]);
   // No column active means the record's default order — newest created first,
   // updated as the tiebreak; client-side sorting is honest here because the
   // page holds the full normalized list.
@@ -371,11 +374,16 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   const due = taskEffectiveDueDate(task);
                   const overdue = task.completed !== true && !!due && due < todayIso();
                   const priority = trimmedText(task.priority);
+                  const description = trimmedText(task.description);
                   return (
                     <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} data-pan-row="true" onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
                       <td>
                         <span className="admin-record">
                           <b className={task.completed ? "is-done" : undefined}><OverflowPanText>{String(task.title ?? task.name ?? "Task")}</OverflowPanText></b>
+                          {/* The description is the line an operator actually
+                              reads; it fades at the clip edge and never pans,
+                              so the title is the one line that reveals. */}
+                          {description ? <small className="admin-record-desc"><OverflowPanText pan={false}>{description}</OverflowPanText></small> : null}
                           {/* Project stays a small per-task detail — the list
                               is one flat record, never grouped by project. */}
                           <small>{task.project?.name ? String(task.project.name) : "No project"}{priority ? ` · ${statusLabel(priority)} priority` : ""}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>

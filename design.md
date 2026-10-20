@@ -1993,7 +1993,10 @@ instead of the header.
 - **Tasks** is the organization task record with bounded filters on one compact
   controls row and the local add-task flow: one flat list, never grouped or
   ordered by project, which stays a small per-task detail beside the task's
-  priority and labels.
+  priority and labels. Each row shows the task's description on its own line
+  beneath the title — clipped with the shared fade and never a pan — and the
+  assignee cell resolves the recorded assignee ids through the roster, so a task
+  with a real assignee is never displayed as Unassigned.
   **Settings** leads with the account's own settings — the same groups the
   employee Settings page carries (profile, this device, page guides, reading
   & display, workday, sync & session, memory, suggestions, diagnostics, and

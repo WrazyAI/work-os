@@ -674,6 +674,26 @@ function normalizeTaskRow(row: Loose): AdminTaskRow {
   };
 }
 
+/** The employee lists receive hydrated assignee identities, but the
+ * administration record returns the raw `assignee_person_ids`. Map those ids
+ * through the roster so a task with a real assignee never renders
+ * "Unassigned"; rows that already carry identities are left alone. */
+export function attachAdminAssigneeNames(
+  tasks: AdminTaskRow[],
+  people: Array<{ id?: string | null; display_name?: string | null; email?: string | null }>,
+): AdminTaskRow[] {
+  const nameById = new Map(people.map((person) => [String(person.id ?? ""), String(person.display_name ?? person.email ?? "Organization member")]));
+  return tasks.map((task) => {
+    if (Array.isArray(task.assignees) && task.assignees.length) return task;
+    const ids: unknown[] = Array.isArray(task.assignee_person_ids) ? task.assignee_person_ids : [];
+    const assignees = ids
+      .map((id) => nameById.get(String(id)))
+      .filter((name): name is string => !!name)
+      .map((displayName) => ({ displayName }));
+    return assignees.length ? { ...task, assignees } : task;
+  });
+}
+
 export function normalizeAdminTaskList(raw: unknown): AdminTaskListResponse {
   const source = asRecord(raw);
   const summary = source.summary && typeof source.summary === "object" ? asRecord(source.summary) : null;
