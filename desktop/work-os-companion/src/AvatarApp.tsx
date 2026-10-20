@@ -277,8 +277,6 @@ export default function AvatarApp(): React.ReactElement {
           stale: false,
         })
       : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
-    toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
-    releaseObjectUrl: (url) => URL.revokeObjectURL(url),
     createAudio: browserRecapAudio,
     onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
     onFailure: (message) => setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]),

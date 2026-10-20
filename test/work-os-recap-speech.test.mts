@@ -89,7 +89,7 @@ function stubProvider(options: {
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
     const href = String(url);
     calls.push({ url: href, init });
-    if (options.fail && href.includes("/fal-ai-gemini-3.8-flash-tts")) throw options.fail;
+    if (options.fail && href.includes("/fal-ai-gemini-3.8-flash-lite-tts")) throw options.fail;
     if (href.startsWith("https://fal.run/")) {
       if (options.fail) throw options.fail;
       return new Response(JSON.stringify(options.body ?? { audio: { url: "https://fal.media/out.wav" } }), {
@@ -120,7 +120,7 @@ test("asks the provider for a recap read with the recap's own words", async () =
   assert.equal(result.voice, "Kore");
   assert.equal(result.audio.byteLength, 2048);
   const request = calls[0];
-  assert.equal(request.url, "https://fal.run/google/gemini-3.8-flash-tts");
+  assert.equal(request.url, "https://fal.run/google/gemini-3.8-flash-lite-tts");
   assert.equal((request.init?.headers as Record<string, string>).Authorization, "Key test-key");
   const body = JSON.parse(String(request.init?.body));
   assert.equal(body.voice, "Kore");

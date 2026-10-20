@@ -54,7 +54,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' asset: http://asset.localhost blob: data:; connect-src 'self' https: ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' blob: data:; connect-src 'self' https: ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

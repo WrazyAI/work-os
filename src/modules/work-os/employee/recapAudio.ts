@@ -19,32 +19,6 @@ export type RecapReadState = {
 const IDLE: RecapReadState = { intervalId: null, status: "idle", progress: 0, activeIndex: 0, lines: [], error: null };
 const UNAVAILABLE = "Reading that recap is unavailable right now. Try again in a moment.";
 
-/** A quarter second of silence, as a valid PCM WAV. Generated rather than
- * shipped: the browser needs *something* to start inside the press. */
-export function silentWav(): ArrayBuffer {
-  const sampleRate = 8000;
-  const samples = Math.floor(sampleRate / 4);
-  const buffer = new ArrayBuffer(44 + samples * 2);
-  const view = new DataView(buffer);
-  const ascii = (offset: number, value: string) => {
-    for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
-  };
-  ascii(0, "RIFF");
-  view.setUint32(4, 36 + samples * 2, true);
-  ascii(8, "WAVE");
-  ascii(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  ascii(36, "data");
-  view.setUint32(40, samples * 2, true);
-  return buffer;
-}
-
 /** Longer lines take longer to say; the highlight follows that, not equal
  * slices, so it stays with the voice instead of racing ahead on short lines. */
 export function lineWeights(lines: RecapReadLine[]): number[] {
@@ -75,36 +49,39 @@ export function parseLines(header: string | null): RecapReadLine[] {
   }
 }
 
+type RecorderContext = AudioContext & { decodeAudioData?: AudioContext["decodeAudioData"] };
+
 /**
  * One recap read for the whole stream: press Listen, hear the recap's own
- * lines, and follow them as they are spoken. The element is started with a
- * silent source inside the press, because the clip takes seconds to synthesize
- * and the browser stops honouring the gesture before it arrives.
+ * lines, and follow them as they are spoken.
+ *
+ * Playback runs on Web Audio, and the context is opened inside the press. A
+ * media element would refuse to start after a slow synthesis (the browser stops
+ * counting the click as a gesture); a running context does not care how long
+ * the clip took, and it needs no blob URL for the media-src policy to block.
  */
 export function useRecapRead(options: { onStale?: () => void } = {}) {
   const [state, setState] = useState<RecapReadState>(IDLE);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const clipUrlRef = useRef<string | null>(null);
-  const primeUrlRef = useRef<string | null>(null);
+  const contextRef = useRef<RecorderContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenRef = useRef(0);
   const onStaleRef = useRef(options.onStale);
   useEffect(() => { onStaleRef.current = options.onStale; }, [options.onStale]);
 
   const release = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.onended = null;
-      audioRef.current.onerror = null;
-      audioRef.current.ontimeupdate = null;
-      audioRef.current = null;
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-    if (clipUrlRef.current) {
-      URL.revokeObjectURL(clipUrlRef.current);
-      clipUrlRef.current = null;
-    }
-    if (primeUrlRef.current) {
-      URL.revokeObjectURL(primeUrlRef.current);
-      primeUrlRef.current = null;
+    if (sourceRef.current) {
+      sourceRef.current.onended = null;
+      try {
+        sourceRef.current.stop();
+      } catch {
+        /* already stopped */
+      }
+      sourceRef.current = null;
     }
   }, []);
 
@@ -121,17 +98,23 @@ export function useRecapRead(options: { onStale?: () => void } = {}) {
     }
     const mine = (tokenRef.current += 1);
     release();
-    // Inside the press: the element is allowed to play from here on.
-    const audio = new Audio();
+
+    // Inside the press: the context is created and resumed here, so the clip
+    // can play whenever it arrives.
+    let context = contextRef.current;
     try {
-      const prime = URL.createObjectURL(new Blob([silentWav()], { type: "audio/wav" }));
-      primeUrlRef.current = prime;
-      audio.src = prime;
-      void audio.play().catch(() => { /* best effort: the clip tries anyway */ });
+      if (!context) {
+        const Constructor = (window.AudioContext
+          ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+        if (!Constructor) throw new Error("Audio is not available in this browser.");
+        context = new Constructor() as RecorderContext;
+        contextRef.current = context;
+      }
+      void context.resume().catch(() => undefined);
     } catch {
-      /* The real play reports its own failure. */
+      context = null;
     }
-    audioRef.current = audio;
+
     setState({ ...IDLE, intervalId: interval.id, status: "loading" });
 
     try {
@@ -147,37 +130,30 @@ export function useRecapRead(options: { onStale?: () => void } = {}) {
       if (mine !== tokenRef.current) return;
       if (response.headers.get("x-work-os-recap-stale") === "1") onStaleRef.current?.();
       const lines = parseLines(response.headers.get("x-work-os-recap-lines"));
-      const blob = await response.blob();
+      const bytes = await response.arrayBuffer();
       if (mine !== tokenRef.current) return;
+      if (!context) throw new Error(UNAVAILABLE);
 
-      audio.pause();
-      if (primeUrlRef.current) {
-        URL.revokeObjectURL(primeUrlRef.current);
-        primeUrlRef.current = null;
-      }
-      const clipUrl = URL.createObjectURL(blob);
-      clipUrlRef.current = clipUrl;
-      audio.src = clipUrl;
-      audio.load();
+      const buffer = await context.decodeAudioData(bytes);
+      if (mine !== tokenRef.current) return;
       const weights = lineWeights(lines);
-      audio.ontimeupdate = () => {
-        if (mine !== tokenRef.current) return;
-        const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-        const progress = duration ? Math.min(1, Math.max(0, audio.currentTime / duration)) : 0;
-        setState((current) => ({ ...current, progress, activeIndex: activeLineIndex(progress, weights) }));
-      };
-      audio.onended = () => {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.onended = () => {
         if (mine !== tokenRef.current) return;
         release();
         setState({ ...IDLE, intervalId: interval.id, status: "finished", progress: 1, activeIndex: Math.max(0, lines.length - 1), lines });
       };
-      audio.onerror = () => {
-        if (mine !== tokenRef.current) return;
-        release();
-        setState({ ...IDLE, intervalId: interval.id, error: UNAVAILABLE });
-      };
+      source.start();
+      sourceRef.current = source;
+      const startedAt = context.currentTime;
       setState({ intervalId: interval.id, status: "playing", progress: 0, activeIndex: 0, lines, error: null });
-      await audio.play();
+      timerRef.current = setInterval(() => {
+        if (mine !== tokenRef.current || !context) return;
+        const progress = buffer.duration > 0 ? Math.min(1, Math.max(0, (context.currentTime - startedAt) / buffer.duration)) : 0;
+        setState((current) => ({ ...current, progress, activeIndex: activeLineIndex(progress, weights) }));
+      }, 100);
     } catch (error) {
       if (mine !== tokenRef.current) return;
       release();
@@ -185,7 +161,10 @@ export function useRecapRead(options: { onStale?: () => void } = {}) {
     }
   }, [release, state.intervalId, state.status, stop]);
 
-  useEffect(() => () => release(), [release]);
+  useEffect(() => () => {
+    release();
+    void contextRef.current?.close().catch(() => undefined);
+  }, [release]);
 
   return { state, toggle, stop };
 }

@@ -4,16 +4,23 @@ import { createRecapSpeechPlayer, type RecapAudio, type RecapSpeechSnapshot } fr
 
 function fakeAudio() {
   const listeners = new Map<string, Array<() => void>>();
-  const audio: RecapAudio & { currentTime: number; fire(type: string): void; played: number; paused: number; createdWith: string; sources: string[] } = {
+  const audio: RecapAudio & {
+    currentTime: number;
+    fire(type: string): void;
+    played: number;
+    paused: number;
+    loads: Array<{ bytes: number; mimeType: string }>;
+  } = {
     currentTime: 0,
     duration: 30,
     played: 0,
     paused: 0,
-    createdWith: "",
-    sources: [],
+    loads: [],
+    async load(bytes, mimeType) {
+      audio.loads.push({ bytes: bytes.byteLength, mimeType });
+    },
     async play() { audio.played += 1; },
     pause() { audio.paused += 1; },
-    setSource(src) { audio.sources.push(src); },
     addEventListener(type, handler) {
       listeners.set(type, [...(listeners.get(type) ?? []), handler]);
     },
@@ -29,7 +36,6 @@ function harness(overrides: Partial<Parameters<typeof createRecapSpeechPlayer>[0
   const failures: string[] = [];
   const stale: string[] = [];
   const audios: Array<ReturnType<typeof fakeAudio>> = [];
-  const released: string[] = [];
   const fetched: Array<{ intervalId: string; revision: number | null; voice: string }> = [];
   let clip: RecapSpeechClip = {
     bytes: new ArrayBuffer(8),
@@ -47,11 +53,8 @@ function harness(overrides: Partial<Parameters<typeof createRecapSpeechPlayer>[0
       fetched.push(input);
       return clip;
     },
-    toObjectUrl: (bytes) => bytes.byteLength === 8 ? "blob:clip" : "blob:silence",
-    releaseObjectUrl: (url) => { released.push(url); },
-    createAudio: (src) => {
+    createAudio: () => {
       const audio = fakeAudio();
-      audio.createdWith = src;
       audios.push(audio);
       return audio;
     },
@@ -60,7 +63,7 @@ function harness(overrides: Partial<Parameters<typeof createRecapSpeechPlayer>[0
     onStaleCard: (intervalId) => { stale.push(intervalId); },
     ...overrides,
   });
-  return { player, snapshots, failures, stale, audios, released, fetched, setClip: (next: RecapSpeechClip) => { clip = next; } };
+  return { player, snapshots, failures, stale, audios, fetched, setClip: (next: RecapSpeechClip) => { clip = next; } };
 }
 
 describe("recap speech player", () => {
@@ -69,8 +72,8 @@ describe("recap speech player", () => {
     await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
     expect(h.snapshots.map((snapshot) => snapshot.status)).toEqual(["loading", "playing"]);
     expect(h.player.snapshot().lines).toHaveLength(3);
-    expect(h.audios[0].played).toBe(2); // the silent prime, then the clip
-    expect(h.audios[0].sources).toEqual(["blob:clip"]);
+    expect(h.audios[0].loads).toEqual([{ bytes: 8, mimeType: "audio/wav" }]);
+    expect(h.audios[0].played).toBe(1);
     h.audios[0].currentTime = 15;
     h.audios[0].fire("timeupdate");
     expect(h.player.snapshot().progress).toBeCloseTo(0.5, 5);
@@ -87,7 +90,7 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().status).toBe("idle");
     expect(h.player.snapshot().lines).toEqual([]);
     expect(h.audios[0].paused).toBeGreaterThan(0);
-    expect(h.audios).toHaveLength(1); // one audio element for the whole window
+    expect(h.audios).toHaveLength(1); // one player for the whole window
   });
 
   it("switching recaps replaces the read instead of stacking a second one", async () => {
@@ -111,22 +114,23 @@ describe("recap speech player", () => {
     ]);
   });
 
-  it("primes playback inside the press, before the clip exists", async () => {
+  it("opens the player inside the press, before the clip exists", async () => {
     let resolve: (clip: RecapSpeechClip) => void = () => undefined;
     const h = harness({ fetchClip: () => new Promise<RecapSpeechClip>((done) => { resolve = done; }) });
     const pending = h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
-    // The element exists and has started while the network is still working:
-    // a webview that has played this element will let the clip play too.
+    // The player exists while the network is still working: a slow synthesis
+    // cannot outlive the press and leave the clip unplayable.
     expect(h.audios).toHaveLength(1);
-    expect(h.audios[0].createdWith).toBe("blob:silence");
-    expect(h.audios[0].played).toBe(1);
+    expect(h.audios[0].loads).toHaveLength(0);
+    expect(h.audios[0].played).toBe(0);
     resolve({ bytes: new ArrayBuffer(8), mimeType: "audio/wav", lines: [{ text: "Lead", time: null }], revision: 1, stale: false });
     await pending;
-    expect(h.audios[0].sources).toEqual(["blob:clip"]);
+    expect(h.audios[0].loads).toHaveLength(1);
+    expect(h.audios[0].played).toBe(1);
     expect(h.player.snapshot().status).toBe("playing");
   });
 
-  it("a failed read tells the employee, stays retryable, and leaves no audio behind", async () => {
+  it("a failed read tells the employee, stays retryable, and leaves no audio playing", async () => {
     let fail = true;
     const h = harness({
       fetchClip: async () => {
@@ -135,13 +139,25 @@ describe("recap speech player", () => {
       },
     });
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
-    expect(failuresOf(h)).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
+    expect(h.failures).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
     expect(h.player.snapshot().status).toBe("idle");
-    expect(h.released).toContain("blob:silence");
     expect(h.audios[0].paused).toBeGreaterThan(0);
     fail = false;
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
     expect(h.player.snapshot().status).toBe("playing");
+  });
+
+  it("a clip the device cannot decode says so instead of pretending to play", async () => {
+    const h = harness({
+      createAudio: () => {
+        const audio = fakeAudio();
+        audio.load = async () => { throw new Error("decode failed"); };
+        return audio;
+      },
+    });
+    await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    expect(h.player.snapshot().status).toBe("idle");
+    expect(h.failures).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
   });
 
   it("refreshes the card when the recap has moved on, before it plays", async () => {
@@ -167,7 +183,7 @@ describe("recap speech player", () => {
     expect(h.failures).toHaveLength(0);
   });
 
-  it("ending the clip keeps the words on screen and frees the clip's url", async () => {
+  it("ending the clip keeps the words on screen and frees the player", async () => {
     const h = harness();
     await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
     h.audios[0].fire("ended");
@@ -177,7 +193,7 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().lines).toHaveLength(3);
     expect(h.player.snapshot().progress).toBe(1);
     expect(h.player.snapshot().activeIndex).toBe(2);
-    expect(h.released).toContain("blob:clip");
+    expect(h.audios[0].paused).toBeGreaterThan(0);
     // A second press reads it again rather than resuming, and pressing Stop
     // (the dismiss in the bubble) returns the bubble to its resting shape.
     await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
@@ -185,7 +201,3 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().lines).toEqual([]);
   });
 });
-
-function failuresOf(h: ReturnType<typeof harness>) {
-  return h.failures;
-}

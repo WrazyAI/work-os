@@ -1,14 +1,20 @@
 /**
  * One recap read at a time, in one place.
  *
- * The companion's floating window owns exactly one audio element: the tray menu,
+ * The companion's floating window owns exactly one audio player: the tray menu,
  * the expand/collapse of the panel, the recorder, and the Listen controls all
  * route through here, so two readings can never overlap and a recording can
  * never start on top of one (the design's "one audio owner" rule).
  *
+ * The clock and the clip's bytes go through `RecapAudio`, which the browser
+ * implements with Web Audio. That matters: synthesis can take longer than a
+ * webview honours a press, and a media element refuses to start after that. An
+ * audio context opened during the press stays usable, so the clip plays however
+ * long it took to arrive.
+ *
  * The machine is separated from React so the interesting behaviour — the clock
  * driving the prompter, stopping cleanly, retrying a failure — is tested with a
- * fake audio element instead of a browser.
+ * fake player instead of a browser.
  */
 
 import { activeLineIndex, lineWeights, type RecapSpeechLine } from "./recapSpeech";
@@ -29,10 +35,10 @@ export interface RecapSpeechSnapshot {
 }
 
 export interface RecapAudio {
+  /** Decode the clip; resolves when it is ready to play. */
+  load(bytes: ArrayBuffer, mimeType: string): Promise<void>;
   play(): Promise<void>;
   pause(): void;
-  /** Point the same element at new audio, keeping playback permission. */
-  setSource(src: string): void;
   currentTime: number;
   readonly duration: number;
   addEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
@@ -47,9 +53,7 @@ export interface RecapSpeechPlayerDeps {
     revision: number | null;
     stale: boolean;
   }>;
-  toObjectUrl: (bytes: ArrayBuffer, mimeType: string) => string;
-  releaseObjectUrl: (url: string) => void;
-  createAudio: (src: string) => RecapAudio;
+  createAudio: () => RecapAudio;
   onSnapshot: (snapshot: RecapSpeechSnapshot) => void;
   /** A bounded, employee-facing reason; the caller shows it and stops. */
   onFailure: (message: string) => void;
@@ -65,56 +69,104 @@ export interface RecapSpeechPlayer {
 }
 
 const IDLE: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null };
+const UNAVAILABLE = "Reading a recap is unavailable right now. Try again in a moment.";
 
-/** The real browser element behind `RecapAudio`. */
-export function browserRecapAudio(src: string): RecapAudio {
-  const element = new Audio(src);
+/**
+ * The browser player, on Web Audio.
+ *
+ * The context is created and resumed by `createAudio`, which the caller invokes
+ * inside the press. Decoding and starting the clip happen later without asking
+ * the browser for another gesture, which a media element would require — and
+ * would refuse after a slow synthesis.
+ */
+export function browserRecapAudio(): RecapAudio {
+  type ContextConstructor = new () => AudioContext;
+  const Constructor = (window.AudioContext
+    ?? (window as unknown as { webkitAudioContext?: ContextConstructor }).webkitAudioContext) as ContextConstructor | undefined;
+  if (!Constructor) throw new Error("Audio is not available in this window.");
+  const context = new Constructor();
+  void context.resume().catch(() => undefined);
+
+  let buffer: AudioBuffer | null = null;
+  let source: AudioBufferSourceNode | null = null;
+  let startedAt = 0;
+  let offset = 0;
+  let playing = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const listeners = new Map<string, Array<() => void>>();
+  const emit = (type: string) => {
+    for (const handler of listeners.get(type) ?? []) handler();
+  };
+  const stopTimer = () => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+  const elapsed = () => (playing ? offset + (context.currentTime - startedAt) : offset);
+
   return {
-    play: () => element.play(),
-    pause: () => element.pause(),
-    setSource(next) {
-      element.src = next;
-      element.load();
+    async load(bytes) {
+      buffer = await context.decodeAudioData(bytes.slice(0));
     },
-    get currentTime() { return element.currentTime; },
-    get duration() { return element.duration; },
-    addEventListener: (type, handler) => element.addEventListener(type, handler),
-    removeEventListener: (type, handler) => element.removeEventListener(type, handler),
+    async play() {
+      if (!buffer) throw new Error("The recap audio could not be decoded.");
+      if (playing) return;
+      if (offset >= buffer.duration) offset = 0;
+      source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.onended = () => {
+        if (!playing) return;
+        playing = false;
+        offset = buffer ? buffer.duration : 0;
+        stopTimer();
+        emit("ended");
+      };
+      source.start(0, offset);
+      startedAt = context.currentTime;
+      playing = true;
+      stopTimer();
+      // The element's `timeupdate` becomes a quiet poll of the context's clock.
+      timer = setInterval(() => {
+        if (playing) emit("timeupdate");
+      }, 100);
+    },
+    pause() {
+      if (!playing) return;
+      const at = elapsed();
+      playing = false;
+      offset = Math.min(buffer?.duration ?? 0, Math.max(0, at));
+      stopTimer();
+      if (source) {
+        source.onended = null;
+        try {
+          source.stop();
+        } catch {
+          /* already stopped */
+        }
+        source = null;
+      }
+    },
+    get currentTime() {
+      return Math.min(buffer?.duration ?? 0, Math.max(0, elapsed()));
+    },
+    get duration() {
+      return buffer?.duration ?? 0;
+    },
+    addEventListener(type, handler) {
+      listeners.set(type, [...(listeners.get(type) ?? []), handler]);
+    },
+    removeEventListener(type, handler) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== handler));
+    },
   };
-}
-
-/** A quarter second of silence, as a valid PCM WAV. */
-function silentWav(): ArrayBuffer {
-  const sampleRate = 8000;
-  const samples = Math.floor(sampleRate / 4);
-  const buffer = new ArrayBuffer(44 + samples * 2);
-  const view = new DataView(buffer);
-  const ascii = (offset: number, value: string) => {
-    for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
-  };
-  ascii(0, "RIFF");
-  view.setUint32(4, 36 + samples * 2, true);
-  ascii(8, "WAVE");
-  ascii(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  ascii(36, "data");
-  view.setUint32(40, samples * 2, true);
-  // The sample bytes stay zero: silence.
-  return buffer;
 }
 
 export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeechPlayer {
   let snapshot: RecapSpeechSnapshot = IDLE;
   let weights: number[] = [];
   let audio: RecapAudio | null = null;
-  let objectUrl: string | null = null;
-  let primeUrl: string | null = null;
   /** Guards a slow clip arriving after the read was stopped. */
   let token = 0;
 
@@ -127,30 +179,6 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     if (audio) {
       audio.pause();
       audio = null;
-    }
-    if (objectUrl) {
-      deps.releaseObjectUrl(objectUrl);
-      objectUrl = null;
-    }
-    if (primeUrl) {
-      deps.releaseObjectUrl(primeUrl);
-      primeUrl = null;
-    }
-  };
-
-  /** Start a silent clip inside the press.
-   *
-   * A clip takes seconds to synthesize, and a webview only honours a gesture
-   * for a few seconds: by the time the audio arrives, `play()` is refused and
-   * the read is silent. Playing a silent source on the element that will carry
-   * the clip marks that element as allowed, so the real `play()` succeeds. */
-  const prime = () => {
-    try {
-      primeUrl = deps.toObjectUrl(silentWav(), "audio/wav");
-      audio = deps.createAudio(primeUrl);
-      void audio.play().catch(() => { /* best effort: the clip still tries */ });
-    } catch {
-      /* Priming is an optimisation; the real play reports its own failure. */
     }
   };
 
@@ -174,34 +202,40 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
   const start = async (input: { intervalId: string; revision: number | null; voice: string }) => {
     const mine = (token += 1);
     publish({ status: "loading", lines: [], progress: 0, activeIndex: 0, revision: input.revision, intervalId: input.intervalId });
-    // Before the await: this is still the press.
-    prime();
+    // Inside the press: the player opens its audio context here, so the clip can
+    // start later without the browser asking for another gesture.
+    try {
+      audio = deps.createAudio();
+    } catch {
+      /* The load below reports the failure. */
+    }
     let clip: Awaited<ReturnType<RecapSpeechPlayerDeps["fetchClip"]>>;
     try {
       clip = await deps.fetchClip(input);
     } catch (error) {
       if (mine !== token) return;
-      // A failed request still owns the primed element: stop it and free both
-      // sources, so a retry starts clean.
       release();
       publish({ ...IDLE, intervalId: input.intervalId });
-      deps.onFailure(error instanceof Error && error.message ? error.message : "Reading a recap is unavailable right now. Try again in a moment.");
+      deps.onFailure(error instanceof Error && error.message ? error.message : UNAVAILABLE);
       return;
     }
     if (mine !== token) return;
     if (clip.stale) deps.onStaleCard(input.intervalId);
     weights = lineWeights(clip.lines);
-    // Hand the clip to the element that was primed in the press; if priming
-    // failed there is no element yet, so make one.
-    const element = audio ?? deps.createAudio("");
-    element.pause();
-    if (primeUrl) {
-      deps.releaseObjectUrl(primeUrl);
-      primeUrl = null;
-    }
-    objectUrl = deps.toObjectUrl(clip.bytes, clip.mimeType);
-    element.setSource(objectUrl);
+
+    const element = audio ?? deps.createAudio();
     audio = element;
+    try {
+      await element.load(clip.bytes, clip.mimeType);
+    } catch {
+      if (mine !== token) return;
+      release();
+      publish({ ...IDLE, intervalId: input.intervalId });
+      deps.onFailure(UNAVAILABLE);
+      return;
+    }
+    if (mine !== token) return;
+
     element.addEventListener("timeupdate", onTick);
     element.addEventListener("ended", () => {
       if (mine !== token) return;
@@ -217,7 +251,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
       if (mine !== token) return;
       release();
       publish({ ...IDLE, intervalId: input.intervalId });
-      deps.onFailure("Reading a recap is unavailable right now. Try again in a moment.");
+      deps.onFailure(UNAVAILABLE);
     });
     publish({ status: "playing", lines: clip.lines, revision: clip.revision, intervalId: input.intervalId, progress: 0, activeIndex: 0 });
     try {

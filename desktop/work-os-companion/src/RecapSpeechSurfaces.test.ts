@@ -32,14 +32,16 @@ describe("the recap read is offered wherever a recap is", () => {
     expect(avatar).toContain("const [recapPlayer] = useState<RecapSpeechPlayer>");
   });
 
-  it("primes the element inside the press, before the clip is awaited", () => {
+  it("opens the player inside the press, before the clip is awaited", () => {
     const player = read("./recapSpeechPlayer.ts");
     const start = player.indexOf("const start = async");
-    const prime = player.indexOf("prime();", start);
+    const open = player.indexOf("audio = deps.createAudio();", start);
     const fetch = player.indexOf("await deps.fetchClip(input);", start);
-    expect(prime).toBeGreaterThan(start);
-    expect(prime).toBeLessThan(fetch);
-    // The element is reused for the clip rather than recreated after the await.
-    expect(player).toContain("element.setSource(objectUrl);");
+    expect(open).toBeGreaterThan(start);
+    expect(open).toBeLessThan(fetch);
+    // The clip is decoded into that same player after the await.
+    expect(player).toContain("await element.load(clip.bytes, clip.mimeType);");
+    // Web Audio, not a media element whose gesture would expire.
+    expect(player).toContain("new Constructor();");
   });
 });

@@ -4,20 +4,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { activeLineIndex, lineWeights, parseLines, silentWav } from "../src/modules/work-os/employee/recapAudio";
+import { activeLineIndex, lineWeights, parseLines } from "../src/modules/work-os/employee/recapAudio";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-
-test("the prime is a real PCM WAV, not an empty element", () => {
-  const buffer = silentWav();
-  const view = new DataView(buffer);
-  const ascii = (offset: number, length: number) => String.fromCharCode(...new Uint8Array(buffer, offset, length));
-  assert.equal(ascii(0, 4), "RIFF");
-  assert.equal(ascii(8, 4), "WAVE");
-  assert.equal(view.getUint16(20, true), 1); // PCM
-  assert.equal(view.getUint16(22, true), 1); // mono
-  assert.ok(view.getUint32(40, true) > 0); // data bytes, i.e. real silence
-});
 
 test("the highlight follows longer lines slower, and lands on the last one", () => {
   const lines = [
@@ -53,12 +42,16 @@ test("the card offers Listen only when reading aloud is available", () => {
   assert.match(today, /capabilities\?\.voice_input === true/);
 });
 
-test("the web player primes inside the press, before it asks for the clip", () => {
+test("the web player opens its audio context inside the press, before it asks for the clip", () => {
   const source = read("src/modules/work-os/employee/recapAudio.ts");
-  const prime = source.indexOf("audio.src = prime;");
+  const open = source.indexOf("context = new Constructor()");
   const request = source.indexOf('await fetch("/api/work-os/voice/recap"');
-  assert.ok(prime > 0);
-  assert.ok(request > prime, "the silent source must start inside the press");
+  assert.ok(open > 0);
+  assert.ok(request > open, "the context must be opened inside the press");
+  // No media element and no blob URL: neither a gesture window nor media-src
+  // policy can stop the clip from playing.
+  assert.doesNotMatch(source, /createObjectURL|new Audio\(/);
+  assert.match(source, /decodeAudioData/);
   // The route takes an id, never text.
   assert.match(source, /body: JSON\.stringify\(\{ intervalId: interval\.id, revision: interval\.revision \?\? null \}\)/);
   assert.doesNotMatch(source, /body: JSON\.stringify\([^)]*text/);

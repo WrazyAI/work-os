@@ -4704,8 +4704,6 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   const [recapSpeechError, setRecapSpeechError] = useState<string | null>(null);
   const [recapPlayer] = useState(() => createRecapSpeechPlayer({
     fetchClip: (input) => apiRequestAudio("/api/work-os/voice/recap", input),
-    toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
-    releaseObjectUrl: (url) => URL.revokeObjectURL(url),
     createAudio: browserRecapAudio,
     onSnapshot: (snapshot) => setRecapSpeech(snapshot),
     onFailure: (message) => setRecapSpeechError(message),

@@ -56,7 +56,7 @@ export function buildRecapSpeechLines(interval: RecapSpeechSource): RecapSpeechL
 
 /* ── Speaking them ─────────────────────────────────────────────────────────
  *
- * The provider (google/gemini-3.8-flash-tts on fal) returns a whole WAV file
+ * The provider (google/gemini-3.8-flash-lite-tts on fal) returns a whole WAV file
  * and no word timings, which is why the client's prompter is driven by the
  * audio's own clock rather than by anything here. */
 
@@ -83,7 +83,7 @@ export type RecapSpeechResult =
   | { ok: true; audio: Uint8Array; mimeType: string; voice: string }
   | { ok: false; reason: RecapSpeechFailure };
 
-const PROVIDER_URL = "https://fal.run/google/gemini-3.8-flash-tts";
+const PROVIDER_URL = "https://fal.run/google/gemini-3.8-flash-lite-tts";
 const PROVIDER_TIMEOUT_MS = 25_000;
 
 export function recapSpeechConfigured(): boolean {
