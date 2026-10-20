@@ -896,8 +896,11 @@ export default function AvatarApp(): React.ReactElement {
         setActivityPreparing(true);
         const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
         if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
-      } catch { /* the goal question still stands; the next launch retries */ }
-      finally { setActivityPreparing(false); }
+      } catch { /* the goal question still stands; a reconnect retries */ }
+      finally {
+        setActivityPreparing(false);
+        deliveryKeys.current.delete(key);
+      }
       if (recap) setActivityPrompt(recap);
       void loadDay();
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });

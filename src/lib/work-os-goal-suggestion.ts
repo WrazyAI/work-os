@@ -149,7 +149,7 @@ export async function suggestWorkOsDayGoal(
     suggestion_task_ids: taskIds,
     updated_at: new Date().toISOString(),
   }).eq("organization_id", access.organizationId).eq("id", plan.id as string)
-    .is("focus_summary", null).select("id").maybeSingle();
+    .is("focus_summary", null).is("freeform_intent", null).select("id").maybeSingle();
   if (updateError) throw new Error(`save suggested goal: ${updateError.message}`);
   if (!updated) return null;
   await audit(access, "plan.goal_suggested", "daily_plan", plan.id as string, {

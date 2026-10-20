@@ -479,6 +479,9 @@ export function intervalSynthesisMessages(input: {
   observations: IntervalSynthesisObservation[];
   images: IntervalSynthesisImage[];
   counts: ScreenshotWindowPreparation["counts"];
+  /** The day's goal: employer-stated or the suggestion written for this
+   * interval. Context only — never evidence. */
+  goal?: string;
   contextBlock?: string;
   githubBlock?: string;
 }) {
@@ -492,6 +495,7 @@ export function intervalSynthesisMessages(input: {
     type: "text",
     text: [
       `Interval: ${input.windowLabel}.`,
+      ...(input.goal ? [`Today's focus (context only, never evidence): ${input.goal}.`] : []),
       `Frames recorded: ${input.counts.providerFrames}; analyzed: ${input.counts.processed}; excluded by policy: ${input.counts.excludedPolicy}; excluded as sensitive: ${input.counts.excludedSensitive}; unavailable: ${input.counts.unavailable}; still pending: ${input.counts.pending}.`,
       "Neutral observations (1-based indexes):",
       observationText || "(none)",
@@ -522,6 +526,9 @@ async function synthesizeInterval(input: {
   observations: IntervalSynthesisObservation[];
   images: IntervalSynthesisImage[];
   counts: ScreenshotWindowPreparation["counts"];
+  /** The day's goal: employee-stated or the suggestion written for this
+   * interval. Context only — never evidence. */
+  goal?: string;
   contextBlock?: string;
   githubBlock?: string;
   recordedActivityAllowlist?: RecordedActivityAllowlistEntry[];
@@ -848,6 +855,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         observations,
         images,
         counts: preparation.counts,
+        goal: goalText ?? undefined,
         contextBlock: contextBlock || undefined,
         githubBlock: githubBlock || undefined,
         recordedActivityAllowlist: githubActivity ? githubRecordedActivityAllowlist(githubActivity) : undefined,

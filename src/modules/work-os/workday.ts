@@ -217,12 +217,12 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
       ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }
       : { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
   }
-  // The goal question is the day's first prompt. It holds until the employee
-  // has a goal — their own, an accepted suggestion, or the suggested goal the
-  // first recap writes — and a due check-in never preempts it. Its
-  // `nextPromptAt` is the first follow-up: the instant the hold expires and
-  // the recap (with that suggested goal) takes over.
-  if (!context.hasGoal && !planningPromptAnswered(context)) {
+  // The goal question is the day's first prompt. It holds until the day has a
+  // goal — the employee's own, an accepted suggestion, or the suggested goal
+  // the first recap writes — and neither a due check-in nor a check-in update
+  // stands it down. Its `nextPromptAt` is the first follow-up: the instant the
+  // hold expires and the recap (with that suggested goal) takes over.
+  if (!context.hasGoal) {
     return {
       kind: "plan",
       nextPromptAt: new Date(firstAt).toISOString(),
