@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileSearch, Pencil } from "lucide-react";
+import { Check, FileSearch, Pencil, Square, Volume2 } from "lucide-react";
 import { fetchJson, formatTime, requestId, type ActivityInterval, type ActivityIntervalsResponse } from "./model";
 import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "./recaps";
+import { useRecapRead } from "./recapAudio";
 import { Panel, PanelHeader, PrimaryButton, QuietButton, SecondaryButton, Skeleton, StatusPill } from "./ui";
 
 const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
@@ -43,14 +44,20 @@ export default function EmployeeActivityRecaps({
   date,
   timezone,
   prompt,
+  voiceAvailable = false,
 }: {
   date: string;
   timezone?: string;
   prompt?: { kind: string | null; nextPromptAt: string | null } | null;
+  /** The organization may read recaps aloud (flag + deployment capability). */
+  voiceAvailable?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [preparingRecap, setPreparingRecap] = useState(false);
   const [promptTick, setPromptTick] = useState(0);
+  /* One read for the stream, like the companion: pressing a second card's
+     Listen replaces the first instead of stacking two voices. */
+  const read = useRecapRead({ onStale: () => void queryClient.invalidateQueries({ queryKey: ["work-os", "activity-intervals", date] }) });
   const query = useQuery<ActivityIntervalsResponse>({
     queryKey: ["work-os", "activity-intervals", date],
     enabled: !!date,
@@ -118,7 +125,14 @@ export default function EmployeeActivityRecaps({
       ) : (
         <ul>
           {intervals.map((interval) => (
-            <RecapCard key={interval.id} interval={interval} timezone={timezone} onDecided={() => void query.refetch()} />
+            <RecapCard
+              key={interval.id}
+              interval={interval}
+              timezone={timezone}
+              onDecided={() => void query.refetch()}
+              voiceAvailable={voiceAvailable}
+              read={read}
+            />
           ))}
         </ul>
       )}
@@ -126,7 +140,13 @@ export default function EmployeeActivityRecaps({
   );
 }
 
-function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterval; timezone?: string; onDecided: () => void }) {
+function RecapCard({ interval, timezone, onDecided, voiceAvailable, read }: {
+  interval: ActivityInterval;
+  timezone?: string;
+  onDecided: () => void;
+  voiceAvailable: boolean;
+  read: ReturnType<typeof useRecapRead>;
+}) {
   const [amending, setAmending] = useState(false);
   const [feedback, setFeedback] = useState("");
   const decide = useMutation({
@@ -144,6 +164,10 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
 
   const evidence = interval.evidence ?? [];
   const coverage = coverageLabel(interval.coverage);
+  const listening = read.state.intervalId === interval.id && read.state.status !== "idle";
+  // The spoken lines are the card's own: the lead detail first, then the
+  // activities in order. The highlight follows the audio's clock.
+  const activeLine = listening && read.state.status === "playing" ? read.state.activeIndex : -1;
   const preparing = interval.generationStatus === "preparing";
   const unavailable = interval.generationStatus === "unavailable" || interval.generationStatus === "failed";
 
@@ -168,11 +192,20 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
       ) : (
         <>
           {interval.headline ? <p className="mt-2 text-[13px] font-semibold leading-5 text-[var(--text-primary)]">{interval.headline}</p> : null}
-          {interval.detail ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{interval.detail}</p> : null}
+          {interval.detail ? (
+            <p
+              className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]"
+              style={activeLine === 0 ? { color: "var(--text-primary)", fontWeight: 600 } : undefined}
+            >{interval.detail}</p>
+          ) : null}
           {interval.activities?.length ? (
             <ul className="mt-2 grid gap-0.5">
-              {interval.activities.map((activity) => (
-                <li key={activity} className="text-[11px] leading-5 text-[var(--text-secondary)]">· {activity}</li>
+              {interval.activities.map((activity, index) => (
+                <li
+                  key={activity}
+                  className="text-[11px] leading-5 text-[var(--text-secondary)]"
+                  style={activeLine === index + 1 ? { color: "var(--text-primary)", fontWeight: 600 } : undefined}
+                >· {activity}</li>
               ))}
             </ul>
           ) : null}
@@ -220,6 +253,27 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
         <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">
           Screenshots expired under the 30-day retention policy. The recap text is kept.
         </p>
+      ) : null}
+
+      {read.state.intervalId === interval.id && read.state.error ? (
+        <p className="mt-2 text-[11px] leading-5" role="alert" style={{ color: "var(--status-error)" }}>{read.state.error}</p>
+      ) : null}
+      {voiceAvailable && !preparing && !unavailable ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <SecondaryButton
+            aria-label={listening ? `Stop reading the recap for ${interval.label}` : `Listen to the recap for ${interval.label}`}
+            aria-pressed={listening}
+            onClick={() => void read.toggle(interval)}
+          >
+            {listening ? <Square size={12} /> : <Volume2 size={14} />}
+            {listening ? (read.state.status === "loading" ? "Preparing…" : "Stop") : "Listen"}
+          </SecondaryButton>
+          {listening && read.state.status === "playing" ? (
+            <span className="self-center text-[11px] tabular-nums text-[var(--text-tertiary)]">
+              {Math.round(read.state.progress * 100)}%
+            </span>
+          ) : null}
+        </div>
       ) : null}
 
       {decide.error ? <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--status-error)" }}>{(decide.error as Error).message}</p> : null}
