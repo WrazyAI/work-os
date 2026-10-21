@@ -4818,6 +4818,13 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
+/** The working card for a pending update before the real trace starts. It owns
+ * its start instant so the elapsed readout never resets on a re-render. */
+function WorkingNowTrace({ label }: { label: string }) {
+  const [startedAt] = useState(() => Date.now());
+  return <AvatarThinking stages={[{ label }]} active={0} startedAt={startedAt} activeLabel="Thinking" />;
+}
+
 export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
@@ -5015,7 +5022,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   onDecideNextStep={(item, decision, edits) => onDecideNextStep?.(turn.id, item, decision, edits)}
   onRetryOperation={(result) => onRetryHistoryOperation?.(turn.id, result)}
   />
-</Fragment>)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} timestamp={receipt.createdAt} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" showMark={showLiveAssistantMark}>{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
+</Fragment>)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} timestamp={receipt.createdAt} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" variant="tool">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <WorkingNowTrace label="Sending your update" />}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} text={echoReply} stream onSettled={bumpSweep} timestamp={echoReplyAt} />
        : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }} timestamp={interpretationAt}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 

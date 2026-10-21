@@ -15,6 +15,10 @@ describe("AvatarThinking", () => {
     expect(html).toContain("Reading today&#x27;s context");
     expect(html).not.toContain("Matching tasks");
     expect(html).toContain("aria-expanded=\"true\"");
+    // The in-flight step is the hero row; the card owns the full turn.
+    expect(html).toContain("avatar-thinking-row is-active");
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain("avatar-thinking-active");
   });
 
   it("settles to a collapsed receipt with the honest outcome", () => {
@@ -24,5 +28,8 @@ describe("AvatarThinking", () => {
     expect(html).toContain("Thought for 2.4s");
     expect(html).toContain("Reviewed 4 tasks");
     expect(html).toContain("aria-expanded=\"false\"");
+    // Settled steps keep their place in the trace, quietly checked.
+    expect(html).toContain("avatar-thinking-row is-done");
+    expect(html).toContain("avatar-thinking-done");
   });
 });

@@ -6,6 +6,7 @@ import { PlanningSession, type PlanningInterpretation } from "./PlanningSession"
 import { workOsKeys } from "./queryClient";
 import type { ActivityInterval } from "./types";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
+import { AvatarThinking } from "./AvatarThinking";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
@@ -454,6 +455,12 @@ function InAppToolsSection() {
         interpretation={{ status: "loading", operations: [], taskOptions: [] }}
         thinking={{ stages: [{ label: "Sending your update" }, { label: "Filing proposals" }], active: 1, startedAt: Date.now() - 2400 }}
       />
+      <h2 style={{ margin: 0, fontSize: 14 }}>In-app sending state</h2>
+      <ProgressComposer
+        {...composer}
+        pending="Send this before the trace starts"
+        interpretation={{ status: "loading", operations: [], taskOptions: [] }}
+      />
       <h2 style={{ margin: 0, fontSize: 14 }}>In-app tool cards</h2>
       <ProgressComposer
         {...composer}
@@ -528,6 +535,7 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
   const [input, setInput] = useState("");
   const [entries, setEntries] = useState<Array<{ id: string; text: string }>>([]);
   const empty = new URLSearchParams(window.location.search).has("empty");
+  const working = new URLSearchParams(window.location.search).has("working");
   return (
     <section aria-label="Avatar panel preview" style={{ display: "grid", gap: standalone ? 0 : 12, width: standalone ? "100%" : undefined, height: standalone ? "100%" : undefined }}>
       {!standalone && <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>}
@@ -609,6 +617,16 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
               {entries.map((entry) => (
                 <ChatTurn key={entry.id} role="user" text={entry.text} />
               ))}
+              {working && (
+                <ChatTurn role="assistant" variant="tool">
+                  <AvatarThinking
+                    stages={[{ label: "Reading today's context" }, { label: "Matching your tasks", detail: "3 open" }, { label: "Drafting proposals" }]}
+                    active={1}
+                    startedAt={Date.now() - 1800}
+                    activeLabel="Thinking"
+                  />
+                </ChatTurn>
+              )}
             </>}
           </div>
          )}

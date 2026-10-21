@@ -75,6 +75,14 @@ export default function AvatarPreview() {
             settledMs={2400}
             result="2 proposals to review"
           />
+          <div style={{ height: 12 }} />
+          <TaskSelectionCard
+            dense
+            title="Pending tasks"
+            tasks={[]}
+            status="loading"
+            onMarkSelectedDone={() => undefined}
+          />
         </section>
       )}
       {show("agenda") && (

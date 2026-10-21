@@ -569,9 +569,16 @@ export function TaskSelectionCard({
 
         <div id={listId} className="chat-task-list" hidden={!listOpen}>
           {loading ? (
-            <div className="chat-task-skeleton" role="status">
-              <span /><span /><span />
-              <span className="sr-only">Loading tasks</span>
+            <div className="chat-task-loading" role="status">
+              <p className="chat-task-loading-row">
+                <span className="chat-working-spinner" aria-hidden="true" />
+                <span>Loading tasks</span>
+              </p>
+              <div className="chat-task-skeleton" aria-hidden="true">
+                <span><span className="chat-task-skeleton-title" /><span className="chat-task-skeleton-meta" /></span>
+                <span><span className="chat-task-skeleton-title" /><span className="chat-task-skeleton-meta" /></span>
+                <span><span className="chat-task-skeleton-title" /><span className="chat-task-skeleton-meta" /></span>
+              </div>
             </div>
           ) : failed ? (
             <div className="chat-task-blank" role="alert">

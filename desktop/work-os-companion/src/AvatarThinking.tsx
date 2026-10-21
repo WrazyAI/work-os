@@ -43,7 +43,7 @@ export function AvatarThinking({
   const expanded = manualExpanded ?? working;
   const visible = working ? stages.slice(0, Math.min(stages.length, active + 1)) : stages;
   const spokenStatus = working
-    ? activeLabel
+    ? [activeLabel, visible.at(-1)?.label].filter(Boolean).join(": ")
     : `${settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}${result ? ` · ${result}` : ""}`;
 
   // 100ms ticks keep the 0.1s readout honest. State lives here (not in the
@@ -62,6 +62,7 @@ export function AvatarThinking({
       data-workos-tool-surface="thinking"
       data-workos-tool-state={working ? "working" : "settled"}
       data-workos-thinking-stage-count={visible.length}
+      data-expanded={expanded ? "true" : "false"}
     >
       <button
         type="button"
@@ -73,16 +74,14 @@ export function AvatarThinking({
         <MascotMark pose={MASCOT.thinkingPose} className="chat-thinking-mark" />
         <span className="avatar-thinking-copy">
           <span className="avatar-thinking-kicker">{working ? "Working now" : "Completed"}</span>
-          <span>
-            {working ? (
-              <span className="avatar-thinking-active">{activeLabel}</span>
-            ) : (
-              <span className="avatar-thinking-done">
-                {settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}
-                {result ? ` · ${result}` : ""}
-              </span>
-            )}
-          </span>
+          {working ? (
+            <span className="avatar-thinking-active">{activeLabel}</span>
+          ) : (
+            <span className="avatar-thinking-done">
+              {settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}
+              {result ? ` · ${result}` : ""}
+            </span>
+          )}
         </span>
         {working && (
           <span className="avatar-thinking-elapsed" aria-hidden="true">
@@ -90,7 +89,7 @@ export function AvatarThinking({
           </span>
         )}
         <ChevronDown
-          size={13}
+          size={14}
           aria-hidden="true"
           className={`avatar-thinking-chevron ${expanded ? "open" : ""}`}
         />
@@ -105,9 +104,13 @@ export function AvatarThinking({
             {visible.map((stage, index) => {
               const done = !working || index < active;
               return (
-                <div key={`${index}-${stage.label}`} className="avatar-thinking-row">
+                <div
+                  key={`${index}-${stage.label}`}
+                  className={`avatar-thinking-row ${done ? "is-done" : "is-active"}`}
+                  aria-current={done ? undefined : "step"}
+                >
                   {done ? (
-                    <Check size={13} aria-hidden="true" className="avatar-thinking-check" />
+                    <Check size={14} aria-hidden="true" className="avatar-thinking-check" />
                   ) : (
                     <span aria-hidden="true" className="avatar-thinking-spinner" />
                   )}

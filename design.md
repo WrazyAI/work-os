@@ -713,6 +713,16 @@ results, batch review, navigation, thinking, and tool-call variants share the
 same spacing, border, focus, and receipt language while keeping their distinct
 approval contracts.
 
+The live working card is the shared frame for every wait in both chats. Its
+header carries the 34px status tile, the 10px `Working now` eyebrow, the 14px
+active label, the tabular elapsed time, and one disclosure; the body shows the
+current step at 13px with the shared spinner, and the steps already done
+underneath at 12px with muted checks. The same card carries the request itself
+(`Sending your update`), the interpretation (`Thinking`, `Reviewing your
+agenda`), and task loading (`Loading tasks`), and it settles into the collapsed
+`Completed` receipt. The card owns the full assistant turn — no separate mascot
+mark beside it — and the full trace remains available through the disclosure.
+
 Tool surfaces must preserve:
 
 - explicit approval before mutations;

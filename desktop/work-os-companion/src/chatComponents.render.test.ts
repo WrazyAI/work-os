@@ -119,6 +119,14 @@ describe("ChatTurn copy and mascot", () => {
     expect(clustered).not.toContain("chat-mascot-mark");
   });
 
+  it("lets a tool surface own the full turn without the mascot column", () => {
+    const tool = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", variant: "tool" },
+      createElement("span", { className: "avatar-thinking" }, "Working card")));
+    expect(tool).toContain("chat-turn-shell is-tool");
+    expect(tool).toContain("avatar-thinking");
+    expect(tool).not.toContain("chat-mascot-mark");
+  });
+
   it("copies card summaries for card-only turns and skips system notices", () => {
     const cardOnly = renderToStaticMarkup(createElement(ChatTurn, {
       role: "assistant",

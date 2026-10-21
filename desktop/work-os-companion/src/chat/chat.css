@@ -488,8 +488,14 @@
 .chat-task-body { display: flex; min-height: 0; flex-direction: column; }
 .chat-task-list { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
 
-.chat-task-skeleton { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
-.chat-task-skeleton span { height: 34px; border-radius: 9px; background: var(--inset, #edf0ea); animation: chat-pulse 1.4s ease-in-out infinite; }
+.chat-task-loading { display: grid; gap: 10px; padding: 12px; }
+.chat-task-loading-row { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--ink, #182018); font-size: 13px; font-weight: 650; }
+.chat-task-skeleton { display: grid; gap: 8px; }
+.chat-task-skeleton > span { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--tool-line, #d8ded4); border-radius: 10px; background: var(--tool-paper, #fffdf8); }
+.chat-task-skeleton-title,
+.chat-task-skeleton-meta { border-radius: 5px; background: var(--tool-inset, #f2f5ee); animation: chat-pulse 1.4s ease-in-out infinite; }
+.chat-task-skeleton-title { height: 9px; width: 62%; }
+.chat-task-skeleton-meta { height: 7px; width: 36%; }
 .chat-task-blank {
   display: flex;
   flex-direction: column;

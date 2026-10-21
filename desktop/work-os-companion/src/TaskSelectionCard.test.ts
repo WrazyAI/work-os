@@ -28,6 +28,10 @@ describe("TaskSelectionCard", () => {
 
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain("Loading tasks");
+    // The loading state shares the working card's spinner and content-shaped rows.
+    expect(loading).toContain("chat-task-loading");
+    expect(loading).toContain("chat-working-spinner");
+    expect(loading).toContain("chat-task-skeleton-title");
     expect(empty).toContain("No pending tasks");
     expect(error).toContain("Tasks are unavailable");
     expect(error).toContain("Try again");

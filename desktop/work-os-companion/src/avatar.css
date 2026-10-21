@@ -673,76 +673,8 @@ body.avatar-window {
 
 /* ── Thinking trace ─────────────────────────────────────────────── */
 
-.avatar-thinking { max-width: 96%; }
-.avatar-thinking-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 4px 6px;
-  margin-left: -6px;
-  color: #6a6d64;
-  font: 600 12px/1.4 Manrope, Inter, sans-serif;
-  cursor: pointer;
-}
-.avatar-thinking-head:hover { background: rgba(23, 25, 20, 0.05); color: var(--avatar-ink); }
-.avatar-thinking-head:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
-.avatar-thinking-active {
-  background-image: linear-gradient(90deg, #8f9289 35%, var(--avatar-ink) 50%, #8f9289 65%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: avatarShimmer 1.4s linear infinite;
-}
-@keyframes avatarShimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
-}
-.avatar-thinking-done { color: #6a6d64; }
-.avatar-thinking-elapsed {
-  color: #8f9289;
-  font: 600 11px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-variant-numeric: tabular-nums;
-}
-.avatar-thinking-chevron { transition: transform 0.2s ease; }
-.avatar-thinking-chevron.open { transform: rotate(180deg); }
-.avatar-thinking-trace-wrap {
-  display: grid;
-  transition: grid-template-rows 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
-}
-.avatar-thinking-trace-clip { overflow: hidden; min-height: 0; }
-.avatar-thinking-trace {
-  margin: 2px 0 2px 6px;
-  padding-left: 12px;
-  border-left: 1px solid rgba(23, 25, 20, 0.14);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.avatar-thinking-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.avatar-thinking-check { flex: 0 0 auto; color: #5d7a4a; }
-.avatar-thinking-spinner {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(23, 25, 20, 0.2);
-  border-top-color: var(--avatar-ink);
-  animation: avatarSpin 0.7s linear infinite;
-}
-@keyframes avatarSpin { to { transform: rotate(360deg); } }
-.avatar-thinking-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--avatar-ink);
-}
-.avatar-thinking-detail { flex: 0 0 auto; font-size: 11px; color: #8f9289; }
+/* The working card is owned by chat/tool-surfaces.css so both conversation
+   surfaces share one frame; this file no longer paints its internals. */
 
 /* ── Agenda review card ─────────────────────────────────────────── */
 

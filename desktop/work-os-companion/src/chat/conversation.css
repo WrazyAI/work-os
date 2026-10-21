@@ -433,6 +433,20 @@
   visibility: hidden;
 }
 
+/* A tool surface owns the full turn: no mascot column, no message cap. */
+.conversation-surface .chat-turn-shell.is-tool .chat-turn {
+  width: 100%;
+  max-width: 100%;
+}
+
+.conversation-surface .chat-turn-shell.is-tool .chat-turn-mark {
+  display: none;
+}
+
+.conversation-surface .chat-turn-shell.is-tool .chat-turn-body {
+  width: 100%;
+}
+
 .conversation-surface .chat-turn-user {
   max-width: min(78%, 520px);
   padding: 11px 14px;

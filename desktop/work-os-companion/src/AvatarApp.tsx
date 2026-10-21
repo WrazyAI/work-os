@@ -2530,7 +2530,7 @@ export default function AvatarApp(): React.ReactElement {
               </Fragment>
               );
             })}
-            {thinkingTrace && <ChatTurn role="assistant" showMark={chat.at(-1)?.role !== "assistant"}><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
+            {thinkingTrace && <ChatTurn role="assistant" variant="tool"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
             {agendaReview && (
               <AgendaReviewCard
                 clarifications={agendaReview.interpretation.clarifications}
