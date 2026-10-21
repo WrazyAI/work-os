@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.92 — 2026-10-21
+
+- The next-steps bubble now grows centred above Otto, so the mascot stays exactly where you left it.
+
 ## 0.4.91 — 2026-10-21
 
 - Approving a recap now shows its suggested next steps in the mascot bubble, so you can accept, edit, or skip each one without opening the chat.
