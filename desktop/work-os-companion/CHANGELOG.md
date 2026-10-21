@@ -25,6 +25,13 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.91 — 2026-10-21
+
+- Approving a recap now shows its suggested next steps in the mascot bubble, so you can accept, edit, or skip each one without opening the chat.
+- While the suggestions are being worked out, the bubble says so and Otto keeps working instead of leaving you guessing.
+- Next steps can be read aloud, and a long list scrolls inside the bubble.
+- When the last suggestion is decided, Otto shows the result and celebrates.
+
 ## 0.4.90 — 2026-10-21
 
 - Building from a Loom link now reads the link for you — no need to press Read Loom first.

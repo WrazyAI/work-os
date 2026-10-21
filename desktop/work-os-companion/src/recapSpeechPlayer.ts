@@ -72,7 +72,7 @@ export interface RecapSpeechPlayer {
   dispose(): void;
 }
 
-const IDLE: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null };
+export const IDLE_RECAP_SPEECH: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null };
 
 /** How long a read is expected to take before the employee is told it is
  * taking longer. The provider budget stays well beyond this (the route allows
@@ -174,7 +174,7 @@ export function browserRecapAudio(): RecapAudio {
 }
 
 export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeechPlayer {
-  let snapshot: RecapSpeechSnapshot = IDLE;
+  let snapshot: RecapSpeechSnapshot = IDLE_RECAP_SPEECH;
   let weights: number[] = [];
   let audio: RecapAudio | null = null;
   /** Guards a slow clip arriving after the read was stopped. */
@@ -211,7 +211,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     // Already at rest: nothing to publish (a press on an idle control must not
     // re-render the window).
     if (snapshot.status === "idle" && !snapshot.lines.length && snapshot.intervalId === null) return;
-    publish({ ...IDLE, retryIntervalId: cancelledWait });
+    publish({ ...IDLE_RECAP_SPEECH, retryIntervalId: cancelledWait });
   };
 
   const onTick = () => {
@@ -241,7 +241,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     } catch (error) {
       if (mine !== token) return;
       release();
-      publish({ ...IDLE, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure(error instanceof Error && error.message ? error.message : UNAVAILABLE);
       return;
     }
@@ -256,7 +256,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     } catch {
       if (mine !== token) return;
       release();
-      publish({ ...IDLE, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure(UNAVAILABLE);
       return;
     }
@@ -276,7 +276,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     element.addEventListener("error", () => {
       if (mine !== token) return;
       release();
-      publish({ ...IDLE, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure(UNAVAILABLE);
     });
     clearSlow();
@@ -286,7 +286,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     } catch {
       if (mine !== token) return;
       release();
-      publish({ ...IDLE, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure("Your device blocked the audio. Press Listen again to play this recap.");
     }
   };

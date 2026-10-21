@@ -160,7 +160,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 export type RecapSpeechClip = {
   bytes: ArrayBuffer;
   mimeType: string;
-  lines: Array<{ text: string; time: string | null }>;
+  lines: Array<{ text: string; time: string | null; ref?: string | null }>;
   revision: number | null;
   stale: boolean;
 };
@@ -206,14 +206,22 @@ export async function apiRequestAudio(
         : "Reading that recap is unavailable right now. Try again in a moment.";
       throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status));
     }
-    const linesHeader = response.headers.get("x-work-os-recap-lines");
+    // One parser, two spoken surfaces: a recap read and a next-steps read both
+    // answer with the words they spoke, so the visible line and the voice can
+    // never diverge.
+    const linesHeader = response.headers.get("x-work-os-recap-lines")
+      ?? response.headers.get("x-work-os-next-steps-lines");
     let lines: RecapSpeechClip["lines"] = [];
     if (linesHeader) {
       try {
         const parsed = JSON.parse(decodeURIComponent(linesHeader));
         if (Array.isArray(parsed)) {
           lines = parsed.flatMap((entry) => entry && typeof entry === "object" && typeof (entry as { text?: unknown }).text === "string"
-            ? [{ text: (entry as { text: string }).text, time: typeof (entry as { time?: unknown }).time === "string" ? (entry as { time: string }).time : null }]
+            ? [{
+                text: (entry as { text: string }).text,
+                time: typeof (entry as { time?: unknown }).time === "string" ? (entry as { time: string }).time : null,
+                ref: typeof (entry as { ref?: unknown }).ref === "string" ? (entry as { ref: string }).ref : null,
+              }]
             : []);
         }
       } catch { lines = []; }

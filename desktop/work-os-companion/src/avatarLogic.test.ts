@@ -549,6 +549,13 @@ describe("avatarBubble", () => {
     expect(avatarBubble({ preparing: false, eodDue: false, recapReady: true, promptDue: false })).toBe("recap");
   });
 
+  it("shows the approved recap's next steps ahead of a newer recap or prompt", () => {
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: false, nextSteps: true })).toBe("next-steps");
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: true, promptDue: true, nextSteps: true })).toBe("next-steps");
+    // The mandatory wrap-up still outranks it.
+    expect(avatarBubble({ preparing: false, eodDue: true, recapReady: true, promptDue: true, nextSteps: true })).toBe("prompt");
+  });
+
   it("shows the EOD alert ahead of a ready recap and in-flight analysis", () => {
     expect(avatarBubble({ preparing: false, eodDue: true, recapReady: true, promptDue: true })).toBe("prompt");
     expect(avatarBubble({ preparing: true, eodDue: true, recapReady: true, promptDue: true })).toBe("prompt");

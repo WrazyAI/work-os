@@ -3,8 +3,10 @@ import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } fr
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
 import { RecapPrompter } from "./RecapPrompter";
-import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
+import { browserRecapAudio, createRecapSpeechPlayer, IDLE_RECAP_SPEECH, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 import { DEFAULT_RECAP_VOICE, grownWindow, normalizeRecapVoice, RECAP_BUBBLE_RESTING, RECAP_VOICE_EVENT } from "./recapSpeech";
+import { nextStepsWindow } from "./nextStepsWindow";
+import { NextStepsBubble, nextStepsHasFailure } from "./NextStepsBubble";
 import { prefersReducedMotion } from "./listShift";
 import { apiRequestAudio } from "./api";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
@@ -31,7 +33,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapLiveFixtureRequested, avatarRecapNoVoiceFixtureFacts, avatarRecapNoVoiceFixtureRequested, avatarRecapReadingDoneFixtureRequested, avatarRecapReadingFixtureLines, avatarRecapReadingFixtureRequested, avatarRecapReadingStillFixtureRequested, avatarRecapRetryFixtureRequested, avatarRecapSlowFixtureRequested, AVATAR_RECAP_READING_SAMPLE, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureChat, avatarNextStepsFixtureMoment, avatarNextStepsFixtureMomentFor, avatarNextStepsFixturePhase, avatarNextStepsFixtureRequested, avatarNextStepsFixtureSpeechLines, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapLiveFixtureRequested, avatarRecapNoVoiceFixtureFacts, avatarRecapNoVoiceFixtureRequested, avatarRecapReadingDoneFixtureRequested, avatarRecapReadingFixtureLines, avatarRecapReadingFixtureRequested, avatarRecapReadingStillFixtureRequested, avatarRecapRetryFixtureRequested, avatarRecapSlowFixtureRequested, AVATAR_RECAP_READING_SAMPLE, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -202,6 +204,10 @@ export default function AvatarApp(): React.ReactElement {
   const avatarNextStepsEmptyFixture = avatarNextStepsEmptyFixtureRequested(window.location.search);
   const avatarNextStepsPairFixture = avatarNextStepsPairFixtureRequested(window.location.search);
   const avatarNextStepsRecoveryLike = avatarNextStepsRecoveryFixture || avatarNextStepsEmptyFixture || avatarNextStepsPairFixture;
+  // The preview opens on the moment itself: the bubble that replaces the
+  // panel is what the fixture exists to judge.
+  const avatarNextStepsPhase = avatarNextStepsFixture ? avatarNextStepsFixturePhase(window.location.search) : "ready";
+  const nextStepsFixtureMoment = avatarNextStepsFixture ? avatarNextStepsFixtureMomentFor(avatarNextStepsPhase) : null;
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
@@ -262,13 +268,14 @@ export default function AvatarApp(): React.ReactElement {
       : avatarNextStepsRecoveryFixture
         ? avatarNextStepsRecoveryFixtureChat()
         : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
-        : (avatarRecapFixture || avatarRecapReadingFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+        : avatarNextStepsFixture && nextStepsFixtureMoment ? avatarNextStepsFixtureChat(nextStepsFixtureMoment)
+        : (avatarRecapFixture || avatarRecapReadingFixture || avatarRecapProcessingFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
-  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarRecapReadingFixture || avatarRecapNoVoiceFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarRecapReadingFixture || avatarRecapNoVoiceFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
   /* A failed or cancelled read is acknowledged by the mascot itself: its own
@@ -288,6 +295,10 @@ export default function AvatarApp(): React.ReactElement {
   // One player owns this window's audio: the tray hide, the recorder, and every
   // Listen control route through it, so two reads can never overlap and a
   // recording never starts on top of one.
+  const [nextStepsSpeech, setNextStepsSpeech] = useState<RecapSpeechSnapshot>(IDLE_RECAP_SPEECH);
+  const [nextStepsBubbleId, setNextStepsBubbleId] = useState<string | null>(avatarNextStepsFixture && nextStepsFixtureMoment
+    ? `next-steps-${nextStepsFixtureMoment.intervalId}` : null);
+  const [nextStepsCelebration, setNextStepsCelebration] = useState(false);
   const [recapPlayer] = useState<RecapSpeechPlayer>(() => createRecapSpeechPlayer({
     fetchClip: avatarRecapReadingFixture
       ? async () => ({
@@ -316,6 +327,85 @@ export default function AvatarApp(): React.ReactElement {
     if (recapPlayer.snapshot().status === "loading") flashRecapFailure();
     recapPlayer.stop();
   }, [flashRecapFailure, recapPlayer]);
+
+  // The same audio owner reads the next steps: one player, a different route.
+  // The route takes the recap id, so what is spoken is the suggestion set the
+  // server filed for this recap — never text typed into the bubble.
+  const [nextStepsPlayer] = useState<RecapSpeechPlayer>(() => createRecapSpeechPlayer({
+    fetchClip: avatarNextStepsFixture
+      ? async () => ({
+          bytes: await (await fetch(AVATAR_RECAP_READING_SAMPLE)).arrayBuffer(),
+          mimeType: "audio/mpeg",
+          lines: avatarNextStepsFixtureSpeechLines(nextStepsFixtureMoment ?? avatarNextStepsFixtureMomentFor("ready")),
+          revision: 1,
+          stale: false,
+        })
+      : (input) => apiRequestAudio("/api/work-os/voice/next-steps", input),
+    createAudio: browserRecapAudio,
+    onSnapshot: setNextStepsSpeech,
+    onFailure: (message) => {
+      flashRecapFailure();
+      setChat((current) => [...current, { id: `next-steps-speech-error-${Date.now()}`, role: "system", text: message }]);
+    },
+    onStaleCard: () => undefined,
+  }));
+  const toggleNextStepsRead = useCallback((moment: RecapNextStepsMoment): void => {
+    void nextStepsPlayer.toggle({
+      intervalId: moment.intervalId,
+      revision: null,
+      voice: recapVoiceRef.current,
+      enabled: facts.voiceAvailable,
+    });
+  }, [nextStepsPlayer, facts.voiceAvailable]);
+  const stopNextStepsRead = useCallback((): void => nextStepsPlayer.stop(), [nextStepsPlayer]);
+
+  // One audio owner: whichever read starts, the other stops. The effect (rather
+  // than each handler) keeps the rule true for the fixture players too.
+  useEffect(() => {
+    if (recapSpeech.status !== "idle") nextStepsPlayer.stop();
+  }, [recapSpeech.status, nextStepsPlayer]);
+  useEffect(() => {
+    if (nextStepsSpeech.status !== "idle") recapPlayer.stop();
+  }, [nextStepsSpeech.status, recapPlayer]);
+
+  // The bubble's moment, by entry id. The chat entry stays the source of truth:
+  // the bubble is a second view of the same decisions, never a second copy.
+  const nextStepsBubbleEntry = useMemo(
+    () => nextStepsBubbleId ? chat.find((entry) => entry.id === nextStepsBubbleId) : undefined,
+    [chat, nextStepsBubbleId],
+  );
+  const nextStepsMoment = nextStepsBubbleEntry?.nextSteps ?? null;
+
+  // The success beat belongs to the finished decision list, not to the recap
+  // confirmation. It plays once every item is settled with nothing failed, then
+  // the bubble returns to the orb and the mascot celebrates there.
+  useEffect(() => {
+    if (!nextStepsBubbleEntry || !nextStepsMoment) return;
+    if (nextStepsMoment.status === "empty") {
+      const timer = window.setTimeout(() => setNextStepsBubbleId(null), 4_000);
+      return () => window.clearTimeout(timer);
+    }
+    if (nextStepsMoment.status === "done" && !nextStepsHasFailure(nextStepsMoment)) {
+      const timer = window.setTimeout(() => {
+        setNextStepsBubbleId(null);
+        nextStepsPlayer.stop();
+        setNextStepsCelebration(true);
+      }, 10_000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [nextStepsBubbleEntry, nextStepsMoment, nextStepsPlayer]);
+
+  useEffect(() => {
+    if (!nextStepsCelebration) return;
+    const timer = window.setTimeout(() => setNextStepsCelebration(false), 2_900);
+    return () => window.clearTimeout(timer);
+  }, [nextStepsCelebration]);
+
+  // A moment that left the conversation (or a new session's sync) cannot leave
+  // the bubble pointing at an entry that no longer exists.
+  useEffect(() => {
+    if (nextStepsBubbleId && !nextStepsBubbleEntry) setNextStepsBubbleId(null);
+  }, [nextStepsBubbleId, nextStepsBubbleEntry]);
 
   const voice = useVoiceInput({
     enabled: facts.voiceAvailable,
@@ -602,12 +692,13 @@ export default function AvatarApp(): React.ReactElement {
   // Keep the player's stale-card refresh pointed at the live loader.
   loadDayRef.current = loadDay;
 
-  // Grow the bubble while Otto reads, and put it back exactly as it was. Only
-  // the collapsed companion is managed here — expanding it is the panel's own
-  // effect, and the read keeps going through the expand.
+  // Grow the bubble while Otto reads or the next steps are open, and put it
+  // back exactly as it was. Only the collapsed companion is managed here —
+  // expanding it is the panel's own effect, and the read keeps going.
   useEffect(() => {
     if (!win || expanded) return;
     const reading = recapSpeech.status !== "idle";
+    const moment = nextStepsMoment;
     let cancelled = false;
     void (async () => {
       try {
@@ -617,15 +708,19 @@ export default function AvatarApp(): React.ReactElement {
         const bounds = monitor
           ? { width: monitor.size.width, height: monitor.size.height }
           : { width: logical.x + RECAP_BUBBLE_RESTING.width, height: logical.y + RECAP_BUBBLE_RESTING.height };
-        const target = reading
-          ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 4, chrome: 102 }, bounds, { x: logical.x, y: logical.y })
-          : { size: RECAP_BUBBLE_RESTING, position: { x: logical.x, y: logical.y } };
+        // The decision list needs the taller window; the prompter keeps its own
+        // math when no moment is open.
+        const target = moment
+          ? nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y })
+          : reading
+            ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 4, chrome: 102 }, bounds, { x: logical.x, y: logical.y })
+            : { size: RECAP_BUBBLE_RESTING, position: { x: logical.x, y: logical.y } };
         await win.setSize(new LogicalSize(target.size.width, target.size.height)).catch(() => undefined);
         await win.setPosition(new LogicalPosition(target.position.x, target.position.y)).catch(() => undefined);
       } catch { /* the companion keeps its size when the monitor cannot be read */ }
     })();
     return () => { cancelled = true; };
-  }, [win, expanded, recapSpeech.status]);
+  }, [win, expanded, recapSpeech.status, nextStepsMoment?.status, nextStepsMoment?.items.length]);
 
   // Settings lives in the main window; a change there reaches this one live, so
   // the next read uses the new voice without a restart.
@@ -1033,6 +1128,12 @@ export default function AvatarApp(): React.ReactElement {
       clearRecapAutoCollapse();
       endNextStepsMoment();
     }
+    if (open) {
+      // Opening the panel hands the moment to the chat; the bubble must not
+      // keep asking from behind it, and its voice yields to the chat surface.
+      setNextStepsBubbleId(null);
+      nextStepsPlayer.stop();
+    }
     setExpanded(open);
     // The recap celebration is staggered: it plays only once the panel has
     // closed, so the employee sees the success beat on the orb instead of it
@@ -1064,7 +1165,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       await win.setPosition(new LogicalPosition(x, y));
     } catch { /* sizing is cosmetic */ }
-  }, [clearRecapAutoCollapse, endNextStepsMoment, win]);
+  }, [clearRecapAutoCollapse, endNextStepsMoment, nextStepsPlayer, win]);
 
   /** After the moment is decided, the panel returns to the orb after a settle
    * beat unless the employee interacts again. */
@@ -1079,11 +1180,13 @@ export default function AvatarApp(): React.ReactElement {
 
   /** The post-approval moment: the chat lingers while the recap's suggestions
    * are generated, then shows them inline as actionable cards. */
-  const startNextStepsMoment = useCallback(async (intervalId: string, label: string | null, existingEntryId?: string): Promise<void> => {
+  const startNextStepsMoment = useCallback(async (
+    intervalId: string,
+    label: string | null,
+    existingEntryId?: string,
+    options?: { bubble?: boolean },
+  ): Promise<void> => {
     const entryId = existingEntryId ?? `next-steps-${intervalId}`;
-    // Whichever path attached this moment, its success beat waits for the
-    // panel to close so the animation is actually seen.
-    pendingRecapCelebration.current = true;
     // A new moment takes over: a settle timer left by an earlier, already
     // finished moment must never collapse the panel and dismiss the fresh
     // suggestions before the employee can act on them.
@@ -1108,7 +1211,9 @@ export default function AvatarApp(): React.ReactElement {
         createdAt: new Date().toISOString(),
       }]);
     }
-    void toggleExpanded(true);
+    // The confirmed recap hands the bubble to the suggestions instead of
+    // opening the panel: the decision happens where the employee already is.
+    if (options?.bubble !== false) setNextStepsBubbleId(entryId);
     if (avatarNextStepsFixture || avatarNextStepsRecoveryLike) {
       // DEV-only: the recovery fixtures resolve their poll locally.
       await new Promise((resolve) => window.setTimeout(resolve, 350));
@@ -1172,7 +1277,7 @@ export default function AvatarApp(): React.ReactElement {
     for (const entry of missing) {
       const intervalId = entry.id.slice("next-steps-".length);
       if (!intervalId) continue;
-      void startNextStepsMoment(intervalId, null, entry.id);
+      void startNextStepsMoment(intervalId, null, entry.id, { bubble: false });
     }
     // A decision left in flight by a previous session is settled against the
     // server, so a restored card can never stay on Saving.
@@ -1306,12 +1411,22 @@ export default function AvatarApp(): React.ReactElement {
   // employee's own decision on this recap is recorded.
   const decideActivityPrompt = useCallback(async (id: string, action: "confirm" | "amend", feedback?: string): Promise<void> => {
     if (avatarRecapLiveFixture && action === "confirm") {
-      // The recap leaves `inferred`, which is what retires the bubble, so the
-      // preview shows the real outcome without a server.
+      // The recap leaves `inferred`, which is what retires the bubble, and the
+      // approval hands straight to the next-steps moment in the same bubble —
+      // exactly the live flow, without a server. The panel must stay closed.
+      const moment = avatarNextStepsFixtureMomentFor("ready");
       setActivityPrompt((current) => current && current.id === id ? { ...current, reviewStatus: "confirmed" } : current);
-      setChat((current) => current.map((entry) => entry.activityInterval?.id === id
-        ? { ...entry, activityInterval: { ...entry.activityInterval, reviewStatus: "confirmed" } }
-        : entry));
+      setChat((current) => [...current.map((entry) => entry.activityInterval?.id === id
+        ? { ...entry, activityInterval: { ...entry.activityInterval, reviewStatus: "confirmed" as const } }
+        : entry), {
+        id: `next-steps-${moment.intervalId}`,
+        role: "assistant",
+        text: "Recap confirmed — while it's fresh, here's what could come next:",
+        nextSteps: moment,
+        createdAt: new Date().toISOString(),
+      }]);
+      setNextStepsBubbleId(`next-steps-${moment.intervalId}`);
+      stopRecapRead();
       return;
     }
     setDecidingIntervalId(id);
@@ -1327,10 +1442,10 @@ export default function AvatarApp(): React.ReactElement {
           : entry), {
           id: "next-steps-fixture", role: "assistant",
           text: "Recap confirmed — while it's fresh, here's what could come next:",
-          nextSteps: avatarNextStepsFixtureMoment(),
+          nextSteps: avatarNextStepsFixtureMomentFor(avatarNextStepsPhase),
           createdAt: new Date().toISOString(),
         }]);
-        void toggleExpanded(true);
+        setNextStepsBubbleId("next-steps-fixture");
         return;
       }
       await decideActivityIntervalReview(id, action, feedback);
@@ -1343,10 +1458,9 @@ export default function AvatarApp(): React.ReactElement {
         : entry));
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
       void loadDay();
-      // The panel lingers instead of returning to the orb: the approved recap
-      // becomes a next-steps moment with actionable suggestions inline. Its
-      // celebration waits until the panel closes so the animation is seen.
-      pendingRecapCelebration.current = true;
+      // The confirmed recap becomes a next-steps moment in the bubble. No
+      // celebration here: the payoff is the finished decision list, not the
+      // confirmation itself.
       clearRecapAutoCollapse();
       void startNextStepsMoment(id, recapLabel);
     } catch (value) {
@@ -1862,7 +1976,13 @@ export default function AvatarApp(): React.ReactElement {
     const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
     return entry?.activityInterval ?? null;
   }, [activityPrompt, chat]);
-  const bubble = avatarBubble({ preparing: activityPreparing, eodDue, recapReady: pendingRecap !== null, promptDue: attentionDue });
+  const bubble = avatarBubble({
+    preparing: activityPreparing,
+    eodDue,
+    recapReady: pendingRecap !== null,
+    promptDue: attentionDue,
+    nextSteps: nextStepsMoment !== null,
+  });
   /* The last read of this recap was cancelled while it was still preparing, or
      failed: the control offers another try instead of pretending it never ran. */
   const recapRetry = pendingRecap !== null && recapSpeech.retryIntervalId === pendingRecap.id;
@@ -1954,12 +2074,12 @@ export default function AvatarApp(): React.ReactElement {
     scenario: debugScenario,
     facts: { ...facts, connected: connected === true && facts.loaded,
       promptKind: contextualPrompt.kind, promptRequired: attentionDue, eodOutstanding: eodDue },
-    working: thinking || filing || activityPreparing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
+    working: thinking || filing || activityPreparing || nextStepsMoment?.status === "drafting" || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
     failed: recapFlash || daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
     needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
       || chat.some((entry) => hasPendingMascotApproval(entry.operations, entry.toolResults)),
-    completed: readyPulse,
+    completed: readyPulse || nextStepsCelebration,
     receipt: mascotReceipt,
   });
   const agentActivity: MascotAgentActivity = mascotVisual.activity;
@@ -2081,7 +2201,7 @@ export default function AvatarApp(): React.ReactElement {
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
           <div className="avatar-compact">
-          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
+          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); stopNextStepsRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
           <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window" aria-label={`Open ${MASCOT.name} companion to connect Work OS`}>
             <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
           </button>
@@ -2102,7 +2222,7 @@ export default function AvatarApp(): React.ReactElement {
   }
 
   return (
-    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" ? "true" : undefined}>
+    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" ? "true" : undefined} data-next-steps={nextStepsMoment ? nextStepsMoment.status : undefined}>
       {!expanded && (
         <div className="avatar-compact">
         {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
@@ -2173,6 +2293,23 @@ export default function AvatarApp(): React.ReactElement {
             </>}
           </div>
         )}
+        {bubble === "next-steps" && nextStepsMoment && nextStepsBubbleEntry && (
+          <NextStepsBubble
+            moment={nextStepsMoment}
+            busy={nextStepsBusyId === nextStepsBubbleEntry.id}
+            speech={nextStepsSpeech}
+            voiceAvailable={facts.voiceAvailable}
+            reduced={reducedMotion}
+            onDecide={(item, decision, edits) => { void decideNextStep(nextStepsBubbleEntry.id, item, decision, edits); }}
+            onRetry={() => { void startNextStepsMoment(nextStepsMoment.intervalId, nextStepsMoment.label, nextStepsBubbleEntry.id); }}
+            onListen={() => toggleNextStepsRead(nextStepsMoment)}
+            onStopListening={stopNextStepsRead}
+            onDismiss={() => {
+              stopNextStepsRead();
+              setNextStepsBubbleId(null);
+            }}
+          />
+        )}
         {bubble === "prompt" && (
           <AvatarPromptBubble
             kind={contextualPrompt.kind}
@@ -2182,7 +2319,7 @@ export default function AvatarApp(): React.ReactElement {
             onAction={(action) => { void (action === "open_eod" ? openEodReview() : openGoalPlan()); }}
           />
         )}
-        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
+        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); stopNextStepsRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"
           onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}

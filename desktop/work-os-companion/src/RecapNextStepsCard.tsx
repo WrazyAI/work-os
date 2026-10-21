@@ -17,19 +17,19 @@ export interface RecapNextStepsMoment {
   error?: string | null;
 }
 
-const KIND_LABEL: Record<RecapNextStepItem["operation"], string> = {
+export const KIND_LABEL: Record<RecapNextStepItem["operation"], string> = {
   complete_task: "Mark done",
   create_task: "New task",
   add_subtask: "Subtask",
 };
 
-const ACCEPT_LABEL: Record<RecapNextStepItem["operation"], string> = {
+export const ACCEPT_LABEL: Record<RecapNextStepItem["operation"], string> = {
   complete_task: "Mark done",
   create_task: "Add task",
   add_subtask: "Add subtask",
 };
 
-const APPLIED_LABEL: Record<RecapNextStepItem["operation"], string> = {
+export const APPLIED_LABEL: Record<RecapNextStepItem["operation"], string> = {
   complete_task: "Done",
   create_task: "Added",
   add_subtask: "Added",

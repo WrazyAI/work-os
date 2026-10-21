@@ -13,6 +13,10 @@ export interface RecapSpeechLine {
   text: string;
   /** The clock time the card shows as its own pill; never spoken. */
   time: string | null;
+  /** The surface line this speaks, when the caller wants to highlight it in
+   * place instead of showing a separate prompter (`lead`, `<id>:title`,
+   * `<id>:why`). Never spoken and never rendered as text. */
+  ref?: string | null;
 }
 
 /** The voices the app ships.
@@ -128,10 +132,27 @@ export function grownWindow(
   monitor: WindowSize,
   position: WindowPosition,
 ): { size: WindowSize; position: WindowPosition } {
-  const heightDelta = Math.max(0, Math.round(metrics.lineHeight * metrics.prompterLines + metrics.chrome));
+  return grownWindowFor(
+    base,
+    Math.round(metrics.lineHeight * metrics.prompterLines + metrics.chrome),
+    monitor,
+    position,
+  );
+}
+
+/** The same growth for a bubble whose height is already known (the next-steps
+ * moment computes it from its item count): widen to the reading measure, add
+ * the delta upward, and clamp inside the monitor. The bottom edge — and with
+ * it the mascot and elapsed pill — stays put, exactly like the prompter. */
+export function grownWindowFor(
+  base: WindowSize,
+  heightDeltaInput: number,
+  monitor: WindowSize,
+  position: WindowPosition,
+): { size: WindowSize; position: WindowPosition } {
+  const heightDelta = Math.max(0, Math.round(heightDeltaInput));
   // Wider only when the monitor can hold the reading measure with a margin to
-  // spare; otherwise the bubble keeps its resting width and the prompter rows
-  // wrap inside it.
+  // spare; otherwise the bubble keeps its resting width and the rows wrap.
   const width = monitor.width >= RECAP_BUBBLE_READING_WIDTH + 24 ? RECAP_BUBBLE_READING_WIDTH : base.width;
   const height = Math.min(monitor.height, base.height + heightDelta);
   // Grow about the window's own centre so the mascot under it does not slide

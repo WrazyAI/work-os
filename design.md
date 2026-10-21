@@ -1191,7 +1191,8 @@ days — in the amber recoverable-attention tone.
   and offer `Try again` and `Dismiss`; outdated items dismiss only because the
   task moved on. Approving or dismissing refreshes the task surfaces the change
   could touch. Recap-sourced next steps never appear here — they belong to the
-  mascot chat moment (§9.1) — and nothing is written back until an approval.
+  mascot chat moment (§9.1) or its compact bubble — and nothing is written back
+  until an approval.
 
 ### 8.13 Keyboard and focus
 
@@ -1614,6 +1615,30 @@ face. Sending that note records it as the employee amendment.
 Neither action mutates anything other than the recap, and the Tasks-tab stream
 keeps its inline review as the same round check (`Looks right`) and pencil
 (`Add or correct`) actions.
+
+**Next steps after approval.** Confirming a recap hands the same compact bubble
+to the suggestions the confirmation generated; the panel never opens on its
+own. While generation runs the bubble says `Working out what could come next`,
+carries the reason (`Otto is reading your recap for anything worth doing.`), and
+Otto keeps his working pose. The ready bubble leads with `Next steps` and the
+source line (`From your … recap`), then one decision row per suggestion: its
+kind (`Mark done`, `New task`, `Subtask`), the title, the evidence-bounded
+reason, and that item's own accept, edit, and skip controls. Nothing is applied
+in bulk and nothing is applied by opening the bubble; each control decides only
+its row, and a failed row keeps its reason and a retry. Titles that can be
+edited are edited in the bubble.
+
+The compact window grows upward with the list, keeping Otto and the elapsed pill
+in place; three rows fit, and a longer list scrolls inside the bubble rather
+than moving the companion off screen. `Listen` reads the lead and each row's
+title and reason with the same voice and one-audio-owner rule as the recap, and
+the row being spoken is marked in place — the controls stay available while it
+reads. The empty state says nothing needs action; a failed generation keeps its
+reason and `Try again`. After the last row is settled the bubble shows the
+result (`N changes applied · N skipped`), then Otto returns to the orb and the
+success beat plays. A row that failed suppresses the success and stays
+retryable. `Not now` hides the bubble but keeps the moment in the chat; the
+chat card remains the durable record, and the bubble is only its front door.
 
 The collapsed companion's prompt bubble carries the day's current demand
 (check-in, agenda, or EOD). Tapping the copy opens the chat; when the demand

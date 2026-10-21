@@ -25,6 +25,7 @@
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { CompanionDayFacts } from "./avatarLogic";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
+import type { RecapSpeechLine } from "./recapSpeech";
 import type { ActivityIntervalCard } from "./types";
 
 export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
@@ -273,6 +274,63 @@ export function avatarNextStepsFixtureMoment(): RecapNextStepsMoment {
     failures: {},
     error: null,
   };
+}
+
+/** DEV-only preview phases for the bubble: the wait state, the ready list, and
+ * a list long enough to scroll. */
+export type AvatarNextStepsFixturePhase = "ready" | "drafting" | "long" | "failed";
+
+export function avatarNextStepsFixturePhase(search: string): AvatarNextStepsFixturePhase {
+  if (!import.meta.env.DEV) return "ready";
+  const value = new URLSearchParams(search).get("avatar-next-steps");
+  return value === "drafting" || value === "long" || value === "failed" ? value : "ready";
+}
+
+export function avatarNextStepsFixtureMomentFor(phase: AvatarNextStepsFixturePhase): RecapNextStepsMoment {
+  const base = avatarNextStepsFixtureMoment();
+  if (phase === "drafting") {
+    return { ...base, status: "drafting", items: [], states: {}, failures: {}, error: null };
+  }
+  if (phase === "failed") {
+    return { ...base, status: "failed", items: [], states: {}, failures: {}, error: "Next steps could not be drafted from this recap." };
+  }
+  if (phase === "long") {
+    return {
+      ...base,
+      items: [
+        ...base.items,
+        { proposalId: "fixture-step-4", operation: "create_task", status: "pending", title: "Write the rollout note for the companion release", rationale: "The release notes are part of shipping the update.", taskId: null, editable: true },
+        { proposalId: "fixture-step-5", operation: "complete_task", status: "pending", title: "Close the stale screenshot-retention ticket", rationale: "The retention work is visible and already verified in the recap.", taskId: "fixture-task-3", editable: false },
+      ],
+    };
+  }
+  return base;
+}
+
+/** The fixture conversation starts at the moment, not at the recap card: the
+ * preview exists to judge the bubble that replaces the panel. */
+export function avatarNextStepsFixtureChat(moment: RecapNextStepsMoment): AvatarFixtureTurn[] {
+  return [{
+    id: `next-steps-${moment.intervalId}`,
+    role: "assistant",
+    text: "Recap confirmed — while it's fresh, here's what could come next:",
+    nextSteps: moment,
+  }];
+}
+
+/** The words the fixture clip "speaks": the same lead and rows the bubble
+ * shows, so the highlight can be previewed without a provider call. */
+export function avatarNextStepsFixtureSpeechLines(moment: RecapNextStepsMoment): RecapSpeechLine[] {
+  const lines: RecapSpeechLine[] = [{
+    text: moment.label ? `Next steps from your ${moment.label} recap.` : "Next steps from your approved recap.",
+    time: null,
+    ref: "lead",
+  }];
+  for (const item of moment.items) {
+    if (item.title.trim()) lines.push({ text: item.title.trim(), time: null, ref: `${item.proposalId}:title` });
+    if (item.rationale.trim()) lines.push({ text: item.rationale.trim(), time: null, ref: `${item.proposalId}:why` });
+  }
+  return lines;
 }
 
 export function avatarRecapProcessingFixtureRequested(search: string): boolean {

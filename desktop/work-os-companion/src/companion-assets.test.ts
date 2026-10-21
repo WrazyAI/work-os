@@ -384,7 +384,7 @@ describe("floating companion recap voice", () => {
     expect(avatar).not.toContain("buildRecapSpeechLines");
     // Both hide paths stop the read, a hidden window stops it, and a recording
     // takes the audio over.
-    expect(avatar.match(/stopRecapRead\(\); void invoke\("hide_avatar"\)/g)).toHaveLength(2);
+    expect(avatar.match(/stopRecapRead\(\); stopNextStepsRead\(\); void invoke\("hide_avatar"\)/g)).toHaveLength(2);
     expect(avatar).toContain('if (voice.state !== "idle") stopRecapRead();');
     expect(avatar).toContain('if (document.visibilityState === "hidden") stopRecapRead();');
     const css = readFileSync(resolve(root, "src/avatar.css"), "utf8");
@@ -392,6 +392,31 @@ describe("floating companion recap voice", () => {
     expect(css).toContain(".avatar-reading-dots");
     expect(css).toContain("@keyframes avatar-reading-dot");
     expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]{0,140}avatar-reading-dots i \{ animation: none/);
+  });
+
+  it("shows the approved recap's next steps in the bubble with one audio owner", () => {
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    expect(avatar).toContain("<NextStepsBubble");
+    expect(avatar).toContain("nextStepsWindow(");
+    expect(avatar).toContain('apiRequestAudio("/api/work-os/voice/next-steps"');
+    // The words come from the route, exactly like the recap read.
+    expect(avatar).not.toContain("buildNextStepsSpeechLines");
+    // Confirming a recap must never open the panel by itself.
+    const start = avatar.indexOf("const startNextStepsMoment");
+    const end = avatar.indexOf("setNextStepsBubbleId(entryId);", start);
+    const slice = avatar.slice(start, end);
+    expect(slice).not.toContain("toggleExpanded(true)");
+    expect(slice).toContain("options?.bubble !== false");
+    // The success beat belongs to the finished list, after the last decision.
+    expect(avatar).toContain("nextStepsHasFailure(nextStepsMoment)");
+    expect(avatar).toContain("setNextStepsCelebration(true)");
+    // One audio owner across both reads.
+    expect(avatar).toContain('if (recapSpeech.status !== "idle") nextStepsPlayer.stop();');
+    expect(avatar).toContain('if (nextStepsSpeech.status !== "idle") recapPlayer.stop();');
+    const css = readFileSync(resolve(root, "src/avatar.css"), "utf8");
+    expect(css).toContain(".avatar-next-steps-list");
+    expect(css).toContain('[data-next-steps]');
+    expect(css).toContain("max-height: 312px");
   });
 });
 

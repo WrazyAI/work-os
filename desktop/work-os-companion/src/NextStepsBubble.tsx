@@ -1,0 +1,278 @@
+/**
+ * The approved recap's next steps, decided in the compact bubble.
+ *
+ * This is the same moment the chat renders — `RecapNextStepsCard` remains the
+ * durable record — but the bubble is the front door: confirming a recap no
+ * longer opens the panel. The list is deliberately a decision surface, not a
+ * transcript: every suggestion is accepted, edited, or skipped on its own, and
+ * nothing is written until its own control is pressed.
+ *
+ * While Otto reads, the spoken line is marked in place instead of replacing the
+ * list with a second copy of the words. The server returns the words and the
+ * `ref` of the line each belongs to; the row highlights, the list follows.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { Check, Pencil, RotateCw, SkipForward, Sparkles, X } from "lucide-react";
+import {
+  ACCEPT_LABEL,
+  APPLIED_LABEL,
+  KIND_LABEL,
+  type RecapNextStepState,
+  type RecapNextStepsMoment,
+} from "./RecapNextStepsCard";
+import type { RecapSpeechSnapshot } from "./recapSpeechPlayer";
+import type { RecapNextStepItem } from "./types";
+
+function stateFor(moment: RecapNextStepsMoment, item: RecapNextStepItem): RecapNextStepState {
+  return moment.states[item.proposalId] ?? "pending";
+}
+
+/** What the bubble says after the decisions settle. Mirrors the chat card's
+ * result line so the two surfaces never count the same outcome differently. */
+export function nextStepsResultLine(moment: RecapNextStepsMoment): string {
+  const applied = moment.items.filter((item) => stateFor(moment, item) === "applied").length;
+  const skipped = moment.items.filter((item) => stateFor(moment, item) === "skipped").length;
+  const failed = moment.items.filter((item) => stateFor(moment, item) === "failed").length;
+  const parts = [
+    applied ? `${applied} ${applied === 1 ? "change" : "changes"} applied` : null,
+    skipped ? `${skipped} skipped` : null,
+    failed ? `${failed} failed` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Nothing to change";
+}
+
+export function nextStepsAllSettled(moment: RecapNextStepsMoment): boolean {
+  return moment.items.length > 0
+    && moment.items.every((item) => !["pending", "processing"].includes(stateFor(moment, item)));
+}
+
+export function nextStepsHasFailure(moment: RecapNextStepsMoment): boolean {
+  return moment.items.some((item) => stateFor(moment, item) === "failed");
+}
+
+export function NextStepsBubble({
+  moment,
+  busy,
+  speech,
+  voiceAvailable,
+  reduced,
+  onDecide,
+  onRetry,
+  onListen,
+  onStopListening,
+  onDismiss,
+}: {
+  moment: RecapNextStepsMoment;
+  busy: boolean;
+  speech: RecapSpeechSnapshot;
+  voiceAvailable: boolean;
+  reduced: boolean;
+  onDecide: (item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => void;
+  onRetry: () => void;
+  onListen: () => void;
+  onStopListening: () => void;
+  onDismiss: () => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [edited, setEdited] = useState<Record<string, string>>({});
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+
+  const shown = moment.status === "ready" || moment.status === "done";
+  const reading = speech.status === "playing" || speech.status === "loading";
+  const loading = speech.status === "loading";
+  const activeRef = speech.status === "idle" || speech.status === "finished"
+    ? null
+    : speech.lines[speech.activeIndex]?.ref ?? null;
+  const activeItemId = activeRef && activeRef !== "lead" ? activeRef.split(":")[0] : null;
+  const activePart = activeRef?.endsWith(":why") ? "why" : "title";
+  const settled = moment.status === "done";
+  const failed = nextStepsHasFailure(moment);
+  const result = nextStepsResultLine(moment);
+
+  const titleFor = (item: RecapNextStepItem) => edited[item.proposalId] ?? item.title;
+
+  // Follow the voice: the row being spoken stays visible inside the list, never
+  // scrolling the whole companion window.
+  useEffect(() => {
+    if (!activeItemId) return;
+    const row = rowRefs.current.get(activeItemId);
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+  }, [activeItemId, activePart, reduced]);
+
+  // A decided row no longer offers an editor.
+  useEffect(() => {
+    if (!editingId) return;
+    const item = moment.items.find((candidate) => candidate.proposalId === editingId);
+    if (!item || !["pending", "processing"].includes(stateFor(moment, item))) {
+      setEditingId(null);
+    }
+  }, [editingId, moment]);
+
+  return (
+    <section
+      className="avatar-next-steps"
+      aria-label="Suggested next steps"
+      data-phase={moment.status}
+      data-reading={reading ? "true" : undefined}
+      data-workos-tool-surface="recap-next-steps-bubble"
+      data-workos-tool-state={moment.status}
+    >
+      <header className="avatar-next-steps-head">
+        <span className="avatar-next-steps-mark" aria-hidden="true"><Sparkles size={13} /></span>
+        <div className="avatar-next-steps-title">
+          <strong>Next steps</strong>
+          <small>{moment.label ? `From your ${moment.label} recap` : "From your approved recap"}</small>
+        </div>
+        <div className="avatar-next-steps-tools">
+          {voiceAvailable && shown && moment.items.length > 0 ? (
+            reading ? (
+              <button type="button" className="avatar-next-steps-tool" onClick={onStopListening}>
+                {loading ? "Stop" : "Stop reading"}
+              </button>
+            ) : (
+              <button type="button" className="avatar-next-steps-tool" onClick={onListen}>Listen</button>
+            )
+          ) : null}
+          <button
+            type="button"
+            className="avatar-next-steps-tool avatar-next-steps-close"
+            aria-label="Not now — keep these in the chat"
+            title="Not now"
+            onClick={onDismiss}
+          ><X size={12} aria-hidden="true" /></button>
+        </div>
+      </header>
+
+      {moment.status === "drafting" ? (
+        <div className="avatar-next-steps-wait" role="status">
+          <span className="avatar-reading-dots" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+          <div>
+            <strong>Working out what could come next</strong>
+            <span>Otto is reading your recap for anything worth doing.</span>
+          </div>
+        </div>
+      ) : null}
+
+      {moment.status === "empty" ? (
+        <div className="avatar-next-steps-wait" role="status">
+          <strong>Nothing new to action</strong>
+          <span>This recap did not turn up anything worth adding or closing.</span>
+        </div>
+      ) : null}
+
+      {moment.status === "failed" ? (
+        <div className="avatar-next-steps-wait" role="status">
+          <strong>Next steps could not be drafted</strong>
+          <span>{moment.error ?? "This recap can still be read below."}</span>
+          {onRetry ? <button type="button" className="avatar-next-steps-retry" onClick={onRetry}><RotateCw size={11} aria-hidden="true" /> Try again</button> : null}
+        </div>
+      ) : null}
+
+      {shown && moment.items.length > 0 ? (
+        <ul className="avatar-next-steps-list" aria-label="Suggested next steps" aria-busy={busy ? "true" : undefined}>
+          {moment.items.map((item) => {
+            const state = stateFor(moment, item);
+            const editing = editingId === item.proposalId;
+            const accept = () => onDecide(item, "accept", edited[item.proposalId] && edited[item.proposalId] !== item.title ? { name: edited[item.proposalId] } : undefined);
+            const active = activeItemId === item.proposalId;
+            return (
+              <li
+                key={item.proposalId}
+                ref={(node) => {
+                  if (node) rowRefs.current.set(item.proposalId, node);
+                  else rowRefs.current.delete(item.proposalId);
+                }}
+                data-state={state}
+                data-active={active ? "true" : undefined}
+                aria-current={active ? "true" : undefined}
+              >
+                <span className="avatar-next-steps-kind">{KIND_LABEL[item.operation]}</span>
+                {editing ? (
+                  <div className="avatar-next-steps-edit">
+                    <input
+                      value={draft}
+                      maxLength={240}
+                      aria-label="Suggestion title"
+                      autoFocus
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && draft.trim()) {
+                          setEdited((current) => ({ ...current, [item.proposalId]: draft.trim() }));
+                          setEditingId(null);
+                        }
+                        if (event.key === "Escape") setEditingId(null);
+                      }}
+                    />
+                    <div className="avatar-next-steps-actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={!draft.trim() || busy}
+                        onClick={() => {
+                          setEdited((current) => ({ ...current, [item.proposalId]: draft.trim() }));
+                          setEditingId(null);
+                        }}
+                      >Save</button>
+                      <button type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <strong className={active && activePart === "title" ? "is-speaking" : undefined}>{titleFor(item)}</strong>
+                    <small className={active && activePart === "why" ? "is-speaking" : undefined}>{item.rationale}</small>
+                  </>
+                )}
+
+                {state === "pending" || state === "processing" ? (
+                  !editing ? (
+                    <div className="avatar-next-steps-actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={busy || state === "processing"}
+                        onClick={accept}
+                      >{state === "processing" ? "Saving…" : ACCEPT_LABEL[item.operation]}</button>
+                      {item.editable ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingId(item.proposalId);
+                            setDraft(titleFor(item));
+                          }}
+                        ><Pencil size={11} aria-hidden="true" /> Edit</button>
+                      ) : null}
+                      <button type="button" disabled={busy || state === "processing"} onClick={() => onDecide(item, "skip")}>
+                        <SkipForward size={11} aria-hidden="true" /> Skip
+                      </button>
+                    </div>
+                  ) : null
+                ) : (
+                  <div className="avatar-next-steps-state">
+                    <span>{state === "applied" ? `${APPLIED_LABEL[item.operation]} ✓` : state === "skipped" ? "Skipped" : "Failed"}</span>
+                    {state === "failed" ? (
+                      <>
+                        <small>{moment.failures[item.proposalId] ?? "The change could not be applied."}</small>
+                        <button type="button" disabled={busy} onClick={accept}><RotateCw size={11} aria-hidden="true" /> Retry</button>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      {settled && !failed ? (
+        <div className="avatar-next-steps-done" role="status">
+          <span className="avatar-next-steps-check" aria-hidden="true"><Check size={12} /></span>
+          <strong>{result}</strong>
+        </div>
+      ) : null}
+    </section>
+  );
+}

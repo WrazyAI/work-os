@@ -316,9 +316,19 @@ export function composerSendTarget(input: { agendaDue: boolean; recapEditing: bo
  * from, so the employee sees what was produced — but the EOD alert outranks
  * everything: the mandatory wrap-up must never hide behind an undecided recap
  * or an in-flight analysis. */
-export function avatarBubble(input: { preparing: boolean; eodDue: boolean; recapReady: boolean; promptDue: boolean }): "processing" | "recap" | "prompt" | null {
+export function avatarBubble(input: {
+  preparing: boolean;
+  eodDue: boolean;
+  recapReady: boolean;
+  promptDue: boolean;
+  /** An approved recap's suggestions are drafting or waiting for a decision. */
+  nextSteps?: boolean;
+}): "processing" | "next-steps" | "recap" | "prompt" | null {
   if (input.eodDue) return "prompt";
   if (input.preparing) return "processing";
+  // The suggestions belong to the recap the employee just approved: they take
+  // the bubble ahead of a newer prompt, and never open the panel by themselves.
+  if (input.nextSteps) return "next-steps";
   if (input.recapReady) return "recap";
   if (input.promptDue) return "prompt";
   return null;
