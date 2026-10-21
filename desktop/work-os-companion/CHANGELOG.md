@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.2 — 2026-10-21
+
 - Otto's working card now leads with the step in progress, keeps the steps already done quietly underneath, and carries the same card while tasks load.
 
 ## 0.5.1 — 2026-10-21
