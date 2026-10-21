@@ -54,6 +54,7 @@ jobs:
       - name: Render the production layout in the real macOS webview
         working-directory: desktop/work-os-companion
         run: |
+          set -euo pipefail
           python3 -m http.server 1437 --bind 127.0.0.1 --directory native-layout-dist > "$RUNNER_TEMP/native-window-server.log" 2>&1 &
           server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
