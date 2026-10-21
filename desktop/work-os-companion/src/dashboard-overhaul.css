@@ -484,16 +484,17 @@ body {
 }
 .task-list-tab.active em { background: #e1f2d2; color: #5b6459; }
 .task-list-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-.task-list-controls .task-search { flex: 0 1 190px; min-width: 140px; max-width: 220px; min-height: 38px; border-radius: 10px; }
+.task-list-controls .task-search { flex: 0 1 170px; min-width: 140px; max-width: 200px; min-height: 38px; border-radius: 10px; }
 .task-list-controls .task-filters-toggle { min-height: 38px; height: 38px; padding: 0 11px; border-radius: 10px; }
-.task-list-controls .task-add-button { min-height: 38px; height: 38px; padding: 0 13px; border-radius: 10px; }
+.task-list-controls .task-add-button { min-height: 38px; height: 38px; padding: 0 13px; border-color: transparent; border-radius: 10px; background: var(--dash-ink, #182018); color: #fff; box-shadow: none; }
+.task-list-controls .task-add-button:not(:disabled):hover { border-color: transparent; background: #263526; color: #fff; box-shadow: none; }
 .task-list-panel > .task-filter-summary { margin: 9px var(--task-list-inset) 0; }
 .task-list-panel > .skeleton-task-list { padding: 0 var(--task-list-inset); }
 .task-list-panel > .task-load-more { width: calc(100% - var(--task-list-inset) - var(--task-list-inset)); margin: 10px var(--task-list-inset) 16px; }
-/* Seven controls fit on one row at the 1000px reference width. Step to the
-   stacked header just below that so a wrapped controls row starts at the panel
-   edge instead of floating at the right. */
-@media (max-width: 999px) {
+/* The compact search lets all seven controls share the panel header at the
+   984px app width. Step to the stacked header below 970px so a wrapped controls
+   row starts at the panel edge instead of floating at the right. */
+@media (max-width: 970px) {
   .task-list-controls { flex-basis: 100%; justify-content: flex-start; }
   .task-list-controls .task-filters-wrap { margin-left: auto; }
 }
