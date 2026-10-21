@@ -43,6 +43,22 @@ jobs:
       - name: Check real native bounds on a compact display
         working-directory: desktop/work-os-companion
         run: bash scripts/check-macos-window-bounds.sh "$RUNNER_TEMP/mac-app/Work OS Companion.app/Contents/MacOS/work-os-companion"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Build the isolated layout fixture with production CSS
+        working-directory: desktop/work-os-companion
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-native-layout-fixture.mjs
+      - name: Render the production layout in the real macOS webview
+        working-directory: desktop/work-os-companion
+        run: |
+          python3 -m http.server 1437 --bind 127.0.0.1 --directory native-layout-dist > "$RUNNER_TEMP/native-window-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          xcrun swiftc scripts/check-native-webview-layout.swift -o "$RUNNER_TEMP/native-window-webview-probe"
+          "$RUNNER_TEMP/native-window-webview-probe" | tee "$RUNNER_TEMP/native-window-webview.json"
       - name: Retain native window evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
