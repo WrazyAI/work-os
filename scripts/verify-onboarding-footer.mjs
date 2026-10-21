@@ -11,18 +11,23 @@ assert.ok(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or 
 const base = process.env.BASE_URL ?? "http://127.0.0.1:1420";
 assert.ok(["127.0.0.1", "localhost", "[::1]"].includes(new URL(base).hostname), "Use a local fixture server, never a live account");
 const legacy = process.argv.includes("--prove-legacy");
+const motion = process.env.MOTION ?? "reduce";
+assert.ok(["reduce", "no-preference"].includes(motion), "MOTION must be reduce or no-preference");
 const browser = await ({ chromium, webkit })[engine].launch(
   engine === "webkit" && process.env.WEBKIT_EXECUTABLE_PATH
     ? { executablePath: process.env.WEBKIT_EXECUTABLE_PATH } : {},
 );
 let checks = 0;
 try {
-  for (const [width, height] of legacy ? [[1000, 760]] : [[1000, 500], [1000, 540], [1440, 900], [1024, 768], [1000, 600], [900, 640], [720, 900], [390, 844]]) {
+  for (const [width, height] of legacy ? [[1000, 760]] : [[720, 600], [390, 844], [1000, 500], [1000, 540], [1440, 900], [1024, 768], [1000, 600], [900, 640], [720, 900]]) {
     for (const simulated of legacy ? [false] : [false, true]) {
-      const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
+      const page = await browser.newPage({ viewport: { width, height }, reducedMotion: motion });
       try {
         await page.goto(`${base}/?preview-onboarding&simulated=${simulated ? "1" : "0"}`);
         await page.getByRole("button", { name: "Start setup" }).click();
+        await page.locator(".onboarding-workspace").evaluate(async (el) => {
+          await Promise.all(el.getAnimations().map((animation) => animation.finished));
+        });
         if (legacy) {
           await page.getByRole("button", { name: "Continue", exact: true }).click();
           await page.addStyleTag({ content: ".onboarding-workspace { display: grid; grid-template-rows: 68px auto minmax(0, 1fr) auto; }" });
@@ -33,9 +38,8 @@ try {
         }
         for (let step = 0; step < 5; step++) {
           const forward = page.locator(".phase-actions .primary");
-          // Stacked layouts scroll the page; desktop keeps the step body as
-          // its only scroller. Do not auto-scroll desktop and mask the bug.
-          if (width <= 720) await page.locator(".phase-actions").scrollIntoViewIfNeeded();
+           // Inspect before focusing/clicking/scrolling the footer: automation
+           // must not reveal an off-screen control on the employee's behalf.
           const geometry = await page.locator(".phase-actions").evaluate((footer) => {
             const r = footer.getBoundingClientRect();
             const buttons = [...footer.querySelectorAll("button")];
@@ -50,7 +54,7 @@ try {
           });
           assert.ok(geometry.top >= 0 && geometry.bottom <= height + 1 && geometry.height > 0 && geometry.hit, JSON.stringify({ engine, width, height, simulated, step, geometry }));
           assert.equal(geometry.overflowX, false, "No horizontal overflow");
-          if (width > 720) assert.ok(Math.abs(geometry.bottom - height) <= 1, "Desktop footer stays pinned");
+          assert.ok(Math.abs(geometry.bottom - height) <= 1, "Footer stays pinned at every width");
           if (step === 1) {
             assert.equal(await page.locator(".archetype-grid > button").count(), 9, "Exercise the real dense catalog");
             if (width > 720 && height <= 768) {
@@ -64,7 +68,6 @@ try {
             await forward.click();
             await page.getByRole("alert").waitFor();
             await page.getByRole("checkbox").first().check();
-            if (width <= 720) await forward.scrollIntoViewIfNeeded();
           }
           await forward.focus();
           await page.keyboard.press("Enter");

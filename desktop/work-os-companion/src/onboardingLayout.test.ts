@@ -47,4 +47,19 @@ describe("setup panel column", () => {
     // layout flips it to `visible`; this file must not pin it back to `auto`.
     expect(contentRule).not.toMatch(/overflow:\s*auto;/);
   });
+
+  it("anchors narrow actions to the viewport and reserves their content clearance", () => {
+    const narrowStyles = styles.slice(styles.indexOf('@media (max-width: 720px)', styles.indexOf(".guided-onboarding {")));
+    const footer = narrowStyles.match(/\.phase-actions \{[\s\S]*?\n  \}/)?.[0] ?? "";
+    const workspace = narrowStyles.match(/\.onboarding-workspace \{[\s\S]*?\n  \}/)?.[0] ?? "";
+    expect(footer).toMatch(/position:\s*fixed;/);
+    expect(footer).toMatch(/bottom:\s*0;/);
+    expect(workspace).toContain("padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px))");
+  });
+
+  it("does not let a filled container transform capture the narrow fixed actions", () => {
+    const narrowFormStyles = formStyles.slice(formStyles.indexOf('@media (max-width: 720px)'));
+    const workspace = narrowFormStyles.match(/\.guided-onboarding\[data-stage="form"\] \.onboarding-workspace \{[\s\S]*?\n  \}/)?.[0] ?? "";
+    expect(workspace).toMatch(/animation:\s*none;/);
+  });
 });

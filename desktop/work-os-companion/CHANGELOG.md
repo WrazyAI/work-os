@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Back and Continue stay on screen in narrow setup windows, without needing to scroll down to find them.
+
 - Change task views, search, or date range from one compact Tasks header, with Add task in reach.
 - Add team tasks and find them with views, search, and filters.
 
