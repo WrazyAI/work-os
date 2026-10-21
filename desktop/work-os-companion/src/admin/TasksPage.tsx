@@ -322,45 +322,44 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   return (
     <div className="admin-grid">
       <AdminCard
+        className="admin-task-record-card"
         icon={ListChecks}
         title="Organization tasks"
         detail={summary ? `${summary.open} open · ${summary.overdue} overdue · ${summary.completedWeek} completed in the last 7 days` : undefined}
+        // The primary action trails the card's name and summary on the title
+        // row; the compact toolbar below carries only the record's views,
+        // search, and filters (design.md §8.2, §16.2).
+        action={
+          <span className="admin-task-add">
+            <AdminButton variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add task</AdminButton>
+          </span>
+        }
         padded={false}
         controls={
-          <>
-            {/* One compact controls row: views, search, and the two record
-                filters read in order, with the primary Add task action last
-                and right-aligned while the row has room (design.md §8.2,
-                §16.2). The row wraps deliberately at narrow widths; the
-                action keeps the trailing edge. */}
-            <AdminControls className="admin-task-controls">
-              <AdminControlsGroup>
-                <Segmented<TaskFilter>
-                  ariaLabel="Task filter"
-                  value={filter}
-                  onChange={(next) => setFilter(next)}
-                  options={[
-                    { value: "open", label: "Open" },
-                    { value: "completed", label: "Completed" },
-                    { value: "all", label: "All" },
-                  ]}
-                />
-              </AdminControlsGroup>
-              <AdminControlsGroup>
-                <label className="admin-search">
-                  <Search size={14} aria-hidden />
-                  <input type="search" value={search} placeholder="Search tasks" aria-label="Search tasks" onChange={(event) => setSearch(event.target.value)} />
-                </label>
-              </AdminControlsGroup>
-              <AdminControlsGroup>
-                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-                <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />
-              </AdminControlsGroup>
-              <AdminControlsGroup end>
-                <AdminButton variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add task</AdminButton>
-              </AdminControlsGroup>
-            </AdminControls>
-          </>
+          <AdminControls className="admin-task-controls">
+            <AdminControlsGroup>
+              <Segmented<TaskFilter>
+                ariaLabel="Task filter"
+                value={filter}
+                onChange={(next) => setFilter(next)}
+                options={[
+                  { value: "open", label: "Open" },
+                  { value: "completed", label: "Completed" },
+                  { value: "all", label: "All" },
+                ]}
+              />
+            </AdminControlsGroup>
+            <AdminControlsGroup>
+              <label className="admin-search">
+                <Search size={14} aria-hidden />
+                <input type="search" value={search} placeholder="Search tasks" aria-label="Search tasks" onChange={(event) => setSearch(event.target.value)} />
+              </label>
+            </AdminControlsGroup>
+            <AdminControlsGroup>
+              <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+              <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />
+            </AdminControlsGroup>
+          </AdminControls>
         }
       >
         {tasks.isLoading ? (

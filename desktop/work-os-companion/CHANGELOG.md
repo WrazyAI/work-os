@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - The Tasks list now keeps its views, search, date range, and Add task together in one compact header, like the dashboard.
+- The admin Tasks page puts Add task beside the title, with views, search, and filters together below.
 
 ## 0.4.94 — 2026-10-21
 

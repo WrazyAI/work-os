@@ -219,6 +219,35 @@ body:has(.admin-workspace) .notifications-card {
   margin-left: auto;
 }
 
+/* A card's own action can trail its name and detail on the title row. The
+   shared `.card-title button` reset in styles.css strips an admin button's
+   border, background, and type, so the title slot restores the admin button
+   contract for that one action (design.md §8.1: one primary action per local
+   decision area, in the admin material language). */
+.admin-card-title .admin-task-add {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.admin-card-title .admin-task-add > .admin-button {
+  display: inline-flex;
+  min-height: 32px;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-radius: 10px;
+  background: var(--surface-raised, #fbfcf8);
+  color: var(--ink);
+  font: 650 11.5px/1 Manrope, Inter, sans-serif;
+}
+
+.admin-card-title .admin-task-add > .admin-button.primary {
+  border-color: transparent;
+  background: var(--ink);
+  color: var(--paper);
+}
+
 .admin-subhead {
   margin: 4px 0 0;
   color: var(--muted);
@@ -504,6 +533,60 @@ body:has(.admin-workspace) .notifications-card {
   margin-left: auto;
 }
 
+/* The task record's one compact toolbar: views lead on the left, and search
+   plus the record filters trail as one cluster while the card has room. Below
+   the compact desktop class the views take their own first row and search and
+   the filters follow, so the wrap is deliberate instead of accidental
+   (design.md §8.2, §11). */
+.admin-task-controls > .admin-controls-group:nth-child(2) {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .admin-task-controls > .admin-controls-group:first-child {
+    flex: 1 1 100%;
+  }
+
+  .admin-task-controls > .admin-controls-group:nth-child(2) {
+    flex: 1 1 220px;
+    margin-left: 0;
+  }
+
+  /* The search field grows into the row it leads instead of leaving a gap
+     beside the filters it shares the line with. */
+  .admin-task-controls > .admin-controls-group:nth-child(2) .admin-search {
+    flex: 1 1 auto;
+  }
+
+  .admin-task-controls > .admin-controls-group:nth-child(2) .admin-search input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* At the small class the name and primary action share the title's first line
+   and the summary takes the next, so the header stays compact instead of
+   stacking three rows; the action keeps a 40px touch target (design.md §11,
+   §12). */
+@media (max-width: 560px) {
+  .admin-task-record-card > .admin-card-title > .admin-card-meta {
+    display: contents;
+  }
+
+  .admin-task-record-card > .admin-card-title > .admin-card-meta > small {
+    order: 2;
+    flex: 1 1 100%;
+  }
+
+  .admin-task-record-card > .admin-card-title > .admin-card-meta > .admin-task-add {
+    order: 1;
+  }
+
+  .admin-task-record-card .admin-task-add > .admin-button {
+    min-height: 40px;
+  }
+}
+
 /* A status chip beside the fields centres on them instead of hanging on their
    baseline. */
 .admin-card-controls .admin-controls-group > .admin-pill {
@@ -564,8 +647,7 @@ body:has(.admin-workspace) .notifications-card {
 @media (max-width: 720px) {
   .admin-task-controls .admin-seg button,
   .admin-task-controls .admin-search,
-  .admin-task-controls .admin-field select,
-  .admin-task-controls .admin-button {
+  .admin-task-controls .admin-field select {
     min-height: 40px;
   }
 }

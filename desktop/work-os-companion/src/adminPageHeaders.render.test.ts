@@ -89,22 +89,33 @@ describe("administration page headers", () => {
     expect(controls).not.toContain(`>${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}<`);
   });
 
-  it("keeps the task record's views, search, filters, and action on one compact controls row", () => {
+  it("keeps the task record's Add task in the card title row and its views, search, and filters on one compact controls row", () => {
     const markup = renderPage(createElement(TasksPage, {}));
     const card = cardOf(markup, "Organization tasks");
-    expectCleanTitleRow(card, "Organization tasks");
+    const title = titleRow(card);
+    // The title row keeps the name and its summary; its one control is the
+    // primary Add task action trailing them at the row's right edge.
+    expect(title).toContain("Organization tasks");
+    expect(title).toContain("43 open · 5 overdue · 17 completed in the last 7 days");
+    expect(title).toContain('class="admin-task-add"');
+    expect(title).toContain("admin-button primary");
+    expect((title.match(/<button\b/g) ?? []).length).toBe(1);
+    expect(title.indexOf("43 open")).toBeLessThan(title.indexOf("Add task"));
+    expect(title).not.toContain("<input");
+    expect(title).not.toContain("<select");
+    expect(title).not.toContain('role="group"');
+    // The controls row keeps views, search, and both filters, with the action
+    // no longer riding the trailing edge of the filters.
     const controls = controlsBand(card);
+    expect(controls).not.toContain("Add task");
     const rows = controls.split(/class="admin-controls(?=[" ])/).slice(1);
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
-    // Reading order on the single row: views, search, person and project
-    // filters, then the primary action last.
-    const positions = ['aria-label="Task filter"', 'aria-label="Search tasks"', 'aria-label="Filter by person"', 'aria-label="Filter by project"', "Add task"]
+    const positions = ['aria-label="Task filter"', 'aria-label="Search tasks"', 'aria-label="Filter by person"', 'aria-label="Filter by project"']
       .map((needle) => row.indexOf(needle));
     for (const position of positions) expect(position).toBeGreaterThan(-1);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
-    // The primary action keeps its is-end marker so wide widths right-align it.
-    expect(row).toContain('class="admin-controls-group is-end"');
+    expect(row).not.toContain('class="admin-controls-group is-end"');
   });
 
   it("keeps the roster's search, role, and attendance filters grouped under the title", () => {
