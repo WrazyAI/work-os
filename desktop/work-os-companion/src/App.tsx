@@ -19,7 +19,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
@@ -163,7 +163,7 @@ const worktivityControlTransport: WorktivityControlTransport = {
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
-type TaskEvidenceRequest = { task: Record<string, any>; mode: "complete" | "attach"; refreshDetails: boolean };
+type TaskEvidenceRequest = { task: Record<string, any>; mode: "complete" | "attach"; refreshDetails: boolean; savedEvidence?: TaskEvidenceRecord | null };
 type ClockInConfirmation = { kind: "late" | "exception"; reason: string; operationId?: string };
 type PendingWorktivityControl = { action: WorktivityControlAction; operationId: string; body: Record<string, unknown>; message: string };
 function isWorktivityControlResult(value: unknown): value is WorktivityControlResult {
@@ -443,6 +443,7 @@ export default function App() {
   const [taskOptionsLoading, setTaskOptionsLoading] = useState(false);
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
   const [taskEvidenceRequest, setTaskEvidenceRequest] = useState<TaskEvidenceRequest | null>(null);
+  const taskEvidenceRequestSeq = useRef(0);
   const [taskDetailsReadOnly, setTaskDetailsReadOnly] = useState(false);
   const [taskDetailsLoading, setTaskDetailsLoading] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
@@ -3101,10 +3102,10 @@ export default function App() {
     notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
   }
 
-  async function refreshTaskDetailsFor(taskId: string) {
+  async function refreshTaskDetailsFor(taskId: string, force = false) {
     if (!taskDetails) return;
     const openId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
-    if (openId !== taskId) return;
+    if (!force && openId !== taskId) return;
     setTaskDetails(await loadTaskDetails(openId));
   }
 
@@ -3123,7 +3124,7 @@ export default function App() {
       ...(evidence ? { completion_evidence_count: Number(task.completion_evidence_count ?? 0) + 1 } : {}),
     });
     setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
-    if (refreshDetails) await refreshTaskDetailsFor(taskId);
+    if (refreshDetails) await refreshTaskDetailsFor(taskId, true);
     else if (evidence) await refreshTaskDetailsFor(taskId);
   }
 
@@ -3147,14 +3148,34 @@ export default function App() {
     });
   }
 
-  function requestTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
+  async function requestTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
+    const sequence = ++taskEvidenceRequestSeq.current;
     if (!completed) { setTaskCompletion(task, false, refreshDetails); return; }
-    if (syncBypassRef.current || taskKind(task) === "subtask") { setTaskCompletion(task, true, refreshDetails); return; }
+    if (syncBypassRef.current || (taskKind(task) === "subtask" && !taskRequiresCompletionEvidence(task))) { setTaskCompletion(task, true, refreshDetails); return; }
     if (carryOverOpen) setCarryOverOpen(false);
-    setTaskEvidenceRequest({ task, mode: "complete", refreshDetails });
+    const taskId = String(task.provider_task_id || task.id);
+    const openDetails = taskDetails && String(taskDetails.task.provider_task_id || taskDetails.task.id) === taskId ? taskDetails : null;
+    let savedEvidence = openDetails?.completionEvidence?.[0] ?? null;
+    // An output task may already have evidence from an earlier completion
+    // attempt. Read it before showing the form so recovery never asks for a
+    // second upload. A simple task skips the lookup: its evidence is optional.
+    if (!savedEvidence && taskRequiresCompletionEvidence(task)) {
+      setCompletingTaskIds((current) => new Set([...current, taskId]));
+      try {
+        const details = await loadTaskDetails(taskId);
+        savedEvidence = details.completionEvidence?.[0] ?? null;
+      } catch {
+        // Opening the form is the recovery path; a failed lookup never blocks it.
+      } finally {
+        setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+      }
+    }
+    if (sequence !== taskEvidenceRequestSeq.current) return;
+    setTaskEvidenceRequest({ task, mode: "complete", refreshDetails, savedEvidence });
   }
 
   function requestTaskEvidence(task: TaskRow) {
+    taskEvidenceRequestSeq.current += 1;
     if (carryOverOpen) setCarryOverOpen(false);
     setTaskEvidenceRequest({ task, mode: "attach", refreshDetails: true });
   }
@@ -4468,10 +4489,12 @@ export default function App() {
         {taskEvidenceRequest && <TaskEvidenceDialog
           task={taskEvidenceRequest.task}
           mode={taskEvidenceRequest.mode}
+          initialPhase={taskEvidenceRequest.savedEvidence ? "evidence_saved" : "idle"}
+          initialEvidence={taskEvidenceRequest.savedEvidence ?? null}
           onAttach={(file, note, idempotencyKey) => attachTaskEvidence(taskEvidenceRequest, file, note, idempotencyKey)}
           onRetryCompletion={retryTaskCompletionForEvidence}
           onCompleteWithoutEvidence={taskEvidenceRequest.mode === "complete" ? () => completeTaskWithoutEvidence(taskEvidenceRequest.task, taskEvidenceRequest.refreshDetails) : undefined}
-          onClose={() => setTaskEvidenceRequest(null)}
+          onClose={() => { taskEvidenceRequestSeq.current += 1; setTaskEvidenceRequest(null); }}
         />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {eodDeleteConfirmation && <TaskRemovalConfirmation mode="delete" scope="draft" title={String(reviewDay?.report?.title ?? "Your EOD draft")} subtaskCount={0} busy={eodDeleting} onCancel={() => setEodDeleteConfirmation(false)} onConfirm={() => void deleteEodDraft()} />}

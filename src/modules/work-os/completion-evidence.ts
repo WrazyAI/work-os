@@ -192,6 +192,7 @@ export function completionEvidenceMetrics(input: {
   contentType: string;
   fileName: string;
   sizeBytes: number;
+  note?: string;
 }) {
   return {
     evidenceClass: "output_evidence" as const,
@@ -200,6 +201,7 @@ export function completionEvidenceMetrics(input: {
     contentType: input.contentType,
     fileName: input.fileName,
     sizeBytes: input.sizeBytes,
+    ...(input.note ? { note: input.note } : {}),
   };
 }
 
@@ -223,7 +225,7 @@ export function taskEvidenceFromRow(row: Record<string, unknown>): TaskEvidenceR
   return {
     id,
     title: typeof row.title === "string" && row.title.trim() ? row.title.trim() : "Completion evidence",
-    note: typeof row.summary === "string" ? row.summary : "",
+    note: typeof metrics.note === "string" ? metrics.note : "",
     fileName: typeof metrics.fileName === "string" && metrics.fileName.trim() ? metrics.fileName.trim() : "completion-evidence",
     contentType,
     sizeBytes: Number.isFinite(sizeBytes) && sizeBytes > 0 ? sizeBytes : 0,

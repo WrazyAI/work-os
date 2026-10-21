@@ -69,7 +69,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       headers: {
         "Content-Type": contentType,
         "Content-Length": String(downloaded.data!.arrayBuffer.byteLength),
-        "Content-Disposition": `${contentType.startsWith("text/") || contentType === "application/pdf" ? "inline" : "attachment"}; filename="${fileName.replaceAll('"', "_")}"`,
+        "Content-Disposition": `inline; filename="${fileName.replaceAll('"', "_")}"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         ...(contentType.startsWith("text/") ? { "Content-Security-Policy": "default-src 'none'; sandbox" } : {}),

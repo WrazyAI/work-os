@@ -105,6 +105,7 @@ test("employee-attached rows are output evidence and never expose their storage 
       contentType: "application/pdf",
       fileName: "release-verification.pdf",
       sizeBytes: 482112,
+      note: "The signed verification record.",
       storagePath: "/private/should-not-leak.pdf",
     },
     raw: { storagePath: "/private/should-not-leak.pdf" },
@@ -115,6 +116,7 @@ test("employee-attached rows are output evidence and never expose their storage 
   assert.equal(evidence.sizeBytes, 482112);
   assert.equal(evidence.note, "The signed verification record.");
   assert.equal(JSON.stringify(evidence).includes("should-not-leak"), false);
+  assert.equal(taskEvidenceFromRow({ ...row, metrics: { ...row.metrics, note: undefined } }).note, "", "a generated summary is never shown as the employee's note");
   assert.equal(isEmployeeAttachedEvidence(row), true);
   assert.equal(isTaskOutcomeEvidence(row), true);
   assert.equal(isEmployeeAttachedEvidence({ ...row, source: "github" }), false);
@@ -125,6 +127,8 @@ test("the evidence route and server path keep their truthful contract", async ()
   const route = await readFile(new URL("src/app/api/work-os/me/tasks/[taskId]/completion-evidence/route.ts", root), "utf8");
   const fileRoute = await readFile(new URL("src/app/api/work-os/evidence/[eventId]/file/route.ts", root), "utf8");
   const server = await readFile(new URL("src/lib/work-os-employee-tasks.ts", root), "utf8");
+  const adminEvidence = await readFile(new URL("src/app/api/work-os/evidence/route.ts", root), "utf8");
+  const eod = await readFile(new URL("src/lib/work-os-eod.ts", root), "utf8");
   assert.match(route, /requirePerson: true/);
   assert.match(route, /feature: "employee_companion"/);
   assert.match(route, /formData\(\)/);
@@ -140,4 +144,7 @@ test("the evidence route and server path keep their truthful contract", async ()
   assert.match(server, /getStorageBackend\(\)\.remove/);
   assert.match(server, /completionEvidence/);
   assert.doesNotMatch(route, /storagePath|storage_path/);
+  // The evidence row reaches the existing admin and EOD reads unchanged.
+  assert.match(adminEvidence, /from\("work_evidence"\)/);
+  assert.match(eod, /source !== "worktivity"/);
 });

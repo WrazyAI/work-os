@@ -489,6 +489,7 @@ export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, t
       contentType: validated.contentType,
       fileName: validated.fileName,
       sizeBytes: validated.size,
+      note: validated.note,
     }),
     raw: { origin: "task_completion" },
     idempotency_key: idempotencyKey,
