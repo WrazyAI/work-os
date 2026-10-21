@@ -25,8 +25,13 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.95 — 2026-10-21
+
 - Change task views, search, or date range from one compact Tasks header, with Add task in reach.
 - Add team tasks and find them with views, search, and filters.
+- **Try again** now fits its bubble — the two buttons are no longer cut off.
+- The elapsed-time pill stays under Otto while a recap or **Try again** is open.
+- Otto's small progress dot is a clean ring instead of a stray wedge.
 
 ## 0.4.94 — 2026-10-21
 

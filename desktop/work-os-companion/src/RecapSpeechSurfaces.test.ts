@@ -77,3 +77,24 @@ describe("a read that takes too long", () => {
     expect(avatar).toContain('if (recapPlayer.snapshot().status === "loading") flashRecapFailure();');
   });
 });
+
+describe("the grown bubble stays inside its window", () => {
+  it("grows for the retry view too, so its two actions are never clamped", () => {
+    const avatar = read("./AvatarApp.tsx");
+    expect(avatar).toContain("recapSpeech.status !== \"idle\" || recapSpeech.retryIntervalId !== null");
+    expect(avatar).toContain("data-recap-reading={recapSpeech.status !== \"idle\" || recapSpeech.retryIntervalId !== null");
+  });
+
+  it("fills the window, reserves the pill strip, and lets the bubble take the slack", () => {
+    const css = read("./avatar.css");
+    expect(css).toContain("height: 100%;");
+    expect(css).toContain("padding-bottom: 26px;");
+    expect(css).toContain("flex: 1 1 auto;");
+    expect(css).toContain("flex-wrap: wrap;");
+  });
+
+  it("draws the shift progress as a ring rather than a pie wedge", () => {
+    const css = read("./avatar.css");
+    expect(css).toMatch(/\.avatar-badge\.avatar-badge-progress \{[\s\S]{0,400}?mask: radial-gradient/);
+  });
+});

@@ -286,6 +286,7 @@ body.avatar-window {
    bars, so "Otto is talking" and "you are recording" never share a shape. */
 .avatar-bubble-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   margin-top: 8px;
@@ -983,6 +984,9 @@ body.avatar-window {
 .avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
 .avatar-badge.avatar-badge-progress {
   background: conic-gradient(from -90deg, #ff8a55 0 var(--shift-progress, 0%), rgba(255, 138, 85, .2) var(--shift-progress, 0%) 100%);
+  /* A ring, not a pie: the unfilled arc used to read as a stray triangle. */
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
 }
 .avatar-badge.avatar-badge-progress-unavailable { background: rgba(255, 138, 85, .16); }
 .avatar-hide { top: 20px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
@@ -1083,19 +1087,31 @@ body.avatar-window {
   flex-direction: column;
   align-items: center;
   width: 300px;
-  height: auto;
+  /* Fill the grown window rather than trusting it to be tall enough: the
+     bubble takes the slack and the figure stays above the pill even when the
+     monitor limits how far the window can grow. */
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
   gap: 8px;
+  /* The elapsed pill is pinned to the window's bottom edge; keep its strip
+     clear so the figure is never squeezed down over it. */
+  padding-bottom: 26px;
 }
 .avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-prompt-bubble {
   position: static;
   width: 100%;
   /* The resting clamp exists because the figure must never move; while the
-     bubble is grown the figure has room, so the surface gets the whole box. */
+     bubble is grown the figure has room, so the surface gets the leftover box
+     and clips only what genuinely cannot fit. */
   max-height: none;
-  overflow: visible;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-orb {
-  margin: 0 auto 12px;
+  flex: 0 0 auto;
+  margin: 0 auto;
 }
 /* In the grown column the bubble owns the top of the window, so the window
    controls move down to the mascot's crown instead of covering the header. */

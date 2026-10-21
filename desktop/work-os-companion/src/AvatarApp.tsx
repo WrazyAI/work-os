@@ -697,7 +697,9 @@ export default function AvatarApp(): React.ReactElement {
   // expanding it is the panel's own effect, and the read keeps going.
   useEffect(() => {
     if (!win || expanded) return;
-    const reading = recapSpeech.status !== "idle";
+    // The retry view carries two actions, so it needs the grown column as much
+    // as a read does; the resting bubble clamps its own actions away.
+    const reading = recapSpeech.status !== "idle" || recapSpeech.retryIntervalId !== null;
     const moment = nextStepsMoment;
     let cancelled = false;
     void (async () => {
@@ -720,7 +722,7 @@ export default function AvatarApp(): React.ReactElement {
       } catch { /* the companion keeps its size when the monitor cannot be read */ }
     })();
     return () => { cancelled = true; };
-  }, [win, expanded, recapSpeech.status, nextStepsMoment?.status, nextStepsMoment?.items.length]);
+  }, [win, expanded, recapSpeech.status, recapSpeech.retryIntervalId, nextStepsMoment?.status, nextStepsMoment?.items.length]);
 
   // Settings lives in the main window; a change there reaches this one live, so
   // the next read uses the new voice without a restart.
@@ -2229,7 +2231,7 @@ export default function AvatarApp(): React.ReactElement {
   }
 
   return (
-    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" ? "true" : undefined} data-next-steps={nextStepsMoment ? nextStepsMoment.status : undefined}>
+    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" || recapSpeech.retryIntervalId !== null ? "true" : undefined} data-next-steps={nextStepsMoment ? nextStepsMoment.status : undefined}>
       {!expanded && (
         <div className="avatar-compact">
         {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
