@@ -17,13 +17,19 @@ if CommandLine.arguments.dropFirst().first == "--compact-display" {
     let compact = modes.filter { $0.width >= 1000 && $0.height >= 700 && $0.height <= 900 }
         .sorted { $0.height == $1.height ? $0.width < $1.width : $0.height < $1.height }
     guard let mode = compact.first else {
-        fail("No compact display mode available: " + modes.map { "\($0.width)x\($0.height)" }.joined(separator: ", "))
+        fail("No compact display mode available: " + modes.map { "\($0.width)x\($0.height)" }.joined(separator: ", "), code: 3)
     }
     guard CGDisplaySetDisplayMode(display, mode, nil) == .success else {
         fail("Could not select compact display mode")
     }
     print("Selected native display mode \(mode.width)x\(mode.height)")
     exit(0)
+}
+
+if CommandLine.arguments.dropFirst().first == "--compact-work-area" {
+    guard let screen = NSScreen.screens.first else { fail("No native screen is available") }
+    print("Native usable height: \(screen.visibleFrame.height)")
+    exit(screen.visibleFrame.height <= 940 ? 0 : 2)
 }
 
 guard let argument = CommandLine.arguments.dropFirst().first, let pid = Int32(argument) else {
