@@ -69,15 +69,19 @@ export default function EmployeePlanBuilder({
   }]))) : null;
 
   const interpret = useMutation({
-    mutationFn: () => fetchJson<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input: input.trim(),
-        date: day.shiftDate,
-        ...(loomOpen && loomUrl.trim() ? { loom: { url: loomUrl.trim(), transcript: loomTranscript.trim() || undefined } } : {}),
-      }),
-    }),
+    mutationFn: () => {
+      const loomUrlText = loomUrl.trim();
+      const transcript = loomTranscript.trim();
+      return fetchJson<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: input.trim(),
+          date: day.shiftDate,
+          ...(loomOpen && (loomUrlText || transcript) ? { loom: { ...(loomUrlText ? { url: loomUrlText } : {}), ...(transcript ? { transcript } : {}) } } : {}),
+        }),
+      });
+    },
     onSuccess: (result) => {
       setInterpretation(interpretationFromResponse(result));
       setAnswers({});
@@ -175,7 +179,7 @@ export default function EmployeePlanBuilder({
     );
   }
 
-  const hasLoom = loomOpen && !!loomUrl.trim();
+  const hasLoom = loomOpen && !!(loomUrl.trim() || loomTranscript.trim());
   const canBuild = !!(input.trim() || hasLoom) && !busy;
 
   const commitmentCriteria = (clientId: string, fallback: string[]) => {
@@ -255,7 +259,7 @@ export default function EmployeePlanBuilder({
                         onChange={(event) => setLoomTranscript(event.target.value)}
                         rows={3}
                         maxLength={50000}
-                        placeholder="Paste the transcript when Loom has none (optional)."
+                        placeholder="Paste the recording's transcript to build from it without the link."
                         className={`${inputClass} resize-y`}
                         style={inputStyle}
                         aria-label="Loom transcript"

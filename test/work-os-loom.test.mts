@@ -13,6 +13,7 @@ import {
   parseLoomReference,
   parseLoomTranscriptRecord,
 } from "../src/lib/work-os-loom";
+import { buildPastedLoomAttachment } from "../src/lib/aiLoom";
 
 const ID = "912e89a68ccc42c5ab5096fec7cd63d6";
 const ID_RECORDED = "4d65fd6181c94c7ba75a31c9c700d3e2";
@@ -286,6 +287,55 @@ test("waits for Loom's own transcription instead of guessing", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("a pasted transcript without a link is a Loom source with no claimed date", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = requestUrl(input);
+    calls.push(url);
+    if (url.includes("/chat/completions")) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              summary: "The employee shipped the settlement dashboard and is waiting on two approvals.",
+              suggestedTasks: [],
+              cautions: [],
+            }),
+          },
+        }],
+      }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }) as typeof fetch;
+  try {
+    const result = await buildPastedLoomAttachment({
+      transcript: "1:04 So, that is just a quick update for me today. I shipped the settlement dashboard.",
+      targetDate: "2026-10-21",
+    });
+    assert.ok(result);
+    assert.equal(result?.attachment.verdict, "unknown");
+    assert.equal(result?.attachment.createdLocalDate, null);
+    assert.equal(result?.attachment.transcriptSource, "employee_paste");
+    assert.ok((result?.attachment.transcriptChars ?? 0) > 0);
+    assert.match(result?.attachment.line ?? "", /transcript/i);
+    assert.match(result?.attachment.line ?? "", /unverified/i);
+    assert.match(result?.attachment.cautions.join(" "), /no recording link/i);
+    assert.equal(result?.attachment.summary, "The employee shipped the settlement dashboard and is waiting on two approvals.");
+    assert.equal(calls.length, 1, "a transcript-only source never calls Loom");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalKey;
+  }
+});
+
+test("an empty pasted transcript is not a Loom source", async () => {
+  assert.equal(await buildPastedLoomAttachment({ transcript: "   ", targetDate: "2026-10-21" }), null);
 });
 
 console.log("Work OS Loom tests passed.");

@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.90 — 2026-10-21
+
+- Building from a Loom link now reads the link for you — no need to press Read Loom first.
+- You can build your plan from a pasted Loom transcript without the link.
+
 ## 0.4.89 — 2026-10-21
 
 - A recap that takes a while now says "Taking longer than usual" and lets you cancel, instead of leaving you guessing.

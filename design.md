@@ -1024,6 +1024,12 @@ reference implementation.
 - **Input view** — the intent field, any attached source (such as a Loom
   recording), and the one primary action that produces the draft (`Build my
   plan`).
+- **Loom source** — a recording link, a pasted transcript, or both. A pasted
+  link is read automatically when Build is used, so reading it is never a
+  separate prerequisite; if Loom says the recording is not usable for the day,
+  the build stops on that verdict. A transcript pasted without a link is still
+  the employee's own copy of the recording's words: the draft may use it, but
+  the surface never claims a verified date, title, or length.
 - **Drafted view** — the review document with its own in-place actions (edit,
   delete), starting at the top of the body with no inherited scroll position.
   Focus follows into the view so keyboard and screen-reader users land on what

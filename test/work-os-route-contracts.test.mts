@@ -254,6 +254,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(loomPreview, /parseLoomReference/);
   assert.match(loomPreview, /usableForDay/);
   assert.match(loomPreview, /url must be a Loom share link/);
+  // A transcript pasted without a link is a planning source too, and an
+  // explicit paste wins over Loom's auto-read copy when both exist.
+  assert.match(planInterpret, /buildPastedLoomAttachment/);
+  assert.match(planInterpret, /pastedTranscript/);
+  assert.match(planInterpret, /transcript: pastedTranscript/);
   const loomAnalyze = await source("src/app/api/work-os/me/loom/analyze/route.ts");
   assert.match(loomAnalyze, /analyzeLoomForAgent/);
   assert.match(loomAnalyze, /Loom analysis is disabled for this organization/);

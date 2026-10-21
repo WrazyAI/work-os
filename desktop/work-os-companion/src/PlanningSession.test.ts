@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningPrimaryAction } from "./PlanningSession";
+import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningBuildState, planningPrimaryAction } from "./PlanningSession";
 
 const props = {
   open: true,
@@ -62,6 +62,31 @@ describe("PlanningSession footer gating", () => {
       label: "Commitment 1 success criteria", maxLength: 1500, onChange: () => undefined,
     }));
     expect(single).not.toContain("planning-document-line");
+  });
+});
+
+describe("PlanningSession Loom source gating", () => {
+  it("treats a pasted transcript as a buildable Loom source without a link", () => {
+    const state = planningBuildState("", "", "1:04 So, that is just a quick update for me today.", null);
+    expect(state.hasLoomSource).toBe(true);
+    expect(state.effectiveInput).toContain("Loom recording");
+    expect(state.canBuild).toBe(true);
+  });
+
+  it("lets Build start before Read Loom, so the click can read the link first", () => {
+    const state = planningBuildState("", "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6", "", null);
+    expect(state.hasLoomSource).toBe(true);
+    expect(state.canBuild).toBe(true);
+  });
+
+  it("still blocks a recording Loom says is not usable for the day", () => {
+    const state = planningBuildState("", "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6", "", { usableForDay: false });
+    expect(state.canBuild).toBe(false);
+  });
+
+  it("keeps the input requirement when there is no Loom source at all", () => {
+    expect(planningBuildState("", "", "", null).canBuild).toBe(false);
+    expect(planningBuildState("Focus on the release.", "", "", null).canBuild).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { interpretDailyPlan, LOOM_ONLY_PLAN_INTENT, type PlanLoomContext, type PlanMemoryContext } from "@/lib/aiPlan";
-import { buildLoomAttachment } from "@/lib/aiLoom";
+import { buildLoomAttachment, buildPastedLoomAttachment } from "@/lib/aiLoom";
 import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { buildPlanningContext } from "@/lib/work-os-planning-context";
@@ -38,29 +38,44 @@ export async function POST(req: Request) {
       ]);
       memory = { todayBlock, memoryBlock };
     }
-    // A Loom link in the day's intent (or an explicit attachment) is analyzed
-    // as planning context; commitments still come from the normal review flow.
-    // Enrichment is optional: schedule/network/AI failures must never block
-    // planning, and the shift lookup only runs when a Loom link is present.
+    // A Loom source is either the recording link or a transcript the employee
+    // pasted without one. Both are planning context; commitments still come
+    // from the normal review flow. Enrichment is optional: schedule/network/AI
+    // failures must never block planning.
     let loom: PlanLoomContext | undefined;
     const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
+    const pastedTranscript = typeof loomInput?.transcript === "string" ? loomInput.transcript : "";
     const loomText = [
       inputText,
       typeof loomInput?.url === "string" ? loomInput.url : "",
-      typeof loomInput?.transcript === "string" ? loomInput.transcript : "",
+      pastedTranscript,
     ].filter(Boolean).join(" ");
-    if (loomMetadataEnabled(auth.access.featureFlags) && findLoomReference(loomText)) {
-      try {
-        const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
-        const attachment = await buildLoomAttachment({
-          text: loomText,
-          targetDate: date,
-          timezone,
-          existingTaskTitles: [...context.todayTasks, ...context.carryOver].map((task) => task.title).slice(0, 60),
-        });
-        if (attachment) loom = { ...attachment.attachment };
-      } catch {
-        loom = undefined;
+    if (loomMetadataEnabled(auth.access.featureFlags)) {
+      const reference = findLoomReference(loomText);
+      if (reference || pastedTranscript.trim()) {
+        try {
+          const existingTaskTitles = [...context.todayTasks, ...context.carryOver].map((task) => task.title).slice(0, 60);
+          if (reference) {
+            const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
+            const attachment = await buildLoomAttachment({
+              text: loomText,
+              transcript: pastedTranscript,
+              targetDate: date,
+              timezone,
+              existingTaskTitles,
+            });
+            if (attachment) loom = { ...attachment.attachment };
+          } else {
+            const attachment = await buildPastedLoomAttachment({
+              transcript: pastedTranscript,
+              targetDate: date,
+              existingTaskTitles,
+            });
+            if (attachment) loom = { ...attachment.attachment };
+          }
+        } catch {
+          loom = undefined;
+        }
       }
     }
     const planningInput = inputText.trim() || (loom ? LOOM_ONLY_PLAN_INTENT : "");
