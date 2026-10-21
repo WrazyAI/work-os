@@ -12,7 +12,7 @@
  * `ref` of the line each belongs to; the row highlights, the list follows.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Pencil, RotateCw, SkipForward, Sparkles, X } from "lucide-react";
 import {
   ACCEPT_LABEL,
@@ -51,6 +51,16 @@ export function nextStepsHasFailure(moment: RecapNextStepsMoment): boolean {
   return moment.items.some((item) => stateFor(moment, item) === "failed");
 }
 
+/** Which frosted edges the decision list shows: only where more rows continue.
+ * A list that fits, or one at its first row, must not look cut off. */
+export function nextStepsScrollEdges(scrollTop: number, clientHeight: number, scrollHeight: number) {
+  const overflows = scrollHeight > clientHeight + 2;
+  return {
+    top: overflows && scrollTop > 2,
+    bottom: overflows && scrollTop + clientHeight < scrollHeight - 2,
+  };
+}
+
 export function NextStepsBubble({
   moment,
   busy,
@@ -78,6 +88,8 @@ export function NextStepsBubble({
   const [draft, setDraft] = useState("");
   const [edited, setEdited] = useState<Record<string, string>>({});
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
 
   const shown = moment.status === "ready" || moment.status === "done";
   const reading = speech.status === "playing" || speech.status === "loading";
@@ -99,6 +111,35 @@ export function NextStepsBubble({
   });
 
   const titleFor = (item: RecapNextStepItem) => edited[item.proposalId] ?? item.title;
+
+  // The frosted edges exist only where there is more to scroll: a list at its
+  // top must not look as if it is cut off, and a finished list must not keep a
+  // dead blur under its last row.
+  const syncScrollEdges = useCallback((): void => {
+    const list = listRef.current;
+    if (!list) {
+      setScrollEdges({ top: false, bottom: false });
+      return;
+    }
+    const next = nextStepsScrollEdges(list.scrollTop, list.clientHeight, list.scrollHeight);
+    setScrollEdges((current) => current.top === next.top && current.bottom === next.bottom ? current : next);
+  }, []);
+
+  useEffect(() => {
+    if (!shown) return;
+    const list = listRef.current;
+    if (!list) return;
+    // Measure once the browser has laid the rows out: a first paint can report
+    // an overflowing list as exactly its visible height.
+    syncScrollEdges();
+    const frame = requestAnimationFrame(() => syncScrollEdges());
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => syncScrollEdges());
+    observer?.observe(list);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [shown, moment.items.length, syncScrollEdges]);
 
   // Follow the voice: the row being spoken stays visible inside the list, never
   // scrolling the whole companion window.
@@ -185,7 +226,19 @@ export function NextStepsBubble({
       ) : null}
 
       {shown && moment.items.length > 0 ? (
-        <ul className="avatar-next-steps-list" aria-label="Suggested next steps" aria-busy={busy ? "true" : undefined}>
+        <div
+          className="avatar-next-steps-scroll"
+          data-top={scrollEdges.top ? "true" : undefined}
+          data-bottom={scrollEdges.bottom ? "true" : undefined}
+        >
+          <span className="avatar-next-steps-shade" data-edge="top" aria-hidden="true" />
+          <ul
+            className="avatar-next-steps-list"
+            ref={listRef}
+            aria-label="Suggested next steps"
+            aria-busy={busy ? "true" : undefined}
+            onScroll={syncScrollEdges}
+          >
           {moment.items.map((item) => {
             const state = stateFor(moment, item);
             const editing = editingId === item.proposalId;
@@ -277,7 +330,9 @@ export function NextStepsBubble({
               </li>
             );
           })}
-        </ul>
+          </ul>
+          <span className="avatar-next-steps-shade" data-edge="bottom" aria-hidden="true" />
+        </div>
       ) : null}
 
       {settled && !failed ? (

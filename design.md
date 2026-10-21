@@ -1630,7 +1630,12 @@ edited are edited in the bubble.
 
 The compact window grows upward with the list, keeping Otto and the elapsed pill
 in place; three rows fit, and a longer list scrolls inside the bubble rather
-than moving the companion off screen. `Listen` reads the lead and each row's
+than moving the companion off screen. The scrolling edge is frosted — a soft
+blur plus the bubble's own tint fading out — and appears only where more
+content continues; the read prompter uses the same frost, and its top edge
+waits until the track has travelled so the first spoken line is never under it.
+The bubble eases in over a quarter-second, and reduced motion removes the
+entrance, the frost transitions, and the slide. `Listen` reads the lead and each row's
 title and reason with the same voice and one-audio-owner rule as the recap, and
 the row being spoken is marked in place — the controls stay available while it
 reads. The empty state says nothing needs action; a failed generation keeps its

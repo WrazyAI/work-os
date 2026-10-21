@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { NextStepsBubble, nextStepsResultLine } from "./NextStepsBubble";
+import { NextStepsBubble, nextStepsResultLine, nextStepsScrollEdges } from "./NextStepsBubble";
 import { IDLE_RECAP_SPEECH, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 
@@ -50,6 +50,16 @@ const render = (overrides: {
   onStopListening: () => undefined,
   onDismiss: () => undefined,
 }));
+
+describe("nextStepsScrollEdges", () => {
+  it("frosts only the edges where the list continues", () => {
+    expect(nextStepsScrollEdges(0, 312, 617)).toEqual({ top: false, bottom: true });
+    expect(nextStepsScrollEdges(200, 312, 617)).toEqual({ top: true, bottom: true });
+    expect(nextStepsScrollEdges(305, 312, 617)).toEqual({ top: true, bottom: false });
+    // A list that fits has no edge to soften, even at the top.
+    expect(nextStepsScrollEdges(0, 312, 312)).toEqual({ top: false, bottom: false });
+  });
+});
 
 describe("NextStepsBubble", () => {
   it("shows the wait state while the suggestions generate", () => {

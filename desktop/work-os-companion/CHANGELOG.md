@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.94 — 2026-10-21
+
+- The next steps list and the read-along view now soften at their scrolling edges instead of ending on a hard line.
+- The bubble eases in when it opens, so the hand-off from an approved recap feels continuous.
+
 ## 0.4.93 — 2026-10-21
 
 - Closing the chat now brings undecided next steps back to the mascot bubble instead of dropping them.

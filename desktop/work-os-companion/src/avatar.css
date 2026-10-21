@@ -122,10 +122,10 @@ body.avatar-window {
 }
 .recap-prompter-window {
   position: relative;
-  /* Four rows of the shipped type. Deliberately unmasked: a fade at the edges
-     dimmed the very line being spoken whenever it wrapped, and the rows already
-     distinguish themselves by colour (the spoken one bright, the rest muted),
-     so nothing here needs to be dimmed to show that it is not current. */
+  /* Four rows of the shipped type. The edges frost what is leaving and entering
+     the window, but the top frost only appears once the track has travelled:
+     the first row is often the one being spoken, and it must never sit under a
+     mask. */
   height: 112px;
   overflow: hidden;
 }
@@ -1120,6 +1120,7 @@ body.avatar-window {
 .avatar-next-steps {
   position: relative;
   width: 100%;
+  animation: avatarNextStepsIn 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   padding: 10px 11px 11px;
   border: 1px solid #344535;
   border-radius: 15px 15px 15px 5px;
@@ -1187,9 +1188,50 @@ body.avatar-window {
 .avatar-next-steps-tool:hover { border-color: rgba(244, 245, 238, .48); }
 .avatar-next-steps-tool:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
 .avatar-next-steps-close { padding: 4px 6px; color: #b9c0b0; }
+.avatar-next-steps-scroll {
+  position: relative;
+  margin-top: 9px;
+  animation: avatarNextStepsRows 260ms 50ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* The frosted edges: a soft blur and the bubble's own tint fading out, shown
+   only where the list continues. They sit above the words, never replace them,
+   and the active row stays in the clear middle. */
+/* The scope is deliberate: the recap bubble's generic `span` rule (relative,
+   block) otherwise wins over a plain class and leaves the frost in the flow. */
+.avatar-next-steps-scroll .avatar-next-steps-shade,
+.recap-prompter-window .recap-prompter-shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 18px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.avatar-next-steps-shade[data-edge="top"],
+.recap-prompter-shade[data-edge="top"] {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(32, 36, 33, .94), rgba(32, 36, 33, .5) 58%, rgba(32, 36, 33, 0));
+  -webkit-mask-image: linear-gradient(to bottom, #000 8%, transparent 90%);
+  mask-image: linear-gradient(to bottom, #000 8%, transparent 90%);
+}
+.avatar-next-steps-shade[data-edge="bottom"],
+.recap-prompter-shade[data-edge="bottom"] {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(32, 36, 33, .94), rgba(32, 36, 33, .5) 58%, rgba(32, 36, 33, 0));
+  -webkit-mask-image: linear-gradient(to top, #000 8%, transparent 90%);
+  mask-image: linear-gradient(to top, #000 8%, transparent 90%);
+}
+.avatar-next-steps-scroll[data-top="true"] .avatar-next-steps-shade[data-edge="top"],
+.avatar-next-steps-scroll[data-bottom="true"] .avatar-next-steps-shade[data-edge="bottom"],
+.recap-prompter-window[data-top="true"] .recap-prompter-shade[data-edge="top"],
+.recap-prompter-window[data-bottom="true"] .recap-prompter-shade[data-edge="bottom"] { opacity: 1; }
 .avatar-next-steps-list {
   list-style: none;
-  margin: 9px 0 0;
+  margin: 0;
   padding: 0;
   /* Three rows fit; a fourth scrolls inside the bubble instead of pushing the
      companion off the top of the screen. */
@@ -1318,6 +1360,7 @@ body.avatar-window {
 }
 .avatar-next-steps-retry { margin-top: 7px; }
 .avatar-next-steps-done {
+  animation: avatarNextStepsRows 220ms ease both;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1326,6 +1369,14 @@ body.avatar-window {
   border-top: 1px solid rgba(244, 245, 238, .12);
   color: #eaffc8;
   font: 650 11px/1.3 Manrope, Inter, sans-serif;
+}
+@keyframes avatarNextStepsIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes avatarNextStepsRows {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
 }
 .avatar-next-steps-check {
   display: grid;
@@ -1338,7 +1389,11 @@ body.avatar-window {
   color: #182018;
 }
 @media (prefers-reduced-motion: reduce) {
-  .avatar-next-steps-list { scroll-behavior: auto; }
+  .avatar-next-steps,
+  .avatar-next-steps-scroll,
+  .avatar-next-steps-done { animation: none; }
+  .avatar-next-steps-shade,
+  .recap-prompter-shade { transition: none; }
 }
 
 /* The frame is the window: the companion fills it instead of the browser

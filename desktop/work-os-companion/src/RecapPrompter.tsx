@@ -28,6 +28,10 @@ export function RecapPrompter({
 }) {
   const track = useRef<HTMLDivElement | null>(null);
   const [offset, setOffset] = useState(0);
+  // Which edges have words beyond them. The first row must stay untouched when
+  // it is the one being spoken, which is why the top edge only appears once
+  // the track has actually travelled.
+  const [edges, setEdges] = useState({ top: false, bottom: false });
 
   // Measured, not assumed: a line may wrap on the narrow companion, and the
   // row being spoken has to sit in the window's clear middle whatever its
@@ -35,17 +39,24 @@ export function RecapPrompter({
   // active line half inside the fade and looking dimmed.
   useEffect(() => {
     const element = track.current;
-    if (!element || reduced) return;
+    if (!element) return;
+    const window = element.parentElement;
+    const windowHeight = window?.clientHeight ?? 0;
+    if (reduced) {
+      setEdges({ top: false, bottom: element.scrollHeight > windowHeight + 2 });
+      return;
+    }
     const rows = element.children;
     const active = rows.item(Math.min(activeIndex, rows.length - 1)) as HTMLElement | null;
     if (!active) return;
-    const window = element.parentElement;
-    const windowHeight = window?.clientHeight ?? 0;
     // A small travel inside the row keeps the motion continuous rather than
     // stepping: the same weighted fraction the highlight uses.
     const within = Math.max(0, Math.min(1, progress * lines.length - activeIndex));
     const centred = active.offsetTop - Math.max(0, (windowHeight - active.offsetHeight) / 2);
-    setOffset(Math.max(0, centred + within * active.offsetHeight * 0.4));
+    const next = Math.max(0, centred + within * active.offsetHeight * 0.4);
+    const max = Math.max(0, element.scrollHeight - windowHeight);
+    setOffset(next);
+    setEdges({ top: next > 2, bottom: next < max - 2 });
   }, [activeIndex, progress, lines.length, reduced]);
 
   if (!lines.length) return null;
@@ -55,7 +66,12 @@ export function RecapPrompter({
     data-reduced={reduced ? "true" : "false"}
     data-progress={progress.toFixed(3)}
   >
-    <div className="recap-prompter-window" aria-hidden={reduced ? "true" : undefined}>
+    <div
+      className="recap-prompter-window"
+      aria-hidden={reduced ? "true" : undefined}
+      data-top={edges.top ? "true" : undefined}
+      data-bottom={edges.bottom ? "true" : undefined}
+    >
       <div
         className="recap-prompter-track"
         ref={track}
@@ -70,6 +86,11 @@ export function RecapPrompter({
           {line.text}
         </p>)}
       </div>
+      {/* A soft edge on the slide, never a mask over the words: the active row
+          sits in the clear middle, so the blur only softens the rows leaving
+          and entering the window. */}
+      <span className="recap-prompter-shade" data-edge="top" aria-hidden="true" />
+      <span className="recap-prompter-shade" data-edge="bottom" aria-hidden="true" />
     </div>
     {reduced && <p className="sr-only" role="status" aria-live="polite">{lines[Math.min(activeIndex, lines.length - 1)]?.text}</p>}
     <span className="recap-prompter-progress" aria-hidden="true"><i style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }} /></span>
