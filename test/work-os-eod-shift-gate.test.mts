@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   attendanceStillOpen,
+  EOD_EARLY_DRAFT_WINDOW_MS,
   EOD_SHIFT_OPEN_LINK_LABEL,
   EOD_SHIFT_OPEN_PREFIX,
   EOD_SHIFT_OPEN_REASON,
   EOD_SHIFT_OPEN_SERVER_MESSAGE,
   EOD_SHIFT_OPEN_SUFFIX,
+  eodDraftBlocked,
+  eodDraftWindowOpen,
   sessionStillOpen,
   shiftStillOpen,
 } from "../src/lib/work-os-shift-gate";
@@ -76,11 +79,41 @@ test("the freshest fact settles a conflicting session and provider state", () =>
   }), true);
 });
 
+test("today's EOD opens in the final ten minutes before the scheduled clock-out", () => {
+  const scheduledEnd = "2026-10-19T20:00:00.000Z";
+  const scheduledSession = { ...openSession, scheduled_ends_at: scheduledEnd };
+  const at = (iso: string) => Date.parse(iso);
+
+  assert.equal(EOD_EARLY_DRAFT_WINDOW_MS, 10 * 60_000);
+  // Ten minutes before the scheduled end, the report is available.
+  assert.equal(eodDraftWindowOpen({ session: scheduledSession, now: at("2026-10-19T19:49:59.000Z") }), false);
+  assert.equal(eodDraftWindowOpen({ session: scheduledSession, now: at("2026-10-19T19:50:00.000Z") }), true);
+  assert.equal(eodDraftWindowOpen({ session: openSession, now: at("2026-10-19T20:05:00.000Z") }), false);
+  assert.equal(eodDraftBlocked({ session: scheduledSession, now: at("2026-10-19T19:49:59.000Z") }), true);
+  assert.equal(eodDraftBlocked({ session: scheduledSession, now: at("2026-10-19T19:50:00.000Z") }), false);
+  // Still worked in past the scheduled end: the report stays available.
+  assert.equal(eodDraftBlocked({ session: scheduledSession, now: at("2026-10-19T20:05:00.000Z") }), false);
+  // A closed shift is never blocked, whenever it closed.
+  assert.equal(eodDraftBlocked({ session: closedSession, now: at("2026-10-19T19:00:00.000Z") }), false);
+  // No scheduled clock-out means there is no window to open early.
+  assert.equal(eodDraftBlocked({ session: { ...openSession, scheduled_ends_at: null }, now: at("2026-10-19T20:05:00.000Z") }), true);
+  // A fresh provider observation can carry the schedule when the session has
+  // not mirrored it yet.
+  assert.equal(eodDraftBlocked({
+    session: null,
+    attendance: { source: "worktivity", state: "active", stale: false, observedAt: "2026-10-19T19:45:00.000Z" },
+    scheduledEndsAt: scheduledEnd,
+    now: at("2026-10-19T19:50:00.000Z"),
+  }), false);
+  // No open shift at all is never blocked.
+  assert.equal(eodDraftBlocked({ session: null, now: at("2026-10-19T19:50:00.000Z") }), false);
+});
+
 test("the prompt is one sentence with an inline clock-out link", () => {
-  assert.match(EOD_SHIFT_OPEN_PREFIX, /shift has not ended/);
+  assert.match(EOD_SHIFT_OPEN_PREFIX, /10 minutes before your scheduled clock-out/);
   assert.equal(EOD_SHIFT_OPEN_LINK_LABEL, "clock out");
-  assert.match(EOD_SHIFT_OPEN_SUFFIX.companion, /first, then draft your report\./);
+  assert.match(EOD_SHIFT_OPEN_SUFFIX.companion, /first to draft it now\./);
   assert.match(EOD_SHIFT_OPEN_SUFFIX.web, /Windows Work OS Companion/);
-  assert.match(EOD_SHIFT_OPEN_SERVER_MESSAGE, /Clock out before drafting it\./);
+  assert.match(EOD_SHIFT_OPEN_SERVER_MESSAGE, /10 minutes before your scheduled clock-out/);
   assert.equal(EOD_SHIFT_OPEN_REASON, "shift_open");
 });

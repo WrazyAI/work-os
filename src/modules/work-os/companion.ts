@@ -267,7 +267,7 @@ export function decideWorkOsPrompt(
     return { kind: null, nextPromptAt: snoozedUntil, required: false, reason: "Check-in snoozed." };
   }
 
-  const eodAt = ends - 15 * 60_000;
+  const eodAt = ends - 10 * 60_000;
   if (now >= eodAt) return { kind: "eod", nextPromptAt: new Date(eodAt).toISOString(), required: false, reason: "EOD review window." };
   if (ends - now <= 60 * 60_000) return { kind: null, nextPromptAt: new Date(eodAt).toISOString(), required: false, reason: "Final-hour planning suppression." };
 

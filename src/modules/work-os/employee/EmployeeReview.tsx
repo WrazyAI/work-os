@@ -20,6 +20,7 @@ import {
 import EmployeeEodEvidence from "./EmployeeEodEvidence";
 import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
+import { useNow } from "./useNow";
 import { HttpError, fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
 import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
 import {
@@ -28,7 +29,8 @@ import {
   EOD_SHIFT_OPEN_REASON,
   EOD_SHIFT_OPEN_REBUILD_PREFIX,
   EOD_SHIFT_OPEN_SUFFIX,
-  shiftStillOpen,
+  eodDraftBlocked,
+  eodDraftWindowOpen,
 } from "@/lib/work-os-shift-gate";
 import {
   EmptyState,
@@ -74,6 +76,7 @@ function proposalSummary(proposal: AnyRow) {
 export default function EmployeeReview() {
   const { day, refresh, refreshAttendance, sync, syncing } = useEmployeeDay();
   const outstanding = useOutstandingEods();
+  const now = useNow();
   const [selectedDate, setSelectedDate] = useState("");
   const [reportMarkdown, setReportMarkdown] = useState("");
   /** The EOD page keeps the moment after a submission: the confirmation stays
@@ -104,19 +107,23 @@ export default function EmployeeReview() {
 
   const eodDay = historical ? selectedDay.data ?? null : day.data ?? null;
   const eodReport = eodDay?.report ?? null;
-  /* An open shift means the day is not finished, so its EOD cannot be
-     drafted. The server refuses the same draft; this is the prompt that
-     explains why, before the employee reaches for the button. A refusal is
-     remembered for the day it happened and only while that day's payload is
-     the one the server judged, so a fresh payload supersedes it — clocking
-     out brings the draft action back. */
+  /* Today's report opens in the final ten minutes before its scheduled
+     clock-out, so the employee can finish before clocking out. The server
+     enforces the same window; this is the prompt that explains the wait before
+     the employee reaches for the button. A refusal is remembered for the day it
+     happened and only while that day's payload is the one the server judged, so
+     a fresh payload supersedes it — clocking out, or the window opening, brings
+     the draft action back. */
   const [refusal, setRefusal] = useState<{ date: string; at: string | null } | null>(null);
   useEffect(() => { setRefusal(null); }, [selectedDate]);
-  const shiftOpen = !historical && shiftStillOpen({
+  const scheduledEndsAt = eodDay?.dayShift?.endsAt ?? null;
+  const shiftOpen = !historical && eodDraftBlocked({
     session: eodDay?.session ?? null,
     attendance: eodDay?.attendance ?? null,
+    scheduledEndsAt,
+    now,
   });
-  const shiftBlocked = shiftOpen || (refusal?.date === selectedDate && refusal.at === (eodDay?.at ?? null));
+  const shiftBlocked = shiftOpen || (refusal?.date === selectedDate && refusal.at === (eodDay?.at ?? null) && !eodDraftWindowOpen({ session: eodDay?.session ?? null, scheduledEndsAt, now }));
   /* The report date the editor is currently showing; an assistant response for
      another day must never alter the active editor. */
   const activeReportDateRef = useRef<string>("");

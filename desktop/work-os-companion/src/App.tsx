@@ -34,7 +34,7 @@ import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, shiftStillOpen } from "../../../src/lib/work-os-shift-gate";
+import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
@@ -2660,17 +2660,23 @@ export default function App() {
   useListShift(dashboardGridRef);
   const openTasks = visibleTodayTasks.filter((task) => !task.completed);
   const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
-  /* An open shift means the day is not finished, so its EOD cannot be
-     drafted. The server refuses the same draft; this is the prompt that
-     explains it before the employee reaches for the button. */
+  /* Today's report opens in the final ten minutes before its scheduled
+     clock-out. The server and the web use the same predicate; this prompt
+     explains the wait before the employee reaches for the button. */
   const reviewShiftDate = eodDate ?? reviewDay?.shiftDate ?? "";
   /* The gate belongs to the running shift: today. An earlier day has ended,
      so it stays draftable even when one of its sessions was never closed. */
   const reviewIsCurrentDay = !eodDate || eodDate === visibleDay?.shiftDate;
-  const reviewShiftOpen = reviewIsCurrentDay && (shiftStillOpen({
+  const reviewShiftOpen = reviewIsCurrentDay && (eodDraftBlocked({
     session: reviewDay?.session ?? null,
     attendance: reviewDay?.attendance ?? null,
-  }) || (eodShiftRefused?.date === reviewShiftDate && eodShiftRefused.at === (reviewDay?.at ?? null)));
+    scheduledEndsAt: reviewDay?.dayShift?.endsAt ?? null,
+    now: pulseNow.getTime(),
+  }) || (eodShiftRefused?.date === reviewShiftDate && eodShiftRefused.at === (reviewDay?.at ?? null) && !eodDraftWindowOpen({
+    session: reviewDay?.session ?? null,
+    scheduledEndsAt: reviewDay?.dayShift?.endsAt ?? null,
+    now: pulseNow.getTime(),
+  })));
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
