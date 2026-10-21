@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
 import { Button, Notice, Skeleton, cx } from "./ui";
@@ -52,11 +52,6 @@ export default function AdminShell({ section, children }: { section: AdminSectio
     staleTime: 30_000,
     enabled: session.data?.role === "admin",
   });
-  const sync = useMutation({
-    mutationFn: () => adminFetch("/api/work-os/nifty/sync", { method: "POST" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["work-os"] }),
-  });
-
   useEffect(() => {
     if (session.data && session.data.role !== "admin") router.replace("/work-os");
   }, [session.data, router]);
@@ -88,15 +83,6 @@ export default function AdminShell({ section, children }: { section: AdminSectio
                 </Link>
               ) : null}
               <Button
-                variant="secondary"
-                disabled={!schemaReady || sync.isPending}
-                onClick={() => sync.mutate()}
-                title={schemaReady ? "Sync the Nifty task record" : "Work OS migration required before sync"}
-              >
-                <RefreshCw size={13} className={cx(sync.isPending && "animate-spin")} aria-hidden />
-                {sync.isPending ? "Syncing…" : "Sync Nifty"}
-              </Button>
-              <Button
                 variant="ghost"
                 aria-label="Refresh this page"
                 title="Refresh this page"
@@ -127,7 +113,6 @@ export default function AdminShell({ section, children }: { section: AdminSectio
                 )}
               </span>
             ) : null}
-            {sync.error ? <span style={{ color: "var(--status-error)" }}>{(sync.error as Error).message}</span> : null}
           </div>
         </header>
 

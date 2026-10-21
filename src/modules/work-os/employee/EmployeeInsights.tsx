@@ -190,7 +190,6 @@ export default function EmployeeInsights() {
                 ? `${data.totals.plannedCompleted} of ${data.totals.planned} planned commitments landed`
                 : "No planned commitments were recorded in this range"}
             </span>
-            <span>Nifty {data.freshness.niftySyncedAt ? `updated ${formatDateTimeShort(data.freshness.niftySyncedAt)}` : "not synced"}</span>
             <span>Worktivity {data.freshness.worktivityObservedAt ? `observed ${formatDateTimeShort(data.freshness.worktivityObservedAt)}` : "not observed"}</span>
           </div>
 

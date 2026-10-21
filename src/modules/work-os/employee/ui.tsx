@@ -297,14 +297,14 @@ export function SyncChip({
 }) {
   const degraded = !!sync?.error;
   const busy = syncing || sync?.syncing === true;
-  const label = degraded ? "Sync delayed" : busy ? "Syncing…" : "Sync";
+  const label = degraded ? "Refresh delayed" : busy ? "Refreshing…" : "Refresh";
   const detail = degraded
-    ? sync?.error || "The provider refresh did not complete."
+    ? sync?.error || "The refresh did not complete."
     : busy
-      ? "Refreshing Nifty and Worktivity state…"
+      ? "Refreshing today's record and attendance…"
       : sync?.syncedAt
-        ? `Last provider sync ${formatDateTimeShort(sync.syncedAt)}`
-        : "Refresh Nifty and Worktivity state for this day.";
+        ? `Record updated ${formatDateTimeShort(sync.syncedAt)}`
+        : "Refresh today's record and attendance.";
   const color = degraded ? "var(--status-warn)" : "var(--text-secondary)";
   return (
     <button

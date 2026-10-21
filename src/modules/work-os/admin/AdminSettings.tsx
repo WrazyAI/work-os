@@ -146,7 +146,7 @@ export default function AdminSettingsPage() {
                 {status.data?.schema.ready ? "Work OS schema ready" : "Migration required"}
               </StateMark>
               <StateMark tone={status.data?.nifty.canCallApi ? "ok" : "warn"}>
-                {status.data?.nifty.canCallApi ? "Nifty API ready" : "Nifty needs a connection"}
+                {status.data?.nifty.canCallApi ? "Nifty backup ready" : "Nifty backup not connected"}
               </StateMark>
               <StateMark tone={status.data?.nifty.hasRefreshToken ? "ok" : "neutral"}>
                 {status.data?.nifty.hasRefreshToken ? "Refresh token present" : "No refresh token"}
@@ -317,7 +317,7 @@ export default function AdminSettingsPage() {
           detail="Workspace-level connections for evidence providers. Source accounts are only verified when mapped to a person."
           action={
             <a href="/api/work-os/nifty/oauth/start" className="inline-flex items-center rounded-[10px] border px-3 py-2 text-[11.5px] font-semibold text-[var(--text-primary)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-              Connect Nifty
+              Connect Nifty backup
             </a>
           }
         />

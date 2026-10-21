@@ -67,10 +67,10 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
     if (observed?.changed) await queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
   }, [queryClient]);
 
-  // The companion's explicit provider sync: ask the server to refresh Nifty
-  // and Worktivity for this day, then refetch the day every surface reads.
+  // Explicit refresh of the day every surface reads: re-read the local record
+  // and ask Worktivity for attendance. There is no provider task sync.
   const sync = useMutation({
-    mutationFn: () => fetchJson<EmployeeDayResponse>("/api/work-os/me/day?refreshProviders=true&refreshAttendance=true"),
+    mutationFn: () => fetchJson<EmployeeDayResponse>("/api/work-os/me/day?refreshAttendance=true"),
     onSuccess: () => void refresh(),
   });
 
