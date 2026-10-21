@@ -197,13 +197,13 @@ describe("EodComposer review surface", () => {
     expect(markup).not.toContain("Delete draft");
   });
 
-  it("prompts for a clock-out while the shift is still open", () => {
+  it("prompts for the ten-minute window while the shift is still open", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
       shiftOpen: true,
       onOpenDashboard: () => undefined,
     }));
-    expect(markup).toContain("Your shift has not ended yet");
+    expect(markup).toContain("10 minutes before your scheduled clock-out");
     expect(markup).toContain("eod-shift-open-notice");
     // The clock-out reads as inline text and behaves like the action it names.
     expect(markup).toMatch(/eod-inline-action[^>]*>clock out<\/button>/);

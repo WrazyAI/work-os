@@ -1368,30 +1368,34 @@ blurs them.
   Escape closes), and account pills are static text so nothing offers a control
   the employee cannot honor.
 
-### 8.16 EOD drafts while the shift is open, and deleting a draft
+### 8.16 EOD drafts before clock-out, and deleting a draft
 
-An end-of-day report describes a finished day. While the workday is still
-running, today's report cannot be written yet, and both Work OS surfaces say
-so instead of offering a draft that would describe an unfinished shift.
+An end-of-day report describes the day, not a closed session. Today's report
+opens in the final ten minutes before the scheduled clock-out — and stays open
+after it — even while the shift is still running, so the employee can finish and
+submit the report without clocking out first.
 
 - **The gate.** A shift is open while the mirrored session is still running or
   a fresh Worktivity observation says the employee is active or paused. One
   predicate (`shiftStillOpen`) decides this for the server, the web workspace,
-  and the companion, so every surface tells the same story. The gate applies to
-  the day being drafted: today is blocked while the shift runs, and an earlier
-  day — whose shift already ended — stays draftable so a backlog is never
-  stranded.
+  and the companion; a second (`eodDraftBlocked`) adds the ten-minute window.
+  Today is blocked only before that window. An earlier day — whose shift already
+  ended — stays draftable so a backlog is never stranded. The window is anchored
+  to the day's scheduled end (`scheduled_ends_at` on the mirrored session, with
+  the day's schedule as a fallback); a day with no scheduled clock-out has no
+  early window and stays blocked until the shift closes.
 - **The server refuses it too.** Creating a report, and asking the assistant
-  for a fresh narrative, both answer `409` with the reason `shift_open`.
-  Refining a draft that already exists stays available: that day is already
-  recorded.
-- **The prompt.** The surface states that the shift has not ended and that the
-  employee should clock out first. The clock-out is inline text, underlined,
-  and behaves like the action it names: in the companion it returns to the
-  dashboard, where the Clock out button closes the shift; on the web it
-  returns to Today, which names the Windows Companion as the surface that
-  closes a shift. The prompt replaces the draft action rather than sitting
-  beside it.
+  for a fresh narrative, both answer `409` with the reason `shift_open` before
+  the window. Refining a draft that already exists stays available: that day is
+  already recorded.
+- **The prompt.** Before the window, the surface names the ten-minute opening
+  and offers clock-out for employees who are finishing early. The clock-out is
+  inline text, underlined, and behaves like the action it names: in the
+  companion it returns to the dashboard, where the Clock out button closes the
+  shift; on the web it returns to Today, which names the Windows Companion as
+  the surface that closes a shift. The prompt replaces the draft action rather
+  than sitting beside it; once the window opens, the draft action replaces the
+  prompt without a refresh.
 - **Deleting a draft.** The EOD composer carries one destructive action
   beside its draft-building controls: `Delete draft`, in red, with a trash
   glyph. It is offered only for an unsubmitted draft, it asks for confirmation
@@ -1720,8 +1724,9 @@ instead of resting — until the report is submitted or one hour past the
 scheduled end, when the mascot rests again and the day stays in the outstanding
 EOD list. While the session is still open the alert never takes the composer:
 the employee can keep sending updates and editing a recap through the lead
-window, and only clock-out hands the moment to the EOD page. A day without a
-scheduled end follows the server's EOD signal alone.
+window, and clock-out hands the composer's moment to the EOD page; the final
+ten-minute window opens the EOD draft without taking that composer away. A day
+without a scheduled end follows the server's EOD signal alone.
 
 The EOD uses a confirmed, amended, or inferred recap as activity context for
 the hours it covers, labeled with its provenance, and falls back to the hourly

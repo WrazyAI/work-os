@@ -241,6 +241,11 @@ assert.match(app, /useOutstandingEodsQuery/);
 assert.match(app, /useReportDayQuery/);
 assert.match(app, /eod-day-context/);
 assert.match(app, /Back to today/);
+// The EOD draft gate and the shared alert window agree: an open shift only
+// blocks the draft before its final ten minutes.
+assert.match(app, /eodDraftBlocked/);
+assert.match(app, /scheduledEndsAt: reviewDay\?\.dayShift\?\.endsAt/);
+assert.match(app, /now: pulseNow\.getTime\(\)/);
 const notificationsBell = read("src/NotificationsBell.tsx");
 assert.match(notificationsBell, /aria-label="Outstanding EODs"/);
 assert.match(notificationsBell, /role="dialog"/);

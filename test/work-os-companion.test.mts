@@ -50,7 +50,8 @@ const validCheckIn = [{
 }];
 assert.equal(decideWorkOsPrompt(active, validCheckIn, new Date("2026-07-10T18:10:00Z")).kind, "optional");
 assert.equal(decideWorkOsPrompt(active, validCheckIn, new Date("2026-07-10T19:10:00Z")).reason, "Final-hour planning suppression.");
-assert.equal(decideWorkOsPrompt(active, validCheckIn, new Date("2026-07-10T19:46:00Z")).kind, "eod");
+assert.equal(decideWorkOsPrompt(active, validCheckIn, new Date("2026-07-10T19:46:00Z")).reason, "Final-hour planning suppression.");
+assert.equal(decideWorkOsPrompt(active, validCheckIn, new Date("2026-07-10T19:50:00Z")).kind, "eod");
 
 const overnightRule: WorkOsScheduleRule = {
   ...baseRule,

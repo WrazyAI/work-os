@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.3 — 2026-10-21
+
+- You can draft and submit your EOD from 10 minutes before your scheduled clock-out, without clocking out first.
+
 ## 0.5.2 — 2026-10-21
 
 - Otto's working card now leads with the step in progress, keeps the steps already done quietly underneath, and carries the same card while tasks load.

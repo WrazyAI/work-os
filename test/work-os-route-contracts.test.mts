@@ -682,12 +682,16 @@ test("admin task routes only select columns that exist in the migration DDL", as
   assert.ok(!tables.get("work_tasks")?.has("name"), "work_tasks has no name column");
 });
 
-test("an unfinished day cannot be drafted, and a draft can be deleted", async () => {
+test("an unfinished day can be drafted in its final ten minutes, and a draft can be deleted", async () => {
   const gate = await source("src/lib/work-os-shift-gate.ts");
   assert.match(gate, /export function shiftStillOpen/, "one predicate decides whether the workday is still open");
+  assert.match(gate, /EOD_EARLY_DRAFT_WINDOW_MS = 10 \* 60_000/, "the early window is ten minutes");
+  assert.match(gate, /export function eodDraftBlocked/, "one predicate decides whether the EOD window is open");
   assert.match(gate, /EOD_SHIFT_OPEN_REASON = "shift_open"/, "the refusal carries a machine-readable reason");
   const gateService = await source("src/lib/work-os-eod-shift-gate.ts");
   assert.match(gateService, /eodDraftShiftGate/, "the server resolves the gate from the session and the provider observation");
+  assert.match(gateService, /eodDraftBlocked/, "the server allows the final ten minutes before the scheduled clock-out");
+  assert.match(gateService, /scheduled_ends_at/, "the scheduled clock-out anchors the early window");
   assert.match(gateService, /work_sessions/, "the gate reads the mirrored session");
   assert.match(gateService, /work_attendance_observations/, "the gate reads the provider observation");
   const eodService = await source("src/lib/work-os-eod.ts");
@@ -696,6 +700,10 @@ test("an unfinished day cannot be drafted, and a draft can be deleted", async ()
   assert.match(eodService, /export async function deleteWorkOsEodDraft/, "an unsubmitted EOD draft can be deleted");
   assert.match(eodService, /\["draft", "rejected"\]/, "only a draft or rejected report can be deleted");
   assert.match(eodService, /report\.deleted/, "the deletion is written to the audit log");
+  // Both client surfaces share the same window: they must not keep hiding
+  // the draft action after the server has opened it.
+  const review = await source("src/modules/work-os/employee/EmployeeReview.tsx");
+  assert.match(review, /eodDraftBlocked/, "the web EOD gate shares the early window");
   const draftRoute = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
   assert.match(draftRoute, /eodDraftShiftGate/, "the assistant draft refuses a day whose shift is still open");
   assert.match(draftRoute, /isRefinement/, "refining an existing draft stays available while the shift is open");
