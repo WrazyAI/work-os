@@ -19,11 +19,13 @@ createRoot(document.getElementById("root")).render(React.createElement(Onboardin
  onComplete:()=>undefined,onOpenDebug:()=>undefined,onLogout:()=>undefined,onNotify:()=>undefined
 }));
 </script></body></html>`;
+let created = false;
 try {
   await writeFile(entry, html, { flag: "wx" });
+  created = true;
   const loaded = await loadConfigFromFile({ command: "build", mode: "production" }, resolve("vite.config.ts"));
   if (!loaded) throw new Error("Companion Vite configuration not found");
   const config = mergeConfig(loaded.config, { configFile: false, build: { outDir: "native-layout-dist" } });
   config.build.rollupOptions.input = { nativeLayout: entry };
   await build(config);
-} finally { await unlink(entry).catch(() => undefined); }
+} finally { if (created) await unlink(entry).catch(() => undefined); }
