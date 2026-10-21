@@ -45,7 +45,10 @@ test("the reuse lookup is narrow: window, person, still open, local only", () =>
   const source = readFileSync(new URL("../src/lib/work-os-local-tasks.ts", import.meta.url), "utf8");
   const lookupAt = source.indexOf("async function findReusableLocalTask");
   assert.ok(lookupAt > 0);
-  const lookup = source.slice(lookupAt, source.indexOf("async function createLocalTaskRow"));
+  // Bound by the next declaration rather than a named neighbour: the file has
+  // been reorganised, and a rename used to widen this slice to the whole file.
+  const nextAt = source.indexOf("\nasync function ", lookupAt + 1);
+  const lookup = source.slice(lookupAt, nextAt === -1 ? undefined : nextAt);
   assert.match(lookup, /\.eq\("provider", LOCAL_TASK_PROVIDER\)/);
   assert.match(lookup, /\.eq\("completed", false\)/);
   assert.match(lookup, /\.not\("status", "in", "\(archived,deleted\)"\)/);
