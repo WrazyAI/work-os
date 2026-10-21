@@ -1126,7 +1126,13 @@ export default function AvatarApp(): React.ReactElement {
   const toggleExpanded = useCallback(async (open: boolean): Promise<void> => {
     if (!open) {
       clearRecapAutoCollapse();
-      endNextStepsMoment();
+      // Closing the chat hands undecided suggestions back to the bubble instead
+      // of dismissing them; only a fully decided moment ends with the panel.
+      const undecided = chatRef.current.find((entry) => entry.nextSteps
+        && (entry.nextSteps.status === "ready" || entry.nextSteps.status === "drafting")
+        && entry.nextSteps.items.some((item) => ["pending", "processing"].includes(entry.nextSteps!.states[item.proposalId] ?? "pending")));
+      if (undecided) setNextStepsBubbleId(undecided.id);
+      else endNextStepsMoment();
     }
     if (open) {
       // Opening the panel hands the moment to the chat; the bubble must not
@@ -1294,6 +1300,7 @@ export default function AvatarApp(): React.ReactElement {
    * apply is still running — or whose accept response was lost — is reconciled
    * against the server so the card can never sit on Saving forever. */
   const decideNextStep = useCallback(async (entryId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }): Promise<void> => {
+    nextStepsPlayer.stop();
     setNextStepsBusyId(entryId);
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
     let state: RecapNextStepState = "failed";
@@ -1337,7 +1344,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setNextStepsBusyId(null);
     }
-  }, [avatarNextStepsFixture, avatarNextStepsRecoveryLike, loadDay, reconcileNextStepDecision, updateNextStepsEntry]);
+  }, [avatarNextStepsFixture, avatarNextStepsRecoveryLike, loadDay, nextStepsPlayer, reconcileNextStepDecision, updateNextStepsEntry]);
 
   // Which moments still have undecided items (for dismissal on close) and
   // which fully settled moments already scheduled their settle beat.

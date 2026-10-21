@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.93 — 2026-10-21
+
+- Closing the chat now brings undecided next steps back to the mascot bubble instead of dropping them.
+- Deciding a suggestion stops the read, and editing a title pauses Listen until you accept it.
+
 ## 0.4.92 — 2026-10-21
 
 - The next-steps bubble now grows centred above Otto, so the mascot stays exactly where you left it.

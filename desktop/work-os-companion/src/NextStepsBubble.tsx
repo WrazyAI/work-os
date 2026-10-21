@@ -90,6 +90,13 @@ export function NextStepsBubble({
   const settled = moment.status === "done";
   const failed = nextStepsHasFailure(moment);
   const result = nextStepsResultLine(moment);
+  // The route speaks the stored suggestion set. While a title is edited but
+  // not yet accepted, the bubble would show words the voice does not have, so
+  // the read waits for the decision instead of saying the wrong thing.
+  const pendingEdits = Object.entries(edited).some(([proposalId, title]) => {
+    const item = moment.items.find((candidate) => candidate.proposalId === proposalId);
+    return item ? item.title !== title : false;
+  });
 
   const titleFor = (item: RecapNextStepItem) => edited[item.proposalId] ?? item.title;
 
@@ -133,7 +140,13 @@ export function NextStepsBubble({
                 {loading ? "Stop" : "Stop reading"}
               </button>
             ) : (
-              <button type="button" className="avatar-next-steps-tool" onClick={onListen}>Listen</button>
+              <button
+                type="button"
+                className="avatar-next-steps-tool"
+                disabled={pendingEdits}
+                title={pendingEdits ? "Accept or cancel your edit before listening" : "Hear these suggestions"}
+                onClick={onListen}
+              >Listen</button>
             )
           ) : null}
           <button
