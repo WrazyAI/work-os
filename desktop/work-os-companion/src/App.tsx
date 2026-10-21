@@ -1,6 +1,6 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
 import { OverflowPanText } from "./OverflowPan";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { readStoredFlag, writeStoredFlag } from "./storedFlags";
@@ -4968,6 +4968,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
 }) {
   const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
   const [filtersOpen, setFiltersOpen] = useState(initialFiltersOpen);
+  const taskTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
@@ -5023,6 +5024,20 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     { id: "completed", label: "Completed", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.completed : serverCounts?.completed ?? parentTasks(uniqueTasks(completedTasks)).length },
     { id: "all", label: "All tasks", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.total : serverCounts?.total ?? parentTasks(uniqueTasks(workspaceHistory)).length },
   ];
+  // Peer views keep one tab stop and move between views with the shared
+  // ←/→/Home/End contract (design §8.13).
+  const onTaskTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = chipCounts.length - 1;
+    let next = index;
+    if (event.key === "ArrowRight") next = index === last ? 0 : index + 1;
+    else if (event.key === "ArrowLeft") next = index === 0 ? last : index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = last;
+    else return;
+    event.preventDefault();
+    onTaskView(chipCounts[next].id);
+    requestAnimationFrame(() => taskTabRefs.current[next]?.focus());
+  };
   // Paginated views say how much of the server total is on screen so a chip
   // can never look like it disagrees with its own list.
   const viewTotal = pageTotal ?? (historical ? null : taskView === "all" ? serverCounts?.total ?? null : taskView === "completed" ? serverCounts?.completed ?? null : null);
@@ -5147,27 +5162,25 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       </div>
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" aria-label={`Review unfinished work — ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} onClick={() => onCarryOverOpen(true)}><span className="carry-count" aria-hidden="true"><b>{carryOver.length > 99 ? "99+" : carryOver.length}</b><small>{carryOver.length === 1 ? "unfinished task" : "unfinished tasks"}</small></span><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </section>
-    <div className="tasks-toolbar">
-    {!historical && <nav className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</nav>}
-    <section className="task-search-toolbar" aria-label="Task search and date filters">
-      <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => onTaskSearch?.(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => onTaskSearch?.("")}><X size={14} /></button>}</label>
-      <div className="task-search-actions">
-      <div className="task-filters-wrap">
-        <button type="button" className={`task-filters-toggle ${dateFilterActive ? "active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}><CalendarDays size={15} aria-hidden="true" /> Date range{dateFilterActive ? " · on" : ""}</button>
-        {filtersOpen && <div className="task-filters-popover" role="group" aria-label="Task date range">
-          <label><span>From</span><input aria-label="Filter from date" type="date" max={filterTo || currentDate} value={filterFrom} onChange={(event) => onFilterFrom?.(event.target.value)} /></label>
-          <i aria-hidden="true">—</i>
-          <label><span>To</span><input aria-label="Filter to date" type="date" min={filterFrom || undefined} max={currentDate} value={filterTo} onChange={(event) => onFilterTo?.(event.target.value)} /></label>
-          {dateFilterActive && <button onClick={() => { onFilterFrom?.(""); onFilterTo?.(""); }}>Clear dates</button>}
-        </div>}
-      </div>
-      {!historical && <button className="primary task-add-button" onClick={onAddTask}><Plus size={15} /> Add task</button>}
-      </div>
-    </section>
-    </div>
-    {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{overflowNote ?? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}`}</p>}
     <section className="panel task-list-panel" aria-label="Task list"><h2 className="sr-only">{historical ? `Tasks from ${formatWorkOsDate(selectedDate)}` : viewLabel}</h2>
-      <div className="evidence-list task-records" ref={listRef}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <><SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{taskView === "today" && !historical
+      <header className="task-list-header">
+        {!historical && <nav className="task-list-tabs" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }, index) => <button key={id} ref={(node) => { taskTabRefs.current[index] = node; }} id={`task-list-tab-${id}`} role="tab" aria-controls="task-list-panel" aria-selected={taskView === id} tabIndex={taskView === id ? 0 : -1} className={`task-list-tab ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)} onKeyDown={(event) => onTaskTabKeyDown(event, index)}>{label}<em>{count}</em></button>)}</nav>}
+        <section className="task-list-controls" aria-label="Task search and date filters">
+          <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => onTaskSearch?.(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => onTaskSearch?.("")}><X size={14} /></button>}</label>
+          <div className="task-filters-wrap">
+            <button type="button" className={`task-filters-toggle ${dateFilterActive ? "active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}><CalendarDays size={15} aria-hidden="true" /> Date range{dateFilterActive ? " · on" : ""}</button>
+            {filtersOpen && <div className="task-filters-popover" role="group" aria-label="Task date range">
+              <label><span>From</span><input aria-label="Filter from date" type="date" max={filterTo || currentDate} value={filterFrom} onChange={(event) => onFilterFrom?.(event.target.value)} /></label>
+              <i aria-hidden="true">—</i>
+              <label><span>To</span><input aria-label="Filter to date" type="date" min={filterFrom || undefined} max={currentDate} value={filterTo} onChange={(event) => onFilterTo?.(event.target.value)} /></label>
+              {dateFilterActive && <button onClick={() => { onFilterFrom?.(""); onFilterTo?.(""); }}>Clear dates</button>}
+            </div>}
+          </div>
+          {!historical && <button className="primary task-add-button" onClick={onAddTask}><Plus size={15} /> Add task</button>}
+        </section>
+      </header>
+      {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{overflowNote ?? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}`}</p>}
+      <div className="evidence-list task-records" id="task-list-panel" ref={listRef} role={historical ? undefined : "tabpanel"} aria-labelledby={historical ? undefined : `task-list-tab-${taskView}`}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <><SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{taskView === "today" && !historical
         ? dayGroupsForDisplay.flatMap((group) => group.tasks).map(renderTaskRow)
         : displayedTasks.map(renderTaskRow)}</> : historyError && !historyHasData ? null : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading tasks…</> : loadMoreError ? "Retry load more" : "Load more"}</button>}</section>
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} taskFlight={taskFlight} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}

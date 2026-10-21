@@ -374,10 +374,6 @@ body {
 .agenda-strip-focus { min-width: 0; }
 .agenda-strip-text { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .agenda-strip-meta { color: var(--dash-muted); font-size: 10px; }
-.agenda-strip-chips { justify-content: center; }
-.agenda-strip-chip { border-color: transparent; border-radius: 9px; background: transparent; color: var(--dash-muted); }
-.agenda-strip-chip:hover { background: #f0f5ed; }
-.agenda-strip-chip.active { border-color: #c9dabb; background: #edf5e7; color: #315d22; box-shadow: inset 0 0 0 1px rgba(94, 157, 39, 0.08); }
 .agenda-strip-carry { position: relative; min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
 
 /* The unfinished count rides on the carry pill as a compact badge in the same
@@ -428,21 +424,92 @@ body {
   .carry-count small { transition: none; }
 }
 
-/* One toolbar row: the view chips, search, and the date/add controls. The
-   controls sit in the space the chips leave; when the row runs out of width
-   they wrap below the chips instead of leaving a permanently empty band. */
-.tasks-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
-.tasks-toolbar > .agenda-strip-chips { order: 0; flex: 0 1 auto; min-width: 0; margin: 0; }
-.tasks-toolbar > .task-search-toolbar { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; flex: 1 1 440px; min-width: 0; margin: 0; }
-.tasks-toolbar .task-search { flex: 1 1 200px; min-width: 200px; }
-.tasks-toolbar .task-search-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
-.task-search { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); box-shadow: none; }
+/* The Tasks panel borrows the dashboard queue's header outline: the views are
+   the panel title, and the compact search, date range, and Add task controls
+   share the trailing edge. Ordering stays in the sortable column row below. */
+.task-search { border-color: var(--dash-line); background: rgba(255, 255, 252, 0.84); box-shadow: none; }
 .task-search:focus-within { border-color: #a9c79c; box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.13); }
-.task-filters-toggle { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); color: var(--dash-muted); }
+.task-filters-toggle { border-color: var(--dash-line); background: rgba(255, 255, 252, 0.84); color: var(--dash-muted); }
 .task-filters-toggle.active { border-color: #bfd7af; background: #edf7e7; color: #427d21; }
 .task-filters-popover { border-color: var(--dash-line); border-radius: 14px; box-shadow: var(--dash-shadow); }
 
-.task-list-panel { border-color: var(--dash-line); border-radius: 16px; background: rgba(255, 255, 252, 0.9); box-shadow: var(--dash-shadow); }
+.task-list-panel { padding: 0; border-color: var(--dash-line); border-radius: 16px; background: rgba(255, 255, 252, 0.9); box-shadow: var(--dash-shadow); }
+/* The narrow workspace rule in styles.css re-pads every .panel; the task list
+   owns its header's edge-to-edge treatment, so keep that one panel flush. */
+.tasks-workspace .task-list-panel { padding: 0; }
+.task-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--dash-line);
+  border-radius: 16px 16px 0 0;
+}
+.task-list-tabs { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; min-width: 0; margin: 0; }
+.task-list-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dash-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.task-list-tab:hover { background: #f2f5ef; color: var(--dash-ink); }
+.task-list-tab.active { background: #e9eee5; color: var(--dash-ink); }
+.task-list-tab:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
+.task-list-tab em {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #edf2e9;
+  color: var(--dash-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.task-list-tab.active em { background: #e1f2d2; color: #427d21; }
+.task-list-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.task-list-controls .task-search { flex: 0 1 190px; min-width: 140px; max-width: 220px; min-height: 38px; border-radius: 10px; }
+.task-list-controls .task-filters-toggle { min-height: 38px; height: 38px; padding: 0 11px; border-radius: 10px; }
+.task-list-controls .task-add-button { min-height: 38px; height: 38px; padding: 0 13px; border-radius: 10px; }
+.task-list-panel > .task-filter-summary { margin: 9px 16px 0; }
+.task-list-panel > .skeleton-task-list { padding: 0 16px; }
+.task-list-panel > .task-load-more { width: calc(100% - 32px); margin: 10px 16px 16px; }
+@media (max-width: 860px) {
+  .task-list-controls { flex-basis: 100%; justify-content: flex-start; }
+  .task-list-controls .task-filters-wrap { margin-left: auto; }
+}
+@media (max-width: 720px) {
+  .task-list-header { padding: 9px 12px; }
+  .task-list-tabs { width: 100%; flex-wrap: wrap; }
+  .task-list-controls .task-search { flex: 1 1 180px; max-width: none; }
+  .task-list-tab,
+  .task-list-controls .task-search,
+  .task-list-controls .task-filters-toggle,
+  .task-list-controls .task-add-button { min-height: 40px; }
+  .task-list-controls .task-filters-toggle,
+  .task-list-controls .task-add-button { height: 40px; }
+}
+@media (max-width: 520px) {
+  .task-list-controls .task-search,
+  .task-list-controls .task-filters-wrap { width: 100%; }
+  .task-list-controls .task-filters-wrap { margin-left: 0; }
+  .task-list-controls .task-filters-toggle,
+  .task-list-controls .task-add-button { width: 100%; justify-content: center; }
+}
 .task-list-panel > .card-title { min-height: 64px; padding-inline: 20px; border-bottom: 1px solid var(--dash-line); }
 .task-list-panel > .card-title > span { color: var(--dash-ink); font-size: 14px; }
 .task-list-panel > .card-title > span svg { color: var(--dash-signal-deep); }
@@ -673,32 +740,8 @@ body {
 .agenda-strip-focus-scroll { max-width: min(620px, 100%); }
 .agenda-strip-meta { padding-left: 0; }
 /* The strip's stat trio is gone: the overdue and due-today counts it repeated
-   already lead the day-group headers and the view chips, and "done today" was a
+   already lead the day-group headers and the view tabs, and "done today" was a
    third copy. The strip states the focus and the carry action only. */
-.agenda-strip-chips {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  width: fit-content;
-  max-width: 100%;
-  margin: 12px 0;
-  padding: 4px;
-  gap: 3px;
-  border: 1px solid var(--dash-line);
-  border-radius: 11px;
-  background: rgba(244, 247, 241, 0.94);
-}
-.agenda-strip-chips .agenda-strip-chip {
-  height: 32px;
-  padding-inline: 10px;
-  border-radius: 8px;
-}
-.agenda-strip-chips .agenda-strip-chip.active {
-  border-color: #d2e3c7;
-  background: #fff;
-  color: #315d22;
-  box-shadow: 0 2px 5px rgba(28, 45, 27, 0.08);
-}
 .task-list-heading { align-items: center; }
 .task-list-heading-copy { display: grid; gap: 4px; min-width: 0; }
 .task-list-heading-copy > strong { color: var(--dash-ink); font-size: 15px; letter-spacing: -0.025em; }
@@ -948,8 +991,6 @@ body {
   .task-agenda-strip { grid-template-columns: minmax(0, 1fr); grid-template-areas: "focus" "carry"; row-gap: 10px; }
   .agenda-strip-focus { grid-area: focus; min-width: 0; }
   .agenda-strip-carry { grid-area: carry; justify-self: end; }
-  .agenda-strip-chips { width: 100%; overflow-x: auto; }
-  .agenda-strip-chips .agenda-strip-chip { flex: 0 0 auto; }
   .work-os-side-panel,
   .task-detail-modal.work-os-side-panel,
   .carry-over-layer .carry-flyout { width: 100vw; border-radius: 22px 0 0 22px; }

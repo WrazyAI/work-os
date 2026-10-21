@@ -139,7 +139,7 @@ export const GUIDE_SHOTS = {
   },
 
   /*
-   * Tasks: the view chips, the composer, and the table. The third step ends on a
+   * Tasks: the view tabs, the composer, and the table. The third step ends on a
    * row being completed, so the film shows the same checkbox the first step
    * talks about being used.
    */
@@ -148,17 +148,17 @@ export const GUIDE_SHOTS = {
       chapter: "Pick a view",
       url: "/?offline",
       nav: "Tasks",
-      await: [".tasks-toolbar"],
+      await: [".task-list-header"],
       opening: { fit: ".task-list-panel", anchor: "top" },
       entry: { x: 900, y: 440 },
       hold: 400,
       tail: 300,
       shots: [
-        { cam: { fit: ".tasks-toolbar", anchor: "center", ms: 1200 } },
-        { point: ".agenda-strip-chip", ms: 620 },
+        { cam: { fit: ".task-list-header", anchor: "center", ms: 1200 } },
+        { point: ".task-list-tab", ms: 620 },
         { wait: 180 },
         // A real view change: the table behind the chips re-reads itself.
-        { click: ".agenda-strip-chip:nth-of-type(2)", ms: 620, after: 900 },
+        { click: ".task-list-tab:nth-of-type(2)", ms: 620, after: 900 },
         { cam: { fit: ".task-list-panel", anchor: "top", ms: 900 } },
         { wait: 260 },
       ],
@@ -167,15 +167,15 @@ export const GUIDE_SHOTS = {
       chapter: "Add and change work",
       url: "/?offline",
       nav: "Tasks",
-      await: [".tasks-toolbar"],
-      opening: { fit: ".tasks-toolbar", anchor: "center" },
-      entry: ".tasks-toolbar .primary",
+      await: [".task-list-header"],
+      opening: { fit: ".task-list-header", anchor: "center" },
+      entry: ".task-list-header .task-add-button",
       hold: 380,
       tail: 300,
       shots: [
-        { point: ".tasks-toolbar .primary", ms: 620 },
+        { point: ".task-list-header .task-add-button", ms: 620 },
         { wait: 160 },
-        { click: ".tasks-toolbar .primary", ms: 620, after: 880 },
+        { click: ".task-list-header .task-add-button", ms: 620, after: 880 },
         { cam: { contain: ".task-modal", ms: 720 } },
         { wait: 240 },
       ],

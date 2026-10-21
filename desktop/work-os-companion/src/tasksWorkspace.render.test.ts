@@ -47,6 +47,103 @@ describe("Tasks workspace filters", () => {
     expect(markup).toContain('aria-label="Filter to date"');
   });
 
+  it("puts the views, search, date range, and Add task in one list header", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-26",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null,
+      suggestion: null,
+      saveState: "saved",
+      taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
+      todayTasks: [],
+      taskHistory: [{ id: "task-1", title: "Repair provider sync", due_date: "2026-08-26", completed: false }],
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: false,
+      busy: false,
+      initialFiltersOpen: true,
+      onTaskView: () => undefined,
+      onTaskSort: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onDeleteTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    }));
+    const header = markup.match(/<header class="task-list-header">[\s\S]*?<\/header>/)?.[0] ?? "";
+
+    expect(header).toContain('aria-label="Task views"');
+    expect(header).toContain('aria-label="Task search and date filters"');
+    expect(header).toContain('aria-label="Search tasks"');
+    expect(header).toContain("Date range");
+    expect(header).toContain("Add task");
+    expect(header).toContain('tabindex="0"');
+    expect(header).toContain('tabindex="-1"');
+    expect(header).toContain('aria-selected="true"');
+    expect(header).toContain('aria-controls="task-list-panel"');
+    expect(markup).toContain('id="task-list-panel"');
+    expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain('aria-labelledby="task-list-tab-all"');
+    expect(markup).not.toContain("tasks-toolbar");
+    expect(markup).not.toContain("task-search-toolbar");
+    // Ordering stays in the list, not in the header.
+    const headerEnd = markup.indexOf(header) + header.length;
+    expect(markup.indexOf("sort-header-row")).toBeGreaterThan(headerEnd);
+  });
+
+  it("keeps search and date filters on a historical day without tabs or Add task", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-25",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null,
+      suggestion: null,
+      saveState: "saved",
+      taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
+      todayTasks: [],
+      taskHistory: [],
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: false,
+      busy: false,
+      onTaskView: () => undefined,
+      onTaskSort: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onDeleteTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    }));
+
+    expect(markup).toContain('aria-label="Task search and date filters"');
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain('role="tabpanel"');
+    expect(markup).not.toContain("Add task");
+  });
+
   it("shows a skeleton while a view is loading and only then the empty state", () => {
     const base = {
       currentDate: "2026-08-26",

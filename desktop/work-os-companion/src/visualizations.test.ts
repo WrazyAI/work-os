@@ -304,7 +304,7 @@ describe("operational visualizations", () => {
 
   it("keeps focus contextual and task lifecycle actions consistent", () => {
     expect(app).toContain('className={`panel task-agenda-strip');
-    expect(app).toContain("agenda-strip-chip");
+    expect(app).toContain('className={`task-list-tab ${taskView === id ? "active" : ""}`}');
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("function DashboardTaskCard");
     expect(app).toContain('className={`task-check card-check');
@@ -388,22 +388,29 @@ describe("operational visualizations", () => {
     expect(styles).not.toContain(".tasks-page");
     expect(styles).not.toContain(".task-view-tabs");
     expect(styles).not.toContain(".tasks-workspace .page-intro");
-    // Chips never wrap inside their pill above 900px; the strip reflows instead.
-    expect(workspaceStyles).toMatch(/\.agenda-strip-chips \{[\s\S]*?flex-wrap: nowrap/);
-    // Views and the search/filter controls share one toolbar row; the controls
-    // wrap below the views only when the row runs out of width.
-    expect(app).toContain('className="tasks-toolbar"');
-    expect(dashboardStyles).toContain(".tasks-toolbar { display: flex; flex-wrap: wrap;");
-    expect(dashboardStyles).toContain(".tasks-toolbar > .task-search-toolbar { display: flex; flex-direction: row;");
+    // The list panel borrows the dashboard queue's header: views on the left,
+    // compact search/date/Add task on the right, and the sort row below.
+    expect(app).toContain('className="task-list-header"');
+    expect(app).toContain('className="task-list-tabs"');
+    expect(dashboardStyles).toMatch(/\.task-list-header \{[\s\S]*?display: flex;/);
+    expect(dashboardStyles).toMatch(/\.task-list-header \{[\s\S]*?flex-wrap: wrap;/);
+    expect(dashboardStyles).toMatch(/\.task-list-tabs \{[\s\S]*?flex-wrap: nowrap/);
+    expect(dashboardStyles).toContain(".task-list-tabs { width: 100%; flex-wrap: wrap; }");
+    expect(dashboardStyles).toMatch(/\.task-list-controls \{[\s\S]*?justify-content: flex-end;/);
+    expect(dashboardStyles).toContain(".task-list-controls .task-search { flex: 0 1 190px;");
+    expect(dashboardStyles).toContain(".task-list-panel { padding: 0;");
+    // The peer-view tablist keeps one tab stop and follows ←/→/Home/End.
+    expect(app).toContain('event.key === "ArrowRight"');
+    expect(app).toContain('event.key === "Home"');
+    expect(app).toContain("taskTabRefs.current[next]?.focus()");
     // Status labels center inside their pill instead of hugging the top edge.
     expect(dashboardStyles).toContain(".task-state { display: inline-flex; align-items: center; justify-content: center;");
     expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
     expect(dashboardStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?min-width: 0;/);
     // The strip states the focus and the carry action. The counts it used to
-    // restate here already lead the day-group headers and the view chips.
+    // restate here already lead the panel tabs.
     expect(dashboardStyles).not.toContain(".task-focus-stats");
     expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus"[\s\S]*?"carry"/);
-    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{[\s\S]*?\.agenda-strip-chips \{ flex-wrap: wrap; \}/);
     // Title line never wraps the On today tag onto the metadata line.
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);

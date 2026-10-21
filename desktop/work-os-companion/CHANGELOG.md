@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The Tasks list now keeps its views, search, date range, and Add task together in one compact header, like the dashboard.
+
 ## 0.4.94 — 2026-10-21
 
 - The next steps list and the read-along view now soften at their scrolling edges instead of ending on a hard line.

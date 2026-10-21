@@ -479,10 +479,13 @@ workspace than a list of cards.
 1. Masthead title/date and date navigator.
 2. One compact agenda strip: focus statement, save/provenance state, live count
    shortcuts, and Review unfinished work only when relevant.
-3. One toolbar row: the four views (My day, Unfinished, Completed, All tasks),
-   the search field, the date-range filter, and the local Add task action. The
-   controls wrap below the views only when the row runs out of width.
-4. One flat task-list panel.
+3. One flat task-list panel whose header borrows the dashboard queue's outline:
+   the four views (My day, Unfinished, Completed, All tasks) are the panel title,
+   and the compact search field, date-range filter, and local Add task action
+   share its trailing edge. The controls wrap below the views only when the
+   header runs out of width.
+4. The sortable column row and task rows inside that same panel; ordering never
+   moves into the header.
 5. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
@@ -494,11 +497,14 @@ Use a flat, readable list:
 
     completion | task + metadata | progress | due | status | actions
 
-The Tasks page has one date navigator in the masthead, one toolbar row (the
-views, search, date filter, and Add task), and one task list. Do not repeat a
-Task queue heading or status section headers. The list begins with one quiet
-sortable column row for Name, Date due, and Status; it aligns to the task, due,
-and status tracks rather than introducing
+The Tasks page has one date navigator in the masthead, one task-list panel, and
+one task list. The panel header carries the views, a compact search, the date
+filter, and Add task on one row while width permits; the search stays compact
+while the header is one row, and the controls wrap beneath the views rather than
+compressing them. Once wrapped on a small screen, the search may take the row.
+Do not repeat a Task queue heading or status section headers. The list
+begins with one quiet sortable column row for Name, Date due, and Status; it
+aligns to the task, due, and status tracks rather than introducing
 a second boxed toolbar. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
@@ -510,7 +516,7 @@ Due today, Due date) before anything is hidden; then the project name and
 description drop, so the title, completion control, and due signal always
 survive. The agenda strip stays one compact row down to 780px — the focus
 statement and the carry action — and becomes a two-line stack below. The counts
-live in the view chips.
+live in the panel's view tabs.
 
 The carry action reports the unfinished count as a compact amber badge in the
 same language as the notifications badge: the number alone in a circle, growing
@@ -608,7 +614,7 @@ orders rows inside each group. The groups do not print a header row each: §6.2
 keeps status section headers out of the list, and a group header stacked
 directly under the column row reads as a second header while only restating the
 status pill every row already carries. The row sequence carries the grouping and
-the view chips carry the counts. Unfinished is
+the view tabs carry the counts. Unfinished is
 open backlog, with overdue work first; the default order applies within each
 group. Completed is historical record. All tasks is the complete inspectable
 set. Every view loads 50 parent
@@ -813,18 +819,17 @@ Inputs have persistent labels where the field is not self-evident, visible
 focus, inline validation, and deliberate disabled/loading states. Placeholder
 text is not the only label.
 
-The task record's controls are one compact row: the views, the always-visible
-search, and the person/project selects read in order, and the primary Add task
-action stays last, right-aligned while the row has room. A card never shares
-its title row with controls: the name and its one-line detail own the first
-row, and filters and toolbar controls group into rows beneath it
-(`.admin-controls`, grouped by `.admin-controls-group`) in reading order —
-filters first, the primary action last, right-aligned while its row has room
-and full-width once the row wraps. Below the compact desktop class the task
-row wraps deliberately, filters before the action, with 40px targets once
-stacked. Date range stays a peer control or popover, with clear/reset behavior
-and a result count when active. Filtered empty says No tasks match these
-filters, never No tasks.
+The task record's header owns the name and its one-line detail on the left and
+the primary Add task action at the trailing edge. Beneath it, one compact
+controls row carries the views, the always-visible search, and the
+person/project selects in reading order; search leads into the record filters,
+and Add task never sits in that row. Below the compact desktop class the views
+take the first row and search plus filters follow; at the small class the name
+and Add task share the first line, the summary drops to the next, and the
+action keeps a 40px target (`.admin-controls`, grouped by
+`.admin-controls-group`). Date range stays a peer control or popover, with
+clear/reset behavior and a result count when active. Filtered empty says No
+tasks match these filters, never No tasks.
 
 ### 8.3 Menus and detached surfaces
 
@@ -2008,11 +2013,12 @@ they show — so it renders no page refresh.
 
 Every section keeps one header rhythm: the card's name and its one-line detail
 own the first row, and the card's filters and toolbar controls sit in grouped
-rows beneath it (`.admin-controls`, design.md §8.2) — segmented views, then
-search, then selects, then the primary action. The task record keeps all of
-those on one compact row that wraps deliberately at narrow widths. Overview
-stays quiet meta only; Settings keeps each field group inside its own card
-instead of the header.
+rows beneath it (`.admin-controls`, design.md §8.2). The task record is the
+exception: its primary Add task action trails the name and detail on the title
+row, while segmented views, search, and selects share one compact controls row
+beneath it and wrap deliberately at narrow widths. Overview stays quiet meta
+only; Settings keeps each field group inside its own card instead of the
+header.
 
 - **Overview** is the command center: a needs-attention list (reviews pending,
   outstanding EODs, overdue tasks, disputed evidence, configuration blockers),
@@ -2035,10 +2041,11 @@ instead of the header.
 - **People** is a roster with a person drawer: mappings, schedule and
   exceptions, recent workdays, reports, updates and recaps, and a seven-day
   evidence summary.
-- **Tasks** is the organization task record with bounded filters on one compact
-  controls row and the local add-task flow: one flat list, never grouped or
-  ordered by project, which stays a small per-task detail beside the task's
-  priority and labels. Each row shows the task's description on its own line
+- **Tasks** is the organization task record with the primary Add task action in
+  the card title row, bounded filters on one compact controls row beneath it,
+  and the local add-task flow: one flat list, never grouped or ordered by
+  project, which stays a small per-task detail beside the task's priority and
+  labels. Each row shows the task's description on its own line
   beneath the title — clipped with the shared fade and never a pan — and the
   assignee cell resolves the recorded assignee ids through the roster, so a task
   with a real assignee is never displayed as Unassigned.

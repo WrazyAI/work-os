@@ -1550,8 +1550,7 @@ body {
 .active-task-tabs,
 .active-day-footer,
 .progress-flyout .workos-chat-head,
-.progress-input-shell,
-.task-search-toolbar {
+.progress-input-shell {
   display: flex;
   align-items: center;
 }
@@ -2928,19 +2927,6 @@ body {
   color: #8e978b;
 }
 
-.task-search-toolbar {
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.task-search-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-}
-
 .task-add-button {
   min-height: 42px;
   white-space: nowrap;
@@ -3162,60 +3148,6 @@ body {
   font-size: 9px;
 }
 
-.agenda-strip-chips {
-  display: inline-flex;
-  flex: 0 1 auto;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  max-width: 100%;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid #dde3d7;
-  border-radius: 11px;
-  background: #f4f6f0;
-}
-
-.agenda-strip-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #5b655a;
-  font-size: 10px;
-  font-weight: 720;
-  white-space: nowrap;
-}
-
-.agenda-strip-chip em {
-  min-width: 17px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: #e2e7dc;
-  color: #54604f;
-  font-size: 8.5px;
-  font-style: normal;
-  font-weight: 780;
-  text-align: center;
-}
-
-.agenda-strip-chip:hover {
-  background: #e9eee3;
-}
-
-.agenda-strip-chip.active {
-  background: #29421e;
-  color: #f2f7ec;
-}
-
-.agenda-strip-chip.active em {
-  background: rgba(255, 255, 255, 0.16);
-  color: #e4efdb;
-}
-
 .agenda-strip-carry {
   display: inline-flex;
   flex: 0 0 auto;
@@ -3234,10 +3166,6 @@ body {
 
 .agenda-strip-carry:hover {
   background: #fff3d6;
-}
-
-@media (max-width: 900px) {
-  .agenda-strip-chips { flex-wrap: wrap; }
 }
 
 /* Compact task rows: dot | body | actions | chevron. Grid anatomy lives in
@@ -3597,10 +3525,6 @@ button:not(:disabled):active {
   }
 
   .task-agenda-strip {
-    flex-wrap: wrap;
-  }
-
-  .agenda-strip-chips {
     flex-wrap: wrap;
   }
 
