@@ -6415,6 +6415,7 @@ dependencies = [
  "windows-sys 0.60.2",
  "work-os-diagnostics-core",
  "work-os-vault-password-core",
+ "work-os-window-fit-core",
  "zip 2.4.2",
 ]
 
@@ -6434,6 +6435,10 @@ dependencies = [
  "rand 0.9.5",
  "serde",
 ]
+
+[[package]]
+name = "work-os-window-fit-core"
+version = "0.1.0"
 
 [[package]]
 name = "writeable"

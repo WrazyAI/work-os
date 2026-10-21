@@ -39,6 +39,7 @@ uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 work-os-diagnostics-core = { path = "diagnostics-core" }
 work-os-vault-password-core = { path = "vault-password-core" }
+work-os-window-fit-core = { path = "window-fit-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }

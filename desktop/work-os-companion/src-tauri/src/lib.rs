@@ -3,6 +3,7 @@ mod diagnostics;
 mod local_settings;
 mod session_guard;
 mod vault_password;
+mod window_fit;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::path::BaseDirectory;
@@ -664,6 +665,13 @@ pub fn run() {
             diagnostics::open_logs_dir
         ])
         .setup(|app| {
+            // Fit the window before anything renders: the configured 1000x960
+            // window is taller than a 13-inch MacBook's work area, and macOS
+            // only keeps the title bar on screen, so the bottom row of the UI
+            // sat below the physical display.
+            if let Some(window) = app.get_webview_window("main") {
+                window_fit::fit_to_work_area(&window, app.handle());
+            }
             // The Stronghold plugin derives its key with Argon2 and writes the
             // salt with `std::fs::write(..).expect(..)` (kdf.rs) — it never
             // creates the directory itself. On macOS nothing else creates the

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::diagnostics::{self, DiagnosticLevel};
+use crate::window_fit;
 
 pub const DEBUG_LABEL: &str = "debug";
 
@@ -24,7 +25,10 @@ pub fn open_debug_window(app: AppHandle) -> Result<(), String> {
         .build();
 
     match result {
-        Ok(_) => {
+        Ok(window) => {
+            // The debugger's configured 860-point height also overflows a
+            // 13-inch MacBook's work area, so it gets the same fit.
+            window_fit::fit_to_work_area(&window, &app);
             diagnostics::host_event(&app, "window.debug.created", "Debug window created", DiagnosticLevel::Info);
             Ok(())
         }
