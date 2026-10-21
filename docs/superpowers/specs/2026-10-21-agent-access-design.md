@@ -1,6 +1,6 @@
 # Agent access layer: scoped credentials and a documented task API
 
-Date: Oct 21, 2026. Status: draft for builder check.
+Date: Oct 21, 2026. Status: approved by the user on Oct 21, 2026; implementation not started.
 Source baseline: Work OS `e4ac7fe3` (0.5.1).
 Ledger: Nifty **Tasks** — “Design the external agent access layer”.
 Related: `docs/NIFTY-EXIT-PLAN.md`, `design.md` §9 (data truth and provenance),
@@ -17,6 +17,21 @@ missing is the **access layer**: a credential that is not a browser cookie or a
 device-bound desktop session, a contract they can discover, retry-safe writes, and
 a way to ask what changed. This is the last Nifty-shaped gap in the task system,
 and it is about access rather than data.
+
+## Decisions made by the user
+
+Confirmed on Oct 21, 2026:
+
+1. **Agents may complete tasks.** Completion passes the existing evidence gate: a
+   task with an `expected_outcome` or `definition_of_done` still needs an attached
+   artifact.
+2. **Tokens are self-minted.** Any active member creates a token for themselves;
+   nobody can mint a token that acts as another person, including administrators.
+3. **A token sees only work assigned to its person.** New tasks are assigned to
+   that person by default.
+4. **Default lifetime is 90 days**, renewable, revocable at any time; maximum 365.
+5. **Agent actions are labeled as agent actions** in the record, not attributed to
+   the employee's own hand.
 
 ## Goals
 
@@ -41,35 +56,28 @@ and it is about access rather than data.
 
 ## Decisions made by the builder
 
-These are calls, not user agreements. They are recorded here so they can be
-rejected before implementation.
+These are calls, not user agreements, recorded so they can be rejected before
+implementation.
 
-1. **Tokens are self-minted.** Any active member can create a token for
-   themselves. Nobody can mint a token that acts as another person, including an
-   administrator. A future “agent service account” for organization automation is
-   a separate design.
-2. **The surface is separate from the app’s internal API.** Agent endpoints live
+1. **The surface is separate from the app’s internal API.** Agent endpoints live
    under `/api/agent/v1/*`; the internal `/api/work-os/*` routes keep their
    cookie/device-session contracts. Agent tokens are rejected by the internal
    guard, and app sessions are rejected by the agent guard.
-3. **A token sees only work assigned to its person.** List, read, update,
-   complete, progress, and activity all pass through the same person-scoped task
-   lookup the employee API already uses.
-4. **Agents may complete tasks.** Completion still passes the existing evidence
-   gate: a task with an `expected_outcome` or `definition_of_done` needs an
-   attached artifact. Attaching evidence and completing are separate operations,
-   so a failed completion retries without re-uploading.
-5. **Progress is evidence, not a new table.** A progress note is a
+2. **Progress is evidence, not a new table.** A progress note is a
    `work_evidence` row (`source = manual`, `metrics.origin = "agent_progress"`,
    token id in metrics). It is employee-authored context, never completion proof.
-6. **Tokens expire by default.** Default 90 days, maximum 365, revocable at any
-   time. `last_used_at` is written at most once per minute per token.
-7. **The OpenAPI file is the source of truth.** The schema lives in the repository
+3. **The OpenAPI file is the source of truth.** The schema lives in the repository
    and is served at `/api/agent/v1/openapi.yaml`. A test fails when a v1 route is
    missing from the spec or the spec names a route that does not exist.
-8. **MCP ships as a second phase of the same project.** REST and OpenAPI first;
-   the MCP shim reuses the same handlers and auth. This keeps the first release
-   small enough to verify end to end.
+4. **MCP ships as a second phase of the same project.** REST and OpenAPI first;
+   the MCP shim reuses the same handlers and auth.
+5. **Idempotency is transactional.** The idempotency row and the mutation commit
+   together, so a crash cannot create a task without its record.
+6. **Create is self-assigned and TASKS-only**, and `project_id` /
+   `parent_task_id` are create-only on update.
+7. **A batch counts as one request and one write** against the rate limit; the
+   20-operation cap is the bound.
+8. **`/me` needs no scope**, so a write-only token can still discover itself.
 
 ## Credential model
 
@@ -263,6 +271,22 @@ looked” read and the reason webhooks can wait.
 - Companion parity is a follow-up; the web personal settings are the first
   surface because token creation is a rare, deliberate action.
 
+## Provenance
+
+Agent writes stay distinguishable from the employee’s own actions:
+
+- `work_task_day_events.provenance` gains `agent` alongside `employee_explicit`;
+  completion and reopen events written through a token use it.
+- `work_task_blockers` gains a nullable `agent_token_id`; employee-created rows
+  keep it null.
+- `work_evidence.metrics` carries `agentTokenId` for progress notes and attached
+  evidence, in addition to `origin`.
+- The activity feed reports `actor: "agent"` when the row carries a token id, so
+  the record never implies the person clicked when an agent did.
+- EOD and report context may say “recorded through an agent token” but never
+  presents agent activity as the employee’s own hands-on work.
+- The audit log records the token id and name; it never records the secret.
+
 ## Audit, limits, and errors
 
 - `work_audit_log` actions: `agent_token.created`, `agent_token.revoked`,
@@ -305,19 +329,3 @@ looked” read and the reason webhooks can wait.
 - Contract: OpenAPI covers exactly the v1 routes and scopes.
 - Live: the end-to-end sequence above against the deployed app with a real token,
   including the failed-completion retry path and revocation.
-
-## Open questions for the user
-
-1. Should an agent be allowed to complete tasks, or only log progress? This design
-   allows completion with the existing evidence gate.
-2. Should tokens be self-minted only, or may an administrator mint a token bound
-   to another person for automation? This design is self-only.
-3. Should an agent see only tasks assigned to its person, or also unassigned work
-   it created earlier? This design is assigned-work only, with new tasks assigned
-   to the person by default.
-4. Default token lifetime: 90 days (this design) or no expiry?
-5. Should agent actions be labeled as agent actions in the employee record? Today
-   a completion is recorded with `provenance = employee_explicit`, and blockers
-   carry no actor beyond their person. A new `agent` provenance and token markers
-   would appear in the activity feed, EOD context, and audit. This design leaves
-   it unresolved because it is a truthfulness policy, not a technical default.
