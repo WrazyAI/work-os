@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.100 — 2026-10-21
+
+- Add task now sits in the list's own header, right of the status column, with views, search, and date range sharing the top row.
+
 ## 0.4.99 — 2026-10-21
 
 - Task views, search, date range, and Add task now stay on one row, with the Add task button matching the admin record.
