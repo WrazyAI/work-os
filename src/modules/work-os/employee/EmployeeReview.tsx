@@ -493,7 +493,7 @@ export default function EmployeeReview() {
               style={inputStyle}
             />
             {historical ? <SecondaryButton onClick={() => setSelectedDate(day.data?.shiftDate ?? "")}>Back to today</SecondaryButton> : null}
-            <IconButton label="Refresh review" onClick={() => { void refreshAttendance(); void refresh(); }} disabled={day.isFetching || selectedDay.isFetching}>
+            <IconButton label="Refresh review" onClick={() => { void refreshAttendance().then(refresh); }} disabled={day.isFetching || selectedDay.isFetching}>
               <RefreshCw size={15} className={day.isFetching || selectedDay.isFetching ? "animate-spin" : undefined} />
             </IconButton>
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />

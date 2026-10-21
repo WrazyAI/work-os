@@ -183,7 +183,15 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
     return { employee: previous.employee, projection: { ...previous.projection, observedAt }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
   }
   const pending = inflight.get(cacheKey);
-  if (pending) return pending;
+  if (pending) {
+    // A background read would normally be reused. A forced refresh asked for
+    // provider truth now, so it waits for that read and then asks again instead
+    // of accepting a status that may predate the change it is looking for.
+    if (!forceRefresh) return pending;
+    await pending.catch(() => undefined);
+    const startedAfter = inflight.get(cacheKey);
+    if (startedAfter) return startedAfter;
+  }
   const request = fetchEmployeeAttendance(employeeId, observedAt, cacheKey, bounds, previous, forceRefresh);
   inflight.set(cacheKey, request);
   try {

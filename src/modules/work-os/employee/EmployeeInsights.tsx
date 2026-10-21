@@ -159,7 +159,7 @@ export default function EmployeeInsights() {
               className={`${inputClass} w-auto`}
               style={inputStyle}
             />
-            <IconButton label="Refresh insights" onClick={() => { void refreshAttendance(); void refresh(); }} disabled={insights.isFetching}>
+            <IconButton label="Refresh insights" onClick={() => { void refreshAttendance().then(refresh); }} disabled={insights.isFetching}>
               <RefreshCw size={15} className={insights.isFetching ? "animate-spin" : undefined} />
             </IconButton>
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />

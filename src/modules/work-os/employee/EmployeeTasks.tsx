@@ -269,7 +269,7 @@ export default function EmployeeTasks() {
                 ) : null}
               </>
             ) : null}
-            <IconButton label="Refresh tasks" onClick={() => { void refreshAttendance(); void refresh(); }} disabled={scoped.isFetching || history.isFetching}>
+            <IconButton label="Refresh tasks" onClick={() => { void refreshAttendance().then(refresh); }} disabled={scoped.isFetching || history.isFetching}>
               <RefreshCw size={15} className={scoped.isFetching || history.isFetching ? "animate-spin" : undefined} />
             </IconButton>
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
