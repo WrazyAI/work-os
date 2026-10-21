@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RecapSpeechClip } from "./api";
-import { createRecapSpeechPlayer, type RecapAudio, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
+import { RECAP_SLOW_AFTER_MS, createRecapSpeechPlayer, type RecapAudio, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 
 function fakeAudio() {
   const listeners = new Map<string, Array<() => void>>();
@@ -130,6 +130,52 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().status).toBe("playing");
   });
 
+  it("says it is taking longer only after the usual window, and keeps the request alive", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolve: (clip: RecapSpeechClip) => void = () => undefined;
+      const h = harness({ fetchClip: () => new Promise<RecapSpeechClip>((done) => { resolve = done; }) });
+      const pending = h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+      expect(h.player.snapshot().slow).toBe(false);
+      vi.advanceTimersByTime(RECAP_SLOW_AFTER_MS - 1);
+      expect(h.player.snapshot().slow).toBe(false);
+      vi.advanceTimersByTime(1);
+      // Past the expected wait the bubble says so, but the request is still
+      // wanted: the provider is never cut off at the hint.
+      expect(h.player.snapshot().slow).toBe(true);
+      expect(h.player.snapshot().status).toBe("loading");
+      resolve({ bytes: new ArrayBuffer(8), mimeType: "audio/wav", lines: [{ text: "Lead", time: null }], revision: 1, stale: false });
+      await pending;
+      expect(h.player.snapshot().status).toBe("playing");
+      expect(h.player.snapshot().slow).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancel leaves the synthesis running and marks the recap for another try", async () => {
+    let resolve: (clip: RecapSpeechClip) => void = () => undefined;
+    const h = harness({ fetchClip: () => new Promise<RecapSpeechClip>((done) => { resolve = done; }) });
+    const pending = h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    h.player.stop();
+    expect(h.player.snapshot().status).toBe("idle");
+    expect(h.player.snapshot().retryIntervalId).toBe("interval-1");
+    // The request was not abandoned; its clip simply arrives too late to play.
+    resolve({ bytes: new ArrayBuffer(8), mimeType: "audio/wav", lines: [{ text: "Lead", time: null }], revision: 1, stale: false });
+    await pending;
+    expect(h.audios.every((audio) => audio.played === 0)).toBe(true);
+    // Trying again clears the marker for the length of the new attempt.
+    void h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    expect(h.player.snapshot().retryIntervalId).toBeNull();
+  });
+
+  it("stopping a read that is already playing is not a retry", async () => {
+    const h = harness();
+    await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    h.player.stop();
+    expect(h.player.snapshot().retryIntervalId).toBeNull();
+  });
+
   it("a failed read tells the employee, stays retryable, and leaves no audio playing", async () => {
     let fail = true;
     const h = harness({
@@ -141,6 +187,7 @@ describe("recap speech player", () => {
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
     expect(h.failures).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
     expect(h.player.snapshot().status).toBe("idle");
+    expect(h.player.snapshot().retryIntervalId).toBe("interval-1");
     expect(h.audios[0].paused).toBeGreaterThan(0);
     fail = false;
     await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });

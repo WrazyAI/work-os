@@ -9,7 +9,7 @@ import { prefersReducedMotion } from "./listShift";
 import { apiRequestAudio } from "./api";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Check, History, SquarePen, X } from "lucide-react";
+import { Check, History, RotateCcw, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
@@ -31,7 +31,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapLiveFixtureRequested, avatarRecapNoVoiceFixtureFacts, avatarRecapNoVoiceFixtureRequested, avatarRecapReadingDoneFixtureRequested, avatarRecapReadingFixtureLines, avatarRecapReadingFixtureRequested, avatarRecapReadingStillFixtureRequested, AVATAR_RECAP_READING_SAMPLE, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapLiveFixtureRequested, avatarRecapNoVoiceFixtureFacts, avatarRecapNoVoiceFixtureRequested, avatarRecapReadingDoneFixtureRequested, avatarRecapReadingFixtureLines, avatarRecapReadingFixtureRequested, avatarRecapReadingStillFixtureRequested, avatarRecapRetryFixtureRequested, avatarRecapSlowFixtureRequested, AVATAR_RECAP_READING_SAMPLE, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -211,15 +211,24 @@ export default function AvatarApp(): React.ReactElement {
   // audio's own progress, and one player owns this window's only audio element.
   const avatarRecapReadingStillFixture = avatarRecapReadingStillFixtureRequested(window.location.search);
   const avatarRecapReadingDoneFixture = avatarRecapReadingDoneFixtureRequested(window.location.search);
-  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>(avatarRecapReadingDoneFixture
+  const avatarRecapSlowFixture = avatarRecapSlowFixtureRequested(window.location.search);
+  const avatarRecapRetryFixture = avatarRecapRetryFixtureRequested(window.location.search);
+  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>(avatarRecapSlowFixture
+    // The wait has passed the usual window: the quiet line and Cancel are up.
+    ? { status: "loading", lines: [], progress: 0, activeIndex: 0, revision: 1, intervalId: "fixture-recap", slow: true, retryIntervalId: null }
+    : avatarRecapRetryFixture
+      // The read was cancelled or failed: the recap stays, the control offers
+      // another try (the API/fixture is never called by this frame).
+      ? { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: "fixture-recap" }
+      : avatarRecapReadingDoneFixture
     // The finished frame: the words stay on screen and the ask is up, exactly as
     // it is the moment the voice stops.
-    ? { status: "finished", lines: avatarRecapReadingFixtureLines(), progress: 1, activeIndex: 4, revision: 1, intervalId: "fixture-recap" }
+    ? { status: "finished", lines: avatarRecapReadingFixtureLines(), progress: 1, activeIndex: 4, revision: 1, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
     : avatarRecapReadingStillFixture
       // The frozen frame: mid-read, no audio, so the prompter's shape can be
       // reviewed without a session, a provider call, or a browser gesture.
-      ? { status: "playing", lines: avatarRecapReadingFixtureLines(), progress: 0.42, activeIndex: 2, revision: 1, intervalId: "fixture-recap" }
-      : { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null });
+      ? { status: "playing", lines: avatarRecapReadingFixtureLines(), progress: 0.42, activeIndex: 2, revision: 1, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
+      : { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const recapVoiceRef = useRef<string>(recapVoice);
   recapVoiceRef.current = recapVoice;
@@ -262,6 +271,16 @@ export default function AvatarApp(): React.ReactElement {
   const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarRecapReadingFixture || avatarRecapNoVoiceFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
+  /* A failed or cancelled read is acknowledged by the mascot itself: its own
+     warning state for half a second, then back to the state it was in. */
+  const [recapFlash, setRecapFlash] = useState(false);
+  const recapFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashRecapFailure = useCallback(() => {
+    setRecapFlash(true);
+    if (recapFlashTimer.current) clearTimeout(recapFlashTimer.current);
+    recapFlashTimer.current = setTimeout(() => setRecapFlash(false), 500);
+  }, []);
+  useEffect(() => () => { if (recapFlashTimer.current) clearTimeout(recapFlashTimer.current); }, []);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [scrollToLatest, setScrollToLatest] = useState(0);
   /* Voice input (design §8.8): the transcript lands in the draft for review;
@@ -281,13 +300,22 @@ export default function AvatarApp(): React.ReactElement {
       : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
     createAudio: browserRecapAudio,
     onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
-    onFailure: (message) => setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]),
+    onFailure: (message) => {
+      flashRecapFailure();
+      setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]);
+    },
     onStaleCard: () => { void loadDayRef.current?.(true); },
   }));
   const toggleRecapRead = useCallback((intervalId: string, revision: number | null): void => {
     void recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
   }, [recapPlayer, facts.voiceAvailable]);
   const stopRecapRead = useCallback((): void => recapPlayer.stop(), [recapPlayer]);
+  /** Leaving a wait is a failure-shaped moment for the mascot, even though the
+   * synthesis itself keeps running for the retry. */
+  const cancelRecapWait = useCallback((): void => {
+    if (recapPlayer.snapshot().status === "loading") flashRecapFailure();
+    recapPlayer.stop();
+  }, [flashRecapFailure, recapPlayer]);
 
   const voice = useVoiceInput({
     enabled: facts.voiceAvailable,
@@ -1835,6 +1863,9 @@ export default function AvatarApp(): React.ReactElement {
     return entry?.activityInterval ?? null;
   }, [activityPrompt, chat]);
   const bubble = avatarBubble({ preparing: activityPreparing, eodDue, recapReady: pendingRecap !== null, promptDue: attentionDue });
+  /* The last read of this recap was cancelled while it was still preparing, or
+     failed: the control offers another try instead of pretending it never ran. */
+  const recapRetry = pendingRecap !== null && recapSpeech.retryIntervalId === pendingRecap.id;
   useEffect(() => {
     const recap = activityPrompt;
     // A recap gets its own stable turn so it survives the prompt being claimed
@@ -1924,7 +1955,7 @@ export default function AvatarApp(): React.ReactElement {
     facts: { ...facts, connected: connected === true && facts.loaded,
       promptKind: contextualPrompt.kind, promptRequired: attentionDue, eodOutstanding: eodDue },
     working: thinking || filing || activityPreparing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
-    failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
+    failed: recapFlash || daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
     needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
       || chat.some((entry) => hasPendingMascotApproval(entry.operations, entry.toolResults)),
@@ -2085,10 +2116,12 @@ export default function AvatarApp(): React.ReactElement {
                 {facts.voiceAvailable && <button
                   type="button"
                   className="avatar-bubble-listen"
-                  title="Hear this recap instead of reading it"
-                  aria-label={`Listen to ${pendingRecap.label ?? "this recap"}`}
+                  title={recapRetry ? "Try reading this recap again" : "Hear this recap instead of reading it"}
+                  aria-label={recapRetry
+                    ? `Try again to read the recap for ${pendingRecap.label ?? "this interval"}`
+                    : `Listen to ${pendingRecap.label ?? "this recap"}`}
                   onClick={() => toggleRecapRead(pendingRecap.id, pendingRecap.revision ?? null)}
-                >Listen</button>}
+                >{recapRetry ? <><RotateCcw size={13} aria-hidden="true" />Try again</> : "Listen"}</button>}
               </div>
             </> : recapSpeech.status === "finished" ? <>
               {recapSpeech.lines.length > 0 && <RecapPrompter
@@ -2121,8 +2154,16 @@ export default function AvatarApp(): React.ReactElement {
               <div className="avatar-bubble-reading">
                 <span className="avatar-reading-dots" aria-hidden="true"><i /><i /><i /><i /><i /></span>
                 <span className="avatar-reading-label">{recapSpeech.status === "playing" ? "Otto is reading" : "Getting your recap…"}</span>
-                <button type="button" className="avatar-bubble-stop" onClick={stopRecapRead}>Stop</button>
+                {!(recapSpeech.status === "loading" && recapSpeech.slow) && <button type="button" className="avatar-bubble-stop" onClick={cancelRecapWait}>Stop</button>}
               </div>
+              {recapSpeech.status === "loading" && recapSpeech.slow ? (
+                /* Past the usual wait: say so quietly, and give the employee a
+                   way back that leaves the synthesis running for the retry. */
+                <div className="avatar-bubble-slow">
+                  <span>Taking longer than usual</span>
+                  <button type="button" className="avatar-bubble-cancel" onClick={cancelRecapWait}>Cancel</button>
+                </div>
+              ) : null}
               {recapSpeech.lines.length > 0 && <RecapPrompter
                 lines={recapSpeech.lines}
                 progress={recapSpeech.progress}

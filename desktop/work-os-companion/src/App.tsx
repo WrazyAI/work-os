@@ -4699,7 +4699,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
      gesture while the clip is synthesized), and a visible reason when a read
      cannot start instead of a silent press. */
   const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>({
-    status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null,
+    status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null,
   });
   const [recapSpeechError, setRecapSpeechError] = useState<string | null>(null);
   const [recapPlayer] = useState(() => createRecapSpeechPlayer({

@@ -292,6 +292,9 @@ body.avatar-window {
 }
 .avatar-bubble-actions .avatar-bubble-more { margin-top: 0; }
 .avatar-bubble-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid rgba(244, 245, 238, 0.28);
   border-radius: 8px;
   padding: 4px 10px;
@@ -324,6 +327,27 @@ body.avatar-window {
 }
 .avatar-bubble-stop:hover { border-color: rgba(244, 245, 238, 0.5); }
 .avatar-bubble-stop:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
+/* Past the usual wait: a quiet line and a way out, never a second loud control. */
+.avatar-bubble-slow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+  color: rgba(244, 245, 238, 0.6);
+  font: 500 11px/1.35 Manrope, Inter, sans-serif;
+}
+.avatar-bubble-cancel {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.avatar-bubble-cancel:hover { color: #f4f5ee; }
+.avatar-bubble-cancel:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 2px; }
 /* The decision the listen was for: asked in the bubble, with the words still
    above it, so confirming never means opening anything else. */
 .avatar-bubble-ask {

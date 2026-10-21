@@ -50,6 +50,10 @@ export const AVATAR_RECAP_LIVE_FIXTURE = "recap-live";
 /** The same recap in a workspace where reading aloud is switched off: the
  * bubble offers View more but no Listen, so the negative case is reviewable. */
 export const AVATAR_RECAP_NO_VOICE_FIXTURE = "recap-no-voice";
+/** The wait past the usual window: the quiet "taking longer" line and Cancel. */
+export const AVATAR_RECAP_SLOW_FIXTURE = "recap-reading-slow";
+/** The bubble after a cancelled or failed read: View more + Try again. */
+export const AVATAR_RECAP_RETRY_FIXTURE = "recap-reading-retry";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
@@ -126,7 +130,19 @@ export function avatarRecapReadingFixtureRequested(search: string): boolean {
     || fixture === AVATAR_RECAP_READING_STILL_FIXTURE
     || fixture === AVATAR_RECAP_READING_DONE_FIXTURE
     || fixture === AVATAR_RECAP_LIVE_FIXTURE
-    || fixture === AVATAR_RECAP_NO_VOICE_FIXTURE;
+    || fixture === AVATAR_RECAP_NO_VOICE_FIXTURE
+    || fixture === AVATAR_RECAP_SLOW_FIXTURE
+    || fixture === AVATAR_RECAP_RETRY_FIXTURE;
+}
+
+export function avatarRecapSlowFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_SLOW_FIXTURE;
+}
+
+export function avatarRecapRetryFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_RETRY_FIXTURE;
 }
 
 /** True only for the no-voice preview. */
