@@ -414,30 +414,6 @@ export async function getWorkOsProposal(access: WorkOsAccess, proposalId: string
   return { ...data, create_intent_unresolved: proposalCreateIntentUnresolved(data as Json) };
 }
 
-/** Fenced write of the provider task id onto the applying proposal. Returns
- * false when the lease moved on, so a stale worker never overwrites the live
- * attempt's outbox anchor. */
-async function rememberProviderTaskId(proposalId: string, providerTaskId: string, applyAttempt: string): Promise<boolean> {
-  const { data, error } = await db().from("work_task_proposals").update({
-    provider_task_id: providerTaskId,
-    provider_create_issued_at: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("id").maybeSingle();
-  if (error) throw new Error(`record provider task id: ${error.message}`);
-  return Boolean(data);
-}
-
-/** Fenced record that a provider create is about to be dispatched. From here
- * on a retry must never POST again until the outcome is known: the id write
- * (above) or a definite rejection (below) resolves the intent. */
-async function rememberProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<boolean> {
-  const { data, error } = await db().from("work_task_proposals").update({
-    provider_create_issued_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("id").maybeSingle();
-  if (error) throw new Error(`record provider create intent: ${error.message}`);
-  return Boolean(data);
-}
 
 /** Truthy when a timestamp column is set. The pg driver returns timestamptz
  * columns as Date objects, so a string-only check silently reads null. */
@@ -452,16 +428,6 @@ function hasTimestamp(value: unknown): boolean {
  * offers the employee the clear-and-retry recovery instead of a dead end. */
 export function proposalCreateIntentUnresolved(row: Json): boolean {
   return row.operation === "create_task" && hasTimestamp(row.provider_create_issued_at);
-}
-
-/** A definite rejection (HTTP 4xx) proves no task was created, so the intent is
- * cleared and a corrected retry may POST again. */
-async function clearProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<void> {
-  const { error } = await db().from("work_task_proposals").update({
-    provider_create_issued_at: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt);
-  if (error) throw new Error(`clear provider create intent: ${error.message}`);
 }
 
 async function applyProposal(
@@ -494,96 +460,23 @@ async function applyProposal(
     return listWorkOsEmployeeTaskSelection(access, change.view === "overdue" ? "overdue" : "pending", change.limit);
   }
   if (operation === "create_task") {
-    if (change.task_authority === "work_os") {
-      const marker = `Work OS proposal: ${proposal.id}`;
-      const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
-        .eq("organization_id", access.organizationId)
-        .eq("provider", "local")
-        .contains("raw", { proposalId: proposal.id })
-        .maybeSingle();
-      if (existingError) throw new Error(`reconcile Work OS task proposal: ${existingError.message}`);
-      if (existing) return existing;
-      return createWorkOsEmployeeTask(access, {
-        ...change,
-        description: [text(change.description), marker].filter(Boolean).join("\n\n"),
-        assignee_person_ids: access.personId ? [access.personId] : [],
-        local_proposal_id: proposal.id,
-      });
-    }
-    if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
+    // Work OS owns task creation now: Nifty is a read-only backup, so every
+    // proposal lands in the local record even when a legacy change omits
+    // task_authority.
     const marker = `Work OS proposal: ${proposal.id}`;
-    const body = {
+    const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
+      .eq("organization_id", access.organizationId)
+      .eq("provider", "local")
+      .contains("raw", { proposalId: proposal.id })
+      .maybeSingle();
+    if (existingError) throw new Error(`reconcile Work OS task proposal: ${existingError.message}`);
+    if (existing) return existing;
+    return createWorkOsEmployeeTask(access, {
       ...change,
       description: [text(change.description), marker].filter(Boolean).join("\n\n"),
-    };
-    // Outbox replay: this proposal already created its provider task. Adopt it
-    // instead of issuing a second Nifty POST; the tail fills in anything the
-    // interrupted attempt had not written yet.
-    const recordedProviderId = text(proposal.provider_task_id);
-    if (recordedProviderId) return adoptProviderTask(ownerId, recordedProviderId, body);
-    // A full provider sync does not belong in a request path: the local
-    // mirror already holds anything a previous attempt created, so the
-    // marker lookup alone reconciles a retry after an interrupted filing.
-    const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
-      .eq("organization_id", access.organizationId).ilike("description", `%${marker}%`).maybeSingle();
-    if (existingError) throw new Error(`reconcile Nifty task proposal: ${existingError.message}`);
-    if (existing) {
-      // Upgrade the mirror-era reconcile to an id-based anchor so later retries
-      // never depend on the marker text surviving in Nifty.
-      if (text(existing.provider_task_id)) await rememberProviderTaskId(proposal.id as string, String(existing.provider_task_id), applyAttempt);
-      return existing;
-    }
-    // A previous attempt recorded that it dispatched a create without ever
-    // recording the created id. Its listing is allowed to lag the creation, so
-    // search patiently across bounded retries — and NEVER POST again from an
-    // unresolved intent. A duplicate is worse than a retry.
-    const createIssued = hasTimestamp((proposal as Json).provider_create_issued_at);
-    const orphan = opts.firstAttempt
-      ? null
-      : await findNiftyTaskByMarker(ownerId, marker, {
-          projectId: text(change.project_id) ?? undefined,
-          taskGroupId: text(change.task_group_id) ?? undefined,
-          ...(createIssued ? { retries: 3, retryDelayMs: 1_500 } : {}),
-        });
-    if (orphan) {
-      await rememberProviderTaskId(proposal.id as string, orphan.id, applyAttempt);
-      return adoptProviderTask(ownerId, orphan.id, body);
-    }
-    if (createIssued && !opts.confirmedNoTaskCreated) {
-      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet. Retry to adopt it if it exists, or confirm nothing was created to clear the recorded attempt and file it once.");
-    }
-    if (createIssued) {
-      // The employee confirmed Nifty holds no such task. Clear the recorded
-      // intent — fenced to this attempt — so the create below may POST again.
-      await clearProviderCreateIssued(proposal.id as string, applyAttempt);
-      await audit(access, "proposal.create_intent_cleared", "task_proposal", proposal.id as string, { operation });
-    }
-    try {
-      return await createTask(ownerId, body, {
-        beforeProviderCreate: async () => {
-          if (!await rememberProviderCreateIssued(proposal.id as string, applyAttempt)) {
-            throw new Error("The proposal lease moved to another attempt before the task could be created.");
-          }
-        },
-        onProviderTaskCreated: async (providerTaskId) => {
-          if (!await rememberProviderTaskId(proposal.id as string, providerTaskId, applyAttempt)) {
-            throw new Error("The proposal lease moved to another attempt before the created task could be recorded.");
-          }
-        },
-      });
-    } catch (error) {
-      if (providerCreateFailureDefinite(error)) {
-        try {
-          await clearProviderCreateIssued(proposal.id as string, applyAttempt);
-        } catch (clearError) {
-          // Never let the clear failure hide the provider's real rejection: its
-          // message drives needs_review classification and what the employee sees.
-          const clearReason = clearError instanceof Error ? clearError.message : "the clear request failed";
-          throw new Error(`${error instanceof Error ? error.message : String(error)} (clearing the recorded create intent also failed: ${clearReason})`);
-        }
-      }
-      throw error;
-    }
+      assignee_person_ids: access.personId ? [access.personId] : [],
+      local_proposal_id: proposal.id,
+    });
   }
   if (!taskId) throw new Error("proposal task is required");
   if (operation === "add_subtask") {

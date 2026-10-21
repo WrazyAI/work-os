@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, PlugZap, RefreshCw, ShieldCheck, Users, UsersRound } from "lucide-react";
+import { Cable, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
-import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, niftySyncReceipt, workspaceDegradedNotice } from "./adminNotifications";
+import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, workspaceDegradedNotice } from "./adminNotifications";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -23,7 +23,6 @@ import {
   relativeTime,
   saveOrganizationFeatures,
   statusLabel,
-  syncNiftyTasks,
 } from "./data";
 import { AdminButton, AdminCard, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
 
@@ -107,17 +106,6 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
       }
     },
   });
-  // The sync is fire-and-forget — the operator presses it and moves on — so its
-  // failure raises a flyout as well; the card's inline notice stays for retry.
-  const sync = useMutation({
-    mutationFn: () => syncNiftyTasks(),
-    onSuccess: (result) => {
-      invalidate();
-      notifications.success(niftySyncReceipt(result), "Nifty sync finished");
-    },
-    onError: (error) => notifications.error((error as Error).message, "Nifty sync failed"),
-  });
-
   // One standing condition for this page: the workspace status endpoint says
   // the schema or the Nifty connection is degraded. Stable key, cleared when
   // the status is healthy again.
@@ -148,12 +136,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
       <AdminCard
         icon={ShieldCheck}
         title="Workspace status"
-        detail="Schema readiness and the Nifty connection behind the task record"
-        action={
-          <AdminButton variant="secondary" icon={RefreshCw} disabled={sync.isPending || !status.data?.schema?.ready} onClick={() => sync.mutate()}>
-            {sync.isPending ? "Syncing…" : "Sync Nifty"}
-          </AdminButton>
-        }
+        detail="Schema readiness and the read-only Nifty backup"
       >
         {status.isLoading || organization.isLoading ? (
           <Skeleton className="h-16" />
@@ -165,7 +148,6 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
             <Pill>slug {organization.data?.organization?.slug || "—"}</Pill>
           </div>
         )}
-        {sync.error ? <Notice tone="err">{(sync.error as Error).message}</Notice> : null}
       </AdminCard>
 
       <AdminCard icon={PlugZap} title="Features" detail="One switch per workspace capability; changes apply to every member">

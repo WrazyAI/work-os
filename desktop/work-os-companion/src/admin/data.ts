@@ -173,7 +173,6 @@ export const organizationAction = (body: Record<string, unknown>) => send<Record
 export const organizationMembershipPatch = (body: Record<string, unknown>) => send<Record<string, unknown>>("/api/work-os/organization", "PATCH", body);
 export const requestScreenshotAccess = (summaryId: string, reason: string) =>
   send<{ url: string }>(`/api/work-os/evidence/screenshots/${encodeURIComponent(summaryId)}/access`, "POST", { reason });
-export const syncNiftyTasks = () => send<Record<string, unknown>>("/api/work-os/nifty/sync", "POST");
 
 /* --- Response normalizers ------------------------------------------------
  *

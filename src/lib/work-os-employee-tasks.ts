@@ -13,7 +13,7 @@ import {
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
-import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
+import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { syncPlanItemCompletion } from "@/lib/work-os-plan-items";
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
@@ -333,6 +333,8 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   const options = await getWorkOsTaskCreationOptions(access);
   const allowedPeople = new Map(options.people.map((person) => [person.id, person]));
   const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
+  // New work belongs to TASKS; a subtask inherits its parent's project instead.
+  const requestedProjectId = text(body.project_id);
   const parentId = text(body.parent_task_id);
   let parent: Json | null = null;
   if (parentId) {
@@ -352,7 +354,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
     expectedOutcome: text(body.expected_outcome),
     definitionOfDone: text(body.definition_of_done),
     taskGroupId: text(body.task_group_id),
-    projectId: text(body.project_id),
+    projectId: requestedProjectId ?? (parent ? null : await defaultWorkOsTaskProjectId(access.organizationId)),
     providerProjectId: text(parent?.provider_project_id),
     parent,
     raw: text(body.local_proposal_id) ? { proposalId: text(body.local_proposal_id), source: "work_os_proposal" } : undefined,

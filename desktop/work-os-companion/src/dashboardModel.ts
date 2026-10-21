@@ -238,13 +238,14 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
     if (isOverdueTask(task, input.currentDate)) overdueById.set(uniqueTaskKey(task), task);
   }
 
+  const localAuthority = (input.niftySync as { authority?: string } | undefined)?.authority === "work_os";
   const sync = input.niftySync?.error
-    ? { label: "Sync delayed", tone: "danger" as const, detail: input.niftySync.error }
+    ? { label: "Save delayed", tone: "danger" as const, detail: input.niftySync.error }
     : input.niftySync?.syncing
-      ? { label: "Syncing", tone: "warning" as const, detail: "Refreshing task records" }
+      ? { label: "Saving", tone: "warning" as const, detail: "Refreshing task records" }
       : input.niftySync?.fresh
-        ? { label: "Synced", tone: "signal" as const, detail: input.niftySync.syncedAt ? `Updated ${formatWorkOsDateTime(input.niftySync.syncedAt, input.timezone ?? input.shift?.timezone ?? undefined, "—", new Date(now))}` : "Task records are current" }
-        : { label: "Sync status unknown", tone: "quiet" as const, detail: "Task freshness is unavailable" };
+        ? { label: localAuthority ? "Saved" : "Synced", tone: "signal" as const, detail: input.niftySync.syncedAt ? `Updated ${formatWorkOsDateTime(input.niftySync.syncedAt, input.timezone ?? input.shift?.timezone ?? undefined, "—", new Date(now))}` : "Task records are current" }
+        : { label: "Save status unknown", tone: "quiet" as const, detail: "Task freshness is unavailable" };
 
   const focusText = safeTaskText(input.focus, "Your open tasks define today’s work.");
   const focusSource = safeTaskText(input.focusSource, "Task record");

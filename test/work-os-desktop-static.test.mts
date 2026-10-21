@@ -477,9 +477,11 @@ assert.doesNotMatch(webEmployee, /body: \{ action: workSession\?\.state === "pau
 
 const companionModules = ["day-view", "checkins", "proposals", "eod", "employee-tasks", "schedules"];
 const companionServer = companionModules.map((m) => readFileSync(resolve(import.meta.dirname, `../src/lib/work-os-${m}.ts`), "utf8")).join("\n");
-assert.match(companionServer, /dedupedProviderRefresh/);
-assert.match(companionServer, /void dedupedProviderRefresh/);
-assert.match(companionServer, /syncing: options\.refreshNifty \|\| providerRefreshRunning \|\| !niftyFresh/);
+// The task record is local: no request path refreshes from a provider, and the
+// day view reports the record's own save authority.
+assert.match(companionServer, /authority: "work_os"/);
+assert.doesNotMatch(companionServer, /dedupedProviderRefresh/);
+assert.doesNotMatch(companionServer, /syncing: options\.refreshNifty/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.doesNotMatch(companionServer, /await niftySyncPromise/);
 assert.match(companionServer, /role", "admin"/);

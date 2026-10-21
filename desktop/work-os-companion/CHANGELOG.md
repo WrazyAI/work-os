@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.88 — 2026-10-21
+
+- New tasks now land in the TASKS project automatically, and your task record is kept in Work OS — Nifty is only a read-only backup.
+
 ## 0.4.87 — 2026-10-20
 
 - You can clock out from the companion again.

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
-import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
+import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     const parent = typeof body.parent_task_id === "string" && body.parent_task_id.trim()
       ? await getTaskByLocalOrProviderId(ownerId, body.parent_task_id.trim())
       : null;
+    const requestedProjectId = typeof body.project_id === "string" && body.project_id.trim() ? body.project_id.trim() : null;
     const task = await createLocalWorkOsTask(auth.access, {
       title: String(body.name ?? ""),
       description: typeof body.description === "string" ? body.description : null,
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
       storyPoints: typeof body.story_points === "number" ? body.story_points : null,
       expectedOutcome: typeof body.expected_outcome === "string" ? body.expected_outcome : null,
       definitionOfDone: typeof body.definition_of_done === "string" ? body.definition_of_done : null,
-      projectId: typeof body.project_id === "string" ? body.project_id : null,
+      projectId: requestedProjectId ?? (parent ? null : await defaultWorkOsTaskProjectId(auth.access.organizationId)),
       assigneePersonIds: Array.isArray(body.assignee_person_ids) ? body.assignee_person_ids.filter((value: unknown): value is string => typeof value === "string") : [],
       parent,
       raw: { source: "work_os_admin" },

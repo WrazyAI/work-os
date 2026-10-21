@@ -1,8 +1,6 @@
 import {
   listEvidence,
   listPersonTasks,
-  syncNifty,
-  syncNiftyPersonTasks,
 } from "@/lib/work-os";
 import { localDateForTimezone, resolveShiftWindow, resolveShiftWindowForDate } from "@/modules/work-os/companion";
 import { getWorkday } from "@/lib/work-os-workday";
@@ -12,42 +10,6 @@ import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { db, dateOnly, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { suppressPromptForSubmittedEod } from "@/modules/work-os/workday";
-
-const NIFTY_FRESH_MS = 5 * 60_000;
-const niftyRefreshes = new Map<string, Promise<void>>();
-
-async function recordNiftySyncError(organizationId: string, message: string) {
-  try {
-    await db().from("work_organizations").update({
-      nifty_sync_error: message,
-      updated_at: new Date().toISOString(),
-    }).eq("id", organizationId);
-  } catch (error) {
-    console.error("[work-os] could not record Nifty sync error", { organizationId, error });
-  }
-}
-
-/** Runs one provider refresh per organization at a time. Never awaited by a
- * request path: the dashboard renders current (truthful, timestamped) data and
- * the refresh lands in the background. */
-function dedupedProviderRefresh(organizationId: string, run: () => Promise<unknown>) {
-  const existing = niftyRefreshes.get(organizationId);
-  if (existing) return existing;
-  const refresh = (async () => {
-    try {
-      await run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Nifty sync failed";
-      console.error("[work-os] background Nifty refresh failed", { organizationId, message });
-      await recordNiftySyncError(organizationId, message);
-      throw error;
-    } finally {
-      niftyRefreshes.delete(organizationId);
-    }
-  })();
-  niftyRefreshes.set(organizationId, refresh);
-  return refresh;
-}
 
 export async function getWorkOsDay(
   access: WorkOsAccess,
@@ -82,35 +44,21 @@ export async function getWorkOsDay(
   const dayShift = resolveShiftWindowForDate(rules, exceptions, shiftDate)
     ?? resolveShiftWindowForDate(rules, exceptions, previousShiftDate.toISOString().slice(0, 10));
   const ownerId = await ownerIdPromise;
-  const [latestTaskResult, latestProjectResult, organizationSyncResult] = await Promise.all([
-    db().from("work_tasks").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
-    db().from("work_projects").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
-    db().from("work_organizations").select("nifty_synced_at,nifty_sync_error").eq("id", access.organizationId).single(),
-  ]);
-  if (latestTaskResult.error) throw new Error(`load Nifty task freshness: ${latestTaskResult.error.message}`);
-  if (latestProjectResult.error) throw new Error(`load Nifty project freshness: ${latestProjectResult.error.message}`);
-  if (organizationSyncResult.error) throw new Error(`load Nifty organization freshness: ${organizationSyncResult.error.message}`);
-  const latestTask = latestTaskResult.data;
-  const latestProject = latestProjectResult.data;
-  const lastSyncedAt = [latestTask?.synced_at, latestProject?.synced_at, organizationSyncResult.data.nifty_synced_at].filter(Boolean).sort().at(-1) as string | undefined;
-  const effectiveLastSyncedAt = lastSyncedAt;
-  const niftyFresh = !!effectiveLastSyncedAt && Date.now() - new Date(effectiveLastSyncedAt).getTime() < NIFTY_FRESH_MS;
-  const providerRefreshRunning = niftyRefreshes.has(access.organizationId);
-  if (options.refreshNifty) {
-    // Explicit refresh: targeted person sync, then the full org mirror.
-    void dedupedProviderRefresh(access.organizationId, async () => {
-      await syncNiftyPersonTasks(ownerId, personId);
-      await syncNifty(ownerId);
-    }).catch(() => undefined);
-  } else if (!niftyFresh) {
-    void dedupedProviderRefresh(access.organizationId, () => syncNifty(ownerId)).catch(() => undefined);
-  }
+  const latestTaskResult = await db().from("work_tasks")
+    .select("updated_at")
+    .eq("organization_id", access.organizationId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestTaskResult.error) throw new Error(`load task freshness: ${latestTaskResult.error.message}`);
+  // Tasks are local now: the record's own last write is the freshness that
+  // matters. Nifty is a read-only backup, never a refresh source.
+  const localSavedAt = latestTaskResult.data?.updated_at as string | undefined;
   const niftySync: Json = {
-    fresh: niftyFresh,
-    syncing: options.refreshNifty || providerRefreshRunning || !niftyFresh,
-    syncedAt: effectiveLastSyncedAt ?? null,
-    authority: "nifty",
-    ...(organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
+    fresh: true,
+    syncing: false,
+    syncedAt: localSavedAt ?? null,
+    authority: "work_os",
   };
   const [taskHistory, evidence, proposalsResult, reportResult, workspace] = await Promise.all([
     options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 50 }),

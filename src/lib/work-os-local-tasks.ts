@@ -148,6 +148,21 @@ async function validateLocalTaskProject(access: WorkOsAccess, projectId: string 
   return id;
 }
 
+/** The one project that owns newly created organization work. The legacy
+ * provider mirrored six, but only TASKS is a decision the caller should never
+ * have to make. Returns null when the workspace has not materialized it yet. */
+export async function defaultWorkOsTaskProjectId(organizationId: string) {
+  const result = await db().from("work_projects").select("id")
+    .eq("organization_id", organizationId)
+    .eq("archived", false)
+    .ilike("name", "TASKS")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (result.error) throw new Error(`resolve the TASKS project: ${result.error.message}`);
+  return result.data?.id ? String(result.data.id) : null;
+}
+
 /** A subtask lives in its parent's project. A caller may omit the project — it
  * is inherited — but must never override it with a different one. Top-level
  * tasks have no parent to inherit from. */

@@ -59,7 +59,7 @@ describe("buildWorkdayDashboardModel", () => {
     expect(model.state).toBe("paused");
     expect(model.stateTone).toBe("warning");
     expect(model.stateDetail).toContain("Worktivity confirms your break");
-    expect(model.sync).toMatchObject({ label: "Sync delayed", tone: "danger" });
+    expect(model.sync).toMatchObject({ label: "Save delayed", tone: "danger" });
   });
 
   it("uses an explicit observed-only state without converting it to a session", () => {
