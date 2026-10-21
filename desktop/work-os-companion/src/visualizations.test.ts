@@ -399,10 +399,9 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toMatch(/\.task-list-controls \{[\s\S]*?justify-content: flex-end;/);
     expect(dashboardStyles).toContain(".task-list-controls .task-search { flex: 0 1 190px;");
     expect(dashboardStyles).toContain(".task-list-panel { padding: 0;");
-    // The peer-view tablist keeps one tab stop and follows ←/→/Home/End.
-    expect(app).toContain('event.key === "ArrowRight"');
-    expect(app).toContain('event.key === "Home"');
-    expect(app).toContain("taskTabRefs.current[next]?.focus()");
+    // The peer-view tablist delegates its index math to the tested helper.
+    expect(app).toContain("taskViewTabIndex(index, event.key, chipCounts.length)");
+    expect(app).toContain("requestAnimationFrame(() => taskTabRefs.current[next]?.focus())");
     // Status labels center inside their pill instead of hugging the top edge.
     expect(dashboardStyles).toContain(".task-state { display: inline-flex; align-items: center; justify-content: center;");
     expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);

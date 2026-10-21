@@ -89,8 +89,9 @@ describe("Tasks workspace filters", () => {
     expect(header).toContain('aria-label="Search tasks"');
     expect(header).toContain("Date range");
     expect(header).toContain("Add task");
-    expect(header).toContain('tabindex="0"');
-    expect(header).toContain('tabindex="-1"');
+    const selectedTab = header.match(/<button[^>]*aria-selected="true"[^>]*>/)?.[0] ?? "";
+    expect(selectedTab).toContain('tabindex="0"');
+    expect(header.match(/tabindex="-1"/g)?.length).toBe(3);
     expect(header).toContain('aria-selected="true"');
     expect(header).toContain('aria-controls="task-list-panel"');
     expect(markup).toContain('id="task-list-panel"');

@@ -58,8 +58,8 @@ function controlsBand(card: string) {
 function expectCleanTitleRow(card: string, title: string) {
   const row = titleRow(card);
   expect(row).toContain(title);
-  // No filter, input, or action may ride the title row: the name and its
-  // one-line detail own it (design.md §2.2 quiet top).
+  // These pages keep filters and extra controls off the title row; the Tasks
+  // record is the documented exception with one primary Add task action.
   expect(row).not.toMatch(/<(button|input|select|textarea)\b/);
   expect(row).not.toContain('role="group"');
   expect(row).not.toContain('role="button"');
@@ -116,6 +116,11 @@ describe("administration page headers", () => {
     for (const position of positions) expect(position).toBeGreaterThan(-1);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(row).not.toContain('class="admin-controls-group is-end"');
+    // The title-slot button restores the admin button contract that the
+    // shared .card-title reset strips, and keeps its 40px narrow target.
+    const adminStyles = readText(resolve(root, "src/admin/admin.css"));
+    expect(adminStyles).toMatch(/\.admin-card-title \.admin-task-add > \.admin-button\.primary \{[\s\S]{0,160}?background: var\(--ink\)/);
+    expect(adminStyles).toMatch(/\.admin-task-record-card \.admin-task-add > \.admin-button \{\s*min-height: 40px;\s*\}/);
   });
 
   it("keeps the roster's search, role, and attendance filters grouped under the title", () => {

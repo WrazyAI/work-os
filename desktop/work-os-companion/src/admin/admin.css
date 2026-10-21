@@ -564,10 +564,17 @@ body:has(.admin-workspace) .notifications-card {
   }
 }
 
+/* The title action follows the same touch-size step as the old controls-row
+   button once the compact desktop class ends (design.md §11, §12). */
+@media (max-width: 720px) {
+  .admin-task-record-card .admin-task-add > .admin-button {
+    min-height: 40px;
+  }
+}
+
 /* At the small class the name and primary action share the title's first line
    and the summary takes the next, so the header stays compact instead of
-   stacking three rows; the action keeps a 40px touch target (design.md §11,
-   §12). */
+   stacking three rows (design.md §11, §12). */
 @media (max-width: 560px) {
   .admin-task-record-card > .admin-card-title > .admin-card-meta {
     display: contents;
@@ -580,10 +587,6 @@ body:has(.admin-workspace) .notifications-card {
 
   .admin-task-record-card > .admin-card-title > .admin-card-meta > .admin-task-add {
     order: 1;
-  }
-
-  .admin-task-record-card .admin-task-add > .admin-button {
-    min-height: 40px;
   }
 }
 

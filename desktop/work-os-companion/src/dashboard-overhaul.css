@@ -352,8 +352,8 @@ body {
 /* One quiet inset marks the selected view; there is no second underline. */
 .work-queue-tabs button.active { background: #e9eee5; color: var(--dash-ink); }
 .work-queue-tabs button:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
-.work-queue-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #edf2e9; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
-.work-queue-tabs button.active em { background: #e1f2d2; color: #427d21; }
+.work-queue-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #edf2e9; color: #5b6459; font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
+.work-queue-tabs button.active em { background: #e1f2d2; color: #5b6459; }
 .work-queue-list { margin: 0; padding: 0 20px; }
 .work-queue-list .dashboard-task-queue { margin-top: 4px; }
 .work-queue-panel > .dashboard-panel-footer { margin: 0; padding: 10px 20px; }
@@ -433,7 +433,7 @@ body {
 .task-filters-toggle.active { border-color: #bfd7af; background: #edf7e7; color: #427d21; }
 .task-filters-popover { border-color: var(--dash-line); border-radius: 14px; box-shadow: var(--dash-shadow); }
 
-.task-list-panel { padding: 0; border-color: var(--dash-line); border-radius: 16px; background: rgba(255, 255, 252, 0.9); box-shadow: var(--dash-shadow); }
+.task-list-panel { --task-list-inset: 16px; padding: 0; border-color: var(--dash-line); border-radius: 16px; background: rgba(255, 255, 252, 0.9); box-shadow: var(--dash-shadow); }
 /* The narrow workspace rule in styles.css re-pads every .panel; the task list
    owns its header's edge-to-edge treatment, so keep that one panel flush. */
 .tasks-workspace .task-list-panel { padding: 0; }
@@ -467,6 +467,8 @@ body {
 .task-list-tab:hover { background: #f2f5ef; color: var(--dash-ink); }
 .task-list-tab.active { background: #e9eee5; color: var(--dash-ink); }
 .task-list-tab:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
+/* 10px count text keeps 4.5:1 on both the quiet and active count pills; the
+   earlier green pair measured 4.26:1. */
 .task-list-tab em {
   display: inline-grid;
   min-width: 20px;
@@ -475,24 +477,28 @@ body {
   padding: 0 5px;
   border-radius: 999px;
   background: #edf2e9;
-  color: var(--dash-muted);
+  color: #5b6459;
   font-size: 10px;
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
-.task-list-tab.active em { background: #e1f2d2; color: #427d21; }
+.task-list-tab.active em { background: #e1f2d2; color: #5b6459; }
 .task-list-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .task-list-controls .task-search { flex: 0 1 190px; min-width: 140px; max-width: 220px; min-height: 38px; border-radius: 10px; }
 .task-list-controls .task-filters-toggle { min-height: 38px; height: 38px; padding: 0 11px; border-radius: 10px; }
 .task-list-controls .task-add-button { min-height: 38px; height: 38px; padding: 0 13px; border-radius: 10px; }
-.task-list-panel > .task-filter-summary { margin: 9px 16px 0; }
-.task-list-panel > .skeleton-task-list { padding: 0 16px; }
-.task-list-panel > .task-load-more { width: calc(100% - 32px); margin: 10px 16px 16px; }
-@media (max-width: 860px) {
+.task-list-panel > .task-filter-summary { margin: 9px var(--task-list-inset) 0; }
+.task-list-panel > .skeleton-task-list { padding: 0 var(--task-list-inset); }
+.task-list-panel > .task-load-more { width: calc(100% - var(--task-list-inset) - var(--task-list-inset)); margin: 10px var(--task-list-inset) 16px; }
+/* Seven controls fit on one row at the 1000px reference width. Step to the
+   stacked header just below that so a wrapped controls row starts at the panel
+   edge instead of floating at the right. */
+@media (max-width: 999px) {
   .task-list-controls { flex-basis: 100%; justify-content: flex-start; }
   .task-list-controls .task-filters-wrap { margin-left: auto; }
 }
 @media (max-width: 720px) {
+  .task-list-panel { --task-list-inset: 12px; }
   .task-list-header { padding: 9px 12px; }
   .task-list-tabs { width: 100%; flex-wrap: wrap; }
   .task-list-controls .task-search { flex: 1 1 180px; max-width: none; }
@@ -510,9 +516,6 @@ body {
   .task-list-controls .task-filters-toggle,
   .task-list-controls .task-add-button { width: 100%; justify-content: center; }
 }
-.task-list-panel > .card-title { min-height: 64px; padding-inline: 20px; border-bottom: 1px solid var(--dash-line); }
-.task-list-panel > .card-title > span { color: var(--dash-ink); font-size: 14px; }
-.task-list-panel > .card-title > span svg { color: var(--dash-signal-deep); }
 .task-records { padding: 0 16px 18px; box-shadow: none; background: transparent; }
 .task-records.evidence-list { padding: 0 16px 18px; }
 .sort-header-row { position: sticky; top: 0; z-index: 3; min-height: 38px; border-bottom-color: var(--dash-line-strong); background: rgba(255, 255, 252, 0.96); backdrop-filter: blur(12px); }
@@ -666,8 +669,7 @@ body {
   gap: 4px;
   min-width: 0;
 }
-.task-focus-kicker,
-.task-list-kicker {
+.task-focus-kicker {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -678,8 +680,7 @@ body {
   line-height: 1.2;
   text-transform: uppercase;
 }
-.task-focus-kicker svg,
-.task-list-kicker svg { color: var(--dash-signal-deep); }
+.task-focus-kicker svg { color: var(--dash-signal-deep); }
 .agenda-strip-edit {
   width: fit-content;
   max-width: min(660px, 100%);
@@ -739,16 +740,6 @@ body {
 /* The agenda strip owns its measure; the shared line owns the reveal. */
 .agenda-strip-focus-scroll { max-width: min(620px, 100%); }
 .agenda-strip-meta { padding-left: 0; }
-/* The strip's stat trio is gone: the overdue and due-today counts it repeated
-   already lead the day-group headers and the view tabs, and "done today" was a
-   third copy. The strip states the focus and the carry action only. */
-.task-list-heading { align-items: center; }
-.task-list-heading-copy { display: grid; gap: 4px; min-width: 0; }
-.task-list-heading-copy > strong { color: var(--dash-ink); font-size: 15px; letter-spacing: -0.025em; }
-.task-list-heading-copy .task-filter-result { margin-left: 0; }
-.task-list-panel > .card-title > .task-list-heading-copy > .task-list-kicker { color: var(--dash-muted); font-size: 9px; }
-.task-list-panel > .card-title > .task-list-heading-copy > .task-list-kicker svg { color: var(--dash-signal-deep); }
-
 /* One deep overlay seam for task detail and unfinished-work review. These
    layers are portaled to body, so neither the stage scroller nor the chat dock
    can clip or locally position the panel. */

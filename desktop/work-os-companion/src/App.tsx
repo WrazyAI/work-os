@@ -51,6 +51,7 @@ import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportO
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { SortHeaderRow } from "./SortHeaderRow";
+import { taskViewTabIndex } from "./taskViewTabs";
 import { ProgressRing } from "./ProgressRing";
 import { prefersReducedMotion, useListShift } from "./listShift";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
@@ -5027,13 +5028,8 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   // Peer views keep one tab stop and move between views with the shared
   // ←/→/Home/End contract (design §8.13).
   const onTaskTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
-    const last = chipCounts.length - 1;
-    let next = index;
-    if (event.key === "ArrowRight") next = index === last ? 0 : index + 1;
-    else if (event.key === "ArrowLeft") next = index === 0 ? last : index - 1;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else return;
+    const next = taskViewTabIndex(index, event.key, chipCounts.length);
+    if (next === null) return;
     event.preventDefault();
     onTaskView(chipCounts[next].id);
     requestAnimationFrame(() => taskTabRefs.current[next]?.focus());
