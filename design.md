@@ -1282,6 +1282,12 @@ product language: personality on the stage, discipline in the panel.
   a field (the archetype cards, the weekday track) puts the message in the flow
   and takes focus itself. The save state names the state and never an internal
   revision number.
+- **Narrow setup actions.** At 720px and below the stage and setup content may
+  scroll as one page, but Back, save state, and Continue remain anchored to the
+  viewport bottom before any scrolling. Reserve the bar's height and safe-area
+  inset beneath the content so the last field remains reachable. The narrow
+  panel skips its container-transform entrance (which would capture the fixed
+  bar); step-content entrances remain, with the existing reduced-motion rule.
 
 ### 8.15 Profile signals and connected accounts
 

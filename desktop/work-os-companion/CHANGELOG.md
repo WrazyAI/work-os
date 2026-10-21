@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Back and Continue stay on screen in narrow setup windows, without needing to scroll down to find them.
+
 ## 0.4.96 — 2026-10-21
 
 - Workspace setup now fits your screen, so the Back and Continue buttons are no longer hidden on a smaller Mac.

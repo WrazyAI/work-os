@@ -4033,6 +4033,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .onboarding-workspace {
     min-height: 600px;
     overflow: visible;
+    /* The action bar leaves page flow below. Keep the last field and the
+       completion screen reachable above it when the document is scrolled. */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
   .phase-content {
     overflow: visible;
@@ -4042,8 +4045,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     grid-template-columns: 1fr;
   }
   .phase-actions {
-    position: sticky;
+    /* Sticky does not bring a footer that starts below the fold on screen.
+       Setup's primary actions must be visible before the employee scrolls. */
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 0;
+    z-index: 10;
+    min-height: calc(80px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background: #f5f3eb;
   }
   .profile-board {

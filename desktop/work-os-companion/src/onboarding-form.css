@@ -878,6 +878,13 @@
 }
 
 @media (max-width: 720px) {
+  /* A forwards-filled transform animation makes this a containing block for
+     fixed descendants even after its final transform is `none`. Keep the
+     narrow footer viewport-relative; the step content still animates. */
+  .guided-onboarding[data-stage="form"] .onboarding-workspace {
+    animation: none;
+  }
+
   .phase-content {
     width: min(680px, calc(100% - 36px));
   }
