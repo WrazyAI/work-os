@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.96 — 2026-10-21
+
+- Workspace setup now fits your screen, so the Back and Continue buttons are no longer hidden on a smaller Mac.
+
 ## 0.4.95 — 2026-10-21
 
 - Change task views, search, or date range from one compact Tasks header, with Add task in reach.
