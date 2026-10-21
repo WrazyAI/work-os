@@ -234,6 +234,11 @@ the employee who just installed the update — one short, plain bullet per
 change — because first launch after an update shows it in the changelog modal.
 Keep installer/updater verification and signing requirements intact.
 
+The companion release line continues as 0.5.x from 0.5.1 (shipped 2026-10-21):
+the next release is 0.5.2. Keep the canonical SemVer in the version files and
+the changelog heading (`0.5.2`); the release tag and the app's display pad the
+patch segment (`work-os-companion-internal-v0.5.02`, shown as 0.5.02).
+
 Work OS changes deploy through the deployed Agent OS checkout on the VPS
 (`/home/dev/agent-os`). This repository is public, so the host address and the
 SSH key path are kept out of it; read them from the private Agent OS repo
