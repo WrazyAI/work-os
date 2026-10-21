@@ -23,6 +23,10 @@ export type RecapSpeechLine = {
   text: string;
   /** The clock time the card shows as its own pill, or null. Never spoken. */
   time: string | null;
+  /** Stable identifier for what the line belongs to, so a reader can highlight
+   * the row being spoken. Optional: the recap's own lines have no rows to
+   * point at. Never spoken. */
+  ref?: string | null;
 };
 
 export type RecapSpeechSource = {
