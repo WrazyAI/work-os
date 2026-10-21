@@ -28,10 +28,16 @@ function taskUrl(task: AnyRow): string | null {
   return typeof url === "string" && url.startsWith("http") ? url : null;
 }
 
-function assigneeNames(task: AnyRow): string[] {
-  return Array.isArray(task.assignees)
+function assigneeNames(task: AnyRow, peopleById: Map<string, string>): string[] {
+  const names = Array.isArray(task.assignees)
     ? task.assignees.filter((person: AnyRow) => typeof person?.displayName === "string").map((person: AnyRow) => String(person.displayName))
     : [];
+  if (names.length) return names;
+  // The record returns raw assignee ids; resolve them through the roster so a
+  // task with a real assignee never reads as unassigned.
+  return (Array.isArray(task.assignee_person_ids) ? task.assignee_person_ids : [])
+    .map((id: unknown) => peopleById.get(String(id)))
+    .filter((name): name is string => !!name);
 }
 
 export default function AdminTasksPage() {
@@ -44,7 +50,6 @@ export default function AdminTasksPage() {
   const [form, setForm] = useState({
     name: "",
     description: "",
-    projectId: "",
     assigneePersonId: "",
     dueDate: "",
     startDate: "",
@@ -93,7 +98,7 @@ export default function AdminTasksPage() {
       body: JSON.stringify({
         name: form.name.trim(),
         description: form.description.trim() || undefined,
-        project_id: form.projectId || undefined,
+        project_id: tasksProjectId ? String(tasksProjectId) : undefined,
         assignee_person_ids: form.assigneePersonId ? [form.assigneePersonId] : [],
         due_date: form.dueDate || undefined,
         start_date: form.startDate || undefined,
@@ -106,7 +111,7 @@ export default function AdminTasksPage() {
     }),
     onSuccess: () => {
       setCreateOpen(false);
-      setForm({ name: "", description: "", projectId: "", assigneePersonId: "", dueDate: "", startDate: "", priority: "", labels: "", storyPoints: "", expectedOutcome: "", definitionOfDone: "" });
+      setForm({ name: "", description: "", assigneePersonId: "", dueDate: "", startDate: "", priority: "", labels: "", storyPoints: "", expectedOutcome: "", definitionOfDone: "" });
       void queryClient.invalidateQueries({ queryKey: ["work-os"] });
     },
   });
@@ -119,7 +124,10 @@ export default function AdminTasksPage() {
   }, [tasks.data, search]);
 
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
-  const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.provider_project_id || project.id), label: String(project.name) }));
+  const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name) }));
+  // TASKS is the one project that owns organization work; the picker is gone.
+  const tasksProjectId = (projects.data?.projects ?? []).find((project) => String(project.name ?? "").trim().toUpperCase() === "TASKS")?.id;
+  const peopleById = new Map((people.data?.people ?? []).map((person) => [String(person.id), String(person.display_name)]));
 
   return (
     <div className="grid gap-5">
@@ -184,7 +192,7 @@ export default function AdminTasksPage() {
           <ul>
             {rows.map((task) => {
               const done = task.completed === true;
-              const names = assigneeNames(task);
+              const names = assigneeNames(task, peopleById);
               const url = taskUrl(task);
               return (
                 <li key={String(task.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
@@ -205,6 +213,7 @@ export default function AdminTasksPage() {
                   </button>
                   <div className="min-w-0 flex-1">
                     <p className={cx("truncate text-[13px] font-semibold", done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>{String(task.title ?? "Untitled task")}</p>
+                    {task.description ? <p className="truncate text-[11.5px] text-[var(--text-secondary)]">{String(task.description)}</p> : null}
                     <p className="truncate text-[11.5px] text-[var(--text-tertiary)]">
                       {task.project?.name ? String(task.project.name) : "No project"}
                       {names.length ? ` · ${names.join(", ")}` : ""}
@@ -249,7 +258,7 @@ export default function AdminTasksPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="Add a task"
-        subtitle="The task is created in Work OS first and mirrored to Nifty by the workspace sync."
+        subtitle="The task lands in the TASKS project and the Work OS record immediately."
         width={560}
         footer={
           <div className="flex justify-end gap-2">
@@ -274,7 +283,6 @@ export default function AdminTasksPage() {
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <SelectField label="Project" value={form.projectId} onChange={(value) => setForm((current) => ({ ...current, projectId: value }))} options={projectOptions} placeholder="No project" ariaLabel="Task project" />
             <SelectField label="Assignee" value={form.assigneePersonId} onChange={(value) => setForm((current) => ({ ...current, assigneePersonId: value }))} options={personOptions} placeholder="Unassigned" ariaLabel="Task assignee" />
             <TextField label="Due date" type="date" value={form.dueDate} onChange={(value) => setForm((current) => ({ ...current, dueDate: value }))} ariaLabel="Due date" />
             <TextField label="Start date" type="date" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} ariaLabel="Start date" />
