@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.1 — 2026-10-21
+
+- The task list's column headers now read Name, Date Due, and Status instead of shouting them.
+- Add task now sits in the list's own header, right of the status column, with views, search, and date range sharing the top row.
+
 ## 0.4.100 — 2026-10-21
 
 - Add task now sits in the list's own header, right of the status column, with views, search, and date range sharing the top row.
