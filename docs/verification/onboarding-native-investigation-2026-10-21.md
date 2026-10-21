@@ -24,6 +24,8 @@ screenshot are unavailable. Do not interpret prior CSS fixes as resolution.
   because its `tee` pipeline masked the probe's exit code. Explicit
   `set -euo pipefail` is added so the failing assertion becomes a failing job.
   Trust the recorded geometry, not that initial green job status.
+  The corrected negative control, run **39655212591**, failed with exit 1 on
+  the same `footerVisible:false` result, confirming the native guard catches it.
 
 ## Root cause of this reproduced path
 
@@ -58,7 +60,7 @@ complete nine-card catalog, but not the employee's live account or vault.
 
 The first full companion run had one test-selector error (the guard located
 an earlier unrelated media block); after correcting the guard, all **1,236
-tests passed**, and the final post-rebase suite passed **1,239 tests**.
+tests passed**, and the final release-source suite passed **1,240 tests**.
 Work OS typecheck and companion build passed. A concurrent build/browser
 verification attempt timed out under host load; unchanged sequential reruns
 completed the build and both 90-check matrices. CodeRabbit reviewed all 17
@@ -87,6 +89,23 @@ reset or new telemetry collection has been made by this task.
 A separate native window-fitting change (`7cc853d3`, release 0.4.96) landed
 while this investigation was running. It is preserved on rebase; this narrow
 footer fix is complementary, not a replacement or a claim to have validated
-every native configuration. Release 0.4.97 is prepared for the narrow fix;
-publication, cross-repo runtime convergence, final post-rebase verification,
-and the affected employee's confirmation remain pending at this checkpoint.
+every native configuration.
+
+Work OS release source **a298a22f** is merged on main. Release **0.4.97** is
+queued in workflow **39658423277**, behind the existing 0.4.96 release; this
+checkpoint does not claim publication or authenticated updater delivery.
+
+Runtime CSS and the unit guards are byte-identical in Agent OS **8a565eda**.
+The onboarding design paragraph was ported selectively, preserving unrelated
+design changes and independent version metadata. Agent OS passed **1,202
+companion tests**, typecheck, and companion build. Its broader TypeScript
+suite reported **521 passed / 9 failed**: the same seven provider-outbox
+guards, `work-os-desktop-static.test.mts` (`dedupedProviderRefresh` assertion),
+and `the reuse lookup is narrow: window, person, still open, local only` in
+`work-os-local-plan-tasks.test.mts`. All nine reproduced directly on clean
+baseline **fba5ada4**. No server redeploy is needed for these desktop CSS
+changes. The native CI fixture/audit tooling remains Work OS-owned.
+
+The affected employee's actual window conditions and confirmation after
+installation are still unavailable; do not close the incident as verified on
+her device solely because these reproductions and package checks pass.
