@@ -2,7 +2,9 @@ import { useState } from "react";
 import SidebarNav from "./SidebarNav";
 import { ProgressComposer, TasksWorkspace } from "./App";
 import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation, TaskCarryOverFlyout } from "./taskSurfaces";
+import { TaskEvidenceDialog, type TaskEvidenceDialogPhase } from "./CompletionEvidence";
 import { TaskSelectionCard } from "./TaskSelectionCard";
+import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import { DEFAULT_TASK_SORT, suggestDailyGoal, unfinishedBefore, type TaskRow, type TaskSort } from "./taskWorkspace";
 import type { DailyPlan } from "./types";
 import { formatWorkOsDate } from "./dateFormat";
@@ -21,6 +23,19 @@ const tasks: TaskRow[] = [
   { id: "task-done", title: "Remove Plan navigation", description: "Plan is no longer a user-facing route.", due_date: CURRENT_DATE, provider_created_at: `${CURRENT_DATE}T07:30:00Z`, completed: true, synced_at: `${CURRENT_DATE}T08:45:00Z`, project: { name: "Work OS" } },
   { id: "task-later", title: "Draft the Q3 review outline for the LaunchLoom handoff", description: "Later-dated work stays below today in the My day groups.", due_date: "2026-08-28", provider_created_at: "2026-08-19T14:00:00Z", priority: "medium", synced_at: `${CURRENT_DATE}T08:52:00Z`, completed: false, project: { name: "Work OS" } },
   { id: "task-done-release", title: "Archive old task normalization", description: "Retain the completed record for history sorting.", completed: true, completed_at: `${CURRENT_DATE}T06:30:00Z`, provider_created_at: `${CURRENT_DATE}T06:00:00Z`, synced_at: `${CURRENT_DATE}T08:40:00Z`, project: { name: "Work OS" } },
+];
+
+const PREVIEW_EVIDENCE: TaskEvidenceRecord[] = [
+  {
+    id: "evidence-preview-1",
+    title: "Ship unified Tasks workspace — completion evidence",
+    note: "Signed installer check and the release screenshot.",
+    fileName: "release-verification.pdf",
+    contentType: "application/pdf",
+    sizeBytes: 482_112,
+    createdAt: `${CURRENT_DATE}T16:42:00Z`,
+    url: "/api/work-os/evidence/evidence-preview-1/file",
+  },
 ];
 
 const currentPlan: DailyPlan = {
@@ -135,12 +150,17 @@ export default function TasksPreview() {
   const selectionTasks = tasks.slice(0, 3).map((task, index) => ({ id: String(task.id), title: String(task.title), description: String(task.description), dueDate: task.due_date, projectName: task.project?.name, priority: task.priority, state: index === 1 ? "overdue" as const : "pending" as const }));
   const emptyHistoryFixture = scenario === "history-empty" || scenario === "history-loading" || (scenario === "history-error" && !params.has("stale"));
   const previewTaskHistory = emptyHistoryFixture ? [] : degraded;
+  const evidenceScenario = scenario?.startsWith("completion") ? scenario : null;
+  const evidencePhase: TaskEvidenceDialogPhase = scenario === "completion-uploading" ? "saving"
+    : scenario === "completion-failed" ? "failed"
+      : scenario === "completion-saved" ? "evidence_saved"
+        : scenario === "completion-done" ? "done" : "idle";
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="tasks" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
       <TasksWorkspace currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => undefined} onOpenTask={() => setDetailsOpen(true)} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete" })} onSurfaceTask={() => undefined} onTaskCompletion={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined} />
       {!previewHistorical && <ProgressComposer mode="agenda" input={input} open={composerOpen} panel={composerPanel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="accepted_suggestion" goalSuggestion={suggestion} saveState="saved" onInput={setInput} onOpen={() => { setComposerPanel("update"); setComposerOpen(true); }} onOpenGoal={() => { setComposerPanel("goal"); setComposerOpen(true); }} onClose={() => { setComposerOpen(false); setPending(""); }} onSubmit={() => { const text = input.trim(); if (!text) return; setPending(text); setReceipt(null); setInput(""); setComposerOpen(true); }} onClassify={(kind) => { const text = pending; setReceipt({ text, kind, createdAt: new Date().toISOString(), message: kind === "new_task" ? `Added “${text}” to today’s Nifty agenda.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onApplyGoal={setGoal} />}
-      {detailsOpen && <TaskDetailsModal details={detailsTask} loading={false} readOnly={scenario === "details-readonly"} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={() => undefined} onEditTask={openPreviewEdit} onCompleteTask={() => undefined} onMoveSubtask={(subtask) => { setSubtaskMenuId(null); setMoveMenuId(null); setPreviewSubtasks((current) => current.filter((row) => String(row.provider_task_id || row.id) !== String(subtask.provider_task_id || subtask.id))); }} onToggleSubtask={(subtask) => setPreviewSubtasks((current) => current.map((row) => String(row.provider_task_id || row.id) === String(subtask.provider_task_id || subtask.id) ? { ...row, completed: !row.completed } : row))} onArchiveSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "archive" })} onDeleteSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "delete" })} onClose={() => setDetailsOpen(false)} />}
+      {detailsOpen && <TaskDetailsModal details={detailsTask} loading={false} readOnly={scenario === "details-readonly"} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={() => undefined} onEditTask={openPreviewEdit} onCompleteTask={() => undefined} completionEvidence={PREVIEW_EVIDENCE} onAttachEvidence={() => undefined} onDownloadEvidence={() => undefined} onMoveSubtask={(subtask) => { setSubtaskMenuId(null); setMoveMenuId(null); setPreviewSubtasks((current) => current.filter((row) => String(row.provider_task_id || row.id) !== String(subtask.provider_task_id || subtask.id))); }} onToggleSubtask={(subtask) => setPreviewSubtasks((current) => current.map((row) => String(row.provider_task_id || row.id) === String(subtask.provider_task_id || subtask.id) ? { ...row, completed: !row.completed } : row))} onArchiveSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "archive" })} onDeleteSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "delete" })} onClose={() => setDetailsOpen(false)} />}
       {scenario === "details-loading" && <TaskDetailsModal details={{ task: tasks[0] as unknown as Record<string, unknown>, subtasks: [], moveTargets: [], subtaskSync: undefined }} loading={true} readOnly={false} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={null} moveMenuId={null} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={() => undefined} onMoveMenu={() => undefined} onSubtaskCreate={() => undefined} onEditTask={() => undefined} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
       {scenario === "create" && <TaskComposerModal busy={false} title="" description="" assignees={["person-1"]} options={[{ id: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" }, { id: "person-2", displayName: "Alex Rivera", email: null }]} optionsLoading={false} onTitle={() => undefined} onDescription={() => undefined} onToggleAssignee={() => undefined} onClose={() => undefined} onSubmit={() => undefined} />}
       {scenario === "edit" && <TaskEditModal kind="task" title="Ship unified Tasks workspace" description="Finish the desktop implementation and validation." busy={false} onTitle={() => undefined} onDescription={() => undefined} onClose={() => undefined} onSubmit={() => undefined} />}
@@ -150,6 +170,18 @@ export default function TasksPreview() {
       {previewEditTask && <TaskEditModal kind="subtask" title={previewEditTitle} description={previewEditDescription} busy={false} onTitle={setPreviewEditTitle} onDescription={setPreviewEditDescription} onClose={() => setPreviewEditTask(null)} onSubmit={savePreviewEdit} />}
       {previewRemoval && <TaskRemovalConfirmation mode={previewRemoval.mode} scope="subtask" title={String(previewRemoval.task.title ?? "Untitled subtask")} subtaskCount={0} busy={false} onCancel={() => setPreviewRemoval(null)} onConfirm={confirmPreviewRemoval} />}
       {selectionScenario && <TaskSelectionCard title="Finish pending work" tasks={selectionScenario === "empty" || selectionScenario === "error" ? [] : selectionTasks} status={selectionScenario === "loading" ? "loading" : selectionScenario === "error" ? "error" : "ready"} degraded={selectionScenario === "degraded"} dense={selectionScenario === "dense"} errorMessage="Nifty could not refresh this task list." onRetry={() => undefined} onMarkSelectedDone={() => undefined} />}
+      {evidenceScenario && <TaskEvidenceDialog
+        task={scenario === "completion-required" ? { ...tasks[0], expected_outcome: "A signed verification record for the desktop release." } : tasks[0]}
+        mode={scenario === "completion-attach" ? "attach" : "complete"}
+        initialPhase={evidencePhase}
+        initialError={scenario === "completion-failed" ? "The connection dropped before the file was saved." : scenario === "completion-saved" ? "Evidence saved. The task is not marked complete yet." : null}
+        initialFileName={scenario === "completion-uploading" || scenario === "completion-failed" ? "release-verification.pdf" : ""}
+        initialEvidence={scenario === "completion-saved" || scenario === "completion-done" ? PREVIEW_EVIDENCE[0] : null}
+        onAttach={async (_file, _note, _key) => ({ outcome: "completed", evidence: PREVIEW_EVIDENCE[0] })}
+        onRetryCompletion={async () => ({ completed: false, error: "Still waiting for the server. Try again." })}
+        onCompleteWithoutEvidence={async () => ({ completed: true })}
+        onClose={() => undefined}
+      />}
     </section>
   </div>;
 }

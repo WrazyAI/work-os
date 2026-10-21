@@ -6,8 +6,10 @@ import { computeMenuPlacement } from "./menuPlacement";
 import { renderViewportSurface } from "./viewportSurface";
 import { stripPlaceholderBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { TaskEvidenceList } from "./CompletionEvidence";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
+import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import { ProgressRing } from "./ProgressRing";
 import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
@@ -260,13 +262,14 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
   </div>;
 }
 
-export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
+export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, completionEvidence = [], onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onAttachEvidence, onDownloadEvidence, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
   details: { task: AnyTask; subtasks: AnyTask[]; moveTargets: AnyTask[]; subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null } };
   loading: boolean; readOnly: boolean; currentDate: string; busy: boolean;
   subtaskTitle: string; subtaskDescription: string; subtaskMenuId: string | null; moveMenuId: string | null;
+  completionEvidence?: TaskEvidenceRecord[];
   onSubtaskTitle: (value: string) => void; onSubtaskDescription: (value: string) => void;
   onSubtaskMenu: (id: string | null) => void; onMoveMenu: (id: string | null) => void;
-  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: () => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
+  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: () => void; onAttachEvidence?: () => void; onDownloadEvidence?: (evidence: TaskEvidenceRecord) => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
   onToggleSubtask: (subtask: AnyTask) => void; onArchiveSubtask: (subtask: AnyTask) => void; onDeleteSubtask: (subtask: AnyTask) => void; onClose: () => void;
 }) {
   const task = details.task;
@@ -294,6 +297,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
           <nav className="task-detail-breadcrumb" aria-label="Task location">{breadcrumbs.map((crumb, index) => <span key={`${crumb}-${index}`}>{index > 0 && <ChevronRight size={13} aria-hidden="true" />}{crumb}</span>)}</nav>
           <section className="task-detail-intro"><h2 className="task-detail-title" id="task-detail-title">{title}</h2><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /></section>
+          {String(task.expected_outcome ?? "").trim() ? <section className="task-detail-outcome" aria-label="Expected outcome"><span>Expected outcome</span><p>{safeTaskText(task.expected_outcome, "")}</p></section> : null}
           <section className="task-detail-meta" aria-label="Task metadata">
             <div><CalendarDays size={18} aria-hidden="true" /><span>Due</span><strong>{dueDate}</strong></div>
             <div><Clock3 size={18} aria-hidden="true" /><span>Added</span><strong>{addedDate}</strong></div>
@@ -303,6 +307,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             <header><span>Subtasks <b>{completedSubtasks} / {subtasks.length}</b></span><span>{progressPercent}%</span></header>
             <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} aria-label={`${progressPercent}% of subtasks complete`}><i style={{ width: `${progressPercent}%` }} /></div>
           </section>
+          <TaskEvidenceList evidence={completionEvidence} readOnly={readOnly} busy={busy} completed={task.completed === true} onAttach={onAttachEvidence} onDownload={onDownloadEvidence} />
           <section className="subtask-section task-detail-next-steps"><header><div><strong>Next steps</strong><small>Keep the next concrete move visible.</small></div><span className="task-detail-next-count">{subtasks.length}</span></header>
             {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {

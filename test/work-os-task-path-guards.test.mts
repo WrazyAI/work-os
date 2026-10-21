@@ -142,6 +142,8 @@ function detailHarness() {
     db: () => ({ from: () => query }),
     isTaskAttributableToPerson: attributable,
     hydrateTaskAssignees: async (_ownerId: string, rows: unknown[]) => rows,
+    isEmployeeAttachedEvidence: () => false,
+    taskEvidenceFromRow: () => ({}),
     console,
   };
   const subject = loadFunction(

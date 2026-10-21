@@ -4,6 +4,7 @@ import { machineCadenceHeaders } from "./localSettings";
 import { isSessionExpired } from "./sessionState";
 import { emit } from "./tauriEvents";
 import type { OfflineAction } from "./types";
+import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 
 const MAX_QUEUE_ATTEMPTS = 6;
 
@@ -54,6 +55,9 @@ export class ApiRequestError extends Error {
     readonly retryable: boolean,
     readonly conflict = false,
     readonly reason?: string,
+    /** Parsed error body, kept so a route can return a truthful partial
+     * receipt (for example evidence that was saved before completion failed). */
+    readonly payload?: unknown,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -148,7 +152,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       const reason = typeof (result as { reason?: unknown } | undefined)?.reason === "string"
         ? (result as { reason: string }).reason
         : undefined;
-      throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status), response.status === 409, reason);
+      throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status), response.status === 409, reason, result);
     }
     return result as T;
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
@@ -310,6 +314,54 @@ export async function updateTaskCompletion(taskId: string, completed: boolean): 
       // Preserve the mutation failure; it is the actionable error for the user.
     }
     throw mutationError;
+  }
+}
+
+export type TaskEvidenceUploadResult =
+  | { outcome: "completed"; evidence: TaskEvidenceRecord; task?: Record<string, any>; providerStatus?: string }
+  | { outcome: "attached"; evidence: TaskEvidenceRecord }
+  | { outcome: "completion_failed"; evidence: TaskEvidenceRecord; error: string };
+
+/**
+ * Uploads one employee-attached completion file. The server persists the
+ * evidence row before it confirms completion, so a 502 may still carry a
+ * truthful saved-evidence receipt; the caller retries only the completion.
+ * This mutation is never queued offline: a file upload cannot be replayed
+ * safely after its local File object is gone.
+ */
+export async function uploadTaskCompletionEvidence(
+  taskId: string,
+  file: File,
+  note: string,
+  complete: boolean,
+  idempotencyKey: string,
+): Promise<TaskEvidenceUploadResult> {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("note", note);
+  form.set("complete", complete ? "true" : "false");
+  form.set("idempotency_key", idempotencyKey);
+  try {
+    const result = await apiRequest<{ evidence: TaskEvidenceRecord; task?: Record<string, any> | null; providerStatus?: string }>(
+      `/api/work-os/me/tasks/${encodeURIComponent(taskId)}/completion-evidence`,
+      { method: "POST", body: form, signal: AbortSignal.timeout(60_000) },
+    );
+    if (complete && result.task?.completed === true) {
+      return { outcome: "completed", evidence: result.evidence, task: result.task, providerStatus: result.providerStatus };
+    }
+    return { outcome: "attached", evidence: result.evidence };
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 502) {
+      const payload = error.payload as { evidence?: TaskEvidenceRecord; error?: string } | null;
+      if (payload?.evidence) {
+        return {
+          outcome: "completion_failed",
+          evidence: payload.evidence,
+          error: payload.error || "The evidence was saved, but the task is not complete yet.",
+        };
+      }
+    }
+    throw error;
   }
 }
 

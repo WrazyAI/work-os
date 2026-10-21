@@ -659,6 +659,34 @@ internal scroll region. Menus and drawers must collide with the viewport, close
 on Escape/outside click where appropriate, and restore focus to their trigger.
 Destructive archive/delete actions are explicit and separate.
 
+### 6.6 Completion evidence
+
+A completion may carry one explicit employee upload: one file plus an optional
+short note. The task row's completion control and the drawer's `Mark complete`
+open the same completion step, so the two paths cannot tell different stories.
+The step states whether the task records an expected outcome (where the
+attachment is required before completion) or is a simple task (where evidence is
+optional), and it keeps the honest no-evidence path wherever the task allows it.
+
+The step moves only through persisted states: idle, saving the file, saved but
+not complete with `Retry completion`, and confirmed completion. A failed upload
+keeps the selected file and note for retry and never marks the task done. A
+completion failure keeps the saved evidence and says the task is not complete
+yet. The same step can attach evidence to an already completed task without
+changing its state.
+
+The record is `manual`, employee-attached output evidence with the employee,
+task, timestamp, file name, size, and note. It is never provider confirmation,
+never a Worktivity screenshot, and never a completion claim by itself. The
+drawer lists it under `Completion evidence` with `Employee-attached` provenance
+and a download action. Administration and EOD reads receive the same row as
+output evidence. The raw-screenshot restriction (§16.4) does not apply because
+these are explicit employee uploads, while the file is served only from an
+authenticated, person-scoped route and raw storage paths never reach a client.
+
+One file: PNG, JPEG, WebP, PDF, text, Markdown, or CSV up to 8 MB; the note is
+1,000 characters or fewer.
+
 ## 7. Shared tool and chat surfaces
 
 Tool artifacts and chat are one language in the in-app and floating surfaces.
@@ -1412,6 +1440,8 @@ The visual system must keep these evidence classes distinct:
 - Inferred Worktivity boundaries, explicitly labeled with their observation
   time and inference provenance.
 - Employee-authored progress or claims.
+- Explicit employee-attached completion evidence: an upload and note, labeled
+  as such and never provider-confirmed.
 - AI-suggested interpretation.
 - Work OS task state.
 - Historical provider/Nifty state.

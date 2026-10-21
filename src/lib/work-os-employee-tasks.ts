@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   archiveTask,
   assertTopLevelTaskParent,
@@ -13,14 +14,26 @@ import {
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
+import { getStorageBackend } from "@/lib/db/storage";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { syncPlanItemCompletion } from "@/lib/work-os-plan-items";
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
+import {
+  CompletionEvidenceError,
+  COMPLETION_EVIDENCE_BUCKET,
+  assertCompletionEvidenceBytes,
+  completionEvidenceMetrics,
+  completionEvidenceObjectPath,
+  isEmployeeAttachedEvidence,
+  taskEvidenceFromRow,
+  taskRequiresCompletionEvidence,
+  validateCompletionEvidenceUpload,
+} from "@/modules/work-os/completion-evidence";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { localDateForTimezone } from "@/modules/work-os/companion";
-import type { WorkOsAccess } from "@/lib/work-os-api";
+import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
 
 export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
   const [peopleResult, adminResult] = await Promise.all([
@@ -118,8 +131,21 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
   subtasksQuery = task.provider === "local"
     ? subtasksQuery.eq("parent_task_id", task.id as string)
     : subtasksQuery.eq("parent_provider_task_id", providerTaskId);
-  const { data: subtasks, error } = await subtasksQuery;
+  const [subtasksResult, evidenceResult] = await Promise.all([
+    subtasksQuery,
+    db().from("work_evidence")
+      .select("id,title,summary,source,metrics,created_at")
+      .eq("organization_id", access.organizationId)
+      .eq("task_id", String(currentTask.id))
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+  const { data: subtasks, error } = subtasksResult;
   if (error) throw new Error(`load task subtasks: ${error.message}`);
+  if (evidenceResult.error) throw new Error(`load task completion evidence: ${evidenceResult.error.message}`);
+  const completionEvidence = ((evidenceResult.data ?? []) as Json[])
+    .filter(isEmployeeAttachedEvidence)
+    .map(taskEvidenceFromRow);
   // Move targets are a bounded same-project parent set; attribution is filtered
   // in JS exactly like listPersonTasks did, without its per-task embed fan-out.
   let moveQuery = db().from("work_tasks")
@@ -147,7 +173,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     title: candidate.title,
   }));
   const hydrated = await hydrateTaskAssignees(ownerId, [currentTask, ...(subtasks ?? [])] as Json[]);
-  return { task: hydrated[0], subtasks: hydrated.slice(1), moveTargets };
+  return { task: hydrated[0], subtasks: hydrated.slice(1), moveTargets, completionEvidence };
 }
 
 export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: string, body: Json) {
@@ -198,6 +224,12 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
 
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
+  if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(String(task.id), access.organizationId, ownerId))) {
+    throw new WorkOsConflictError(
+      "This task records an expected outcome. Attach completion evidence in the Windows Companion before marking it complete.",
+      "evidence_required",
+    );
+  }
   const updated = await completeTask(ownerId, String(task.provider_task_id ?? task.id), completed);
   const exactAt = (completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at)) ?? new Date().toISOString();
   await recordTaskDayEvent(access, updated as Json, completed ? "completed" : "reopened", {
@@ -380,11 +412,126 @@ async function completionEvidence(taskId: string, organizationId: string, ownerI
   return legacyOutput || !!eventResult.data?.length;
 }
 
+export type CompletionEvidenceUpload = {
+  fileName?: string | null;
+  contentType?: string | null;
+  bytes: Uint8Array;
+  note?: string | null;
+  idempotencyKey?: string | null;
+};
+
+/**
+ * Persists one employee-attached completion artifact and its `work_evidence`
+ * row before any completion is confirmed. The storage object is removed if the
+ * row cannot be written, so an upload can never leave a file the ledger does
+ * not know about. A completion failure keeps the evidence: it is truthful on
+ * its own, and the client can retry only the completion.
+ */
+export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, taskId: string, input: CompletionEvidenceUpload) {
+  if (!access.personId) throw new CompletionEvidenceError("Work OS person mapping required");
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const validated = validateCompletionEvidenceUpload({
+    contentType: input.contentType,
+    fileName: input.fileName,
+    size: input.bytes.byteLength,
+    note: input.note,
+  });
+  assertCompletionEvidenceBytes(input.bytes, validated.contentType);
+  const idempotencyKey = text(input.idempotencyKey);
+  if (!idempotencyKey) throw new CompletionEvidenceError("Idempotency-Key is required");
+  if (idempotencyKey.length > 160) throw new CompletionEvidenceError("Idempotency-Key must be 160 characters or fewer");
+
+  if (idempotencyKey) {
+    const existing = await db().from("work_evidence").select("*")
+      .eq("organization_id", access.organizationId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing.error) throw new Error(`load idempotent completion evidence: ${existing.error.message}`);
+    if (existing.data) {
+      if (String(existing.data.task_id ?? "") !== String(task.id) || String(existing.data.person_id ?? "") !== String(access.personId)) {
+        throw new WorkOsConflictError("That evidence reference belongs to another task", "evidence_conflict");
+      }
+      if (!isEmployeeAttachedEvidence(existing.data as Json)) {
+        throw new WorkOsConflictError("That evidence reference is not employee-attached completion evidence", "evidence_conflict");
+      }
+      return { evidence: taskEvidenceFromRow(existing.data as Json), task };
+    }
+  }
+
+  const evidenceId = randomUUID();
+  const objectPath = completionEvidenceObjectPath({
+    organizationId: access.organizationId,
+    personId: access.personId,
+    taskId: String(task.id),
+    evidenceId,
+    contentType: validated.contentType,
+  });
+  const now = new Date();
+  const { timezone } = await loadShiftData(access, access.personId, now);
+  const uploaded = await getStorageBackend().upload(COMPLETION_EVIDENCE_BUCKET, objectPath, Buffer.from(input.bytes), {
+    contentType: validated.contentType,
+  });
+  if (uploaded.error) throw new Error(`save completion evidence: ${uploaded.error.message}`);
+
+  const taskTitle = text(task.title) ?? "Task";
+  const row = {
+    id: evidenceId,
+    user_id: ownerId,
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    task_id: String(task.id),
+    evidence_date: localDateForTimezone(now, timezone),
+    source: "manual",
+    title: `${taskTitle.slice(0, 220)} — completion evidence`,
+    summary: validated.note || `Employee-attached file: ${validated.fileName}.`,
+    url: `/api/work-os/evidence/${evidenceId}/file`,
+    metrics: completionEvidenceMetrics({
+      contentType: validated.contentType,
+      fileName: validated.fileName,
+      sizeBytes: validated.size,
+    }),
+    raw: { origin: "task_completion" },
+    idempotency_key: idempotencyKey,
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+  const inserted = await db().from("work_evidence").insert(row).select("*").single();
+  if (inserted.error) {
+    try {
+      const removed = await getStorageBackend().remove(COMPLETION_EVIDENCE_BUCKET, [objectPath]);
+      if (removed.error) console.warn("[work-os] completion evidence rollback failed", { evidenceId, message: removed.error.message });
+    } catch (rollbackError) {
+      console.warn("[work-os] completion evidence rollback failed", { evidenceId, message: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) });
+    }
+    if (idempotencyKey) {
+      const existing = await db().from("work_evidence").select("*")
+        .eq("organization_id", access.organizationId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (existing.data && isEmployeeAttachedEvidence(existing.data as Json)) {
+        return { evidence: taskEvidenceFromRow(existing.data as Json), task };
+      }
+    }
+    throw new Error(`save completion evidence record: ${inserted.error.message}`);
+  }
+
+  await audit(access, "task.evidence_attached", "work_evidence", evidenceId, {
+    taskId: String(task.id),
+    fileName: validated.fileName,
+    contentType: validated.contentType,
+    sizeBytes: validated.size,
+  });
+  return { evidence: taskEvidenceFromRow(inserted.data as Json), task };
+}
+
 export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, completed = true) {
   const ownerId = await organizationOwnerId(access.organizationId);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
-  if (completed && !(await completionEvidence(task.id as string, access.organizationId, ownerId))) {
-    throw new Error("sufficient outcome or artifact evidence is required before completing this task");
+  if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(task.id as string, access.organizationId, ownerId))) {
+    throw new WorkOsConflictError(
+      "This task records an expected outcome. Attach completion evidence in the Windows Companion before marking it complete.",
+      "evidence_required",
+    );
   }
   const updated = await completeTask(ownerId, taskId, completed);
   // An admin completing a task still completes the plan items that committed

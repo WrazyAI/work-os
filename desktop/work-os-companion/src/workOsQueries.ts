@@ -15,6 +15,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
+import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
@@ -22,6 +23,7 @@ export type TaskDetails = {
   task: Record<string, any>;
   subtasks: Array<Record<string, any>>;
   moveTargets: Array<Record<string, any>>;
+  completionEvidence?: TaskEvidenceRecord[];
   subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null };
 };
 

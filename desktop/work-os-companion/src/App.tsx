@@ -17,7 +17,9 @@ import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
-import { ApiRequestError, apiRequest, apiRequestAudio, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
+import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
+import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
@@ -161,6 +163,7 @@ const worktivityControlTransport: WorktivityControlTransport = {
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
+type TaskEvidenceRequest = { task: Record<string, any>; mode: "complete" | "attach"; refreshDetails: boolean };
 type ClockInConfirmation = { kind: "late" | "exception"; reason: string; operationId?: string };
 type PendingWorktivityControl = { action: WorktivityControlAction; operationId: string; body: Record<string, unknown>; message: string };
 function isWorktivityControlResult(value: unknown): value is WorktivityControlResult {
@@ -439,6 +442,7 @@ export default function App() {
   const [taskAssigneeOptions, setTaskAssigneeOptions] = useState<TaskAssigneeOption[]>([]);
   const [taskOptionsLoading, setTaskOptionsLoading] = useState(false);
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
+  const [taskEvidenceRequest, setTaskEvidenceRequest] = useState<TaskEvidenceRequest | null>(null);
   const [taskDetailsReadOnly, setTaskDetailsReadOnly] = useState(false);
   const [taskDetailsLoading, setTaskDetailsLoading] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
@@ -572,7 +576,7 @@ export default function App() {
    * mount no overlays) can never freeze the window with no modal to close.
    * Employee-only flags are ignored, not closed, so a half-finished draft or
    * confirmation survives a visit to administration (design §9). */
-  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || !!eodDeleteConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
+  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!taskEvidenceRequest || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || !!eodDeleteConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
   /** The profile modal needs the onboarding record it edits; without it the
    * flag renders nothing and must therefore count for nothing. */
   const profileModalOpen = profileOpen && !!visibleOnboarding;
@@ -654,6 +658,7 @@ export default function App() {
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
+    if (taskEvidenceRequest) { setTaskEvidenceRequest(null); return; }
     if (debugPageGuide) { setDebugPageGuide(null); return; }
     if (tourScope) { setTourScope(null); return; }
     if (openPageGuide) { closeGuide(); return; }
@@ -671,7 +676,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourScope, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
@@ -3083,18 +3088,49 @@ export default function App() {
     }));
   }
 
+  function applyScenarioTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
+    const taskId = String(task.provider_task_id || task.id);
+    setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row) ?? [] }));
+    if (refreshDetails && taskDetails) {
+      setTaskDetails((current) => current ? {
+        ...current,
+        task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed } : current.task,
+        subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row),
+      } : current);
+    }
+    notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
+  }
+
+  async function refreshTaskDetailsFor(taskId: string) {
+    if (!taskDetails) return;
+    const openId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
+    if (openId !== taskId) return;
+    setTaskDetails(await loadTaskDetails(openId));
+  }
+
+  /** Confirmed completion: the row plays its short exit, then the caches drop
+   * it. Only called after the server (or the offline scenario fixture) has
+   * confirmed the state, so the checkbox never reports a false success. */
+  async function applyConfirmedTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false, evidence?: TaskEvidenceRecord) {
+    const taskId = String(task.provider_task_id || task.id);
+    setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+    setLeavingTaskIds((current) => new Set([...current, taskId]));
+    setMascotReceipt({});
+    await new Promise((resolve) => window.setTimeout(resolve, prefersReducedMotion() ? 0 : 150));
+    patchTaskCaches(taskId, {
+      completed,
+      status: completed ? "completed" : "open",
+      ...(evidence ? { completion_evidence_count: Number(task.completion_evidence_count ?? 0) + 1 } : {}),
+    });
+    setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+    if (refreshDetails) await refreshTaskDetailsFor(taskId);
+    else if (evidence) await refreshTaskDetailsFor(taskId);
+  }
+
   function setTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const taskId = String(task.provider_task_id || task.id);
     if (syncBypassRef.current) {
-      setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row) ?? [] }));
-      if (refreshDetails && taskDetails) {
-        setTaskDetails((current) => current ? {
-          ...current,
-          task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed } : current.task,
-          subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row),
-        } : current);
-      }
-      notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
+      applyScenarioTaskCompletion(task, completed, refreshDetails);
       return;
     }
     if (completingTaskIds.has(taskId) || leavingTaskIds.has(taskId)) return;
@@ -3107,19 +3143,114 @@ export default function App() {
         setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
         throw value;
       }
-      // Confirmed: the checkbox shows its check, the row plays its short exit,
-      // then the caches drop it so the list shifts without a refresh.
-      setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
-      setLeavingTaskIds((current) => new Set([...current, taskId]));
-      setMascotReceipt({});
-      await new Promise((resolve) => window.setTimeout(resolve, prefersReducedMotion() ? 0 : 150));
-      patchTaskCaches(taskId, { completed, status: completed ? "completed" : "open" });
-      setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
-      if (refreshDetails && taskDetails) {
-        const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
-        setTaskDetails(await loadTaskDetails(parentId));
-      }
+      await applyConfirmedTaskCompletion(task, completed, refreshDetails);
     });
+  }
+
+  function requestTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
+    if (!completed) { setTaskCompletion(task, false, refreshDetails); return; }
+    if (syncBypassRef.current || taskKind(task) === "subtask") { setTaskCompletion(task, true, refreshDetails); return; }
+    if (carryOverOpen) setCarryOverOpen(false);
+    setTaskEvidenceRequest({ task, mode: "complete", refreshDetails });
+  }
+
+  function requestTaskEvidence(task: TaskRow) {
+    if (carryOverOpen) setCarryOverOpen(false);
+    setTaskEvidenceRequest({ task, mode: "attach", refreshDetails: true });
+  }
+
+  async function completeTaskWithoutEvidence(task: TaskRow, refreshDetails: boolean): Promise<{ completed: boolean; error?: string }> {
+    const taskId = String(task.provider_task_id || task.id);
+    if (syncBypassRef.current) {
+      applyScenarioTaskCompletion(task, true, refreshDetails);
+      return { completed: true };
+    }
+    setBusy(true); setError("");
+    setCompletingTaskIds((current) => new Set([...current, taskId]));
+    try {
+      await updateTaskCompletion(taskId, true);
+      await applyConfirmedTaskCompletion(task, true, refreshDetails);
+      notifications.success(actionSuccessMessages["task.complete"]);
+      return { completed: true };
+    } catch (value) {
+      setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+      const message = errorMessage(value, "The task could not be completed.");
+      setError(message);
+      diagnostics.error("ui.task.completion_failed", message, { taskId, evidence: false });
+      return { completed: false, error: message };
+    } finally { setBusy(false); }
+  }
+
+  async function attachTaskEvidence(request: TaskEvidenceRequest, file: File, note: string, idempotencyKey: string): Promise<TaskEvidenceAttachResult> {
+    const taskId = String(request.task.provider_task_id || request.task.id);
+    if (syncBypassRef.current) {
+      const evidence: TaskEvidenceRecord = {
+        id: `debug-evidence-${Date.now()}`,
+        title: `${String(request.task.title ?? "Task")} — completion evidence`,
+        note,
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+        createdAt: new Date().toISOString(),
+        url: "",
+      };
+      if (request.mode === "complete") applyScenarioTaskCompletion(request.task, true, request.refreshDetails);
+      else notifications.success("Evidence attached to this task.", "Evidence saved");
+      return { outcome: request.mode === "complete" ? "completed" : "attached", evidence };
+    }
+    setBusy(true); setError("");
+    try {
+      const result = await uploadTaskCompletionEvidence(taskId, file, note, request.mode === "complete", idempotencyKey);
+      if (result.outcome === "completed") {
+        await applyConfirmedTaskCompletion(request.task, true, request.refreshDetails, result.evidence);
+        notifications.success("Task complete — evidence attached.", "Task completed");
+      } else if (result.outcome === "attached" && request.mode === "attach") {
+        await refreshTaskDetailsFor(taskId);
+        notifications.success("Evidence attached to this task.", "Evidence saved");
+      } else if (result.outcome === "completion_failed") {
+        await refreshTaskDetailsFor(taskId);
+        diagnostics.warn("ui.task.completion_after_evidence_failed", result.error, { taskId });
+      }
+      return result;
+    } finally { setBusy(false); }
+  }
+
+  async function retryTaskCompletionForEvidence(evidence: TaskEvidenceRecord): Promise<{ completed: boolean; error?: string }> {
+    const request = taskEvidenceRequest;
+    if (!request) return { completed: false, error: "The task is no longer open." };
+    const taskId = String(request.task.provider_task_id || request.task.id);
+    if (syncBypassRef.current) {
+      applyScenarioTaskCompletion(request.task, true, request.refreshDetails);
+      return { completed: true };
+    }
+    setBusy(true); setError("");
+    try {
+      await updateTaskCompletion(taskId, true);
+      await applyConfirmedTaskCompletion(request.task, true, request.refreshDetails, evidence);
+      notifications.success("Task complete — evidence attached.", "Task completed");
+      return { completed: true };
+    } catch (value) {
+      const message = errorMessage(value, "The task could not be completed.");
+      setError(message);
+      diagnostics.error("ui.task.completion_retry_failed", message, { taskId, evidence: true });
+      return { completed: false, error: message };
+    } finally { setBusy(false); }
+  }
+
+  async function downloadTaskEvidence(evidence: TaskEvidenceRecord) {
+    try {
+      const blob = await apiRequestBlob(evidence.url, "Evidence file");
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = evidence.fileName || "completion-evidence";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    } catch (value) {
+      showError(value, "The evidence file could not be downloaded.", "Download unavailable");
+    }
   }
 
   function editTask(task: TaskRow) {
@@ -4047,7 +4178,7 @@ export default function App() {
         onOpenCarryover={() => { setCarryOverOpen(true); setView("tasks"); }}
         onOpenFocus={openGoalComposer}
         onOpenTask={(task) => void openTaskDetails(task)}
-        onToggleTask={setTaskCompletion}
+        onToggleTask={requestTaskCompletion}
         taskFlight={taskFlight}
         onRetryPendingTask={retryPendingTask}
         onDismissPendingTask={dismissPendingTask}
@@ -4068,7 +4199,7 @@ export default function App() {
         onOpenCarryover={() => { setCarryOverOpen(true); setTaskView("unfinished"); setView("tasks"); }}
         onOpenFocus={openPlanningSession}
         onOpenTask={(task) => void openTaskDetails(task)}
-        onToggleTask={setTaskCompletion}
+        onToggleTask={requestTaskCompletion}
         onPause={() => {
           if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" as const : "paused" as const, paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
           void act("shift.pause_toggle", () => performWorktivityControl(paused ? "resume" : "pause"));
@@ -4120,7 +4251,7 @@ export default function App() {
         onAddTask={() => void openTaskComposer()}
         onManageTasks={() => setView("tasks")} onOpenOverdue={openOverdueTasks} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
-        onToggleTask={setTaskCompletion}
+        onToggleTask={requestTaskCompletion}
         taskFlight={taskFlight}
         onEditTask={editTask}
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
@@ -4193,7 +4324,7 @@ export default function App() {
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
         onSurfaceTask={surfaceTask}
-        onTaskCompletion={setTaskCompletion}
+        onTaskCompletion={requestTaskCompletion}
         taskFlight={taskFlight}
         onCarryOverOpen={setCarryOverOpen}
         onLoadMore={() => void loadMoreTasks()}
@@ -4333,7 +4464,15 @@ export default function App() {
       />}
     </section>
     {taskComposerOpen && <TaskComposerModal closing={taskComposerClosing} busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={closeTaskComposer} onSubmit={submitTaskFromDesktop} />}
-        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => setTaskCompletion(taskDetails.task as TaskRow, true, true)} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => requestTaskCompletion(taskDetails.task as TaskRow, true, true)} onAttachEvidence={() => requestTaskEvidence(taskDetails.task as TaskRow)} onDownloadEvidence={(evidence) => void downloadTaskEvidence(evidence)} completionEvidence={taskDetails.completionEvidence ?? []} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskEvidenceRequest && <TaskEvidenceDialog
+          task={taskEvidenceRequest.task}
+          mode={taskEvidenceRequest.mode}
+          onAttach={(file, note, idempotencyKey) => attachTaskEvidence(taskEvidenceRequest, file, note, idempotencyKey)}
+          onRetryCompletion={retryTaskCompletionForEvidence}
+          onCompleteWithoutEvidence={taskEvidenceRequest.mode === "complete" ? () => completeTaskWithoutEvidence(taskEvidenceRequest.task, taskEvidenceRequest.refreshDetails) : undefined}
+          onClose={() => setTaskEvidenceRequest(null)}
+        />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {eodDeleteConfirmation && <TaskRemovalConfirmation mode="delete" scope="draft" title={String(reviewDay?.report?.title ?? "Your EOD draft")} subtaskCount={0} busy={eodDeleting} onCancel={() => setEodDeleteConfirmation(false)} onConfirm={() => void deleteEodDraft()} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}

@@ -23,7 +23,7 @@ vi.mock("./diagnostics", () => ({
   diagnostics: { withSpan: vi.fn(async (_category: string, action: () => Promise<unknown>) => action()), warn: vi.fn() },
 }));
 
-import { apiRequest, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, updateTaskCompletion } from "./api";
+import { apiRequest, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 
 describe("offline action replay", () => {
   beforeEach(() => {
@@ -213,5 +213,51 @@ describe("queued result contract", () => {
     expect(isQueuedResult(undefined)).toBe(false);
     expect(isQueuedResult(null)).toBe(false);
     expect(isQueuedResult("queued")).toBe(false);
+  });
+});
+
+describe("completion evidence upload", () => {
+  const evidence = {
+    id: "evidence-1",
+    title: "Ship the drawer — completion evidence",
+    note: "Signed verification record.",
+    fileName: "notes.txt",
+    contentType: "text/plain",
+    sizeBytes: 5,
+    createdAt: "2026-08-21T16:42:00.000Z",
+    url: "/api/work-os/evidence/evidence-1/file",
+  };
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } });
+    vi.restoreAllMocks();
+  });
+
+  it("sends multipart form data without a JSON content type and reports confirmed completion", async () => {
+    const onlineFetch = vi.fn(async () => new Response(JSON.stringify({ evidence, task: { completed: true }, providerStatus: "work_os_confirmed" }), { status: 201, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", onlineFetch);
+    const result = await uploadTaskCompletionEvidence("task/one", new File(["hello"], "notes.txt", { type: "text/plain" }), "Shows the check", true, "idem-1");
+    expect(result).toMatchObject({ outcome: "completed", evidence });
+    const [url, init] = onlineFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://work.example.test/api/work-os/me/tasks/task%2Fone/completion-evidence");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers).not.toMatchObject({ "Content-Type": "application/json" });
+    expect((init.body as FormData).get("idempotency_key")).toBe("idem-1");
+    expect((init.body as FormData).get("complete")).toBe("true");
+  });
+
+  it("keeps a saved-evidence receipt when completion fails after the upload", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      error: "Evidence saved. This task records an expected outcome.",
+      evidence,
+      task: null,
+      completion: "failed",
+    }), { status: 502, headers: { "content-type": "application/json" } })));
+    const result = await uploadTaskCompletionEvidence("task-1", new File(["hello"], "notes.txt", { type: "text/plain" }), "", true, "idem-2");
+    expect(result).toEqual({
+      outcome: "completion_failed",
+      evidence,
+      error: "Evidence saved. This task records an expected outcome.",
+    });
   });
 });

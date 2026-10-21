@@ -60,4 +60,30 @@ describe("TaskDetailsModal subtask actions", () => {
     expect(markup).toContain("Move to");
     expect(markup).toContain("Archive");
   });
+
+  it("shows employee-attached completion evidence without claiming provider confirmation", () => {
+    const markup = renderToStaticMarkup(createElement(TaskDetailsModal, {
+      ...base,
+      details: { ...details, task: { ...details.task, expected_outcome: "A signed verification record." } },
+      completionEvidence: [{
+        id: "evidence-1",
+        title: "Ship the drawer — completion evidence",
+        note: "Signed verification record.",
+        fileName: "release-verification.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 482112,
+        createdAt: "2026-09-29T16:42:00.000Z",
+        url: "/api/work-os/evidence/evidence-1/file",
+      }],
+      onAttachEvidence: noop,
+      onDownloadEvidence: noop,
+    }));
+    expect(markup).toContain("Expected outcome");
+    expect(markup).toContain("Completion evidence");
+    expect(markup).toContain("Employee-attached");
+    expect(markup).toContain("release-verification.pdf");
+    expect(markup).toContain("Download release-verification.pdf");
+    expect(markup).toContain("Attach evidence");
+    expect(markup).not.toContain("Nifty synced");
+  });
 });
