@@ -7,7 +7,9 @@ final class Probe: NSObject, WKNavigationDelegate {
     let webview: WKWebView
     var tries = 0
     override init() {
-        webview = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760))
+        let width = Double(ProcessInfo.processInfo.environment["LAYOUT_WIDTH"] ?? "1000") ?? 1000
+        let height = Double(ProcessInfo.processInfo.environment["LAYOUT_HEIGHT"] ?? "760") ?? 760
+        webview = WKWebView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         window = NSWindow(contentRect: webview.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         super.init()
         window.contentView = webview
@@ -42,7 +44,8 @@ final class Probe: NSObject, WKNavigationDelegate {
                 if let image = image, let tiff = image.tiffRepresentation,
                    let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using:.png, properties:[:]),
                    let temp = ProcessInfo.processInfo.environment["RUNNER_TEMP"] {
-                    try? png.write(to: URL(fileURLWithPath: temp+"/native-window-webview.png"))
+                    let suffix = ProcessInfo.processInfo.environment["LAYOUT_WIDTH"] ?? "1000"
+                    try? png.write(to: URL(fileURLWithPath: temp+"/native-window-webview-"+suffix+".png"))
                 }
                 exit(parsed?["footerVisible"] as? Bool == true && parsed?["cards"] as? Int == 9 ? 0 : 1)
             }
