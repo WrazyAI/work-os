@@ -85,6 +85,7 @@ export type TaskListOrder =
   | "title_desc"
   | "due_asc"
   | "due_desc"
+  | "created_desc"
   | "status_asc"
   | "status_desc";
 
@@ -154,11 +155,15 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   let query = db()
     .from("work_tasks")
     .select("*, project:work_projects(*), evidence:work_evidence(id, source, title, evidence_date)")
-    .eq("user_id", userId)
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: true })
-    .range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
+    .eq("user_id", userId);
+  // The administration record opens newest-created first (design.md §16.2);
+  // every other list keeps the due-date order the workday uses.
+  query = opts.order === "created_desc"
+    ? query.order("created_at", { ascending: false }).order("id", { ascending: true })
+    : query.order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
+  query = query.range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
   query = query.not("status", "in", "(archived,deleted)");
   if (opts.completed === "true") query = query.eq("completed", true);
   if (opts.completed === "false") query = query.eq("completed", false);

@@ -24,6 +24,7 @@ export async function GET(req: Request) {
       limit: Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)),
       includeCompleted: sp.get("includeCompleted") === "true",
       includeLedgerHistory: sp.get("today") !== "true" && !sp.get("from") && !sp.get("to"),
+      order: "created_desc" as const,
     };
     const personId = sp.get("personId");
     const tasks = (personId
