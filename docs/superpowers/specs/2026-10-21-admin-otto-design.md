@@ -1,6 +1,6 @@
 # Admin Otto: reviewed recaps and employee queries
 
-Date: Oct 21, 2026. Status: proposed; awaiting user approval.
+Date: Oct 21, 2026. Status: approved by the user on Oct 21, 2026; implementation not started.
 Source baseline: Work OS `a1b2d86f`; compared Agent OS ref `04870874`.
 Ledger: `wYzO1UbYPZ` — Design admin Otto recaps and employee queries.
 
@@ -27,7 +27,7 @@ manager. Reuse existing services behind explicit admin-authorized tools.
 5. Extend/reuse employee functionality and the existing APIs/tools instead of
    inventing unrelated admin uses.
 
-## Proposed builder choices — not yet user-approved
+## Builder choices included in the approved design
 
 - First delivery targets the installed Windows/macOS companion: floating Otto,
   its admin-mode chat, a reviewed-recap inbox, and personal settings inside the
@@ -370,7 +370,7 @@ Required evidence before calling the eventual feature shipped:
 - [x] Trace existing recap audio, employee review, admin reads and task authority.
 - [x] Record user decisions separately from proposed builder choices.
 - [x] Fresh builder check; specified activation, history-window and reactivation rules.
-- [ ] User approves the full description.
+- [x] User approved the full description on Oct 21, 2026.
 
 Documentation only: no feature, migration, speech request or deployment has been
 made. Current TTS provider availability and real native playback have not been
@@ -381,5 +381,5 @@ Builder-check result: the reviewer identified three lifecycle ambiguities, not
 additional user requirements. The author resolved them above as proposed builder
 choices: first-use activation with fresh watermarks after disabled access; inbox
 age by review commit time with explicit older-history access; and resumed follows
-on employee reactivation without retroactive alerts. These remain subject to the
-user's approval together with the rest of the proposed design.
+on employee reactivation without retroactive alerts. The user approved these
+together with the rest of the design on Oct 21, 2026.
