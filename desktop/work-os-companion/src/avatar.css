@@ -1074,6 +1074,9 @@ body.avatar-window {
      keeps the mascot and the elapsed pill exactly where they were on screen,
      and lets the bubble take the space that opened above. */
   align-items: flex-end;
+  /* The window widened symmetrically about its centre; centring the column
+     keeps the mascot exactly on the screen position it had before the growth. */
+  justify-content: center;
 }
 .avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact {
   display: flex;
