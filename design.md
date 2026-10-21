@@ -481,11 +481,15 @@ workspace than a list of cards.
    shortcuts, and Review unfinished work only when relevant.
 3. One flat task-list panel whose header borrows the dashboard queue's outline:
    the four views (My day, Unfinished, Completed, All tasks) are the panel title,
-   and the compact search field, date-range filter, and local Add task action
-   share its trailing edge. The controls wrap below the views only when the
-   header runs out of width.
-4. The sortable column row and task rows inside that same panel; ordering never
-   moves into the header.
+   and the compact search field and the date-range filter ride the trailing
+   edge. The controls wrap below the views only when the header runs out of
+   width.
+4. The list's own header row — the quiet sortable column row for Name, Date
+   due, and Status — carries the local Add task action at its right edge, so the
+   action belongs to the list it adds to and the panel title row stays a title.
+   Ordering and the action share that row without crowding: the date and status
+   tracks keep the width the rows use, and the action sits in the space the
+   status column leaves free.
 5. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
@@ -498,14 +502,16 @@ Use a flat, readable list:
     completion | task + metadata | progress | due | status | actions
 
 The Tasks page has one date navigator in the masthead, one task-list panel, and
-one task list. The panel header carries the views, a compact search, the date
-filter, and Add task on one row while width permits; the search stays compact
-while the header is one row, and the controls wrap beneath the views rather than
-compressing them. Once wrapped on a small screen, the search may take the row.
-Do not repeat a Task queue heading or status section headers. The list
-begins with one quiet sortable column row for Name, Date due, and Status; it
-aligns to the task, due, and status tracks rather than introducing
-a second boxed toolbar. Keep the canonical default order visible through the row
+one task list. The panel header carries the views, a compact search, and the
+date filter on one row while width permits; search and the date filter ride the
+right edge, the search stays compact while the header is one row, and the
+controls wrap beneath the views rather than compressing them. Once wrapped on a
+small screen, the search may take the row. Do not repeat a Task queue heading or
+status section headers. The list begins with one quiet sortable column row for
+Name, Date due, and Status, which also carries the Add task action at its
+right edge; the row aligns to the task, due, and status tracks rather than
+introducing a second boxed toolbar, and the action never crowds the status
+label. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
 

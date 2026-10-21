@@ -47,7 +47,7 @@ describe("Tasks workspace filters", () => {
     expect(markup).toContain('aria-label="Filter to date"');
   });
 
-  it("puts the views, search, date range, and Add task in one list header", () => {
+  it("puts the views, search, and date range in the panel header and Add task in the list header", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       currentDate: "2026-08-26",
       historyDate: "2026-08-26",
@@ -88,7 +88,8 @@ describe("Tasks workspace filters", () => {
     expect(header).toContain('aria-label="Task search and date filters"');
     expect(header).toContain('aria-label="Search tasks"');
     expect(header).toContain("Date range");
-    expect(header).toContain("Add task");
+    // The action belongs to the list itself, not to the panel title row.
+    expect(header).not.toContain("Add task");
     const selectedTab = header.match(/<button[^>]*aria-selected="true"[^>]*>/)?.[0] ?? "";
     expect(selectedTab).toContain('tabindex="0"');
     expect(header.match(/tabindex="-1"/g)?.length).toBe(3);
@@ -99,9 +100,50 @@ describe("Tasks workspace filters", () => {
     expect(markup).toContain('aria-labelledby="task-list-tab-all"');
     expect(markup).not.toContain("tasks-toolbar");
     expect(markup).not.toContain("task-search-toolbar");
-    // Ordering stays in the list, not in the header.
+    // The list's own header row carries the action, below the panel header.
     const headerEnd = markup.indexOf(header) + header.length;
     expect(markup.indexOf("sort-header-row")).toBeGreaterThan(headerEnd);
+    expect(markup.indexOf("task-add-button")).toBeGreaterThan(markup.indexOf("sort-header-row"));
+    expect(markup).toMatch(/sort-header-row[\s\S]*?task-add-button/);
+  });
+
+  it("keeps Add task available when the list has no rows", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-26",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null,
+      suggestion: null,
+      saveState: "saved",
+      taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
+      todayTasks: [],
+      taskHistory: [],
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: false,
+      busy: false,
+      onTaskView: () => undefined,
+      onTaskSort: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onDeleteTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    }));
+
+    expect(markup).toContain("task-add-button");
+    expect(markup).toContain("Add task");
   });
 
   it("keeps search and date filters on a historical day without tabs or Add task", () => {

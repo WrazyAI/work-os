@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import type { ReactNode } from "react";
 
 export type SortDirection = "asc" | "desc";
 export type SortState<Key extends string> = { key: Key; direction: SortDirection };
@@ -31,12 +32,14 @@ export function nextSortState<Key extends string>(
  * carries `aria-pressed` and names the order it will apply next; the visible
  * section notes state the order that is currently applied (design §27.3).
  */
-export function SortHeaderRow<Key extends string>({ columns, sort, fallback, onChange, label, className = "" }: {
+export function SortHeaderRow<Key extends string>({ columns, sort, fallback, onChange, label, action = null, className = "" }: {
   columns: ReadonlyArray<SortColumn<Key>>;
   sort: SortState<Key>;
   fallback: SortState<Key>;
   onChange: (next: SortState<Key>) => void;
   label: string;
+  /** A trailing action for the list itself, such as its Add task control. */
+  action?: ReactNode;
   className?: string;
 }) {
   return (
@@ -62,6 +65,7 @@ export function SortHeaderRow<Key extends string>({ columns, sort, fallback, onC
           </span>
         );
       })}
+      {action ? <span className="sort-header-action">{action}</span> : null}
     </div>
   );
 }

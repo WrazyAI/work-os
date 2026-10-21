@@ -398,8 +398,9 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toContain(".task-list-tabs { width: 100%; flex-wrap: wrap; }");
     expect(dashboardStyles).toMatch(/\.task-list-controls \{[\s\S]*?justify-content: flex-end;/);
     expect(dashboardStyles).toContain(".task-list-controls .task-search { flex: 0 1 170px;");
-    expect(dashboardStyles).toContain(".task-list-controls .task-add-button { min-height: 38px; height: 38px; padding: 0 13px; border-color: transparent; border-radius: 10px; background: var(--dash-ink, #182018);");
-    expect(dashboardStyles).toContain(".task-list-controls .task-add-button:not(:disabled):hover");
+    expect(dashboardStyles).toContain(".task-list-panel .task-add-button { min-height: 32px; height: 32px; padding: 0 11px; border-color: transparent; border-radius: 9px; background: var(--dash-ink, #182018);");
+    expect(dashboardStyles).toContain(".task-list-panel .task-add-button:not(:disabled):hover");
+    expect(dashboardStyles).toContain(".tasks-column-sort .sort-header-action { position: absolute; right: 0;");
     expect(dashboardStyles).toContain(".task-list-panel { padding: 0;");
     // The peer-view tablist delegates its index math to the tested helper.
     expect(app).toContain("taskViewTabIndex(index, event.key, chipCounts.length)");
