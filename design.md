@@ -485,11 +485,12 @@ workspace than a list of cards.
    edge. The controls wrap below the views only when the header runs out of
    width.
 4. The list's own header row — the quiet sortable column row for Name, Date
-   due, and Status — carries the local Add task action at its right edge, so the
+   Due, and Status — carries the local Add task action at its right edge, so the
    action belongs to the list it adds to and the panel title row stays a title.
    Ordering and the action share that row without crowding: the date and status
    tracks keep the width the rows use, and the action sits in the space the
-   status column leaves free.
+   status column leaves free. The column labels are written as words, not
+   shouted labels, so the row reads as a quiet table header.
 5. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
@@ -508,7 +509,7 @@ right edge, the search stays compact while the header is one row, and the
 controls wrap beneath the views rather than compressing them. Once wrapped on a
 small screen, the search may take the row. Do not repeat a Task queue heading or
 status section headers. The list begins with one quiet sortable column row for
-Name, Date due, and Status, which also carries the Add task action at its
+Name, Date Due, and Status, which also carries the Add task action at its
 right edge; the row aligns to the task, due, and status tracks rather than
 introducing a second boxed toolbar, and the action never crowds the status
 label. Keep the canonical default order visible through the row
@@ -642,7 +643,7 @@ chip, and the agenda-strip counts all derive from the same day list (the
 canonical default order only applies where the server pages a view; a client
 view whose rows skip the active sort would make the column header lie). The
 strip counts name exactly what they measure — overdue, due today, done today —
-and never repeat a view chip under a different definition. The Tasks column row exposes Name, Date due, and Status
+and never repeat a view chip under a different definition. The Tasks column row exposes Name, Date Due, and Status
 sorting. Activating a column starts in its natural direction, toggles on the
 second activation, and restores the default on the third. The choice persists
 for the Tasks workspace, and paginated results must be sorted before pagination

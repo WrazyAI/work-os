@@ -330,11 +330,11 @@ describe("Tasks workspace ordering contract", () => {
 
     expect(markup).toContain('role="toolbar"');
     expect(markup).toContain("Name");
-    expect(markup).toContain("Date due");
+    expect(markup).toContain("Date Due");
     expect(markup).toContain("Status");
     expect(markup).not.toContain("Task queue");
     expect(markup).not.toContain("Scheduled today");
-    expect(markup).toContain("Date due, sorted descending.");
+    expect(markup).toContain("Date Due, sorted descending.");
     expect(markup).toContain("Add task");
 
     const latestDueIndex = markup.indexOf("Soon work");

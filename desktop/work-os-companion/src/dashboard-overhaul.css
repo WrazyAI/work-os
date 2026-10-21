@@ -537,6 +537,9 @@ body {
 .tasks-column-sort .sort-header-cell:nth-child(2) { grid-column: 4; justify-self: end; }
 .tasks-column-sort .sort-header-cell:nth-child(3) { grid-column: 5; justify-self: start; }
 .tasks-column-sort .sort-header-cell button { min-height: 30px; padding: 0; }
+/* The list's column labels read as words, not shouted labels. */
+.tasks-column-sort .sort-header-cell button { font-size: 11px; font-weight: 700; letter-spacing: 0.01em; text-transform: none; color: var(--dash-muted); }
+.tasks-column-sort .sort-header-cell.is-active button { color: var(--dash-ink); }
 .tasks-column-sort .sort-header-cell:nth-child(2) button { justify-content: flex-end; text-align: right; }
 /* The day-group header rules lived here: they drew the Overdue / Due today /
    Later / No date bands that My day no longer renders. The urgency order still

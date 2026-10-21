@@ -851,12 +851,13 @@ const cargoLock = read("src-tauri/Cargo.lock");
 const companionLockVersion = /name = "work-os-companion"\nversion = "([^"]+)"/.exec(cargoLock)?.[1] ?? null;
 assert.equal(companionLockVersion, companionPackage.version, "Cargo.lock's work-os-companion version must match package.json");
 // The release bump must touch the companion's own entry, never a dependency
-// whose version happens to look the same.
-assert.equal(
-  cargoLock.split(`version = "${companionPackage.version}"`).length - 1,
-  1,
-  "exactly one Cargo.lock entry may carry the companion's version",
-);
+// whose version happens to look the same. Counting the companion's package
+// blocks is the exact check; counting raw version strings misfires whenever a
+// dependency legitimately shares the companion's version (0.5.1 does).
+const cargoLockPackages = cargoLock.split("\n[[package]]\n").slice(1);
+const companionLockPackages = cargoLockPackages.filter((block) => /^name = "work-os-companion"$/m.test(block));
+assert.equal(companionLockPackages.length, 1, "the companion must have exactly one Cargo.lock entry");
+assert.match(companionLockPackages[0]!, new RegExp(`^version = "${companionPackage.version}"$`, "m"));
 assert.match(read("src-tauri/Cargo.toml"), new RegExp(`^version = "${companionPackage.version}"$`, "m"));
 assert.match(read("src-tauri/tauri.conf.json"), new RegExp(`"version": "${companionPackage.version}"`));
 // package-lock.json drifted silently across two releases before this guard:

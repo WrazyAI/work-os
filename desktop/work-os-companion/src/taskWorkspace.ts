@@ -80,7 +80,7 @@ export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string;
 
 export const TASKS_WORKSPACE_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
   { key: "title", label: "Name", initialDirection: "asc" },
-  { key: "due", label: "Date due", initialDirection: "desc" },
+  { key: "due", label: "Date Due", initialDirection: "desc" },
   { key: "status", label: "Status", initialDirection: "asc" },
 ];
 

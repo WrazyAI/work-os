@@ -193,7 +193,7 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
   it("defines the Tasks workspace columns and preserves an explicit Status sort", () => {
     expect(TASKS_WORKSPACE_SORT_COLUMNS.map(({ key, label }) => [key, label])).toEqual([
       ["title", "Name"],
-      ["due", "Date due"],
+      ["due", "Date Due"],
       ["status", "Status"],
     ]);
     const store = new Map<string, string>([[TASKS_SORT_STORAGE_KEY, JSON.stringify({ key: "status", direction: "asc" })]]);
