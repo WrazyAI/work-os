@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.99 — 2026-10-21
+
 - Task views, search, date range, and Add task now stay on one row, with the Add task button matching the admin record.
 
 ## 0.4.98 — 2026-10-21
