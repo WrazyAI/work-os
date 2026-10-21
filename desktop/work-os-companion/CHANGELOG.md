@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.98 — 2026-10-21
+
 - When you finish a task, you can attach a file and a short note as completion evidence — or complete it without one when the task doesn't need it.
 
 ## 0.4.97 — 2026-10-21
