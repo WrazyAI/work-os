@@ -25,9 +25,18 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
   });
   // Activity alone can clock someone in or out. Re-check Worktivity on the
   // adaptive cadence and refresh the day only when the tracked state moved.
+  //
+  // The first check of a page load asks Worktivity directly instead of taking
+  // the short observer cache: a clock-out made in Worktivity must land on a
+  // reload, not on the next poll. Later checks keep the cache and cadence.
+  const firstAttendanceCheck = useRef(true);
   const attendanceWatch = useQuery<{ changed?: boolean }>({
     queryKey: ["work-os", "attendance-watch"],
-    queryFn: () => fetchJson("/api/work-os/attendance/observe", { method: "POST" }),
+    queryFn: () => {
+      const force = firstAttendanceCheck.current;
+      firstAttendanceCheck.current = false;
+      return fetchJson(`/api/work-os/attendance/observe${force ? "?refresh=1" : ""}`, { method: "POST" });
+    },
     enabled: enabled && !!day.data,
     refetchInterval: () => attendanceWatchInterval(attendanceWatchInput(day.data), Date.now()),
     staleTime: 0,
@@ -50,6 +59,14 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
     ]);
   }, [queryClient]);
 
+  /** Explicit attendance refresh: ask Worktivity now instead of waiting for the
+   * watch cadence, and re-read the day when the provider actually moved. A
+   * provider failure never blocks the UI — the last observed state stays. */
+  const refreshAttendance = useCallback(async () => {
+    const observed = await fetchJson<{ changed?: boolean }>("/api/work-os/attendance/observe?refresh=1", { method: "POST" }).catch(() => null);
+    if (observed?.changed) await queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
+  }, [queryClient]);
+
   // The companion's explicit provider sync: ask the server to refresh Nifty
   // and Worktivity for this day, then refetch the day every surface reads.
   const sync = useMutation({
@@ -59,7 +76,7 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
 
   const watchExpectation = attendanceWatchExpectation(attendanceWatchInput(day.data), Date.now());
   const syncing = sync.isPending || day.data?.niftySync?.syncing === true;
-  return { day, refresh, watchExpectation, sync, syncing };
+  return { day, refresh, refreshAttendance, watchExpectation, sync, syncing };
 }
 
 /** The outstanding-EOD list, shared by Today's callout and Review. */

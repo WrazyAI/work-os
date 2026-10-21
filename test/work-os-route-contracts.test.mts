@@ -722,3 +722,23 @@ test("the goal question holds the day and the first recap suggests a goal", asyn
   const web = await source("src/modules/work-os/employee/EmployeeToday.tsx");
   assert.match(web, /provenance === "suggested"/, "the web labels a suggested goal as one");
 });
+
+test("the companion's attendance headers pass CORS and explicit refreshes force a provider read", async () => {
+  const proxy = await source("src/proxy.ts");
+  for (const header of ["X-Work-OS-Desktop-Control", "X-Work-OS-Cadence-Minutes", "X-Work-OS-First-Follow-Up-Minutes"]) {
+    assert.match(proxy, new RegExp(`Access-Control-Allow-Headers[^\\n]*${header}`, "i"), `${header} must be allowed by the desktop preflight`);
+  }
+  const observeRoute = await source("src/app/api/work-os/attendance/observe/route.ts");
+  assert.match(observeRoute, /refresh/, "the observe route accepts an explicit refresh");
+  assert.match(observeRoute, /forceRefresh/, "an explicit refresh bypasses the observer cache");
+  const attendance = await source("src/lib/work-os-attendance.ts");
+  assert.match(attendance, /observeAttendanceChange\(access: WorkOsAccess, at = new Date\(\), options: \{ forceRefresh\?: boolean \}/, "the observer exposes the force option");
+  const dayView = await source("src/lib/work-os-day-view.ts");
+  assert.match(dayView, /refreshAttendance[\s\S]{0,220}forceRefresh: true/, "the day's attendance refresh forces a provider read");
+  const webWatch = await source("src/modules/work-os/employee/useEmployeeDay.ts");
+  assert.match(webWatch, /attendance\/observe\$\{force \? "\?refresh=1" : ""\}/, "the web's first check asks the provider");
+  assert.match(webWatch, /attendance\/observe\?refresh=1/, "the web's explicit refresh asks the provider");
+  const companionWatch = await source("desktop/work-os-companion/src/useAttendanceWatch.ts");
+  assert.match(companionWatch, /refresh=1/, "the companion's first check asks the provider");
+  assert.match(companionWatch, /tick\(true\)/, "the first check runs immediately");
+});

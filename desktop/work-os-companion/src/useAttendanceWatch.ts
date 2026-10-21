@@ -26,12 +26,18 @@ export function useAttendanceWatch({ enabled, input, onChange }: {
     if (!enabled) return;
     let disposed = false;
     let timer: number | undefined;
-    const tick = async () => {
+    const tick = async (force = false) => {
       if (disposed) return;
       if (!inFlight.current && navigator.onLine) {
         inFlight.current = true;
         try {
-          const result = await apiRequest<AttendanceObserveResponse>("/api/work-os/attendance/observe", { method: "POST" });
+          // The first check of a launch asks Worktivity directly instead of
+          // taking the observer cache: a clock-out made in Worktivity must land
+          // when the companion opens, not on the next cadence tick.
+          const result = await apiRequest<AttendanceObserveResponse>(
+            `/api/work-os/attendance/observe${force ? "?refresh=1" : ""}`,
+            { method: "POST" },
+          );
           if (!disposed && result?.changed) changeRef.current();
         } catch { /* transient; the next tick retries */ }
         finally { inFlight.current = false; }
@@ -42,7 +48,8 @@ export function useAttendanceWatch({ enabled, input, onChange }: {
       if (disposed) return;
       timer = window.setTimeout(() => void tick(), attendanceWatchInterval(inputRef.current, Date.now()));
     };
-    schedule();
+    // Ask now, then keep the adaptive cadence.
+    void tick(true);
     return () => { disposed = true; if (timer) window.clearTimeout(timer); };
   }, [enabled]);
 }

@@ -183,7 +183,15 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
     return { employee: previous.employee, projection: { ...previous.projection, observedAt }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
   }
   const pending = inflight.get(cacheKey);
-  if (pending) return pending;
+  if (pending) {
+    // A background read would normally be reused. A forced refresh asked for
+    // provider truth now, so it waits for that read and then asks again instead
+    // of accepting a status that may predate the change it is looking for.
+    if (!forceRefresh) return pending;
+    await pending.catch(() => undefined);
+    const startedAfter = inflight.get(cacheKey);
+    if (startedAfter) return startedAfter;
+  }
   const request = fetchEmployeeAttendance(employeeId, observedAt, cacheKey, bounds, previous, forceRefresh);
   inflight.set(cacheKey, request);
   try {
@@ -315,10 +323,13 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
  * the full day payload. It converges the session from fresh provider activity
  * (the same path a full refresh takes) and reports whether the tracked state
  * actually moved, so clients refresh their workspace only on a real transition. */
-export async function observeAttendanceChange(access: WorkOsAccess, at = new Date()) {
+export async function observeAttendanceChange(access: WorkOsAccess, at = new Date(), options: { forceRefresh?: boolean } = {}) {
   const beforeAttendance = await loadPersistedWorktivityAttendance(access, at);
   const beforeSession = await activeSession(access);
-  const result = await observeWorktivityAttendance(access, at);
+  // An explicit refresh asks Worktivity now: the short read cache is for the
+  // background cadence, and would otherwise hide a clock-out made in
+  // Worktivity for up to its lifetime.
+  const result = await observeWorktivityAttendance(access, at, options.forceRefresh === true ? { forceRefresh: true } : {});
   const changed = attendanceSignature(beforeAttendance, beforeSession) !== attendanceSignature(result.attendance, result.session);
   return { attendance: result.attendance, session: result.session, changed };
 }

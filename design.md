@@ -942,7 +942,16 @@ refresh.
   Pause/Resume, and Clock out controls stay available the whole time, and
   manual clock actions keep their existing Worktivity confirmation flow.
 - Provider reads are cached for 25 seconds and single-flight per employee, so
-  two windows polling together never stampede the provider.
+  two windows polling together never stampede the provider. The cache belongs to
+  the background cadence, never to an explicit request: a page load, the refresh
+  control, the day's attendance sync, and the companion's first check after
+  launch all ask Worktivity immediately (`?refresh=1`), so a clock-out made in
+  Worktivity lands on that refresh instead of the next poll.
+- A transition observed in Worktivity alone is only as fresh as the last
+  provider read. The desktop webview may reach the API cross-origin, so the
+  preflight allow-list names every header the companion sends — including the
+  desktop control marker and the machine cadence overrides. A missing header
+  fails the preflight and surfaces as `Failed to fetch` before any route runs.
 
 ### 8.8 Voice input: record → transcribe → review
 
