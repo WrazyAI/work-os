@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: "50 20 * * *"
   workflow_dispatch:
+    inputs:
+      geometry_release:
+        description: "Audit a published release's native window bounds only (optional release tag)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +24,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-geometry-audit:
+    if: ${{ inputs.geometry_release != '' && inputs.geometry_release != null }}
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download the published Mac app under investigation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.geometry_release }}
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz' --dir "$RUNNER_TEMP/mac-app"
+          tar -xzf "$RUNNER_TEMP/mac-app/Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz" -C "$RUNNER_TEMP/mac-app"
+      - name: Check real native bounds on a compact display
+        working-directory: desktop/work-os-companion
+        run: bash scripts/check-macos-window-bounds.sh "$RUNNER_TEMP/mac-app/Work OS Companion.app/Contents/MacOS/work-os-companion"
+      - name: Retain native window evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-native-geometry-${{ github.run_id }}
+          path: ${{ runner.temp }}/native-window-*
+          retention-days: 7
   macos:
+    if: ${{ !inputs.geometry_release }}
     runs-on: macos-14
     timeout-minutes: 60
     defaults:
