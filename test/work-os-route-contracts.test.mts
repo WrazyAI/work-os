@@ -401,6 +401,7 @@ test("auth proxy keeps desktop CORS and bearer bypass intact", async () => {
      names them; the companion's subtitles and stale check depend on these. */
   assert.match(proxy, /Access-Control-Expose-Headers/);
   assert.match(proxy, /X-Work-OS-Recap-Lines/);
+  assert.match(proxy, /X-Work-OS-Next-Steps-Lines/);
   assert.match(proxy, /request\.method === "OPTIONS"/);
   assert.match(proxy, /workOsBearer/);
   assert.match(proxy, /Idempotency-Key/);
