@@ -21,6 +21,18 @@ describe("AvatarThinking", () => {
     expect(html).toContain("avatar-thinking-active");
   });
 
+  it("keeps the step in progress first and the finished steps beneath it", () => {
+    const html = renderToStaticMarkup(
+      createElement(AvatarThinking, { stages, active: 1, startedAt: Date.now() }),
+    );
+    const activeAt = html.indexOf("avatar-thinking-row is-active");
+    const doneAt = html.indexOf("avatar-thinking-row is-done");
+    expect(activeAt).toBeGreaterThan(-1);
+    expect(doneAt).toBeGreaterThan(-1);
+    expect(activeAt).toBeLessThan(doneAt);
+    expect(html).toContain("Matching tasks");
+  });
+
   it("settles to a collapsed receipt with the honest outcome", () => {
     const html = renderToStaticMarkup(
       createElement(AvatarThinking, { stages, active: -1, startedAt: 0, settledMs: 2400, result: "Reviewed 4 tasks" }),

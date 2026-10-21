@@ -42,6 +42,12 @@ export function AvatarThinking({
   const [elapsed, setElapsed] = useState(0);
   const expanded = manualExpanded ?? working;
   const visible = working ? stages.slice(0, Math.min(stages.length, active + 1)) : stages;
+  // The step in progress leads the body; the steps already done stay visible
+  // beneath it, quiet and in their original order (design §7.1).
+  const rows = visible.map((stage, index) => ({ stage, index }));
+  const orderedRows = working
+    ? [...rows.filter((row) => row.index === active), ...rows.filter((row) => row.index !== active)]
+    : rows;
   const spokenStatus = working
     ? [activeLabel, visible.at(-1)?.label].filter(Boolean).join(": ")
     : `${settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}${result ? ` · ${result}` : ""}`;
@@ -101,8 +107,8 @@ export function AvatarThinking({
       >
         <div className="avatar-thinking-trace-clip">
           <div className="avatar-thinking-trace">
-            {visible.map((stage, index) => {
-              const done = !working || index < active;
+            {orderedRows.map(({ stage, index }) => {
+              const done = !working || index !== active;
               return (
                 <div
                   key={`${index}-${stage.label}`}
