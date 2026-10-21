@@ -59,6 +59,7 @@ jobs:
           trap 'kill "$server" 2>/dev/null || true' EXIT
           xcrun swiftc scripts/check-native-webview-layout.swift -o "$RUNNER_TEMP/native-window-webview-probe"
           "$RUNNER_TEMP/native-window-webview-probe" | tee "$RUNNER_TEMP/native-window-webview.json"
+          LAYOUT_WIDTH=720 LAYOUT_HEIGHT=600 "$RUNNER_TEMP/native-window-webview-probe" | tee "$RUNNER_TEMP/native-window-webview-720.json"
       - name: Retain native window evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
