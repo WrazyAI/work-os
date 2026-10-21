@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.89 — 2026-10-21
+
+- A recap that takes a while now says "Taking longer than usual" and lets you cancel, instead of leaving you guessing.
+- If you cancel or the read fails, the recap stays with **View more** and **Try again** — and the voice keeps being prepared, so trying again is quick.
+
 ## 0.4.88 — 2026-10-21
 
 - New tasks now land in the TASKS project automatically, and your task record is kept in Work OS — Nifty is only a read-only backup.
