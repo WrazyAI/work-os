@@ -474,3 +474,19 @@ describe("interval recap scheduler", () => {
     expect(app).toMatch(/eodAlertNow, clockInAlertNow, promptDueNow\]/);
   });
 });
+
+describe("preview fixtures are recognised as fixtures", () => {
+  it("lists every fixture, so the day poll never clears a fixture's bubble", () => {
+    const source = readFileSync(new URL("./avatarFixture.ts", import.meta.url), "utf8");
+    const names = [...source.matchAll(/export const (AVATAR_[A-Z_]*_FIXTURE) =/g)].map((match) => match[1]);
+    expect(names.length).toBeGreaterThan(10);
+    const start = source.indexOf("export function avatarFixtureRequested");
+    const end = source.indexOf("\n}", start);
+    const body = source.slice(start, end);
+    const missing = names.filter((name) => !body.includes(name));
+    // Every fixture mounted in the browser must advertise itself here: the
+    // companion skips its day poll for fixtures, and a missed one makes the
+    // bubble disappear a moment after it appears.
+    expect(missing).toEqual([]);
+  });
+});
