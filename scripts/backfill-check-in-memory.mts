@@ -16,6 +16,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isoDate, isoTimestamp } from "@/lib/iso-timestamp";
 import { recordWorkMemory } from "@/lib/work-memory";
 
+// Match the other operator scripts: the checkout's own env is authoritative,
+// and running from the app directory is what makes that possible.
+for (const file of [".env.local", ".env"]) {
+  try { process.loadEnvFile(file); } catch { /* the process environment remains authoritative */ }
+}
+
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
 const limitIndex = process.argv.indexOf("--limit");
