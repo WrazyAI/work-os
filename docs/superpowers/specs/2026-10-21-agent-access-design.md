@@ -135,7 +135,7 @@ All paths are `/api/agent/v1`. Every write requires `Idempotency-Key`.
 
 | method | path | scope | notes |
 |---|---|---|---|
-| GET | `/me` | `tasks:read` | identity, scopes, expiry |
+| GET | `/me` | none | identity, scopes, expiry; any valid token |
 | GET | `/tasks` | `tasks:read` | views, search, due filters, `updated_since`, cursor |
 | POST | `/tasks` | `tasks:write` | create; defaults assignee = person, project = TASKS |
 | GET | `/tasks/{id}` | `tasks:read` | task, subtasks, evidence, blockers |
@@ -151,14 +151,18 @@ All paths are `/api/agent/v1`. Every write requires `Idempotency-Key`.
 ### Creation and update
 
 - Create accepts `name`, `description`, `due_date`, `start_date`, `priority`,
-  `labels`, `expected_outcome`, `definition_of_done`, `parent_task_id`,
-  `project_id`, and `assignee_person_ids`.
-- Assignees default to the token’s person; a caller may assign another active
-  member only if that person is a valid assignable member of the organization.
-- `project_id` defaults to TASKS when omitted. Groups, milestones, and
-  dependencies are not part of the contract.
-- Update accepts the same mutable fields plus `blocked` and `blocked_reason`.
-  Immutable: `provider`, `provider_task_id`, `id`, `organization_id`,
+  `labels`, `expected_outcome`, `definition_of_done`, `parent_task_id`, and
+  `project_id`.
+- A token creates work **for its own person**. Assignees are fixed to that
+  person; the create body does not accept `assignee_person_ids`. This keeps a
+  token from filing work it cannot then see.
+- `project_id` defaults to TASKS and is validated against the organization's
+  projects. Groups, milestones, and dependencies are not part of the contract.
+- Update accepts the mutable content fields plus `blocked` and
+  `blocked_reason`. `project_id` and `parent_task_id` are **create-only**: moving
+  a task between projects or parents needs service logic the employee surface does
+  not have and is out of scope.
+- Immutable: `provider`, `provider_task_id`, `id`, `organization_id`,
   `created_at`.
 
 ### Completion
@@ -200,6 +204,12 @@ create table if not exists work_agent_idempotency (
 
 - The request hash covers method, path, and the canonical request body (file
   bytes included for multipart).
+- The idempotency row and the mutation are written in **one database
+  transaction**: insert the row as `in_flight`, perform the task write, store the
+  response, commit. A crash therefore rolls both back and a retry cannot create a
+  second task. Multipart evidence keeps its existing row-level idempotency key and
+  storage rollback; the file is written before the transaction.
+- A batch is one transaction as well, so a crash applies all of it or none.
 - Replay within 24 hours returns the stored status and body with
   `Idempotent-Replay: true`.
 - Same key with a different hash is `409 idempotency_conflict`.
@@ -214,15 +224,20 @@ create table if not exists work_agent_idempotency (
 whole batch. Operations run in order; each result reports `status`, `id`, and
 `error` when it failed, so a partial failure is visible rather than hidden. The
 response is `200` when the batch was accepted, `400` for a malformed batch,
-`409` for an idempotency conflict. Evidence upload stays out of the batch in v1
-because it is multipart.
+`409` for an idempotency conflict. A batch counts as **one request and one write**
+against the rate limit; the 20-operation cap is the bound. Evidence upload stays
+out of the batch in v1 because it is multipart.
 
 ## Change feed
 
-`GET /tasks?updated_since=<RFC3339>` returns tasks whose `updated_at` is after
-the instant, ordered by `updated_at` then `id`, with an opaque cursor. This is the
-agent’s “what changed since I last looked” read and the reason webhooks can wait.
-The same `updated_since` and cursor apply to `/tasks/{id}/activity`.
+`GET /tasks?updated_since=<RFC3339>` returns tasks whose row `updated_at` is
+after the instant, ordered by `updated_at` then `id`, with an opaque cursor. It
+reports **task-row changes**: create, content update, completion, reopen, archive,
+and delete. Evidence uploads and progress notes do not move the task row; they are
+read through `/tasks/{id}/activity`. With `include_archived=true` the same feed
+returns archived and deleted rows with their `status`, so an agent can see a task
+disappear instead of guessing. This is the agent’s “what changed since I last
+looked” read and the reason webhooks can wait.
 
 ## OpenAPI and MCP
 
@@ -301,3 +316,8 @@ The same `updated_since` and cursor apply to `/tasks/{id}/activity`.
    it created earlier? This design is assigned-work only, with new tasks assigned
    to the person by default.
 4. Default token lifetime: 90 days (this design) or no expiry?
+5. Should agent actions be labeled as agent actions in the employee record? Today
+   a completion is recorded with `provenance = employee_explicit`, and blockers
+   carry no actor beyond their person. A new `agent` provenance and token markers
+   would appear in the activity feed, EOD context, and audit. This design leaves
+   it unresolved because it is a truthfulness policy, not a technical default.
