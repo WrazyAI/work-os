@@ -50,10 +50,6 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
   }, [attendanceWatch.data, attendanceWatch.dataUpdatedAt, queryClient]);
 
   const refresh = useCallback(async () => {
-    // An explicit refresh asks Worktivity now, in parallel with the data
-    // refetch: a clock-out made in Worktivity lands on this refresh instead of
-    // waiting for the watch cadence. A provider failure never blocks the UI.
-    const observed = fetchJson<{ changed?: boolean }>("/api/work-os/attendance/observe?refresh=1", { method: "POST" }).catch(() => null);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "task-day"] }),
@@ -61,8 +57,14 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
       queryClient.invalidateQueries({ queryKey: ["work-os", "employee-insights"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "eod-outstanding"] }),
     ]);
-    const attendance = await observed;
-    if (attendance?.changed) await queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
+  }, [queryClient]);
+
+  /** Explicit attendance refresh: ask Worktivity now instead of waiting for the
+   * watch cadence, and re-read the day when the provider actually moved. A
+   * provider failure never blocks the UI — the last observed state stays. */
+  const refreshAttendance = useCallback(async () => {
+    const observed = await fetchJson<{ changed?: boolean }>("/api/work-os/attendance/observe?refresh=1", { method: "POST" }).catch(() => null);
+    if (observed?.changed) await queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
   }, [queryClient]);
 
   // The companion's explicit provider sync: ask the server to refresh Nifty
@@ -74,7 +76,7 @@ export function useEmployeeDay(options?: { enabled?: boolean }) {
 
   const watchExpectation = attendanceWatchExpectation(attendanceWatchInput(day.data), Date.now());
   const syncing = sync.isPending || day.data?.niftySync?.syncing === true;
-  return { day, refresh, watchExpectation, sync, syncing };
+  return { day, refresh, refreshAttendance, watchExpectation, sync, syncing };
 }
 
 /** The outstanding-EOD list, shared by Today's callout and Review. */

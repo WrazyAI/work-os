@@ -58,7 +58,7 @@ const FLOW_COLORS: Record<string, string> = {
 };
 
 export default function EmployeeInsights() {
-  const { day, refresh, sync, syncing } = useEmployeeDay();
+  const { day, refresh, refreshAttendance, sync, syncing } = useEmployeeDay();
   const [range, setRange] = useState<Range>("7d");
   const [through, setThrough] = useState("");
   const [synthesis, setSynthesis] = useState<{ status: "loading" } | { status: "ready"; text: string; mode?: "ai" | "evidence" } | { status: "failed" } | null>(null);
@@ -159,7 +159,7 @@ export default function EmployeeInsights() {
               className={`${inputClass} w-auto`}
               style={inputStyle}
             />
-            <IconButton label="Refresh insights" onClick={() => void refresh()} disabled={insights.isFetching}>
+            <IconButton label="Refresh insights" onClick={() => { void refreshAttendance(); void refresh(); }} disabled={insights.isFetching}>
               <RefreshCw size={15} className={insights.isFetching ? "animate-spin" : undefined} />
             </IconButton>
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />

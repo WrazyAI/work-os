@@ -78,7 +78,7 @@ function TaskAssigneeTags({ task }: { task: AnyRow }) {
 }
 
 export default function EmployeeTasks() {
-  const { day, refresh, sync, syncing } = useEmployeeDay();
+  const { day, refresh, refreshAttendance, sync, syncing } = useEmployeeDay();
   const [view, setView] = useState<TaskView>("day");
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
@@ -269,7 +269,7 @@ export default function EmployeeTasks() {
                 ) : null}
               </>
             ) : null}
-            <IconButton label="Refresh tasks" onClick={() => void refresh()} disabled={scoped.isFetching || history.isFetching}>
+            <IconButton label="Refresh tasks" onClick={() => { void refreshAttendance(); void refresh(); }} disabled={scoped.isFetching || history.isFetching}>
               <RefreshCw size={15} className={scoped.isFetching || history.isFetching ? "animate-spin" : undefined} />
             </IconButton>
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
