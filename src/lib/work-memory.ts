@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isoDate, isoTimestamp } from "@/lib/iso-timestamp";
 import { getPool } from "@/lib/db/pool";
 import {
   embedMemoryTexts,
@@ -72,8 +73,10 @@ export async function recordWorkMemory(scope: MemoryScope, input: RecordMemoryIn
         organization_id: scope.organizationId,
         person_id: scope.personId,
         kind: input.kind,
-        occurred_at: input.occurredAt ?? new Date().toISOString(),
-        local_date: input.localDate ?? null,
+        // Normalise here: a Date or a String(date) would be rejected by
+        // Postgres, and the caller only logs a warning.
+        occurred_at: isoTimestamp(input.occurredAt) ?? new Date().toISOString(),
+        local_date: input.localDate ? isoDate(input.localDate) : null,
         source_table: input.sourceTable,
         source_id: input.sourceId,
         content,

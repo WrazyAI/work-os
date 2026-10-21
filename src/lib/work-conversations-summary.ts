@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, CONVERSATION_SUMMARY_MODEL, aiRequestBody, recordAiUsage } from "@/lib/work-os-ai-model";
 import { conversationScopeKey, type ConversationScope } from "@/lib/work-conversations";
+import { isoTimestamp } from "@/lib/iso-timestamp";
 
 /**
  * A per-workday chat keeps only its most recent turns in the prompt, so the
@@ -49,8 +50,7 @@ function db() {
  * fails and the fold silently never lands.
  */
 export function isoBoundary(value: unknown): string | null {
-  const parsed = value instanceof Date ? value : new Date(String(value));
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  return isoTimestamp(value);
 }
 
 /** The conversation plus its running summary. Turns the summary covers are

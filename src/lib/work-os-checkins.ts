@@ -258,7 +258,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
       summary: input ? input.slice(0, 160) : null,
       metadata: { checkInKind: kind, updateKind, proposalCount: proposals.length },
       localDate: shiftDate,
-      occurredAt: checkIn.created_at ? String(checkIn.created_at) : now.toISOString(),
+      occurredAt: checkIn.created_at ?? now.toISOString(),
     },
   );
   if (activeSession?.id && (input || confirmedExisting)) {
