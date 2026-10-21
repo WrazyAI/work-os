@@ -7,6 +7,7 @@ import {
   findLoomReference,
   formatLoomDuration,
   loomUsableForDay,
+  normalizeLoomTranscript,
   type LoomBundle,
 } from "@/lib/work-os-loom";
 
@@ -63,12 +64,23 @@ const LOOM_ANALYSIS_SCHEMA = {
   },
 } as const;
 
-function loomFacts(bundle: LoomBundle) {
+/** The facts the analyzer needs. A transcript pasted without a link has no
+ * recording reference or public metadata, but the rest of the bundle shape is
+ * the same, so both paths share one analysis prompt. */
+export interface LoomAnalysisSource {
+  reference?: LoomBundle["reference"] | null;
+  metadata: LoomBundle["metadata"];
+  temporal: LoomBundle["temporal"];
+  transcript: LoomBundle["transcript"];
+}
+
+function loomFacts(bundle: LoomAnalysisSource) {
+  const link = bundle.reference?.url ?? null;
   const lines = [
     `Recording: ${bundle.metadata?.title ?? "Untitled"}`,
     formatLoomDuration(bundle.metadata?.durationSeconds) ? `Length: ${formatLoomDuration(bundle.metadata?.durationSeconds)}` : null,
-    `Link: ${bundle.reference.url}`,
-    `Recording date: ${bundle.temporal.createdLocalDate ?? "not exposed by Loom"}`,
+    `Link: ${link ?? "not provided (pasted transcript)"}`,
+    `Recording date: ${bundle.temporal.createdLocalDate ?? (link ? "not exposed by Loom" : "unverified (no link provided)")}`,
     `Target day: ${bundle.temporal.targetDate} (${bundle.temporal.verdict.replaceAll("_", " ")})`,
   ];
   return lines.filter(Boolean).join("\n");
@@ -78,7 +90,7 @@ function loomFacts(bundle: LoomBundle) {
  * still describes as outstanding. Suggestions are inputs for the calling
  * agent's reconciliation, never filed directly. */
 export async function analyzeLoomNarrative(
-  bundle: LoomBundle,
+  bundle: LoomAnalysisSource,
   context?: { existingTaskTitles?: string[] },
 ): Promise<LoomAnalysisResult> {
   const key = process.env.OPENROUTER_API_KEY;
@@ -179,10 +191,11 @@ export async function analyzeLoomForAgent(input: {
 }
 
 /** Human-readable line describing the recording for prompts and receipts. */
-export function loomFeedLine(bundle: LoomBundle) {
+export function loomFeedLine(bundle: LoomAnalysisSource) {
   const length = formatLoomDuration(bundle.metadata?.durationSeconds);
-  const recorded = bundle.temporal.createdLocalDate ? formatReportDate(bundle.temporal.createdLocalDate) : "an unverified date";
-  return `${bundle.metadata?.title ?? "Loom recording"}${length ? ` (${length})` : ""} — ${bundle.reference.url} · recorded ${recorded} · ${bundle.temporal.verdict.replaceAll("_", " ")} for ${formatReportDate(bundle.temporal.targetDate)}`;
+  const recorded = bundle.temporal.createdLocalDate ? `recorded ${formatReportDate(bundle.temporal.createdLocalDate)}` : "recorded on an unverified date";
+  const source = bundle.reference?.url ? ` — ${bundle.reference.url}` : " — pasted transcript (no link)";
+  return `${bundle.metadata?.title ?? "Loom recording"}${length ? ` (${length})` : ""}${source} · ${recorded} · ${bundle.temporal.verdict.replaceAll("_", " ")} for ${formatReportDate(bundle.temporal.targetDate)}`;
 }
 
 /** Everything written beside the link that is not the link itself: an
@@ -202,6 +215,8 @@ function transcriptFromUpdateText(text: string, videoId: string) {
  * the analyze tool and shape its output for the interpretation prompt. */
 export async function buildLoomAttachment(input: {
   text: string;
+  /** The employee's own transcript paste; it wins over Loom's auto-read copy. */
+  transcript?: string | null;
   targetDate: string;
   timezone: string;
   existingTaskTitles?: string[];
@@ -214,6 +229,7 @@ export async function buildLoomAttachment(input: {
   if (!reference) return null;
   const feed = await analyzeLoomForAgent({
     url: reference.url,
+    transcript: input.transcript,
     updateText: transcriptFromUpdateText(input.text, reference.videoId),
     targetDate: input.targetDate,
     timezone: input.timezone,
@@ -238,6 +254,48 @@ export async function buildLoomAttachment(input: {
       transcriptChars: feed.bundle.transcript.chars,
       transcriptSource: feed.bundle.transcript.source,
       blocked: feed.blocked,
+    },
+  };
+}
+
+/** A transcript pasted without a link is still a Loom source: it is the
+ * employee's own copy of the recording's words. Its date, title, and length
+ * cannot be verified, so no day verdict is claimed; the analyzer reads the same
+ * transcript and the cautions say exactly what is unknown. */
+export async function buildPastedLoomAttachment(input: {
+  transcript: string;
+  targetDate: string;
+  existingTaskTitles?: string[];
+}): Promise<{
+  attachment: NonNullable<import("./aiInterpret").InterpretContext["loom"]>;
+  analysis: LoomAnalysis | null;
+} | null> {
+  const text = normalizeLoomTranscript(input.transcript);
+  if (!text) return null;
+  const result = await analyzeLoomNarrative({
+    reference: null,
+    metadata: null,
+    temporal: { verdict: "unknown", createdAt: null, createdLocalDate: null, targetDate: input.targetDate, timezone: "" },
+    transcript: { present: true, chars: text.length, source: "employee_paste", text },
+  }, { existingTaskTitles: input.existingTaskTitles });
+  return {
+    analysis: result.analysis ?? null,
+    attachment: {
+      verdict: "unknown",
+      createdAt: null,
+      createdLocalDate: null,
+      targetDate: input.targetDate,
+      line: "Loom transcript pasted by the employee — no recording link, so the recording date is unverified",
+      summary: result.analysis?.summary ?? null,
+      suggestedTasks: result.analysis?.suggestedTasks ?? [],
+      cautions: [
+        ...(result.analysis?.cautions ?? []),
+        "No recording link was provided: the recording date, title, and length are unverified. Use only the transcript's words.",
+        ...(result.ok ? [] : ["The transcript could not be analyzed; do not infer work from it."]),
+      ],
+      transcriptChars: text.length,
+      transcriptSource: "employee_paste",
+      blocked: false,
     },
   };
 }

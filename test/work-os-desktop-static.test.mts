@@ -289,6 +289,12 @@ assert.match(planningSession, /onLoomPreview/);
 assert.match(planningSession, /Plan from a Loom recording/);
 assert.match(planningSession, /Build from Loom/);
 assert.match(planningSession, /Use Loom only/);
+// Build reads an unread link first, and a pasted transcript is a source even
+// without a link.
+assert.match(planningSession, /planningBuildState/);
+assert.match(planningSession, /readLoomSource/);
+assert.match(planningSession, /transcript \? \{ transcript \}/);
+assert.match(planningSession, /Paste a transcript instead/);
 assert.doesNotMatch(taskSurfaces, /eod-bottleneck-label/);
 assert.doesNotMatch(taskSurfaces, /Add the reason above/);
 assert.match(taskSurfaces, /stripPlaceholderBottleneck/);

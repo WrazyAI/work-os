@@ -2793,7 +2793,7 @@ export default function App() {
     }
   }
 
-  async function interpretPlanning(input: string, loom?: { url: string; transcript?: string }): Promise<PlanningInterpretation> {
+  async function interpretPlanning(input: string, loom?: { url?: string; transcript?: string }): Promise<PlanningInterpretation> {
     if (!visibleDay) throw new Error("Your workday is still loading.");
     if (debugScenario.enabled && debugScenario.planningState === "ai_unavailable") throw new Error("Planning assistance is unavailable in this scenario.");
     if (syncBypassRef.current) {

@@ -30,6 +30,24 @@ export function planningPrimaryAction(view: PlanningView, hasDraft: boolean, fal
   return view === "compose" ? "review" : "confirm";
 }
 export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
+/** The compose view's build gate. A pasted link or a pasted transcript is the
+ * source, so an unread link still enables Build: the click reads it first.
+ * A recording Loom already says is unusable for the day stays blocked. */
+export function planningBuildState(
+  input: string,
+  loomUrl: string,
+  loomTranscript: string,
+  loomReadback: { usableForDay: boolean } | null,
+) {
+  const hasLoomSource = Boolean(loomUrl.trim() || loomTranscript.trim());
+  const effectiveInput = input.trim() || (hasLoomSource ? LOOM_ONLY_PLAN_INTENT : "");
+  return {
+    hasLoomSource,
+    effectiveInput,
+    canBuild: Boolean(effectiveInput) && loomReadback?.usableForDay !== false,
+  };
+}
+export type LoomReadback = { title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean };
 export type PlanningInterpretation = {
   buildId?: string;
   rawIntent: string;
@@ -232,7 +250,7 @@ export function PlanningSession({
   active: boolean;
   busy: boolean;
   onClose: () => void;
-  onInterpret: (input: string, loom?: { url: string; transcript?: string }) => Promise<PlanningInterpretation>;
+  onInterpret: (input: string, loom?: { url?: string; transcript?: string }) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
   onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
   /** Goal text handed off from the dock Focus panel. Takes precedence over the
@@ -243,7 +261,7 @@ export function PlanningSession({
   onSaveLateReason?: (reason: string) => Promise<void>;
   /** Loom analysis for the day's plan, opt-in per organization. */
   loomEnabled?: boolean;
-  onLoomPreview?: (url: string) => Promise<{ title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean } | null>;
+  onLoomPreview?: (url: string) => Promise<LoomReadback | null>;
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<PlanningSessionState>("idle");
@@ -253,7 +271,7 @@ export function PlanningSession({
   const [loomTranscript, setLoomTranscript] = useState("");
   const [loomReading, setLoomReading] = useState(false);
   const [loomError, setLoomError] = useState("");
-  const [loomReadback, setLoomReadback] = useState<{ title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean } | null>(null);
+  const [loomReadback, setLoomReadback] = useState<LoomReadback | null>(null);
   const [interpretation, setInterpretation] = useState<PlanningInterpretation | null>(null);
   const [builtIntent, setBuiltIntent] = useState("");
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({});
@@ -321,10 +339,8 @@ export function PlanningSession({
   }
   const hasDraft = interpretation !== null;
   const working = busy || state === "saving" || state === "interpreting" || state === "refining";
-  const loomReady = Boolean(loomUrl.trim() && loomReadback?.usableForDay !== false && loomReadback);
-  const effectiveInput = input.trim() || (loomReady ? LOOM_ONLY_PLAN_INTENT : "");
+  const { hasLoomSource, effectiveInput, canBuild } = planningBuildState(input, loomUrl, loomTranscript, loomReadback);
   const planningInput = builtIntent || effectiveInput;
-  const canBuild = Boolean(effectiveInput) && (!loomReadback || loomReadback.usableForDay);
   const pendingValid = pendingSelection !== null && isAnnotationCommentValid(pendingComment);
   const unansweredClarifications = Boolean(interpretation?.clarifications.some((question) => !clarificationAnswers[question.id]?.trim()));
   const editedCommitments = interpretation ? diffEditedCommitments(interpretation.commitments, edited) : [];
@@ -378,14 +394,47 @@ export function PlanningSession({
     }
   };
 
+  /** Reads a pasted Loom link's public metadata and day verdict. Returns the
+   * fresh result so Build can use it in the same click. */
+  const readLoomSource = async (): Promise<LoomReadback | null> => {
+    if (!loomUrl.trim() || !onLoomPreview || loomReading) return null;
+    setLoomReading(true);
+    setLoomError("");
+    try {
+      const result = await onLoomPreview(loomUrl.trim());
+      setLoomReadback(result);
+      if (!result) setLoomError("The Loom link could not be read. Check the link and try again.");
+      return result;
+    } catch {
+      setLoomReadback(null);
+      setLoomError("The Loom link could not be read. Check the link and try again.");
+      return null;
+    } finally {
+      setLoomReading(false);
+    }
+  };
+  const readLoom = () => void readLoomSource();
+
   const build = async (loomOnly = false) => {
     const requestedInput = loomOnly ? LOOM_ONLY_PLAN_INTENT : effectiveInput;
     if (!requestedInput) return;
+    // A link the employee pasted but has not read yet is read now. Build stays
+    // one action, and a recording Loom cannot use for the day stops before any
+    // AI draft is requested.
+    let readback = loomReadback;
+    if (loomUrl.trim() && !readback) {
+      readback = await readLoomSource();
+      if (!readback || !readback.usableForDay) return;
+    }
+    if (readback?.usableForDay === false) return;
     resetDraftState();
     setState("interpreting");
     setError("");
     try {
-      const loom = loomUrl.trim() ? { url: loomUrl.trim(), ...(loomTranscript.trim() ? { transcript: loomTranscript.trim() } : {}) } : undefined;
+      const transcript = loomTranscript.trim();
+      const loom = loomUrl.trim()
+        ? { url: loomUrl.trim(), ...(transcript ? { transcript } : {}) }
+        : transcript ? { transcript } : undefined;
       const result = await onInterpret(requestedInput, loom);
       setInterpretation(result);
       setBuiltIntent(requestedInput);
@@ -394,23 +443,6 @@ export function PlanningSession({
     } catch (value) {
       setError(value instanceof Error ? value.message : "Planning assistance is unavailable.");
       setState("ai_unavailable");
-    }
-  };
-
-  /** Reads a pasted Loom link's public metadata and day verdict. */
-  const readLoom = async () => {
-    if (!loomUrl.trim() || !onLoomPreview || loomReading) return;
-    setLoomReading(true);
-    setLoomError("");
-    try {
-      const result = await onLoomPreview(loomUrl.trim());
-      setLoomReadback(result);
-      if (!result) setLoomError("The Loom link could not be read. Check the link and try again.");
-    } catch {
-      setLoomReadback(null);
-      setLoomError("The Loom link could not be read. Check the link and try again.");
-    } finally {
-      setLoomReading(false);
     }
   };
 
@@ -619,8 +651,8 @@ export function PlanningSession({
             </div>
             {loomError ? <p className="planning-loom-message is-error" role="alert"><AlertTriangle size={14} />{loomError}</p> : null}
             {loomReadback ? <div className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`} role="status"><CheckCircle2 size={15} /><span><strong>{loomReadback.title ?? "Loom recording"}</strong><small>Recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "on an unverified date"}{loomReadback.durationSeconds ? ` - ${Math.round(loomReadback.durationSeconds / 60)} min` : ""}</small>{loomReadback.usableForDay ? <em>Ready for today's plan</em> : <em>Not usable for today's plan</em>}</span></div> : null}
-            <details className="planning-loom-transcript"><summary>{loomTranscript.trim() ? "Transcript attached" : "Add your own transcript (optional)"}</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={3} maxLength={50000} placeholder="Only if Loom has no transcript: open Transcript in Loom, Copy, and paste it here." aria-label="Loom transcript" /></details>
-            {loomReadback && loomReady && input.trim() ? <button type="button" className="planning-loom-use" onClick={() => void build(true)} disabled={working}>Use Loom only <span>Build without the text above</span></button> : null}
+            <details className="planning-loom-transcript"><summary>{loomTranscript.trim() ? "Transcript attached" : "Paste a transcript instead"}</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={3} maxLength={50000} placeholder="Paste the recording's transcript to build from it without the link." aria-label="Loom transcript" /></details>
+            {hasLoomSource && input.trim() ? <button type="button" className="planning-loom-use" onClick={() => void build(true)} disabled={working || loomReading || loomReadback?.usableForDay === false}>Use Loom only <span>Build without the text above</span></button> : null}
           </div> : null}
         </div>}
         {lateReasonRequired && <div className="planning-notice planning-late-reason" role="status">
@@ -697,7 +729,7 @@ export function PlanningSession({
           <button className="secondary planning-refine-button" onClick={() => void refine()} disabled={!hasDraft || working || !refineReady} title={!hasDraft ? "Build your plan first" : !refineReady ? "Add feedback or edits to refine" : "Refine the draft with your feedback"}>Refine plan{annotations.length > 0 && <span className="planning-refine-count" aria-label={`${annotations.length} annotations`}>{annotations.length}</span>}</button>
           {(() => {
             const primary = planningPrimaryAction(view, hasDraft, fallbackSave);
-            if (primary === "build") return <button className="primary" onClick={() => void build()} disabled={!canBuild || working}>{input.trim() || !loomReady ? "Build my plan" : "Build from Loom"}</button>;
+            if (primary === "build") return <button className="primary" onClick={() => void build()} disabled={!canBuild || working || loomReading}>{loomReading ? "Reading Loom…" : input.trim() || !hasLoomSource ? "Build my plan" : "Build from Loom"}</button>;
             if (primary === "review") return <button className="primary" onClick={() => setView("review")} disabled={working}>Review draft</button>;
             return <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>;
           })()}
