@@ -512,7 +512,7 @@ assert.match(companionServer, /setWorkOsEmployeeTaskCompletion/);
 // The day event's idempotency key stays namespaced by the task's own provider,
 // so a local completion and a Nifty completion can never collide.
 assert.match(companionServer, /idempotencyKey: `\$\{[a-zA-Z]+\.provider === "local" \? "local" : "nifty"\}:(completed|reopened):/);
-assert.match(companionServer, /source: "employee_explicit"/);
+assert.match(companionServer, /source: actor \? "agent" : "employee_explicit"/);
 // Completing a task completes the open subtasks beneath it, on the employee
 // surfaces and on the administration record alike.
 assert.match(companionServer, /applyTaskCompletion/);
