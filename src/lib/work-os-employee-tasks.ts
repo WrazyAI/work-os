@@ -328,7 +328,7 @@ async function openSubtaskRows(input: { organizationId: string; task: Json }): P
   return (data ?? []) as Json[];
 }
 
-export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
+export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean, actor?: AgentActor) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(String(task.id), access.organizationId, ownerId))) {
     throw new WorkOsConflictError(
@@ -352,7 +352,8 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
       await recordTaskDayEvent(access, updated as Json, "completed", {
         idempotencyKey: `${candidate.provider === "local" ? "local" : "nifty"}:completed:${String(candidate.provider_task_id ?? candidate.id)}:${exactAt}`,
         exactAt,
-        provenance: "employee_explicit",
+        provenance: actor ? "agent" : "employee_explicit",
+        ...(actor ? { metadata: { agentTokenId: actor.tokenId } } : {}),
       });
       // The task record is authoritative for the plan's commitment state.
       await syncPlanItemCompletion({
@@ -363,8 +364,9 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
         personId: access.personId,
       });
       const local = String(candidate.provider ?? "") === "local";
-      await audit(access, "task.completed", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
-        source: "employee_explicit",
+      await audit(access, actor ? "agent.task.completed" : "task.completed", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
+        ...(actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : {}),
+        source: actor ? "agent" : "employee_explicit",
       });
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
@@ -374,7 +376,8 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
       await recordTaskDayEvent(access, updated as Json, "reopened", {
         idempotencyKey: `${candidate.provider === "local" ? "local" : "nifty"}:reopened:${String(candidate.provider_task_id ?? candidate.id)}:${exactAt}`,
         exactAt,
-        provenance: "employee_explicit",
+        provenance: actor ? "agent" : "employee_explicit",
+        ...(actor ? { metadata: { agentTokenId: actor.tokenId } } : {}),
       });
       await syncPlanItemCompletion({
         organizationId: access.organizationId,
@@ -384,8 +387,9 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
         personId: access.personId,
       });
       const local = String(candidate.provider ?? "") === "local";
-      await audit(access, "task.reopened", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
-        source: "employee_explicit",
+      await audit(access, actor ? "agent.task.reopened" : "task.reopened", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
+        ...(actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : {}),
+        source: actor ? "agent" : "employee_explicit",
       });
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
@@ -573,7 +577,13 @@ export type CompletionEvidenceUpload = {
  * not know about. A completion failure keeps the evidence: it is truthful on
  * its own, and the client can retry only the completion.
  */
-export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, taskId: string, input: CompletionEvidenceUpload) {
+/** Agent-attached evidence keeps the token identity while leaving the
+ * employee-attached contract (evidenceClass, employeeAttached) intact. */
+export function agentEvidenceMetrics(metrics: Json, agentTokenId?: string | null): Json {
+  return agentTokenId ? { ...metrics, origin: "agent_evidence", agentTokenId } : metrics;
+}
+
+export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, taskId: string, input: CompletionEvidenceUpload, actor?: AgentActor) {
   if (!access.personId) throw new CompletionEvidenceError("Work OS person mapping required");
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const validated = validateCompletionEvidenceUpload({
@@ -631,13 +641,13 @@ export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, t
     title: `${taskTitle.slice(0, 220)} — completion evidence`,
     summary: validated.note || `Employee-attached file: ${validated.fileName}.`,
     url: `/api/work-os/evidence/${evidenceId}/file`,
-    metrics: completionEvidenceMetrics({
+    metrics: agentEvidenceMetrics(completionEvidenceMetrics({
       contentType: validated.contentType,
       fileName: validated.fileName,
       sizeBytes: validated.size,
       note: validated.note,
-    }),
-    raw: { origin: "task_completion" },
+    }), actor?.tokenId),
+    raw: { origin: "task_completion", ...(actor ? { agentTokenId: actor.tokenId } : {}) },
     idempotency_key: idempotencyKey,
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
@@ -662,7 +672,8 @@ export async function attachWorkOsTaskCompletionEvidence(access: WorkOsAccess, t
     throw new Error(`save completion evidence record: ${inserted.error.message}`);
   }
 
-  await audit(access, "task.evidence_attached", "work_evidence", evidenceId, {
+  await audit(access, actor ? "agent.evidence.attached" : "task.evidence_attached", "work_evidence", evidenceId, {
+    ...(actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : {}),
     taskId: String(task.id),
     fileName: validated.fileName,
     contentType: validated.contentType,

@@ -1,6 +1,6 @@
 import type { AgentAccess } from "@/lib/work-agent-auth";
 import { WorkOsValidationError, workOsOrganizationOwnerId } from "@/lib/work-os-api";
-import { createWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, updateWorkOsAgentTask } from "@/lib/work-os-employee-tasks";
+import { createWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, setWorkOsEmployeeTaskCompletion, updateWorkOsAgentTask } from "@/lib/work-os-employee-tasks";
 import { db, type Json } from "@/lib/work-os-internal";
 
 /** Person-scoped agent task reads. The list uses the dedicated change-feed
@@ -138,4 +138,8 @@ export async function createAgentTask(agent: AgentAccess, body: Json, idempotenc
 
 export async function updateAgentTask(agent: AgentAccess, taskId: string, body: Json) {
   return updateWorkOsAgentTask(agent.access, taskId, body, { tokenId: agent.tokenId, tokenName: agent.tokenName });
+}
+
+export async function completeAgentTask(agent: AgentAccess, taskId: string, completed: boolean) {
+  return setWorkOsEmployeeTaskCompletion(agent.access, taskId, completed, { tokenId: agent.tokenId, tokenName: agent.tokenName });
 }
