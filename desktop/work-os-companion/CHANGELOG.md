@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- If this device's saved data cannot be decrypted, you can choose to start fresh after a warning about unsent updates.
+
 ## 0.5.3 — 2026-10-21
 
 - You can draft and submit your EOD from 10 minutes before your scheduled clock-out, without clocking out first.

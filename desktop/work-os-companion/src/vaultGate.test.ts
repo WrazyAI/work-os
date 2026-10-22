@@ -135,6 +135,46 @@ describe("vault gate", () => {
     expect(failure.message).toContain("can't be read");
   });
 
+  const badFileKey = "inner error occurred(invalid file failed to decode/decrypt age content BadFileKey)";
+
+  it.each([
+    badFileKey,
+    new Error(badFileKey),
+    { message: badFileKey },
+    { code: "unknown", message: badFileKey },
+  ])("offers explicit recovery for a confirmed decryption failure: %j", (error) => {
+    const failure = vaultFailureFrom(error);
+    expect(failure.requiresReset).toBe(true);
+    expect(failure.confirmationRequired).toBe(false);
+    expect(failure.message).toContain("couldn't decrypt");
+    expect(failure.message).toContain("Start fresh");
+    expect(failure.message).not.toContain("BadFileKey");
+  });
+
+  it("passes decryption recovery through the boot gate without invoking recovery", async () => {
+    const open = vi.fn().mockRejectedValue(badFileKey);
+    const attempt = runVaultGate(open);
+    await expect(attempt.result).resolves.toMatchObject({
+      status: "failed",
+      failure: { requiresReset: true, confirmationRequired: false },
+    });
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { code: "unknown" },
+    { code: "unknown", message: "The local vault gate failed; the retry screen is up" },
+    { code: "store_unavailable", message: "Credential store is not ready" },
+    { code: "store_write_failed", message: "Credential store write failed" },
+    "plugin stronghold not found",
+    "Opening this device's saved data timed out",
+    "invalid file",
+    "failed to decode/decrypt age content",
+    "NotBadFileKey",
+  ])("keeps unknown and transient startup failures non-destructive: %j", (error) => {
+    expect(vaultFailureFrom(error).requiresReset).toBe(false);
+  });
+
   it("stays useful when the rejection carries no structure", () => {
     expect(vaultFailureFrom("Local workspace unavailable").message).toBe("Local workspace unavailable");
     expect(vaultFailureFrom(undefined).requiresReset).toBe(false);

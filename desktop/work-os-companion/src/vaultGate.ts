@@ -109,6 +109,16 @@ export function vaultFailureFrom(error: unknown): VaultGateFailure {
     : typeof error === "string" ? error.trim()
       : "";
   const code = typeof record?.code === "string" ? record.code : "";
+  // Stronghold rejects with a raw error, not the password worker's structured
+  // unlock_failed code. Recognize only its explicit key-decryption verdict;
+  // generic file/store/startup failures must keep the non-destructive retry.
+  if (/\bBadFileKey\b/.test(message)) {
+    return {
+      message: "Work OS couldn't decrypt this device's saved data with the available key. Try again, or choose Start fresh to replace the local data. Starting fresh signs you out and removes any unsent queued updates; nothing already saved on the server is changed.",
+      confirmationRequired: false,
+      requiresReset: true,
+    };
+  }
   const requiresReset = record?.requiresReset === true || code === "unlock_failed";
   if (!message) return { ...GENERIC_FAILURE, requiresReset };
   return {

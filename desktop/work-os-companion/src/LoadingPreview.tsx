@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ConnectScreen, LoadingScreen } from "./App";
 import { BootOverlay, BOOT_STAGE_COPY, FirstLightSurface, useBootRise } from "./BootHandoff";
 import type { BootSurface } from "./bootSurface";
+import { vaultFailureFrom } from "./vaultGate";
 
 /** A repeating loading → content loop so the Morning Rise handoff is watchable
  * without a packaged app. The stand-in panel is an obvious wireframe, not the
@@ -66,6 +67,16 @@ export default function LoadingPreview() {
       failed
       note="macOS is waiting for you to allow access to the saved Work OS key. Look for a system password dialog — it can open behind the companion — then try again."
       retry={() => undefined}
+      onDebug={() => undefined}
+    />;
+  }
+  if (state === "vault-decrypt") {
+    const failure = vaultFailureFrom("inner error occurred(invalid file failed to decode/decrypt age content BadFileKey)");
+    return <LoadingScreen
+      failed
+      note={failure.message}
+      retry={() => undefined}
+      onReset={failure.requiresReset ? () => undefined : undefined}
       onDebug={() => undefined}
     />;
   }

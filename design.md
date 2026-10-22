@@ -1769,7 +1769,7 @@ build — so the gate that holds every screen until the vault opens always settl
 |---|---|
 | Opening | Loading screen: the companion in his working pose, heading, the real stage line, the bench pulse, no recovery controls |
 | Opened | The workspace, or whatever screen the workspace itself requires next |
-| Failed | Failure screen: the bounded reason as its explanation, `Retry`, and `Start fresh on this device` only when a stored key cannot be read |
+| Failed | Failure screen: the bounded reason as its explanation, `Retry`, and `Start fresh on this device` for an unreadable stored key, a confirmed `BadFileKey` decryption failure, or a host-reported lost open |
 
 The opening screen is one persistent overlay across the vault and day-read
 phases — only the stage line changes between them. It exits through the
@@ -1785,6 +1785,12 @@ can never jump past the screen in front of them. A failed gate is a boot phase o
 its own (`boot:vault_failed`), so a launch that stopped before the workspace is
 never reported as a crash, and the packaged-Mac startup gate asserts the app
 reaches a phase past its loading screen.
+
+A `BadFileKey` verdict means the available key did not decrypt the local copy,
+not that the cause of the mismatch is known or that a Keychain dialog is still
+pending. Its explanation names sign-out and loss of unsent queued updates;
+unknown, timed-out, and transient startup errors never gain this reset option
+from their generic messages. No error classification itself replaces data.
 
 ## 10. Motion
 
