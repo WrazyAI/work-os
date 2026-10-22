@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { AppProfile } from "@/lib/supabase/auth";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, type WorkOsOrgRole } from "@/lib/work-os-api";
 import { hashAgentToken, type AgentScope } from "@/lib/work-agent-tokens";
+import { AgentRateLimitError } from "@/lib/work-agent-rate-limit";
 import { db, isWorkOsMigrationRequired } from "@/lib/work-os-internal";
 import { CompletionEvidenceError } from "@/modules/work-os/completion-evidence";
 
@@ -40,6 +41,11 @@ export function agentError(code: string, message: string, status: number) {
 /** One error mapper for every v1 route: the design's `{ error, code,
  * request_id }` contract, with cross-person lookups collapsing to 404. */
 export function agentRouteError(error: unknown) {
+  if (error instanceof AgentRateLimitError) {
+    const response = agentError("rate_limited", error.message, 429);
+    response.headers.set("Retry-After", String(error.retryAfter));
+    return response;
+  }
   if (isWorkOsMigrationRequired(error)) {
     return agentError("migration_required", "Work OS agent access is not installed yet", 503);
   }
