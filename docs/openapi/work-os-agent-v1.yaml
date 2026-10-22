@@ -1,0 +1,536 @@
+openapi: 3.1.0
+info:
+  title: Work OS Agent API
+  version: 1.0.0
+  description: |
+    Scoped, self-minted access for external agents to the work assigned to one
+    person. Tokens are created in Work OS Settings and shown once. Every write
+    requires an `Idempotency-Key`; replays return the stored response with
+    `Idempotent-Replay: true`. A token never sees another person's work: an
+    out-of-scope task id answers 404.
+servers:
+  - url: https://app.wrazyos.com/api/agent/v1
+    description: Production
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: The token's identity and scopes
+      operationId: getMe
+      x-required-scope: none
+      responses:
+        "200":
+          description: Identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization_id: { type: string, format: uuid }
+                  person_id: { type: string, format: uuid }
+                  token:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      name: { type: string }
+                      prefix: { type: string }
+                      scopes:
+                        type: array
+                        items: { $ref: "#/components/schemas/Scope" }
+                      expires_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /tasks:
+    get:
+      summary: Tasks assigned to the token's person
+      operationId: listTasks
+      x-required-scope: tasks:read
+      parameters:
+        - name: updated_since
+          in: query
+          schema: { type: string, format: date-time }
+          description: Switches to ascending row-change order for the change feed.
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+          description: Include archived and deleted tombstones with their status.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+                  cursor:
+                    type: object
+                    properties:
+                      next: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Create work for the token's person
+      operationId: createTask
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}:
+    get:
+      summary: Task detail with subtasks, evidence, and blockers
+      operationId: getTask
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Update task content
+      operationId: updateTask
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/complete:
+    post:
+      summary: Complete a task
+      operationId: completeTask
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/reopen:
+    post:
+      summary: Reopen a completed task
+      operationId: reopenTask
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Reopened
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/progress:
+    post:
+      summary: Append a progress note
+      operationId: logProgress
+      x-required-scope: progress:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgressNote" }
+      responses:
+        "201":
+          description: Progress evidence
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence: { $ref: "#/components/schemas/Evidence" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/evidence:
+    post:
+      summary: Attach one completion evidence file
+      operationId: attachEvidence
+      x-required-scope: evidence:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                note: { type: string, maxLength: 1000 }
+                complete: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Evidence saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence: { $ref: "#/components/schemas/Evidence" }
+                  task: { $ref: "#/components/schemas/Task", nullable: true }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/FileTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedFileType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: Evidence saved, completion failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /tasks/{taskId}/activity:
+    get:
+      summary: Merged task timeline
+      operationId: getActivity
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Newest-first activity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ActivityItem" }
+                  cursor:
+                    type: object
+                    properties:
+                      next: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /batch:
+    post:
+      summary: Apply up to 20 idempotent operations
+      operationId: runBatch
+      x-required-scope: tasks:write
+      description: |
+        One request key covers the batch. Each operation is applied with its own
+        derived key and reports its own result; a failed item does not roll back
+        its siblings.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchRequest" }
+      responses:
+        "200":
+          description: Per-item results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /openapi.yaml:
+    get:
+      summary: This schema
+      operationId: getOpenApi
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 document
+          content:
+            application/yaml:
+              schema: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: wos_agent_…
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 160 }
+  responses:
+    Unauthorized:
+      description: Missing, invalid, revoked, or expired token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: The token is missing a required scope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: The task is not assigned to the token's person
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: The request body is not valid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Idempotency conflict or a completion that needs evidence
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: The token exceeded 120 requests or 20 writes per minute
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FileTooLarge:
+      description: The evidence file is larger than 8 MB
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedFileType:
+      description: The evidence file type is not accepted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Scope:
+      type: string
+      enum: [tasks:read, tasks:write, progress:write, evidence:write]
+    Error:
+      type: object
+      required: [error, code, request_id]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum:
+            - unauthorized
+            - token_revoked
+            - token_expired
+            - insufficient_scope
+            - not_found
+            - validation_error
+            - evidence_required
+            - idempotency_conflict
+            - idempotency_in_flight
+            - rate_limited
+            - file_too_large
+            - unsupported_file_type
+            - feature_disabled
+            - migration_required
+            - internal_error
+        request_id: { type: string, format: uuid }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string }
+        provider_task_id: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string }
+        completed: { type: boolean }
+        completed_at: { type: string, format: date-time, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        start_date: { type: string, format: date, nullable: true }
+        priority: { type: string, nullable: true }
+        labels: { type: array, items: { type: string } }
+        expected_outcome: { type: string, nullable: true }
+        definition_of_done: { type: string, nullable: true }
+        blocked: { type: boolean }
+        blocked_reason: { type: string, nullable: true }
+        project_id: { type: string, nullable: true }
+        parent_task_id: { type: string, nullable: true }
+        assignee_person_ids: { type: array, items: { type: string, format: uuid } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TaskCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 240 }
+        description: { type: string, maxLength: 20000 }
+        due_date: { type: string, format: date }
+        start_date: { type: string, format: date }
+        priority: { type: string }
+        labels: { type: array, items: { type: string } }
+        expected_outcome: { type: string }
+        definition_of_done: { type: string }
+        parent_task_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+    TaskUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, maxLength: 240 }
+        description: { type: string, maxLength: 20000 }
+        due_date: { type: string, format: date }
+        start_date: { type: string, format: date }
+        priority: { type: string }
+        labels: { type: array, items: { type: string } }
+        story_points: { type: number }
+        expected_outcome: { type: string }
+        definition_of_done: { type: string }
+        blocked: { type: boolean }
+        blocked_reason: { type: string }
+    ProgressNote:
+      type: object
+      required: [summary]
+      properties:
+        title: { type: string, maxLength: 240 }
+        summary: { type: string, maxLength: 2000 }
+        url: { type: string, format: uri }
+    Evidence:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        summary: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    ActivityItem:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string, enum: [agent, employee, system] }
+        summary: { type: string }
+    BatchRequest:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [operation]
+            properties:
+              operation:
+                type: string
+                enum: [create_task, update_task, complete_task, reopen_task, log_progress]
+              task_id: { type: string }
+    BatchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              operation: { type: string }
+              status: { type: string, enum: [applied, failed] }
+              id: { type: string }
+              error: { type: string }
+        applied: { type: integer }
+        failed: { type: integer }
+    TaskDetail:
+      type: object
+      properties:
+        task: { $ref: "#/components/schemas/Task" }
+        subtasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+        completionEvidence:
+          type: array
+          items: { $ref: "#/components/schemas/Evidence" }
+        blockers:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              description: { type: string }
+              status: { type: string, enum: [active, resolved] }
+              created_at: { type: string, format: date-time }
+              resolved_at: { type: string, format: date-time, nullable: true }
