@@ -1,5 +1,8 @@
 -- Work OS agent access: scoped, self-minted credentials for external agents.
 --
+-- Better Auth user ids live in `neon_auth.user` on the Neon runtime; existing
+-- Work OS tables keep them unconstrained, and this migration follows suit.
+--
 -- A token is bound to one organization, one person, and one user. Secrets are
 -- stored as SHA-256 hex only; the raw value is shown once at creation. The
 -- idempotency table is a response cache: status 0 means in-flight, a positive
@@ -10,12 +13,12 @@ create table if not exists work_agent_tokens (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references work_organizations(id) on delete cascade,
   person_id uuid not null references work_people(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null,
   name text not null,
   token_hash text not null unique,
   token_prefix text not null,
   scopes text[] not null default '{}'::text[],
-  created_by uuid references auth.users(id) on delete set null,
+  created_by uuid,
   expires_at timestamptz not null,
   last_used_at timestamptz,
   revoked_at timestamptz,
