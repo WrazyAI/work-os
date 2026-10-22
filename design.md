@@ -1084,6 +1084,12 @@ reference implementation.
   delete), starting at the top of the body with no inherited scroll position.
   Focus follows into the view so keyboard and screen-reader users land on what
   changed.
+- **Plan summary** — the drafted summary states the day's focus in one or two
+  sentences, written as the goal. It never describes the source or the
+  analysis: no Loom/transcript provenance, no recording date, no missing task
+  IDs or linking notes, and no "completion is not assumed" caveat. Source
+  limits shape how confidently the commitments are linked, not the summary
+  copy.
 - **Back** — the drafted view carries one quiet Back control in the dialog
   header's top-left corner. It returns to the input view and keeps the draft;
   nothing is discarded, and the primary action then reads `Review draft` so the

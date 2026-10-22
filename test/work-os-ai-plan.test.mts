@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPlanningPrompt, LOOM_ONLY_PLAN_INTENT, parsePlanInterpretation, resolvePlanIntent } from "../src/lib/aiPlan";
+import { buildPlanRefinePrompt, buildPlanningPrompt, LOOM_ONLY_PLAN_INTENT, parsePlanInterpretation, resolvePlanIntent } from "../src/lib/aiPlan";
 
 const context = {
   date: "2026-09-04",
@@ -66,4 +66,29 @@ test("a Loom attachment can supply the planning intent", () => {
   assert.equal(resolvePlanIntent("", loom), LOOM_ONLY_PLAN_INTENT);
   assert.equal(resolvePlanIntent("Write a plan.", loom), "Write a plan.");
   assert.equal(resolvePlanIntent("", undefined), null);
+});
+
+test("the plan summary states the day's focus, never the input's provenance", () => {
+  const prompt = buildPlanningPrompt("", context, [], undefined, {
+    verdict: "unknown",
+    createdLocalDate: null,
+    targetDate: "2026-10-22",
+    line: "Loom transcript pasted by the employee (no recording link)",
+    summary: "The employee wants to resume the template work.",
+    suggestedTasks: [],
+    cautions: ["No recording link was provided; the date is unverified."],
+    blocked: false,
+  });
+  assert.match(prompt, /summary.*day's focus/);
+  assert.match(prompt, /never mention the Loom, transcript, recording/);
+  assert.match(prompt, /one or two sentences on today's focus/);
+  assert.match(prompt, /never copy them into the summary or commitments/);
+  const refine = buildPlanRefinePrompt(
+    "Prepare the release.",
+    { summary: "Focus on the release.", commitments: [] },
+    [],
+    [],
+    context,
+  );
+  assert.match(refine, /never add provenance/);
 });
