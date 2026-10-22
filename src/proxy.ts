@@ -15,8 +15,10 @@ const PUBLIC_PREFIXES = [
   "/api/work-os/desktop/token",
   "/api/work-os/integrations/github/webhook",
   "/api/work-os/integrations/ghl/webhook",
-  // The agent schema is documentation, not data; it carries no token.
-  "/api/agent/v1/openapi.yaml",
+  // The agent v1 namespace authenticates every route with its own bearer
+  // token; the proxy cannot validate that token, and an API client must get a
+  // 401 rather than a /login redirect.
+  "/api/agent",
 ];
 
 const WORK_OS_DESKTOP_ORIGINS = new Set([
@@ -77,9 +79,6 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   const workOsBearer = pathname.startsWith("/api/work-os/") && /^Bearer\s+\S+$/i.test(request.headers.get("authorization") || "");
-  // Agent tokens are self-contained bearer credentials: the v1 routes hash and
-  // validate them (revocation, expiry, scope), so the proxy only checks shape.
-  const agentBearer = pathname.startsWith("/api/agent/") && /^Bearer\s+\S+$/i.test(request.headers.get("authorization") || "");
   // The SEO agent control route validates its own constant-time service token.
   // Let bearer requests reach that route without a browser session; no other SEO
   // route receives this exemption.
@@ -94,7 +93,7 @@ export async function proxy(request: NextRequest) {
   const notesAgentBearer =
     pathname === "/api/agent-tools/notes" &&
     /^Bearer\s+\S+$/i.test(request.headers.get("authorization") || "");
-  if (!user && !isPublic(pathname) && !workOsBearer && !agentBearer && !seoAgentBearer && !notesAgentBearer && !isDesktopUpdaterDownload(pathname)) {
+  if (!user && !isPublic(pathname) && !workOsBearer && !seoAgentBearer && !notesAgentBearer && !isDesktopUpdaterDownload(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);

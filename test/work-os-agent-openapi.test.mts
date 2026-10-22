@@ -69,9 +69,8 @@ test("the served schema reads the repository contract", async () => {
   assert.match(route, /application\/yaml/);
 });
 
-test("the proxy lets agent bearers and the public schema reach their routes", async () => {
+test("the proxy leaves the agent namespace to its own bearer guard", async () => {
   const proxy = await read("src/proxy.ts");
-  assert.match(proxy, /"\/api\/agent\/v1\/openapi\.yaml"/, "the schema is public");
-  assert.match(proxy, /pathname\.startsWith\("\/api\/agent\/"\)/, "agent bearer requests pass the cookie gate");
-  assert.match(proxy, /agentBearer/);
+  assert.match(proxy, /"\/api\/agent"/, "the namespace authenticates in-route");
+  assert.doesNotMatch(proxy, /agentBearer/, "a missing token must answer 401, not a login redirect");
 });
