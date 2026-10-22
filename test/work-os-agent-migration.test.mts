@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const migration = await readFile(new URL("../supabase/migrations/0063_work_agent_access.sql", import.meta.url), "utf8");
+const followup = await readFile(new URL("../supabase/migrations/0064_work_agent_day_event_cursor.sql", import.meta.url), "utf8");
 
 test("0063 creates agent tokens with hashed secrets and expiry", () => {
   assert.match(migration, /create table if not exists work_agent_tokens/i);
@@ -39,4 +40,13 @@ test("0063 defines the person-scoped change feed function", () => {
 
 test("0063 is additive only", () => {
   assert.doesNotMatch(migration, /\bdrop table\b|\btruncate\b|\bdelete from\b/i);
+});
+
+test("0064 allows agent day events and fixes the descending cursor", () => {
+  assert.match(followup, /work_task_day_events_provenance_check/);
+  assert.match(followup, /'agent'/);
+  assert.match(followup, /p_ascending and \(t\.updated_at, t\.id\) >/);
+  assert.match(followup, /not p_ascending and \(t\.updated_at, t\.id\) </);
+  assert.match(followup, /create or replace function public\.work_agent_list_tasks/i);
+  assert.doesNotMatch(followup, /\bdrop table\b|\btruncate\b|\bdelete from\b/i);
 });

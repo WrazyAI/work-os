@@ -9,6 +9,7 @@ import {
   validateAgentScopes,
 } from "../src/lib/work-agent-tokens";
 import { hasAgentScope, parseAgentAuthorization, agentRouteError } from "../src/lib/work-agent-auth";
+import { WorkOsConflictError } from "../src/lib/work-os-api";
 
 test("a token secret is prefixed, opaque, and hashes deterministically", () => {
   const secret = newAgentTokenSecret();
@@ -52,4 +53,10 @@ test("cross-person task denials map to 404, not a server error", async () => {
   assert.equal(response.status, 404);
   const body = await response.json() as { code?: string };
   assert.equal(body.code, "not_found");
+});
+
+test("an in-flight idempotency conflict asks the caller to retry", () => {
+  const response = agentRouteError(new WorkOsConflictError("The same request is still being applied", "idempotency_in_flight"));
+  assert.equal(response.status, 409);
+  assert.equal(response.headers.get("Retry-After"), "1");
 });

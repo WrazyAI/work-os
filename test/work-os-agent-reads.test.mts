@@ -75,6 +75,7 @@ test("agent read routes enforce scopes and the change-feed RPC", async () => {
   const detail = await read("src/app/api/agent/v1/tasks/[taskId]/route.ts");
   const activity = await read("src/app/api/agent/v1/tasks/[taskId]/activity/route.ts");
   const service = await read("src/lib/work-agent-tasks.ts");
+  const activityService = await read("src/lib/work-agent-activity.ts");
   assert.match(me, /requireAgentAccess\(req\)/, "identity needs any valid token, no scope");
   assert.doesNotMatch(me, /requireAgentAccess\(req,\s*"/);
   for (const source of [tasks, detail, activity]) assert.match(source, /requireAgentAccess\(req, "tasks:read"\)/);
@@ -82,6 +83,8 @@ test("agent read routes enforce scopes and the change-feed RPC", async () => {
   assert.match(service, /work_agent_list_tasks/);
   assert.match(service, /p_limit: limit \+ 1/);
   assert.match(service, /includeArchived|include_archived/);
+  assert.match(activityService, /lte\("observed_at", decoded\.at\)/, "day events bound the page before the limit");
+  assert.match(activityService, /lte\("created_at", decoded\.at\)/, "evidence and blockers bound the page before the limit");
 });
 
 test("an absent or invalid limit falls back, and bounds clamp", () => {
@@ -102,4 +105,21 @@ test("activity timestamps are ISO and invalid rows are skipped", () => {
   }, null, 50);
   assert.equal(items.length, 1);
   assert.equal(items[0]?.at, "2026-10-22T10:00:00.000Z");
+});
+
+test("a resolved blocker shows both its opening and its resolution", () => {
+  const { items } = mergeAgentActivity({
+    blockers: [{
+      id: "b1",
+      description: "Waiting on review",
+      status: "resolved",
+      created_at: new Date("2026-10-22T09:00:00Z"),
+      resolved_at: new Date("2026-10-22T12:00:00Z"),
+      agent_token_id: "token-1",
+    }],
+  }, null, 50);
+  assert.deepEqual(items.map((item) => [item.kind, item.at]), [
+    ["blocker.resolved", "2026-10-22T12:00:00.000Z"],
+    ["blocker.opened", "2026-10-22T09:00:00.000Z"],
+  ]);
 });

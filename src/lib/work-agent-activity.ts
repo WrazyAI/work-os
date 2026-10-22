@@ -80,17 +80,32 @@ export function mergeAgentActivity(
     });
   }
   for (const row of input.blockers ?? []) {
-    const at = toIsoTimestamp(row.created_at);
-    if (!at) continue;
-    const resolved = String(row.status ?? "") === "resolved";
-    items.push({
-      id: `blocker:${String(row.id)}`,
-      kind: resolved ? "blocker.resolved" : "blocker.opened",
-      at,
-      actor: row.agent_token_id ? "agent" : "employee",
-      summary: typeof row.description === "string" ? row.description : "Blocker",
-      data: { status: row.status ?? null },
-    });
+    const actor = row.agent_token_id ? "agent" : "employee";
+    const summary = typeof row.description === "string" ? row.description : "Blocker";
+    const openedAt = toIsoTimestamp(row.created_at);
+    if (openedAt) {
+      items.push({
+        id: `blocker:${String(row.id)}`,
+        kind: "blocker.opened",
+        at: openedAt,
+        actor,
+        summary,
+        data: { status: row.status ?? null },
+      });
+    }
+    if (String(row.status ?? "") === "resolved") {
+      const resolvedAt = toIsoTimestamp(row.resolved_at);
+      if (resolvedAt) {
+        items.push({
+          id: `blocker_resolved:${String(row.id)}`,
+          kind: "blocker.resolved",
+          at: resolvedAt,
+          actor,
+          summary,
+          data: { status: "resolved" },
+        });
+      }
+    }
   }
   items.sort((left, right) => right.at.localeCompare(left.at) || right.id.localeCompare(left.id));
   const decoded = decodeActivityCursor(cursor);
@@ -112,17 +127,20 @@ export async function listAgentActivity(
   const details = await getWorkOsEmployeeTaskDetails(agent.access, taskId);
   const localTaskId = String((details.task as Json).id);
   const organizationId = agent.access.organizationId;
-  const [events, evidence, blockers] = await Promise.all([
-    db().from("work_task_day_events").select("id,event_type,provenance,exact_at,observed_at,task_snapshot,metadata")
-      .eq("organization_id", organizationId).eq("task_id", localTaskId)
-      .order("observed_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX),
-    db().from("work_evidence").select("id,title,summary,source,metrics,created_at")
-      .eq("organization_id", organizationId).eq("task_id", localTaskId)
-      .order("created_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX),
-    db().from("work_task_blockers").select("id,description,status,created_at,resolved_at,agent_token_id")
-      .eq("organization_id", organizationId).eq("task_id", localTaskId)
-      .order("created_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX),
-  ]);
+  const decoded = decodeActivityCursor(params.cursor);
+  let eventsQuery = db().from("work_task_day_events").select("id,event_type,provenance,exact_at,observed_at,task_snapshot,metadata")
+    .eq("organization_id", organizationId).eq("task_id", localTaskId);
+  if (decoded) eventsQuery = eventsQuery.lte("observed_at", decoded.at);
+  eventsQuery = eventsQuery.order("observed_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX);
+  let evidenceQuery = db().from("work_evidence").select("id,title,summary,source,metrics,created_at")
+    .eq("organization_id", organizationId).eq("task_id", localTaskId);
+  if (decoded) evidenceQuery = evidenceQuery.lte("created_at", decoded.at);
+  evidenceQuery = evidenceQuery.order("created_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX);
+  let blockersQuery = db().from("work_task_blockers").select("id,description,status,created_at,resolved_at,agent_token_id")
+    .eq("organization_id", organizationId).eq("task_id", localTaskId);
+  if (decoded) blockersQuery = blockersQuery.lte("created_at", decoded.at);
+  blockersQuery = blockersQuery.order("created_at", { ascending: false }).limit(AGENT_ACTIVITY_MAX);
+  const [events, evidence, blockers] = await Promise.all([eventsQuery, evidenceQuery, blockersQuery]);
   for (const result of [events, evidence, blockers]) {
     if (result.error) throw new Error(`load agent activity: ${result.error.message}`);
   }

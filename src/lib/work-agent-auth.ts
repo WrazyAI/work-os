@@ -38,6 +38,12 @@ export function agentError(code: string, message: string, status: number) {
   return NextResponse.json({ error: message, code, request_id: randomUUID() }, { status });
 }
 
+function isWorkOsConflict(error: unknown): error is WorkOsConflictError {
+  // Module identity can differ between an aliased import and a relative one;
+  // the class name keeps the mapping stable across both.
+  return error instanceof WorkOsConflictError || (error instanceof Error && error.name === "WorkOsConflictError");
+}
+
 /** One error mapper for every v1 route: the design's `{ error, code,
  * request_id }` contract, with cross-person lookups collapsing to 404. */
 export function agentRouteError(error: unknown) {
@@ -49,8 +55,10 @@ export function agentRouteError(error: unknown) {
   if (isWorkOsMigrationRequired(error)) {
     return agentError("migration_required", "Work OS agent access is not installed yet", 503);
   }
-  if (error instanceof WorkOsConflictError) {
-    return agentError(error.reason ?? "conflict", error.message, 409);
+  if (isWorkOsConflict(error)) {
+    const response = agentError(error.reason ?? "conflict", error.message, 409);
+    if (error.reason === "idempotency_in_flight") response.headers.set("Retry-After", "1");
+    return response;
   }
   if (error instanceof WorkOsValidationError || error instanceof CompletionEvidenceError) {
     return agentError("validation_error", error.message, 400);

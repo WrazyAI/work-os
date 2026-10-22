@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agentRequestHash, idempotencyDecision } from "../src/lib/work-agent-idempotency";
+import { agentRequestHash, cacheAgentResponse, idempotencyDecision } from "../src/lib/work-agent-idempotency";
 import { AgentRateLimitError, assertAgentRateLimit } from "../src/lib/work-agent-rate-limit";
 
 test("same key and hash replays, different hash conflicts, fresh in-flight waits", () => {
@@ -50,4 +50,11 @@ test("a rate-limited write reports a retry-after within the window", () => {
     assert.ok(error instanceof AgentRateLimitError);
     assert.equal(error.retryAfter, 30);
   }
+});
+
+test("only non-5xx responses are cached for replay", () => {
+  assert.equal(cacheAgentResponse(201), true);
+  assert.equal(cacheAgentResponse(409), true);
+  assert.equal(cacheAgentResponse(500), false);
+  assert.equal(cacheAgentResponse(502), false);
 });

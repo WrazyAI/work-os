@@ -50,6 +50,12 @@ export function agentRequestHash(method: string, path: string, body: unknown): s
 
 export type AgentIdempotencyResult = { status: number; body: unknown; replayed: boolean };
 
+/** 5xx responses are transient: caching them would trap a same-key retry on a
+ * stale failure, while every mutation is already idempotent by its own key. */
+export function cacheAgentResponse(status: number): boolean {
+  return status < 500;
+}
+
 export async function withAgentIdempotency(input: {
   agent: AgentAccess;
   key: string | null | undefined;
@@ -117,6 +123,10 @@ export async function withAgentIdempotency(input: {
     // idempotent through its own unique key.
     await db().from("work_agent_idempotency").delete().eq("token_id", agent.tokenId).eq("key", key);
     throw error;
+  }
+  if (!cacheAgentResponse(result.status)) {
+    await db().from("work_agent_idempotency").delete().eq("token_id", agent.tokenId).eq("key", key);
+    return { status: result.status, body: result.body, replayed: false };
   }
   const { error: storeError } = await db().from("work_agent_idempotency")
     .update({ status: result.status, body: result.body as Json, updated_at: new Date().toISOString() })
