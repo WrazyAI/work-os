@@ -56,6 +56,11 @@ export type CreateLocalWorkOsTaskInput = {
   assigneePersonIds?: string[];
   parent?: Json | null;
   raw?: Json;
+  /** Agent provenance: the token that created this row and the request key
+   * that makes a retried create return this row instead of a second one. */
+  agentTokenId?: string | null;
+  agentIdempotencyKey?: string | null;
+  provenance?: "employee_explicit" | "agent";
 };
 
 /** Stable dedup marker. Re-confirming the same plan never duplicates tasks:
@@ -205,6 +210,8 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
     start_date: input.startDate ?? null,
     parent_task_id: input.parent ? String(input.parent.id) : null,
     parent_provider_task_id: input.parent?.provider_task_id ? String(input.parent.provider_task_id) : null,
+    agent_token_id: input.agentTokenId ?? null,
+    agent_idempotency_key: input.agentIdempotencyKey ?? null,
     raw: { source: "work_os", ...(input.raw ?? {}) },
     synced_at: now,
     created_at: now,
@@ -212,7 +219,10 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
   }).select("*").single();
   if (result.error) throw new Error(`create Work OS task: ${result.error.message}`);
   const row = result.data as Json;
-  await recordLocalTaskCreationEvent(access, row, input.dueDate ?? null, now);
+  await recordLocalTaskCreationEvent(access, row, input.dueDate ?? null, now, {
+    provenance: input.provenance ?? "employee_explicit",
+    agentTokenId: input.agentTokenId ?? null,
+  });
   return row;
 }
 
@@ -236,12 +246,19 @@ async function createLocalTaskRow(access: WorkOsAccess, input: {
 /** Day-event attribution is best-effort (idempotent upsert): a missing event
  * only affects day surfacing, never the task itself, and re-running the flow
  * heals it. */
-async function recordLocalTaskCreationEvent(access: WorkOsAccess, task: Json, dueDate: string | null, exactAt: string) {
+async function recordLocalTaskCreationEvent(
+  access: WorkOsAccess,
+  task: Json,
+  dueDate: string | null,
+  exactAt: string,
+  actor: { provenance: "employee_explicit" | "agent"; agentTokenId?: string | null } = { provenance: "employee_explicit" },
+) {
   try {
     await recordTaskDayEvent(access, task, "creation_observed", {
       idempotencyKey: `local:created:${String(task.provider_task_id)}`,
       exactAt,
-      provenance: "employee_explicit",
+      provenance: actor.provenance,
+      ...(actor.agentTokenId ? { metadata: { agentTokenId: actor.agentTokenId } } : {}),
       ...(dueDate ? { localDate: dueDate } : {}),
     });
   } catch (error) {

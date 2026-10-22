@@ -34,7 +34,8 @@ import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { applyTaskCompletion, taskCompletionFailureMessage } from "@/lib/work-os-task-completion";
 import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { localDateForTimezone } from "@/modules/work-os/companion";
-import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
+import type { AgentActor } from "@/lib/work-agent-auth";
 
 export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
   const [peopleResult, adminResult] = await Promise.all([
@@ -221,6 +222,79 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
     fields: ["name", ...(description === undefined ? [] : ["description"]), ...(assigneePersonIds ? ["assignee_person_ids"] : [])],
   });
   return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
+}
+
+const AGENT_TASK_UPDATE_FIELDS = new Set([
+  "name",
+  "description",
+  "due_date",
+  "start_date",
+  "priority",
+  "labels",
+  "story_points",
+  "expected_outcome",
+  "definition_of_done",
+  "blocked",
+  "blocked_reason",
+]);
+
+/** The agent PATCH contract: content fields only. Moving a task between
+ * projects or parents needs service logic the employee surface does not have,
+ * so those fields are rejected instead of silently ignored. */
+export function validateAgentTaskUpdate(body: Json): Json {
+  const patch: Json = {};
+  for (const key of Object.keys(body ?? {})) {
+    if (!AGENT_TASK_UPDATE_FIELDS.has(key)) {
+      throw new WorkOsValidationError(`Field ${key} cannot be updated through the agent API`);
+    }
+    patch[key] = body[key];
+  }
+  if (!Object.keys(patch).length) throw new WorkOsValidationError("At least one field is required");
+  if ("blocked" in patch && typeof patch.blocked !== "boolean") {
+    throw new WorkOsValidationError("blocked must be a boolean");
+  }
+  if ("labels" in patch && (!Array.isArray(patch.labels) || patch.labels.some((value) => typeof value !== "string"))) {
+    throw new WorkOsValidationError("labels must be an array of strings");
+  }
+  return patch;
+}
+
+export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string, body: Json, actor: AgentActor) {
+  const patch = validateAgentTaskUpdate(body);
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  if ("blocked" in patch) {
+    if (patch.blocked === true) {
+      const description = text(patch.blocked_reason) ?? "Blocked";
+      const existing = await db().from("work_task_blockers").select("id")
+        .eq("organization_id", access.organizationId).eq("task_id", String(task.id)).eq("status", "active").maybeSingle();
+      if (existing.error) throw new Error(`load agent task blocker: ${existing.error.message}`);
+      if (!existing.data) {
+        const inserted = await db().from("work_task_blockers").insert({
+          organization_id: access.organizationId,
+          task_id: String(task.id),
+          person_id: access.personId,
+          description,
+          created_by: access.ctx.user.id,
+          agent_token_id: actor.tokenId,
+        }).select("id").single();
+        if (inserted.error) throw new Error(`create agent task blocker: ${inserted.error.message}`);
+      }
+      patch.blocked_reason = description;
+    } else if (patch.blocked === false) {
+      const resolved = await db().from("work_task_blockers")
+        .update({ status: "resolved", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("organization_id", access.organizationId).eq("task_id", String(task.id)).eq("status", "active");
+      if (resolved.error) throw new Error(`resolve agent task blocker: ${resolved.error.message}`);
+      patch.blocked_reason = null;
+    }
+  }
+  const updated = await updateTask(ownerId, String(task.provider_task_id ?? task.id), patch);
+  await audit(access, "agent.task.updated", "work_os_task", String(task.provider_task_id ?? task.id), {
+    tokenId: actor.tokenId,
+    tokenName: actor.tokenName,
+    fields: Object.keys(patch),
+  });
+  return updated;
 }
 
 /** A task row the completion rule can carry: a stable id and a name to show
@@ -421,7 +495,7 @@ export async function deleteWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
   return { task: deleted, deletedSubtasks: children?.length ?? 0, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
-export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json) {
+export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json, actor?: AgentActor, idempotencyKey?: string) {
   const title = text(body.name);
   const description = text(body.description);
   if (!title) throw new Error("Task title is required");
@@ -459,9 +533,12 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
     providerProjectId: text(parent?.provider_project_id),
     parent,
     raw: text(body.local_proposal_id) ? { proposalId: text(body.local_proposal_id), source: "work_os_proposal" } : undefined,
+    agentTokenId: actor?.tokenId ?? null,
+    agentIdempotencyKey: idempotencyKey ?? null,
+    provenance: actor ? "agent" : "employee_explicit",
   });
-  const taskRecord = task as Json;
-  await audit(access, parent ? "task.subtask_created" : "task.created", "work_os_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
+  await audit(access, actor ? "agent.task.created" : parent ? "task.subtask_created" : "task.created", "work_os_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
+    ...(actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : {}),
     parentTaskId: text(parent?.id),
     parentProviderTaskId: text(parent?.provider_task_id),
     assigneePersonIds: requestedPersonIds,

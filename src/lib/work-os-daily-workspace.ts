@@ -70,7 +70,7 @@ export async function recordTaskDayEvent(
   access: WorkOsAccess,
   taskValue: Json,
   eventType: "surfaced" | "deferred" | "carried" | "completed" | "reopened" | "creation_observed",
-  options: { idempotencyKey: string; exactAt?: string | null; localDate?: string; provenance?: "nifty_exact" | "provider_observed" | "employee_explicit"; metadata?: Json } ,
+  options: { idempotencyKey: string; exactAt?: string | null; localDate?: string; provenance?: "nifty_exact" | "provider_observed" | "employee_explicit" | "agent"; metadata?: Json } ,
 ) {
   const context = await employeeContext(access);
   const providerTaskId = String(taskValue.provider_task_id ?? taskValue.id ?? "");

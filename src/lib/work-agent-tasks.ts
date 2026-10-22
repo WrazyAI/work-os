@@ -1,6 +1,6 @@
 import type { AgentAccess } from "@/lib/work-agent-auth";
 import { WorkOsValidationError, workOsOrganizationOwnerId } from "@/lib/work-os-api";
-import { getWorkOsEmployeeTaskDetails } from "@/lib/work-os-employee-tasks";
+import { createWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, updateWorkOsAgentTask } from "@/lib/work-os-employee-tasks";
 import { db, type Json } from "@/lib/work-os-internal";
 
 /** Person-scoped agent task reads. The list uses the dedicated change-feed
@@ -84,4 +84,58 @@ export async function getAgentTask(agent: AgentAccess, taskId: string) {
     completionEvidence: details.completionEvidence,
     blockers: blockers.data ?? [],
   };
+}
+
+const AGENT_TASK_CREATE_FIELDS = new Set([
+  "name",
+  "description",
+  "due_date",
+  "start_date",
+  "priority",
+  "labels",
+  "expected_outcome",
+  "definition_of_done",
+  "parent_task_id",
+  "project_id",
+]);
+
+/** The agent create contract: work for the token's own person, in a real
+ * project (TASKS by default). Assignment and grouping fields are rejected so a
+ * token can never file work it cannot then see. */
+export function validateAgentTaskCreate(body: Json): Json {
+  const create: Json = {};
+  for (const key of Object.keys(body ?? {})) {
+    if (!AGENT_TASK_CREATE_FIELDS.has(key)) {
+      throw new WorkOsValidationError(`Field ${key} is not accepted when creating through the agent API`);
+    }
+    create[key] = body[key];
+  }
+  if (typeof create.name !== "string" || !create.name.trim()) {
+    throw new WorkOsValidationError("Task title is required");
+  }
+  return create;
+}
+
+export async function createAgentTask(agent: AgentAccess, body: Json, idempotencyKey: string) {
+  const personId = agent.access.personId as string;
+  const actor = { tokenId: agent.tokenId, tokenName: agent.tokenName };
+  const create = { ...validateAgentTaskCreate(body), assignee_person_ids: [personId] };
+  try {
+    return await createWorkOsEmployeeTask(agent.access, create, actor, idempotencyKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/duplicate key|unique constraint|already exists/i.test(message)) throw error;
+    const existing = await db().from("work_tasks").select("*")
+      .eq("organization_id", agent.access.organizationId)
+      .eq("agent_token_id", agent.tokenId)
+      .eq("agent_idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing.error) throw new Error(`reconcile agent task create: ${existing.error.message}`);
+    if (!existing.data) throw error;
+    return existing.data as Json;
+  }
+}
+
+export async function updateAgentTask(agent: AgentAccess, taskId: string, body: Json) {
+  return updateWorkOsAgentTask(agent.access, taskId, body, { tokenId: agent.tokenId, tokenName: agent.tokenName });
 }
