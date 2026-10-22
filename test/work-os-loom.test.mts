@@ -323,8 +323,9 @@ test("a pasted transcript without a link is a Loom source with no claimed date",
     assert.equal(result?.attachment.transcriptSource, "employee_paste");
     assert.ok((result?.attachment.transcriptChars ?? 0) > 0);
     assert.match(result?.attachment.line ?? "", /transcript/i);
-    assert.match(result?.attachment.line ?? "", /unverified/i);
+    assert.doesNotMatch(result?.attachment.line ?? "", /unverified/i, "the prompt line carries no date claim to echo");
     assert.match(result?.attachment.cautions.join(" "), /no recording link/i);
+    assert.match(result?.attachment.cautions.join(" "), /do not claim the recording's date/i);
     assert.equal(result?.attachment.summary, "The employee shipped the settlement dashboard and is waiting on two approvals.");
     assert.equal(calls.length, 1, "a transcript-only source never calls Loom");
   } finally {

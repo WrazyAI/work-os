@@ -158,6 +158,7 @@ export function buildPlanningPrompt(
     context,
     rules: [
       "Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
+      "`summary` is the day's focus in one or two plain sentences. Write the goal, not a description of the input: never mention the Loom, transcript, recording, link, recording date, task IDs, linking, analysis, or 'no completion is assumed'. Use attachedLoom.cautions only to avoid overclaiming; never copy them into the summary or commitments.",
       "Only link a task using an id from the supplied context. Do not invent task, PR, deadline, blocker, or provider references.",
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
@@ -170,7 +171,7 @@ export function buildPlanningPrompt(
       ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
     ],
     output: {
-      summary: "string",
+      summary: "one or two sentences on today's focus; no provenance or analysis notes",
       commitments: [{ clientId: "string", linkedTaskId: "optional server task id", title: "string", objective: "string", successCriteria: ["string"], dependency: "optional string", blocker: "optional string", estimatedMinutes: 30, confidence: 0.8 }],
       clarifications: [{ id: "string", commitmentId: "optional clientId", question: "string", reason: "missing_outcome|ambiguous_scope|missing_completion_criteria|unclear_task_match|conflicting_context" }],
     },
@@ -239,6 +240,7 @@ export function buildPlanRefinePrompt(
     rules: [
       "Revise the current draft minimally to honor the annotation feedback and employee edits. Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
       "Keep every commitment that received no feedback exactly as written unless an edit or annotation requires a change.",
+      "Keep `summary` as the day's focus in one or two plain sentences; never add provenance, recording, link, task-ID, linking, or analysis notes.",
       "Only link a task using an id from the supplied context. Do not invent task, PR, deadline, blocker, or provider references.",
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
@@ -246,7 +248,7 @@ export function buildPlanRefinePrompt(
       ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
     ],
     output: {
-      summary: "string",
+      summary: "one or two sentences on today's focus; no provenance or analysis notes",
       commitments: [{ clientId: "string", linkedTaskId: "optional server task id", title: "string", objective: "string", successCriteria: ["string"], dependency: "optional string", blocker: "optional string", estimatedMinutes: 30, confidence: 0.8 }],
       clarifications: [{ id: "string", commitmentId: "optional clientId", question: "string", reason: "missing_outcome|ambiguous_scope|missing_completion_criteria|unclear_task_match|conflicting_context" }],
     },
