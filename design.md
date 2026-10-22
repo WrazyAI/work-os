@@ -1482,6 +1482,21 @@ credentials are not a verified connection. A successful browser request is not
 a provider-confirmed mutation. Use labels, placement, and source/freshness copy
 to keep meanings separate.
 
+**Completing a task completes its open subtasks.** A finished task never shows
+open work underneath it, on every surface that can mark a task done: the chat
+selection card, the companion's task list and task drawer, the web app's
+employee list and drawer, and the administration task record. The subtasks
+close first, so a subtask that cannot close leaves the task above it open and
+the failure names the subtask, rather than leaving a completed task sitting
+above open work. Reopening a task never reopens its subtasks, a subtask that is
+already done is never closed again, and each cascaded subtask keeps its own
+completion record, day event, audit entry, and plan-item state, recorded as
+`employee_explicit`: the employee's own act is the source, never an inference.
+In the chat selection card a task and its subtasks are one selection unit:
+checking the task checks its open subtasks, unticking either clears the other,
+and the review lists each subtask the approval will close, so nothing closes
+behind the employee's back.
+
 Every asynchronous surface defines:
 
 | State | Required treatment |

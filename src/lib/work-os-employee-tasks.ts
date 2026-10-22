@@ -31,6 +31,7 @@ import {
   validateCompletionEvidenceUpload,
 } from "@/modules/work-os/completion-evidence";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
+import { applyTaskCompletion, taskCompletionFailureMessage } from "@/lib/work-os-task-completion";
 import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
@@ -222,6 +223,36 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
   return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
+/** A task row the completion rule can carry: a stable id and a name to show
+ * when a subtask cannot close. */
+type CompletionRow = Record<string, any> & { id: string; title: string };
+
+const completionRow = (value: Json): CompletionRow => ({
+  ...value,
+  id: String(value.id ?? ""),
+  title: String(value.title ?? "Untitled task"),
+});
+
+/**
+ * The open subtasks beneath a task — what a completion has to close with it.
+ * Completed, archived, and deleted subtasks are left alone: they are not open
+ * work, and a completion never rewrites history.
+ */
+async function openSubtaskRows(input: { organizationId: string; task: Json }): Promise<Json[]> {  const providerTaskId = String(input.task.provider_task_id ?? input.task.id);
+  let query = db().from("work_tasks")
+    .select("id,provider_task_id,title,provider,status,completed,parent_task_id,parent_provider_task_id")
+    .eq("organization_id", input.organizationId)
+    .eq("completed", false)
+    .not("status", "in", "(archived,deleted)")
+    .order("provider_created_at", { ascending: true });
+  query = input.task.provider === "local"
+    ? query.eq("parent_task_id", String(input.task.id))
+    : query.eq("parent_provider_task_id", providerTaskId);
+  const { data, error } = await query;
+  if (error) throw new Error(`load task subtasks: ${error.message}`);
+  return (data ?? []) as Json[];
+}
+
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(String(task.id), access.organizationId, ownerId))) {
@@ -230,26 +261,63 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
       "evidence_required",
     );
   }
-  const updated = await completeTask(ownerId, String(task.provider_task_id ?? task.id), completed);
-  const exactAt = (completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at)) ?? new Date().toISOString();
-  await recordTaskDayEvent(access, updated as Json, completed ? "completed" : "reopened", {
-    idempotencyKey: `${task.provider === "local" ? "local" : "nifty"}:${completed ? "completed" : "reopened"}:${String(task.provider_task_id ?? task.id)}:${exactAt}`,
-    exactAt,
-    provenance: "employee_explicit",
-  });
-  // The task record is authoritative for the plan's commitment state.
-  await syncPlanItemCompletion({
-    organizationId: access.organizationId,
-    taskId: String(task.id),
+  // Completing a task completes the open subtasks beneath it: a finished task
+  // never shows open work underneath it. The subtasks close first, so a
+  // subtask that cannot close leaves the task above it open rather than
+  // leaving a completed task sitting above open work. Reopening a task never
+  // touches its subtasks.
+  let updatedTask: Json | undefined;
+  const outcome = await applyTaskCompletion({
+    task: completionRow(task),
     completed,
-    completedAt: completed ? text((updated as Json).completed_at) : null,
-    personId: access.personId,
+    openChildren: async (candidate) => (await openSubtaskRows({ organizationId: access.organizationId, task: candidate })).map(completionRow),
+    complete: async (candidate) => {
+      const updated = await completeTask(ownerId, String(candidate.provider_task_id ?? candidate.id), true);
+      const exactAt = text((updated as Json).completed_at) ?? new Date().toISOString();
+      await recordTaskDayEvent(access, updated as Json, "completed", {
+        idempotencyKey: `${candidate.provider === "local" ? "local" : "nifty"}:completed:${String(candidate.provider_task_id ?? candidate.id)}:${exactAt}`,
+        exactAt,
+        provenance: "employee_explicit",
+      });
+      // The task record is authoritative for the plan's commitment state.
+      await syncPlanItemCompletion({
+        organizationId: access.organizationId,
+        taskId: String(candidate.id),
+        completed: true,
+        completedAt: text((updated as Json).completed_at) ?? null,
+        personId: access.personId,
+      });
+      const local = String(candidate.provider ?? "") === "local";
+      await audit(access, "task.completed", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
+        source: "employee_explicit",
+      });
+      if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
+    },
+    reopen: async (candidate) => {
+      const updated = await completeTask(ownerId, String(candidate.provider_task_id ?? candidate.id), false);
+      const exactAt = text((updated as Json).provider_updated_at) ?? new Date().toISOString();
+      await recordTaskDayEvent(access, updated as Json, "reopened", {
+        idempotencyKey: `${candidate.provider === "local" ? "local" : "nifty"}:reopened:${String(candidate.provider_task_id ?? candidate.id)}:${exactAt}`,
+        exactAt,
+        provenance: "employee_explicit",
+      });
+      await syncPlanItemCompletion({
+        organizationId: access.organizationId,
+        taskId: String(candidate.id),
+        completed: false,
+        completedAt: null,
+        personId: access.personId,
+      });
+      const local = String(candidate.provider ?? "") === "local";
+      await audit(access, "task.reopened", local ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {
+        source: "employee_explicit",
+      });
+      if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
+    },
   });
+  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures));
   const local = String(task.provider ?? "") === "local";
-  await audit(access, completed ? "task.completed" : "task.reopened", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
-    source: "employee_explicit",
-  });
-  return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
+  return { task: updatedTask ?? task, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 /**
@@ -534,14 +602,36 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
       "evidence_required",
     );
   }
-  const updated = await completeTask(ownerId, taskId, completed);
-  // An admin completing a task still completes the plan items that committed
-  // to it, across whoever planned it.
-  await syncPlanItemCompletion({
-    organizationId: access.organizationId,
-    taskId: String(task.id),
+  // The administration record follows the same rule as the employee surfaces:
+  // completing a task completes the open subtasks beneath it, subtasks first.
+  let updatedTask: Json | undefined;
+  const outcome = await applyTaskCompletion({
+    task: completionRow(task),
     completed,
-    completedAt: completed ? text((updated as Json).completed_at) : null,
+    openChildren: async (candidate) => (await openSubtaskRows({ organizationId: access.organizationId, task: candidate })).map(completionRow),
+    complete: async (candidate) => {
+      const updated = await completeTask(ownerId, String(candidate.provider_task_id ?? candidate.id), true);
+      // An admin completing a task still completes the plan items that committed
+      // to it, across whoever planned it.
+      await syncPlanItemCompletion({
+        organizationId: access.organizationId,
+        taskId: String(candidate.id),
+        completed: true,
+        completedAt: text((updated as Json).completed_at) ?? null,
+      });
+      if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
+    },
+    reopen: async (candidate) => {
+      const updated = await completeTask(ownerId, String(candidate.provider_task_id ?? candidate.id), false);
+      await syncPlanItemCompletion({
+        organizationId: access.organizationId,
+        taskId: String(candidate.id),
+        completed: false,
+        completedAt: null,
+      });
+      if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
+    },
   });
-  return updated;
+  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures));
+  return updatedTask ?? task;
 }

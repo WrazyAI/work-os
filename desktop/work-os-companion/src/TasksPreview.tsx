@@ -147,7 +147,24 @@ export default function TasksPreview() {
     counts: { total: many ? 30 : 12, open: many ? 28 : 4, completed: 8 },
   } : null;
   const selectionScenario = scenario?.startsWith("selection-") ? scenario.slice("selection-".length) : null;
-  const selectionTasks = tasks.slice(0, 3).map((task, index) => ({ id: String(task.id), title: String(task.title), description: String(task.description), dueDate: task.due_date, projectName: task.project?.name, priority: task.priority, state: index === 1 ? "overdue" as const : "pending" as const }));
+  // The selection card carries a task's open subtasks with it: the first task
+  // owns three, so ticking it shows the cascade and the loaded-subtask path.
+  const selectionSubtasks = [
+    { id: "selection-sub-1", title: "Trim the header", completed: false },
+    { id: "selection-sub-2", title: "Move the tabs", completed: false },
+    { id: "selection-sub-3", title: "Verify the empty state", completed: true },
+  ];
+  const selectionTasks = tasks.slice(0, 3).map((task, index) => ({
+    id: String(task.id),
+    title: String(task.title),
+    description: String(task.description),
+    dueDate: task.due_date,
+    projectName: task.project?.name,
+    priority: task.priority,
+    state: index === 1 ? "overdue" as const : "pending" as const,
+    subtaskTotal: index === 0 ? selectionSubtasks.length : 0,
+    subtaskCompleted: index === 0 ? selectionSubtasks.filter((subtask) => subtask.completed).length : 0,
+  }));
   const emptyHistoryFixture = scenario === "history-empty" || scenario === "history-loading" || (scenario === "history-error" && !params.has("stale"));
   const previewTaskHistory = emptyHistoryFixture ? [] : degraded;
   const evidenceScenario = scenario?.startsWith("completion") ? scenario : null;
@@ -169,7 +186,7 @@ export default function TasksPreview() {
       {scenario === "move-menu" && <TaskDetailsModal details={detailsTask} loading={false} readOnly={false} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={() => undefined} onEditTask={openPreviewEdit} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
       {previewEditTask && <TaskEditModal kind="subtask" title={previewEditTitle} description={previewEditDescription} busy={false} onTitle={setPreviewEditTitle} onDescription={setPreviewEditDescription} onClose={() => setPreviewEditTask(null)} onSubmit={savePreviewEdit} />}
       {previewRemoval && <TaskRemovalConfirmation mode={previewRemoval.mode} scope="subtask" title={String(previewRemoval.task.title ?? "Untitled subtask")} subtaskCount={0} busy={false} onCancel={() => setPreviewRemoval(null)} onConfirm={confirmPreviewRemoval} />}
-      {selectionScenario && <TaskSelectionCard title="Finish pending work" tasks={selectionScenario === "empty" || selectionScenario === "error" ? [] : selectionTasks} status={selectionScenario === "loading" ? "loading" : selectionScenario === "error" ? "error" : "ready"} degraded={selectionScenario === "degraded"} dense={selectionScenario === "dense"} errorMessage="Nifty could not refresh this task list." onRetry={() => undefined} onMarkSelectedDone={() => undefined} />}
+      {selectionScenario && <TaskSelectionCard title="Finish pending work" tasks={selectionScenario === "empty" || selectionScenario === "error" ? [] : selectionTasks} status={selectionScenario === "loading" ? "loading" : selectionScenario === "error" ? "error" : "ready"} degraded={selectionScenario === "degraded"} dense={selectionScenario === "dense"} errorMessage="Nifty could not refresh this task list." onRetry={() => undefined} onMarkSelectedDone={() => undefined} onLoadSubtasks={async (taskId) => (taskId === selectionTasks[0]?.id ? selectionSubtasks : [])} />}
       {evidenceScenario && <TaskEvidenceDialog
         task={scenario === "completion-required" ? { ...tasks[0], expected_outcome: "A signed verification record for the desktop release." } : tasks[0]}
         mode={scenario === "completion-attach" ? "attach" : "complete"}

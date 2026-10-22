@@ -29,6 +29,34 @@ export type TaskSelectionCardTask = {
 
 export type TaskSelectionCardStatus = "ready" | "loading" | "error";
 
+/**
+ * The open subtasks a task's own tick should carry with it.
+ *
+ * A task and its subtasks are one unit: completing the task completes the
+ * subtasks beneath it, so ticking the task ticks them too and the card's
+ * count, the review, and the record all say the same thing. A subtask that is
+ * already done is left alone, and one that already has a pending proposal is
+ * never selected again. `autoChecked` lists only the subtasks this tick added,
+ * so unticking the task clears exactly those and leaves the employee's own
+ * picks alone.
+ */
+export function selectParentSubtasks(input: {
+  children: readonly TaskSelectionCardSubtask[];
+  selectedIds: ReadonlySet<string>;
+  proposedIds?: ReadonlySet<string>;
+}): { selected: string[]; autoChecked: string[] } {
+  const proposed = input.proposedIds ?? new Set<string>();
+  const selected: string[] = [];
+  const autoChecked: string[] = [];
+  for (const child of input.children) {
+    if (child.completed === true) continue;
+    if (proposed.has(child.id)) continue;
+    selected.push(child.id);
+    if (!input.selectedIds.has(child.id)) autoChecked.push(child.id);
+  }
+  return { selected, autoChecked };
+}
+
 /** Collapsed summary line and post-submit receipt text. Pure for testability. */
 export function taskSelectionSummaryText(input: {
   selected: number;
@@ -91,6 +119,12 @@ function statusChipClass(state: string | undefined, proposed: boolean) {
  * from the far-right disclosure, collapses its list to a compact confirmation
  * state the moment a task is checked, expands a task into its subtasks as an
  * accordion item, and marks rows that already have proposals pending approval.
+ *
+ * A task and its subtasks are one unit here, the way they are in the record:
+ * completing a task completes the open subtasks beneath it. Checking a task
+ * therefore checks those subtasks, and unticking either one clears the other,
+ * so the count, the review, and the record never disagree about what a done
+ * task carries with it.
  */
 export function TaskSelectionCard({
   tasks,
@@ -130,6 +164,9 @@ export function TaskSelectionCard({
   const [listOpen, setListOpen] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [childrenById, setChildrenById] = useState<Record<string, readonly TaskSelectionCardSubtask[] | "loading" | "error">>({});
+  /** The subtasks each task ticked for itself, so unticking it clears exactly those. */
+  const [autoCheckedByParent, setAutoCheckedByParent] = useState<Record<string, string[]>>({});
+  const childrenLoadRef = useRef<Record<string, Promise<readonly TaskSelectionCardSubtask[] | null>>>({});
   const [parentChoice, setParentChoice] = useState<Record<string, boolean>>({});
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -144,6 +181,7 @@ export function TaskSelectionCard({
     setConfirming(false);
     setExpandedIds(new Set());
     setChildrenById({});
+    setAutoCheckedByParent({});
     setParentChoice({});
     setListOpen(true);
     // A list refresh must not unlock selection while a submission is in flight,
@@ -189,15 +227,29 @@ export function TaskSelectionCard({
     || childState(task) !== null
     || (!!onLoadSubtasks && Number(task.subtaskTotal ?? 0) > 0);
 
-  const loadChildren = async (task: TaskSelectionCardTask) => {
-    if (childrenOf(task) || childState(task) === "loading" || !onLoadSubtasks) return;
+  /** Loads a parent's subtasks the first time its row expands, and hands the
+   * loaded list back so a selection can carry them with it. */
+  const loadChildren = async (task: TaskSelectionCardTask): Promise<readonly TaskSelectionCardSubtask[] | null> => {
+    const known = childrenOf(task);
+    if (known) return known;
+    if (!onLoadSubtasks) return null;
+    const inflight = childrenLoadRef.current[task.id];
+    if (inflight) return inflight;
     setChildrenById((current) => ({ ...current, [task.id]: "loading" }));
-    try {
-      const loaded = await onLoadSubtasks(task.id);
-      setChildrenById((current) => ({ ...current, [task.id]: loaded }));
-    } catch {
-      setChildrenById((current) => ({ ...current, [task.id]: "error" }));
-    }
+    const promise = (async () => {
+      try {
+        const loaded = await onLoadSubtasks(task.id);
+        setChildrenById((current) => ({ ...current, [task.id]: loaded }));
+        return loaded;
+      } catch {
+        setChildrenById((current) => ({ ...current, [task.id]: "error" }));
+        return null;
+      } finally {
+        delete childrenLoadRef.current[task.id];
+      }
+    })();
+    childrenLoadRef.current[task.id] = promise;
+    return promise;
   };
 
   const toggleExpanded = (task: TaskSelectionCardTask) => {
@@ -211,7 +263,7 @@ export function TaskSelectionCard({
     if (!open) void loadChildren(task);
   };
 
-  const toggle = (taskId: string) => {
+  const toggle = async (taskId: string) => {
     if (proposedIds.has(taskId) || sending) return;
     const checking = !selectedIds.has(taskId);
     setConfirming(false);
@@ -223,21 +275,54 @@ export function TaskSelectionCard({
       }
       return next;
     });
+
+    const task = listedTasks.find((candidate) => candidate.id === taskId) ?? null;
+    const parent = listedTasks.find((candidate) => (childrenOf(candidate) ?? []).some((child) => child.id === taskId)) ?? null;
+
+    if (!checking) {
+      // Unticking a task unticks the subtasks it ticked. Unticking a subtask
+      // unticks the task above it, so a task and its subtasks always move
+      // together: a task that is done carries its subtasks with it.
+      const ownTicks = autoCheckedByParent[taskId] ?? [];
+      const parentTicks = parent ? (autoCheckedByParent[parent.id] ?? []) : [];
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        for (const id of ownTicks) next.delete(id);
+        if (parent && next.has(parent.id)) {
+          next.delete(parent.id);
+          for (const id of parentTicks) next.delete(id);
+        }
+        return next;
+      });
+      setAutoCheckedByParent((current) => {
+        const next = { ...current };
+        delete next[taskId];
+        if (parent) delete next[parent.id];
+        return next;
+      });
+      return;
+    }
+
+    // Checking a task checks the open subtasks beneath it. The task ticks
+    // straight away; the subtasks join as soon as they are known.
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
+      next.add(taskId);
       return next;
     });
-    // Checking a parent expands it so its subtasks are immediately selectable.
-    // Selecting never collapses the list: the confirmation step does that.
-    if (checking) {
-      const parent = listedTasks.find((task) => task.id === taskId);
-      if (parent && expandable(parent) && !expandedIds.has(taskId)) {
-        setExpandedIds((current) => new Set([...current, taskId]));
-        void loadChildren(parent);
-      }
-    }
+    if (!task || !expandable(task)) return;
+    // Checking a parent expands it so its subtasks are immediately visible.
+    setExpandedIds((current) => (current.has(taskId) ? current : new Set([...current, taskId])));
+    const children = await loadChildren(task);
+    if (!children) return;
+    const { selected, autoChecked } = selectParentSubtasks({ children, selectedIds, proposedIds });
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of selected) next.add(id);
+      return next;
+    });
+    setAutoCheckedByParent((current) => ({ ...current, [taskId]: autoChecked }));
   };
 
   const titleById = new Map<string, string>();

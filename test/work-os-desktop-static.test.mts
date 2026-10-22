@@ -509,8 +509,14 @@ assert.match(companionServer, /moveWorkOsEmployeeSubtask/);
 assert.match(companionServer, /task\.subtask_moved/);
 assert.match(companionServer, /task\.archived/);
 assert.match(companionServer, /setWorkOsEmployeeTaskCompletion/);
-assert.match(companionServer, /\$\{task\.provider === "local" \? "local" : "nifty"\}/);
+// The day event's idempotency key stays namespaced by the task's own provider,
+// so a local completion and a Nifty completion can never collide.
+assert.match(companionServer, /idempotencyKey: `\$\{[a-zA-Z]+\.provider === "local" \? "local" : "nifty"\}:(completed|reopened):/);
 assert.match(companionServer, /source: "employee_explicit"/);
+// Completing a task completes the open subtasks beneath it, on the employee
+// surfaces and on the administration record alike.
+assert.match(companionServer, /applyTaskCompletion/);
+assert.match(companionServer, /openSubtaskRows/);
 
 const api = read("src/api.ts");
 assert.match(api, /AbortSignal\.timeout\(20_000\)/);
