@@ -238,7 +238,8 @@ const completionRow = (value: Json): CompletionRow => ({
  * Completed, archived, and deleted subtasks are left alone: they are not open
  * work, and a completion never rewrites history.
  */
-async function openSubtaskRows(input: { organizationId: string; task: Json }): Promise<Json[]> {  const providerTaskId = String(input.task.provider_task_id ?? input.task.id);
+async function openSubtaskRows(input: { organizationId: string; task: Json }): Promise<Json[]> {
+  const providerTaskId = String(input.task.provider_task_id ?? input.task.id);
   let query = db().from("work_tasks")
     .select("id,provider_task_id,title,provider,status,completed,parent_task_id,parent_provider_task_id")
     .eq("organization_id", input.organizationId)
