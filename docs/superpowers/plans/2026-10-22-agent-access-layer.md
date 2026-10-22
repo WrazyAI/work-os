@@ -438,6 +438,7 @@ git commit -m "feat(work-os): add agent task create and update with provenance"
 - Create: `test/work-os-agent-completion.test.mts`
 
 **Interfaces:**
+- Produce `completeAgentTask(agent, taskId, completed)` in `src/lib/work-agent-tasks.ts`; it calls `setWorkOsEmployeeTaskCompletion` with the actor, and both the dedicated routes and the batch use it.
 - Extend `setWorkOsEmployeeTaskCompletion(access, taskId, completed, actor?)`.
 - Extend `attachWorkOsTaskCompletionEvidence(access, taskId, input, actor?)`.
 - `POST /complete` and `/reopen` require `tasks:write`.
@@ -454,7 +455,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement**
 
-- Completion callbacks pass the actor provenance and agent metadata; audit actions become `agent.task.completed` / `agent.task.reopened` when an actor exists.
+- Completion callbacks pass the actor provenance and agent metadata; audit actions become `agent.task.completed` / `agent.task.reopened` when an actor exists. The dedicated routes and the batch call `completeAgentTask`, which owns the actor wiring.
 - Evidence inserts metrics with `agentTokenId`, sets `raw.origin = "task_completion"` and `raw.agentTokenId`, and audits `agent.evidence.attached`.
 - The complete route returns `{ task }`; a gated task with no evidence returns `409 evidence_required` (existing `WorkOsConflictError` mapping).
 - The evidence route mirrors `src/app/api/work-os/me/tasks/[taskId]/completion-evidence/route.ts`: exactly one file, 8 MB cap, supported types, required `Idempotency-Key`, attach first, and `complete=true` completes after the save with `502` plus the evidence id on a completion failure. Compute the idempotency request hash over method, path, `note`, `complete`, file name, content type, and the SHA-256 of the file bytes before claiming the key. Map a size failure to `413 file_too_large`, a type failure to `415 unsupported_file_type`, and any other evidence validation to `400 validation_error`.
