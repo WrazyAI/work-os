@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Bell, HardDriveDownload, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "../timezones";
 import EmployeeMemory from "./EmployeeMemory";
+import AgentAccessSettings from "./AgentAccessSettings";
 import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
 import { fetchJson, requestId, type AnyRow } from "./model";
 import {
@@ -236,6 +237,8 @@ export default function EmployeeSettings() {
         )}
 
         <EmployeeMemory enabled={access.featureFlags.work_memory === true} />
+
+        <AgentAccessSettings />
 
         <Panel>
           <PanelHeader icon={<Bell size={16} />} title="This device" meta="Preferences stay on this device only." />
