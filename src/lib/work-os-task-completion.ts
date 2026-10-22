@@ -106,12 +106,19 @@ export async function applyTaskCompletion<T extends TaskCompletionNode>(input: {
 
 /**
  * The message a surface shows when the rule stopped a completion: the task
- * stayed open because a subtask under it could not be closed.
+ * stayed open because a subtask under it could not be closed. A failure of the
+ * task the employee actually asked to complete has nothing above it, so its
+ * reason stands alone.
  */
-export function taskCompletionFailureMessage(failures: ReadonlyArray<TaskCompletionFailure<{ title: string }>>): string {
-  const names = failures.map((failure) => `“${failure.task.title}”`).join(", ");
-  const reason = failures[0]?.message ?? "The subtask could not be completed.";
-  return failures.length === 1
-    ? `“${failures[0]?.task.title}” could not be completed, so the task above it stayed open: ${reason}`
+export function taskCompletionFailureMessage(
+  failures: ReadonlyArray<TaskCompletionFailure<{ id?: string; title: string }>>,
+  rootId?: string,
+): string {
+  const named = failures.filter((failure) => failure.task.id !== rootId);
+  const reason = (named[0] ?? failures[0])?.message ?? "The task could not be completed.";
+  if (!named.length) return reason;
+  const names = named.map((failure) => `“${failure.task.title}”`).join(", ");
+  return named.length === 1
+    ? `${names} could not be completed, so the task above it stayed open: ${reason}`
     : `${names} could not be completed, so the task above them stayed open: ${reason}`;
 }

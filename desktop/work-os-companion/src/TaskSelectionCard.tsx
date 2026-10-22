@@ -57,6 +57,25 @@ export function selectParentSubtasks(input: {
   return { selected, autoChecked };
 }
 
+/**
+ * What a parent's tick applies once its subtasks arrive from the host.
+ *
+ * The subtasks come back after a round trip, so the answer is decided against
+ * the selection as it stands then: a task the employee unticked while its
+ * subtasks loaded carries nothing, and a subtask they ticked in the meantime
+ * counts as their own pick rather than the task's. Returns null when the tick
+ * no longer applies.
+ */
+export function parentSubtasksAfterLoad(input: {
+  parentId: string;
+  children: readonly TaskSelectionCardSubtask[];
+  selectedIds: ReadonlySet<string>;
+  proposedIds?: ReadonlySet<string>;
+}): { selected: string[]; autoChecked: string[] } | null {
+  if (!input.selectedIds.has(input.parentId)) return null;
+  return selectParentSubtasks({ children: input.children, selectedIds: input.selectedIds, proposedIds: input.proposedIds });
+}
+
 /** Collapsed summary line and post-submit receipt text. Pure for testability. */
 export function taskSelectionSummaryText(input: {
   selected: number;
@@ -166,6 +185,9 @@ export function TaskSelectionCard({
   const [childrenById, setChildrenById] = useState<Record<string, readonly TaskSelectionCardSubtask[] | "loading" | "error">>({});
   /** The subtasks each task ticked for itself, so unticking it clears exactly those. */
   const [autoCheckedByParent, setAutoCheckedByParent] = useState<Record<string, string[]>>({});
+  /** The selection as it stands right now, for work that resumes after a load. */
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
   const childrenLoadRef = useRef<Record<string, Promise<readonly TaskSelectionCardSubtask[] | null>>>({});
   const [parentChoice, setParentChoice] = useState<Record<string, boolean>>({});
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent">("idle");
@@ -316,13 +338,17 @@ export function TaskSelectionCard({
     setExpandedIds((current) => (current.has(taskId) ? current : new Set([...current, taskId])));
     const children = await loadChildren(task);
     if (!children) return;
-    const { selected, autoChecked } = selectParentSubtasks({ children, selectedIds, proposedIds });
+    // The subtasks arrived after a round trip: apply them against the selection
+    // as it stands now, and nothing at all if the task was unticked meanwhile.
+    const applied = parentSubtasksAfterLoad({ parentId: taskId, children, selectedIds: selectedIdsRef.current, proposedIds });
+    if (!applied) return;
     setSelectedIds((current) => {
+      if (!current.has(taskId)) return current;
       const next = new Set(current);
-      for (const id of selected) next.add(id);
+      for (const id of applied.selected) next.add(id);
       return next;
     });
-    setAutoCheckedByParent((current) => ({ ...current, [taskId]: autoChecked }));
+    setAutoCheckedByParent((current) => ({ ...current, [taskId]: applied.autoChecked }));
   };
 
   const titleById = new Map<string, string>();

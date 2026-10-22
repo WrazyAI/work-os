@@ -115,6 +115,45 @@ test("reopening a task never reopens or touches its subtasks", async () => {
   assert.deepEqual(outcome.failures, []);
 });
 
+test("a failure of the task itself reports the reason without a task above it", async () => {
+  const root = node("root");
+  const children: Record<string, Node[]> = { root: [node("child")] };
+  const outcome = await applyTaskCompletion({
+    task: root,
+    completed: true,
+    openChildren: async (task) => children[task.id] ?? [],
+    complete: async (task) => {
+      if (task.id === "root") throw new Error("the provider refused the task");
+    },
+  });
+
+  const message = taskCompletionFailureMessage(outcome.failures, "root");
+  assert.equal(message, "the provider refused the task");
+  assert.doesNotMatch(message, /above it stayed open/);
+});
+
+test("a subtask failure still names the subtask and the task above it", () => {
+  const message = taskCompletionFailureMessage(
+    [{ task: { id: "child", title: "Trim the header" }, message: "the provider refused" }],
+    "root",
+  );
+  assert.equal(message, "“Trim the header” could not be completed, so the task above it stayed open: the provider refused");
+});
+
+test("a failure of the task itself never hides a failing subtask", async () => {
+  const root = node("root");
+  const children: Record<string, Node[]> = { root: [node("child")] };
+  const outcome = await applyTaskCompletion({
+    task: root,
+    completed: true,
+    openChildren: async (task) => children[task.id] ?? [],
+    complete: async (task) => { throw new Error(`${task.id} refused`); },
+  });
+
+  const message = taskCompletionFailureMessage(outcome.failures, "root");
+  assert.match(message, /“Task child” could not be completed, so the task above it stayed open: child refused/);
+});
+
 test("a parent link that loops back never closes the same task twice", async () => {
   const parent = node("parent");
   const child = node("child");

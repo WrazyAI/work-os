@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { selectParentSubtasks } from "./TaskSelectionCard";
+import { selectParentSubtasks, parentSubtasksAfterLoad } from "./TaskSelectionCard";
 
 /**
  * Completing a task completes the open subtasks beneath it. The card makes
@@ -56,5 +56,37 @@ describe("TaskSelectionCard subtask cascade", () => {
     const source = readFileSync(new URL("./TaskSelectionCard.tsx", import.meta.url), "utf8");
     expect(source).toContain("selectParentSubtasks");
     expect(source).toContain("autoCheckedByParent");
+    // The subtasks arrive after a round trip, so the card applies them against
+    // the selection as it stands then, not the one captured before the await.
+    expect(source).toContain("selectedIdsRef");
+  });
+});
+
+describe("parentSubtasksAfterLoad", () => {
+  const children = [
+    { id: "child-open", title: "Lisa is asked about availability", completed: false },
+    { id: "child-done", title: "Move the tabs", completed: true },
+  ];
+
+  it("applies the subtasks once they arrive while the task is still ticked", () => {
+    const outcome = parentSubtasksAfterLoad({ parentId: "parent", children, selectedIds: new Set(["parent"]) });
+
+    expect(outcome).toEqual({ selected: ["child-open"], autoChecked: ["child-open"] });
+  });
+
+  it("applies nothing when the task was unticked while its subtasks loaded", () => {
+    const outcome = parentSubtasksAfterLoad({ parentId: "parent", children, selectedIds: new Set<string>() });
+
+    expect(outcome).toBeNull();
+  });
+
+  it("counts a subtask ticked during the load as the employee's own pick", () => {
+    const outcome = parentSubtasksAfterLoad({
+      parentId: "parent",
+      children,
+      selectedIds: new Set(["parent", "child-open"]),
+    });
+
+    expect(outcome).toEqual({ selected: ["child-open"], autoChecked: [] });
   });
 });

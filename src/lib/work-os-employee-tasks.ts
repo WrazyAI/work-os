@@ -316,7 +316,7 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
   });
-  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures));
+  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures, String(task.id)));
   const local = String(task.provider ?? "") === "local";
   return { task: updatedTask ?? task, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
@@ -633,6 +633,6 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
   });
-  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures));
+  if (outcome.failures.length) throw new Error(taskCompletionFailureMessage(outcome.failures, String(task.id)));
   return updatedTask ?? task;
 }
