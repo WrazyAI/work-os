@@ -8,7 +8,7 @@ import {
   newAgentTokenSecret,
   validateAgentScopes,
 } from "../src/lib/work-agent-tokens";
-import { hasAgentScope, parseAgentAuthorization } from "../src/lib/work-agent-auth";
+import { hasAgentScope, parseAgentAuthorization, agentRouteError } from "../src/lib/work-agent-auth";
 
 test("a token secret is prefixed, opaque, and hashes deterministically", () => {
   const secret = newAgentTokenSecret();
@@ -45,4 +45,11 @@ test("the guard accepts only a wos_agent bearer and enforces scopes", () => {
   assert.equal(hasAgentScope(["tasks:read"], "tasks:write"), false);
   assert.equal(hasAgentScope(["tasks:read"]), true);
   assert.equal(hasAgentScope([], "tasks:read"), false);
+});
+
+test("cross-person task denials map to 404, not a server error", async () => {
+  const response = agentRouteError(new Error("Task is not available to this employee"));
+  assert.equal(response.status, 404);
+  const body = await response.json() as { code?: string };
+  assert.equal(body.code, "not_found");
 });

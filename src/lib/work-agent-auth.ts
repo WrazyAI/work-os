@@ -56,7 +56,7 @@ export function agentRouteError(error: unknown) {
     return agentError("validation_error", error.message, 400);
   }
   const message = error instanceof Error ? error.message : "Request failed";
-  if (/not found/i.test(message)) return agentError("not_found", "Task not found", 404);
+  if (/not found|not available/i.test(message)) return agentError("not_found", "Task not found", 404);
   if (/required|must be|characters or fewer|invalid/i.test(message)) {
     return agentError("validation_error", message, 400);
   }
