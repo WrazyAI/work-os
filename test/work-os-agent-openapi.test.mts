@@ -68,3 +68,10 @@ test("the served schema reads the repository contract", async () => {
   assert.match(route, /docs\/openapi\/work-os-agent-v1\.yaml/);
   assert.match(route, /application\/yaml/);
 });
+
+test("the proxy lets agent bearers and the public schema reach their routes", async () => {
+  const proxy = await read("src/proxy.ts");
+  assert.match(proxy, /"\/api\/agent\/v1\/openapi\.yaml"/, "the schema is public");
+  assert.match(proxy, /pathname\.startsWith\("\/api\/agent\/"\)/, "agent bearer requests pass the cookie gate");
+  assert.match(proxy, /agentBearer/);
+});
