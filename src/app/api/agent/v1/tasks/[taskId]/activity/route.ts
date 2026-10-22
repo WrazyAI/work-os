@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import { listAgentActivity } from "@/lib/work-agent-activity";
 import { agentRouteError, requireAgentAccess } from "@/lib/work-agent-auth";
+import { agentLimitParam } from "@/lib/work-agent-params";
 import { assertAgentRateLimit } from "@/lib/work-agent-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function limitParam(value: string | null): number {
-  const parsed = Number(value ?? "");
-  return Number.isFinite(parsed) ? Math.min(100, Math.max(1, Math.trunc(parsed))) : 50;
-}
 
 export async function GET(req: Request, context: { params: Promise<{ taskId: string }> }) {
   try {
@@ -20,7 +16,7 @@ export async function GET(req: Request, context: { params: Promise<{ taskId: str
     const params = new URL(req.url).searchParams;
     const page = await listAgentActivity(auth.agent, taskId, {
       cursor: params.get("cursor"),
-      limit: limitParam(params.get("limit")),
+      limit: agentLimitParam(params.get("limit"), 50, 100),
     });
     return NextResponse.json({ items: page.items, cursor: { next: page.nextCursor } });
   } catch (error) {

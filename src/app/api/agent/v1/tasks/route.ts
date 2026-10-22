@@ -2,16 +2,12 @@ import { NextResponse } from "next/server";
 import { agentError, agentRouteError, requireAgentAccess } from "@/lib/work-agent-auth";
 import { agentRequestHash, withAgentIdempotency } from "@/lib/work-agent-idempotency";
 import { assertAgentRateLimit } from "@/lib/work-agent-rate-limit";
+import { agentLimitParam } from "@/lib/work-agent-params";
 import { AGENT_TASK_PAGE_MAX, createAgentTask, listAgentTasks } from "@/lib/work-agent-tasks";
 import type { Json } from "@/lib/work-os-internal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function integerParam(value: string | null, fallback: number): number {
-  const parsed = Number(value ?? "");
-  return Number.isFinite(parsed) ? Math.min(AGENT_TASK_PAGE_MAX, Math.max(1, Math.trunc(parsed))) : fallback;
-}
 
 /** The person's assigned work. Without `updated_since` it reads newest first;
  * with it, the feed replays row changes in ascending order for a cursor walk. */
@@ -28,7 +24,7 @@ export async function GET(req: Request) {
     const page = await listAgentTasks(auth.agent, {
       updatedSince,
       includeArchived: params.get("include_archived") === "true",
-      limit: integerParam(params.get("limit"), 50),
+      limit: agentLimitParam(params.get("limit"), 50, AGENT_TASK_PAGE_MAX),
       cursor: params.get("cursor"),
     });
     return NextResponse.json({ tasks: page.tasks, cursor: { next: page.nextCursor } });

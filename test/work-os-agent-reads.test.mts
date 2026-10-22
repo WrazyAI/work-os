@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { mergeAgentActivity } from "../src/lib/work-agent-activity";
+import { agentLimitParam } from "../src/lib/work-agent-params";
 
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -81,4 +82,24 @@ test("agent read routes enforce scopes and the change-feed RPC", async () => {
   assert.match(service, /work_agent_list_tasks/);
   assert.match(service, /p_limit: limit \+ 1/);
   assert.match(service, /includeArchived|include_archived/);
+});
+
+test("an absent or invalid limit falls back, and bounds clamp", () => {
+  assert.equal(agentLimitParam(null, 50, 100), 50);
+  assert.equal(agentLimitParam("", 50, 100), 50);
+  assert.equal(agentLimitParam("abc", 50, 100), 50);
+  assert.equal(agentLimitParam("0", 50, 100), 1);
+  assert.equal(agentLimitParam("200", 50, 100), 100);
+  assert.equal(agentLimitParam("25", 50, 100), 25);
+});
+
+test("activity timestamps are ISO and invalid rows are skipped", () => {
+  const { items } = mergeAgentActivity({
+    evidence: [
+      { id: "e1", title: "Good", source: "agent", metrics: { origin: "agent_progress" }, created_at: new Date("2026-10-22T10:00:00Z") },
+      { id: "e2", title: "Bad", source: "agent", metrics: {}, created_at: "not a date" },
+    ],
+  }, null, 50);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.at, "2026-10-22T10:00:00.000Z");
 });

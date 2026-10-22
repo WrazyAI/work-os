@@ -22,6 +22,17 @@ export function encodeActivityCursor(at: string, id: string): string {
   return Buffer.from(JSON.stringify({ at, id }), "utf8").toString("base64url");
 }
 
+/** pg returns timestamptz as Date; the API contract is ISO 8601. An invalid
+ * timestamp drops the row rather than leaking a locale string. */
+export function toIsoTimestamp(value: unknown): string | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
 export function decodeActivityCursor(value: string | null | undefined): { at: string; id: string } | null {
   if (!value) return null;
   try {
@@ -40,7 +51,7 @@ export function mergeAgentActivity(
 ): { items: AgentActivityItem[]; nextCursor: string | null } {
   const items: AgentActivityItem[] = [];
   for (const event of input.events ?? []) {
-    const at = String(event.exact_at ?? event.observed_at ?? "");
+    const at = toIsoTimestamp(event.exact_at ?? event.observed_at);
     if (!at) continue;
     const provenance = String(event.provenance ?? "");
     const snapshot = event.task_snapshot && typeof event.task_snapshot === "object" ? event.task_snapshot as Json : {};
@@ -54,7 +65,7 @@ export function mergeAgentActivity(
     });
   }
   for (const row of input.evidence ?? []) {
-    const at = String(row.created_at ?? "");
+    const at = toIsoTimestamp(row.created_at);
     if (!at) continue;
     const metrics = row.metrics && typeof row.metrics === "object" ? row.metrics as Json : {};
     const origin = String(metrics.origin ?? "");
@@ -69,7 +80,7 @@ export function mergeAgentActivity(
     });
   }
   for (const row of input.blockers ?? []) {
-    const at = String(row.created_at ?? "");
+    const at = toIsoTimestamp(row.created_at);
     if (!at) continue;
     const resolved = String(row.status ?? "") === "resolved";
     items.push({
