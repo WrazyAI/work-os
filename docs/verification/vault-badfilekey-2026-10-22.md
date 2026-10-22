@@ -72,9 +72,19 @@ saved on the server. Existing two-click destructive confirmation remains.
 
 ## Remaining acceptance
 
-CodeRabbit completed the seven-file batch review with zero findings. The fix
-is intended for the next companion release; no version bump, installer, server
-deployment, or Agent OS convergence is included in this batch.
+CodeRabbit completed the seven-file batch review with zero findings. Recovery
+source merged as Work OS `38a87983`; release `0.5.4` metadata merged as
+`d4993296`, with October 22 ship date. Release run `39798008181` is pending;
+publication is not yet claimed. Release-source companion tests (1,268), build,
+and eleven release guards passed. Runner selection remains unchanged.
+
+Recovery runtime, preview, and unit tests are byte-identical in Agent OS
+`f35c66f2`. Its 1,216 companion tests, typecheck, and build passed; all 33
+vault/startup tests passed again after rebasing over the unrelated plan-summary
+change. Its broader suite has 522 passes and nine failures (plus three initial
+passes); the same static/local-plan/provider-outbox failures reproduce on clean
+`d18ccb9f`. Independent version metadata and platform shell are preserved.
+No server deployment is needed for this desktop-only behavior.
 The affected Mac's decryptability and
 post-recovery setup remain unverified. A signed-off reset would discard
 local-only data; otherwise original matching material or a usable backup is
