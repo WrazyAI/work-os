@@ -74,8 +74,16 @@ saved on the server. Existing two-click destructive confirmation remains.
 
 CodeRabbit completed the seven-file batch review with zero findings. Recovery
 source merged as Work OS `38a87983`; release `0.5.4` metadata merged as
-`d4993296`, with October 22 ship date. Release run `39798008181` is pending;
-publication is not yet claimed. Release-source companion tests (1,268), build,
+`d4993296`, with October 22 ship date. Release run `39798008181` succeeded;
+the unsigned internal prerelease `work-os-companion-internal-v0.5.04` is
+published (not draft). Windows packaging, universal Mac packaging, packaged Mac
+startup, and combined-asset publication gates all passed. Downloaded published
+assets passed every `SHA256SUMS.txt` entry. The combined manifest is version
+`0.5.4`, targets this exact release, and its three platform signatures match
+the published sidecars. The downloaded Mac archive identifies itself as
+`com.wrazy.workos.pilot`, version `0.5.4`. This does not claim authenticated
+updater delivery or recovery on the employee's device.
+Release-source companion tests (1,268), build,
 and eleven release guards passed. Runner selection remains unchanged.
 
 Recovery runtime, preview, and unit tests are byte-identical in Agent OS
