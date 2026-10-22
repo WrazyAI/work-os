@@ -19,7 +19,7 @@
 - Scopes: `tasks:read`, `tasks:write`, `progress:write`, `evidence:write`. Default mint is read + write + progress; evidence is opt-in.
 - Every write requires `Idempotency-Key` (1–160 characters).
 - Rate limit: 120 requests/minute and 20 writes/minute per token; `429` with `Retry-After`.
-- Error body is `{ error, code, request_id }`; codes are limited to the design's list.
+- Error body is `{ error, code, request_id }`; codes are the design's list plus `migration_required` (503 server state), `internal_error` (500 server state), and `feature_disabled` (403 organization state).
 - Completion still passes the existing evidence gate. Agent writes use `agent` provenance and never record employee memory as the person's own action.
 - No Nifty write path. All current tasks have `provider = 'local'`.
 - Never log, return, or audit a raw token or token hash.
