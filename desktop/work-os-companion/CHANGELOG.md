@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.6 — 2026-10-22
+
+- Marking a task done now marks its unfinished subtasks done too, so a finished task never leaves unfinished work underneath it.
+- In the tasks card, ticking a task ticks its subtasks with it, and the review shows each one before anything changes.
+
 ## 0.5.5 — 2026-10-22
 
 - Editing a plan draft no longer duplicates the text when you finish editing.
