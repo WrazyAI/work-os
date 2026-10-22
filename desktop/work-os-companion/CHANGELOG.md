@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.7 — 2026-10-22
+
+- The recap bubble is compact again while Otto reads — four lines of text, not a half-empty panel.
+- The small orange wedge beside Otto is gone; the elapsed-time pill keeps the time.
+
 ## 0.5.6 — 2026-10-22
 
 - Marking a task done now marks its unfinished subtasks done too, so a finished task never leaves unfinished work underneath it.

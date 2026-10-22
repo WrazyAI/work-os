@@ -2336,11 +2336,10 @@ export default function AvatarApp(): React.ReactElement {
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
           <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} speaking={recapSpeech.status === "playing"} />
-          {(showShiftTime || showBadge) && <span
-            className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
-            style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
-            aria-hidden="true"
-          />}
+          {/* One marker, one meaning: it appears when Otto needs attention.
+              Shift progress lives in the elapsed pill; the old pie marker read
+              as a stray wedge beside the figure. */}
+          {showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
         {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>

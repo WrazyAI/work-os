@@ -914,13 +914,6 @@ body.avatar-window {
 .avatar-prompt-bubble + .avatar-drag-surface { top: 58px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, .25); background: rgba(32, 36, 33, .9); color: rgba(255, 252, 246, .82); font-size: 12px; }
 .avatar-day-time { bottom: 1px; border-color: rgba(83, 100, 81, .7); border-radius: 999px; background: rgba(251, 252, 248, .96); color: #344333; font: 500 11px/1 Manrope, Inter, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 9px rgba(13, 18, 12, .13); }
 .avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
-.avatar-badge.avatar-badge-progress {
-  background: conic-gradient(from -90deg, #ff8a55 0 var(--shift-progress, 0%), rgba(255, 138, 85, .2) var(--shift-progress, 0%) 100%);
-  /* A ring, not a pie: the unfilled arc used to read as a stray triangle. */
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
-}
-.avatar-badge.avatar-badge-progress-unavailable { background: rgba(255, 138, 85, .16); }
 .avatar-hide { top: 20px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
 .avatar-prompt-bubble ~ .avatar-hide { top: 58px; }
 
@@ -1018,10 +1011,11 @@ body.avatar-window {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   width: 300px;
   /* Fill the grown window rather than trusting it to be tall enough: the
-     bubble takes the slack and the figure stays above the pill even when the
-     monitor limits how far the window can grow. */
+     bubble takes the height its own rows need, and the figure stays anchored
+     to the bottom even when the monitor limits how far the window can grow. */
   height: 100%;
   max-height: 100%;
   box-sizing: border-box;
@@ -1037,7 +1031,8 @@ body.avatar-window {
      bubble is grown the figure has room, so the surface gets the leftover box
      and clips only what genuinely cannot fit. */
   max-height: none;
-  flex: 1 1 auto;
+  /* Content-sized: four rows of prompter, not the rest of the window. */
+  flex: 0 1 auto;
   min-height: 0;
   overflow: hidden;
 }

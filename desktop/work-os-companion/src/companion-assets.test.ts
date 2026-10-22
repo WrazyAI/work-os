@@ -59,8 +59,10 @@ describe("companion artwork", () => {
     expect(conversationCss).toMatch(/\.avatar-orb\s*\{[^}]*background:\s*transparent/s);
     expect(avatar).toContain('const showBadge = mascotVisual.pose === "alert"');
     expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
-    expect(avatar).toContain('className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress"');
-    expect(avatar).toContain("style={showShiftTime && !showBadge && progressAvailable");
+    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    // The badge marks attention only; shift progress is the elapsed pill.
+    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).not.toContain("avatar-badge-progress");
     expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
     expect(avatar).toContain("chat.some((entry) => hasPendingMascotApproval");
@@ -142,7 +144,7 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("hasOpenShiftSession(facts)");
     expect(avatar).toContain('const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable"');
     expect(avatar).toContain('const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable"');
-    expect(avatar).toContain("!progressAvailable");
+    expect(avatar).not.toContain("avatar-badge-progress-unavailable");
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");

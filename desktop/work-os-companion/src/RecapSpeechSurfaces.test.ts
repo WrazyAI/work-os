@@ -93,8 +93,10 @@ describe("the grown bubble stays inside its window", () => {
     expect(css).toContain("flex-wrap: wrap;");
   });
 
-  it("draws the shift progress as a ring rather than a pie wedge", () => {
+  it("keeps one marker, for attention only — no shift-progress wedge", () => {
     const css = read("./avatar.css");
-    expect(css).toMatch(/\.avatar-badge\.avatar-badge-progress \{[\s\S]{0,400}?mask: radial-gradient/);
+    expect(css).not.toContain("avatar-badge-progress");
+    const avatar = read("./AvatarApp.tsx");
+    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
   });
 });
