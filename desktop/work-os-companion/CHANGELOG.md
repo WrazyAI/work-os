@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.5 — 2026-10-22
+
+- Editing a plan draft no longer duplicates the text when you finish editing.
+
 ## 0.5.4 — 2026-10-22
 
 - If this device's saved data cannot be decrypted, you can choose to start fresh after a warning about unsent updates.

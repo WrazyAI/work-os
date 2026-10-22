@@ -237,6 +237,10 @@ assert.match(app, /eod-attention-pill/);
 assert.match(app, /prior EOD/);
 const planningSession = read("src/PlanningSession.tsx");
 assert.match(planningSession, /newer confirmed plan/);
+// Leaving edit mode remounts the document field. The layout effect writes its
+// text while editing; without a fresh node, React appends the read-only value
+// beside it and every field duplicates.
+assert.match(planningSession, /key=\{editing \? "editing" : "read"\}/);
 assert.match(app, /useOutstandingEodsQuery/);
 assert.match(app, /useReportDayQuery/);
 assert.match(app, /eod-day-context/);

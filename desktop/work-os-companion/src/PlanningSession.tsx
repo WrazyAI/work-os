@@ -144,6 +144,10 @@ export function PlanningDocumentText({
     selection?.addRange(range);
   };
   return <div
+    // The editable field owns its text node while React renders no children.
+    // Switching modes must start from a clean node, or React appends the
+    // read-only value beside the text the layout effect wrote.
+    key={editing ? "editing" : "read"}
     ref={ref}
     className={className}
     data-annotate-target={target}
