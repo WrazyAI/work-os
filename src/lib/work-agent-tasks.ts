@@ -1,7 +1,8 @@
 import type { AgentAccess } from "@/lib/work-agent-auth";
 import { WorkOsValidationError, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { createWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, setWorkOsEmployeeTaskCompletion, updateWorkOsAgentTask } from "@/lib/work-os-employee-tasks";
-import { db, type Json } from "@/lib/work-os-internal";
+import { addTaskProgress } from "@/lib/work-os-tasks";
+import { audit, db, type Json } from "@/lib/work-os-internal";
 
 /** Person-scoped agent task reads. The list uses the dedicated change-feed
  * function so the person attribution rule matches the employee surfaces. */
@@ -142,4 +143,30 @@ export async function updateAgentTask(agent: AgentAccess, taskId: string, body: 
 
 export async function completeAgentTask(agent: AgentAccess, taskId: string, completed: boolean) {
   return setWorkOsEmployeeTaskCompletion(agent.access, taskId, completed, { tokenId: agent.tokenId, tokenName: agent.tokenName });
+}
+
+/** A progress note is employee-authored context, never completion proof. It is
+ * one `work_evidence` row marked with the token that wrote it. */
+export async function addAgentProgress(agent: AgentAccess, taskId: string, body: Json, idempotencyKey: string) {
+  const details = await getWorkOsEmployeeTaskDetails(agent.access, taskId);
+  const localTaskId = String((details.task as Json).id);
+  const ownerId = workOsOrganizationOwnerId(agent.access);
+  const metrics = body.metrics && typeof body.metrics === "object" && !Array.isArray(body.metrics)
+    ? body.metrics as Json
+    : {};
+  const evidence = await addTaskProgress(ownerId, localTaskId, {
+    title: body.title,
+    summary: body.summary,
+    url: body.url,
+    person_id: agent.access.personId,
+    source: "agent",
+    idempotency_key: idempotencyKey,
+    metrics: { ...metrics, origin: "agent_progress", agentTokenId: agent.tokenId },
+  });
+  await audit(agent.access, "agent.progress.logged", "work_evidence", String((evidence as Json).id ?? ""), {
+    tokenId: agent.tokenId,
+    tokenName: agent.tokenName,
+    taskId: localTaskId,
+  });
+  return evidence;
 }
