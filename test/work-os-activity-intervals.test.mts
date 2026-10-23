@@ -34,6 +34,10 @@ const candidate = (id: string, capturedAt: string, app: string | null, retained 
   retained,
 });
 
+/** The config reads only the keys it knows; a partial env is the point. */
+const processEnv = (values: Record<string, string>): NodeJS.ProcessEnv =>
+  values as unknown as NodeJS.ProcessEnv;
+
 test("a prompt slot has one deterministic identity", () => {
   const key = activityIntervalSlotKey("session-1", "2026-09-28T15:19:29.446Z");
   assert.equal(key, "session-1:2026-09-28T15:19:29.446Z");
@@ -211,20 +215,20 @@ test("provenance labels never present inference as employee-confirmed fact", () 
 });
 
 test("interval configuration is bounded and can be disabled", () => {
-  const defaults = activityIntervalConfig({} as NodeJS.ProcessEnv);
+  const defaults = activityIntervalConfig(processEnv({}));
   assert.equal(defaults.enabled, true);
   assert.equal(defaults.maxMinutes, 120);
   assert.equal(defaults.maxFrames, 12);
   assert.equal(defaults.maxRawFrames, 5);
   assert.equal(defaults.maxPerDay, 10);
-  const disabled = activityIntervalConfig({ WORK_OS_ACTIVITY_INTERVALS_ENABLED: "0" } as NodeJS.ProcessEnv);
+  const disabled = activityIntervalConfig(processEnv({ WORK_OS_ACTIVITY_INTERVALS_ENABLED: "0" }));
   assert.equal(disabled.enabled, false);
-  const bounded = activityIntervalConfig({
+  const bounded = activityIntervalConfig(processEnv({
     WORK_OS_ACTIVITY_INTERVAL_MAX_MINUTES: "9999",
     WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES: "-4",
     WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES: "40",
     WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "0",
-  } as NodeJS.ProcessEnv);
+  }));
   assert.equal(bounded.maxMinutes, 120);
   assert.equal(bounded.maxFrames, 12);
   assert.equal(bounded.maxRawFrames, 5);
@@ -233,21 +237,21 @@ test("interval configuration is bounded and can be disabled", () => {
 
 test("a non-hourly cadence override triples the daily recap cap", () => {
   // No override keeps the base cap exactly as configured.
-  assert.equal(activityIntervalConfig({ WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "60" } as NodeJS.ProcessEnv).maxPerDay, 10);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" })).maxPerDay, 24);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "60" })).maxPerDay, 10);
   // Any valid non-hourly override triples the base cap, up to 72.
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10" } as NodeJS.ProcessEnv).maxPerDay, 30);
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 72);
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "12" } as NodeJS.ProcessEnv).maxPerDay, 36);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10" })).maxPerDay, 30);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" })).maxPerDay, 72);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "12" })).maxPerDay, 36);
   // An out-of-range base falls back to the default 10 before tripling.
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "30" } as NodeJS.ProcessEnv).maxPerDay, 30);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "30" })).maxPerDay, 30);
   // Invalid overrides fall back to the hourly default and do not scale the cap.
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "4", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
-  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "241", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "4", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" })).maxPerDay, 24);
+  assert.equal(activityIntervalConfig(processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "241", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" })).maxPerDay, 24);
 });
 
 test("a per-person cadence scales the daily recap cap for that person only", () => {
-  const env = { WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv;
+  const env = processEnv({ WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" });
   assert.equal(activityIntervalConfig(env, 10).maxPerDay, 72);
   assert.equal(activityIntervalConfig(env, 60).maxPerDay, 24);
   assert.equal(activityIntervalConfig(env, null).maxPerDay, 24);

@@ -13,6 +13,10 @@ import {
 } from "../src/lib/work-os-local-config";
 import { checkInIntervalOption, firstFollowUpOption } from "../src/modules/work-os/workday";
 
+/** The config reads only the keys it knows; a partial env is the point. */
+const processEnv = (values: Record<string, string>): NodeJS.ProcessEnv =>
+  values as unknown as NodeJS.ProcessEnv;
+
 test("local config parsing keeps only bounded cadence entries", () => {
   const config = parseWorkOsLocalConfig(JSON.stringify({
     people: {
@@ -50,7 +54,7 @@ test("resolved cadence prefers the local entry, then the environment, then defau
   const config = parseWorkOsLocalConfig(JSON.stringify({
     people: { "person@example.com": { checkInIntervalMinutes: 10 } },
   }));
-  const env = { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "30", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" } as NodeJS.ProcessEnv;
+  const env = processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "30", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" });
   assert.deepEqual(resolveWorkOsCadence({ email: "person@example.com" }, env, config), {
     checkInIntervalMinutes: 10,
     firstFollowUpMinutes: 45,
@@ -61,20 +65,20 @@ test("resolved cadence prefers the local entry, then the environment, then defau
     firstFollowUpMinutes: 45,
     personOverride: false,
   });
-  assert.deepEqual(resolveWorkOsCadence({ email: "other@example.com" }, {} as NodeJS.ProcessEnv, config), {
+  assert.deepEqual(resolveWorkOsCadence({ email: "other@example.com" }, processEnv({}), config), {
     checkInIntervalMinutes: 60,
     firstFollowUpMinutes: 75,
     personOverride: false,
   });
   // Invalid environment values fall back to the defaults.
-  assert.deepEqual(resolveWorkOsCadence({ email: "other@example.com" }, { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "4" } as NodeJS.ProcessEnv, config), {
+  assert.deepEqual(resolveWorkOsCadence({ email: "other@example.com" }, processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "4" }), config), {
     checkInIntervalMinutes: 60,
     firstFollowUpMinutes: 75,
     personOverride: false,
   });
   // A first-follow-up-only entry still counts as a person override.
   const partial = parseWorkOsLocalConfig(JSON.stringify({ people: { "partial@example.com": { firstFollowUpMinutes: 15 } } }));
-  assert.deepEqual(resolveWorkOsCadence({ email: "partial@example.com" }, {} as NodeJS.ProcessEnv, partial), {
+  assert.deepEqual(resolveWorkOsCadence({ email: "partial@example.com" }, processEnv({}), partial), {
     checkInIntervalMinutes: 60,
     firstFollowUpMinutes: 15,
     personOverride: true,
@@ -93,7 +97,7 @@ test("the config file is read from the checkout and refreshes when it changes", 
   assert.deepEqual(loadWorkOsLocalConfig(path).people["a@b.com"], { checkInIntervalMinutes: 15 });
   assert.deepEqual(loadWorkOsLocalConfig(join(dir, "missing.json")), { people: {} });
   // A configured path resolves relative to the checkout.
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "custom/local.json" } as NodeJS.ProcessEnv), join(process.cwd(), "custom/local.json"));
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "custom/local.json" })), join(process.cwd(), "custom/local.json"));
 });
 
 test("the local config path resolves the same value on macOS, Linux, and Windows", () => {
@@ -102,17 +106,17 @@ test("the local config path resolves the same value on macOS, Linux, and Windows
 
   // The default lives with the checkout, so it resolves against the working
   // directory on every platform.
-  assert.equal(workOsLocalConfigPath({} as NodeJS.ProcessEnv, mac), "/Users/david/work-os/config/work-os.local.json");
-  assert.equal(workOsLocalConfigPath({} as NodeJS.ProcessEnv, win), "C:\\work\\work-os\\config\\work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({}), mac), "/Users/david/work-os/config/work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({}), win), "C:\\work\\work-os\\config\\work-os.local.json");
 
   // `~` is how an operator points at a file in their own account.
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~/.work-os.local.json" } as NodeJS.ProcessEnv, mac), "/Users/david/.work-os.local.json");
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~" } as NodeJS.ProcessEnv, mac), "/Users/david");
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~\\work-os.local.json" } as NodeJS.ProcessEnv, win), "C:\\Users\\David\\work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "~/.work-os.local.json" }), mac), "/Users/david/.work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "~" }), mac), "/Users/david");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "~\\work-os.local.json" }), win), "C:\\Users\\David\\work-os.local.json");
 
   // A relative path follows the platform's separator either way.
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "config\\work-os.local.json" } as NodeJS.ProcessEnv, mac), "/Users/david/work-os/config/work-os.local.json");
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "config/work-os.local.json" } as NodeJS.ProcessEnv, win), "C:\\work\\work-os\\config\\work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "config\\work-os.local.json" }), mac), "/Users/david/work-os/config/work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "config/work-os.local.json" }), win), "C:\\work\\work-os\\config\\work-os.local.json");
 
   // A Windows path stays rooted on macOS/Linux instead of being joined to the
   // working directory — a value that cannot exist must not look like a real one.
@@ -122,7 +126,7 @@ test("the local config path resolves the same value on macOS, Linux, and Windows
 
   // A POSIX absolute path is left alone wherever it is honored.
   assert.equal(resolveLocalConfigPath("/etc/work-os.local.json", mac), "/etc/work-os.local.json");
-  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "  /etc/work-os.local.json  " } as NodeJS.ProcessEnv, mac), "/etc/work-os.local.json");
+  assert.equal(workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "  /etc/work-os.local.json  " }), mac), "/etc/work-os.local.json");
 });
 
 test("an unreadable configured override is reported instead of disappearing", () => {
@@ -173,7 +177,7 @@ test("the override path resolves the same way on macOS, Linux, and Windows", () 
 
   // The environment override flows through the same resolution.
   assert.equal(
-    workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~/override.json" } as NodeJS.ProcessEnv, posix),
+    workOsLocalConfigPath(processEnv({ WORK_OS_LOCAL_CONFIG_PATH: "~/override.json" }), posix),
     "/Users/david/override.json",
   );
 });
@@ -181,7 +185,7 @@ test("the override path resolves the same way on macOS, Linux, and Windows", () 
 test("the installed app's own config file wins over every deployment source", () => {
   const identity = { email: "person@example.com" };
   const config = parseWorkOsLocalConfig(JSON.stringify({ people: { "person@example.com": { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10 } } }));
-  const env = { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "45", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" } as NodeJS.ProcessEnv;
+  const env = processEnv({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "45", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" });
 
   // The machine's file is what an employee edited, so it is the most specific
   // source there is.
@@ -214,7 +218,7 @@ test("the installed app's own config file wins over every deployment source", ()
     { checkInIntervalMinutes: 45, firstFollowUpMinutes: 45, personOverride: false },
   );
   assert.deepEqual(
-    resolveWorkOsCadence({ email: "someone-else@example.com" }, {} as NodeJS.ProcessEnv, config, null),
+    resolveWorkOsCadence({ email: "someone-else@example.com" }, processEnv({}), config, null),
     { checkInIntervalMinutes: 60, firstFollowUpMinutes: 75, personOverride: false },
   );
 });
