@@ -415,7 +415,20 @@ function installAdminFetchStub(state: PreviewState) {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (state === "loading") return never();
     if (state === "error") return fail();
-    if (url.includes("/api/work-os/session")) return json({ organizationId: "org-1", role: "admin", personId: "p-ada", userId: "u-1", featureFlags: {}, viewMode: "admin" });
+    if (url.includes("/api/work-os/session")) return json({
+      requiresWorkspaceSelection: false,
+      organizationId: "org-1",
+      organizationName: "David Yeboah Workspace",
+      role: "admin",
+      personId: "p-ada",
+      userId: "u-1",
+      featureFlags: {},
+      viewMode: "admin",
+      organizations: [
+        { organizationId: "org-1", name: "David Yeboah Workspace", role: "admin", personId: "p-ada" },
+        { organizationId: "org-2", name: "WrazyAI Owner Workspace", role: "employee", personId: "p-ada" },
+      ],
+    });
     if (url.includes("/api/work-os/status")) return json(statusFixture());
     if (url.includes("/api/work-os/admin/overview")) return json(overviewFixture(state));
     if (url.includes("/api/work-os/admin/insights")) return json(insightsFixture(state));

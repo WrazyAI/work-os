@@ -3,7 +3,7 @@
 import type { ActivityIntervalView } from "@/lib/work-os-activity-intervals";
 import type { AdminInsights, AdminInsightRange } from "@/lib/work-os-admin-insights";
 import type { AdminOverview } from "@/lib/work-os-admin-overview";
-import type { WorkOsViewMode } from "@/modules/work-os/view-mode";
+import type { WorkOsSessionInfo } from "../session";
 
 export type { AdminInsights, AdminInsightRange, AdminOverview, ActivityIntervalView };
 
@@ -134,14 +134,7 @@ export interface PersonDetailResponse {
   evidenceSummary: { total: number; activity: number; output: number; disputed: number };
 }
 
-export interface SessionResponse {
-  organizationId: string;
-  role: "employee" | "manager" | "admin";
-  personId: string | null;
-  userId: string;
-  featureFlags: Record<string, boolean>;
-  viewMode: WorkOsViewMode;
-}
+export type SessionResponse = WorkOsSessionInfo;
 
 export interface SystemStatusResponse {
   schema: { ready: boolean; migration: string; error?: string };

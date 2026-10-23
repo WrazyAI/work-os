@@ -1,4 +1,6 @@
-import { requireUserProfile } from "@/lib/supabase/auth";
+import { redirect } from "next/navigation";
+import { getCurrentProfile } from "@/lib/supabase/auth";
+import { listWorkOsWorkspaces } from "@/lib/work-os-api";
 import DesktopConnect from "./DesktopConnect";
 
 export default async function DesktopConnectPage({
@@ -6,7 +8,16 @@ export default async function DesktopConnectPage({
 }: {
   searchParams: Promise<{ challenge?: string; state?: string; redirect_uri?: string }>;
 }) {
-  await requireUserProfile();
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
   const params = await searchParams;
-  return <DesktopConnect challenge={params.challenge || ""} state={params.state || ""} redirectUri={params.redirect_uri || ""} />;
+  const workspaces = await listWorkOsWorkspaces(profile.id);
+  return (
+    <DesktopConnect
+      challenge={params.challenge || ""}
+      state={params.state || ""}
+      redirectUri={params.redirect_uri || ""}
+      workspaces={workspaces}
+    />
+  );
 }

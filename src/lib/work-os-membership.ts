@@ -7,52 +7,49 @@ export interface WorkOsMembershipCandidate {
   person_id: string | null;
   feature_flags: unknown;
   created_at: string;
+  /** Workspace name resolved by the caller for the selection UI. */
+  organization_name?: string | null;
 }
 
-/** Privilege order used only to break `created_at` ties. */
-const ROLE_RANK: Record<WorkOsMembershipRole, number> = { admin: 0, manager: 1, employee: 2 };
-const UNKNOWN_ROLE_RANK = 3;
-
-function roleRank(role: string): number {
-  return ROLE_RANK[role as WorkOsMembershipRole] ?? UNKNOWN_ROLE_RANK;
-}
-
-function createdAtMs(row: WorkOsMembershipCandidate): number {
-  const parsed = Date.parse(row.created_at);
-  // An unparseable timestamp must never outrank a real one.
-  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
-}
+export type WorkOsMembershipSelection<T extends WorkOsMembershipCandidate> =
+  | { kind: "selected"; membership: T }
+  | { kind: "required"; memberships: T[] }
+  | { kind: "none" };
 
 /**
- * Choose the membership that represents a signed-in user.
+ * Resolve one membership only when the caller named it or there is exactly one.
  *
- * Earliest membership wins, exactly as before — that keeps an established
- * organization stable. The change is the tie: memberships created by one
- * statement share `created_at`, and leaving the choice to row order made a
- * user's organization (and therefore their role) arbitrary from one request to
- * the next. A privileged role breaks the tie, and the membership id breaks the
- * remaining one, so the result is deterministic for any input order.
+ * Previously the earliest `created_at` won, with a privileged role breaking a
+ * tie. That silently put an account with two memberships into one workspace —
+ * and after a backfill, the privileged one — so two people on the same team
+ * could read different tenants. Now:
+ *
+ * - an explicit organization selects that membership or nothing;
+ * - one active membership selects itself;
+ * - more than one active membership without a choice requires the account to
+ *   choose, and returns every candidate in a stable order;
+ * - no memberships yields nothing.
+ *
+ * Role never decides the workspace. The picker is the only tie-break.
  */
-export function pickMembership<T extends WorkOsMembershipCandidate>(rows: readonly T[]): T | null {
-  let best: T | null = null;
-  for (const row of rows) {
-    if (!best) {
-      best = row;
-      continue;
-    }
-    if (compareCandidates(row, best) < 0) best = row;
+export function selectWorkOsMembership<T extends WorkOsMembershipCandidate>(
+  rows: readonly T[],
+  organizationId?: string | null,
+): WorkOsMembershipSelection<T> {
+  if (organizationId) {
+    const match = rows.find((row) => row.organization_id === organizationId);
+    return match ? { kind: "selected", membership: match } : { kind: "none" };
   }
-  return best;
+  if (rows.length === 0) return { kind: "none" };
+  if (rows.length === 1) return { kind: "selected", membership: rows[0] };
+  return { kind: "required", memberships: sortMemberships(rows) };
 }
 
-function compareCandidates(a: WorkOsMembershipCandidate, b: WorkOsMembershipCandidate): number {
-  // Compare rather than subtract: two unparseable timestamps are both Infinity,
-  // and Infinity - Infinity is NaN, which would skip every later tie-breaker.
-  const aCreated = createdAtMs(a);
-  const bCreated = createdAtMs(b);
-  if (aCreated !== bCreated) return aCreated < bCreated ? -1 : 1;
-  const byRole = roleRank(a.role) - roleRank(b.role);
-  if (byRole !== 0) return byRole;
-  if (a.id === b.id) return 0;
-  return a.id < b.id ? -1 : 1;
+/** Stable order for the chooser: workspace name, then membership id. */
+function sortMemberships<T extends WorkOsMembershipCandidate>(rows: readonly T[]): T[] {
+  return [...rows].sort((left, right) => {
+    const byName = (left.organization_name ?? "").localeCompare(right.organization_name ?? "");
+    if (byName !== 0) return byName;
+    return left.id.localeCompare(right.id);
+  });
 }

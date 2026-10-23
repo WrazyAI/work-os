@@ -359,12 +359,12 @@ test("employee destinations are nested routes with legacy ?tab= redirects", asyn
 
 test("the Work OS dispatcher keeps manager review and the admin workspace", async () => {
   const workOsHome = await source("src/modules/work-os/WorkOsHome.tsx");
-  assert.match(workOsHome, /session\.data\?\.role === "manager"/);
-  assert.match(workOsHome, /<ManagerWorkOsHome \/>/);
+  assert.match(workOsHome, /data\?\.role === "manager"/);
+  assert.match(workOsHome, /<ManagerWorkOsHome/);
   assert.doesNotMatch(workOsHome, /EmployeeWorkOsHome/);
   assert.doesNotMatch(workOsHome, /surface=admin/);
   assert.match(workOsHome, /Opening your workspace/);
-  assert.match(workOsHome, /session\.data\.viewMode === "employee"/);
+  assert.match(workOsHome, /data\.viewMode === "employee"/);
   assert.match(workOsHome, /"Open My workspace"/);
   assert.match(workOsHome, /"Open Work OS administration"/);
   assert.match(workOsHome, /"\/work-os\/today" : "\/work-os\/admin"/);

@@ -12,10 +12,10 @@ export default async function EmployeeWorkspaceLayout({ children }: { children: 
   if (!resolved.ok || !canUseEmployeeWorkspace(resolved.access)) redirect("/work-os");
   const viewMode = await resolveWorkOsViewModeFor(resolved.access);
   if (resolved.access.role === "admin" && viewMode !== "employee") redirect("/work-os/admin");
-  const { role, personId, featureFlags } = resolved.access;
+  const { role, personId, featureFlags, organizationName, workspaces } = resolved.access;
   return (
     <WorkOsProviders>
-      <EmployeeWorkspaceShell access={{ role, personId, featureFlags }}>{children}</EmployeeWorkspaceShell>
+      <EmployeeWorkspaceShell access={{ role, personId, featureFlags, organizationName, canSwitchWorkspaces: workspaces.length > 1 }}>{children}</EmployeeWorkspaceShell>
     </WorkOsProviders>
   );
 }

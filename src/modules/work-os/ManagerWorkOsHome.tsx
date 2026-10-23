@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, Eye, FileCheck2, RefreshCw, Users, X } from "lucide-react";
 import { formatWorkOsDate } from "./date-format";
@@ -15,7 +16,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-export default function ManagerWorkOsHome() {
+export default function ManagerWorkOsHome({ organizationName, canSwitchWorkspaces = false }: { organizationName: string; canSwitchWorkspaces?: boolean }) {
   const client = useQueryClient();
   const [selected, setSelected] = useState<Row | null>(null);
   const [markdown, setMarkdown] = useState("");
@@ -47,7 +48,15 @@ export default function ManagerWorkOsHome() {
     <div className="min-h-[calc(100vh-8rem)] border border-[var(--border)] bg-[var(--bg-primary)]">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--bg-card)] px-5 py-4">
         <div><p className="flex items-center gap-2 text-[11px] font-semibold uppercase text-[var(--accent)]"><Users size={14} /> Team Work OS</p><h1 className="mt-1 text-xl font-semibold">Manager review</h1></div>
-        <button title="Refresh" aria-label="Refresh" onClick={() => void client.invalidateQueries({ queryKey: ["work-os"] })} className="grid size-9 place-items-center border border-[var(--border)]"><RefreshCw size={15} /></button>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[11px] text-[var(--text-tertiary)]">{organizationName}</span>
+          {canSwitchWorkspaces ? (
+            <Link href="/work-os/select-workspace" className="text-[11px] font-semibold text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+              Switch workspace
+            </Link>
+          ) : null}
+          <button title="Refresh" aria-label="Refresh" onClick={() => void client.invalidateQueries({ queryKey: ["work-os"] })} className="grid size-9 place-items-center border border-[var(--border)]"><RefreshCw size={15} /></button>
+        </div>
       </header>
       {error && <div className="m-5 flex items-center gap-2 border border-[var(--status-err)] p-3 text-[12px] text-[var(--status-err)]"><AlertTriangle size={15} />{(error as Error).message}</div>}
       <main className="grid gap-5 p-5 lg:grid-cols-[320px_minmax(0,1fr)]">

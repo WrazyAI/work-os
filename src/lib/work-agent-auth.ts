@@ -99,7 +99,7 @@ export async function requireAgentAccess(
       .eq("person_id", token.person_id as string)
       .eq("active", true)
       .maybeSingle(),
-    supabase.from("work_organizations").select("feature_flags,legacy_owner_id,created_by").eq("id", token.organization_id as string).maybeSingle(),
+    supabase.from("work_organizations").select("name,feature_flags,legacy_owner_id,created_by").eq("id", token.organization_id as string).maybeSingle(),
   ]);
   if (profileResult.error) throw new Error(`load agent profile: ${profileResult.error.message}`);
   if (membershipResult.error) throw new Error(`load agent membership: ${membershipResult.error.message}`);
@@ -136,11 +136,18 @@ export async function requireAgentAccess(
   const access: WorkOsAccess = {
     ctx: { user: { id: token.user_id as string }, profile },
     organizationId: token.organization_id as string,
+    organizationName: String(organization.name ?? "Workspace"),
     organizationOwnerId: ((organization.legacy_owner_id || organization.created_by) as string | null) ?? null,
     role: membership.role as WorkOsOrgRole,
     personId: token.person_id as string,
     membershipId: membership.id as string,
     featureFlags,
+    workspaces: [{
+      organizationId: token.organization_id as string,
+      name: String(organization.name ?? "Workspace"),
+      role: membership.role as WorkOsOrgRole,
+      personId: token.person_id as string,
+    }],
   };
   return {
     agent: {

@@ -13,8 +13,10 @@ import EmployeeTasks from "@/modules/work-os/employee/EmployeeTasks";
 import EmployeeReview from "@/modules/work-os/employee/EmployeeReview";
 import EmployeeInsights from "@/modules/work-os/employee/EmployeeInsights";
 import EmployeeSettings from "@/modules/work-os/employee/EmployeeSettings";
-import { EmployeeWorkspaceProvider } from "@/modules/work-os/employee/EmployeeWorkspaceShell";
+import EmployeeWorkspaceShell, { EmployeeWorkspaceProvider } from "@/modules/work-os/employee/EmployeeWorkspaceShell";
+import WorkspaceChooser from "@/modules/work-os/WorkspaceChooser";
 import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
+import DesktopConnect from "@/app/work-os/desktop/connect/DesktopConnect";
 import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
 import AdminPreview from "./admin-preview";
 
@@ -401,6 +403,48 @@ function PreviewBody() {
   const [destination, setDestination] = useState<(typeof DESTINATIONS)[number]["id"]>("today");
   const admin = searchParams.get("admin");
   if (admin) return <AdminPreview section={admin} />;
+  if (searchParams.has("workspace-chooser")) {
+    return (
+      <div data-work-os-workspace="" style={{ background: "var(--bg-primary)", minHeight: "100vh" }}>
+        <WorkspaceChooser
+          currentOrganizationId="org-1"
+          workspaces={[
+            { organizationId: "org-1", name: "David Yeboah Workspace", role: "admin", personId: "p-1" },
+            { organizationId: "org-2", name: "WrazyAI Owner Workspace", role: "employee", personId: "p-1" },
+          ]}
+        />
+      </div>
+    );
+  }
+  if (searchParams.has("desktop-connect")) {
+    return (
+      <DesktopConnect
+        challenge={"a".repeat(43)}
+        state={"b".repeat(16)}
+        redirectUri="wrazy-workos://auth"
+        workspaces={[
+          { organizationId: "org-1", name: "David Yeboah Workspace", role: "admin", personId: "p-1" },
+          { organizationId: "org-2", name: "WrazyAI Owner Workspace", role: "employee", personId: "p-2" },
+        ]}
+      />
+    );
+  }
+  if (searchParams.has("employee-shell")) {
+    return (
+      <EmployeeWorkspaceShell
+        access={{
+          role: "employee",
+          personId: "preview-person",
+          featureFlags: { voice_input: true, loom_updates: true, work_memory: true, screenshot_summaries: true },
+          organizationName: "David Yeboah Workspace",
+          canSwitchWorkspaces: true,
+        }}
+      >
+        <EmployeeToday />
+      </EmployeeWorkspaceShell>
+    );
+  }
+  const multiWorkspace = searchParams.has("multi-workspace");
   const voice = searchParams.get("voice");
   if (voice) {
     const entries = VOICE_FIXTURES[voice] ? [[voice, VOICE_FIXTURES[voice]] as const] : Object.entries(VOICE_FIXTURES);
@@ -453,7 +497,7 @@ function PreviewBody() {
           ))}
         </nav>
         <EmployeeWorkspaceProvider
-          access={{ role: "employee", personId: "preview-person", featureFlags: { voice_input: true, loom_updates: true, work_memory: true, screenshot_summaries: true } }}
+          access={{ role: "employee", personId: "preview-person", featureFlags: { voice_input: true, loom_updates: true, work_memory: true, screenshot_summaries: true }, organizationName: "WrazyAI", canSwitchWorkspaces: multiWorkspace }}
         >
           {active.render()}
         </EmployeeWorkspaceProvider>

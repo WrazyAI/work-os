@@ -49,9 +49,9 @@ test("switch destinations cannot escape the view being entered", () => {
 
 test("the session reports the effective view for the shell", () => {
   const session = source("src/app/api/work-os/session/route.ts");
-  assert.match(session, /viewMode: await resolveWorkOsViewModeFor\(auth\.access\)/);
-  const client = source("src/modules/work-os/useWorkOsSession.ts");
-  assert.match(client, /viewMode: WorkOsViewMode/);
+  assert.match(session, /viewMode: await resolveWorkOsViewModeFor\(access\)/);
+  const contract = source("src/modules/work-os/session.ts");
+  assert.match(contract, /viewMode: WorkOsViewMode/);
 });
 
 test("employee and administration routes gate on the active view", () => {
@@ -94,7 +94,7 @@ test("the console gate only enters My workspace for a mapped administrator", () 
 
 test("the dispatcher fallback follows the administrator's active view", () => {
   const home = source("src/modules/work-os/WorkOsHome.tsx");
-  assert.match(home, /session\.data\?\.role === "admin" && session\.data\.viewMode === "employee"/);
+  assert.match(home, /data\?\.role === "admin" && data\.viewMode === "employee"/);
   assert.match(home, /"Open My workspace"/);
   assert.match(home, /"Open Work OS administration"/);
 });

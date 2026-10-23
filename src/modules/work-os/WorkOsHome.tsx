@@ -29,8 +29,19 @@ export default function WorkOsHome() {
       </div>
     );
   }
-  if (session.data?.role === "manager") return <ManagerWorkOsHome />;
-  if (session.data?.role === "employee") {
+  const data = session.data;
+  if (data?.requiresWorkspaceSelection) {
+    return (
+      <div className="mx-auto mt-8 max-w-xl rounded-xl border px-4 py-3 text-[12.5px]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+        This account belongs to more than one workspace.{" "}
+        <Link href="/work-os/select-workspace" className="font-semibold text-[var(--text-primary)] underline underline-offset-4">
+          Choose a workspace
+        </Link>
+      </div>
+    );
+  }
+  if (data?.role === "manager") return <ManagerWorkOsHome organizationName={data.organizationName} canSwitchWorkspaces={data.organizations.length > 1} />;
+  if (data?.role === "employee") {
     // The server dispatcher sends employees to the nested workspace routes
     // (/work-os/today …). This only renders if that gate is bypassed.
     return (
@@ -42,7 +53,7 @@ export default function WorkOsHome() {
   // Administrators normally never reach this component (server redirect).
   // My workspace is still a real administrator view, so its fallback points at
   // the employee home instead of offering the administration console.
-  const employeeView = session.data?.role === "admin" && session.data.viewMode === "employee";
+  const employeeView = data?.role === "admin" && data.viewMode === "employee";
   return (
     <div className="mx-auto mt-8 max-w-xl">
       <Link

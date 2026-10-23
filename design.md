@@ -387,6 +387,30 @@ workspace) leads with the record itself:
 At viewport widths under ~1120px the bands collapse to one column and the KPI
 strip wraps to three then two tiles; nothing gains horizontal scroll.
 
+### 4.6 Workspace identity and selection
+
+An account can belong to more than one Work OS workspace. The active workspace is
+explicit and visible, never an implicit oldest or most-privileged membership:
+
+- An account with one active membership enters it directly. An account with two
+  or more and no chosen workspace lands on `/work-os/select-workspace`, which
+  lists only that account's own memberships with each role, one plain POST per
+  workspace. Choosing one returns to `/work-os`, where the dispatcher applies
+  the role.
+- The web stores the choice in the per-device `work-os-org` cookie. The server
+  verifies the membership on every request; the cookie selects among verified
+  memberships and is never an authorization boundary. A stale choice falls back
+  to the only remaining membership, or to the chooser when more than one
+  remains.
+- The active workspace name sits in the administration masthead and in the
+  employee workspace band, with a `Switch workspace` link whenever a second
+  membership exists. The band is absent for a single-workspace employee, so the
+  quiet default composition is unchanged.
+- The desktop connect screen names the workspace and requires the choice before
+  it authorizes the device; the resulting device session is bound to that
+  workspace. A workspace without a mapped workday is not offered as a companion
+  choice, and the screen says so.
+
 ## 5. Dashboard blueprint
 
 The dashboard is a command center, not a report of everything Work OS knows.

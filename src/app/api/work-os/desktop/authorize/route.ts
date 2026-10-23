@@ -10,9 +10,18 @@ export async function POST(req: Request) {
     if (!hasExpectedPublicOrigin(req)) {
       return NextResponse.json({ error: "invalid origin" }, { status: 403 });
     }
-    const auth = await requireWorkOsAccess({ requirePerson: true, feature: "desktop_companion" });
+    const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "invalid authorization request" }, { status: 400 });
+    }
+    const organizationId = typeof body.organization_id === "string" ? body.organization_id : null;
+    const auth = await requireWorkOsAccess({
+      requirePerson: true,
+      feature: "desktop_companion",
+      organizationId,
+    });
     if (auth.response) return auth.response;
-    return NextResponse.json(await authorizeDesktop(auth.access, await req.json()));
+    return NextResponse.json(await authorizeDesktop(auth.access, body));
   } catch (error) {
     return jsonError(error);
   }

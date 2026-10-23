@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireWorkOsAccess } from "@/lib/work-os-api";
+import { WORK_OS_WORKSPACE_SELECT } from "@/modules/work-os/workspace";
 import {
   parseWorkOsViewMode,
   safeWorkOsViewNext,
@@ -45,7 +46,12 @@ export async function POST(request: Request) {
 
   const requested = parseWorkOsViewMode(form.get(WORK_OS_VIEW_MODE_FIELD));
   const auth = await requireWorkOsAccess({});
-  if (auth.response) return redirectTo("/login");
+  if (auth.response) {
+    if (auth.response.headers.get("x-work-os-workspace-selection") === "required") {
+      return redirectTo(WORK_OS_WORKSPACE_SELECT);
+    }
+    return redirectTo("/login");
+  }
   if (auth.access.role !== "admin") return redirectTo("/work-os");
   if (requested === "employee" && !auth.access.personId) return redirectTo("/work-os/admin");
 

@@ -1,11 +1,21 @@
 import { createHash } from "node:crypto";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireUserProfile, type AppProfile } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminDbRole } from "@/lib/userRoles";
 import { isWorkOsMigrationRequired } from "@/lib/work-os";
-import { pickMembership, type WorkOsMembershipCandidate } from "@/lib/work-os-membership";
+import {
+  selectWorkOsMembership,
+  type WorkOsMembershipCandidate,
+  type WorkOsMembershipSelection,
+} from "@/lib/work-os-membership";
 import { checkInIntervalOption, firstFollowUpOption } from "@/modules/work-os/workday";
+import {
+  isWorkOsOrganizationId,
+  WORK_OS_WORKSPACE_COOKIE,
+  type WorkOsWorkspaceChoice,
+} from "@/modules/work-os/workspace";
 
 export type WorkOsOrgRole = "employee" | "manager" | "admin";
 
@@ -17,11 +27,15 @@ interface WorkOsRequestContext {
 export interface WorkOsAccess {
   ctx: WorkOsRequestContext;
   organizationId: string;
+  organizationName: string;
   organizationOwnerId: string | null;
   role: WorkOsOrgRole;
   personId: string | null;
   membershipId: string;
   featureFlags: Record<string, boolean>;
+  /** Every active workspace this account may enter, so the shell can show the
+   * active workspace and offer an explicit switch. */
+  workspaces: WorkOsWorkspaceChoice[];
   /** Cadence the installed app reports from its own local config file, so an
    * edit on one machine applies to that machine only. Validated against the
    * same bounds as every other cadence source; absent when unset or invalid. */
@@ -136,23 +150,63 @@ async function resolveDesktopContext(authorization: string) {
   };
 }
 
-async function loadMembership(userId: string, organizationId?: string | null) {
-  let query = createAdminClient()
+interface WorkOsMembershipRow extends WorkOsMembershipCandidate {
+  organization?: { name?: unknown } | Array<{ name?: unknown }> | null;
+}
+
+function embeddedOrganizationName(value: WorkOsMembershipRow["organization"]): string | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  const name = row && typeof row === "object" ? row.name : null;
+  return typeof name === "string" && name.trim() ? name : null;
+}
+
+/** Every active workspace for this account, with its own name and role. */
+async function loadWorkOsMemberships(userId: string): Promise<WorkOsMembershipRow[]> {
+  const { data, error } = await createAdminClient()
     .from("work_org_members")
-    .select("id, organization_id, role, person_id, feature_flags, created_at")
+    .select("id, organization_id, role, person_id, feature_flags, created_at, organization:work_organizations(name)")
     .eq("user_id", userId)
     .eq("active", true);
-  if (organizationId) query = query.eq("organization_id", organizationId);
-  const { data, error } = await query;
   if (error) {
     if (companionSchemaMissing(error.message)) {
       throw new Error("Work OS Employee Companion migration required: apply supabase/migrations/0010_work_os_employee_companion.sql.");
     }
     throw new Error(`load Work OS membership: ${error.message}`);
   }
-  // Memberships created by one statement share created_at, so ordering on the
-  // server alone left the chosen organization to row order. Rank here instead.
-  return pickMembership((data ?? []) as WorkOsMembershipCandidate[]);
+  return ((data ?? []) as WorkOsMembershipRow[]).map((row) => ({
+    ...row,
+    organization_name: embeddedOrganizationName(row.organization),
+  }));
+}
+
+function workspaceChoices(rows: readonly WorkOsMembershipRow[]): WorkOsWorkspaceChoice[] {
+  return rows.map((row) => ({
+    organizationId: row.organization_id,
+    name: row.organization_name ?? "Workspace",
+    role: row.role as WorkOsOrgRole,
+    personId: row.person_id,
+  }));
+}
+
+/**
+ * The workspace chosen for this device, if any.
+ *
+ * `cookies()` is only available in a request context; scripts and pure callers
+ * simply have no stored choice.
+ */
+export async function readWorkOsOrganizationCookie(): Promise<string | null> {
+  try {
+    const store = await cookies();
+    const value = store.get(WORK_OS_WORKSPACE_COOKIE)?.value;
+    return isWorkOsOrganizationId(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The caller's own workspaces, for the chooser and the desktop connect page. */
+export async function listWorkOsWorkspaces(userId: string): Promise<WorkOsWorkspaceChoice[]> {
+  return workspaceChoices(await loadWorkOsMemberships(userId));
 }
 
 /**
@@ -160,15 +214,15 @@ async function loadMembership(userId: string, organizationId?: string | null) {
  *
  * The web view switch is a presentation preference, so the console gate and
  * the root page only redirect into the employee workspace while the account
- * still has the membership and person record that made the switch possible. A
- * removed mapping, a demoted role, or a stale cookie leaves the administrator
- * in Administration instead of bouncing the console home through Work OS.
+ * still has at least one membership and person record that made the switch
+ * possible. A removed mapping or a demoted role in one workspace must not hide
+ * a mapped admin's workday in another, so this checks every active membership.
  * This is one read-only membership lookup, not an authorization decision.
  */
 export async function hasMappedWorkOsAdminMembership(userId: string): Promise<boolean> {
   try {
-    const membership = await loadMembership(userId, null);
-    return Boolean(membership && membership.role === "admin" && membership.person_id);
+    const memberships = await loadWorkOsMemberships(userId);
+    return memberships.some((membership) => membership.role === "admin" && membership.person_id);
   } catch {
     // The console is not the employee workspace: an unreadable membership
     // record must leave the administrator in Administration, not turn a stale
@@ -177,7 +231,7 @@ export async function hasMappedWorkOsAdminMembership(userId: string): Promise<bo
   }
 }
 
-export async function requireWorkOsAccess(options: {
+interface WorkOsAccessOptions {
   roles?: WorkOsOrgRole[];
   organizationId?: string | null;
   requirePerson?: boolean;
@@ -187,7 +241,27 @@ export async function requireWorkOsAccess(options: {
   cadenceMinutes?: string | null;
   /** Raw `x-work-os-first-follow-up-minutes` header from the installed app. */
   firstFollowUpMinutes?: string | null;
-} = {}): Promise<WorkOsAccessResult> {
+}
+
+type WorkOsResolvedAccess =
+  | { kind: "access"; access: WorkOsAccess }
+  | { kind: "response"; response: NextResponse }
+  | { kind: "selection"; choices: WorkOsWorkspaceChoice[] };
+
+export type WorkOsSessionResolution =
+  | { access: WorkOsAccess }
+  | { choices: WorkOsWorkspaceChoice[] }
+  | { response: NextResponse };
+
+/**
+ * Resolve the caller's workspace.
+ *
+ * An explicit organization (desktop bearer session or `x-work-os-organization-id`)
+ * wins, then this device's `work-os-org` cookie. With neither, exactly one
+ * active membership selects itself; more than one returns `selection` so the
+ * caller must ask. The resolver never chooses between two workspaces.
+ */
+async function resolveWorkOsAccess(options: WorkOsAccessOptions = {}): Promise<WorkOsResolvedAccess> {
   // A machine-local override only counts when it is a valid, in-bounds cadence:
   // a bad local edit must never storm or silence a workday. An absent or
   // rejected value simply leaves the deployment's own resolution in charge.
@@ -201,7 +275,7 @@ export async function requireWorkOsAccess(options: {
     : undefined;
   const desktop = options.authorization ? await resolveDesktopContext(options.authorization) : null;
   if (options.authorization && !desktop) {
-    return { response: NextResponse.json({ error: "invalid or expired desktop session" }, { status: 401 }) };
+    return { kind: "response", response: NextResponse.json({ error: "invalid or expired desktop session" }, { status: 401 }) };
   }
   // API routes must never leak Next.js redirect exceptions (thrown by
   // requireUserProfile when no session cookie exists) as 500s. A missing
@@ -213,25 +287,46 @@ export async function requireWorkOsAccess(options: {
   } catch (err) {
     const digest = (err as { digest?: unknown } | null)?.digest;
     if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
-      return { response: NextResponse.json({ error: "authentication required" }, { status: 401 }) };
+      return { kind: "response", response: NextResponse.json({ error: "authentication required" }, { status: 401 }) };
     }
     throw err;
   }
-  const requestedOrganizationId = desktop?.organizationId ?? options.organizationId;
-  if (desktop && options.organizationId && options.organizationId !== desktop.organizationId) {
-    return { response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+  const headerOrganizationId = typeof options.organizationId === "string" && options.organizationId.trim()
+    ? options.organizationId.trim()
+    : null;
+  const explicitOrganizationId = desktop?.organizationId ?? headerOrganizationId ?? null;
+  if (desktop && headerOrganizationId && headerOrganizationId !== desktop.organizationId) {
+    return { kind: "response", response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
-  let membership = await loadMembership(ctx.profile.id, requestedOrganizationId);
-  if (!membership && isAdminDbRole(ctx.profile.role) && !options.organizationId) {
-    membership = await ensureOwnerOrganization(ctx);
+  // The web has no bearer session; its per-device choice lives in a cookie.
+  const cookieOrganizationId = !desktop && !headerOrganizationId
+    ? await readWorkOsOrganizationCookie()
+    : null;
+  const requestedOrganizationId = explicitOrganizationId ?? cookieOrganizationId;
+  let memberships = await loadWorkOsMemberships(ctx.profile.id);
+  let selection: WorkOsMembershipSelection<WorkOsMembershipRow> = selectWorkOsMembership(memberships, requestedOrganizationId);
+  if (selection.kind === "none" && memberships.length === 0 && !explicitOrganizationId && isAdminDbRole(ctx.profile.role)) {
+    await ensureOwnerOrganization(ctx);
+    memberships = await loadWorkOsMemberships(ctx.profile.id);
+    selection = selectWorkOsMembership(memberships, null);
   }
-  if (!membership) {
-    return { response: NextResponse.json({ error: "Work OS organization membership required." }, { status: 403 }) };
+  if (selection.kind === "none" && cookieOrganizationId && !explicitOrganizationId) {
+    // A stale or revoked cookie is not an authorization failure: fall back to
+    // the account's only remaining workspace, or ask it to choose again.
+    selection = selectWorkOsMembership(memberships, null);
   }
+  if (selection.kind === "required") {
+    return { kind: "selection", choices: workspaceChoices(selection.memberships) };
+  }
+  if (selection.kind === "none") {
+    return { kind: "response", response: NextResponse.json({ error: "Work OS organization membership required." }, { status: 403 }) };
+  }
+
+  const membership = selection.membership;
   const role = membership.role as WorkOsOrgRole;
   const { data: organization, error: organizationError } = await createAdminClient()
     .from("work_organizations")
-    .select("feature_flags, legacy_owner_id, created_by")
+    .select("name, feature_flags, legacy_owner_id, created_by")
     .eq("id", membership.organization_id)
     .single();
   if (organizationError) throw new Error(`load Work OS feature flags: ${organizationError.message}`);
@@ -240,26 +335,55 @@ export async function requireWorkOsAccess(options: {
     ...((membership.feature_flags ?? {}) as Record<string, boolean>),
   };
   if (options.feature && featureFlags[options.feature] !== true) {
-    return { response: NextResponse.json({ error: "Work OS feature is not enabled for this organization or employee." }, { status: 403 }) };
+    return { kind: "response", response: NextResponse.json({ error: "Work OS feature is not enabled for this organization or employee." }, { status: 403 }) };
   }
   if (options.roles && !options.roles.includes(role)) {
-    return { response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+    return { kind: "response", response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
   if (options.requirePerson && !membership.person_id) {
-    return { response: NextResponse.json({ error: "Work OS person mapping required." }, { status: 409 }) };
+    return { kind: "response", response: NextResponse.json({ error: "Work OS person mapping required." }, { status: 409 }) };
   }
   return {
+    kind: "access",
     access: {
       ctx,
       organizationId: membership.organization_id as string,
+      organizationName: String(organization.name ?? membership.organization_name ?? "Workspace"),
       organizationOwnerId: ((organization.legacy_owner_id || organization.created_by) as string | null) ?? null,
       role,
       personId: membership.person_id as string | null,
       membershipId: membership.id as string,
       featureFlags,
+      workspaces: workspaceChoices(memberships),
       ...(localCadence ? { localCadence } : {}),
     } satisfies WorkOsAccess,
   };
+}
+
+export async function requireWorkOsAccess(options: WorkOsAccessOptions = {}): Promise<WorkOsAccessResult> {
+  const resolved = await resolveWorkOsAccess(options);
+  if (resolved.kind === "response") return { response: resolved.response };
+  if (resolved.kind === "selection") {
+    const response = NextResponse.json({
+      error: "workspace_selection_required",
+      reason: "workspace_selection_required",
+      organizations: resolved.choices,
+    }, { status: 409 });
+    response.headers.set("x-work-os-workspace-selection", "required");
+    response.headers.set("Cache-Control", "no-store");
+    return { response };
+  }
+  return { access: resolved.access };
+}
+
+/** Session/page callers can render the chooser instead of treating it as 409. */
+export async function resolveWorkOsSession(
+  options: { organizationId?: string | null; authorization?: string | null } = {},
+): Promise<WorkOsSessionResolution> {
+  const resolved = await resolveWorkOsAccess(options);
+  if (resolved.kind === "access") return { access: resolved.access };
+  if (resolved.kind === "selection") return { choices: resolved.choices };
+  return { response: resolved.response };
 }
 
 export function workOsOrganizationOwnerId(access: WorkOsAccess): string {
@@ -302,10 +426,11 @@ export async function requireWorkOsAdmin(organizationId?: string | null, authori
   | { ctx: WorkOsAccess["ctx"]; access: WorkOsAccess; response?: never }
   | { response: NextResponse; ctx?: never; access?: never }
 > {
-  // Honor the caller's selected organization. Without it, loadMembership picks
-  // the user's oldest membership, which silently writes to the wrong tenant
-  // for anyone who belongs to more than one organization. A desktop bearer
-  // token authorizes the same membership as a browser cookie.
+  // Honor the caller's selected organization. Without an explicit choice the
+  // resolver only proceeds when the account has exactly one active membership;
+  // two or more return a selection-required response instead of silently
+  // reading or writing the wrong tenant. A desktop bearer token authorizes the
+  // same membership as a browser cookie.
   const result = await requireWorkOsAccess({ roles: ["admin"], organizationId: organizationId ?? null, authorization: authorization ?? null });
   if (result.response) return { response: result.response };
   return { ctx: result.access.ctx, access: result.access };

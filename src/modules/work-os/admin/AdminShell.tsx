@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, Building2, RefreshCw } from "lucide-react";
 import WorkOsViewModeForm from "../WorkOsViewModeForm";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
 import { Button, Notice, Skeleton, cx } from "./ui";
@@ -50,11 +51,17 @@ export default function AdminShell({ section, children }: { section: AdminSectio
     queryKey: adminKeys.status(),
     queryFn: () => adminFetch<SystemStatusResponse>("/api/work-os/status"),
     staleTime: 30_000,
-    enabled: session.data?.role === "admin",
+    enabled: session.data?.requiresWorkspaceSelection === false && session.data.role === "admin",
   });
   useEffect(() => {
+    if (session.data?.requiresWorkspaceSelection) {
+      router.replace("/work-os/select-workspace");
+      return;
+    }
     if (session.data && session.data.role !== "admin") router.replace("/work-os");
   }, [session.data, router]);
+
+  const sessionData = session.data && !session.data.requiresWorkspaceSelection ? session.data : null;
 
   const meta = SECTION_META[section];
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -73,7 +80,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
               <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{meta.purpose}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {session.data?.personId ? (
+              {sessionData?.personId ? (
                 <WorkOsViewModeForm
                   mode="employee"
                   next="/work-os/today"
@@ -84,7 +91,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
                 >
                   <ArrowLeftRight size={13} aria-hidden /> Switch to my workspace
                 </WorkOsViewModeForm>
-              ) : session.data ? (
+              ) : sessionData ? (
                 <span className="text-[11px] leading-5 text-[var(--text-tertiary)]">
                   No personal workday is mapped to this account
                 </span>
@@ -102,6 +109,20 @@ export default function AdminShell({ section, children }: { section: AdminSectio
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11.5px] text-[var(--text-tertiary)]">
             <span>{today}</span>
+            {sessionData ? (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <Building2 size={12} aria-hidden />
+                <span className="truncate">{sessionData.organizationName}</span>
+                {sessionData.organizations.length > 1 ? (
+                  <Link
+                    href="/work-os/select-workspace"
+                    className="shrink-0 font-semibold text-[var(--text-secondary)] underline-offset-2 transition hover:text-[var(--text-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  >
+                    Switch workspace
+                  </Link>
+                ) : null}
+              </span>
+            ) : null}
             <span>
               {status.isLoading ? (
                 "Checking workspace…"
@@ -131,7 +152,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
             </div>
           ) : session.error ? (
             <Notice tone="err">{(session.error as Error).message}</Notice>
-          ) : session.data?.role !== "admin" ? (
+          ) : sessionData?.role !== "admin" ? (
             <Notice tone="warn">Administration requires a Work OS admin membership. Redirecting to Work OS…</Notice>
           ) : (
             children
