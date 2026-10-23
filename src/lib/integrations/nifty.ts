@@ -447,6 +447,8 @@ export async function listNiftyTasks(params?: NiftyListParams): Promise<{ tasks:
   };
 }
 
+/** Raw provider create. Work OS no longer creates tasks in Nifty, but this
+ * shared integration surface stays for Agent OS until its copy converges. */
 export async function createNiftyTask(body: Record<string, unknown>): Promise<unknown> {
   return niftyRequest("/api/v1.0/tasks", {
     method: "POST",

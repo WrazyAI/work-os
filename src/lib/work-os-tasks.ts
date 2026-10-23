@@ -1,13 +1,9 @@
 import {
-  assignNiftyTask,
   archiveNiftyTask,
   completeNiftyTask,
-  createNiftyTask,
   deleteNiftyTask,
-  ensureNiftyAccessToken,
   getNiftyTask,
   listNiftyTasks,
-  NiftyHttpError,
   normalizeNiftyTaskPayload,
   updateNiftyTask,
   updateNiftyTaskField,
@@ -24,7 +20,7 @@ import {
   selectFirst,
   type Json,
 } from "@/lib/work-os-internal";
-import { syncNifty, upsertNiftyTask } from "@/lib/work-os-nifty";
+import { upsertNiftyTask } from "@/lib/work-os-nifty";
 import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
 import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 
@@ -550,141 +546,6 @@ export async function listPersonOpenTasks(userId: string, personId: string) {
     tasks: open,
     counts: { total: parents.length, open: open.length, completed: parents.length - open.length },
   };
-}
-
-type NormalizedNiftyTask = NonNullable<ReturnType<typeof normalizeNiftyTaskPayload>>;
-
-// Assignees, mapped fields, and the mirror write are shared by fresh creates
-// and by adoption of a task a previous attempt already created.
-async function finalizeCreatedNiftyTask(userId: string, initial: NormalizedNiftyTask, body: Json) {
-  const requestedAssignees = stringValues(body.assignees);
-  if (requestedAssignees.length) {
-    await niftyForOwner(userId, () => assignNiftyTask(initial.id, requestedAssignees));
-  }
-  await applyMappedFields(userId, initial.id, body);
-  let normalized = initial;
-  for (let attempt = 0; attempt < (requestedAssignees.length ? 6 : 1); attempt += 1) {
-    normalized = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(initial.id))) ?? normalized;
-    if (requestedAssignees.every((assignee) => normalized.assignees.includes(assignee))) break;
-    if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  const missingAssignees = requestedAssignees.filter((assignee) => !normalized.assignees.includes(assignee));
-  if (missingAssignees.length) throw new Error(`Nifty did not confirm ${missingAssignees.length} requested assignee${missingAssignees.length === 1 ? "" : "s"}`);
-  const task = await upsertNiftyTask(userId, normalized) as Json;
-  return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
-}
-
-/** Extracts the provider status from the live class or a structurally identical
- * copy: tsx can instantiate one .ts module separately for ESM and CJS importers
- * (Node without require(esm)), so a cross-module instanceof check alone would
- * silently classify a real NiftyHttpError as uncertain. */
-function niftyHttpStatus(error: unknown): number | null {
-  if (error instanceof NiftyHttpError) return error.status;
-  const candidate = error as { name?: unknown; status?: unknown } | null | undefined;
-  return candidate?.name === "NiftyHttpError" && typeof candidate.status === "number" ? candidate.status : null;
-}
-
-/** True when a create failure is a definitive provider rejection: the request
- * was answered with HTTP 4xx, so Nifty cannot have created the task. Anything
- * else — timeout, network failure, 5xx, and 408 (the server gave up waiting but
- * may still have processed the request) — is uncertain and must never be
- * retried with another POST. */
-export function providerCreateFailureDefinite(error: unknown): boolean {
-  const status = niftyHttpStatus(error);
-  return status !== null && status >= 400 && status < 500 && status !== 408;
-}
-
-export async function createTask(
-  userId: string,
-  body: Json,
-  hooks?: {
-    /** Runs after credentials are proven and immediately before the POST is
-     * dispatched, so the caller can record a durable create intent. Throwing
-     * here aborts before any provider request is attempted. */
-    beforeProviderCreate?: () => Promise<void>;
-    onProviderTaskCreated?: (providerTaskId: string) => Promise<void>;
-  },
-) {
-  const name = nonEmptyString(body.name);
-  const taskGroupId = nonEmptyString(body.task_group_id);
-  if (!name) throw new Error("name is required");
-  if (!taskGroupId) throw new Error("task_group_id is required for Nifty tasks");
-  const payload: Json = { name, task_group_id: taskGroupId };
-  for (const key of ["task_id", "project_id", "milestone_id", "due_date", "start_date", "assignees", "labels", "story_points", "priority", "dependencies"]) if (key in body) payload[key] = body[key];
-  const structuredMappings = await mappedSemanticFields(userId, ["expected_outcome", "definition_of_done"]);
-  payload.description = structuredDescription(
-    nonEmptyString(body.description),
-    structuredMappings.has("expected_outcome") ? null : body.expected_outcome,
-    structuredMappings.has("definition_of_done") ? null : body.definition_of_done,
-  );
-  const result = await niftyForOwner(userId, async () => {
-    // Prove credentials before the intent is recorded: a credential failure
-    // cannot have created a provider task, so it must not look uncertain.
-    if (hooks?.beforeProviderCreate) await ensureNiftyAccessToken();
-    await hooks?.beforeProviderCreate?.();
-    return createNiftyTask(payload);
-  });
-  const initial = normalizeNiftyTaskPayload(result);
-  if (initial) {
-    // Outbox anchor: persist the provider id before any further provider write
-    // or mirror work, so a retry adopts this task instead of creating a second.
-    // A throwing hook means the caller's lease was lost — aborting here keeps
-    // this task unmapped, where the caller's marker search can still adopt it.
-    if (hooks?.onProviderTaskCreated) await hooks.onProviderTaskCreated(initial.id);
-    return finalizeCreatedNiftyTask(userId, initial, body);
-  }
-  if (hooks?.beforeProviderCreate) {
-    // The POST was dispatched (or at least issued) but the response could not
-    // be parsed, so the created task cannot be identified. Never finalize as
-    // applied without the id: fail into the uncertain path, where a retry
-    // adopts the task by marker instead of creating a second one.
-    throw new Error("Nifty accepted the create but did not return the task; a retry will adopt it by marker.");
-  }
-  await syncNifty(userId);
-  return { providerResult: result };
-}
-
-/** Completes a create whose provider task already exists — a previous attempt
- * created it but never recorded the id or mirrored it. Runs the same tail as
- * createTask so missing assignments and mapped fields are filled in. */
-export async function adoptProviderTask(userId: string, providerTaskId: string, body: Json) {
-  const initial = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
-  if (!initial) throw new Error("The provider task could not be loaded for adoption");
-  return finalizeCreatedNiftyTask(userId, initial, body);
-}
-
-/** Finds a provider task an interrupted attempt already created for this
- * proposal. The proposal id travels inside the task description marker, so a
- * crash between the Nifty POST and the id write is still recoverable. Only
- * called on retries; pages a bounded window because the list API's filters are
- * not guaranteed to be applied server-side. */
-export async function findNiftyTaskByMarker(
-  userId: string,
-  marker: string,
-  params?: { projectId?: string; taskGroupId?: string; maxPages?: number; retries?: number; retryDelayMs?: number },
-) {
-  const pageSize = 100;
-  const maxPages = Math.max(1, params?.maxPages ?? 3);
-  const attempts = Math.max(1, params?.retries ?? 1);
-  const delayMs = Math.max(0, params?.retryDelayMs ?? 0);
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    for (let page = 0; page < maxPages; page += 1) {
-      const { tasks, hasMore } = await niftyForOwner(userId, () => listNiftyTasks({
-        ...(params?.projectId ? { project_id: params.projectId } : {}),
-        ...(params?.taskGroupId ? { task_group_id: params.taskGroupId } : {}),
-        include_subtasks: "true",
-        limit: String(pageSize),
-        offset: String(page * pageSize),
-      }));
-      const found = tasks.find((task) => (task.description ?? "").includes(marker));
-      if (found) return found;
-      if (hasMore === false || tasks.length < pageSize) break;
-    }
-    // Provider listings can lag a just-created task; give the uncertain path a
-    // bounded chance to see it before refusing to continue.
-    if (attempt < attempts - 1 && delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-  return null;
 }
 
 export async function updateTask(userId: string, taskId: string, patch: Json) {

@@ -205,7 +205,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.doesNotMatch(day, /draftWorkOsEod/);
   assert.match(nifty, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/assignees/);
   assert.match(nifty, /method: "DELETE"/);
-  assert.match(workOs, /Nifty did not confirm.*requested assignee/);
+  assert.match(workOs, /Historical Nifty tasks require mapped Nifty assignees/);
   assert.match(workOs, /status: "deleted"/);
   assert.doesNotMatch(workday, /clockIn\(auth\.access/);
   assert.match(workday, /Attendance is controlled by Worktivity from the Windows Companion/);
