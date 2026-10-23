@@ -72,6 +72,7 @@ export function NextStepsBubble({
   onListen,
   onStopListening,
   onDismiss,
+  onHeightChange,
 }: {
   moment: RecapNextStepsMoment;
   busy: boolean;
@@ -83,7 +84,10 @@ export function NextStepsBubble({
   onListen: () => void;
   onStopListening: () => void;
   onDismiss: () => void;
+  /** The card's natural height, so the companion window can fit it. */
+  onHeightChange?: (height: number) => void;
 }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [edited, setEdited] = useState<Record<string, string>>({});
@@ -141,6 +145,38 @@ export function NextStepsBubble({
     };
   }, [shown, moment.items.length, syncScrollEdges]);
 
+  // Report the card's natural height. The window grows for next steps, and a
+  // fixed per-row estimate is wrong as soon as a title or reason wraps further
+  // than expected; measuring is what keeps the header inside the window.
+  useEffect(() => {
+    const node = sectionRef.current;
+    const report = onHeightChange;
+    if (!node || !report) return;
+    const measure = (): void => {
+      const list = node.querySelector<HTMLElement>(".avatar-next-steps-list");
+      let height: number;
+      if (list) {
+        // The chrome is stable; the list contributes its content height capped
+        // by its CSS max-height. The card's own scrollHeight would report a
+        // squeezed list as short and shrink the window right back.
+        const cap = Number.parseFloat(getComputedStyle(list).maxHeight);
+        const rows = list.scrollHeight;
+        height = node.offsetHeight - list.offsetHeight + (Number.isFinite(cap) ? Math.min(rows, cap) : rows);
+      } else {
+        height = Math.max(node.offsetHeight, node.scrollHeight);
+      }
+      report(Math.ceil(height));
+    };
+    measure();
+    const frame = requestAnimationFrame(measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [onHeightChange, moment.status, moment.items.length]);
+
   // Follow the voice: the row being spoken stays visible inside the list, never
   // scrolling the whole companion window.
   useEffect(() => {
@@ -161,6 +197,7 @@ export function NextStepsBubble({
 
   return (
     <section
+      ref={sectionRef}
       className="avatar-next-steps"
       aria-label="Suggested next steps"
       data-phase={moment.status}

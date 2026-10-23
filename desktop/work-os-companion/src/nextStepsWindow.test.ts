@@ -56,6 +56,21 @@ describe("nextStepsWindow", () => {
     expect(grown.x).toBe(position.x - (320 - 200) / 2);
   });
 
+  it("grows for the rendered card, which a wrapped title makes taller than the estimate", () => {
+    const estimate = nextStepsBubbleHeight(moment("ready", 1));
+    const measured = 242;
+    expect(measured).toBeGreaterThan(estimate);
+    const { size, position: grown } = nextStepsWindow(moment("ready", 1), monitor, position, measured);
+    expect(size.height).toBe(276 + (measured - 88));
+    // The mascot and the elapsed pill still hold their screen position.
+    expect(grown.y + size.height).toBe(position.y + 276);
+  });
+
+  it("never shrinks below the resting window for a small measured card", () => {
+    const { size } = nextStepsWindow(moment("ready", 1), monitor, position, 40);
+    expect(size.height).toBe(276);
+  });
+
   it("keeps the resting width on a monitor too narrow for the measure", () => {
     const narrow = { width: 240, height: 600 };
     const { size } = nextStepsWindow(moment("ready", 3), narrow, { x: 20, y: 300 });

@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.8 — 2026-10-23
+
+- The next steps card no longer gets cut off at the top: it fits the window and scrolls inside when the screen is short.
+- When a recap has nothing to action, Otto finishes with the same quick celebration instead of an alert.
+
 ## 0.5.7 — 2026-10-22
 
 - The recap bubble is compact again while Otto reads — four lines of text, not a half-empty panel.

@@ -1024,6 +1024,31 @@ body.avatar-window {
      clear so the figure is never squeezed down over it. */
   padding-bottom: 26px;
 }
+/* The decision card is the grown surface itself (there is no prompt-bubble
+   wrapper around it), so it carries the same contract: content-sized, but
+   able to give up height by scrolling its list when the monitor stops the
+   window from growing. Without this the card kept its full content height,
+   the bottom-anchored column overflowed upward, and the header was clipped
+   off the top of the screen. */
+.avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-next-steps {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-next-steps-head {
+  flex: 0 0 auto;
+}
+.avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-next-steps-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-next-steps-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .avatar-shell:is([data-recap-reading="true"], [data-next-steps]) .avatar-compact .avatar-prompt-bubble {
   position: static;
   width: 100%;

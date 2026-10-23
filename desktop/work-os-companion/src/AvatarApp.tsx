@@ -375,6 +375,20 @@ export default function AvatarApp(): React.ReactElement {
     [chat, nextStepsBubbleId],
   );
   const nextStepsMoment = nextStepsBubbleEntry?.nextSteps ?? null;
+  // The window grows for the card's real height, not a per-row estimate: a
+  // wrapped title or reason makes a row taller, and the estimate left the top
+  // of the card clipped above the screen. The key retires a measurement when
+  // the moment (or its row count) changes.
+  const nextStepsMeasureKey = nextStepsBubbleEntry && nextStepsMoment
+    ? `${nextStepsBubbleEntry.id}:${nextStepsMoment.status}:${nextStepsMoment.items.length}` : null;
+  const [nextStepsCardSize, setNextStepsCardSize] = useState<{ key: string; height: number } | null>(null);
+  const measuredNextStepsHeight = nextStepsCardSize && nextStepsMeasureKey && nextStepsCardSize.key === nextStepsMeasureKey
+    ? nextStepsCardSize.height : null;
+  const receiveNextStepsHeight = useCallback((height: number): void => {
+    if (!nextStepsMeasureKey || !Number.isFinite(height) || height <= 0) return;
+    setNextStepsCardSize((current) => current && current.key === nextStepsMeasureKey && Math.abs(current.height - height) < 1
+      ? current : { key: nextStepsMeasureKey, height });
+  }, [nextStepsMeasureKey]);
 
   // The success beat belongs to the finished decision list, not to the recap
   // confirmation. It plays once every item is settled with nothing failed, then
@@ -382,7 +396,15 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     if (!nextStepsBubbleEntry || !nextStepsMoment) return;
     if (nextStepsMoment.status === "empty") {
-      const timer = window.setTimeout(() => setNextStepsBubbleId(null), 4_000);
+      // Nothing to action is a finished moment too: say so quietly, close the
+      // card, then play the same success beat as a fully decided list. Without
+      // this the orb fell straight back to whatever attention was queued and
+      // read as "needs input" although the recap was handled.
+      const timer = window.setTimeout(() => {
+        setNextStepsBubbleId(null);
+        nextStepsPlayer.stop();
+        setNextStepsCelebration(true);
+      }, 4_000);
       return () => window.clearTimeout(timer);
     }
     if (nextStepsMoment.status === "done" && !nextStepsHasFailure(nextStepsMoment)) {
@@ -713,7 +735,7 @@ export default function AvatarApp(): React.ReactElement {
         // The decision list needs the taller window; the prompter keeps its own
         // math when no moment is open.
         const target = moment
-          ? nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y })
+          ? nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y }, measuredNextStepsHeight)
           : reading
             ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 4, chrome: 102 }, bounds, { x: logical.x, y: logical.y })
             : { size: RECAP_BUBBLE_RESTING, position: { x: logical.x, y: logical.y } };
@@ -722,7 +744,7 @@ export default function AvatarApp(): React.ReactElement {
       } catch { /* the companion keeps its size when the monitor cannot be read */ }
     })();
     return () => { cancelled = true; };
-  }, [win, expanded, recapSpeech.status, recapSpeech.retryIntervalId, nextStepsMoment?.status, nextStepsMoment?.items.length]);
+  }, [win, expanded, recapSpeech.status, recapSpeech.retryIntervalId, nextStepsMoment?.status, nextStepsMoment?.items.length, measuredNextStepsHeight]);
 
   // Settings lives in the main window; a change there reaches this one live, so
   // the next read uses the new voice without a restart.
@@ -1423,7 +1445,9 @@ export default function AvatarApp(): React.ReactElement {
       // The recap leaves `inferred`, which is what retires the bubble, and the
       // approval hands straight to the next-steps moment in the same bubble —
       // exactly the live flow, without a server. The panel must stay closed.
-      const moment = avatarNextStepsFixtureMomentFor("ready");
+      // `?avatar-next-steps=empty` previews the nothing-to-action path with the
+      // same live hand-off; the default is the ready decision list.
+      const moment = avatarNextStepsFixtureMomentFor(avatarNextStepsFixturePhase(window.location.search));
       setActivityPrompt((current) => current && current.id === id ? { ...current, reviewStatus: "confirmed" } : current);
       setChat((current) => [...current.map((entry) => entry.activityInterval?.id === id
         ? { ...entry, activityInterval: { ...entry.activityInterval, reviewStatus: "confirmed" as const } }
@@ -1992,6 +2016,12 @@ export default function AvatarApp(): React.ReactElement {
     promptDue: attentionDue,
     nextSteps: nextStepsMoment !== null,
   });
+  // While the next-steps card owns the bubble, a queued day prompt is not
+  // something the employee can act on: it is deliberately behind the card.
+  // Letting it drive the pose made the orb alert for an ask that was not on
+  // screen. The prompt takes the pose back the moment the card closes.
+  const nextStepsOpen = nextStepsMoment !== null;
+  const promptLeads = attentionDue && !nextStepsOpen;
   /* The last read of this recap was cancelled while it was still preparing, or
      failed: the control offers another try instead of pretending it never ran. */
   const recapRetry = pendingRecap !== null && recapSpeech.retryIntervalId === pendingRecap.id;
@@ -2082,12 +2112,15 @@ export default function AvatarApp(): React.ReactElement {
       ? `${desktopSession.organizationId}/${facts.personId}/${facts.shiftDate}` : "",
     scenario: debugScenario,
     facts: { ...facts, connected: connected === true && facts.loaded,
-      promptKind: contextualPrompt.kind, promptRequired: attentionDue, eodOutstanding: eodDue },
+      promptKind: contextualPrompt.kind, promptRequired: promptLeads, eodOutstanding: eodDue },
     working: thinking || filing || activityPreparing || nextStepsMoment?.status === "drafting" || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
     failed: recapFlash || daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
-    needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
-      || chat.some((entry) => hasPendingMascotApproval(entry.operations, entry.toolResults)),
+    // The next-steps outcome beat is the answer to the moment the employee just
+    // handled: it plays before any queued ask (a due check-in or agenda) takes
+    // the pose back. The ask itself stays visible; only the 2.9s beat leads.
+    needsInput: !nextStepsCelebration && (avatarAttentionFixture || promptLeads || facts.lateReasonRequired || !!agendaReview
+      || chat.some((entry) => hasPendingMascotApproval(entry.operations, entry.toolResults))),
     completed: readyPulse || nextStepsCelebration,
     receipt: mascotReceipt,
   });
@@ -2311,6 +2344,7 @@ export default function AvatarApp(): React.ReactElement {
             reduced={reducedMotion}
             onDecide={(item, decision, edits) => { void decideNextStep(nextStepsBubbleEntry.id, item, decision, edits); }}
             onRetry={() => { void startNextStepsMoment(nextStepsMoment.intervalId, nextStepsMoment.label, nextStepsBubbleEntry.id); }}
+            onHeightChange={receiveNextStepsHeight}
             onListen={() => toggleNextStepsRead(nextStepsMoment)}
             onStopListening={stopNextStepsRead}
             onDismiss={() => {

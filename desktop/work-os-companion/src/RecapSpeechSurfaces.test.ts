@@ -100,3 +100,47 @@ describe("the grown bubble stays inside its window", () => {
     expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
   });
 });
+
+describe("the next-steps card is never cut off", () => {
+  it("gives the card height back through its list instead of overflowing the window", () => {
+    const css = read("./avatar.css");
+    // The card is the grown surface itself; without min-height:0 the
+    // bottom-anchored column pushed its header above the top of the screen.
+    expect(css).toMatch(/\[data-next-steps\]\) \.avatar-compact \.avatar-next-steps \{[\s\S]{0,220}?min-height: 0;/);
+    expect(css).toMatch(/\.avatar-compact \.avatar-next-steps-list \{[\s\S]{0,120}?flex: 1 1 auto;/);
+  });
+
+  it("grows the window for the card's measured height, not the row estimate", () => {
+    const bubble = read("./NextStepsBubble.tsx");
+    expect(bubble).toContain("onHeightChange?: (height: number) => void;");
+    // Chrome plus the list's natural rows: a squeezed list must not measure
+    // itself as short and shrink the window straight back.
+    expect(bubble).toContain("node.offsetHeight - list.offsetHeight");
+    expect(bubble).toContain("Math.min(rows, cap)");
+    const avatar = read("./AvatarApp.tsx");
+    expect(avatar).toContain("const measuredNextStepsHeight = nextStepsCardSize");
+    expect(avatar).toContain("nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y }, measuredNextStepsHeight)");
+    expect(avatar).toContain("onHeightChange={receiveNextStepsHeight}");
+  });
+
+  it("lets the card own the pose while a queued prompt waits behind it", () => {
+    const avatar = read("./AvatarApp.tsx");
+    // The prompt is behind the card, so it must not make the orb alert for an
+    // ask that is not on screen; it takes the pose back when the card closes.
+    expect(avatar).toContain("const nextStepsOpen = nextStepsMoment !== null;");
+    expect(avatar).toContain("const promptLeads = attentionDue && !nextStepsOpen;");
+    expect(avatar).toContain("promptRequired: promptLeads, eodOutstanding: eodDue");
+    expect(avatar).toContain("avatarAttentionFixture || promptLeads");
+  });
+
+  it("ends a moment with nothing actionable in the success beat", () => {
+    const avatar = read("./AvatarApp.tsx");
+    const empty = avatar.indexOf('if (nextStepsMoment.status === "empty")');
+    const close = avatar.indexOf("setNextStepsCelebration(true);", empty);
+    expect(empty).toBeGreaterThan(0);
+    expect(close).toBeGreaterThan(empty);
+    // The beat leads over a queued ask; the ask keeps its own surface and
+    // returns as soon as the 2.9s celebration is over.
+    expect(avatar).toContain("needsInput: !nextStepsCelebration && (");
+  });
+});

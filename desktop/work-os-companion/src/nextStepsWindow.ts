@@ -47,13 +47,22 @@ export function nextStepsBubbleHeight(
   return Math.min(NEXT_STEPS_MAX_HEIGHT, NEXT_STEPS_HEADER_HEIGHT + visible * NEXT_STEPS_ITEM_HEIGHT);
 }
 
-/** The window target for a showing next-steps moment. */
+/** The window target for a showing next-steps moment.
+ *
+ * `measuredHeight` is the rendered card's natural height. The row estimate is
+ * only a fallback: a long title or a three-line reason makes a row taller than
+ * the fixed estimate, and growing the window for the estimate left the card
+ * clipped at the top. Measuring makes the window fit what the card actually
+ * draws; the clamp in `avatar.css` keeps the header visible when the monitor
+ * cannot give it the full height. */
 export function nextStepsWindow(
   moment: Pick<RecapNextStepsMoment, "status" | "items">,
   monitor: WindowSize,
   position: WindowPosition,
+  measuredHeight?: number | null,
 ): { size: WindowSize; position: WindowPosition } {
-  const extra = Math.max(0, nextStepsBubbleHeight(moment) - NEXT_STEPS_RESTING_ROOM);
+  const height = measuredHeight && measuredHeight > 0 ? measuredHeight : nextStepsBubbleHeight(moment);
+  const extra = Math.max(0, height - NEXT_STEPS_RESTING_ROOM);
   return grownWindowFor(RECAP_BUBBLE_RESTING, extra, monitor, position);
 }
 

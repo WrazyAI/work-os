@@ -278,18 +278,21 @@ export function avatarNextStepsFixtureMoment(): RecapNextStepsMoment {
 
 /** DEV-only preview phases for the bubble: the wait state, the ready list, and
  * a list long enough to scroll. */
-export type AvatarNextStepsFixturePhase = "ready" | "drafting" | "long" | "failed";
+export type AvatarNextStepsFixturePhase = "ready" | "drafting" | "empty" | "long" | "failed";
 
 export function avatarNextStepsFixturePhase(search: string): AvatarNextStepsFixturePhase {
   if (!import.meta.env.DEV) return "ready";
   const value = new URLSearchParams(search).get("avatar-next-steps");
-  return value === "drafting" || value === "long" || value === "failed" ? value : "ready";
+  return value === "drafting" || value === "empty" || value === "long" || value === "failed" ? value : "ready";
 }
 
 export function avatarNextStepsFixtureMomentFor(phase: AvatarNextStepsFixturePhase): RecapNextStepsMoment {
   const base = avatarNextStepsFixtureMoment();
   if (phase === "drafting") {
     return { ...base, status: "drafting", items: [], states: {}, failures: {}, error: null };
+  }
+  if (phase === "empty") {
+    return { ...base, status: "empty", items: [], states: {}, failures: {}, error: null };
   }
   if (phase === "failed") {
     return { ...base, status: "failed", items: [], states: {}, failures: {}, error: "Next steps could not be drafted from this recap." };
