@@ -12,12 +12,18 @@ test("the Nifty sync can neither create nor revive an employee", async () => {
 
   assert.doesNotMatch(nifty, /upsertNiftyMember/, "the member upsert must be deleted, not merely left unused");
   assert.doesNotMatch(nifty, /listNiftyMembers/, "the sync must not read Nifty members as an employee roster");
+
   // Nifty may still resolve people for task attribution, but it must never write them.
-  assert.doesNotMatch(
-    nifty,
-    /from\("work_people"\)\s*\.\s*(?:upsert|update)/,
-    "a Nifty sync must never insert, update, or reactivate a work_people row",
-  );
+  const peopleWrite = /from\("work_people"\)\s*\.\s*(?:insert|upsert|update)/;
+  assert.doesNotMatch(nifty, peopleWrite, "a Nifty sync must never write a work_people row");
+  // Self-check: every write operation must actually be caught, or this guard is theatre.
+  for (const operation of ["insert", "upsert", "update"]) {
+    assert.match(
+      `db.from("work_people").${operation}({})`,
+      peopleWrite,
+      `the guard must reject a work_people ${operation}`,
+    );
+  }
 });
 
 test("Worktivity remains the only thing that creates employees", async () => {
