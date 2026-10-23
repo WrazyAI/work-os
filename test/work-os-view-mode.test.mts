@@ -11,6 +11,7 @@ import {
   effectiveWorkOsViewMode,
   parseWorkOsViewMode,
   safeWorkOsViewNext,
+  workOsViewSelectionLocation,
   WORK_OS_VIEW_COOKIE,
 } from "../src/modules/work-os/view-mode";
 
@@ -31,6 +32,35 @@ test("only a mapped administrator can enter My workspace", () => {
   assert.equal(effectiveWorkOsViewMode({ role: "admin", personId: null }, "employee"), "admin");
   assert.equal(effectiveWorkOsViewMode({ role: "admin", personId: "p-1" }, "employee"), "employee");
   assert.equal(effectiveWorkOsViewMode({ role: "admin", personId: "p-1" }, undefined), "admin");
+});
+
+test("a switch that needs a workspace choice keeps the chosen view and destination", () => {
+  assert.equal(
+    workOsViewSelectionLocation("admin", "/work-os/admin/people"),
+    "/work-os/select-workspace?next=%2Fwork-os%2Fadmin%2Fpeople",
+  );
+  assert.equal(
+    workOsViewSelectionLocation("employee", "/work-os/tasks"),
+    "/work-os/select-workspace?next=%2Fwork-os%2Ftasks",
+  );
+  assert.equal(
+    workOsViewSelectionLocation("admin", "https://evil.example/work-os/admin"),
+    "/work-os/select-workspace?next=%2Fwork-os%2Fadmin",
+  );
+  assert.equal(
+    workOsViewSelectionLocation("employee", "/work-os/admin"),
+    "/work-os/select-workspace?next=%2Fwork-os%2Ftoday",
+  );
+});
+
+test("the switch stores the preference before asking for a workspace", () => {
+  const route = source("src/app/api/work-os/view-mode/route.ts");
+  const selection = route.slice(
+    route.indexOf("x-work-os-workspace-selection"),
+    route.indexOf('return redirectTo("/login")'),
+  );
+  assert.match(selection, /workOsViewSelectionLocation/);
+  assert.match(selection, /cookies\.set/);
 });
 
 test("switch destinations cannot escape the view being entered", () => {

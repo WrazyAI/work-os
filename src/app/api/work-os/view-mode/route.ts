@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireWorkOsAccess } from "@/lib/work-os-api";
-import { WORK_OS_WORKSPACE_SELECT } from "@/modules/work-os/workspace";
 import {
   parseWorkOsViewMode,
   safeWorkOsViewNext,
+  workOsViewSelectionLocation,
   WORK_OS_VIEW_COOKIE,
   WORK_OS_VIEW_MODE_FIELD,
   WORK_OS_VIEW_NEXT_FIELD,
@@ -32,6 +32,18 @@ function requestIsSecure(request: Request): boolean {
   }
 }
 
+function viewModeCookie(request: Request, mode: "employee" | "admin") {
+  return {
+    name: WORK_OS_VIEW_COOKIE,
+    value: mode,
+    path: "/",
+    sameSite: "lax" as const,
+    httpOnly: true,
+    maxAge: ONE_YEAR_SECONDS,
+    secure: requestIsSecure(request),
+  };
+}
+
 /**
  * Switch the signed-in administrator between Administration and My workspace.
  *
@@ -48,7 +60,13 @@ export async function POST(request: Request) {
   const auth = await requireWorkOsAccess({});
   if (auth.response) {
     if (auth.response.headers.get("x-work-os-workspace-selection") === "required") {
-      return redirectTo(WORK_OS_WORKSPACE_SELECT);
+      // The switch must survive the chooser: store the chosen view before the
+      // workspace is picked, and carry its destination through the redirect.
+      // Without this, choosing a workspace returns to the view being left and
+      // a multi-workspace account looks stuck in one direction.
+      const response = redirectTo(workOsViewSelectionLocation(requested, form.get(WORK_OS_VIEW_NEXT_FIELD)));
+      response.cookies.set(viewModeCookie(request, requested));
+      return response;
     }
     return redirectTo("/login");
   }
@@ -57,14 +75,6 @@ export async function POST(request: Request) {
 
   const next = safeWorkOsViewNext(requested, form.get(WORK_OS_VIEW_NEXT_FIELD));
   const response = redirectTo(next);
-  response.cookies.set({
-    name: WORK_OS_VIEW_COOKIE,
-    value: requested,
-    path: "/",
-    sameSite: "lax",
-    httpOnly: true,
-    maxAge: ONE_YEAR_SECONDS,
-    secure: requestIsSecure(request),
-  });
+  response.cookies.set(viewModeCookie(request, requested));
   return response;
 }

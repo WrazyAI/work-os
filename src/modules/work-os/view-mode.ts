@@ -12,6 +12,7 @@
  * preference sees Administration; employees always see the employee workspace.
  */
 import { EMPLOYEE_HOME_HREF, isEmployeeWorkspacePath } from "./employee-routes";
+import { WORK_OS_WORKSPACE_SELECT } from "./workspace";
 
 export type WorkOsViewMode = "employee" | "admin";
 
@@ -74,4 +75,16 @@ export function safeWorkOsViewNext(mode: WorkOsViewMode, raw: unknown): string {
   }
   if (url.pathname === "/work-os/admin" || url.pathname.startsWith("/work-os/admin/")) return destination;
   return fallback;
+}
+
+/**
+ * The chooser destination for a switch that must first pick a workspace.
+ *
+ * The caller stores the requested view preference before redirecting here; the
+ * `next` field brings the chosen view's destination through the chooser so a
+ * multi-workspace account does not fall back to the view it was leaving.
+ */
+export function workOsViewSelectionLocation(mode: WorkOsViewMode, rawNext: unknown): string {
+  const next = safeWorkOsViewNext(mode, rawNext);
+  return `${WORK_OS_WORKSPACE_SELECT}?next=${encodeURIComponent(next)}`;
 }
