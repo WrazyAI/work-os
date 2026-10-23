@@ -4,6 +4,7 @@ import WorkOsHome from "@/modules/work-os/WorkOsHome";
 import WorkOsProviders from "./providers";
 import { employeeDestinationForLegacyTab } from "@/modules/work-os/employee-routes";
 import { resolveWorkOsPageAccess } from "@/lib/work-os-page-access";
+import { resolveWorkOsViewModeFor } from "@/lib/work-os-view-mode";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -40,9 +41,14 @@ export default async function WorkOsRoute({ searchParams }: { searchParams: Sear
     // Employees always land on their workspace; legacy ?tab= links map onto
     // the nested destinations so old sidebar links and bookmarks keep working.
     if (role === "employee") redirect(employeeDestinationForLegacyTab(tab));
-    // Administrators land in the administration workspace; legacy admin tabs
-    // map onto the real destinations.
-    if (role === "admin") redirect(tab ? LEGACY_ADMIN_TAB_ROUTES[tab] ?? "/work-os/admin" : "/work-os/admin");
+    if (role === "admin") {
+      // Administrators follow the per-device view they are already in. My
+      // workspace keeps the employee destinations; Administration keeps the
+      // administration workspace and its legacy admin tab mapping.
+      const viewMode = await resolveWorkOsViewModeFor(resolved.access);
+      if (viewMode === "employee") redirect(employeeDestinationForLegacyTab(tab));
+      redirect(tab ? LEGACY_ADMIN_TAB_ROUTES[tab] ?? "/work-os/admin" : "/work-os/admin");
+    }
   }
   return (
     <WorkOsProviders>

@@ -155,6 +155,28 @@ async function loadMembership(userId: string, organizationId?: string | null) {
   return pickMembership((data ?? []) as WorkOsMembershipCandidate[]);
 }
 
+/**
+ * Whether this account can still enter My workspace as a mapped admin.
+ *
+ * The web view switch is a presentation preference, so the console gate and
+ * the root page only redirect into the employee workspace while the account
+ * still has the membership and person record that made the switch possible. A
+ * removed mapping, a demoted role, or a stale cookie leaves the administrator
+ * in Administration instead of bouncing the console home through Work OS.
+ * This is one read-only membership lookup, not an authorization decision.
+ */
+export async function hasMappedWorkOsAdminMembership(userId: string): Promise<boolean> {
+  try {
+    const membership = await loadMembership(userId, null);
+    return Boolean(membership && membership.role === "admin" && membership.person_id);
+  } catch {
+    // The console is not the employee workspace: an unreadable membership
+    // record must leave the administrator in Administration, not turn a stale
+    // presentation cookie into a console error.
+    return false;
+  }
+}
+
 export async function requireWorkOsAccess(options: {
   roles?: WorkOsOrgRole[];
   organizationId?: string | null;

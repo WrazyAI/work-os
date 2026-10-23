@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import Link from "next/link";
-import { ShieldHalf } from "lucide-react";
+import { ArrowLeftRight, ShieldHalf } from "lucide-react";
+import WorkOsViewModeForm from "../WorkOsViewModeForm";
 
 export interface EmployeeWorkspaceAccess {
   role: "employee" | "manager" | "admin";
@@ -29,8 +29,8 @@ export function EmployeeWorkspaceProvider({ access, children }: { access: Employ
  *
  * `data-work-os-workspace` scopes the Work OS palette (globals.css) to these
  * routes so the console shell keeps its own identity around them. The admin
- * strip is the only visible difference for a mapped administrator working in
- * their own workspace: one quiet path back to Administration.
+ * strip is the workspace switch for a mapped administrator working in My
+ * workspace: one quiet control back to Administration.
  */
 export default function EmployeeWorkspaceShell({ access, children }: { access: EmployeeWorkspaceAccess; children: ReactNode }) {
   return (
@@ -45,9 +45,16 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
               <span className="flex items-center gap-2 text-[11px] font-semibold text-[var(--text-tertiary)]">
                 <ShieldHalf size={13} /> Your employee workspace
               </span>
-              <Link href="/work-os/admin" className="text-[12px] font-semibold underline-offset-2 hover:underline" style={{ color: "var(--accent-deep)" }}>
-                Administration
-              </Link>
+              <WorkOsViewModeForm
+                mode="admin"
+                next="/work-os/admin"
+                formClassName="inline-flex"
+                buttonClassName="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                title="Open the administration workspace"
+                ariaLabel="Switch to Administration"
+              >
+                <ArrowLeftRight size={13} aria-hidden /> Switch to Administration
+              </WorkOsViewModeForm>
             </div>
           ) : null}
           {children}

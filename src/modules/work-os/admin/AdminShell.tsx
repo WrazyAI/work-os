@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, RefreshCw } from "lucide-react";
+import WorkOsViewModeForm from "../WorkOsViewModeForm";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
 import { Button, Notice, Skeleton, cx } from "./ui";
 
@@ -74,13 +74,20 @@ export default function AdminShell({ section, children }: { section: AdminSectio
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {session.data?.personId ? (
-                <Link
-                  href="/work-os/today"
-                  className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                  style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+                <WorkOsViewModeForm
+                  mode="employee"
+                  next="/work-os/today"
+                  formClassName="inline-flex"
+                  buttonClassName="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                  title="Open your own workday"
+                  ariaLabel="Switch to my workspace"
                 >
-                  My Day <ArrowUpRight size={13} aria-hidden />
-                </Link>
+                  <ArrowLeftRight size={13} aria-hidden /> Switch to my workspace
+                </WorkOsViewModeForm>
+              ) : session.data ? (
+                <span className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+                  No personal workday is mapped to this account
+                </span>
               ) : null}
               <Button
                 variant="ghost"
@@ -125,7 +132,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
           ) : session.error ? (
             <Notice tone="err">{(session.error as Error).message}</Notice>
           ) : session.data?.role !== "admin" ? (
-            <Notice tone="warn">Administration requires a Work OS admin membership. Redirecting to My Day…</Notice>
+            <Notice tone="warn">Administration requires a Work OS admin membership. Redirecting to Work OS…</Notice>
           ) : (
             children
           )}

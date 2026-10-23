@@ -308,6 +308,21 @@ page:
   and freshness, keeps the activity watch truthful, and points to the Windows
   Companion for Clock in, Pause/Resume, and Clock out.
 
+A mapped administrator has two Work OS views, the way the companion does:
+**Administration** and **My workspace**. The active view is a per-device
+presentation preference stored in the `work-os-view` cookie and reported by
+`/api/work-os/session`; it is never an authorization boundary. Administration
+keeps the platform console and the administration destinations. My workspace
+keeps only the employee destinations, and an administration URL redirects to
+the employee home while it is active (and the reverse while Administration is
+active). The switch is visible on both sides: the employee workspace band
+carries `Switch to Administration`, every administration masthead carries
+`Switch to my workspace`, and the platform sidebar's Work OS group follows the
+active view. An administrator without a mapped person stays in Administration,
+managers keep the review console, and non-admin behavior is unchanged. The
+default with no stored preference is Administration, so existing administrator
+bookmarks keep their meaning.
+
 The web workspace also carries the companion's employee-facing capabilities so
 the two surfaces tell the same story: the two-view Plan your day session
 (input → drafted review → refine/confirm, with the Loom attachment), the
@@ -2057,8 +2072,9 @@ The workspace lives at `/work-os/admin` with real routes: Overview, People,
 Tasks, EOD Review, Insights, Evidence, and Settings. The server route gates the
 whole subtree to Work OS admins; employees and managers keep their own
 surfaces, and a mapped administrator reaches their employee workspace through
-`/work-os/me`. Legacy `?surface=admin&tab=…` links redirect to the closest new
-destination instead of rendering a dead tab.
+`Switch to my workspace` on the masthead (the employee home is
+`/work-os/today`). Legacy `?surface=admin&tab=…` links redirect to the closest
+new destination instead of rendering a dead tab.
 
 The workspace owns its navigation: a horizontal section nav in the masthead,
 not a second sidebar. The host shell keeps its chrome, and the Work OS surface

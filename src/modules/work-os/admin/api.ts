@@ -3,6 +3,7 @@
 import type { ActivityIntervalView } from "@/lib/work-os-activity-intervals";
 import type { AdminInsights, AdminInsightRange } from "@/lib/work-os-admin-insights";
 import type { AdminOverview } from "@/lib/work-os-admin-overview";
+import type { WorkOsViewMode } from "@/modules/work-os/view-mode";
 
 export type { AdminInsights, AdminInsightRange, AdminOverview, ActivityIntervalView };
 
@@ -139,6 +140,7 @@ export interface SessionResponse {
   personId: string | null;
   userId: string;
   featureFlags: Record<string, boolean>;
+  viewMode: WorkOsViewMode;
 }
 
 export interface SystemStatusResponse {

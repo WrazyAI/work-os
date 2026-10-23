@@ -364,7 +364,10 @@ test("the Work OS dispatcher keeps manager review and the admin workspace", asyn
   assert.doesNotMatch(workOsHome, /EmployeeWorkOsHome/);
   assert.doesNotMatch(workOsHome, /surface=admin/);
   assert.match(workOsHome, /Opening your workspace/);
-  assert.match(workOsHome, /href="\/work-os\/admin"/);
+  assert.match(workOsHome, /session\.data\.viewMode === "employee"/);
+  assert.match(workOsHome, /"Open My workspace"/);
+  assert.match(workOsHome, /"Open Work OS administration"/);
+  assert.match(workOsHome, /"\/work-os\/today" : "\/work-os\/admin"/);
   const adminLayout = await source("src/app/work-os/admin/layout.tsx");
   assert.match(adminLayout, /resolveWorkOsPageAccess/);
   assert.match(adminLayout, /resolved\.access\.role !== "admin"/);

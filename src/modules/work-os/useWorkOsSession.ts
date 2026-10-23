@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import type { WorkOsViewMode } from "./view-mode";
 
 export interface WorkOsSessionInfo {
   organizationId: string;
@@ -8,6 +9,8 @@ export interface WorkOsSessionInfo {
   personId: string | null;
   userId: string;
   featureFlags: Record<string, boolean>;
+  /** The view the caller can use right now; presentation only, never auth. */
+  viewMode: WorkOsViewMode;
 }
 
 async function fetchSession(): Promise<WorkOsSessionInfo> {

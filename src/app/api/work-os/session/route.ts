@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { resolveWorkOsViewModeFor } from "@/lib/work-os-view-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function GET(req: Request) {
       personId: auth.access.personId,
       userId: auth.access.ctx.user.id,
       featureFlags: auth.access.featureFlags,
+      viewMode: await resolveWorkOsViewModeFor(auth.access),
     });
   } catch (error) {
     return jsonError(error);

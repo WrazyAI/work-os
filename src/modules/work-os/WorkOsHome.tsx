@@ -40,15 +40,22 @@ export default function WorkOsHome() {
     );
   }
   // Administrators normally never reach this component (server redirect).
+  // My workspace is still a real administrator view, so its fallback points at
+  // the employee home instead of offering the administration console.
+  const employeeView = session.data?.role === "admin" && session.data.viewMode === "employee";
   return (
     <div className="mx-auto mt-8 max-w-xl">
       <Link
-        href="/work-os/admin"
+        href={employeeView ? "/work-os/today" : "/work-os/admin"}
         className="inline-flex items-center gap-2 rounded-[10px] border px-4 py-3 text-[12.5px] font-semibold text-[var(--text-primary)]"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
-        <ShieldCheck size={15} style={{ color: "var(--accent)" }} aria-hidden />
-        Open Work OS administration
+        {employeeView ? (
+          <RefreshCw size={15} style={{ color: "var(--accent)" }} aria-hidden />
+        ) : (
+          <ShieldCheck size={15} style={{ color: "var(--accent)" }} aria-hidden />
+        )}
+        {employeeView ? "Open My workspace" : "Open Work OS administration"}
       </Link>
     </div>
   );
