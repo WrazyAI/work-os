@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.9 — 2026-10-23
+
+- The next steps window keeps Otto and the elapsed-time pill in place when the card grows or closes.
+
 ## 0.5.8 — 2026-10-23
 
 - The next steps card no longer gets cut off at the top: it fits the window and scrolls inside when the screen is short.

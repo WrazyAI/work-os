@@ -5,6 +5,7 @@ import {
   nextStepsBubbleHeight,
   nextStepsWindow,
 } from "./nextStepsWindow";
+import { RECAP_BUBBLE_RESTING } from "./recapSpeech";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 
 const item = (index: number) => ({
@@ -64,6 +65,21 @@ describe("nextStepsWindow", () => {
     expect(size.height).toBe(276 + (measured - 88));
     // The mascot and the elapsed pill still hold their screen position.
     expect(grown.y + size.height).toBe(position.y + 276);
+  });
+
+  it("anchors every growth pass and the close to the same resting position", () => {
+    // A first measurement, then a taller second one (a wrapped row or a new
+    // phase) must not subtract the delta from the already-moved top again.
+    const anchor = { x: 600, y: 600 };
+    const first = nextStepsWindow(moment("ready", 1), monitor, anchor, 160);
+    const second = nextStepsWindow(moment("ready", 1), monitor, anchor, 260);
+    for (const target of [first, second]) {
+      expect(target.position.y + target.size.height).toBe(anchor.y + RECAP_BUBBLE_RESTING.height);
+    }
+    // Closing restores the resting size at the same anchor, not at the grown top.
+    const closed = { size: RECAP_BUBBLE_RESTING, position: anchor };
+    expect(closed.position.y + closed.size.height).toBe(anchor.y + RECAP_BUBBLE_RESTING.height);
+    expect(second.size.height).toBeGreaterThan(first.size.height);
   });
 
   it("never shrinks below the resting window for a small measured card", () => {

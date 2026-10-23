@@ -714,6 +714,16 @@ export default function AvatarApp(): React.ReactElement {
   // Keep the player's stale-card refresh pointed at the live loader.
   loadDayRef.current = loadDay;
 
+  /** The collapsed window's top-left before the recap/next-steps growth. The
+   * window widens and grows upward, so its current top is not a resting
+   * position: reusing it for a second resize (drafting → ready, or a new
+   * measurement) would move the mascot again, and closing would restore the
+   * resting size at a displaced top. */
+  const grownAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (expanded) grownAnchorRef.current = null;
+  }, [expanded]);
+
   // Grow the bubble while Otto reads or the next steps are open, and put it
   // back exactly as it was. Only the collapsed companion is managed here —
   // expanding it is the panel's own effect, and the read keeps going.
@@ -723,6 +733,7 @@ export default function AvatarApp(): React.ReactElement {
     // as a read does; the resting bubble clamps its own actions away.
     const reading = recapSpeech.status !== "idle" || recapSpeech.retryIntervalId !== null;
     const moment = nextStepsMoment;
+    const grown = reading || moment !== null;
     let cancelled = false;
     void (async () => {
       try {
@@ -732,13 +743,20 @@ export default function AvatarApp(): React.ReactElement {
         const bounds = monitor
           ? { width: monitor.size.width, height: monitor.size.height }
           : { width: logical.x + RECAP_BUBBLE_RESTING.width, height: logical.y + RECAP_BUBBLE_RESTING.height };
+        // The first grown pass captures the resting top-left. Every later pass
+        // (a second measurement, drafting → ready) reuses it, so the bottom
+        // edge never moves twice; closing restores to the same place.
+        const stored = grownAnchorRef.current;
+        const resting = stored ?? { x: logical.x, y: logical.y };
+        if (grown && !stored) grownAnchorRef.current = resting;
+        if (!grown && stored) grownAnchorRef.current = null;
         // The decision list needs the taller window; the prompter keeps its own
         // math when no moment is open.
         const target = moment
-          ? nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y }, measuredNextStepsHeight)
+          ? nextStepsWindow(moment, bounds, resting, measuredNextStepsHeight)
           : reading
-            ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 4, chrome: 102 }, bounds, { x: logical.x, y: logical.y })
-            : { size: RECAP_BUBBLE_RESTING, position: { x: logical.x, y: logical.y } };
+            ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 4, chrome: 102 }, bounds, resting)
+            : { size: RECAP_BUBBLE_RESTING, position: resting };
         await win.setSize(new LogicalSize(target.size.width, target.size.height)).catch(() => undefined);
         await win.setPosition(new LogicalPosition(target.position.x, target.position.y)).catch(() => undefined);
       } catch { /* the companion keeps its size when the monitor cannot be read */ }

@@ -110,6 +110,16 @@ describe("the next-steps card is never cut off", () => {
     expect(css).toMatch(/\.avatar-compact \.avatar-next-steps-list \{[\s\S]{0,120}?flex: 1 1 auto;/);
   });
 
+  it("keeps one resting anchor across every resize and the close", () => {
+    const avatar = read("./AvatarApp.tsx");
+    expect(avatar).toContain("const grownAnchorRef = useRef<{ x: number; y: number } | null>(null);");
+    expect(avatar).toContain("const resting = stored ?? { x: logical.x, y: logical.y };");
+    expect(avatar).toContain("nextStepsWindow(moment, bounds, resting, measuredNextStepsHeight)");
+    // A second growth must not treat the already-moved top as the anchor.
+    expect(avatar).not.toContain("nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y }");
+    expect(avatar).toContain("if (!grown && stored) grownAnchorRef.current = null;");
+  });
+
   it("grows the window for the card's measured height, not the row estimate", () => {
     const bubble = read("./NextStepsBubble.tsx");
     expect(bubble).toContain("onHeightChange?: (height: number) => void;");
@@ -119,7 +129,7 @@ describe("the next-steps card is never cut off", () => {
     expect(bubble).toContain("Math.min(rows, cap)");
     const avatar = read("./AvatarApp.tsx");
     expect(avatar).toContain("const measuredNextStepsHeight = nextStepsCardSize");
-    expect(avatar).toContain("nextStepsWindow(moment, bounds, { x: logical.x, y: logical.y }, measuredNextStepsHeight)");
+    expect(avatar).toContain("nextStepsWindow(moment, bounds, resting, measuredNextStepsHeight)");
     expect(avatar).toContain("onHeightChange={receiveNextStepsHeight}");
   });
 
