@@ -1,5 +1,4 @@
 import {
-  listNiftyMembers,
   listNiftyProjects,
   listNiftyTasks,
   type NiftyTaskSummary,
@@ -41,48 +40,6 @@ export async function upsertNiftyProject(userId: string, project: { id: string; 
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,provider,provider_project_id" }).select("*"),
     "upsert Nifty project",
-  );
-}
-
-export async function upsertNiftyMember(userId: string, member: { id: string; name: string; email?: string | null; raw: Json }) {
-  const supabase = db();
-  const email = member.email?.trim() || null;
-  if (email) {
-    const existing = await ensureNoError(
-      supabase
-        .from("work_people")
-        .select("*")
-        .eq("user_id", userId)
-        .ilike("email", email)
-        .maybeSingle(),
-      "find existing Nifty member by email",
-    );
-    if (existing) {
-      return selectFirst(
-        supabase.from("work_people").update({
-          display_name: existing.display_name || member.name,
-          email,
-          nifty_member_id: member.id,
-          raw: { ...(existing.raw ?? {}), nifty: member.raw },
-          active: true,
-          updated_at: new Date().toISOString(),
-        }).eq("id", existing.id).select("*"),
-        "merge Nifty member by email",
-      );
-    }
-  }
-
-  return selectFirst(
-    supabase.from("work_people").upsert({
-      user_id: userId,
-      display_name: member.name,
-      email,
-      nifty_member_id: member.id,
-      raw: { nifty: member.raw },
-      active: true,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,nifty_member_id" }).select("*"),
-    "upsert Nifty member",
   );
 }
 
@@ -232,7 +189,6 @@ export async function syncNifty(userId: string) {
   const tasks = [] as Awaited<ReturnType<typeof listNiftyTasks>>["tasks"];
   const seenProjects = new Set<string>();
   const seenTasks = new Set<string>();
-  const { members } = await niftyForOwner(userId, () => listNiftyMembers());
   for (let offset = 0; offset < 10_000; offset += pageSize) {
     const page = await niftyForOwner(userId, () => listNiftyProjects({ limit: String(pageSize), offset: String(offset), archived: "false" }));
     const fresh = page.projects.filter((project) => !seenProjects.has(project.id));
@@ -242,7 +198,6 @@ export async function syncNifty(userId: string) {
   }
 
   for (const project of projects) await upsertNiftyProject(userId, project);
-  for (const member of members) await upsertNiftyMember(userId, member);
 
   for (let offset = 0; offset < 10_000; offset += pageSize) {
     const page = await niftyForOwner(userId, () => listNiftyTasks({ limit: String(pageSize), offset: String(offset), include_subtasks: "true", include_archived: "false" }));
@@ -278,5 +233,5 @@ export async function syncNifty(userId: string) {
   const { error: syncStateError } = await db().from("work_organizations").update({ nifty_synced_at: syncedAt, nifty_sync_error: null, updated_at: syncedAt })
     .eq("legacy_owner_id", userId);
   if (syncStateError) throw new Error(`record Nifty sync state: ${syncStateError.message}`);
-  return { projects: projects.length, members: members.length, tasks: tasks.length, syncedAt };
+  return { projects: projects.length, tasks: tasks.length, syncedAt };
 }

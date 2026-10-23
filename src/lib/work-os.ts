@@ -13,7 +13,6 @@ export {
   canonicalNiftyEventTimestamp,
   niftyTaskEventIdempotencyKey,
   syncNifty,
-  upsertNiftyMember,
   upsertNiftyProject,
   upsertNiftyTask,
 } from "@/lib/work-os-nifty";
