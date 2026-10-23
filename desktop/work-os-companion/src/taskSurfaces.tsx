@@ -7,6 +7,7 @@ import { renderViewportSurface } from "./viewportSurface";
 import { stripPlaceholderBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { TaskEvidenceList } from "./CompletionEvidence";
+import type { EvidenceLoader } from "./EvidencePreview";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
@@ -262,11 +263,12 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
   </div>;
 }
 
-export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, completionEvidence = [], onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onAttachEvidence, onDownloadEvidence, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
+export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, completionEvidence = [], loadEvidence, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onAttachEvidence, onDownloadEvidence, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
   details: { task: AnyTask; subtasks: AnyTask[]; moveTargets: AnyTask[]; subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null } };
   loading: boolean; readOnly: boolean; currentDate: string; busy: boolean;
   subtaskTitle: string; subtaskDescription: string; subtaskMenuId: string | null; moveMenuId: string | null;
   completionEvidence?: TaskEvidenceRecord[];
+  loadEvidence: EvidenceLoader;
   onSubtaskTitle: (value: string) => void; onSubtaskDescription: (value: string) => void;
   onSubtaskMenu: (id: string | null) => void; onMoveMenu: (id: string | null) => void;
   onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: () => void; onAttachEvidence?: () => void; onDownloadEvidence?: (evidence: TaskEvidenceRecord) => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
@@ -307,7 +309,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             <header><span>Subtasks <b>{completedSubtasks} / {subtasks.length}</b></span><span>{progressPercent}%</span></header>
             <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} aria-label={`${progressPercent}% of subtasks complete`}><i style={{ width: `${progressPercent}%` }} /></div>
           </section>
-          <TaskEvidenceList evidence={completionEvidence} readOnly={readOnly} busy={busy} completed={task.completed === true} onAttach={onAttachEvidence} onDownload={onDownloadEvidence} />
+          <TaskEvidenceList evidence={completionEvidence} loadEvidence={loadEvidence} readOnly={readOnly} busy={busy} completed={task.completed === true} onAttach={onAttachEvidence} onDownload={onDownloadEvidence} />
           <section className="subtask-section task-detail-next-steps"><header><div><strong>Next steps</strong><small>Keep the next concrete move visible.</small></div><span className="task-detail-next-count">{subtasks.length}</span></header>
             {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {

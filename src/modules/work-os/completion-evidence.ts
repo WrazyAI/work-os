@@ -12,7 +12,7 @@ export const COMPLETION_EVIDENCE_BUCKET = "work-evidence";
 export const COMPLETION_EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
 export const COMPLETION_EVIDENCE_MAX_NOTE = 1000;
 export const COMPLETION_EVIDENCE_MAX_FILE_NAME = 180;
-export const COMPLETION_EVIDENCE_ACCEPT = ".png,.jpg,.jpeg,.webp,.pdf,.txt,.md,.markdown,.csv";
+export const COMPLETION_EVIDENCE_ACCEPT = ".png,.jpg,.jpeg,.webp,.pdf,.txt,.md,.markdown,.csv,.doc,.docx,.zip,.7z";
 
 const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -22,6 +22,17 @@ const EXTENSIONS: Record<string, string> = {
   "text/plain": "txt",
   "text/markdown": "md",
   "text/csv": "csv",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/zip": "zip",
+  "application/x-7z-compressed": "7z",
+};
+
+/** Browsers and desktop runtimes disagree on a few archive MIME labels. Each
+ * alias resolves to the canonical type the stored record and read route use. */
+const TYPE_ALIASES: Record<string, string> = {
+  "application/x-zip-compressed": "application/zip",
+  "application/x-zip": "application/zip",
 };
 
 const FILE_NAME_TYPES: Record<string, string> = {
@@ -34,9 +45,15 @@ const FILE_NAME_TYPES: Record<string, string> = {
   md: "text/markdown",
   markdown: "text/markdown",
   csv: "text/csv",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  zip: "application/zip",
+  "7z": "application/x-7z-compressed",
 };
 
 export const COMPLETION_EVIDENCE_ALLOWED_TYPES = Object.keys(EXTENSIONS);
+
+export type CompletionEvidencePreviewKind = "image" | "pdf" | "text" | "markdown" | "spreadsheet" | "word" | "archive" | "unsupported";
 
 export class CompletionEvidenceError extends Error {
   constructor(message: string) {
@@ -59,8 +76,52 @@ export type TaskEvidenceRecord = {
 
 export function normalizeCompletionEvidenceType(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const type = value.split(";")[0]?.trim().toLowerCase() ?? "";
+  const raw = value.split(";")[0]?.trim().toLowerCase() ?? "";
+  const type = TYPE_ALIASES[raw] ?? raw;
   return EXTENSIONS[type] ? type : null;
+}
+
+/** The companion's preview matrix. Inline-readable media gets a viewer; Word
+ * and archive containers keep their metadata and a download action. */
+export function completionEvidencePreviewKind(contentType: unknown): CompletionEvidencePreviewKind {
+  const type = normalizeCompletionEvidenceType(contentType);
+  if (!type) return "unsupported";
+  if (type.startsWith("image/")) return "image";
+  if (type === "application/pdf") return "pdf";
+  if (type === "text/markdown") return "markdown";
+  if (type === "text/csv") return "spreadsheet";
+  if (type.startsWith("text/")) return "text";
+  if (type === "application/msword" || type.includes("wordprocessingml")) return "word";
+  if (type === "application/zip" || type === "application/x-7z-compressed") return "archive";
+  return "unsupported";
+}
+
+export function completionEvidenceTypeLabel(contentType: unknown): string {
+  const type = normalizeCompletionEvidenceType(contentType);
+  switch (type) {
+    case "image/png": return "PNG image";
+    case "image/jpeg": return "JPEG image";
+    case "image/webp": return "WebP image";
+    case "application/pdf": return "PDF document";
+    case "text/plain": return "Text file";
+    case "text/markdown": return "Markdown file";
+    case "text/csv": return "CSV file";
+    case "application/msword": return "Word document (.doc)";
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document": return "Word document (.docx)";
+    case "application/zip": return "ZIP archive";
+    case "application/x-7z-compressed": return "7Z archive";
+    default: return "Unsupported file";
+  }
+}
+
+/** Word documents and archives are downloads, never inline responses. The
+ * browser and the companion's webview must not execute or embed their
+ * contents; images, PDFs, and plain text stay inline. */
+export function completionEvidenceDisposition(contentType: unknown): "inline" | "attachment" {
+  const kind = completionEvidencePreviewKind(contentType);
+  return kind === "image" || kind === "pdf" || kind === "text" || kind === "markdown" || kind === "spreadsheet"
+    ? "inline"
+    : "attachment";
 }
 
 function fileExtension(value: unknown): string {
@@ -107,7 +168,7 @@ export function validateCompletionEvidenceUpload(input: {
 }) {
   const contentType = resolveCompletionEvidenceType(input.contentType, input.fileName);
   if (!contentType) {
-    throw new CompletionEvidenceError("Completion evidence must be a PNG, JPEG, WebP, PDF, text, Markdown, or CSV file");
+    throw new CompletionEvidenceError("Completion evidence must be a PNG, JPEG, WebP, PDF, Word, text, Markdown, CSV, ZIP, or 7Z file");
   }
   const size = input.size;
   if (typeof size !== "number" || !Number.isInteger(size) || size <= 0) {
@@ -133,6 +194,18 @@ function startsWith(bytes: Uint8Array, signature: number[]) {
   return signature.length <= bytes.length && signature.every((value, index) => bytes[index] === value);
 }
 
+const ZIP_LOCAL_FILE = [0x50, 0x4b, 0x03, 0x04];
+const ZIP_EMPTY_ARCHIVE = [0x50, 0x4b, 0x05, 0x06];
+const ZIP_SPANNED = [0x50, 0x4b, 0x07, 0x08];
+
+/** A ZIP container can be a normal archive, an empty archive, or a spanned
+ * archive marker. A `.docx` package always carries entries, so only the local
+ * file signature is accepted for it. */
+function hasZipSignature(bytes: Uint8Array, allowEmpty: boolean) {
+  return startsWith(bytes, ZIP_LOCAL_FILE)
+    || (allowEmpty && (startsWith(bytes, ZIP_EMPTY_ARCHIVE) || startsWith(bytes, ZIP_SPANNED)));
+}
+
 /** Reject a file whose bytes contradict its declared type. The route also
  * sends `X-Content-Type-Options: nosniff`, but a truthful type keeps the
  * stored record and the authenticated read honest. */
@@ -154,6 +227,21 @@ export function assertCompletionEvidenceBytes(bytes: Uint8Array, contentType: st
   }
   if (contentType === "application/pdf" && !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
     throw new CompletionEvidenceError("The selected file does not look like a PDF");
+  }
+  if (contentType === "application/msword"
+    && !startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) {
+    throw new CompletionEvidenceError("The selected file does not look like a Word .doc document");
+  }
+  if (contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    && !hasZipSignature(bytes, false)) {
+    throw new CompletionEvidenceError("The selected file does not look like a Word .docx document");
+  }
+  if (contentType === "application/zip" && !hasZipSignature(bytes, true)) {
+    throw new CompletionEvidenceError("The selected file does not look like a ZIP archive");
+  }
+  if (contentType === "application/x-7z-compressed"
+    && !startsWith(bytes, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) {
+    throw new CompletionEvidenceError("The selected file does not look like a 7Z archive");
   }
   if (contentType.startsWith("text/")) {
     if (bytes.includes(0)) throw new CompletionEvidenceError("The selected text file contains binary data");
@@ -220,7 +308,8 @@ export function isEmployeeAttachedEvidence(row: Record<string, unknown>) {
 export function taskEvidenceFromRow(row: Record<string, unknown>): TaskEvidenceRecord {
   const metrics = row.metrics && typeof row.metrics === "object" ? row.metrics as Record<string, unknown> : {};
   const id = String(row.id ?? "");
-  const contentType = typeof metrics.contentType === "string" ? metrics.contentType : "application/octet-stream";
+  const contentType = normalizeCompletionEvidenceType(metrics.contentType)
+    ?? (typeof metrics.contentType === "string" ? metrics.contentType : "application/octet-stream");
   const sizeBytes = Number(metrics.sizeBytes);
   return {
     id,

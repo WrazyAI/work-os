@@ -681,6 +681,41 @@ internal scroll region. Menus and drawers must collide with the viewport, close
 on Escape/outside click where appropriate, and restore focus to their trigger.
 Destructive archive/delete actions are explicit and separate.
 
+**Completion evidence previews.** The drawer's employee-attached evidence rows
+show the file before download: an image uses its real bytes as the thumbnail,
+and every other supported type carries one type tile with a readable extension
+badge (PDF, Word, Markdown, text, CSV, ZIP, 7Z). The row's download action stays
+separate from the row itself; activating the row opens the preview dialog.
+
+The preview matrix is explicit and never guesses:
+
+- Images render at full size in the dialog.
+- PDFs render in an embedded viewer (a blob URL in an iframe) with a persistent
+  download fallback for webviews that cannot display PDF.
+- Plain text, Markdown, and CSV render as readable text, capped at 200 KB with a
+  truncation notice. Markdown uses the safe renderer, so raw HTML stays inert
+  text; it is never injected.
+- Word (`.doc`, `.docx`) and ZIP/7Z keep a metadata preview — name, type, size,
+  attachment time, provenance, and note — with a primary Download action. The
+  companion does not extract Word or archive contents, and `.docx` is not given
+  a partial text preview.
+- HTML and SVG are not supported types and are never inlined.
+
+Both thumbnails and previews read through the authenticated bearer fetch and
+hand a short-lived object URL to the renderer; a token never appears in an
+`<img>`, `<iframe>`, or other URL. Object URLs are revoked when the row closes,
+the dialog closes, or the selection changes. A thumbnail reserves its geometry
+while loading, and a corrupt or missing file falls back to a clearly unavailable
+type tile; the dialog states Preview unavailable and keeps Download available.
+
+The dialog is labelled by the file name, described by the provenance sentence,
+opens with focus on its close control, traps Tab within the dialog, closes on
+Escape or a backdrop press, and restores focus to the evidence row. At 720px
+and below it takes the full viewport with a single internal scroll region; the
+footer action becomes full-width at 560px. Evidence remains employee-attached
+output evidence: the preview and its provenance line never call the file a
+provider confirmation or proof of completion.
+
 ### 6.6 Completion evidence
 
 A completion may carry one explicit employee upload: one file plus an optional

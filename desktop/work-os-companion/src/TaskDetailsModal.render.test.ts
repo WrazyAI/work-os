@@ -17,6 +17,7 @@ const details = {
 
 const base = {
   details,
+  loadEvidence: async () => new Blob([]),
   loading: false,
   readOnly: false,
   currentDate: "2026-09-29",

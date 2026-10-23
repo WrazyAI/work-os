@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { jsonError, requireWorkOsAccess, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 import {
   COMPLETION_EVIDENCE_BUCKET,
+  completionEvidenceDisposition,
   completionEvidenceObjectPath,
   isEmployeeAttachedEvidence,
   normalizeCompletionEvidenceType,
@@ -65,11 +66,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       throw new Error(`load completion evidence file: ${downloaded.error.message}`);
     }
     const fileName = sanitizeCompletionEvidenceFileName(evidence.fileName, contentType);
+    // Word documents and archives are downloads. Images, PDFs, and plain text
+    // stay inline so the companion can preview them without a second route;
+    // HTML and SVG are outside the supported type map entirely.
+    const disposition = completionEvidenceDisposition(contentType);
     return new Response(downloaded.data!.arrayBuffer, {
       headers: {
         "Content-Type": contentType,
         "Content-Length": String(downloaded.data!.arrayBuffer.byteLength),
-        "Content-Disposition": `inline; filename="${fileName.replaceAll('"', "_")}"`,
+        "Content-Disposition": `${disposition}; filename="${fileName.replaceAll('"', "_")}"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         ...(contentType.startsWith("text/") ? { "Content-Security-Policy": "default-src 'none'; sandbox" } : {}),

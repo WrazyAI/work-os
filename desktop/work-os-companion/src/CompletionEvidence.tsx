@@ -1,12 +1,14 @@
-import { useId, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { Check, Download, FileText, Paperclip, X } from "lucide-react";
 import { FadeArc } from "./LoadingUi";
 import { formatWorkOsDateTime } from "./dateFormat";
+import { EvidencePreviewDialog, EvidenceSelectionPreview, EvidenceThumbnail, type EvidenceLoader } from "./EvidencePreview";
 import { safeTaskText } from "./taskWorkspace";
 import {
   COMPLETION_EVIDENCE_ACCEPT,
   COMPLETION_EVIDENCE_MAX_BYTES,
   COMPLETION_EVIDENCE_MAX_NOTE,
+  completionEvidenceTypeLabel,
   formatEvidenceFileSize,
   taskRequiresCompletionEvidence,
   validateCompletionEvidenceUpload,
@@ -218,8 +220,10 @@ export function TaskEvidenceDialog({
               autoFocus
               onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
             />
-            <small>One file · PNG, JPEG, WebP, PDF, text, Markdown, or CSV · up to {COMPLETION_EVIDENCE_MAX_BYTES / (1024 * 1024)} MB.</small>
-            {fileName ? <span className="completion-evidence-file-name"><Paperclip size={13} aria-hidden="true" />{fileName}</span> : null}
+            <small>One file · PNG, JPEG, WebP, PDF, Word, text, Markdown, CSV, ZIP, or 7Z · up to {COMPLETION_EVIDENCE_MAX_BYTES / (1024 * 1024)} MB.</small>
+            {file
+              ? <EvidenceSelectionPreview file={file} />
+              : fileName ? <span className="completion-evidence-file-name"><Paperclip size={13} aria-hidden="true" />{fileName}</span> : null}
           </div>
           <div className="completion-evidence-field">
             <label htmlFor={`${titleId}-note`}>Note <em>optional</em></label>
@@ -247,29 +251,37 @@ export function TaskEvidenceDialog({
 }
 
 /** The drawer's quiet evidence record. It names its provenance explicitly so
- * an employee file is never read as a screenshot or a provider confirmation. */
-export function TaskEvidenceList({ evidence, readOnly = false, busy = false, completed = false, onAttach, onDownload }: {
+ * an employee file is never read as a screenshot or a provider confirmation.
+ * Opening a row previews the file through the authenticated blob loader; the
+ * download action remains a separate control. */
+export function TaskEvidenceList({ evidence, loadEvidence, readOnly = false, busy = false, completed = false, onAttach, onDownload }: {
   evidence: TaskEvidenceRecord[];
+  loadEvidence: EvidenceLoader;
   readOnly?: boolean;
   busy?: boolean;
   completed?: boolean;
   onAttach?: () => void;
   onDownload?: (evidence: TaskEvidenceRecord) => void;
 }) {
+  const [preview, setPreview] = useState<TaskEvidenceRecord | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
   return <section className="task-detail-evidence" aria-label="Completion evidence">
     <header>
       <div><strong>Completion evidence</strong><small>Employee-attached files and notes.</small></div>
       <span className="task-detail-evidence-count">{evidence.length}</span>
     </header>
     {evidence.length ? <div className="task-detail-evidence-list">{evidence.map((item) => <article key={item.id} className="task-detail-evidence-row">
-      <span className="task-detail-evidence-icon" aria-hidden="true"><FileText size={15} /></span>
-      <div className="task-detail-evidence-copy">
-        <strong>{item.fileName}</strong>
-        <small>{formatEvidenceFileSize(item.sizeBytes)} · Employee-attached · {formatWorkOsDateTime(item.createdAt, undefined, "Time unavailable")}</small>
-        {item.note ? <p>{item.note}</p> : null}
-      </div>
-      {onDownload ? <button type="button" aria-label={`Download ${item.fileName}`} disabled={busy} onClick={() => onDownload(item)}><Download size={13} /> Download</button> : null}
+      <button type="button" className="task-detail-evidence-open" aria-label={`Preview ${item.fileName}`} disabled={busy} onClick={() => setPreview(item)}>
+        <EvidenceThumbnail evidence={item} loadEvidence={loadEvidence} />
+        <span className="task-detail-evidence-copy">
+          <strong>{item.fileName}</strong>
+          <small>{completionEvidenceTypeLabel(item.contentType)} · {formatEvidenceFileSize(item.sizeBytes)} · Employee-attached · {formatWorkOsDateTime(item.createdAt, undefined, "Time unavailable")}</small>
+          {item.note ? <p>{item.note}</p> : null}
+        </span>
+      </button>
+      {onDownload ? <button type="button" className="task-detail-evidence-download" aria-label={`Download ${item.fileName}`} disabled={busy} onClick={() => onDownload(item)}><Download size={13} /> Download</button> : null}
     </article>)}</div> : <p className="task-detail-evidence-empty">{completed ? "No completion evidence was attached." : "No evidence attached yet."}</p>}
     {!readOnly && onAttach ? <button type="button" className="task-detail-evidence-attach" disabled={busy} onClick={onAttach}><Paperclip size={14} /> Attach evidence</button> : null}
+    {preview ? <EvidencePreviewDialog evidence={preview} loadEvidence={loadEvidence} onDownload={onDownload} onClose={closePreview} /> : null}
   </section>;
 }

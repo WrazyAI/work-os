@@ -3264,6 +3264,10 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  function loadTaskEvidence(evidence: TaskEvidenceRecord) {
+    return apiRequestBlob(evidence.url, "Evidence file");
+  }
+
   async function downloadTaskEvidence(evidence: TaskEvidenceRecord) {
     try {
       const blob = await apiRequestBlob(evidence.url, "Evidence file");
@@ -4491,7 +4495,7 @@ export default function App() {
       />}
     </section>
     {taskComposerOpen && <TaskComposerModal closing={taskComposerClosing} busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={closeTaskComposer} onSubmit={submitTaskFromDesktop} />}
-        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => requestTaskCompletion(taskDetails.task as TaskRow, true, true)} onAttachEvidence={() => requestTaskEvidence(taskDetails.task as TaskRow)} onDownloadEvidence={(evidence) => void downloadTaskEvidence(evidence)} completionEvidence={taskDetails.completionEvidence ?? []} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => requestTaskCompletion(taskDetails.task as TaskRow, true, true)} onAttachEvidence={() => requestTaskEvidence(taskDetails.task as TaskRow)} onDownloadEvidence={(evidence) => void downloadTaskEvidence(evidence)} completionEvidence={taskDetails.completionEvidence ?? []} loadEvidence={loadTaskEvidence} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
         {taskEvidenceRequest && <TaskEvidenceDialog
           task={taskEvidenceRequest.task}
           mode={taskEvidenceRequest.mode}
