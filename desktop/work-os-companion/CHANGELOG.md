@@ -28,6 +28,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Completion evidence now shows a type thumbnail for every file and previews images, PDFs, and text without leaving the task.
 - Word documents and ZIP or 7Z files can now be attached as evidence, with their details and a download action.
 
+## 0.5.10 — 2026-10-23
+
+- Listening to recaps over and over no longer makes Listen stop working until the app restarts.
+
 ## 0.5.9 — 2026-10-23
 
 - The next steps window keeps Otto and the elapsed-time pill in place when the card grows or closes.

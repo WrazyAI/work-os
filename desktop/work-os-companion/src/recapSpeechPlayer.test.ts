@@ -9,20 +9,26 @@ function fakeAudio() {
     fire(type: string): void;
     played: number;
     paused: number;
+    closed: number;
     loads: Array<{ bytes: number; mimeType: string }>;
   } = {
     currentTime: 0,
     duration: 30,
     played: 0,
     paused: 0,
+    closed: 0,
     loads: [],
     async load(bytes, mimeType) {
       audio.loads.push({ bytes: bytes.byteLength, mimeType });
     },
     async play() { audio.played += 1; },
     pause() { audio.paused += 1; },
+    close() { audio.closed += 1; },
     addEventListener(type, handler) {
       listeners.set(type, [...(listeners.get(type) ?? []), handler]);
+    },
+    removeEventListener(type, handler) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== handler));
     },
     fire(type) {
       for (const handler of listeners.get(type) ?? []) handler();
@@ -194,6 +200,14 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().status).toBe("playing");
   });
 
+  it("reports an audio device that cannot be opened instead of hanging in loading", async () => {
+    const h = harness({ createAudio: () => { throw new Error("Audio is not available in this window."); } });
+    await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    expect(h.player.snapshot().status).toBe("idle");
+    expect(h.player.snapshot().retryIntervalId).toBe("interval-1");
+    expect(h.failures).toEqual(["Reading a recap is unavailable right now. Try again in a moment."]);
+  });
+
   it("a clip the device cannot decode says so instead of pretending to play", async () => {
     const h = harness({
       createAudio: () => {
@@ -214,6 +228,33 @@ describe("recap speech player", () => {
     expect(h.stale).toEqual(["interval-1"]);
     expect(h.player.snapshot().lines).toEqual([{ text: "Newer words", time: null }]);
     expect(h.player.snapshot().revision).toBe(5);
+  });
+
+  it("removes a finished read's listeners before the same audio serves the next recap", async () => {
+    const h = harness();
+    await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    await h.player.toggle({ intervalId: "interval-2", revision: 2, voice: "Kore", enabled: true });
+    // One audio instance now serves every read. If each read left its
+    // timeupdate listener behind, one clock tick would publish once per read.
+    h.audios[0].currentTime = 5;
+    const before = h.snapshots.length;
+    h.audios[0].fire("timeupdate");
+    expect(h.snapshots.length - before).toBe(1);
+  });
+
+  it("reuses one audio context for the window's whole life and closes it on dispose", async () => {
+    const h = harness();
+    await h.player.toggle({ intervalId: "interval-1", revision: 1, voice: "Kore", enabled: true });
+    await h.player.toggle({ intervalId: "interval-2", revision: 2, voice: "Kore", enabled: true });
+    // Browsers cap live Web Audio contexts (around six). Each read used to
+    // create a new one and never close it, so repeated listening could make
+    // Listen fail until the app restarted.
+    expect(h.audios).toHaveLength(1);
+    expect(h.audios[0].closed).toBe(0);
+    h.player.stop();
+    expect(h.audios[0].closed).toBe(0);
+    h.player.dispose();
+    expect(h.audios[0].closed).toBe(1);
   });
 
   it("a late clip for a stopped read is dropped", async () => {

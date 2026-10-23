@@ -43,10 +43,13 @@ export interface RecapAudio {
   load(bytes: ArrayBuffer, mimeType: string): Promise<void>;
   play(): Promise<void>;
   pause(): void;
+  /** Release the audio context. Called once, when the player is disposed. */
+  close?(): void;
   currentTime: number;
   readonly duration: number;
   addEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
-  removeEventListener?(type: "timeupdate" | "ended" | "error", handler: () => void): void;
+  /** Reusable adapters must be able to drop a finished read's listeners. */
+  removeEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
 }
 
 export interface RecapSpeechPlayerDeps {
@@ -103,6 +106,11 @@ export function browserRecapAudio(): RecapAudio {
   let offset = 0;
   let playing = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+  /** A load and a play can both be awaiting the browser. These tokens make a
+   * superseded one return instead of committing a stale clip or starting a
+   * source after Stop. */
+  let loadGeneration = 0;
+  let playGeneration = 0;
   const listeners = new Map<string, Array<() => void>>();
   const emit = (type: string) => {
     for (const handler of listeners.get(type) ?? []) handler();
@@ -113,15 +121,46 @@ export function browserRecapAudio(): RecapAudio {
       timer = null;
     }
   };
+  const stopSource = () => {
+    playing = false;
+    stopTimer();
+    if (source) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        /* already stopped */
+      }
+      source = null;
+    }
+  };
   const elapsed = () => (playing ? offset + (context.currentTime - startedAt) : offset);
 
   return {
     async load(bytes) {
-      buffer = await context.decodeAudioData(bytes.slice(0));
+      const attempt = (loadGeneration += 1);
+      playGeneration += 1;
+      // The adapter can be asked to load while the old clip still plays.
+      // Silence it (and stop its clock) before resetting the position.
+      stopSource();
+      // A reused context keeps the previous clip's clock. The next read is a
+      // different clip, so its position starts at zero even if the old one ran
+      // to its end (a longer new clip would otherwise begin mid-sentence).
+      offset = 0;
+      const decoded = await context.decodeAudioData(bytes.slice(0));
+      // A newer read started while this one decoded: its clip owns the context.
+      if (attempt !== loadGeneration) return;
+      buffer = decoded;
     },
     async play() {
       if (!buffer) throw new Error("The recap audio could not be decoded.");
       if (playing) return;
+      const attempt = (playGeneration += 1);
+      // One context serves every read; a context the browser suspended while
+      // idle has to be resumed before the reused source starts.
+      await context.resume().catch(() => undefined);
+      // Stop, a new clip, or a close arrived while the context was resuming.
+      if (attempt !== playGeneration) return;
       if (offset >= buffer.duration) offset = 0;
       source = context.createBufferSource();
       source.buffer = buffer;
@@ -143,20 +182,11 @@ export function browserRecapAudio(): RecapAudio {
       }, 100);
     },
     pause() {
+      playGeneration += 1;
       if (!playing) return;
       const at = elapsed();
-      playing = false;
       offset = Math.min(buffer?.duration ?? 0, Math.max(0, at));
-      stopTimer();
-      if (source) {
-        source.onended = null;
-        try {
-          source.stop();
-        } catch {
-          /* already stopped */
-        }
-        source = null;
-      }
+      stopSource();
     },
     get currentTime() {
       return Math.min(buffer?.duration ?? 0, Math.max(0, elapsed()));
@@ -170,6 +200,12 @@ export function browserRecapAudio(): RecapAudio {
     removeEventListener(type, handler) {
       listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== handler));
     },
+    close() {
+      playGeneration += 1;
+      loadGeneration += 1;
+      stopSource();
+      void context.close().catch(() => undefined);
+    },
   };
 }
 
@@ -177,6 +213,10 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
   let snapshot: RecapSpeechSnapshot = IDLE_RECAP_SPEECH;
   let weights: number[] = [];
   let audio: RecapAudio | null = null;
+  /** The listeners this read registered on the shared adapter. A reused
+   * adapter keeps its listeners unless the read that added them removes them,
+   * and one clock tick would then publish once per completed read. */
+  let detach: (() => void) | null = null;
   /** Guards a slow clip arriving after the read was stopped. */
   let token = 0;
   let slowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -194,10 +234,12 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
 
   const release = () => {
     clearSlow();
-    if (audio) {
-      audio.pause();
-      audio = null;
-    }
+    detach?.();
+    detach = null;
+    // Keep the context for the next read. Browsers cap live contexts, and a
+    // fresh one per press leaked one every time; the web player already keeps
+    // a single context for the same reason.
+    audio?.pause();
   };
 
   const stop = () => {
@@ -228,12 +270,21 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     slowTimer = setTimeout(() => {
       if (mine === token && snapshot.status === "loading") publish({ slow: true });
     }, RECAP_SLOW_AFTER_MS);
-    // Inside the press: the player opens its audio context here, so the clip can
-    // start later without the browser asking for another gesture.
-    try {
-      audio = deps.createAudio();
-    } catch {
-      /* The load below reports the failure. */
+    // Inside the press, on the first read: the player opens its audio context
+    // here, so the clip can start later without the browser asking for another
+    // gesture. Later reads reuse it instead of opening another one. A device
+    // that cannot be opened fails here, not after a fetch we cannot play.
+    let element = audio;
+    if (!element) {
+      try {
+        element = deps.createAudio();
+        audio = element;
+      } catch {
+        release();
+        publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+        deps.onFailure(UNAVAILABLE);
+        return;
+      }
     }
     let clip: Awaited<ReturnType<RecapSpeechPlayerDeps["fetchClip"]>>;
     try {
@@ -249,8 +300,6 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     if (clip.stale) deps.onStaleCard(input.intervalId);
     weights = lineWeights(clip.lines);
 
-    const element = audio ?? deps.createAudio();
-    audio = element;
     try {
       await element.load(clip.bytes, clip.mimeType);
     } catch {
@@ -262,8 +311,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     }
     if (mine !== token) return;
 
-    element.addEventListener("timeupdate", onTick);
-    element.addEventListener("ended", () => {
+    const onEnded = () => {
       if (mine !== token) return;
       // The read is over, so the words stay on screen and the bubble asks for
       // the decision the employee pressed Listen to make — confirming a recap
@@ -272,13 +320,21 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
       weights = [];
       release();
       publish({ status: "finished", progress: 1, activeIndex: Math.max(0, clip.lines.length - 1), lines: clip.lines, revision: clip.revision, intervalId: input.intervalId });
-    });
-    element.addEventListener("error", () => {
+    };
+    const onError = () => {
       if (mine !== token) return;
       release();
       publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure(UNAVAILABLE);
-    });
+    };
+    element.addEventListener("timeupdate", onTick);
+    element.addEventListener("ended", onEnded);
+    element.addEventListener("error", onError);
+    detach = () => {
+      element.removeEventListener("timeupdate", onTick);
+      element.removeEventListener("ended", onEnded);
+      element.removeEventListener("error", onError);
+    };
     clearSlow();
     publish({ status: "playing", lines: clip.lines, revision: clip.revision, intervalId: input.intervalId, progress: 0, activeIndex: 0, slow: false });
     try {
@@ -313,6 +369,8 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     stop,
     dispose() {
       stop();
+      audio?.close?.();
+      audio = null;
     },
   };
 }

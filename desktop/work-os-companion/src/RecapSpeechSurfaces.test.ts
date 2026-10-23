@@ -35,7 +35,7 @@ describe("the recap read is offered wherever a recap is", () => {
   it("opens the player inside the press, before the clip is awaited", () => {
     const player = read("./recapSpeechPlayer.ts");
     const start = player.indexOf("const start = async");
-    const open = player.indexOf("audio = deps.createAudio();", start);
+    const open = player.indexOf("element = deps.createAudio();", start);
     const fetch = player.indexOf("await deps.fetchClip(input);", start);
     expect(open).toBeGreaterThan(start);
     expect(open).toBeLessThan(fetch);
