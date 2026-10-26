@@ -47,6 +47,13 @@ test("completion evidence rejects empty, oversized, and unsupported uploads", ()
   }), /characters or fewer/);
 });
 
+test("byte validation identifies oversized evidence with the size error code", () => {
+  assert.throws(
+    () => assertCompletionEvidenceBytes(new Uint8Array(COMPLETION_EVIDENCE_MAX_BYTES + 1), "text/plain"),
+    (error: unknown) => error instanceof CompletionEvidenceError && error.code === "file_too_large",
+  );
+});
+
 test("generic browser types fall back to the file name, while a real type wins", () => {
   assert.equal(validateCompletionEvidenceUpload({ contentType: "", fileName: "notes.md", size: 4 }).contentType, "text/markdown");
   assert.equal(validateCompletionEvidenceUpload({ contentType: "application/octet-stream", fileName: "rows.csv", size: 4 }).contentType, "text/csv");

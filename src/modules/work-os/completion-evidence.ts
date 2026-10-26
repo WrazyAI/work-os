@@ -216,7 +216,7 @@ function hasZipSignature(bytes: Uint8Array, allowEmpty: boolean) {
 export function assertCompletionEvidenceBytes(bytes: Uint8Array, contentType: string) {
   if (!bytes.length) throw new CompletionEvidenceError("The evidence file must not be empty");
   if (bytes.byteLength > COMPLETION_EVIDENCE_MAX_BYTES) {
-    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
+    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller", "file_too_large");
   }
   if (contentType === "image/png" && !startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
     throw new CompletionEvidenceError("The selected file does not look like a PNG image", "unsupported_file_type");
