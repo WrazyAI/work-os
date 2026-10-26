@@ -184,9 +184,16 @@ const result = await client.callTool({ name: "list_tasks", arguments: {} });
 Write tools are idempotent. `create_task`, `log_progress`, and
 `attach_evidence` accept an optional `idempotency_key`; when omitted, the
 server derives a stable key from the tool and its arguments, so identical
-create calls return the same task. Tool failures come back as
+create calls return the same task. Reusing an explicit key with different
+arguments returns `idempotency_conflict`. Tool failures come back as
 `isError: true` with `{ error, code }`; a rate-limited result includes
 `retry_after`. A revoked or expired token fails the connection with `401`.
+
+Rate limits are 120 requests and 20 writes per minute per token. POSTs must
+send `Accept: application/json, text/event-stream` and
+`Content-Type: application/json`. Evidence is standard padded base64;
+`attach_evidence` returns `task: null` when `complete` is false. Passing
+`complete=true` also requires the `tasks:write` scope.
 
 `/api/mcp` is excluded from the cookie-session proxy's body buffer because a
 base64 8 MB evidence file exceeds the 10 MB proxy limit; the route validates

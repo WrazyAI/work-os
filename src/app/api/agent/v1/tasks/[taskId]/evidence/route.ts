@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { agentError, agentRouteError, requireAgentAccess } from "@/lib/work-agent-auth";
+import { agentError, agentRouteError, hasAgentScope, requireAgentAccess } from "@/lib/work-agent-auth";
 import { agentRequestHash, withAgentIdempotency } from "@/lib/work-agent-idempotency";
 import { assertAgentRateLimit } from "@/lib/work-agent-rate-limit";
 import { completeAgentTask } from "@/lib/work-agent-tasks";
@@ -37,6 +37,9 @@ export async function POST(req: Request, context: { params: Promise<{ taskId: st
     if (!key) return agentError("validation_error", "Idempotency-Key is required", 400);
     const note = form.get("note");
     const complete = form.get("complete") !== "false";
+    if (complete && !hasAgentScope(auth.agent.scopes, "tasks:write")) {
+      return agentError("insufficient_scope", "Completing a task also requires the tasks:write scope", 403);
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.byteLength !== file.size) {
       return agentError("validation_error", "The evidence file could not be read completely", 400);

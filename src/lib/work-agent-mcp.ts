@@ -6,7 +6,7 @@ import {
   hasAgentScope,
   type AgentAccess,
 } from "@/lib/work-agent-auth";
-import { agentRequestHash } from "@/lib/work-agent-idempotency";
+import { agentRequestHash, withAgentIdempotency } from "@/lib/work-agent-idempotency";
 import { AgentRateLimitError, assertAgentRateLimit } from "@/lib/work-agent-rate-limit";
 import type { AgentScope } from "@/lib/work-agent-tokens";
 import { addAgentProgress, completeAgentTask, createAgentTask, getAgentTask, listAgentTasks, updateAgentTask } from "@/lib/work-agent-tasks";
@@ -55,6 +55,8 @@ const defaultServices: AgentMcpServices = {
   },
 };
 
+export type AgentMcpIdempotency = typeof withAgentIdempotency;
+
 export function agentMcpIdempotencyKey(tool: string, input: unknown): string {
   return `mcp:${tool}:${agentRequestHash("MCP", tool, input)}`;
 }
@@ -62,12 +64,18 @@ export function agentMcpIdempotencyKey(tool: string, input: unknown): string {
 /** Base64 is the transport for one evidence file. The canonical alphabet check
  * keeps malformed input from being silently decoded to a shorter file. */
 export function decodeEvidenceBase64(value: string): Uint8Array {
-  const trimmed = typeof value === "string" ? value.trim() : "";
-  if (!trimmed) throw new WorkOsValidationError("content_base64 is required");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed) || trimmed.length % 4 !== 0) {
+  // Standard library encoders wrap base64 at 76 columns; whitespace is not
+  // payload. Normalize before the alphabet check and bound the encoded length
+  // before allocating the decoded buffer.
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, "") : "";
+  if (!normalized) throw new WorkOsValidationError("content_base64 is required");
+  if (normalized.length > 4 * Math.ceil(COMPLETION_EVIDENCE_MAX_BYTES / 3)) {
+    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) || normalized.length % 4 !== 0) {
     throw new WorkOsValidationError("content_base64 must be valid base64");
   }
-  const bytes = Buffer.from(trimmed, "base64");
+  const bytes = Buffer.from(normalized, "base64");
   if (!bytes.length) throw new WorkOsValidationError("The evidence file must not be empty");
   if (bytes.length > COMPLETION_EVIDENCE_MAX_BYTES) {
     throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
@@ -123,7 +131,7 @@ async function runTool(
   }
 }
 
-export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServices = defaultServices): McpServer {
+export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServices = defaultServices, idempotency: AgentMcpIdempotency = withAgentIdempotency): McpServer {
   const server = new McpServer({ name: "work-os-agent", version: "1.0.0" });
 
   server.registerTool("list_tasks", {
@@ -137,6 +145,9 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
     },
     annotations: { readOnlyHint: true },
   }, async (args) => runTool(agent, "tasks:read", false, async () => {
+    if (args.updated_since && Number.isNaN(new Date(args.updated_since).getTime())) {
+      throw new WorkOsValidationError("updated_since must be an ISO timestamp");
+    }
     const page = await services.listTasks(agent, {
       updatedSince: args.updated_since ?? null,
       includeArchived: args.include_archived === true,
@@ -174,7 +185,13 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   }, async (args) => runTool(agent, "tasks:write", true, async () => {
     const { idempotency_key, ...body } = args;
     const key = idempotency_key ?? agentMcpIdempotencyKey("create_task", body);
-    return mcpToolResult({ task: await services.createTask(agent, body as Json, key) });
+    const outcome = await idempotency({
+      agent,
+      key,
+      requestHash: agentRequestHash("MCP", "create_task", body),
+      handler: async () => ({ status: 200, body: { task: await services.createTask(agent, body as Json, key) } }),
+    });
+    return mcpToolResult(outcome.body);
   }));
 
   server.registerTool("update_task", {
@@ -213,7 +230,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
     description: "Append a progress note as employee-authored evidence on a task. Requires progress:write. A note is context, never completion proof.",
     inputSchema: {
       task_id: z.string().min(1),
-      summary: z.string().min(1).max(2_000),
+      summary: z.string().trim().min(1).max(2_000),
       title: z.string().max(240).optional(),
       url: z.string().optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
@@ -221,7 +238,13 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   }, async (args) => runTool(agent, "progress:write", true, async () => {
     const { task_id, idempotency_key, ...body } = args;
     const key = idempotency_key ?? agentMcpIdempotencyKey("log_progress", { task_id, ...body });
-    return mcpToolResult({ evidence: await services.addProgress(agent, task_id, body as Json, key) });
+    const outcome = await idempotency({
+      agent,
+      key,
+      requestHash: agentRequestHash("MCP", "log_progress", { task_id, ...body }),
+      handler: async () => ({ status: 200, body: { evidence: await services.addProgress(agent, task_id, body as Json, key) } }),
+    });
+    return mcpToolResult(outcome.body);
   }));
 
   server.registerTool("attach_evidence", {
@@ -236,31 +259,52 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       complete: z.boolean().optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
     },
-  }, async (args) => runTool(agent, "evidence:write", true, async () => {
-    const bytes = decodeEvidenceBase64(args.content_base64);
-    const { task_id, file_name, content_type, content_base64, note, complete, idempotency_key } = args;
-    const key = idempotency_key ?? agentMcpIdempotencyKey("attach_evidence", {
-      task_id,
-      file_name,
-      content_type,
-      content_base64,
-      note: note ?? "",
-    });
-    const attached = await services.attachEvidence(agent, task_id, {
-      fileName: file_name,
-      contentType: content_type,
-      bytes,
-      note: note ?? "",
-    }, key);
-    if (!complete) return mcpToolResult({ evidence: attached.evidence, task: null });
-    try {
-      const completed = await services.completeTask(agent, task_id);
-      return mcpToolResult({ ...completed, evidence: attached.evidence });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "The task could not be marked complete";
-      return mcpToolError("internal_error", `Evidence saved. ${message}`, { evidence: attached.evidence });
+  }, async (args) => {
+    if (args.complete === true && !hasAgentScope(agent.scopes, "tasks:write")) {
+      return mcpToolError("insufficient_scope", "Completing a task also requires the tasks:write scope");
     }
-  }));
+    return runTool(agent, "evidence:write", true, async () => {
+      const bytes = decodeEvidenceBase64(args.content_base64);
+      const { task_id, file_name, content_type, content_base64, note, complete, idempotency_key } = args;
+      const key = idempotency_key ?? agentMcpIdempotencyKey("attach_evidence", {
+        task_id,
+        file_name,
+        content_type,
+        content_base64,
+        note: note ?? "",
+      });
+      const outcome = await idempotency({
+        agent,
+        key,
+        requestHash: agentRequestHash("MCP", "attach_evidence", {
+          task_id,
+          file_name,
+          content_type,
+          content_base64,
+          note: note ?? "",
+        }),
+        handler: async () => ({
+          status: 201,
+          body: await services.attachEvidence(agent, task_id, {
+            fileName: file_name,
+            contentType: content_type,
+            bytes,
+            note: note ?? "",
+          }, key),
+        }),
+      });
+      const attached = outcome.body as { evidence: Json };
+      if (!complete) return mcpToolResult({ evidence: attached.evidence, task: null });
+      assertAgentRateLimit(agent.tokenId, true);
+      try {
+        const completed = await services.completeTask(agent, task_id);
+        return mcpToolResult({ ...completed, evidence: attached.evidence });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The task could not be marked complete";
+        return mcpToolError("internal_error", `Evidence saved. ${message}`, { evidence: attached.evidence });
+      }
+    });
+  });
 
   return server;
 }

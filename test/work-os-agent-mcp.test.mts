@@ -10,6 +10,7 @@ import {
   agentMcpIdempotencyKey,
   createAgentMcpServer,
   decodeEvidenceBase64,
+  type AgentMcpIdempotency,
   type AgentMcpServices,
 } from "../src/lib/work-agent-mcp";
 import type { AgentScope } from "../src/lib/work-agent-tokens";
@@ -55,7 +56,11 @@ function fakeServices() {
 
 async function connectTestMcp(agent: AgentAccess) {
   const { calls, services } = fakeServices();
-  const server = createAgentMcpServer(agent, services);
+  const idempotency = (async (input: { handler: () => Promise<{ status: number; body: unknown }> }) => ({
+    ...(await input.handler()),
+    replayed: false,
+  })) as AgentMcpIdempotency;
+  const server = createAgentMcpServer(agent, services, idempotency);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "work-os-mcp-test", version: "1.0.0" });
@@ -158,6 +163,49 @@ test("the MCP route authenticates the bearer and uses the stateless web transpor
 
 test("the proxy leaves the MCP body unbuffered", async () => {
   const proxy = await read("src/proxy.ts");
-  assert.match(proxy, /api\/mcp/);
+  assert.match(proxy, /\|api\/mcp\|/);
   assert.match(proxy, /api\/downloads/);
+});
+
+test("attach_evidence with complete requires tasks:write and saves nothing without it", async () => {
+  const { client, calls, close } = await connectTestMcp(agentWith(["evidence:write"]));
+  const result = await client.callTool({
+    name: "attach_evidence",
+    arguments: {
+      task_id: "task-1",
+      file_name: "screen.png",
+      content_type: "image/png",
+      content_base64: png.toString("base64"),
+      complete: true,
+    },
+  });
+  assert.equal(result.isError, true);
+  assert.equal(JSON.parse(textOf(result)).code, "insufficient_scope");
+  assert.equal(calls.attachBytes.length, 0, "the scope check runs before the evidence service");
+  await close();
+});
+
+test("line-wrapped base64 is accepted", () => {
+  const wrapped = png.toString("base64").replace(/(.{8})/g, "$1\n");
+  assert.deepEqual(decodeEvidenceBase64(wrapped), new Uint8Array(png));
+});
+
+test("an invalid updated_since is a validation error", async () => {
+  const { client, close } = await connectTestMcp(agentWith(["tasks:read"]));
+  const result = await client.callTool({ name: "list_tasks", arguments: { updated_since: "not-a-date" } });
+  assert.equal(result.isError, true);
+  assert.equal(JSON.parse(textOf(result)).code, "validation_error");
+  await close();
+});
+
+test("the REST evidence completion gate also requires tasks:write", async () => {
+  const rest = await read("src/app/api/agent/v1/tasks/[taskId]/evidence/route.ts");
+  assert.match(rest, /hasAgentScope\(auth\.agent\.scopes, "tasks:write"\)/);
+});
+
+test("the MCP route has a body cap in place of the proxy buffer", async () => {
+  const route = await read("src/app/api/mcp/route.ts");
+  assert.match(route, /content-length/i);
+  assert.match(route, /MAX_BODY_BYTES/);
+  assert.match(route, /413/);
 });
