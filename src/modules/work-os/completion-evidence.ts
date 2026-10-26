@@ -55,10 +55,14 @@ export const COMPLETION_EVIDENCE_ALLOWED_TYPES = Object.keys(EXTENSIONS);
 
 export type CompletionEvidencePreviewKind = "image" | "pdf" | "text" | "markdown" | "spreadsheet" | "word" | "archive" | "unsupported";
 
+export type CompletionEvidenceErrorCode = "validation_error" | "file_too_large" | "unsupported_file_type";
+
 export class CompletionEvidenceError extends Error {
-  constructor(message: string) {
+  code: CompletionEvidenceErrorCode;
+  constructor(message: string, code: CompletionEvidenceErrorCode = "validation_error") {
     super(message);
     this.name = "CompletionEvidenceError";
+    this.code = code;
   }
 }
 
@@ -143,7 +147,7 @@ export function resolveCompletionEvidenceType(contentType: unknown, fileName: un
 
 export function completionEvidenceExtension(contentType: unknown): string {
   const type = normalizeCompletionEvidenceType(contentType);
-  if (!type) throw new CompletionEvidenceError("Completion evidence must be a supported file type");
+  if (!type) throw new CompletionEvidenceError("Completion evidence must be a supported file type", "unsupported_file_type");
   return EXTENSIONS[type]!;
 }
 
@@ -168,14 +172,14 @@ export function validateCompletionEvidenceUpload(input: {
 }) {
   const contentType = resolveCompletionEvidenceType(input.contentType, input.fileName);
   if (!contentType) {
-    throw new CompletionEvidenceError("Completion evidence must be a PNG, JPEG, WebP, PDF, Word, text, Markdown, CSV, ZIP, or 7Z file");
+    throw new CompletionEvidenceError("Completion evidence must be a PNG, JPEG, WebP, PDF, Word, text, Markdown, CSV, ZIP, or 7Z file", "unsupported_file_type");
   }
   const size = input.size;
   if (typeof size !== "number" || !Number.isInteger(size) || size <= 0) {
     throw new CompletionEvidenceError("The evidence file must not be empty");
   }
   if (size > COMPLETION_EVIDENCE_MAX_BYTES) {
-    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
+    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller", "file_too_large");
   }
   const note = typeof input.note === "string" ? input.note.trim() : "";
   if (note.length > COMPLETION_EVIDENCE_MAX_NOTE) {
@@ -215,40 +219,40 @@ export function assertCompletionEvidenceBytes(bytes: Uint8Array, contentType: st
     throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
   }
   if (contentType === "image/png" && !startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
-    throw new CompletionEvidenceError("The selected file does not look like a PNG image");
+    throw new CompletionEvidenceError("The selected file does not look like a PNG image", "unsupported_file_type");
   }
   if (contentType === "image/jpeg" && !startsWith(bytes, [0xff, 0xd8, 0xff])) {
-    throw new CompletionEvidenceError("The selected file does not look like a JPEG image");
+    throw new CompletionEvidenceError("The selected file does not look like a JPEG image", "unsupported_file_type");
   }
   if (contentType === "image/webp") {
     const riff = startsWith(bytes, [0x52, 0x49, 0x46, 0x46]);
     const webp = bytes.length >= 12 && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
-    if (!riff || !webp) throw new CompletionEvidenceError("The selected file does not look like a WebP image");
+    if (!riff || !webp) throw new CompletionEvidenceError("The selected file does not look like a WebP image", "unsupported_file_type");
   }
   if (contentType === "application/pdf" && !startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
-    throw new CompletionEvidenceError("The selected file does not look like a PDF");
+    throw new CompletionEvidenceError("The selected file does not look like a PDF", "unsupported_file_type");
   }
   if (contentType === "application/msword"
     && !startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) {
-    throw new CompletionEvidenceError("The selected file does not look like a Word .doc document");
+    throw new CompletionEvidenceError("The selected file does not look like a Word .doc document", "unsupported_file_type");
   }
   if (contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     && !hasZipSignature(bytes, false)) {
-    throw new CompletionEvidenceError("The selected file does not look like a Word .docx document");
+    throw new CompletionEvidenceError("The selected file does not look like a Word .docx document", "unsupported_file_type");
   }
   if (contentType === "application/zip" && !hasZipSignature(bytes, true)) {
-    throw new CompletionEvidenceError("The selected file does not look like a ZIP archive");
+    throw new CompletionEvidenceError("The selected file does not look like a ZIP archive", "unsupported_file_type");
   }
   if (contentType === "application/x-7z-compressed"
     && !startsWith(bytes, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) {
-    throw new CompletionEvidenceError("The selected file does not look like a 7Z archive");
+    throw new CompletionEvidenceError("The selected file does not look like a 7Z archive", "unsupported_file_type");
   }
   if (contentType.startsWith("text/")) {
-    if (bytes.includes(0)) throw new CompletionEvidenceError("The selected text file contains binary data");
+    if (bytes.includes(0)) throw new CompletionEvidenceError("The selected text file contains binary data", "unsupported_file_type");
     try {
       new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     } catch {
-      throw new CompletionEvidenceError("The selected text file must be UTF-8 encoded");
+      throw new CompletionEvidenceError("The selected text file must be UTF-8 encoded", "unsupported_file_type");
     }
   }
 }

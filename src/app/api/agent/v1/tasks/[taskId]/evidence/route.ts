@@ -11,8 +11,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function evidenceError(error: CompletionEvidenceError) {
-  if (/8 MB|size|smaller/i.test(error.message)) return agentError("file_too_large", error.message, 413);
-  if (/PNG|JPEG|WebP|PDF|type/i.test(error.message)) return agentError("unsupported_file_type", error.message, 415);
+  if (error.code === "file_too_large") return agentError("file_too_large", error.message, 413);
+  if (error.code === "unsupported_file_type") return agentError("unsupported_file_type", error.message, 415);
   return agentError("validation_error", error.message, 400);
 }
 

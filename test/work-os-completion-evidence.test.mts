@@ -222,3 +222,18 @@ test("the evidence route and server path keep their truthful contract", async ()
   assert.match(adminEvidence, /from\("work_evidence"\)/);
   assert.match(eod, /source !== "worktivity"/);
 });
+
+test("completion evidence errors carry actionable codes", () => {
+  assert.throws(
+    () => validateCompletionEvidenceUpload({ contentType: "image/png", fileName: "a.png", size: COMPLETION_EVIDENCE_MAX_BYTES + 1 }),
+    (error) => error instanceof CompletionEvidenceError && error.code === "file_too_large",
+  );
+  assert.throws(
+    () => validateCompletionEvidenceUpload({ contentType: "text/html", fileName: "a.html", size: 4 }),
+    (error) => error instanceof CompletionEvidenceError && error.code === "unsupported_file_type",
+  );
+  assert.throws(
+    () => assertCompletionEvidenceBytes(new TextEncoder().encode("not a png"), "image/png"),
+    (error) => error instanceof CompletionEvidenceError && error.code === "unsupported_file_type",
+  );
+});
