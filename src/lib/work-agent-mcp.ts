@@ -70,7 +70,7 @@ export function decodeEvidenceBase64(value: string): Uint8Array {
   const normalized = typeof value === "string" ? value.replace(/\s+/g, "") : "";
   if (!normalized) throw new WorkOsValidationError("content_base64 is required");
   if (normalized.length > 4 * Math.ceil(COMPLETION_EVIDENCE_MAX_BYTES / 3)) {
-    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
+    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller", "file_too_large");
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) || normalized.length % 4 !== 0) {
     throw new WorkOsValidationError("content_base64 must be valid base64");
@@ -78,7 +78,7 @@ export function decodeEvidenceBase64(value: string): Uint8Array {
   const bytes = Buffer.from(normalized, "base64");
   if (!bytes.length) throw new WorkOsValidationError("The evidence file must not be empty");
   if (bytes.length > COMPLETION_EVIDENCE_MAX_BYTES) {
-    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller");
+    throw new CompletionEvidenceError("The evidence file must be 8 MB or smaller", "file_too_large");
   }
   return new Uint8Array(bytes);
 }
@@ -142,12 +142,12 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("list_tasks", {
     title: "List tasks",
     description: "List the tasks assigned to the token's person. Requires tasks:read. Use updated_since for the change feed and include_archived for tombstones.",
-    inputSchema: {
+    inputSchema: strictShape({
       updated_since: z.string().optional().describe("ISO timestamp; switches to ascending row-change order"),
       include_archived: z.boolean().optional().describe("Include archived and deleted tasks"),
       limit: z.number().int().min(1).max(100).optional(),
       cursor: z.string().optional(),
-    },
+    }),
     annotations: { readOnlyHint: true },
   }, async (args) => runTool(agent, "tasks:read", false, async () => {
     if (args.updated_since && Number.isNaN(new Date(args.updated_since).getTime())) {
@@ -165,7 +165,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("get_task", {
     title: "Get a task",
     description: "Read one task with its subtasks, completion evidence, and blockers. Requires tasks:read.",
-    inputSchema: { task_id: z.string().min(1) },
+    inputSchema: strictShape({ task_id: z.string().min(1) }),
     annotations: { readOnlyHint: true },
   }, async (args) => runTool(agent, "tasks:read", false, async () => (
     mcpToolResult(await services.getTask(agent, args.task_id))
@@ -224,7 +224,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("complete_task", {
     title: "Complete a task",
     description: "Complete a task. Requires tasks:write. Tasks with an expected outcome or definition of done still need completion evidence.",
-    inputSchema: { task_id: z.string().min(1) },
+    inputSchema: strictShape({ task_id: z.string().min(1) }),
     annotations: { idempotentHint: true },
   }, async (args) => runTool(agent, "tasks:write", true, async () => (
     mcpToolResult(await services.completeTask(agent, args.task_id))

@@ -252,3 +252,32 @@ test("evidence error codes are explicit", async () => {
   const validation = await mcpToolErrorFrom(new CompletionEvidenceError("bad"));
   assert.equal(JSON.parse(textOf(validation)).code, "validation_error");
 });
+
+test("oversized base64 reports file_too_large through the tool", async () => {
+  const { client, calls, close } = await connectTestMcp(agentWith(["evidence:write"]));
+  try {
+    for (const size of [8 * 1024 * 1024 + 1, 8 * 1024 * 1024 + 2]) {
+      const result = await client.callTool({ name: "attach_evidence", arguments: {
+        task_id: "task-1", file_name: "large.txt", content_type: "text/plain",
+        content_base64: Buffer.alloc(size).toString("base64"),
+      } });
+      assert.equal(result.isError, true);
+      assert.equal(JSON.parse(textOf(result)).code, "file_too_large");
+    }
+    assert.equal(calls.attachBytes.length, 0);
+  } finally { await close(); }
+});
+
+test("unknown arguments are rejected for list, get, and completion", async () => {
+  const { client, close } = await connectTestMcp(agentWith(["tasks:read", "tasks:write"]));
+  try {
+    for (const [name, args] of [
+      ["list_tasks", { typo: true }],
+      ["get_task", { task_id: "task-1", typo: true }],
+      ["complete_task", { task_id: "task-1", typo: true }],
+    ] as const) {
+      const result = await client.callTool({ name, arguments: args });
+      assert.equal(result.isError, true, `${name} must reject unknown arguments`);
+    }
+  } finally { await close(); }
+});
