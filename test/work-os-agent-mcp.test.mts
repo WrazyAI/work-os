@@ -10,10 +10,12 @@ import {
   agentMcpIdempotencyKey,
   createAgentMcpServer,
   decodeEvidenceBase64,
+  mcpToolErrorFrom,
   type AgentMcpIdempotency,
   type AgentMcpServices,
 } from "../src/lib/work-agent-mcp";
 import type { AgentScope } from "../src/lib/work-agent-tokens";
+import { CompletionEvidenceError } from "../src/modules/work-os/completion-evidence";
 import type { WorkOsAccess } from "../src/lib/work-os-api";
 
 const png = Buffer.from("89504e470d0a1a0a", "hex");
@@ -44,7 +46,16 @@ function fakeServices() {
     },
     updateTask: async () => ({ id: "task-1" }),
     completeTask: async () => ({ task: { id: "task-1", completed: true } }),
-    addProgress: async () => ({ id: "evidence-1" }),
+    addProgress: async () => ({
+      id: "evidence-1",
+      title: "Progress note",
+      summary: "A note",
+      source: "agent",
+      created_at: "2026-10-26T00:00:00Z",
+      user_id: "secret-user",
+      raw: { secret: "must-not-leak" },
+      metrics: { agentTokenId: "secret-token" },
+    }),
     attachEvidence: async (_agent, _taskId, input, key) => {
       calls.attachKeys.push(key);
       calls.attachBytes.push(input.bytes.byteLength);
@@ -208,4 +219,36 @@ test("the MCP route has a body cap in place of the proxy buffer", async () => {
   assert.match(route, /content-length/i);
   assert.match(route, /MAX_BODY_BYTES/);
   assert.match(route, /413/);
+  assert.match(route, /Allow: "POST"/);
+});
+
+test("unknown create arguments are rejected, not stripped", async () => {
+  const { client, calls, close } = await connectTestMcp(agentWith(["tasks:write"]));
+  const result = await client.callTool({ name: "create_task", arguments: { name: "Strict", assignee: "p2" } });
+  assert.equal(result.isError, true);
+  assert.match(textOf(result), /invalid|unrecognized|validation/i);
+  assert.equal(calls.createKeys.length, 0, "the handler never runs");
+  await close();
+});
+
+test("log_progress returns a sanitized evidence record", async () => {
+  const { client, close } = await connectTestMcp(agentWith(["progress:write"]));
+  const result = await client.callTool({ name: "log_progress", arguments: { task_id: "task-1", summary: "Note" } });
+  assert.equal(result.isError, undefined);
+  const evidence = JSON.parse(textOf(result)).evidence;
+  assert.equal(evidence.id, "evidence-1");
+  assert.equal(evidence.title, "Progress note");
+  assert.equal(evidence.user_id, undefined);
+  assert.equal(evidence.raw, undefined);
+  assert.equal(evidence.metrics, undefined);
+  await close();
+});
+
+test("evidence error codes are explicit", async () => {
+  const large = await mcpToolErrorFrom(new CompletionEvidenceError("too large", "file_too_large"));
+  assert.equal(JSON.parse(textOf(large)).code, "file_too_large");
+  const type = await mcpToolErrorFrom(new CompletionEvidenceError("bad type", "unsupported_file_type"));
+  assert.equal(JSON.parse(textOf(type)).code, "unsupported_file_type");
+  const validation = await mcpToolErrorFrom(new CompletionEvidenceError("bad"));
+  assert.equal(JSON.parse(textOf(validation)).code, "validation_error");
 });

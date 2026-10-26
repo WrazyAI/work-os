@@ -100,12 +100,11 @@ export async function mcpToolErrorFrom(error: unknown): Promise<CallToolResult> 
   if (error instanceof AgentRateLimitError) {
     return mcpToolError("rate_limited", error.message, { retry_after: error.retryAfter });
   }
-  if (error instanceof CompletionEvidenceError) {
-    if (/8 MB|size|smaller/i.test(error.message)) return mcpToolError("file_too_large", error.message);
-    if (/PNG|JPEG|WebP|PDF|Word|ZIP|7Z|type/i.test(error.message)) {
-      return mcpToolError("unsupported_file_type", error.message);
-    }
-    return mcpToolError("validation_error", error.message);
+  // Module identity can differ between an aliased import and a relative one;
+  // the class name keeps the code mapping stable across both.
+  if (error instanceof CompletionEvidenceError || (error instanceof Error && error.name === "CompletionEvidenceError")) {
+    const code = String((error as { code?: unknown }).code ?? "validation_error");
+    return mcpToolError(code, error.message);
   }
   const response = agentRouteError(error);
   return {
@@ -129,6 +128,12 @@ async function runTool(
   } catch (error) {
     return mcpToolErrorFrom(error);
   }
+}
+
+/** Agent tool input is strict: a typo in an argument is an error, not a
+ * silently dropped field. */
+function strictShape<T extends Record<string, z.ZodType>>(shape: T) {
+  return z.object(shape).strict();
 }
 
 export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServices = defaultServices, idempotency: AgentMcpIdempotency = withAgentIdempotency): McpServer {
@@ -169,7 +174,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("create_task", {
     title: "Create a task",
     description: "Create a task for the token's person. Requires tasks:write. Identical arguments reuse one idempotency key; pass idempotency_key to control retries explicitly.",
-    inputSchema: {
+    inputSchema: strictShape({
       name: z.string().min(1).max(240),
       description: z.string().max(20_000).optional(),
       due_date: z.string().optional(),
@@ -181,7 +186,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       parent_task_id: z.string().optional(),
       project_id: z.string().optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
-    },
+    }),
   }, async (args) => runTool(agent, "tasks:write", true, async () => {
     const { idempotency_key, ...body } = args;
     const key = idempotency_key ?? agentMcpIdempotencyKey("create_task", body);
@@ -197,7 +202,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("update_task", {
     title: "Update a task",
     description: "Update task content, labels, or blockers. Requires tasks:write. Project and parent moves are not supported.",
-    inputSchema: {
+    inputSchema: strictShape({
       task_id: z.string().min(1),
       name: z.string().min(1).max(240).optional(),
       description: z.string().max(20_000).optional(),
@@ -210,7 +215,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       definition_of_done: z.string().optional(),
       blocked: z.boolean().optional(),
       blocked_reason: z.string().optional(),
-    },
+    }),
   }, async (args) => runTool(agent, "tasks:write", true, async () => {
     const { task_id, ...body } = args;
     return mcpToolResult({ task: await services.updateTask(agent, task_id, body as Json) });
@@ -228,13 +233,13 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
   server.registerTool("log_progress", {
     title: "Log progress",
     description: "Append a progress note as employee-authored evidence on a task. Requires progress:write. A note is context, never completion proof.",
-    inputSchema: {
+    inputSchema: strictShape({
       task_id: z.string().min(1),
       summary: z.string().trim().min(1).max(2_000),
       title: z.string().max(240).optional(),
       url: z.string().optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
-    },
+    }),
   }, async (args) => runTool(agent, "progress:write", true, async () => {
     const { task_id, idempotency_key, ...body } = args;
     const key = idempotency_key ?? agentMcpIdempotencyKey("log_progress", { task_id, ...body });
@@ -244,13 +249,22 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       requestHash: agentRequestHash("MCP", "log_progress", { task_id, ...body }),
       handler: async () => ({ status: 200, body: { evidence: await services.addProgress(agent, task_id, body as Json, key) } }),
     });
-    return mcpToolResult(outcome.body);
+    const evidence = (outcome.body as { evidence?: Json }).evidence ?? {};
+    return mcpToolResult({
+      evidence: {
+        id: evidence.id,
+        title: evidence.title,
+        summary: evidence.summary,
+        source: evidence.source,
+        createdAt: evidence.created_at,
+      },
+    });
   }));
 
   server.registerTool("attach_evidence", {
     title: "Attach completion evidence",
     description: "Attach one completion file (base64) to a task. Requires evidence:write. Max 8 MB; images, PDF, Word, text, Markdown, CSV, ZIP, and 7Z. Set complete=true to complete after saving.",
-    inputSchema: {
+    inputSchema: strictShape({
       task_id: z.string().min(1),
       file_name: z.string().min(1).max(180),
       content_type: z.string().min(1),
@@ -258,7 +272,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       note: z.string().max(1_000).optional(),
       complete: z.boolean().optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
-    },
+    }),
   }, async (args) => {
     if (args.complete === true && !hasAgentScope(agent.scopes, "tasks:write")) {
       return mcpToolError("insufficient_scope", "Completing a task also requires the tasks:write scope");
