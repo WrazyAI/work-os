@@ -121,6 +121,11 @@ export async function recordTaskDayEvent(
 const db = () => createAdminClient();
 const dateOf = (value: unknown) => dateOnly(value);
 
+export function daySortRow(task: Json, order: WorkspaceTaskOrder): Json {
+  if (order !== "due_asc" && order !== "due_desc" && order !== "status_asc" && order !== "status_desc") return task;
+  return { ...task, provider_updated_at: task.provider_created_at ?? task.created_at ?? task.provider_updated_at };
+}
+
 function cursorValue(row: DailyWorkspaceTaskRow) {
   const createdAt = Date.parse(String(row.provider_created_at ?? row.created_at ?? ""));
   return `${String(Number.isFinite(createdAt) ? createdAt : 0).padStart(16, "0")}|${row.id}`;
@@ -143,7 +148,8 @@ export function resolveTaskDayAttribution(task: Json, events: Json[], date: stri
   if (surfaced) return { reason: "surfaced" as const, event: surfaced };
   const completed = byType("completed");
   if (completed) return { reason: "completed" as const, event: completed };
-  if (dateOf(task.provider_created_at) === date) return { reason: "creation_observed" as const, event: byType("creation_observed") ?? null };
+  const creation = byType("creation_observed");
+  if (creation || dateOf(task.provider_created_at) === date) return { reason: "creation_observed" as const, event: creation ?? null };
   const carried = byType("carried");
   if (carried) return { reason: "carried" as const, event: carried };
   return null;
@@ -160,6 +166,7 @@ export function taskRangeAttributionDate(task: Json, currentDate: string) {
     return due && completedAt > due ? completedAt : due ?? completedAt;
   }
   if (due && due <= currentDate) return due;
+  if (task.dayAttribution?.reason === "creation_observed" && dateOf(task.dayAttribution.date)) return dateOf(task.dayAttribution.date);
   const providerCreated = dateOf(task.provider_created_at);
   if (providerCreated && providerCreated <= currentDate) return providerCreated;
   const created = dateOf(task.created_at);
@@ -203,7 +210,7 @@ export function projectWorkspaceDay(input: {
   carryOverGroups: DailyWorkspaceRecord["carryOverGroups"];
   sessionQuality: DailyWorkspaceRecord["sessionQuality"];
 } {
-  const { date, allTasks, attributable, events, plan, session } = input;
+  const { date, currentDate, allTasks, attributable, events, plan, session } = input;
   const eventsByTask = new Map<string, Json[]>();
   for (const event of events) {
     const list = eventsByTask.get(String(event.task_id)) ?? [];
@@ -250,6 +257,7 @@ export function projectWorkspaceDay(input: {
       ? true
       : planItem?.completion_state === "open"
         ? false
+        : date === currentDate && event?.event_type === "creation_observed" ? parent.completed === true
         : typeof event?.task_snapshot?.completed === "boolean" ? event.task_snapshot.completed : parent.completed === true;
     resolved.push({
       ...parent,
@@ -396,15 +404,15 @@ export async function resolveDailyWorkspace(
     if (options.fromDate && (!attributedDate || attributedDate < options.fromDate)) return false;
     if (options.toDate && (!attributedDate || attributedDate > options.toDate)) return false;
     return true;
-  }).sort((left, right) => compareWorkspaceTasks(left, right, order, context.currentDate));
+  }).sort((left, right) => compareWorkspaceTasks(daySortRow(left, order), daySortRow(right, order), order, context.currentDate));
   const after = parseWorkspaceTaskCursor(options.cursor, scope);
-  const afterFiltered = after ? filtered.filter((row) => compareWorkspaceTaskCursor(row, after) > 0) : filtered;
+  const afterFiltered = after ? filtered.filter((row) => compareWorkspaceTaskCursor(daySortRow(row, order), after) > 0) : filtered;
   const limit = Math.min(50, Math.max(1, options.limit ?? 50));
   const page = afterFiltered.slice(0, limit);
   // `afterFiltered` is the exact remaining set for this keyset; a row leaving
   // the filter before the cursor must not hide the rest of the pages.
   const next = afterFiltered.length > limit
-    ? createWorkspaceTaskCursor(page[page.length - 1]!, {
+    ? createWorkspaceTaskCursor(daySortRow(page[page.length - 1]!, order), {
       scope,
       order,
       sortDate: context.currentDate,

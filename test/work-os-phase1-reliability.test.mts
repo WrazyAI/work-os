@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { normalizeNiftyTask } from "../src/lib/integrations/nifty";
-import { resolveTaskDayAttribution } from "../src/lib/work-os-daily-workspace";
+import { daySortRow, projectWorkspaceDay, resolveTaskDayAttribution, taskRangeAttributionDate } from "../src/lib/work-os-daily-workspace";
+import { compareWorkspaceTasks } from "../src/lib/work-os-task-pagination";
 import { reliableElapsedSeconds } from "../src/lib/work-os-insights";
 import { canonicalNiftyEventTimestamp, niftyTaskEventIdempotencyKey } from "../src/lib/work-os";
 
@@ -33,6 +34,35 @@ test("task-day attribution follows due, surfaced, completed, creation, carry pri
   assert.equal(resolveTaskDayAttribution({}, events.slice(0, 2), date)?.reason, "completed");
   assert.equal(resolveTaskDayAttribution({ provider_created_at: `${date}T08:00:00Z` }, events.slice(0, 1), date)?.reason, "creation_observed");
   assert.equal(resolveTaskDayAttribution({}, events.slice(0, 1), date)?.reason, "carried");
+});
+
+test("local agent creation events appear in the day newest first", () => {
+  const date = "2026-10-26";
+  const older = { id: "old", title: "Older", provider_created_at: null, created_at: `${date}T08:00:00Z`, completed: false };
+  const newer = { id: "new", title: "Newer", provider_created_at: null, created_at: `${date}T09:00:00Z`, completed: false };
+  const events = [older, newer].map((task) => ({ id: `event-${task.id}`, task_id: task.id, event_type: "creation_observed", local_date: date, exact_at: task.created_at, task_snapshot: { completed: false } }));
+  const projected = projectWorkspaceDay({ date, currentDate: date, allTasks: [older, newer], attributable: [older, newer], events, plan: null, session: null });
+  assert.deepEqual(projected.tasks.map((task) => task.id), ["new", "old"]);
+  assert.equal(projected.tasks[0].dayAttribution.eventId, "event-new");
+});
+
+test("a creation snapshot does not reopen a completed task today", () => {
+  const date = "2026-10-26";
+  const task = { id: "done", title: "Done", provider_created_at: null, created_at: `${date}T08:00:00Z`, completed: true };
+  const event = { id: "created", task_id: task.id, event_type: "creation_observed", local_date: date, task_snapshot: { completed: false } };
+  const projected = projectWorkspaceDay({ date, currentDate: date, allTasks: [task], attributable: [task], events: [event], plan: null, session: null });
+  assert.equal(projected.tasks[0]?.completed, true);
+});
+
+test("day pagination orders equal due dates by creation, not later updates", () => {
+  const old = { id: "old", due_date: "2026-10-26", created_at: "2026-10-26T08:00:00Z", provider_updated_at: "2026-10-26T11:00:00Z" };
+  const recent = { id: "new", due_date: "2026-10-26", created_at: "2026-10-26T09:00:00Z", provider_updated_at: "2026-10-26T09:00:00Z" };
+  assert.ok(compareWorkspaceTasks(daySortRow(recent, "due_desc"), daySortRow(old, "due_desc"), "due_desc", "2026-10-26") < 0);
+});
+
+test("day range uses the recorded local creation day across UTC midnight", () => {
+  const task = { created_at: "2026-10-27T01:00:00Z", dayAttribution: { date: "2026-10-26", reason: "creation_observed" } };
+  assert.equal(taskRangeAttributionDate(task, "2026-10-26"), "2026-10-26");
 });
 
 test("past unclosed sessions contribute no duration", () => {

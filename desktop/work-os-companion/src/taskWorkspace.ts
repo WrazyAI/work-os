@@ -201,7 +201,19 @@ export function dayTaskGroups(tasks: TaskRow[], currentDate: string, sort: TaskS
     else later.push(task);
   }
   const canonicalOverdue = [...overdue].sort((left, right) => String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date))) || recency(right) - recency(left));
-  const within = (group: TaskRow[], canonical: TaskRow[]) => sort.key === "status" ? canonical : sortTaskList(group, sort, currentDate);
+  const within = (group: TaskRow[], canonical: TaskRow[]) => {
+    if (sort.key === "status") return [...canonical].sort((left, right) => {
+      if (dateOnly(left.due_date) !== dateOnly(right.due_date)) return compareDueDirectional(left, right, "asc");
+      return timestamp(right.provider_created_at ?? right.created_at) - timestamp(left.provider_created_at ?? left.created_at);
+    });
+    return [...group].sort((left, right) => {
+      if (sort.key === "due" && dateOnly(left.due_date) === dateOnly(right.due_date)) {
+        const created = timestamp(right.provider_created_at ?? right.created_at) - timestamp(left.provider_created_at ?? left.created_at);
+        if (created) return created;
+      }
+      return compareTaskSort(left, right, sort, currentDate);
+    });
+  };
   // This order is the entire urgency statement: the workspace renders these
   // groups as one flat row sequence with no header row for any of them (§6.2 and
   // §6.4), so overdue leading here is what keeps urgency from being buried.

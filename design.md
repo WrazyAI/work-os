@@ -677,7 +677,9 @@ sentinel loading and mounted-row window belong to live, unbounded feeds such as
 the debugger trace.
 
 The default order is due date latest-first, with open work above completed and
-undated items last. My day is assembled on the client, so its list, its view
+undated items last. Within a My day group, tasks with the same due date (or no
+due date) appear newest-created first; later updates do not move older tasks
+ahead. Explicit column sorts continue to order by their selected field. My day is assembled on the client, so its list, its view
 chip, and the agenda-strip counts all derive from the same day list (the
 canonical default order only applies where the server pages a view; a client
 view whose rows skip the active sort would make the column header lie). The

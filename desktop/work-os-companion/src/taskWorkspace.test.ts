@@ -3,6 +3,15 @@ import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
+  it("orders equally due My day tasks by creation rather than later updates", () => {
+    const date = "2026-10-26";
+    const rows = [
+      { id: "old", title: "Older", due_date: date, created_at: `${date}T08:00:00Z`, provider_updated_at: `${date}T11:00:00Z` },
+      { id: "new", title: "Newer", due_date: date, created_at: `${date}T09:00:00Z`, provider_updated_at: `${date}T09:00:00Z` },
+    ];
+    expect(dayTaskGroups(rows, date)[0].tasks.map((task) => task.id)).toEqual(["new", "old"]);
+    expect(dayTaskGroups(rows, date, { key: "status", direction: "asc" })[0].tasks.map((task) => task.id)).toEqual(["new", "old"]);
+  });
   it("suggests a deterministic goal without persisting authorship", () => {
     const result = suggestDailyGoal([
       { id: "created", title: "Document the release", provider_created_at: "2026-08-21T09:00:00Z", priority: "high", completed: false },
