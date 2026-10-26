@@ -3,6 +3,18 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { mergeAgentActivity } from "../src/lib/work-agent-activity";
 import { agentLimitParam } from "../src/lib/work-agent-params";
+import { decodeAgentTaskCursor, encodeAgentTaskCursor } from "../src/lib/work-agent-tasks";
+
+test("task cursors reject malformed values rather than restarting pagination", () => {
+  assert.equal(decodeAgentTaskCursor(null), null);
+  const valid = { order: "asc" as const, updatedAt: "2026-10-26T12:00:00.000Z", id: "b094c847-1332-4cab-9588-bdd7f8e99e7d" };
+  assert.deepEqual(decodeAgentTaskCursor(encodeAgentTaskCursor(valid)), valid);
+  const postgresTimestamp = { ...valid, updatedAt: "2026-10-26T12:00:00.123456+00:00" };
+  assert.deepEqual(decodeAgentTaskCursor(encodeAgentTaskCursor(postgresTimestamp)), postgresTimestamp);
+  for (const cursor of ["not-a-cursor", "", Buffer.from(JSON.stringify({ ...valid, id: "bad" })).toString("base64url"), Buffer.from(JSON.stringify({ ...valid, updatedAt: "invalid" })).toString("base64url"), encodeAgentTaskCursor({ ...valid, updatedAt: "2026-02-30T12:00:00.000Z" })]) {
+    assert.throws(() => decodeAgentTaskCursor(cursor), /cursor/i);
+  }
+});
 
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 

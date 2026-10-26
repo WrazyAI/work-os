@@ -16,17 +16,31 @@ export function encodeAgentTaskCursor(cursor: AgentTaskCursor): string {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
+/** PostgreSQL JSON timestamps carry a timezone and can retain microseconds. */
+function validCursorTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(value))) return false;
+  const [, year, month, day, hour, minute, second] = match;
+  const y = Number(year), m = Number(month), d = Number(day);
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return y > 0 && m >= 1 && m <= 12 && d >= 1 && d <= days[m - 1]!
+    && Number(hour) <= 23 && Number(minute) <= 59 && Number(second) <= 59;
+}
+
 export function decodeAgentTaskCursor(value: string | null | undefined): AgentTaskCursor | null {
-  if (!value) return null;
+  if (value == null) return null;
   try {
+    if (!value || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("invalid cursor");
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (parsed.order !== "asc" && parsed.order !== "desc") return null;
-    if (typeof parsed.updatedAt !== "string" || !parsed.updatedAt) return null;
-    if (typeof parsed.id !== "string" || !parsed.id) return null;
+    if (!parsed || typeof parsed !== "object") throw new Error("invalid cursor");
+    if (parsed.order !== "asc" && parsed.order !== "desc") throw new Error("invalid cursor");
+    if (!validCursorTimestamp(parsed.updatedAt)) throw new Error("invalid cursor");
+    if (typeof parsed.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.id)) throw new Error("invalid cursor");
     return { order: parsed.order, updatedAt: parsed.updatedAt, id: parsed.id };
   } catch {
-    return null;
+    throw new WorkOsValidationError("Task cursor is invalid");
   }
 }
 
