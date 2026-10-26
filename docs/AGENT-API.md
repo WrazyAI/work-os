@@ -147,3 +147,47 @@ A task with an `expected_outcome` or `definition_of_done` answers
 `409 evidence_required` until a file is attached. Attach first (optionally with
 `complete=true`); if completion fails after the upload, the `502` response
 carries the saved evidence id, so a retry only re-runs the completion.
+
+## MCP (Phase B)
+
+The same token can drive an MCP client through
+`https://app.wrazyos.com/api/mcp`. The endpoint uses **stateless Streamable
+HTTP** with JSON responses. It accepts only `POST`; `GET` and `DELETE` answer
+`405`. It is not a second auth path: the bearer token, scopes, person, evidence
+gate, rate limits, and provenance are the ones the REST surface already uses.
+
+```ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+const transport = new StreamableHTTPClientTransport(
+  new URL("https://app.wrazyos.com/api/mcp"),
+  { requestInit: { headers: { Authorization: `Bearer ${process.env.WORK_OS_AGENT_TOKEN}` } } },
+);
+const client = new Client({ name: "my-agent", version: "1.0.0" });
+await client.connect(transport);
+
+const { tools } = await client.listTools();
+const result = await client.callTool({ name: "list_tasks", arguments: {} });
+```
+
+| Tool | Scope | Behavior |
+|---|---|---|
+| `list_tasks` | `tasks:read` | Person-scoped list and change feed (`updated_since`, `include_archived`, `limit`, `cursor`). |
+| `get_task` | `tasks:read` | Task, subtasks, completion evidence, blockers. |
+| `create_task` | `tasks:write` | Create for the token's person; TASKS by default. |
+| `update_task` | `tasks:write` | Content, labels, priority, blockers. No project/parent moves. |
+| `complete_task` | `tasks:write` | Completion with the evidence gate. |
+| `log_progress` | `progress:write` | Employee-authored progress note; never completion proof. |
+| `attach_evidence` | `evidence:write` | One base64 file, 8 MB max. `complete` defaults to `false`. |
+
+Write tools are idempotent. `create_task`, `log_progress`, and
+`attach_evidence` accept an optional `idempotency_key`; when omitted, the
+server derives a stable key from the tool and its arguments, so identical
+create calls return the same task. Tool failures come back as
+`isError: true` with `{ error, code }`; a rate-limited result includes
+`retry_after`. A revoked or expired token fails the connection with `401`.
+
+`/api/mcp` is excluded from the cookie-session proxy's body buffer because a
+base64 8 MB evidence file exceeds the 10 MB proxy limit; the route validates
+its own bearer token.

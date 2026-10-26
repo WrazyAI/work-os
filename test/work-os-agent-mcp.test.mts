@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -141,4 +142,22 @@ test("evidence base64 is decoded and bounded before the service sees it", () => 
     () => decodeEvidenceBase64(Buffer.alloc(8 * 1024 * 1024 + 1).toString("base64")),
     /8 MB|smaller|large/i,
   );
+});
+
+const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("the MCP route authenticates the bearer and uses the stateless web transport", async () => {
+  const route = await read("src/app/api/mcp/route.ts");
+  assert.match(route, /requireAgentAccess\(request\)/);
+  assert.match(route, /WebStandardStreamableHTTPServerTransport/);
+  assert.match(route, /sessionIdGenerator: undefined/);
+  assert.match(route, /enableJsonResponse: true/);
+  assert.match(route, /export async function POST/);
+  assert.match(route, /405/);
+});
+
+test("the proxy leaves the MCP body unbuffered", async () => {
+  const proxy = await read("src/proxy.ts");
+  assert.match(proxy, /api\/mcp/);
+  assert.match(proxy, /api\/downloads/);
 });

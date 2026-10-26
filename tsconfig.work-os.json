@@ -7,6 +7,7 @@
   "include": [
     "src/app/api/work-os/**/*.ts",
     "src/app/api/agent/**/*.ts",
+    "src/app/api/mcp/**/*.ts",
     "src/app/work-os/**/*.tsx",
     "src/lib/integrations/nifty.ts",
     "src/lib/request-origin.ts",

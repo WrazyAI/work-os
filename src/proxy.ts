@@ -114,7 +114,9 @@ export const config = {
   // EXCEPTION: /api/downloads is excluded so Next doesn't buffer+truncate large
   // uploads at proxyClientMaxBodySize (10MB). That route does its own fast
   // getSession() auth check instead. (Add other large-upload routes here too.)
+  // /api/mcp is excluded for the same body limit: it validates its own bearer
+  // and may carry an 8 MB base64 completion-evidence payload.
   matcher: [
-    "/((?!_next/static|_next/image|api/downloads|api/files/[^/]+/upload|favicon.ico|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|lottie|wasm)$).*)",
+    "/((?!_next/static|_next/image|api/downloads|api/files/[^/]+/upload|api/mcp|favicon.ico|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|lottie|wasm)$).*)",
   ],
 };
