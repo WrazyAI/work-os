@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, ListChecks, Plus, Search } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
@@ -9,6 +9,7 @@ import {
   type AdminTaskRow,
   completeAdminTask,
   createAdminTask,
+  deleteAdminTask,
   fetchAdminTaskDetails,
   fetchAdminTasks,
   fetchPeople,
@@ -21,6 +22,7 @@ import {
   shortDate,
   statusLabel,
   todayIso,
+  updateAdminTask,
 } from "./data";
 import { formatWorkOsFullDate } from "../dateFormat";
 import {
@@ -29,6 +31,9 @@ import {
   compareAdminTaskDefaultOrder,
 } from "../../../../src/modules/work-os/admin-task-model";
 import { OverflowPanText } from "../OverflowPan";
+import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } from "../taskActions";
+import { EllipsisMenu, TaskActionMenuItems } from "../taskSurfaces";
+import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
@@ -43,10 +48,10 @@ type TaskFilter = "open" | "completed" | "all";
  * second activation reverses it, and another column starts its own natural
  * order. Missing values stay last in both directions, and ties fall back to
  * title A→Z then id so equal keys never jitter. Status ranks by attention
- * (Overdue → Open → Done) exactly as the pill reads the recorded completion
- * flag; a row whose record states no flag claims no rank and stays last. Pure
- * functions, exported for the comparator tests (design.md §16.2 sortable
- * tables). */
+ * (Overdue → Pending/In progress → Done) exactly as the pill reads the recorded
+ * completion flag and the derived due date; a row whose record states no flag
+ * claims no rank and stays last. Pure functions, exported for the comparator
+ * tests (design.md §16.2 sortable tables). */
 
 export type TaskSortKey = "task" | "assignees" | "created" | "due" | "status";
 export type TaskSortDirection = "asc" | "desc";
@@ -111,11 +116,11 @@ function dayValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** 0 = Overdue, 1 = Open, 2 = Done — the same predicate the pill renders from
- * the recorded completion flag, reading the row's effective due date (the
- * created + 1 day default included); a row whose record states no flag has no
- * rank and sorts last in both directions (the pill's Open is a display default
- * only). */
+/** 0 = Overdue, 1 = Pending or In progress, 2 = Done — the same predicate the
+ * pill renders from the recorded completion flag, reading the row's effective
+ * due date (the created + 1 day default included); a row whose record states no
+ * flag has no rank and sorts last in both directions (the pill's Pending is a
+ * display default only). */
 function statusRank(task: AdminTaskRow, today: string): number | null {
   return adminTaskStatusRank(task, today);
 }
@@ -216,11 +221,79 @@ export function TaskTableHead({ sort, onSort }: { sort: TaskSortState | null; on
   );
 }
 
+/** The priority vocabulary the record already stores. */
+const PRIORITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+/** The ids the record assigns; the identity embed is the fallback for a payload
+ *  that predates `assignee_person_ids`. */
+function taskAssigneeIds(task: AdminTaskRow): string[] {
+  const ids = Array.isArray(task.assignee_person_ids)
+    ? task.assignee_person_ids.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  if (ids.length) return ids;
+  return Array.isArray(task.assignees)
+    ? task.assignees.map((person) => (typeof person?.personId === "string" ? person.personId : "")).filter(Boolean)
+    : [];
+}
+
+function taskTitle(task: AdminTaskRow | null | undefined, fallback = "Task") {
+  return trimmedText(task?.title ?? task?.name) || fallback;
+}
+
+/** The date editor's seed: only a real calendar-day prefix opens populated. */
+function taskDueDateSeed(value: unknown) {
+  const day = trimmedText(value).slice(0, 10);
+  return STRICT_DATE.test(day) ? day : "";
+}
+
+/** Tone for the four-state pill: Overdue always reads as attention, and Done
+ *  keeps the settled green. */
+function taskStateTone(state: "pending" | "in_progress" | "overdue" | "complete"): "ok" | "err" | "info" | "neutral" {
+  if (state === "complete") return "ok";
+  if (state === "overdue") return "err";
+  if (state === "in_progress") return "info";
+  return "neutral";
+}
+
+/** The row menu body. Exported so the render test can assert the exact
+ *  vocabulary the page wires without a portal; a row renders it inside the
+ *  anchored, keyboard-reachable `EllipsisMenu`. */
+export function AdminTaskMenuItems({ task, today, busy, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose }: {
+  task: AdminTaskRow;
+  today: string;
+  busy: boolean;
+  onStatus: (status: "pending" | "in_progress") => void;
+  onComplete: (completed: boolean) => void;
+  onEdit: () => void;
+  onAssign?: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return <TaskActionMenuItems
+    task={task}
+    currentDate={today}
+    busy={busy}
+    onStatus={onStatus}
+    onComplete={onComplete}
+    onEdit={onEdit}
+    onAssign={onAssign}
+    onArchive={onArchive}
+    onDelete={onDelete}
+    onClose={onClose}
+  />;
+}
+
 /** The organization task record: bounded filters, the flat list, and a drawer
  * that opens one task's detail with its subtasks. */
 export default function TasksPage({ initialTaskId }: { initialTaskId?: string }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
+  const today = todayIso();
   const [filter, setFilter] = useState<TaskFilter>("open");
   const [personId, setPersonId] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -229,6 +302,10 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const [selectedId, setSelectedId] = useState<string | null>(initialTaskId ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", assignee: "", dueDate: "", priority: "" });
+  const [menuTaskId, setMenuTaskId] = useState<string | null>(null);
+  const [editTask, setEditTask] = useState<AdminTaskRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", dueDate: "", priority: "", assignee: "" });
+  const [confirm, setConfirm] = useState<{ task: AdminTaskRow; mode: "archive" | "delete" } | null>(null);
 
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
   const projects = useQuery({ queryKey: adminKeys.projects(), queryFn: fetchProjects, select: normalizeProjects, staleTime: ADMIN_STALE_MS });
@@ -250,13 +327,83 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     enabled: !!selectedId,
     staleTime: 30_000,
   });
+  /** Every task mutation invalidates the record and the one open detail: both
+   *  carry the same task, its status, and its capabilities. */
+  const refreshTask = (taskId?: string | null) => {
+    void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
+    if (taskId) void queryClient.invalidateQueries({ queryKey: adminKeys.taskDetails(taskId) });
+  };
+  const rowTitle = (taskId: string) => {
+    const row = (tasks.data?.tasks ?? []).find((entry) => String(entry.id) === taskId);
+    const open = detail.data?.task;
+    return taskTitle(row ?? (String(open?.id) === taskId ? open : null), "The task");
+  };
   const complete = useMutation({
     mutationFn: ({ id, completed }: { id: string; completed: boolean }) => completeAdminTask(id, completed),
     onSuccess: (result, variables) => {
-      void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
-      const row = (tasks.data?.tasks ?? []).find((entry) => String(entry.id) === variables.id);
-      const title = String(result?.task?.title ?? result?.task?.name ?? row?.title ?? row?.name ?? "The task");
+      refreshTask(variables.id);
+      const title = String(result?.task?.title ?? result?.task?.name ?? rowTitle(variables.id));
       notifications.success(`“${title}” was ${variables.completed ? "marked complete" : "reopened"}.`, variables.completed ? "Task completed" : "Task reopened");
+    },
+  });
+  const statusChange = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "pending" | "in_progress" }) =>
+      updateAdminTask(id, { workflow_status: status }),
+    onSuccess: (_result, variables) => {
+      refreshTask(variables.id);
+      const title = rowTitle(variables.id);
+      notifications.success(`“${title}” is now ${variables.status === "in_progress" ? "In progress" : "Pending"}.`, "Task status updated");
+    },
+  });
+  const assigneeChange = useMutation({
+    mutationFn: ({ id, personId: assigneeId }: { id: string; personId: string }) =>
+      updateAdminTask(id, { assignee_person_ids: assigneeId ? [assigneeId] : [] }),
+    onSuccess: (_result, variables) => {
+      refreshTask(variables.id);
+      const person = (people.data?.people ?? []).find((entry) => String(entry.id) === variables.personId);
+      notifications.success(
+        variables.personId ? `“${rowTitle(variables.id)}” is assigned to ${String(person?.display_name ?? "the selected person")}.` : `“${rowTitle(variables.id)}” is unassigned.`,
+        "Task assignment updated",
+      );
+    },
+  });
+  /** The archive/delete request runs only after the operator confirms in the
+   *  drawer; archiving is reversible and says so. */
+  const removeTask = useMutation({
+    mutationFn: ({ id, mode }: { id: string; mode: "archive" | "delete" }) => deleteAdminTask(id, mode),
+    onSuccess: (result, variables) => {
+      refreshTask(variables.id);
+      setConfirm(null);
+      setMenuTaskId(null);
+      setSelectedId((current) => (current === variables.id ? null : current));
+      setEditTask((current) => (String(current?.id) === variables.id ? null : current));
+      const title = String(result?.task?.title ?? result?.task?.name ?? rowTitle(variables.id));
+      notifications.success(
+        variables.mode === "delete" ? `“${title}” was permanently deleted.` : `“${title}” was archived. It can be restored from the record.`,
+        variables.mode === "delete" ? "Task deleted" : "Task archived",
+      );
+    },
+  });
+  const saveEdit = useMutation({
+    mutationFn: (task: AdminTaskRow) => {
+      const id = String(task.id);
+      const body: Record<string, unknown> = {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || null,
+        due_date: editForm.dueDate || null,
+        priority: editForm.priority || null,
+      };
+      // Send the assignment only when it changed: the server records the actor
+      // as assigner on every assignment write, so a title edit must not.
+      const current = taskAssigneeIds(task);
+      const next = editForm.assignee ? [editForm.assignee] : [];
+      if (next.length !== current.length || next.some((entry) => !current.includes(entry))) body.assignee_person_ids = next;
+      return updateAdminTask(id, body);
+    },
+    onSuccess: (result, task) => {
+      refreshTask(String(task.id));
+      setEditTask(null);
+      notifications.success(`“${String(result?.task?.title ?? result?.task?.name ?? taskTitle(task))}” was updated.`, "Task updated");
     },
   });
   const create = useMutation({
@@ -273,12 +420,25 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     onSuccess: (result) => {
       setCreateOpen(false);
       setForm({ name: "", description: "", assignee: "", dueDate: "", priority: "" });
-      void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
+      refreshTask();
       const submitted = result?.task?.title ?? result?.task?.name;
       const title = String(submitted ?? (form.name.trim() || "The task"));
       notifications.success(`“${title}” was added to the organization task record.`, "Task created");
     },
   });
+
+  /** Seed the editor from the record the operator acted on (row or drawer). */
+  const openEdit = (task: AdminTaskRow) => {
+    setMenuTaskId(null);
+    setEditForm({
+      name: taskTitle(task, ""),
+      description: trimmedText(task.description),
+      dueDate: taskDueDateSeed(task.due_date),
+      priority: trimmedText(task.priority),
+      assignee: taskAssigneeIds(task)[0] ?? "",
+    });
+    setEditTask(task);
+  };
 
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
   const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name ?? "Project") }));
@@ -300,6 +460,20 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   // page holds the full normalized list.
   const sortedRows = useMemo(() => sortTaskRows(rows, sort, today), [rows, sort, today]);
   const summary = tasks.data?.summary;
+  const drawerTask = detail.data?.task ?? null;
+  // The drawer reads the same effective due date as the row, so an Overdue pill
+  // can never open into a drawer that calls the same task Pending.
+  const drawerDue = drawerTask ? taskEffectiveDueDate(drawerTask) : null;
+  const drawerOverdue = !!drawerTask && drawerTask.completed !== true && !!drawerDue && drawerDue < today;
+  const drawerState = drawerTask ? (drawerOverdue ? "overdue" : displayTaskState(drawerTask, today)) : null;
+  const drawerStatusOptions = drawerTask ? taskStatusOptions(drawerTask, today) : [];
+  const drawerStatusNote = drawerStatusOptions.find((option) => option.note)?.note;
+  const drawerAssigneeId = drawerTask ? taskAssigneeIds(drawerTask)[0] ?? "" : "";
+  const drawerCaps = (drawerTask?.capabilities ?? {}) as Partial<TaskCapabilities>;
+  const drawerAssignedBy = drawerTask?.assigned_by_person_id
+    ? (people.data?.people ?? []).find((person) => String(person.id) === String(drawerTask.assigned_by_person_id))
+    : null;
+  const mutationError = (statusChange.error ?? removeTask.error ?? saveEdit.error ?? assigneeChange.error ?? null) as Error | null;
 
   return (
     <div className="admin-grid">
@@ -363,6 +537,12 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   const overdue = task.completed !== true && !!due && due < today;
                   const priority = trimmedText(task.priority);
                   const description = trimmedText(task.description);
+                  // Overdue outranks the stored workflow status. The record's
+                  // effective due date keeps the derived Overdue reading the
+                  // row already showed; everything else is the shared
+                  // four-state vocabulary.
+                  const state = overdue ? "overdue" : displayTaskState(task, today);
+                  const busy = complete.isPending || statusChange.isPending || removeTask.isPending;
                   return (
                     <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} data-pan-row="true" onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
                       <td>
@@ -382,16 +562,48 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                       </td>
                       <td className="admin-numeric">{formatWorkOsFullDate(created)}</td>
                       <td className={overdue ? "admin-numeric warn" : "admin-numeric"}>{formatWorkOsFullDate(due)}</td>
-                      <td><Pill tone={task.completed ? "ok" : overdue ? "err" : "neutral"}>{task.completed ? "Done" : overdue ? "Overdue" : "Open"}</Pill></td>
-                      <td>
-                        <AdminButton
-                          variant="ghost"
-                          icon={Check}
-                          disabled={complete.isPending}
-                          onClick={() => complete.mutate({ id, completed: task.completed !== true })}
+                      <td><Pill tone={taskStateTone(state)}>{taskStatusLabel(state)}</Pill></td>
+                      {/* One trailing cell carries the row's actions: the
+                          completion control stays where it was and the ellipsis
+                          sits beside it, so the row keeps its height and the
+                          menu opens from its own trigger (design.md §16.2). */}
+                      <td className="admin-row-actions">
+                        <span
+                          className="admin-row-actions-inner"
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
                         >
-                          {task.completed ? "Reopen" : "Complete"}
-                        </AdminButton>
+                          <AdminButton
+                            variant="ghost"
+                            icon={Check}
+                            disabled={complete.isPending}
+                            onClick={() => complete.mutate({ id, completed: task.completed !== true })}
+                          >
+                            {task.completed ? "Reopen" : "Complete"}
+                          </AdminButton>
+                          {hasTaskMenu(task, today) ? (
+                            <EllipsisMenu
+                              open={menuTaskId === id}
+                              label={`Actions for ${taskTitle(task)}`}
+                              disabled={busy}
+                              onToggle={() => setMenuTaskId((current) => (current === id ? null : id))}
+                              onClose={() => setMenuTaskId(null)}
+                            >
+                              <AdminTaskMenuItems
+                                task={task}
+                                today={today}
+                                busy={busy}
+                                onStatus={(status) => statusChange.mutate({ id, status })}
+                                onComplete={(completed) => complete.mutate({ id, completed })}
+                                onEdit={() => openEdit(task)}
+                                onAssign={() => openEdit(task)}
+                                onArchive={() => setConfirm({ task, mode: "archive" })}
+                                onDelete={() => setConfirm({ task, mode: "delete" })}
+                                onClose={() => setMenuTaskId(null)}
+                              />
+                            </EllipsisMenu>
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -405,6 +617,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
       </AdminCard>
 
       {complete.error ? <Notice tone="err">{(complete.error as Error).message}</Notice> : null}
+      {mutationError ? <Notice tone="err">{mutationError.message}</Notice> : null}
 
       <Drawer
         open={!!selectedId}
@@ -415,41 +628,88 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
       >
         {detail.isLoading ? (
           <Skeleton className="h-48" />
-        ) : detail.error || !detail.data ? (
+        ) : detail.error || !drawerTask ? (
           <Notice tone="err">{((detail.error as Error | null)?.message) ?? "The task could not be loaded."}</Notice>
         ) : (
           <div className="admin-grid admin-drawer-grid">
             <section className="admin-block">
               <div className="admin-kv-grid">
-                <div className="admin-kv"><span>Status</span><b>{detail.data.task.completed ? "Completed" : "Open"}</b></div>
-                <div className="admin-kv"><span>Due</span><b>{detail.data.task.due_date ? shortDate(`${detail.data.task.due_date}T12:00:00Z`) : "—"}</b></div>
-                <div className="admin-kv"><span>Priority</span><b>{statusLabel(detail.data.task.priority ?? "—")}</b></div>
-                <div className="admin-kv"><span>Updated</span><b>{detail.data.task.updated_at ? relativeTime(String(detail.data.task.updated_at)) : "—"}</b></div>
+                <div className="admin-kv"><span>Status</span><b>{drawerState ? taskStatusLabel(drawerState) : "—"}</b></div>
+                <div className="admin-kv"><span>Due</span><b>{drawerTask.due_date ? shortDate(`${drawerTask.due_date}T12:00:00Z`) : "—"}</b></div>
+                <div className="admin-kv"><span>Priority</span><b>{statusLabel(drawerTask.priority ?? "—")}</b></div>
+                <div className="admin-kv"><span>Updated</span><b>{drawerTask.updated_at ? relativeTime(String(drawerTask.updated_at)) : "—"}</b></div>
+                {drawerAssignedBy ? <div className="admin-kv"><span>Assigned by</span><b>{String(drawerAssignedBy.display_name ?? "Organization member")}</b></div> : null}
               </div>
-              {detail.data.task.description ? <p className="admin-quiet">{String(detail.data.task.description)}</p> : null}
+              {drawerTask.description ? <p className="admin-quiet">{String(drawerTask.description)}</p> : null}
             </section>
-            {detail.data.subtasks.length ? (
+            {/* The status control is the same permission payload the row menu
+                reads. An overdue task keeps the control, disabled with the
+                due-date note; a completed task has no status path at all. */}
+            {drawerStatusOptions.length ? (
+              <section className="admin-block">
+                <h3><Clock3 size={14} aria-hidden /> Task status</h3>
+                <div className="admin-inline-fields">
+                  {drawerStatusOptions.map((option) => (
+                    <AdminButton
+                      key={option.value}
+                      variant={option.value === (drawerTask.workflow_status ?? "pending") ? "primary" : "secondary"}
+                      disabled={option.disabled || drawerOverdue || statusChange.isPending}
+                      onClick={() => statusChange.mutate({ id: String(drawerTask.id), status: option.value })}
+                    >
+                      {option.label}
+                    </AdminButton>
+                  ))}
+                </div>
+                {drawerStatusNote || drawerOverdue ? (
+                  <Notice tone="warn">{`${drawerStatusNote ?? "Update the due date first"}. This task is past its due date.`}</Notice>
+                ) : null}
+              </section>
+            ) : null}
+            <section className="admin-block">
+              <h3><UserRound size={14} aria-hidden /> Assignee</h3>
+              <SelectField
+                label="Assignee"
+                ariaLabel="Task assignee"
+                value={drawerAssigneeId}
+                onChange={(next) => assigneeChange.mutate({ id: String(drawerTask.id), personId: next })}
+                placeholder="Unassigned"
+                options={personOptions}
+              />
+            </section>
+            {detail.data && detail.data.subtasks.length ? (
               <section className="admin-block">
                 <h3><ListChecks size={14} aria-hidden /> Subtasks</h3>
                 <ul className="admin-rows">
-                  {detail.data.subtasks.map((subtask) => (
-                    <li key={String(subtask.id)}>
-                      <span>{String(subtask.title ?? subtask.name ?? "Subtask")}</span>
-                      <Pill tone={subtask.completed ? "ok" : "neutral"}>{subtask.completed ? "Done" : "Open"}</Pill>
-                    </li>
-                  ))}
+                  {detail.data.subtasks.map((subtask) => {
+                    const subtaskState = displayTaskState(subtask, today);
+                    return (
+                      <li key={String(subtask.id)}>
+                        <span>{String(subtask.title ?? subtask.name ?? "Subtask")}</span>
+                        <Pill tone={taskStateTone(subtaskState)}>{taskStatusLabel(subtaskState)}</Pill>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             ) : null}
             <div className="admin-inline-fields">
               <AdminButton
-                variant={detail.data.task.completed ? "secondary" : "primary"}
+                variant={drawerTask.completed ? "secondary" : "primary"}
                 icon={Check}
                 disabled={complete.isPending}
-                onClick={() => complete.mutate({ id: String(detail.data!.task.id), completed: !detail.data!.task.completed })}
+                onClick={() => complete.mutate({ id: String(drawerTask.id), completed: drawerTask.completed !== true })}
               >
-                {detail.data.task.completed ? "Reopen task" : "Mark complete"}
+                {drawerTask.completed ? "Reopen task" : "Mark complete"}
               </AdminButton>
+              {drawerCaps.canEdit === true ? (
+                <AdminButton icon={Pencil} onClick={() => openEdit(drawerTask)}>Edit task</AdminButton>
+              ) : null}
+              {drawerCaps.canArchive === true ? (
+                <AdminButton icon={Archive} onClick={() => setConfirm({ task: drawerTask, mode: "archive" })}>Archive task</AdminButton>
+              ) : null}
+              {drawerCaps.canDelete === true ? (
+                <AdminButton variant="danger" icon={Trash2} onClick={() => setConfirm({ task: drawerTask, mode: "delete" })}>Delete task</AdminButton>
+              ) : null}
             </div>
           </div>
         )}
@@ -470,6 +730,66 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
             </AdminButton>
           </div>
         </div>
+      </Drawer>
+
+      {/* The editor carries the editable record: title, description, due date,
+          priority, and the one assignee. It sits over the detail drawer and the
+          drawer stack keeps Escape closing only the top layer. */}
+      <Drawer
+        open={!!editTask}
+        onClose={() => setEditTask(null)}
+        title="Edit task"
+        subtitle={editTask ? taskTitle(editTask) : undefined}
+        width={520}
+      >
+        <div className="admin-grid admin-drawer-grid">
+          <TextField label="Task" value={editForm.name} onChange={(next) => setEditForm((current) => ({ ...current, name: next }))} ariaLabel="Task name" placeholder="What needs doing" />
+          <TextField label="Description" value={editForm.description} onChange={(next) => setEditForm((current) => ({ ...current, description: next }))} ariaLabel="Task description" />
+          <div className="admin-inline-fields">
+            <SelectField label="Assignee" ariaLabel="Task assignee" value={editForm.assignee} onChange={(next) => setEditForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={personOptions} />
+            <TextField label="Due" type="date" value={editForm.dueDate} onChange={(next) => setEditForm((current) => ({ ...current, dueDate: next }))} ariaLabel="Task due date" />
+          </div>
+          <SelectField label="Priority" ariaLabel="Task priority" value={editForm.priority} onChange={(next) => setEditForm((current) => ({ ...current, priority: next }))} placeholder="No priority" options={PRIORITY_OPTIONS} />
+          {saveEdit.error ? <Notice tone="err">{(saveEdit.error as Error).message}</Notice> : null}
+          <div className="admin-inline-fields">
+            <AdminButton variant="primary" disabled={!editForm.name.trim() || saveEdit.isPending} onClick={() => { if (editTask) saveEdit.mutate(editTask); }}>
+              {saveEdit.isPending ? "Saving…" : "Save changes"}
+            </AdminButton>
+            <AdminButton disabled={saveEdit.isPending} onClick={() => setEditTask(null)}>Cancel</AdminButton>
+          </div>
+        </div>
+      </Drawer>
+
+      {/* Permanent deletion always asks first; archiving says it is reversible
+          and keeps the record in history. */}
+      <Drawer
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={confirm?.mode === "delete" ? "Delete this task permanently?" : "Archive this task?"}
+        width={460}
+      >
+        {confirm ? (
+          <div className="admin-grid admin-drawer-grid">
+            <Notice tone={confirm.mode === "delete" ? "err" : "info"}>
+              {confirm.mode === "delete"
+                ? `“${taskTitle(confirm.task)}” will be permanently removed and cannot be restored.`
+                : `“${taskTitle(confirm.task)}” will be hidden from active work but kept in Work OS history. Archiving is reversible.`}
+            </Notice>
+            {removeTask.error ? <Notice tone="err">{(removeTask.error as Error).message}</Notice> : null}
+            <div className="admin-inline-fields">
+              <AdminButton disabled={removeTask.isPending} onClick={() => setConfirm(null)}>Cancel</AdminButton>
+              <AdminButton
+                variant={confirm.mode === "delete" ? "danger" : "primary"}
+                disabled={removeTask.isPending}
+                onClick={() => removeTask.mutate({ id: String(confirm.task.id), mode: confirm.mode })}
+              >
+                {removeTask.isPending
+                  ? confirm.mode === "delete" ? "Deleting…" : "Archiving…"
+                  : confirm.mode === "delete" ? "Delete permanently" : "Archive task"}
+              </AdminButton>
+            </div>
+          </div>
+        ) : null}
       </Drawer>
     </div>
   );

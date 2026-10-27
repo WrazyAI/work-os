@@ -232,7 +232,7 @@ describe("administration task table dates and details", () => {
     expect(cells[3].trim()).toBe("—");
     expect(row).not.toContain("Overdue");
     expect(row).not.toContain("admin-numeric warn");
-    expect(row).toContain(">Open<");
+    expect(row).toContain(">Pending<");
   });
 
   it("keeps the task record one flat list — per-task project detail, no grouping markup", () => {

@@ -1,4 +1,5 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
@@ -472,34 +473,57 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     { provider_created_at: `${isoDaysAgo(1)}T08:30:00.000Z` },
   ];
   queryClient.setQueryData(adminKeys.tasks(taskFilters), {
-    tasks: Array.from({ length: 9 }, (_, index) => ({
-      id: `t-${index + 1}`,
-      title: [
-        "Retry handling for failed billing webhooks",
-        "Settings information architecture",
-        "Search indexing backfill",
-        "Vendor comparison matrix",
-        "Migration dry-run script",
-        "Design review for the admin surface",
-        "Accessibility pass on the composer",
-        "Deployment runbook for staging",
-        "Quarterly retention policy review",
-      ][index],
-      completed: false,
-      due_date: index === 3 || index === 8 ? null : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
-      ...taskCreated[index],
-      priority: ["high", "medium", "low"][index % 3],
-      description: index === 0 ? "Add bounded retries with backoff for failed billing webhook deliveries." : null,
-      labels: index % 2 === 0 ? ["platform"] : [],
-      project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },
-      assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],
-      updated_at: `${DATES[DATES.length - 1]}T08:${String(40 - index).padStart(2, "0")}:00.000Z`,
-    })),
+    tasks: Array.from({ length: 9 }, (_, index) => {
+      const row = {
+        id: `t-${index + 1}`,
+        title: [
+          "Retry handling for failed billing webhooks",
+          "Settings information architecture",
+          "Search indexing backfill",
+          "Vendor comparison matrix",
+          "Migration dry-run script",
+          "Design review for the admin surface",
+          "Accessibility pass on the composer",
+          "Deployment runbook for staging",
+          "Quarterly retention policy review",
+        ][index],
+        completed: false,
+        due_date: index === 3 || index === 8 ? null : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
+        ...taskCreated[index],
+        priority: ["high", "medium", "low"][index % 3],
+        // Every fourth fixture task is underway, so the record exercises the
+        // stored workflow status beside the derived Overdue reading.
+        workflow_status: index % 4 === 0 ? "in_progress" : "pending",
+        description: index === 0 ? "Add bounded retries with backoff for failed billing webhook deliveries." : null,
+        labels: index % 2 === 0 ? ["platform"] : [],
+        project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },
+        assignee_person_ids: [PEOPLE[index % PEOPLE.length].id],
+        assigned_by_person_id: index === 0 ? "p-2" : "p-1",
+        assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],
+        updated_at: `${DATES[DATES.length - 1]}T08:${String(40 - index).padStart(2, "0")}:00.000Z`,
+      };
+      // The API attaches capabilities to every administration read; computing
+      // them here with the same pure helper keeps the fixture's menu truthful.
+      return { ...row, capabilities: taskCapabilities(row, { role: "admin", personId: "p-1" }, today) };
+    }),
     nextOffset: null,
     summary: { open: 43, overdue: 5, completedWeek: 17 },
   });
+  const detailTask = {
+    id: "t-1",
+    title: "Retry handling for failed billing webhooks",
+    completed: false,
+    due_date: `${today}`,
+    priority: "high",
+    description: "Add bounded retries with backoff for failed billing webhook deliveries.",
+    updated_at: `${today}T08:40:00.000Z`,
+    project: { id: "proj-1", name: "Platform" },
+    workflow_status: "pending",
+    assignee_person_ids: ["p-1"],
+    assigned_by_person_id: "p-2",
+  };
   queryClient.setQueryData(adminKeys.taskDetails("t-1"), {
-    task: { id: "t-1", title: "Retry handling for failed billing webhooks", completed: false, due_date: `${today}`, priority: "high", description: "Add bounded retries with backoff for failed billing webhook deliveries.", updated_at: `${today}T08:40:00.000Z`, project: { id: "proj-1", name: "Platform" } },
+    task: { ...detailTask, capabilities: taskCapabilities(detailTask, { role: "admin", personId: "p-1" }, today) },
     subtasks: [
       { id: "s-1", title: "Exponential backoff for 5xx responses", completed: true },
       { id: "s-2", title: "Dead-letter queue for exhausted retries", completed: false },

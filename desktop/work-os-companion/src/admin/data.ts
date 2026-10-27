@@ -20,6 +20,7 @@ import type {
   SystemStatusResponse,
   WorkOsReportRow,
 } from "./types";
+import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {
@@ -61,6 +62,17 @@ export interface AdminTaskRow {
   description?: string | null;
   priority?: string | null;
   status?: string | null;
+  /** The manual workflow status; `Overdue` is always derived from the due date
+   * and never stored. A payload from an older build states none, which reads as
+   * Pending. */
+  workflow_status?: string | null;
+  /** Who assigned the task, so the drawer can name the assigner instead of
+   * guessing it from the assignee list. */
+  assigned_by_person_id?: string | null;
+  /** The permission payload every administration task read attaches. Absent on
+   * a cached or older-build record, which advertises no action rather than one
+   * the server would refuse. */
+  capabilities?: TaskCapabilities;
   labels?: string[] | null;
   updated_at?: string | null;
   /** The record's own creation stamp; `provider_created_at` (Nifty's mirror)
@@ -154,6 +166,13 @@ export const fetchSystemStatus = () => getNormalized("/api/work-os/status", norm
 
 export const completeAdminTask = (taskId: string, completed: boolean) =>
   send<{ task: Record<string, any>; providerStatus?: string }>(`/api/work-os/tasks/${encodeURIComponent(taskId)}/complete`, "POST", { completed });
+/** Administration edits one field family at a time where the server requires
+ *  it; the caller sends the shape the route accepts. */
+export const updateAdminTask = (taskId: string, body: Record<string, unknown>) =>
+  send<{ task: Record<string, any> }>(`/api/work-os/tasks/${encodeURIComponent(taskId)}`, "PATCH", body);
+/** Archive keeps the record and can be undone; delete is permanent. */
+export const deleteAdminTask = (taskId: string, mode: "archive" | "delete") =>
+  send<Record<string, any>>(`/api/work-os/tasks/${encodeURIComponent(taskId)}?mode=${mode}`, "DELETE");
 export const createAdminTask = (body: Record<string, unknown>) => send<{ task: Record<string, any> }>("/api/work-os/tasks", "POST", body);
 export const updateAdminPerson = (body: Record<string, unknown>) => send<{ person: Record<string, any> }>("/api/work-os/people", "PATCH", body);
 export const reviewAdminReport = (reportId: string, body: { status: "approved" | "rejected"; markdown?: string; manager_notes?: string }) =>
@@ -662,6 +681,9 @@ function normalizeTaskRow(row: Loose): AdminTaskRow {
     description: asTextOrNull(row.description),
     priority: asTextOrNull(row.priority),
     status: asTextOrNull(row.status),
+    workflow_status: asTextOrNull(row.workflow_status),
+    assigned_by_person_id: asTextOrNull(row.assigned_by_person_id),
+    capabilities: row.capabilities && typeof row.capabilities === "object" ? (row.capabilities as TaskCapabilities) : undefined,
     labels: asTextArray(row.labels),
     updated_at: asTextOrNull(row.updated_at),
     created_at: asTextOrNull(row.created_at),

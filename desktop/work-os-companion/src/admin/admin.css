@@ -928,6 +928,19 @@ body:has(.admin-workspace) .notifications-card {
   color: var(--danger);
 }
 
+/* The record's one action cell: the completion control and the ellipsis sit on
+   one line, so the row keeps the height it had with the single button. */
+.admin-table tbody td.admin-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.admin-row-actions-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .admin-quiet {
   color: var(--muted);
   font-size: 11.5px;
