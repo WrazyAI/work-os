@@ -5,13 +5,14 @@ import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { NotificationProvider } from "../NotificationFlyouts";
 import { seedAdminFixtures } from "./adminFixtures";
-import { adminKeys, isoDaysAgo, todayIso, type AdminTaskRow } from "./data";
-import TasksPage, { AdminTaskMenuItems, adminTaskStatusRecord } from "./TasksPage";
+import { adminKeys, isoDaysAgo, shortDate, todayIso, type AdminTaskRow } from "./data";
+import TasksPage, { AdminTaskMenuItems, adminTaskEditPatch, adminTaskStatusRecord } from "./TasksPage";
 
 const noop = () => undefined;
 const TODAY = todayIso();
 const ADMIN = { role: "admin" as const, personId: "p-1" };
 const OPEN_FILTERS = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
+const EMPTY_FORM = { name: "", description: "", dueDate: "", priority: "", assignee: "" };
 
 function renderWith(state: "dense" | "sparse", props: Parameters<typeof TasksPage>[0] = {}, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -55,6 +56,31 @@ function menu(row: AdminTaskRow) {
   }));
 }
 
+/** A task with two recorded assignees, due in the future so status is open. */
+function multiAssigneeRow(overrides: Record<string, unknown> = {}): AdminTaskRow {
+  const task = {
+    id: "t-pair",
+    title: "Pair on the release notes",
+    completed: false,
+    due_date: isoDaysAgo(-3),
+    workflow_status: "in_progress",
+    assignee_person_ids: ["p-1", "p-2"],
+    assigned_by_person_id: "p-1",
+    assignees: [
+      { personId: "p-1", displayName: "Amara Okafor" },
+      { personId: "p-2", displayName: "Ben Sato" },
+    ],
+    ...overrides,
+  };
+  return { ...task, capabilities: taskCapabilities(task, ADMIN, TODAY) };
+}
+
+/** Seed the open record and one detail so a single-row page can render. */
+function seedSingleRow(client: QueryClient, row: AdminTaskRow) {
+  client.setQueryData(adminKeys.tasks(OPEN_FILTERS), { tasks: [row], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } });
+  client.setQueryData(adminKeys.taskDetails(String(row.id)), { task: row, subtasks: [] });
+}
+
 /** The rendered buttons whose visible text names one of the manual statuses,
  *  with the note that follows it in a menu item. */
 function statusButtons(markup: string) {
@@ -69,7 +95,7 @@ function statusButtons(markup: string) {
 describe("administration task row actions", () => {
   it("puts an actions trigger beside the completion control on every row", () => {
     const markup = renderWith("dense");
-    expect((markup.match(/aria-label="Actions for /g) ?? []).length).toBe(9);
+    expect((markup.match(/aria-label="Actions for /g) ?? []).length).toBe(10);
     const at = markup.indexOf('aria-label="Actions for Retry handling for failed billing webhooks"');
     expect(at).toBeGreaterThan(-1);
     const row = markup.slice(markup.lastIndexOf("<tr", at), markup.indexOf("</tr>", at) + "</tr>".length);
@@ -115,6 +141,51 @@ describe("administration task drawer actions", () => {
     expect(markup).toContain("Delete task");
     expect(markup).toContain("Edit task");
   });
+
+  it("puts no status control on a completed task", () => {
+    const done = adminRow({ id: "t-done", title: "Ship the release notes", completed: true });
+    const markup = renderWith("dense", { initialTaskId: "t-done" }, (client) => seedSingleRow(client, done));
+    expect(markup).toContain(">Done<");
+    expect(markup).not.toContain("Task status");
+    expect(statusButtons(markup)).toHaveLength(0);
+  });
+
+  it("manages a multi-assignee task as one checkbox set", () => {
+    const task = multiAssigneeRow();
+    const markup = renderWith("dense", { initialTaskId: "t-pair" }, (client) => seedSingleRow(client, task));
+    const at = markup.indexOf("Assignee</h3>");
+    expect(at).toBeGreaterThan(-1);
+    const section = markup.slice(at);
+    const boxes = [...section.matchAll(/<label class="admin-check">([\s\S]*?)<\/label>/g)]
+      .map((match) => ({
+        tag: match[0],
+        text: match[1]!.replace(/<input[^>]*>/, "").replace(/<[^>]*>/g, "").trim(),
+      }));
+    expect(boxes.map((entry) => entry.text)).toEqual(expect.arrayContaining(["Amara Okafor", "Ben Sato"]));
+    // Exactly the two recorded assignees are checked.
+    expect(boxes.filter((entry) => /<input[^>]*checked/.test(entry.tag)).map((entry) => entry.text)).toEqual(["Amara Okafor", "Ben Sato"]);
+    // The set is managed as checkboxes, never through a single select.
+    expect(section).not.toContain("<select");
+    expect(section).toContain("Assign");
+  });
+});
+
+describe("administration task edit payload", () => {
+  it("never rewrites assignment on a title-only edit of a multi-assignee task", () => {
+    const task = multiAssigneeRow();
+    const patch = adminTaskEditPatch(task, { ...EMPTY_FORM, name: "Pair on the release notes (final)", priority: "medium" });
+    expect(patch.name).toBe("Pair on the release notes (final)");
+    expect(patch).not.toHaveProperty("assignee_person_ids");
+    // Even a stray selection cannot truncate a set this form does not own.
+    expect(adminTaskEditPatch(task, { ...EMPTY_FORM, name: "x", assignee: "p-1" })).not.toHaveProperty("assignee_person_ids");
+  });
+
+  it("sends the single assignment only when it actually changed", () => {
+    const task = adminRow({ assignee_person_ids: ["p-1"] });
+    expect(adminTaskEditPatch(task, { ...EMPTY_FORM, name: "x", assignee: "p-1" })).not.toHaveProperty("assignee_person_ids");
+    expect(adminTaskEditPatch(task, { ...EMPTY_FORM, name: "x", assignee: "p-2" }).assignee_person_ids).toEqual(["p-2"]);
+    expect(adminTaskEditPatch({ ...task, assignee_person_ids: [] }, { ...EMPTY_FORM, name: "x", assignee: "p-2" }).assignee_person_ids).toEqual(["p-2"]);
+  });
 });
 
 describe("administration effective due date", () => {
@@ -154,6 +225,10 @@ describe("administration effective due date", () => {
     });
     // The row reads Overdue from the effective date.
     expect(markup).toContain(">Overdue<");
+    // The drawer labels the same effective date the row shows, with no marker.
+    expect(markup).toContain(`>${shortDate(`${isoDaysAgo(3)}T12:00:00Z`)}<`);
+    // The derived date is display-only: an edit submits the recorded value.
+    expect(adminTaskEditPatch(row, { ...EMPTY_FORM, name: "Vendor comparison matrix" }).due_date).toBeNull();
     // The drawer agrees and names the fix through the shared status options.
     expect(markup).toContain("Update the due date first");
     const drawerStatus = statusButtons(markup);

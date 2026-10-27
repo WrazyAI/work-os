@@ -32,9 +32,9 @@ import {
 } from "../../../../src/modules/work-os/admin-task-model";
 import { OverflowPanText } from "../OverflowPan";
 import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } from "../taskActions";
-import { EllipsisMenu, TaskActionMenuItems } from "../taskSurfaces";
+import { EllipsisMenu, TaskActionMenuItems, toggleAssigneeIds } from "../taskSurfaces";
 import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
-import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
 
@@ -250,6 +250,39 @@ function taskDueDateSeed(value: unknown) {
   return STRICT_DATE.test(day) ? day : "";
 }
 
+/** The stored manual status, which is also the status option that is already
+ *  active — changing to it would be a no-op write. */
+function currentWorkflowStatus(task: AdminTaskRow): "pending" | "in_progress" {
+  return task.workflow_status === "in_progress" ? "in_progress" : "pending";
+}
+
+export interface AdminTaskEditForm {
+  name: string;
+  description: string;
+  dueDate: string;
+  priority: string;
+  assignee: string;
+}
+
+/** The edit drawer's PATCH body. Assignment is written only when the selection
+ *  actually changed, and only for a task with at most one assignee: a
+ *  multi-assignee set is managed by the drawer's checkbox list, so a title-only
+ *  save can never truncate it or re-stamp the assigner. The due date is the
+ *  recorded value the editor seeded — never the derived display default. */
+export function adminTaskEditPatch(task: AdminTaskRow, form: AdminTaskEditForm): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    name: form.name.trim(),
+    description: form.description.trim() || null,
+    due_date: form.dueDate || null,
+    priority: form.priority || null,
+  };
+  const current = taskAssigneeIds(task);
+  if (current.length <= 1 && form.assignee !== (current[0] ?? "")) {
+    patch.assignee_person_ids = form.assignee ? [form.assignee] : [];
+  }
+  return patch;
+}
+
 /** Tone for the four-state pill: Overdue always reads as attention, and Done
  *  keeps the settled green. */
 function taskStateTone(state: "pending" | "in_progress" | "overdue" | "complete"): "ok" | "err" | "info" | "neutral" {
@@ -321,7 +354,8 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const [form, setForm] = useState({ name: "", description: "", assignee: "", dueDate: "", priority: "" });
   const [menuTaskId, setMenuTaskId] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<AdminTaskRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "", dueDate: "", priority: "", assignee: "" });
+  const [editForm, setEditForm] = useState<AdminTaskEditForm>({ name: "", description: "", dueDate: "", priority: "", assignee: "" });
+  const [assigneeDraft, setAssigneeDraft] = useState<{ taskId: string; ids: string[] } | null>(null);
   const [confirm, setConfirm] = useState<{ task: AdminTaskRow; mode: "archive" | "delete" } | null>(null);
 
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
@@ -373,13 +407,15 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     },
   });
   const assigneeChange = useMutation({
-    mutationFn: ({ id, personId: assigneeId }: { id: string; personId: string }) =>
-      updateAdminTask(id, { assignee_person_ids: assigneeId ? [assigneeId] : [] }),
+    mutationFn: ({ id, personIds }: { id: string; personIds: string[] }) =>
+      updateAdminTask(id, { assignee_person_ids: personIds }),
     onSuccess: (_result, variables) => {
       refreshTask(variables.id);
-      const person = (people.data?.people ?? []).find((entry) => String(entry.id) === variables.personId);
+      setAssigneeDraft(null);
+      const title = rowTitle(variables.id);
+      const count = variables.personIds.length;
       notifications.success(
-        variables.personId ? `“${rowTitle(variables.id)}” is assigned to ${String(person?.display_name ?? "the selected person")}.` : `“${rowTitle(variables.id)}” is unassigned.`,
+        count ? `“${title}” is assigned to ${count === 1 ? "1 person" : `${count} people`}.` : `“${title}” is unassigned.`,
         "Task assignment updated",
       );
     },
@@ -392,6 +428,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
       refreshTask(variables.id);
       setConfirm(null);
       setMenuTaskId(null);
+      setAssigneeDraft(null);
       setSelectedId((current) => (current === variables.id ? null : current));
       setEditTask((current) => (String(current?.id) === variables.id ? null : current));
       const title = String(result?.task?.title ?? result?.task?.name ?? rowTitle(variables.id));
@@ -402,21 +439,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     },
   });
   const saveEdit = useMutation({
-    mutationFn: (task: AdminTaskRow) => {
-      const id = String(task.id);
-      const body: Record<string, unknown> = {
-        name: editForm.name.trim(),
-        description: editForm.description.trim() || null,
-        due_date: editForm.dueDate || null,
-        priority: editForm.priority || null,
-      };
-      // Send the assignment only when it changed: the server records the actor
-      // as assigner on every assignment write, so a title edit must not.
-      const current = taskAssigneeIds(task);
-      const next = editForm.assignee ? [editForm.assignee] : [];
-      if (next.length !== current.length || next.some((entry) => !current.includes(entry))) body.assignee_person_ids = next;
-      return updateAdminTask(id, body);
-    },
+    mutationFn: (task: AdminTaskRow) => updateAdminTask(String(task.id), adminTaskEditPatch(task, editForm)),
     onSuccess: (result, task) => {
       refreshTask(String(task.id));
       setEditTask(null);
@@ -444,17 +467,27 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     },
   });
 
-  /** Seed the editor from the record the operator acted on (row or drawer). */
+  /** Seed the editor from the record the operator acted on (row or drawer). A
+   *  multi-assignee task seeds no selection: its set is managed in the drawer,
+   *  so the editor never truncates it. */
   const openEdit = (task: AdminTaskRow) => {
     setMenuTaskId(null);
+    const assignees = taskAssigneeIds(task);
     setEditForm({
       name: taskTitle(task, ""),
       description: trimmedText(task.description),
       dueDate: taskDueDateSeed(task.due_date),
       priority: trimmedText(task.priority),
-      assignee: taskAssigneeIds(task)[0] ?? "",
+      assignee: assignees.length === 1 ? assignees[0]! : "",
     });
     setEditTask(task);
+  };
+
+  /** A removal waits in the confirmation drawer; a second press while the
+   *  request is in flight never opens another confirmation or a second write. */
+  const requestRemoval = (task: AdminTaskRow, mode: "archive" | "delete") => {
+    if (removeTask.isPending) return;
+    setConfirm({ task, mode });
   };
 
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
@@ -484,11 +517,38 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const drawerState = drawerStatusTask ? displayTaskState(drawerStatusTask, today) : null;
   const drawerStatusOptions = drawerStatusTask ? taskStatusOptions(drawerStatusTask, today) : [];
   const drawerStatusNote = drawerStatusOptions.find((option) => option.note)?.note;
-  const drawerAssigneeId = drawerTask ? taskAssigneeIds(drawerTask)[0] ?? "" : "";
+  // A completed task has no status path, and an actor with none gets no section
+  // rather than a row of dead buttons or a stale active highlight.
+  const drawerStatusVisible = drawerStatusOptions.some((option) => !option.disabled || option.note);
+  const drawerWorkflowStatus = drawerTask ? currentWorkflowStatus(drawerTask) : "pending";
+  // The drawer labels the row's effective due date plainly (design.md §16.2);
+  // the editor still seeds the recorded value.
+  const drawerDue = drawerTask ? taskEffectiveDueDate(drawerTask) : null;
+  const drawerAssigneeIds = drawerTask ? taskAssigneeIds(drawerTask) : [];
+  const drawerAssigneeDraft = assigneeDraft && drawerTask && assigneeDraft.taskId === String(drawerTask.id)
+    ? assigneeDraft.ids
+    : drawerAssigneeIds;
+  const drawerAssigneeChanged = drawerAssigneeDraft.length !== drawerAssigneeIds.length
+    || drawerAssigneeDraft.some((id) => !drawerAssigneeIds.includes(id));
+  const toggleDrawerAssignee = (personId: string) => {
+    if (!drawerTask) return;
+    const id = String(drawerTask.id);
+    const base = assigneeDraft && assigneeDraft.taskId === id ? assigneeDraft.ids : drawerAssigneeIds;
+    setAssigneeDraft({ taskId: id, ids: toggleAssigneeIds(base, personId) });
+  };
   const drawerCaps = (drawerTask?.capabilities ?? {}) as Partial<TaskCapabilities>;
   const drawerAssignedBy = drawerTask?.assigned_by_person_id
     ? (people.data?.people ?? []).find((person) => String(person.id) === String(drawerTask.assigned_by_person_id))
     : null;
+  const editAssignees = editTask ? taskAssigneeIds(editTask) : [];
+  const editMultiAssignee = editAssignees.length > 1;
+  const editAssigneeNames = editAssignees.map((id) => {
+    const roster = (people.data?.people ?? []).find((person) => String(person.id) === id);
+    const embedded = Array.isArray(editTask?.assignees)
+      ? editTask?.assignees.find((person) => String(person?.personId ?? "") === id)
+      : null;
+    return String(roster?.display_name ?? embedded?.displayName ?? "Organization member");
+  });
   const mutationError = (statusChange.error ?? removeTask.error ?? saveEdit.error ?? assigneeChange.error ?? null) as Error | null;
 
   return (
@@ -608,12 +668,15 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                                 task={statusTask}
                                 today={today}
                                 busy={busy}
-                                onStatus={(status) => statusChange.mutate({ id, status })}
+                                onStatus={(status) => {
+                                  // The option that is already active is a no-op write.
+                                  if (status !== currentWorkflowStatus(statusTask)) statusChange.mutate({ id, status });
+                                }}
                                 onComplete={(completed) => complete.mutate({ id, completed })}
                                 onEdit={() => openEdit(task)}
                                 onAssign={() => openEdit(task)}
-                                onArchive={() => setConfirm({ task, mode: "archive" })}
-                                onDelete={() => setConfirm({ task, mode: "delete" })}
+                                onArchive={() => requestRemoval(task, "archive")}
+                                onDelete={() => requestRemoval(task, "delete")}
                                 onClose={() => setMenuTaskId(null)}
                               />
                             </EllipsisMenu>
@@ -636,7 +699,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
 
       <Drawer
         open={!!selectedId}
-        onClose={() => setSelectedId(null)}
+        onClose={() => { setSelectedId(null); setAssigneeDraft(null); }}
         title={detail.data?.task ? String(detail.data.task.title ?? detail.data.task.name ?? "Task") : "Task"}
         subtitle={detail.data?.task?.project?.name ? String(detail.data.task.project.name) : undefined}
         width={560}
@@ -650,7 +713,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
             <section className="admin-block">
               <div className="admin-kv-grid">
                 <div className="admin-kv"><span>Status</span><b>{drawerState ? taskStatusLabel(drawerState) : "—"}</b></div>
-                <div className="admin-kv"><span>Due</span><b>{drawerTask.due_date ? shortDate(`${drawerTask.due_date}T12:00:00Z`) : "—"}</b></div>
+                <div className="admin-kv"><span>Due</span><b>{drawerDue ? shortDate(`${drawerDue}T12:00:00Z`) : "—"}</b></div>
                 <div className="admin-kv"><span>Priority</span><b>{statusLabel(drawerTask.priority ?? "—")}</b></div>
                 <div className="admin-kv"><span>Updated</span><b>{drawerTask.updated_at ? relativeTime(String(drawerTask.updated_at)) : "—"}</b></div>
                 {drawerAssignedBy ? <div className="admin-kv"><span>Assigned by</span><b>{String(drawerAssignedBy.display_name ?? "Organization member")}</b></div> : null}
@@ -660,16 +723,19 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
             {/* The status control is the same permission payload the row menu
                 reads. An overdue task keeps the control, disabled with the
                 due-date note; a completed task has no status path at all. */}
-            {drawerStatusOptions.length ? (
+            {drawerStatusVisible ? (
               <section className="admin-block">
                 <h3><Clock3 size={14} aria-hidden /> Task status</h3>
                 <div className="admin-inline-fields">
                   {drawerStatusOptions.map((option) => (
                     <AdminButton
                       key={option.value}
-                      variant={option.value === (drawerTask.workflow_status ?? "pending") ? "primary" : "secondary"}
-                      disabled={option.disabled || statusChange.isPending}
-                      onClick={() => statusChange.mutate({ id: String(drawerTask.id), status: option.value })}
+                      variant={option.value === drawerWorkflowStatus ? "primary" : "secondary"}
+                      disabled={option.disabled || statusChange.isPending || option.value === drawerWorkflowStatus}
+                      onClick={() => {
+                        // The option that is already active is a no-op write.
+                        if (option.value !== drawerWorkflowStatus) statusChange.mutate({ id: String(drawerTask.id), status: option.value });
+                      }}
                     >
                       {option.label}
                     </AdminButton>
@@ -678,17 +744,35 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                 {drawerStatusNote ? <Notice tone="warn">{drawerStatusNote}.</Notice> : null}
               </section>
             ) : null}
-            <section className="admin-block">
-              <h3><UserRound size={14} aria-hidden /> Assignee</h3>
-              <SelectField
-                label="Assignee"
-                ariaLabel="Task assignee"
-                value={drawerAssigneeId}
-                onChange={(next) => assigneeChange.mutate({ id: String(drawerTask.id), personId: next })}
-                placeholder="Unassigned"
-                options={personOptions}
-              />
-            </section>
+            {drawerCaps.canAssign === true ? (
+              <section className="admin-block">
+                <h3><UserRound size={14} aria-hidden /> Assignee</h3>
+                {(people.data?.people ?? []).length ? (
+                  <>
+                    <div className="admin-check-list">
+                      {(people.data?.people ?? []).map((person) => (
+                        <CheckField
+                          key={String(person.id)}
+                          label={String(person.display_name ?? "Unnamed")}
+                          checked={drawerAssigneeDraft.includes(String(person.id))}
+                          disabled={assigneeChange.isPending}
+                          onChange={() => toggleDrawerAssignee(String(person.id))}
+                        />
+                      ))}
+                    </div>
+                    <div className="admin-inline-fields">
+                      <AdminButton
+                        variant="primary"
+                        disabled={!drawerAssigneeChanged || assigneeChange.isPending}
+                        onClick={() => assigneeChange.mutate({ id: String(drawerTask.id), personIds: drawerAssigneeDraft })}
+                      >
+                        {assigneeChange.isPending ? "Assigning…" : "Assign"}
+                      </AdminButton>
+                    </div>
+                  </>
+                ) : <p className="admin-quiet">No organization members are available to assign.</p>}
+              </section>
+            ) : null}
             {detail.data && detail.data.subtasks.length ? (
               <section className="admin-block">
                 <h3><ListChecks size={14} aria-hidden /> Subtasks</h3>
@@ -718,10 +802,10 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                 <AdminButton icon={Pencil} onClick={() => openEdit(drawerTask)}>Edit task</AdminButton>
               ) : null}
               {drawerCaps.canArchive === true ? (
-                <AdminButton icon={Archive} onClick={() => setConfirm({ task: drawerTask, mode: "archive" })}>Archive task</AdminButton>
+                <AdminButton icon={Archive} disabled={removeTask.isPending} onClick={() => requestRemoval(drawerTask, "archive")}>Archive task</AdminButton>
               ) : null}
               {drawerCaps.canDelete === true ? (
-                <AdminButton variant="danger" icon={Trash2} onClick={() => setConfirm({ task: drawerTask, mode: "delete" })}>Delete task</AdminButton>
+                <AdminButton variant="danger" icon={Trash2} disabled={removeTask.isPending} onClick={() => requestRemoval(drawerTask, "delete")}>Delete task</AdminButton>
               ) : null}
             </div>
           </div>
@@ -759,9 +843,19 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
           <TextField label="Task" value={editForm.name} onChange={(next) => setEditForm((current) => ({ ...current, name: next }))} ariaLabel="Task name" placeholder="What needs doing" />
           <TextField label="Description" value={editForm.description} onChange={(next) => setEditForm((current) => ({ ...current, description: next }))} ariaLabel="Task description" />
           <div className="admin-inline-fields">
-            <SelectField label="Assignee" ariaLabel="Task assignee" value={editForm.assignee} onChange={(next) => setEditForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={personOptions} />
+            {editMultiAssignee ? (
+              <div className="admin-field">
+                <span>Assignee</span>
+                <b>Multiple assignees</b>
+              </div>
+            ) : (
+              <SelectField label="Assignee" ariaLabel="Task assignee" value={editForm.assignee} onChange={(next) => setEditForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={personOptions} />
+            )}
             <TextField label="Due" type="date" value={editForm.dueDate} onChange={(next) => setEditForm((current) => ({ ...current, dueDate: next }))} ariaLabel="Task due date" />
           </div>
+          {editMultiAssignee ? (
+            <Notice tone="info">{editAssigneeNames.join(", ")}. Change the set in the task drawer; this editor never rewrites assignment.</Notice>
+          ) : null}
           <SelectField label="Priority" ariaLabel="Task priority" value={editForm.priority} onChange={(next) => setEditForm((current) => ({ ...current, priority: next }))} placeholder="No priority" options={PRIORITY_OPTIONS} />
           {saveEdit.error ? <Notice tone="err">{(saveEdit.error as Error).message}</Notice> : null}
           <div className="admin-inline-fields">
@@ -794,7 +888,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
               <AdminButton
                 variant={confirm.mode === "delete" ? "danger" : "primary"}
                 disabled={removeTask.isPending}
-                onClick={() => removeTask.mutate({ id: String(confirm.task.id), mode: confirm.mode })}
+                onClick={() => { if (!removeTask.isPending) removeTask.mutate({ id: String(confirm.task.id), mode: confirm.mode }); }}
               >
                 {removeTask.isPending
                   ? confirm.mode === "delete" ? "Deleting…" : "Archiving…"

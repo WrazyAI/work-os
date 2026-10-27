@@ -471,9 +471,10 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     { provider_created_at: "2026-10-09T14:10:00.000Z" },
     {},
     { provider_created_at: `${isoDaysAgo(1)}T08:30:00.000Z` },
+    { created_at: `${isoDaysAgo(2)}T11:00:00.000Z` },
   ];
   queryClient.setQueryData(adminKeys.tasks(taskFilters), {
-    tasks: Array.from({ length: 9 }, (_, index) => {
+    tasks: Array.from({ length: 10 }, (_, index) => {
       const row = {
         id: `t-${index + 1}`,
         title: [
@@ -486,14 +487,22 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
           "Accessibility pass on the composer",
           "Deployment runbook for staging",
           "Quarterly retention policy review",
+          // The one future-dated, in-progress task: the happy path the status
+          // control and the preview are meant to demonstrate.
+          "Plan the next release train",
         ][index],
         completed: false,
-        due_date: index === 3 || index === 8 ? null : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
+        due_date: index === 3 || index === 8
+          ? null
+          : index === 9
+            ? isoDaysAgo(-4)
+            : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
         ...taskCreated[index],
         priority: ["high", "medium", "low"][index % 3],
-        // Every fourth fixture task is underway, so the record exercises the
-        // stored workflow status beside the derived Overdue reading.
-        workflow_status: index % 4 === 0 ? "in_progress" : "pending",
+        // Every fourth fixture task is underway, plus the future-dated happy
+        // path, so the record exercises the stored workflow status beside the
+        // derived Overdue reading.
+        workflow_status: index === 9 || index % 4 === 0 ? "in_progress" : "pending",
         description: index === 0 ? "Add bounded retries with backoff for failed billing webhook deliveries." : null,
         labels: index % 2 === 0 ? ["platform"] : [],
         project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },

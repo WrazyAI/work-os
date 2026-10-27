@@ -465,6 +465,13 @@ body:has(.admin-workspace) .notifications-card {
   accent-color: #5e9d27;
 }
 
+/* A set of checkboxes (the task drawer's assignees) stacks in one column so
+   every name and its box read as one decision. */
+.admin-check-list {
+  display: grid;
+  gap: 2px;
+}
+
 .admin-seg {
   display: inline-flex;
   align-items: center;

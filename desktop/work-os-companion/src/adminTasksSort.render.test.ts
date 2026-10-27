@@ -147,6 +147,7 @@ describe("administration task table sorting affordances", () => {
     // with the one row that records no created date last.
     expect(titles).toEqual([
       "Quarterly retention policy review",
+      "Plan the next release train",
       "Vendor comparison matrix",
       "Accessibility pass on the composer",
       "Design review for the admin surface",
@@ -203,7 +204,7 @@ describe("administration task table dates and details", () => {
     // Every created date renders as a letter month, and no row with a created
     // date keeps a dash in Due.
     const rows = body.match(/<tr[\s\S]*?<\/tr>/g) ?? [];
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     for (const row of rows) {
       const cells = cellsOf(row);
       expect(cells[2], cells[2]).toMatch(/^([A-Z][a-z]{2} \d{1,2}, \d{4}|—)$/);
@@ -242,7 +243,7 @@ describe("administration task table dates and details", () => {
     expect((markup.match(/<tbody>/g) ?? []).length).toBe(1);
     const body = bodyOf(markup);
     const rows = body.match(/<tr[\s\S]*?<\/tr>/g) ?? [];
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     expect(body).not.toContain("colspan");
     expect(body).not.toContain('role="rowgroup"');
     expect(body).not.toMatch(/<th\b/);
