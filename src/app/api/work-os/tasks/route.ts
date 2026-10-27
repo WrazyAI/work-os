@@ -3,6 +3,7 @@ import { countAdminTaskRecord } from "@/lib/work-os-admin-otto-reads";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
       : new Date().toISOString().slice(0, 10);
     const summary = await countAdminTaskRecord(auth.access, { ownerId, personId, today });
     return NextResponse.json({
-      tasks,
+      tasks: withTaskCapabilities(tasks, { role: auth.access.role, personId: auth.access.personId }, new Date().toISOString().slice(0, 10)),
       nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null,
       summary,
     });
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
       parent,
       raw: { source: "work_os_admin" },
     });
-    return NextResponse.json({ task, providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
+    return NextResponse.json({ task: withTaskCapabilities([task], { role: auth.access.role, personId: auth.access.personId }, new Date().toISOString().slice(0, 10))[0], providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
   } catch (err) {
     return jsonError(err, 502);
   }

@@ -534,6 +534,12 @@ export function effortMinutesPatch(value: unknown): number | null {
 export async function updateTask(userId: string, taskId: string, patch: Json) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
   const row: Json = {};
+  if ("workflow_status" in patch) {
+    const status = patch.workflow_status;
+    if (status !== "pending" && status !== "in_progress") throw new WorkOsValidationError("workflow_status must be pending or in_progress");
+    row.workflow_status = status;
+  }
+  if ("assigned_by_person_id" in patch) row.assigned_by_person_id = nonEmptyString(patch.assigned_by_person_id);
   if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
   if ("description" in patch) row.description = nonEmptyString(patch.description);
   for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason", "task_group_id", "effort_unit"]) {

@@ -7,6 +7,7 @@ import { getWorkday } from "@/lib/work-os-workday";
 import { loadPersistedWorktivityAttendance, observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
+import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 import { db, dateOnly, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { suppressPromptForSubmittedEod } from "@/modules/work-os/workday";
@@ -70,8 +71,9 @@ export async function getWorkOsDay(
   if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
   if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);
   const workday = await getWorkday(access, at);
-  const taskRows = workspace.tasks;
-  const historyRows = taskHistory ?? [];
+  const actor = { role: access.role, personId: access.personId };
+  const taskRows = withTaskCapabilities(workspace.tasks, actor, shiftDate);
+  const historyRows = withTaskCapabilities(taskHistory ?? [], actor, shiftDate);
   const evidenceRows = evidence ?? [];
   const signals = {
     employeeUpdates: 0,
@@ -81,5 +83,5 @@ export async function getWorkOsDay(
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
   const workdayPrompt = suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined);
-  return { at: at.toISOString(), shiftDate, shift, dayShift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
+  return { at: at.toISOString(), shiftDate, shift, dayShift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: taskRows, taskHistory: historyRows, workspaceSummary: { ...workspace, tasks: taskRows }, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
 }

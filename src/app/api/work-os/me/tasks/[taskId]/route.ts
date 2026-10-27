@@ -3,6 +3,7 @@ import { archiveWorkOsEmployeeTask, deleteWorkOsEmployeeTask, getWorkOsEmployeeT
 import { jsonError, requireWorkOsAccess, WorkOsValidationError } from "@/lib/work-os-api";
 import { updateWorkOsEmployeeTaskStatus } from "@/lib/work-os-employee-tasks";
 import { isWorkflowStatus } from "@/lib/work-os-task-permissions";
+import { employeeToday, withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,10 @@ export async function GET(req: Request, context: { params: Promise<{ taskId: str
     const auth = await access(req);
     if (auth.response) return auth.response;
     const { taskId } = await context.params;
-    return NextResponse.json(await getWorkOsEmployeeTaskDetails(auth.access, taskId));
+    const details = await getWorkOsEmployeeTaskDetails(auth.access, taskId);
+    const today = await employeeToday(auth.access);
+    const actor = { role: auth.access.role, personId: auth.access.personId };
+    return NextResponse.json({ ...details, task: withTaskCapabilities([details.task], actor, today)[0], subtasks: withTaskCapabilities(details.subtasks, actor, today) });
   } catch (error) {
     return jsonError(error);
   }
@@ -34,9 +38,10 @@ export async function DELETE(req: Request, context: { params: Promise<{ taskId: 
     const { taskId } = await context.params;
     const mode = new URL(req.url).searchParams.get("mode") ?? "archive";
     if (mode !== "archive" && mode !== "delete") return NextResponse.json({ error: "mode must be archive or delete" }, { status: 400 });
-    return NextResponse.json(mode === "delete"
+    const result = mode === "delete"
       ? await deleteWorkOsEmployeeTask(auth.access, taskId)
-      : await archiveWorkOsEmployeeTask(auth.access, taskId));
+      : await archiveWorkOsEmployeeTask(auth.access, taskId);
+    return NextResponse.json({ ...result, task: withTaskCapabilities([result.task], { role: auth.access.role, personId: auth.access.personId }, await employeeToday(auth.access))[0] });
   } catch (error) {
     // A missing or already-removed task is a 404, not an upstream failure.
     return jsonError(error);
@@ -57,15 +62,15 @@ export async function PATCH(req: Request, context: { params: Promise<{ taskId: s
       if (!isWorkflowStatus(body.workflow_status) || Object.keys(body).some((key) => key !== "workflow_status")) {
         return NextResponse.json({ error: "Provide only workflow_status, set to pending or in_progress" }, { status: 400 });
       }
-      return NextResponse.json(await updateWorkOsEmployeeTaskStatus(auth.access, taskId, body.workflow_status));
+      const result = await updateWorkOsEmployeeTaskStatus(auth.access, taskId, body.workflow_status);
+      return NextResponse.json({ ...result, task: withTaskCapabilities([result.task], { role: auth.access.role, personId: auth.access.personId }, await employeeToday(auth.access))[0] });
     }
-    return NextResponse.json(
-      typeof body.completed === "boolean"
+    const result = typeof body.completed === "boolean"
         ? await setWorkOsEmployeeTaskCompletion(auth.access, taskId, body.completed)
         : body.parent_task_id
           ? await moveWorkOsEmployeeSubtask(auth.access, taskId, body)
-          : await updateWorkOsEmployeeTask(auth.access, taskId, body),
-    );
+          : await updateWorkOsEmployeeTask(auth.access, taskId, body);
+    return NextResponse.json({ ...result, task: withTaskCapabilities([result.task], { role: auth.access.role, personId: auth.access.personId }, await employeeToday(auth.access))[0] });
   } catch (error) {
     return jsonError(error);
   }

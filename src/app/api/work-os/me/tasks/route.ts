@@ -4,6 +4,7 @@ import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmplo
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
+import { employeeToday, withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export async function GET(req: Request) {
     const auth = await access(req);
     if (auth.response) return auth.response;
     const params = new URL(req.url).searchParams;
+    const today = await employeeToday(auth.access);
+    const actor = { role: auth.access.role, personId: auth.access.personId };
     const ownerId = workOsOrganizationOwnerId(auth.access);
     const requestedLimit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
     const limit = Math.min(50, requestedLimit);
@@ -44,7 +47,10 @@ export async function GET(req: Request) {
     if (search.length > 200) return NextResponse.json({ error: "search must be 200 characters or fewer" }, { status: 400 });
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
-    if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, requestedLimit));
+    if (view === "pending" || view === "overdue") {
+      const selection = await listWorkOsEmployeeTaskSelection(auth.access, view, requestedLimit);
+      return NextResponse.json({ ...selection, tasks: withTaskCapabilities(selection.tasks, actor, today) });
+    }
     const sortKey = params.get("sort");
     const sortDirection = params.get("direction");
     const order = sortKey && ["title", "due", "status"].includes(sortKey) && (sortDirection === "asc" || sortDirection === "desc")
@@ -68,7 +74,7 @@ export async function GET(req: Request) {
         excludeTaskIds,
         overdueFirst: true,
       });
-      return NextResponse.json({ ...page, view, cursor: { next: page.nextCursor } });
+      return NextResponse.json({ ...page, tasks: withTaskCapabilities(page.tasks, actor, today), view, cursor: { next: page.nextCursor } });
     }
     if (view === "today" || view === "day") {
       const workspace = await resolveDailyWorkspace(auth.access, requestedDate, {
@@ -79,11 +85,12 @@ export async function GET(req: Request) {
         toDate,
         order,
       });
+      const tasks = withTaskCapabilities(workspace.tasks, actor, today);
       return NextResponse.json({
-        tasks: workspace.tasks,
+        tasks,
         view,
         date: workspace.date,
-        workspace,
+        workspace: { ...workspace, tasks },
         totalCount: workspace.totalCount,
         counts: workspace.counts,
         cursor: workspace.cursor,
@@ -102,7 +109,7 @@ export async function GET(req: Request) {
         order,
         sortDate: sortDate ?? requestedDate,
       });
-      return NextResponse.json({ ...page, view, date: requestedDate, cursor: { next: page.nextCursor }, nextOffset: null });
+      return NextResponse.json({ ...page, tasks: withTaskCapabilities(page.tasks, actor, today), view, date: requestedDate, cursor: { next: page.nextCursor }, nextOffset: null });
     }
     const tasks = (await listPersonTasks(ownerId, auth.access.personId as string, {
       completed: params.get("completed"),
@@ -117,7 +124,7 @@ export async function GET(req: Request) {
       order,
       sortDate,
     })) ?? [];
-    return NextResponse.json({ tasks, view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null, cursor: { next: null } });
+    return NextResponse.json({ tasks: withTaskCapabilities(tasks, actor, today), view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null, cursor: { next: null } });
   } catch (error) {
     return jsonError(error);
   }
@@ -128,7 +135,7 @@ export async function POST(req: Request) {
     const auth = await access(req);
     if (auth.response) return auth.response;
     const task = await createWorkOsEmployeeTask(auth.access, await req.json());
-    return NextResponse.json({ task, providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
+    return NextResponse.json({ task: withTaskCapabilities([task], { role: auth.access.role, personId: auth.access.personId }, await employeeToday(auth.access))[0], providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
   } catch (error) {
     return jsonError(error, 502);
   }
