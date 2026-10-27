@@ -9,6 +9,17 @@ const employee = readFileSync("src/lib/work-os-employee-tasks.ts", "utf8");
 const local = readFileSync("src/lib/work-os-local-tasks.ts", "utf8");
 const route = readFileSync("src/app/api/work-os/me/tasks/[taskId]/route.ts", "utf8");
 const api = readFileSync("src/lib/work-os-api.ts", "utf8");
+// Execute the real decorator without importing its shift/database dependencies.
+const capabilitiesSource = readFileSync("src/lib/work-os-task-capabilities.ts", "utf8");
+const capabilitiesAst = ts.createSourceFile("capabilities.ts", capabilitiesSource, ts.ScriptTarget.Latest, true);
+const decorator = capabilitiesAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "withTaskCapabilities");
+assert.ok(decorator);
+const decoratorExports: Record<string, any> = {};
+new Function("exports", "taskCapabilities", ts.transpileModule(decorator.getText(capabilitiesAst), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(decoratorExports, taskCapabilities);
+const withTaskCapabilities = decoratorExports.withTaskCapabilities;
+const employeeToday = async () => "2026-10-27";
 function functionSource(name: string) {
   const start = employee.indexOf(`export async function ${name}(`);
   assert.notEqual(start, -1, `${name} must exist`);
@@ -290,10 +301,11 @@ test("PATCH routes status-only changes and rejects mixed or malformed workflow r
   const calls: unknown[] = [];
   const exports: Record<string, any> = {};
   const unexpected = () => { throw new Error("status request reached a different mutation"); };
-  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", "jsonError", "WorkOsValidationError", javascript)(
+  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", "jsonError", "WorkOsValidationError", "withTaskCapabilities", "employeeToday", javascript)(
     exports, async () => ({ access }), Response, isWorkflowStatus,
     async (...args: unknown[]) => { calls.push(args); return { task: { workflow_status: args[2] } }; },
     unexpected, unexpected, unexpected, (error: Error) => Response.json({ error: error.message }, { status: error instanceof Validation ? 400 : 500 }), Validation,
+    withTaskCapabilities, employeeToday,
   );
   const context = { params: Promise.resolve({ taskId: "task" }) };
   for (const body of [null, [], { workflow_status: null }, { workflow_status: "complete" }, { workflow_status: "pending", completed: true }, { workflow_status: "pending", name: "Changed" }, { workflow_status: "pending", parent_task_id: "parent" }]) {
@@ -314,10 +326,11 @@ test("PATCH refuses all mixed lifecycle shapes before dispatch while single shap
   const calls: string[] = [];
   const exports: Record<string, any> = {};
   const mutation = (kind: string) => async () => { calls.push(kind); return { task: {} }; };
-  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "WorkOsValidationError", "jsonError", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", javascript)(
+  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "WorkOsValidationError", "jsonError", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", "withTaskCapabilities", "employeeToday", javascript)(
     exports, async () => ({ access }), Response, isWorkflowStatus, Validation,
     (error: Error) => Response.json({ error: error.message }, { status: error instanceof Validation ? 400 : 500 }),
     mutation("status"), mutation("completion"), mutation("move"), mutation("edit"),
+    withTaskCapabilities, employeeToday,
   );
   const send = (body: unknown) => exports.PATCH(new Request("http://localhost/tasks/task", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ taskId: "task" }) });
   for (const body of [
