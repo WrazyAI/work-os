@@ -548,6 +548,15 @@ Use a flat, readable list:
 
     completion | task + metadata | progress | due | status | actions
 
+The actions column is one intrinsic menu cell at the trailing edge: a row with
+an action for this actor carries a single ellipsis trigger aligned with the
+status pill, and the trigger never widens the row or shifts when a menu opens.
+The menu is detached (§8.3) and opens beside its trigger, so the row keeps its
+height and no action is inlined as text. A row with nothing available to this
+actor renders no trigger — an empty menu is never offered — and a cached
+payload that predates the capability answer waits for the refresh instead of
+guessing from assignees.
+
 The Tasks page has one date navigator in the masthead, one task-list panel, and
 one task list. The panel header carries the views, a compact search, and the
 date filter on one row while width permits; search and the date filter ride the
@@ -604,8 +613,9 @@ Rows:
 - Minimum 64px high, with 12–16px vertical breathing room.
 - Transparent/paper surface with hairline dividers.
 - One title line, one metadata line, optional one-line description.
-- A single semantic status pill: Open, Overdue, Done, or Sync issue. The pill
-  stays quiet for Open; the failing states lead.
+- A single semantic status pill: Pending, In progress, Overdue, or Done. Pending
+  and In progress share the quiet treatment — the label carries the difference
+  — so neither competes with the Overdue and Done states, which lead.
 - The project line renders only when the view actually mixes projects, and the
   On today tag appears only where it discriminates (not inside My day).
 - The description renders only when it adds something beyond the title; it is
@@ -623,9 +633,15 @@ Rows:
   content the employee is meant to read.
 - The failing state is stated once, by the pill. The due date does not repeat it
   in red alongside.
-- The status vocabulary (Open, Complete, Overdue, Sync issue) and its tints are
-  defined once in `styles.css`. A theme layer places the pill; it does not
-  restate its colour, size, or weight.
+- The status vocabulary is Pending, In progress, Overdue, Done, and its tints
+  are defined once in `styles.css`. Precedence is Done → Overdue → In progress
+  → Pending: a completed task reads Done even when its due date has passed, an
+  open task past its due date reads Overdue whatever its stored workflow
+  status, and Pending is the default a new task starts in. Overdue is derived
+  from the due date, never stored, so no status write can fake or clear it.
+  Open remains the collective noun for incomplete work in counts and copy, and
+  provider sync keeps its own chip instead of adding a fifth task status. A
+  theme layer places the pill; it does not restate its colour, size, or weight.
 - The active sort is stated once, in the column row. A day group states an order
   only when that group deviates from the view's own.
 - No raw provider IDs, object stringification, or invalid date output.
@@ -708,6 +724,24 @@ Desktop task details open as a right-side drawer, up to 540px wide, with a
 stable header, scrollable body, and footer actions. The underlying list stays
 in place and does not reflow. The drawer includes full title, description,
 source/provenance, dates, assignees, subtasks, and lifecycle actions.
+
+The drawer's action block carries the task's status control, the assignee
+control, and its lifecycle actions — Edit task, Archive task (reversible), and
+Delete task (which always asks for confirmation) — and every control renders
+only when the task's capability payload allows it. A cached payload without
+capabilities shows no controls rather than advertising an action the server
+would refuse, and a completed task has no status path until it is reopened.
+
+The status control states the task's current status and opens the detached
+menu of §8.3, listing Pending and In progress with the current option marked.
+An overdue task keeps it disabled with the note "Update the due date first":
+overdue is derived from the due date, so the control unlocks only once the due
+date is today or later, and reopening a completed task restores the status it
+held before completion (reading Overdue again if its due date has since
+passed). The assignee control lists only the people this actor may assign; when
+a current assignee sits outside that scope the control locks and states why, so
+a client never submits a set the server would reject. Replacing the assignees
+records the actor as the task's assigner.
 
 At narrow widths it becomes a bottom sheet with a safe viewport inset and an
 internal scroll region. Menus and drawers must collide with the viewport, close
@@ -968,6 +1002,15 @@ page and shifting the user's scroll position. The outside-click boundary is the
 trigger plus the menu itself, including when the menu renders through a portal
 at the document body; a press inside the menu never dismisses it before the
 item's action runs.
+
+The task status control behaves as one menu wherever it appears: in the drawer
+it is a trigger that states the current status, and in a row or administration
+menu it is the same item list inside that row's action menu. Opening it focuses
+the first enabled item, and Escape, an outside press, or running an item closes
+it and returns focus to the trigger. Its items are Pending and In progress with
+the current option marked, and an overdue task's options are disabled with the
+due-date note. It is never a segmented control, a native select, or an inline
+panel, and it never changes the row's height.
 
 ### 8.4 Worktivity attendance controls
 
@@ -2218,6 +2261,13 @@ header.
   beneath the title — clipped with the shared fade and never a pan — and the
   assignee cell resolves the recorded assignee ids through the roster, so a task
   with a real assignee is never displayed as Unassigned.
+  Each row carries the same trailing ellipsis action menu as the companion task
+  lists (§6.2): its status actions, Edit task, Assign, Archive (reversible), and
+  Delete permanently, each present only when the task's capability payload
+  allows it. The task drawer carries the status control, the assignee control,
+  and the lifecycle buttons — Mark complete or Reopen task, Edit task, Archive
+  task, Delete task — under the same gate, and archiving or deleting waits for
+  an explicit confirmation.
   **Settings** leads with the account's own settings — the same groups the
   employee Settings page carries (profile, this device, page guides, reading
   & display, workday, sync & session, memory, suggestions, diagnostics, and
@@ -2265,10 +2315,17 @@ letter-month form as its due date and immediately ahead of it, so the two dates
 read together. A task with no recorded due date reads against the default it
 implies: one day after it was created. The derived value is the row's effective
 due date everywhere the row is read — the Due cell, the overdue warning and the
-Overdue/Open/Done pill, and the Due column's sorting — exactly as a recorded
-date would, and it renders plainly with no "default" marker. Only a task whose
-created date is also missing shows a dash and claims no overdue state, so a
-task past its derived date does read Overdue.
+Overdue/Pending/Done pill, the Due column's sorting, and the status lock —
+exactly as a recorded date would, and it renders plainly with no "default"
+marker. Only a task whose created date is also missing shows a dash and claims
+no overdue state, so a task past its derived date does read Overdue.
+
+The effective due date drives both the Overdue pill and the status lock in this
+record: an open task past its effective date cannot change workflow status
+until the date is today or later, even when no due date was ever recorded. The
+edit form still seeds and writes the recorded date, so saving it never turns
+the derived default into a recorded one; a task with no recorded date opens
+the editor empty, and the date the operator types becomes the real due date.
 
 **Cached state.** Administration reads through the shared in-memory TanStack
 Query cache, not a fetch per visit: list and summary reads revalidate after 45
@@ -2292,13 +2349,13 @@ date; a row missing a value in any step stays after the rows that record one.
 Every labeled column header is a button: the first activation applies
 that column's natural order — A→Z for Task and Assignees, newest first for
 Created, earliest first for Due (which orders by the row's effective due date,
-the derived default included), attention order (Overdue → Open → Done) for
-Status — a second activation reverses it, and another column switches to its
-own natural order. Rows missing the sorted value stay last in both directions,
-and ties break by title then id so the list never jitters. The sorted column's
-`th` carries `aria-sort` with an always-visible direction indicator, inactive
-columns reveal a quiet affordance on hover or keyboard focus, and the empty
-actions column is never sortable.
+the derived default included), attention order (Overdue → Pending/In progress →
+Done) for Status — a second activation reverses it, and another column switches
+to its own natural order. Rows missing the sorted value stay last in both
+directions, and ties break by title then id so the list never jitters. The
+sorted column's `th` carries `aria-sort` with an always-visible direction
+indicator, inactive columns reveal a quiet affordance on hover or keyboard
+focus, and the empty actions column is never sortable.
 
 ### 16.3 Data and provenance
 

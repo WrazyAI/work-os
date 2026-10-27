@@ -184,6 +184,15 @@ Verify target services and runtime state before operational claims.
 - Keep fonts self-hosted and avoid render-blocking external resources. Keep
   storage Node imports lazy/bundle-safe. Preserve provider provenance,
   idempotent mutations, and truthful approval/completion states.
+- Task actions are capability-gated by `src/lib/work-os-task-permissions.ts`,
+  which derives edit, archive, delete, assign, complete, reopen, and
+  workflow-status flags from the actor's role, the recorded assigner, and the
+  due date; API routes enforce those same flags. Assignment scope is self for
+  employees, their managed teams for supervisors, and anyone in the organization
+  for administrators, and out-of-scope ids are rejected even when a client sends
+  them. Overdue is derived, never stored: the effective due date must be today
+  or later before an overdue task's workflow status can change, so the due date
+  is the unlock and no status write may fake or clear overdue.
 
 AI activity inference must not create `work_check_ins` rows or advance
 `last_substantive_update_at`. Read check-in and activity-interval code before

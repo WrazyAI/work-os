@@ -68,6 +68,7 @@ const migrations = [
     "neon/migrations/0041_work_activity_intervals.sql",
     "supabase/migrations/0058_work_os_member_ui_state.sql",
     "supabase/migrations/0061_work_os_membership_determinism.sql",
+    "supabase/migrations/0065_work_task_assignment_and_status.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -129,6 +130,32 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and column_name = any($1)
   `, [["interval_id", "screenshot_summary_id", "evidence_event_id", "captured_at", "ordinal", "used_in_model", "raw_image_shown", "selection_reason", "visible_app_snapshot", "frame_summary_snapshot"]]);
   assert.equal(activityIntervalEvidenceColumns.rows.length, 10);
+  const taskAssignmentColumns = await db.query(`
+    select column_name, is_nullable, column_default from information_schema.columns
+    where table_schema='public' and table_name='work_tasks'
+      and column_name = any($1)
+  `, [["workflow_status", "assigned_by_person_id"]]);
+  assert.equal(taskAssignmentColumns.rows.length, 2, "workflow status and assignment provenance columns exist");
+  const workflowColumn = taskAssignmentColumns.rows.find((row) => row.column_name === "workflow_status");
+  assert.equal(workflowColumn.is_nullable, "NO", "workflow status is stored for every task");
+  assert.match(String(workflowColumn.column_default), /'pending'/, "a new task starts pending");
+  assert.equal(taskAssignmentColumns.rows.find((row) => row.column_name === "assigned_by_person_id").is_nullable, "YES", "a legacy row may have no assigner");
+  const workflowConstraint = await db.query(`
+    select pg_get_constraintdef(oid) as definition from pg_constraint
+    where conrelid = 'public.work_tasks'::regclass and contype = 'c'
+      and pg_get_constraintdef(oid) like '%workflow_status%'
+  `);
+  assert.equal(workflowConstraint.rows.length, 1, "workflow status is constrained");
+  assert.match(workflowConstraint.rows[0].definition, /'pending'/);
+  assert.match(workflowConstraint.rows[0].definition, /'in_progress'/);
+  const assignmentIndex = await db.query(`select indexname from pg_indexes where schemaname='public' and indexname='work_tasks_assigned_by_idx'`);
+  assert.equal(assignmentIndex.rows.length, 1, "the assigner lookup is indexed");
+  const assignmentForeignKey = await db.query(`
+    select conname from pg_constraint
+    where conrelid = 'public.work_tasks'::regclass and contype = 'f'
+      and pg_get_constraintdef(oid) like '%assigned_by_person_id%'
+  `);
+  assert.equal(assignmentForeignKey.rows.length, 1, "the assigner is a real person");
 
   const policies = await db.query(`
     select count(*)::int as count from pg_policies where schemaname='public'
@@ -235,6 +262,40 @@ test("Work OS companion migration is complete and idempotent", async () => {
   `, [owner.id, orgA, personA, orgB, personB]);
   const taskA = tasks.rows.find((row) => row.organization_id === orgA);
   const taskB = tasks.rows.find((row) => row.organization_id === orgB);
+
+  // 0065's backfill keeps legacy control: a row with exactly one recorded
+  // assignee records that person as its assigner, while a row with two
+  // assignees or none stays assigner-less (administrators manage it and its
+  // assignees keep only assignee permissions). Re-running the additive
+  // migration over these seeded legacy rows exercises the same statement the
+  // deploy applies, instead of asserting against an empty table.
+  const legacyUser = await db.query(`insert into auth.users(email) values ('legacy-b@test.invalid') returning id`);
+  const legacyPerson = await db.query(`
+    insert into work_people(user_id,organization_id,display_name,email,auth_user_id)
+    values ($1,$2,'Employee Legacy','legacy-b@test.invalid',$3) returning id
+  `, [owner.id, orgB, legacyUser.rows[0].id]);
+  await db.query(`
+    insert into work_tasks(user_id,organization_id,provider_task_id,title,assignee_person_ids)
+    values ($1,$2,'task-multi','Legacy multi',array[$3,$4]::uuid[]),
+           ($1,$2,'task-unassigned','Legacy unassigned','{}'::uuid[])
+  `, [owner.id, orgB, personB, legacyPerson.rows[0].id]);
+  await db.exec(await readFile("supabase/migrations/0065_work_task_assignment_and_status.sql", "utf8"));
+  const backfilled = await db.query(`
+    select provider_task_id, assigned_by_person_id, workflow_status from work_tasks
+    where provider_task_id = any($1) order by provider_task_id
+  `, [["task-a", "task-b", "task-multi", "task-unassigned"]]);
+  assert.deepEqual(backfilled.rows, [
+    { provider_task_id: "task-a", assigned_by_person_id: personA, workflow_status: "pending" },
+    { provider_task_id: "task-b", assigned_by_person_id: personB, workflow_status: "pending" },
+    { provider_task_id: "task-multi", assigned_by_person_id: null, workflow_status: "pending" },
+    { provider_task_id: "task-unassigned", assigned_by_person_id: null, workflow_status: "pending" },
+  ], "only a single-assignee legacy row is backfilled to that assignee");
+  await assert.rejects(() => db.query(`update work_tasks set workflow_status='done' where provider_task_id='task-a'`), /work_tasks_workflow_status_check/);
+  await assert.rejects(() => db.query(`update work_tasks set assigned_by_person_id=gen_random_uuid() where provider_task_id='task-a'`), /work_tasks_assigned_by_person_id_fkey/);
+  // Keep the seeded rows out of the RLS visibility assertions below.
+  await db.query(`delete from work_tasks where provider_task_id = any($1)`, [["task-multi", "task-unassigned"]]);
+  await db.query(`delete from work_people where id=$1`, [legacyPerson.rows[0].id]);
+  await db.query(`delete from auth.users where id=$1`, [legacyUser.rows[0].id]);
 
   const schedules = await db.query(`
     insert into work_schedules(organization_id,person_id,timezone,shift_start,shift_end,created_by)
