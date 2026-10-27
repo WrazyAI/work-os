@@ -103,6 +103,16 @@ test("overdue uses date prefixes and ignores completed, missing, or malformed da
   }
 });
 
+test("overdue rejects impossible calendar dates and honors leap years", () => {
+  for (const due_date of ["2026-00-01", "2026-02-30", "2026-13-01", "2026-04-31", "2026-01-00", "2026-02-29", "2100-02-29"]) {
+    assert.equal(taskIsOverdue({ due_date }, "2101-01-01"), false, due_date);
+  }
+  assert.equal(taskIsOverdue({ due_date: "2028-02-29" }, "2028-03-01"), true);
+  assert.equal(taskIsOverdue({ due_date: "2028-02-29" }, "2028-02-29"), false);
+  assert.equal(taskIsOverdue({ due_date: "2028-02-29" }, "2028-02-28"), false);
+  assert.equal(taskIsOverdue({ due_date: "2000-02-29T12:00:00Z" }, today), true);
+});
+
 test("display state prioritizes completion, overdue, workflow progress, then pending", () => {
   assert.equal(taskDisplayState({ completed: true, due_date: "2026-10-26", workflow_status: "in_progress" }, today), "complete");
   assert.equal(taskDisplayState({ due_date: "2026-10-26", workflow_status: "in_progress" }, today), "overdue");

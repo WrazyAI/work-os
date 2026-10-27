@@ -27,7 +27,12 @@ export function taskAssignerId(task: Record<string, any>): string | null {
 export function taskIsOverdue(task: Record<string, any>, today: string): boolean {
   if (task.completed === true || typeof task.due_date !== "string") return false;
   const dueDate = task.due_date.match(datePrefix)?.[0];
-  return dueDate !== undefined && dueDate < today;
+  if (dueDate === undefined) return false;
+  const [year, month, day] = dueDate.split("-").map(Number);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1] && dueDate < today;
 }
 
 export function taskDisplayState(task: Record<string, any>, today: string): TaskDisplayState {
