@@ -307,10 +307,10 @@ export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string
   if ("assignee_person_ids" in patch) {
     const options = await getWorkOsTaskCreationOptions(access);
     const assignees = validateAgentAssignment(options.people.map((person) => person.id), patch.assignee_person_ids);
-    // The token's own person stays assigned, exactly as on create: dropping it
-    // would answer 404 to the token that just made the change, leaving it no
-    // way to undo. Handing work off entirely is an employee-surface action.
-    patch.assignee_person_ids = [...new Set([access.personId as string, ...assignees])];
+    // Honored exactly, so a token can hand work to someone else. The tradeoff is
+    // explicit: a task with no assignee matching this token answers 404 to it,
+    // and the new assignee or an administrator hands it back.
+    patch.assignee_person_ids = assignees;
     const finalAssignees = patch.assignee_person_ids as string[];
     if (String(task.provider ?? "") !== "local" && finalAssignees.length) {
       const mapped = await db().from("work_people").select("id,nifty_member_id")

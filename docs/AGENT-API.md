@@ -50,14 +50,24 @@ The schema is the contract: `GET /openapi.yaml` or
 
 `GET /options` returns the projects and people this token may attach to a task —
 the same sets the employee's own composer offers. Use it instead of guessing a
-`project_id` or `assignee_person_ids` value. A created task always keeps the
-token's own person as an assignee, so the same token can read and complete what
-it created; any co-assignees must appear in `/options`. Tasks default to the
-TASKS project.
+`project_id` or `assignee_person_ids` value. Tasks default to the TASKS project.
 
-Reassignment keeps the token's own person on the task for the same reason:
-removing itself would lock the token out of work it just changed. Handing a task
-entirely to someone else is an employee-surface action.
+An omitted `assignee_person_ids` assigns the task to the token's own person. An
+explicit list is honored exactly, so a token can hand work to someone else; that
+is the same delegation the employee surface allows.
+
+Work is attributed by assignee, so a handoff has two consequences. Both are
+deliberate, and both need a client decision:
+
+- A top-level task with nobody from this token's person answers `404` to it. The
+  new assignee, or an administrator, can hand it back.
+- The change feed (`updated_since`) reports the work currently assigned to this
+  person. A handed-off task therefore leaves the feed without a tombstone, so an
+  incremental client should reconcile with a full list on a cadence, or treat a
+  `404` on read as removal. No assignment history exists to emit a tombstone.
+- A handed-off *subtask* stays reachable through its parent's owner, because a
+  subtask inherits access from its active parent. Hand a subtask off by moving it
+  under a parent the new owner already has, or by handing off the parent too.
 
 `DELETE /tasks/{taskId}?mode=archive|delete` removes a task. `archive` (the
 default) keeps it recoverable and `delete` tombstones it. Both are the employee

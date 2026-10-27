@@ -86,10 +86,11 @@ test("archived tasks stay reachable for removal but not for editing", async () =
   assert.match(source, /allowArchived/);
 });
 
-test("an agent create always keeps the token's own person assigned", () => {
+test("an omitted assignee list defaults to the token's person, an explicit one is honored", () => {
   assert.deepEqual(agentCreateAssignees("self", undefined), ["self"]);
-  assert.deepEqual(agentCreateAssignees("self", ["other"]), ["self", "other"]);
-  assert.deepEqual(agentCreateAssignees("self", ["other", "other", "self"]), ["self", "other"]);
+  assert.deepEqual(agentCreateAssignees("self", ["other"]), ["other"]);
+  assert.deepEqual(agentCreateAssignees("self", ["other", "other", "self"]), ["other", "self"]);
+  assert.deepEqual(agentCreateAssignees("self", []), []);
   assert.throws(() => agentCreateAssignees("self", ["other", 7]), /assignee_person_ids/);
 });
 
@@ -171,10 +172,11 @@ test("moving a non-subtask is a caller error, not a server fault", async () => {
   assert.match(source, /throw new WorkOsValidationError\("Only subtasks can be moved"\)/);
 });
 
-test("an agent cannot assign itself away from a task it manages", async () => {
+test("an agent update honors the exact assignee list it was given", async () => {
   const source = await read("src/lib/work-os-employee-tasks.ts");
   const update = source.slice(source.indexOf("export async function updateWorkOsAgentTask"), source.indexOf("export async function setWorkOsEmployeeTaskCompletion"));
-  assert.match(update, /access\.personId as string, \.\.\.assignees/);
+  assert.match(update, /patch\.assignee_person_ids = assignees/);
+  assert.doesNotMatch(update, /access\.personId as string, \.\.\.assignees/);
 });
 
 test("a board group id is a bounded opaque string, not free-form junk", () => {

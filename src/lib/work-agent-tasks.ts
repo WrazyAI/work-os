@@ -147,15 +147,16 @@ export function validateAgentTaskCreate(body: Json): Json {
   return create;
 }
 
-/** A created task always keeps the token's own person so the same token can
- * read, update, and complete what it just created. Any requested co-assignees
- * are added beside that person, never instead of them. */
+/** With no assignees named, work belongs to the token's person. An explicit
+ * list is honored exactly, including a handoff to someone else: the employee
+ * surface can delegate work the same way, and a task the token cannot see is a
+ * recoverable state (the new assignee or an administrator can hand it back). */
 export function agentCreateAssignees(personId: string, requested: unknown): string[] {
   if (requested === undefined || requested === null) return [personId];
   if (!Array.isArray(requested)) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
   const ids = requested.filter((value): value is string => typeof value === "string" && !!value.trim());
   if (ids.length !== requested.length) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
-  return [...new Set([personId, ...ids])];
+  return [...new Set(ids)];
 }
 
 export async function createAgentTask(agent: AgentAccess, body: Json, idempotencyKey: string) {

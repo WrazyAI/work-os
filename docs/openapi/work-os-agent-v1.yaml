@@ -511,7 +511,7 @@ components:
         assignee_person_ids:
           type: array
           items: { type: string, format: uuid }
-          description: The token's own person is always assigned so the token can read and complete what it created. Co-assignees must be assignable members from /options.
+          description: Defaults to the token's own person when omitted. An explicit list is honored exactly, so a token can hand work to another assignable member from /options. A task with nobody from this token's person answers 404 to it.
     TaskUpdate:
       type: object
       minProperties: 1
@@ -531,7 +531,7 @@ components:
         assignee_person_ids:
           type: array
           items: { type: string, format: uuid }
-          description: Replaces co-assignees. The token's own person always stays assigned so the token can still read and complete the task.
+          description: "Replaces the assignee list exactly. Removing this token's person hands the work over: the task then answers 404 to this token, and it leaves the updated_since feed without a tombstone."
         parent_task_id:
           type: string
           format: uuid
