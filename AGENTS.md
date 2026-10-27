@@ -51,29 +51,33 @@ guessing. Add a changelog entry when a change is release-facing.
 
 ## Mandatory work ledger
 
-Create or reuse a Nifty task before user-requested investigation,
+Create or reuse a ledger task before user-requested investigation,
 implementation, deployment, integration, or external action. Read existing
-tasks first and reuse equivalent active work; use the canonical VPS logger
-(`/home/dev/agent-os/scripts/log-nifty-tasks.mjs`) for creation. If access
-fails, report the exact blocker and stop before changes rather than doing
-untracked work.
+tasks first and reuse equivalent active work; use the canonical ledger tool
+(`scripts/work-os-ledger.mjs`, mirrored at
+`/home/dev/agent-os/scripts/work-os-ledger.mjs`) for creation. It writes to the
+work record through the Work OS Agent API, so the ledger and the work share one
+source of truth. If access fails, report the exact blocker and stop before
+changes rather than doing untracked work.
 
-- The progress project is **Tasks** (`czFZk9928z`). Keep descriptions short
-  (one to three sentences) and subtask names to five to eight words; put
-  implementation detail in subtasks, not bullet-pointed descriptions.
+- The progress project is **TASKS**. Keep descriptions short (one to three
+  sentences) and subtask names to five to eight words; put implementation
+  detail in subtasks, not bullet-pointed descriptions.
 - Keep incomplete work open with a concise blocker; complete each task and
   known subtask only after its outcome and verification are done, and mark them
   as you go rather than batching at the end.
-- Nifty's partial task update can change completion even when `completed` is
-  omitted. Read the task first, include its current completion value in any
-  update, and read back `name`, `completed`, and `archived` after every
+- Every ledger task carries the `agent-ledger` label, so it stays separable
+  from the employee's own work. Completing a parent also closes its open
+  subtasks, and a completion is explicit: read `completed` back after every
   completion write.
-- Keep Nifty credentials on the VPS; never print or paste a token.
+- Keep the ledger token on the VPS (`WORK_OS_AGENT_TOKEN` in
+  `/home/dev/agent-os/.env.local`); never print or paste it.
 - For explicitly requested duplicate cleanup, page tasks, retain one canonical
   task per outcome, archive duplicates rather than deleting them, and read back
   the canonical and archived states.
-- EOD reports belong in the **EOD Report** project (`Dyo7QY7XNR`) as a task
-  named `<Full Name><MM/DD/YYYY>`; EOD Report is not itself a task. Put the
+- EOD reports belong in the **EOD Report** project (pass
+  `--project-name "EOD Report"`) as a task named `<Full Name><MM/DD/YYYY>`;
+  EOD Report is not itself a task. Put the
   report in the description: shift start and end time, number of tasks
   completed and in progress, a short outcome-focused shift summary, and a
   blocker line only when something remains open. Drafting and submitting are
@@ -169,7 +173,7 @@ activity. Keep the two relationships exact: `performed` is the employee's own
 account's work; `triggered` is a consequence of their work (CI runs linked by
 same-window pushed commits, deployments they created, reviews or closures on
 their pull requests) and must never be described as their own action. Recorded
-activity may be stated exactly as recorded but is never Nifty task completion,
+activity may be stated exactly as recorded but is never task completion,
 never attendance, and never a substitute for screenshot evidence; the model's
 structured `recorded_activity` output is validated against the recorded list.
 
