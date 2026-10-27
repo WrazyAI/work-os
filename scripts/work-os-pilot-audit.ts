@@ -31,14 +31,10 @@ function args() {
   };
 }
 
-function isValidCredential(expiresAt: string | null) {
-  return !expiresAt || new Date(expiresAt).getTime() > Date.now() + 60_000;
-}
-
 async function auditOrganization(db: Db, organization: { id: string; name: string; slug: string; legacy_owner_id: string | null; feature_flags: Record<string, unknown> | null }) {
   const id = organization.id;
   const [people, memberships, teams, schedules, roleProfiles, connections, credentials, sourceAccounts, tasks, teamMembers] = await Promise.all([
-    db.query("select id,active,auth_user_id,nifty_member_id,worktivity_employee_id,role_profile_id from work_people where organization_id=$1", [id]),
+    db.query("select id,active,auth_user_id,worktivity_employee_id,role_profile_id from work_people where organization_id=$1", [id]),
     db.query("select person_id,role,active from work_org_members where organization_id=$1", [id]),
     db.query("select id,active from work_teams where organization_id=$1", [id]),
     db.query("select person_id,active,effective_from,effective_to from work_schedules where organization_id=$1", [id]),
@@ -51,22 +47,15 @@ async function auditOrganization(db: Db, organization: { id: string; name: strin
   ]);
   const connectionRows = connections.rows as Array<{ provider: string; active: boolean }>;
   const credentialRows = credentials.rows as Array<{ provider: string; expires_at: string | null }>;
-  const activeNiftyConnection = connectionRows.some((row) => row.provider === "nifty" && row.active !== false);
-  const validNiftyCredential = credentialRows.some((row) => row.provider === "nifty" && isValidCredential(row.expires_at));
-  const legacyNiftyConfigured = Boolean(process.env.NIFTY_ACCESS_TOKEN || (process.env.NIFTY_REFRESH_TOKEN && process.env.NIFTY_CLIENT_ID && process.env.NIFTY_CLIENT_SECRET));
-  const legacyNiftyAllowed = process.env.WORK_OS_LEGACY_NIFTY_OWNER_USER_ID
-    ? process.env.WORK_OS_LEGACY_NIFTY_OWNER_USER_ID === organization.legacy_owner_id
-    : legacyNiftyConfigured;
   const worktivityReady = Boolean(process.env.WORKTIVITY_API_KEY);
   const providerReady = {
-    nifty: (activeNiftyConnection && validNiftyCredential) || legacyNiftyAllowed,
     worktivity: worktivityReady,
     github: connectionRows.some((row) => row.provider === "github" && row.active !== false) && Boolean(process.env.WORK_OS_GITHUB_WEBHOOK_SECRET),
     ghl: connectionRows.some((row) => row.provider === "ghl" && row.active !== false) && Boolean(process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY),
   };
   return evaluateWorkOsReadiness({
     organization: { id: organization.id, name: organization.name, slug: organization.slug, featureFlags: organization.feature_flags },
-    people: people.rows.map((row) => ({ id: row.id, active: row.active, authUserId: row.auth_user_id, niftyMemberId: row.nifty_member_id, worktivityEmployeeId: row.worktivity_employee_id, roleProfileId: row.role_profile_id })),
+    people: people.rows.map((row) => ({ id: row.id, active: row.active, authUserId: row.auth_user_id, worktivityEmployeeId: row.worktivity_employee_id, roleProfileId: row.role_profile_id })),
     memberships: memberships.rows.map((row) => ({ personId: row.person_id, role: row.role, active: row.active })),
     teams: teams.rows.map((row) => ({ id: row.id, active: row.active })),
     teamMembers: teamMembers.rows.map((row) => ({ teamId: row.team_id, personId: row.person_id, isManager: row.is_manager })),
