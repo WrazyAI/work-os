@@ -40,6 +40,38 @@ paths:
                         items: { $ref: "#/components/schemas/Scope" }
                       expires_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /options:
+    get:
+      summary: Projects and people this token may attach to a task
+      description: "The same sets the employee's own task composer offers, so an agent can choose a real project_id or assignee_person_ids value instead of guessing ids."
+      operationId: getTaskOptions
+      x-required-scope: tasks:read
+      responses:
+        "200":
+          description: Creation options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        displayName: { type: string }
+                        email: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /tasks:
     get:
       summary: Tasks assigned to the token's person
@@ -142,6 +174,32 @@ paths:
                   task: { $ref: "#/components/schemas/Task" }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Archive or delete a task
+      description: "mode=archive (the default) keeps the task recoverable; mode=delete tombstones it. A task already visible in the archive can still be removed."
+      operationId: removeTask
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: mode
+          in: query
+          schema: { type: string, enum: [archive, delete], default: archive }
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -445,8 +503,15 @@ components:
         labels: { type: array, items: { type: string } }
         expected_outcome: { type: string }
         definition_of_done: { type: string }
+        estimated_effort_minutes: { type: integer, minimum: 0 }
+        effort_unit: { type: string }
+        task_group_id: { type: string }
         parent_task_id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
+        assignee_person_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: The token's own person is always assigned so the token can read and complete what it created. Co-assignees must be assignable members from /options.
     TaskUpdate:
       type: object
       minProperties: 1
@@ -460,6 +525,17 @@ components:
         story_points: { type: number }
         expected_outcome: { type: string }
         definition_of_done: { type: string }
+        estimated_effort_minutes: { type: integer, minimum: 0 }
+        effort_unit: { type: string }
+        task_group_id: { type: string }
+        assignee_person_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: Replaces co-assignees. The token's own person always stays assigned so the token can still read and complete the task.
+        parent_task_id:
+          type: string
+          format: uuid
+          description: Moves a subtask under another parent. Only subtasks can be moved.
         blocked: { type: boolean }
         blocked_reason: { type: string }
     ProgressNote:

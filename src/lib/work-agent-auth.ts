@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { AppProfile } from "@/lib/supabase/auth";
-import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, type WorkOsOrgRole } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, type WorkOsOrgRole, WorkOsNotFoundError } from "@/lib/work-os-api";
 import { hashAgentToken, type AgentScope } from "@/lib/work-agent-tokens";
 import { AgentRateLimitError } from "@/lib/work-agent-rate-limit";
 import { db, isWorkOsMigrationRequired } from "@/lib/work-os-internal";
@@ -44,6 +44,12 @@ function isWorkOsConflict(error: unknown): error is WorkOsConflictError {
   return error instanceof WorkOsConflictError || (error instanceof Error && error.name === "WorkOsConflictError");
 }
 
+/** A record this token cannot see. Matched by type and class name so a
+ * reworded message can never turn a 404 into a 500. */
+function isWorkOsNotFound(error: unknown): error is Error {
+  return error instanceof WorkOsNotFoundError || (error instanceof Error && error.name === "WorkOsNotFoundError");
+}
+
 /** One error mapper for every v1 route: the design's `{ error, code,
  * request_id }` contract, with cross-person lookups collapsing to 404. */
 export function agentRouteError(error: unknown) {
@@ -60,6 +66,7 @@ export function agentRouteError(error: unknown) {
     if (error.reason === "idempotency_in_flight") response.headers.set("Retry-After", "1");
     return response;
   }
+  if (isWorkOsNotFound(error)) return agentError("not_found", "Task not found", 404);
   if (error instanceof WorkOsValidationError || error instanceof CompletionEvidenceError) {
     return agentError("validation_error", error.message, 400);
   }

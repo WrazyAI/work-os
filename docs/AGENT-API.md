@@ -31,10 +31,12 @@ Base URL: `https://app.wrazyos.com/api/agent/v1`
 | Method | Path | Scope |
 |---|---|---|
 | GET | `/me` | any valid token |
+| GET | `/options` | `tasks:read` |
 | GET | `/tasks` | `tasks:read` |
 | POST | `/tasks` | `tasks:write` |
 | GET | `/tasks/{taskId}` | `tasks:read` |
 | PATCH | `/tasks/{taskId}` | `tasks:write` |
+| DELETE | `/tasks/{taskId}` | `tasks:write` |
 | POST | `/tasks/{taskId}/complete` | `tasks:write` |
 | POST | `/tasks/{taskId}/reopen` | `tasks:write` |
 | POST | `/tasks/{taskId}/progress` | `progress:write` |
@@ -45,6 +47,22 @@ Base URL: `https://app.wrazyos.com/api/agent/v1`
 
 The schema is the contract: `GET /openapi.yaml` or
 `docs/openapi/work-os-agent-v1.yaml`.
+
+`GET /options` returns the projects and people this token may attach to a task —
+the same sets the employee's own composer offers. Use it instead of guessing a
+`project_id` or `assignee_person_ids` value. A created task always keeps the
+token's own person as an assignee, so the same token can read and complete what
+it created; any co-assignees must appear in `/options`. Tasks default to the
+TASKS project.
+
+Reassignment keeps the token's own person on the task for the same reason:
+removing itself would lock the token out of work it just changed. Handing a task
+entirely to someone else is an employee-surface action.
+
+`DELETE /tasks/{taskId}?mode=archive|delete` removes a task. `archive` (the
+default) keeps it recoverable and `delete` tombstones it. Both are the employee
+record's own semantics, so a task already archived can still be deleted. A task
+that is gone — deleted, or outside this token's person — answers `404`.
 
 ## Authentication
 
@@ -176,7 +194,7 @@ const result = await client.callTool({ name: "list_tasks", arguments: {} });
 | `list_tasks` | `tasks:read` | Person-scoped list and change feed (`updated_since`, `include_archived`, `limit`, `cursor`). |
 | `get_task` | `tasks:read` | Task, subtasks, completion evidence, blockers. |
 | `create_task` | `tasks:write` | Create for the token's person; TASKS by default. |
-| `update_task` | `tasks:write` | Content, labels, priority, blockers. No project/parent moves. |
+| `update_task` | `tasks:write` | Content, labels, priority, blockers, assignees, board group, subtask parent. No project moves. |
 | `complete_task` | `tasks:write` | Completion with the evidence gate. |
 | `log_progress` | `progress:write` | Employee-authored progress note; never completion proof. |
 | `attach_evidence` | `evidence:write` | One base64 file, 8 MB max. `complete` defaults to `false`. |

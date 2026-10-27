@@ -183,8 +183,12 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       labels: z.array(z.string()).optional(),
       expected_outcome: z.string().optional(),
       definition_of_done: z.string().optional(),
+      estimated_effort_minutes: z.number().int().min(0).optional(),
+      effort_unit: z.string().optional(),
+      task_group_id: z.string().optional(),
       parent_task_id: z.string().optional(),
       project_id: z.string().optional(),
+      assignee_person_ids: z.array(z.string().min(1)).optional(),
       idempotency_key: z.string().min(1).max(160).optional(),
     }),
   }, async (args) => runTool(agent, "tasks:write", true, async () => {
@@ -201,7 +205,7 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
 
   server.registerTool("update_task", {
     title: "Update a task",
-    description: "Update task content, labels, or blockers. Requires tasks:write. Project and parent moves are not supported.",
+    description: "Update task content, labels, blockers, assignees, board group, or subtask parent. Requires tasks:write. Project moves are not supported.",
     inputSchema: strictShape({
       task_id: z.string().min(1),
       name: z.string().min(1).max(240).optional(),
@@ -213,6 +217,11 @@ export function createAgentMcpServer(agent: AgentAccess, services: AgentMcpServi
       story_points: z.number().optional(),
       expected_outcome: z.string().optional(),
       definition_of_done: z.string().optional(),
+      estimated_effort_minutes: z.number().int().min(0).optional(),
+      effort_unit: z.string().optional(),
+      task_group_id: z.string().optional(),
+      assignee_person_ids: z.array(z.string().min(1)).optional(),
+      parent_task_id: z.string().min(1).optional(),
       blocked: z.boolean().optional(),
       blocked_reason: z.string().optional(),
     }),

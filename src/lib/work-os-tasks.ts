@@ -21,6 +21,7 @@ import {
   type Json,
 } from "@/lib/work-os-internal";
 import { upsertNiftyTask } from "@/lib/work-os-nifty";
+import { WorkOsNotFoundError, WorkOsValidationError } from "@/lib/work-os-api";
 import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
 import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 
@@ -548,15 +549,32 @@ export async function listPersonOpenTasks(userId: string, personId: string) {
   };
 }
 
+/** A stored estimate is whole minutes. Anything else is rejected rather than
+ * rounded or cleared, so a typo cannot silently erase the estimate. */
+export function effortMinutesPatch(value: unknown): number | null {
+  // Absent and explicitly empty both mean "no estimate"; every other shape must
+  // be a real number. Coercing whitespace, arrays, or booleans would store 0.
+  if (value === null || value === undefined || value === "") return null;
+  const minutes = typeof value === "number"
+    ? value
+    : typeof value === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isInteger(minutes)) {
+    throw new WorkOsValidationError("estimated_effort_minutes must be a whole number of minutes");
+  }
+  if (minutes < 0) throw new WorkOsValidationError("estimated_effort_minutes must be a non-negative whole number");
+  return minutes;
+}
+
 export async function updateTask(userId: string, taskId: string, patch: Json) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
   if (task.provider === "local") {
     const row: Json = {};
     if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
     if ("description" in patch) row.description = nonEmptyString(patch.description);
-    for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason"]) {
+    for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason", "task_group_id", "effort_unit"]) {
       if (key in patch) row[key] = nonEmptyString(patch[key]);
     }
+    if ("estimated_effort_minutes" in patch) row.estimated_effort_minutes = effortMinutesPatch(patch.estimated_effort_minutes);
     for (const key of ["labels", "story_points", "blocked"]) {
       if (key in patch) row[key] = patch[key];
     }
@@ -720,35 +738,35 @@ export async function deleteTask(userId: string, taskId: string) {
  * paths from drifting apart: a subtask must never silently change project.
  */
 export function assertSubtaskMoveTarget(task: Record<string, any>, parent: Record<string, any>) {
-  if (task.id === parent.id) throw new Error("A task cannot be its own parent");
-  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
-  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
-  if (task.organization_id !== parent.organization_id) throw new Error("Subtasks can only be moved between tasks in the same project");
+  if (task.id === parent.id) throw new WorkOsValidationError("A task cannot be its own parent");
+  if (!task.parent_task_id && !task.parent_provider_task_id) throw new WorkOsValidationError("Only subtasks can be moved to another task");
+  if (parent.parent_task_id || parent.parent_provider_task_id) throw new WorkOsValidationError("Subtasks can only be moved beneath a top-level task");
+  if (task.organization_id !== parent.organization_id) throw new WorkOsValidationError("Subtasks can only be moved between tasks in the same project");
   const taskLocal = task.provider === "local";
   const parentLocal = parent.provider === "local";
   if (taskLocal && parentLocal) {
     // Local rows carry no provider project, so the local project is the
     // boundary: moving across projects would re-home the subtask silently.
     if ((task.project_id ?? null) !== (parent.project_id ?? null)) {
-      throw new Error("Subtasks can only be moved between tasks in the same project");
+      throw new WorkOsValidationError("Subtasks can only be moved between tasks in the same project");
     }
     return;
   }
-  if (!taskLocal && parentLocal) throw new Error("Nifty subtasks cannot be moved beneath a Work OS task");
+  if (!taskLocal && parentLocal) throw new WorkOsValidationError("Nifty subtasks cannot be moved beneath a Work OS task");
   if (!taskLocal && !parentLocal) {
-    if (task.provider_project_id !== parent.provider_project_id) throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+    if (task.provider_project_id !== parent.provider_project_id) throw new WorkOsValidationError("Subtasks can only be moved between tasks in the same Nifty project");
     return;
   }
   // A Work OS subtask may join a Nifty task only inside the same provider project.
   if (task.provider_project_id && parent.provider_project_id && task.provider_project_id !== parent.provider_project_id) {
-    throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+    throw new WorkOsValidationError("Subtasks can only be moved between tasks in the same Nifty project");
   }
 }
 
 /** Employee-created subtasks hang from a top-level task only; deeper nesting
  * stays out of the employee surface, matching the move path's rule. */
 export function assertTopLevelTaskParent(parent: Record<string, any>) {
-  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be created beneath a top-level task");
+  if (parent.parent_task_id || parent.parent_provider_task_id) throw new WorkOsValidationError("Subtasks can only be created beneath a top-level task");
 }
 
 export async function moveTaskToParent(userId: string, taskId: string, parentTaskId: string) {
@@ -855,6 +873,6 @@ export async function getTaskByLocalOrProviderId(userId: string, taskId: string)
     db().from("work_tasks").select("*").eq("user_id", userId).eq(localId ? "id" : "provider_task_id", taskId).maybeSingle(),
     "load task",
   );
-  if (!row) throw new Error("Task not found");
+  if (!row) throw new WorkOsNotFoundError();
   return row as Json;
 }

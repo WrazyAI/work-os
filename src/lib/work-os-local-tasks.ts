@@ -51,6 +51,9 @@ export type CreateLocalWorkOsTaskInput = {
   expectedOutcome?: string | null;
   definitionOfDone?: string | null;
   taskGroupId?: string | null;
+  /** A local estimate: whole minutes plus the unit the surface displays it in. */
+  estimatedEffortMinutes?: number | null;
+  effortUnit?: string | null;
   projectId?: string | null;
   providerProjectId?: string | null;
   assigneePersonIds?: string[];
@@ -198,6 +201,8 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
     title: title.slice(0, MAX_TITLE),
     description: description ? description.slice(0, MAX_DESCRIPTION) : null,
     task_group_id: input.taskGroupId ?? null,
+    estimated_effort_minutes: input.estimatedEffortMinutes ?? null,
+    effort_unit: input.effortUnit ?? null,
     priority: input.priority ?? null,
     labels: input.labels ?? [],
     story_points: input.storyPoints ?? null,

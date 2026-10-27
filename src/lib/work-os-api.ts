@@ -67,6 +67,16 @@ export class WorkOsValidationError extends Error {
   }
 }
 
+/** A record the caller cannot see: missing, archived, tombstoned, or owned by
+ * another person or workspace. `jsonError` maps it to 404 so a removed task is
+ * never reported as a caller mistake or an upstream failure. */
+export class WorkOsNotFoundError extends Error {
+  constructor(message = "Task not found") {
+    super(message);
+    this.name = "WorkOsNotFoundError";
+  }
+}
+
 type WorkOsAccessResult =
   | { access: WorkOsAccess; response?: never }
   | { response: NextResponse; access?: never };
@@ -445,6 +455,9 @@ export function jsonError(err: unknown, status?: number) {
   }
   if (err instanceof WorkOsConflictError) {
     return NextResponse.json({ error: err.message, ...(err.reason ? { reason: err.reason } : {}) }, { status: 409 });
+  }
+  if (err instanceof WorkOsNotFoundError) {
+    return NextResponse.json({ error: err.message }, { status: 404 });
   }
   if (err instanceof WorkOsValidationError) {
     return NextResponse.json({ error: err.message }, { status: 400 });

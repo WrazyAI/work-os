@@ -36,7 +36,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ taskId: 
       ? await deleteWorkOsEmployeeTask(auth.access, taskId)
       : await archiveWorkOsEmployeeTask(auth.access, taskId));
   } catch (error) {
-    return jsonError(error, 502);
+    // A missing or already-removed task is a 404, not an upstream failure.
+    return jsonError(error);
   }
 }
 
@@ -54,6 +55,6 @@ export async function PATCH(req: Request, context: { params: Promise<{ taskId: s
           : await updateWorkOsEmployeeTask(auth.access, taskId, body),
     );
   } catch (error) {
-    return jsonError(error, 502);
+    return jsonError(error);
   }
 }

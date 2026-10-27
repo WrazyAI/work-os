@@ -19,6 +19,8 @@ import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os
 import { syncPlanItemCompletion } from "@/lib/work-os-plan-items";
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
+import { effortMinutesPatch } from "@/lib/work-os-tasks";
+import { validateTaskGroupId } from "@/lib/work-agent-tasks";
 import {
   CompletionEvidenceError,
   COMPLETION_EVIDENCE_BUCKET,
@@ -34,16 +36,20 @@ import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { applyTaskCompletion, taskCompletionFailureMessage } from "@/lib/work-os-task-completion";
 import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { localDateForTimezone } from "@/modules/work-os/companion";
-import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsNotFoundError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import type { AgentActor } from "@/lib/work-agent-auth";
 
 export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
-  const [peopleResult, adminResult] = await Promise.all([
+  const [peopleResult, adminResult, projectsResult] = await Promise.all([
     db().from("work_people").select("id,display_name,email").eq("organization_id", access.organizationId).eq("active", true).order("display_name"),
     db().from("work_org_members").select("person_id").eq("organization_id", access.organizationId).eq("role", "admin").eq("active", true).not("person_id", "is", null),
+    // `archived` is nullable and predates the flag being written on every row,
+    // so a null means "live" rather than "archived".
+    db().from("work_projects").select("id,name,archived").eq("organization_id", access.organizationId).order("name"),
   ]);
   if (peopleResult.error) throw new Error(`load assignable task people: ${peopleResult.error.message}`);
   if (adminResult.error) throw new Error(`load task administrators: ${adminResult.error.message}`);
+  if (projectsResult.error) throw new Error(`load task projects: ${projectsResult.error.message}`);
   const adminPersonIds = new Set((adminResult.data ?? []).map((item: any) => String(item.person_id)));
   const people = (peopleResult.data ?? []).map((person: Record<string, unknown>) => ({ ...person, id: String(person.id) }));
   const assignable = access.role === "admin" ? people : filterAssignableTaskPeople(people, adminPersonIds, access.personId);
@@ -53,13 +59,27 @@ export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
       displayName: (person.display_name as string | null)?.trim() || "Organization member",
       email: person.email as string | null,
     })),
+    // Projects are workspace structure, not a secret: every task row already
+    // names its project, so an employee (and their agent token) can see the
+    // organization's active projects and choose one when creating work.
+    projects: (projectsResult.data ?? [])
+      .filter((project: Record<string, unknown>) => project.archived !== true)
+      .map((project: Record<string, unknown>) => ({
+        id: String(project.id),
+        name: (project.name as string | null)?.trim() || "Untitled project",
+      })),
   };
 }
 
-async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
+async function employeeTaskContext(access: WorkOsAccess, taskId: string, options: { allowArchived?: boolean } = {}) {
   const ownerId = await organizationOwnerId(access.organizationId);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
-  if (task.status === "archived" || task.status === "deleted") throw new Error("Task not found");
+  // A tombstoned task is gone for every caller. An archived one is only
+  // reachable for the operation that removes it, so removing an archived task
+  // does not answer "not found" to the person who can still see it in the
+  // archive.
+  if (task.status === "deleted") throw new WorkOsNotFoundError();
+  if (task.status === "archived" && options.allowArchived !== true) throw new WorkOsNotFoundError();
   const { data: person, error } = await db().from("work_people").select("nifty_member_id").eq("organization_id", access.organizationId).eq("id", access.personId as string).single();
   if (error) throw new Error(`load task employee mapping: ${error.message}`);
   let parent: Record<string, any> | null = null;
@@ -72,7 +92,7 @@ async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
       parent = null;
     }
   }
-  if (!isEmployeeTaskAccessible(task, parent, access.personId as string | null, person.nifty_member_id as string | null)) throw new Error("Task is not available to this employee");
+  if (!isEmployeeTaskAccessible(task, parent, access.personId as string | null, person.nifty_member_id as string | null)) throw new WorkOsNotFoundError("Task is not available to this employee");
   return { ownerId, task, niftyMemberId: person.nifty_member_id as string | null };
 }
 
@@ -185,7 +205,7 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
     employeeTaskContext(access, taskId),
     employeeTaskContext(access, targetId),
   ]);
-  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved");
+  if (!task.parent_task_id && !task.parent_provider_task_id) throw new WorkOsValidationError("Only subtasks can be moved");
   const moved = await moveTaskToParent(ownerId, String(task.provider_task_id ?? task.id), String(parent.provider_task_id ?? parent.id));
   const local = String(task.provider ?? "") === "local";
   await audit(access, "task.subtask_moved", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
@@ -234,13 +254,18 @@ const AGENT_TASK_UPDATE_FIELDS = new Set([
   "story_points",
   "expected_outcome",
   "definition_of_done",
+  "estimated_effort_minutes",
+  "effort_unit",
+  "task_group_id",
+  "assignee_person_ids",
+  "parent_task_id",
   "blocked",
   "blocked_reason",
 ]);
 
-/** The agent PATCH contract: content fields only. Moving a task between
- * projects or parents needs service logic the employee surface does not have,
- * so those fields are rejected instead of silently ignored. */
+/** The agent PATCH contract: content, assignment, board group, and subtask
+ * parent. Project moves stay rejected: a subtask may not change project, so a
+ * project edit needs validation the flat patch cannot carry. */
 export function validateAgentTaskUpdate(body: Json): Json {
   const patch: Json = {};
   for (const key of Object.keys(body ?? {})) {
@@ -256,12 +281,57 @@ export function validateAgentTaskUpdate(body: Json): Json {
   if ("labels" in patch && (!Array.isArray(patch.labels) || patch.labels.some((value) => typeof value !== "string"))) {
     throw new WorkOsValidationError("labels must be an array of strings");
   }
+  if ("task_group_id" in patch) validateTaskGroupId(patch.task_group_id);
   return patch;
+}
+
+/** Agent assignment is limited to the same assignable set the employee's own
+ * composer offers; anything outside it is a caller mistake, not a silent drop. */
+export function validateAgentAssignment(allowed: Iterable<string>, requested: unknown): string[] {
+  if (!Array.isArray(requested)) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
+  const ids = requested.filter((value): value is string => typeof value === "string" && !!value.trim());
+  if (ids.length !== requested.length) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
+  const permitted = new Set(allowed);
+  const unique = [...new Set(ids)];
+  if (unique.some((personId) => !permitted.has(personId))) {
+    throw new WorkOsValidationError("Assignees must be active Work OS organization members");
+  }
+  return unique;
 }
 
 export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string, body: Json, actor: AgentActor) {
   const patch = validateAgentTaskUpdate(body);
   const { ownerId, task } = await employeeTaskContext(access, taskId);
+  // Every rejection happens before the first write, so a refused assignment can
+  // never leave the subtask already moved under a new parent.
+  if ("assignee_person_ids" in patch) {
+    const options = await getWorkOsTaskCreationOptions(access);
+    const assignees = validateAgentAssignment(options.people.map((person) => person.id), patch.assignee_person_ids);
+    // The token's own person stays assigned, exactly as on create: dropping it
+    // would answer 404 to the token that just made the change, leaving it no
+    // way to undo. Handing work off entirely is an employee-surface action.
+    patch.assignee_person_ids = [...new Set([access.personId as string, ...assignees])];
+    const finalAssignees = patch.assignee_person_ids as string[];
+    if (String(task.provider ?? "") !== "local" && finalAssignees.length) {
+      const mapped = await db().from("work_people").select("id,nifty_member_id")
+        .eq("organization_id", access.organizationId).in("id", finalAssignees);
+      if (mapped.error) throw new Error(`load assignee provider mappings: ${mapped.error.message}`);
+      if ((mapped.data ?? []).some((person: any) => !person.nifty_member_id)) {
+        throw new WorkOsValidationError("Historical provider tasks require mapped provider assignees");
+      }
+    }
+  }
+  // Validate the content patch before the move: a rejected estimate must not
+  // leave the subtask already reassigned to a new parent.
+  if ("estimated_effort_minutes" in patch) patch.estimated_effort_minutes = effortMinutesPatch(patch.estimated_effort_minutes);
+  const moveParentId = typeof patch.parent_task_id === "string" ? patch.parent_task_id.trim() : "";
+  if ("parent_task_id" in patch && !moveParentId) throw new WorkOsValidationError("parent_task_id must be a task id");
+  delete patch.parent_task_id;
+  if (moveParentId) await moveWorkOsEmployeeSubtask(access, taskId, { parent_task_id: moveParentId });
+  if (!Object.keys(patch).length) {
+    const moved = await employeeTaskContext(access, taskId);
+    return moved.task as Json;
+  }
   if ("blocked" in patch) {
     if (patch.blocked === true) {
       const description = text(patch.blocked_reason) ?? "Blocked";
@@ -466,7 +536,7 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
 }
 
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
-  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { ownerId, task } = await employeeTaskContext(access, taskId, { allowArchived: true });
   let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
     .not("status", "in", "(archived,deleted)");
@@ -483,7 +553,7 @@ export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: st
 }
 
 export async function deleteWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
-  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { ownerId, task } = await employeeTaskContext(access, taskId, { allowArchived: true });
   let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
     .not("status", "in", "(archived,deleted)");
@@ -533,6 +603,8 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json,
     expectedOutcome: text(body.expected_outcome),
     definitionOfDone: text(body.definition_of_done),
     taskGroupId: text(body.task_group_id),
+    estimatedEffortMinutes: effortMinutesPatch(body.estimated_effort_minutes),
+    effortUnit: text(body.effort_unit),
     projectId: requestedProjectId ?? (parent ? null : await defaultWorkOsTaskProjectId(access.organizationId)),
     providerProjectId: text(parent?.provider_project_id),
     parent,

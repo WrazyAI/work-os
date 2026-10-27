@@ -6,23 +6,28 @@ import { validateAgentTaskUpdate } from "../src/lib/work-os-employee-tasks";
 
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("agent create accepts content fields and rejects structural or assignment fields", () => {
+test("agent create accepts content, group, and assignment fields", () => {
   assert.deepEqual(
     validateAgentTaskCreate({ name: "Ship the release", due_date: "2026-10-30", expected_outcome: "Published" }),
     { name: "Ship the release", due_date: "2026-10-30", expected_outcome: "Published" },
   );
-  assert.throws(() => validateAgentTaskCreate({ name: "x", assignee_person_ids: ["p2"] }), /assignee_person_ids/);
-  assert.throws(() => validateAgentTaskCreate({ name: "x", task_group_id: "group" }), /task_group_id/);
+  assert.deepEqual(
+    validateAgentTaskCreate({ name: "x", assignee_person_ids: ["p2"], task_group_id: "group" }),
+    { name: "x", assignee_person_ids: ["p2"], task_group_id: "group" },
+  );
+  assert.throws(() => validateAgentTaskCreate({ name: "x", milestone_id: "m" }), /milestone_id/);
 });
 
-test("agent update rejects project and parent moves and requires a field", () => {
+test("agent update accepts assignment and subtask moves but rejects project moves", () => {
   assert.deepEqual(
     validateAgentTaskUpdate({ name: "Renamed", blocked: true, blocked_reason: "Waiting on review" }),
     { name: "Renamed", blocked: true, blocked_reason: "Waiting on review" },
   );
+  assert.deepEqual(
+    validateAgentTaskUpdate({ assignee_person_ids: ["p"], parent_task_id: "parent" }),
+    { assignee_person_ids: ["p"], parent_task_id: "parent" },
+  );
   assert.throws(() => validateAgentTaskUpdate({ project_id: "project" }), /project_id/);
-  assert.throws(() => validateAgentTaskUpdate({ parent_task_id: "parent" }), /parent_task_id/);
-  assert.throws(() => validateAgentTaskUpdate({ assignee_person_ids: ["p"] }), /assignee_person_ids/);
   assert.throws(() => validateAgentTaskUpdate({}), /field/i);
 });
 

@@ -101,6 +101,16 @@ export async function getAgentTask(agent: AgentAccess, taskId: string) {
   };
 }
 
+/** `task_group_id` is the board column the historical import carried on the
+ * row. There is no group registry to check against, so the honest bound is
+ * shape and length: an opaque id, never a free-form sentence. */
+export function validateTaskGroupId(value: unknown) {
+  if (value === undefined || value === null) return;
+  if (typeof value !== "string" || !value.trim() || value.length > 200) {
+    throw new WorkOsValidationError("task_group_id must be a board group id of 200 characters or fewer");
+  }
+}
+
 const AGENT_TASK_CREATE_FIELDS = new Set([
   "name",
   "description",
@@ -110,13 +120,18 @@ const AGENT_TASK_CREATE_FIELDS = new Set([
   "labels",
   "expected_outcome",
   "definition_of_done",
+  "estimated_effort_minutes",
+  "effort_unit",
+  "task_group_id",
   "parent_task_id",
   "project_id",
+  "assignee_person_ids",
 ]);
 
-/** The agent create contract: work for the token's own person, in a real
- * project (TASKS by default). Assignment and grouping fields are rejected so a
- * token can never file work it cannot then see. */
+/** The agent create contract: work in a real project (TASKS by default) and a
+ * real board group. Assignees default to the token's own person; naming
+ * someone else is validated against the same assignable set the employee
+ * composer offers, so a token cannot file work onto a stranger. */
 export function validateAgentTaskCreate(body: Json): Json {
   const create: Json = {};
   for (const key of Object.keys(body ?? {})) {
@@ -128,13 +143,28 @@ export function validateAgentTaskCreate(body: Json): Json {
   if (typeof create.name !== "string" || !create.name.trim()) {
     throw new WorkOsValidationError("Task title is required");
   }
+  validateTaskGroupId(create.task_group_id);
   return create;
+}
+
+/** A created task always keeps the token's own person so the same token can
+ * read, update, and complete what it just created. Any requested co-assignees
+ * are added beside that person, never instead of them. */
+export function agentCreateAssignees(personId: string, requested: unknown): string[] {
+  if (requested === undefined || requested === null) return [personId];
+  if (!Array.isArray(requested)) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
+  const ids = requested.filter((value): value is string => typeof value === "string" && !!value.trim());
+  if (ids.length !== requested.length) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
+  return [...new Set([personId, ...ids])];
 }
 
 export async function createAgentTask(agent: AgentAccess, body: Json, idempotencyKey: string) {
   const personId = agent.access.personId as string;
   const actor = { tokenId: agent.tokenId, tokenName: agent.tokenName };
-  const create = { ...validateAgentTaskCreate(body), assignee_person_ids: [personId] };
+  const create = {
+    ...validateAgentTaskCreate(body),
+    assignee_person_ids: agentCreateAssignees(personId, body?.assignee_person_ids),
+  };
   try {
     return await createWorkOsEmployeeTask(agent.access, create, actor, idempotencyKey);
   } catch (error) {
