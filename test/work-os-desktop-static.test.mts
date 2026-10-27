@@ -506,7 +506,14 @@ assert.doesNotMatch(companionServer, /dedupedProviderRefresh/);
 assert.doesNotMatch(companionServer, /syncing: options\.refreshNifty/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.doesNotMatch(companionServer, /await niftySyncPromise/);
-assert.match(companionServer, /role", "admin"/);
+// Assignment options must flow through the canonical role/team scope, not
+// merely import a scope helper or filter an unrelated companion surface.
+const taskAssignmentOptions = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-employee-tasks.ts"), "utf8")
+  .match(/export async function getWorkOsTaskCreationOptions\([^]*?\n\}/)?.[0];
+assert.ok(taskAssignmentOptions, "companion task creation options must exist");
+assert.match(taskAssignmentOptions, /const allowed = await accessibleWorkOsPersonIds\(access\)/);
+assert.match(taskAssignmentOptions, /const assignable = scopedAssignableTaskPeople\(people, allowed\)/);
+assert.match(taskAssignmentOptions, /people: \(assignable\b/);
 assert.match(companionServer, /Assignees must be active Work OS organization members/);
 assert.match(taskSurfaces, /No active organization members were found/);
 assert.match(companionServer, /getWorkOsEmployeeTaskDetails/);

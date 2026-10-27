@@ -5,6 +5,7 @@ import vm from "node:vm";
 import ts from "typescript";
 
 import { applyTaskCompletion, taskCompletionFailureMessage } from "../src/lib/work-os-task-completion";
+import { taskCapabilities, type TaskActor } from "../src/lib/work-os-task-permissions";
 
 type Node = { id: string; title: string };
 
@@ -175,10 +176,25 @@ test("a parent link that loops back never closes the same task twice", async () 
 /* The surfaces that mark a task done inherit the rule                 */
 /* ------------------------------------------------------------------ */
 
-const root = { id: "root-local", provider_task_id: "provider-root", title: "AnyDesk testing session with Lisa", provider: "nifty" };
-const child = { id: "child-local", provider_task_id: "provider-child", title: "Lisa is asked about availability", provider: "nifty" };
+const root = { id: "root-local", organization_id: "org", provider_task_id: "provider-root", title: "AnyDesk testing session with Lisa", provider: "nifty", completed: false, assignee_person_ids: ["person"] };
+const child = { id: "child-local", organization_id: "org", provider_task_id: "provider-child", title: "Lisa is asked about availability", provider: "nifty", completed: false, assignee_person_ids: ["person"] };
+
+class WorkOsForbiddenError extends Error {}
+class WorkOsNotFoundError extends Error {}
+const permissionContext = {
+  taskCapabilities,
+  taskActor: ({ role, personId }: TaskActor): TaskActor => ({ role, personId }),
+  employeeTaskToday: async () => "2026-10-27",
+  WorkOsForbiddenError,
+  WorkOsNotFoundError,
+  organizationOwnerId: async (organizationId: string) => {
+    assert.equal(organizationId, "org");
+    return "owner";
+  },
+};
 
 const employeeContext = (overrides: Record<string, unknown> = {}) => ({
+  ...permissionContext,
   employeeTaskContext: async () => ({ ownerId: "owner", task: root }),
   taskRequiresCompletionEvidence: () => false,
   completionEvidence: async () => null,
@@ -208,7 +224,7 @@ test("the employee completion path closes the open subtasks before the task", as
     },
   }));
 
-  const result = await subject({ organizationId: "org", personId: "person" }, "provider-root", true);
+  const result = await subject({ organizationId: "org", personId: "person", role: "employee" }, "provider-root", true);
 
   assert.deepEqual(closed, ["provider-child:true", "provider-root:true"]);
   assert.equal(result.task.completed_at, "2026-10-22T10:00:00Z");
@@ -225,7 +241,7 @@ test("the employee completion path leaves the task open when a subtask cannot cl
   }));
 
   await assert.rejects(
-    () => subject({ organizationId: "org", personId: "person" }, "provider-root", true),
+    () => subject({ organizationId: "org", personId: "person", role: "employee" }, "provider-root", true),
     /Lisa is asked about availability/,
   );
   // The task itself never closed behind an open subtask.
@@ -236,6 +252,7 @@ test("reopening a task through the employee path leaves its subtasks alone", asy
   const closed: string[] = [];
   const askedForChildren: string[] = [];
   const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "setWorkOsEmployeeTaskCompletion", "export async function listWorkOsEmployeeTaskSelection", employeeContext({
+    employeeTaskContext: async () => ({ ownerId: "owner", task: { ...root, completed: true } }),
     openSubtaskRows: async () => { askedForChildren.push("asked"); return [child]; },
     completeTask: async (_ownerId: string, id: string, completed: boolean) => {
       closed.push(`${id}:${completed}`);
@@ -243,7 +260,7 @@ test("reopening a task through the employee path leaves its subtasks alone", asy
     },
   }));
 
-  await subject({ organizationId: "org", personId: "person" }, "provider-root", false);
+  await subject({ organizationId: "org", personId: "person", role: "employee" }, "provider-root", false);
 
   assert.deepEqual(closed, ["provider-root:false"]);
   assert.deepEqual(askedForChildren, []);
@@ -252,7 +269,7 @@ test("reopening a task through the employee path leaves its subtasks alone", asy
 test("the administration completion path closes the open subtasks before the task", async () => {
   const closed: string[] = [];
   const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "completeWorkOsTask", "", {
-    organizationOwnerId: async () => "owner",
+    ...permissionContext,
     getTaskByLocalOrProviderId: async () => root,
     taskRequiresCompletionEvidence: () => false,
     completionEvidence: async () => null,
@@ -273,7 +290,35 @@ test("the administration completion path closes the open subtasks before the tas
     text: (value: unknown) => (typeof value === "string" ? value.trim() : ""),
   });
 
-  await subject({ organizationId: "org", personId: "person" }, "provider-root");
+  await subject({ organizationId: "org", personId: null, role: "admin" }, "provider-root");
 
   assert.deepEqual(closed, ["provider-child:true", "provider-root:true"]);
+});
+
+for (const name of ["setWorkOsEmployeeTaskCompletion", "completeWorkOsTask"]) {
+  test(`${name} refuses an unauthorized completion before any cascade or write`, async () => {
+    const calls: string[] = [];
+    const subject = loadFunction("src/lib/work-os-employee-tasks.ts", name, name === "completeWorkOsTask" ? "" : "export async function listWorkOsEmployeeTaskSelection", employeeContext({
+      getTaskByLocalOrProviderId: async () => root,
+      openSubtaskRows: async () => { calls.push("children"); return [child]; },
+      completeTask: async () => { calls.push("complete"); return root; },
+      syncPlanItemCompletion: async () => { calls.push("plan"); },
+      recordTaskDayEvent: async () => { calls.push("event"); },
+      audit: async () => { calls.push("audit"); },
+    }));
+    await assert.rejects(() => subject({ organizationId: "org", personId: "outsider", role: "employee" }, "provider-root", true), WorkOsForbiddenError);
+    assert.deepEqual(calls, []);
+  });
+}
+
+test("administration completion refuses another organization before any cascade or write", async () => {
+  const calls: string[] = [];
+  const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "completeWorkOsTask", "", employeeContext({
+    getTaskByLocalOrProviderId: async () => ({ ...root, organization_id: "other-org" }),
+    openSubtaskRows: async () => { calls.push("children"); return [child]; },
+    completeTask: async () => { calls.push("complete"); return root; },
+    syncPlanItemCompletion: async () => { calls.push("plan"); },
+  }));
+  await assert.rejects(() => subject({ organizationId: "org", personId: null, role: "admin" }, "provider-root", true), WorkOsNotFoundError);
+  assert.deepEqual(calls, []);
 });
