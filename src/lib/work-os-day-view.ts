@@ -15,7 +15,7 @@ export async function getWorkOsDay(
   access: WorkOsAccess,
   personId: string,
   at = new Date(),
-  options: { refreshNifty?: boolean; refreshAttendance?: boolean; compact?: boolean; localDate?: string | null } = {},
+  options: { refreshAttendance?: boolean; compact?: boolean; localDate?: string | null } = {},
 ) {
   // External provider calls are started immediately but never block the
   // response: the dashboard renders current (timestamped, truthful) data and
@@ -52,7 +52,7 @@ export async function getWorkOsDay(
     .maybeSingle();
   if (latestTaskResult.error) throw new Error(`load task freshness: ${latestTaskResult.error.message}`);
   // Tasks are local now: the record's own last write is the freshness that
-  // matters. Nifty is a read-only backup, never a refresh source.
+  // matters. The task record is the authority; there is no provider to sync from.
   const localSavedAt = latestTaskResult.data?.updated_at as string | undefined;
   const niftySync: Json = {
     fresh: true,

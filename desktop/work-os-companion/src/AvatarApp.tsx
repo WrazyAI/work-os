@@ -2537,7 +2537,7 @@ export default function AvatarApp(): React.ReactElement {
                           if (seenCards.has(displayKey)) return null;
                           seenCards.add(displayKey);
                           const tasks: TaskSelectionCardTask[] = selection.tasks.map((task) => ({
-                            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
+                            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled task",
                             description: typeof task.description === "string" ? task.description : null,
                             dueDate: typeof task.due_date === "string" ? task.due_date : null,
                             priority: typeof task.priority === "string" ? task.priority : null,

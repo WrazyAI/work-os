@@ -206,7 +206,7 @@ export default function DebugWindow() {
           <option value="real">Use server state</option><option value="no_shift">No shift</option><option value="scheduled">Scheduled — clock-in required</option><option value="shift_start">Shift start</option><option value="clocked_in">Clocked in</option><option value="paused">Paused</option><option value="catch_up">First-hour follow-up</option><option value="optional">Optional hourly check-in</option><option value="final_hour">Final-hour suppression</option><option value="eod_due">EOD due</option><option value="eod">EOD review</option><option value="clocked_out">Clocked out</option>
         </select></label>
         <div className="debug-switches">
-          <DebugSwitch label="Nifty sync failure" checked={scenario.niftyFailure} onChange={(value) => update({ niftyFailure: value })} />
+          <DebugSwitch label="Task load failure" checked={scenario.niftyFailure} onChange={(value) => update({ niftyFailure: value })} />
           <DebugSwitch label="No tasks" checked={scenario.emptyTasks} onChange={(value) => update({ emptyTasks: value })} />
           <DebugSwitch label="No evidence" checked={scenario.emptyEvidence} onChange={(value) => update({ emptyEvidence: value })} />
           <DebugSwitch label="No proposals" checked={scenario.emptyProposals} onChange={(value) => update({ emptyProposals: value })} />

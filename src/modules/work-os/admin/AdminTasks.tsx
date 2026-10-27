@@ -301,6 +301,6 @@ export default function AdminTasksPage() {
 
 function ProvenanceBadge({ task }: { task: AnyRow }) {
   if (String(task.provider ?? "") === "local") return <span className="text-[10.5px] text-[var(--text-tertiary)]">Work OS record</span>;
-  if (task.synced_at) return <span className="text-[10.5px] text-[var(--text-tertiary)]">Nifty synced</span>;
+  if (task.synced_at) return <span className="text-[10.5px] text-[var(--text-tertiary)]">Recorded</span>;
   return <StateMark tone="warn">Sync pending</StateMark>;
 }

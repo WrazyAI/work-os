@@ -32,14 +32,6 @@ const FEATURES: Array<{ key: string; label: string; detail: string; comingSoon?:
   { key: "seo_mission_control", label: "SEO Mission Control", detail: "The SEO operations surface for this workspace." },
 ];
 
-const SEMANTIC_FIELDS = [
-  { value: "priority", label: "Priority" },
-  { value: "blocked_reason", label: "Blocked reason" },
-  { value: "estimated_effort_minutes", label: "Estimated effort" },
-  { value: "expected_outcome", label: "Expected outcome" },
-  { value: "definition_of_done", label: "Definition of done" },
-];
-
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["work-os"] });
@@ -52,11 +44,6 @@ export default function AdminSettingsPage() {
   const connections = useQuery<{ connections: AnyRow[]; accounts: AnyRow[] }>({
     queryKey: adminKeys.connections(),
     queryFn: () => adminFetch("/api/work-os/integrations/connections"),
-    staleTime: 30_000,
-  });
-  const fieldMappings = useQuery<{ mappings: AnyRow[] }>({
-    queryKey: adminKeys.fieldMappings(),
-    queryFn: () => adminFetch("/api/work-os/field-mappings"),
     staleTime: 30_000,
   });
   const blueprints = useQuery<{ blueprints: AnyRow[] }>({
@@ -99,12 +86,6 @@ export default function AdminSettingsPage() {
     }),
     onSuccess: invalidate,
   });
-  const saveMapping = useMutation({
-    mutationFn: (body: AnyRow) => adminFetch("/api/work-os/field-mappings", {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    }),
-    onSuccess: invalidate,
-  });
   const generateBlueprint = useMutation({
     mutationFn: ({ id, body }: { id: string; body: AnyRow }) => adminFetch(`/api/work-os/blueprints/${id}/generate`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -122,15 +103,13 @@ export default function AdminSettingsPage() {
   const [connectorWorkspaceId, setConnectorWorkspaceId] = useState("");
   const [connectorAccountId, setConnectorAccountId] = useState("");
   const [connectorPersonId, setConnectorPersonId] = useState("");
-  const [mappingField, setMappingField] = useState("priority");
-  const [mappingProviderFieldId, setMappingProviderFieldId] = useState("");
   const [blueprintClient, setBlueprintClient] = useState("");
   const [blueprintStart, setBlueprintStart] = useState(() => new Date().toISOString().slice(0, 10));
   const [blueprintAssignee, setBlueprintAssignee] = useState("");
 
   const organizationFlags = (organization.data?.organization?.feature_flags ?? {}) as Record<string, boolean>;
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
-  const error = organization.error || connections.error || fieldMappings.error || blueprints.error || features.error || membershipAction.error || membershipPatch.error || saveConnection.error || saveMapping.error || generateBlueprint.error;
+  const error = organization.error || connections.error || blueprints.error || features.error || membershipAction.error || membershipPatch.error || saveConnection.error || generateBlueprint.error;
 
   return (
     <div className="grid gap-5">
@@ -144,12 +123,6 @@ export default function AdminSettingsPage() {
             <>
               <StateMark tone={status.data?.schema.ready ? "ok" : "warn"}>
                 {status.data?.schema.ready ? "Work OS schema ready" : "Migration required"}
-              </StateMark>
-              <StateMark tone={status.data?.nifty.canCallApi ? "ok" : "warn"}>
-                {status.data?.nifty.canCallApi ? "Nifty backup ready" : "Nifty backup not connected"}
-              </StateMark>
-              <StateMark tone={status.data?.nifty.hasRefreshToken ? "ok" : "neutral"}>
-                {status.data?.nifty.hasRefreshToken ? "Refresh token present" : "No refresh token"}
               </StateMark>
             </>
           )}
@@ -315,11 +288,6 @@ export default function AdminSettingsPage() {
           icon={Cable}
           title="Provider connections"
           detail="Workspace-level connections for evidence providers. Source accounts are only verified when mapped to a person."
-          action={
-            <a href="/api/work-os/nifty/oauth/start" className="inline-flex items-center rounded-[10px] border px-3 py-2 text-[11.5px] font-semibold text-[var(--text-primary)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-              Connect Nifty backup
-            </a>
-          }
         />
         <div className="flex flex-wrap items-end gap-2">
           <SelectField
@@ -384,33 +352,6 @@ export default function AdminSettingsPage() {
             ))}
           </ul>
         ) : null}
-      </AdminCard>
-
-      {/* Field mappings */}
-      <AdminCard>
-        <SectionHeading icon={Layers3} title="Nifty custom fields" detail="Maps Work OS fields onto Nifty custom field IDs." />
-        <div className="flex flex-wrap items-end gap-2">
-          <SelectField label="Work OS field" value={mappingField} onChange={setMappingField} options={SEMANTIC_FIELDS} ariaLabel="Semantic field" />
-          <TextField label="Nifty field ID" value={mappingProviderFieldId} onChange={setMappingProviderFieldId} ariaLabel="Nifty field ID" />
-          <Button
-            variant="primary"
-            disabled={!mappingProviderFieldId.trim() || saveMapping.isPending}
-            onClick={() => saveMapping.mutate({ provider: "nifty", semantic_field: mappingField, provider_field_id: mappingProviderFieldId.trim() }, { onSuccess: () => setMappingProviderFieldId("") })}
-          >
-            Save mapping
-          </Button>
-        </div>
-        <ul className="mt-4 grid gap-1.5">
-          {(fieldMappings.data?.mappings ?? []).map((mapping) => (
-            <li key={String(mapping.id)} className="flex items-center justify-between gap-2 text-[12px] text-[var(--text-secondary)]">
-              <span>{statusLabel(String(mapping.semantic_field))}</span>
-              <span className="font-mono text-[11px] text-[var(--text-tertiary)]">{String(mapping.provider_field_id)}</span>
-            </li>
-          ))}
-          {!fieldMappings.data?.mappings?.length && !fieldMappings.isLoading ? (
-            <li className="text-[12px] text-[var(--text-tertiary)]">No field mappings recorded.</li>
-          ) : null}
-        </ul>
       </AdminCard>
 
       {/* Blueprints */}

@@ -85,6 +85,6 @@ describe("TaskDetailsModal subtask actions", () => {
     expect(markup).toContain("release-verification.pdf");
     expect(markup).toContain("Download release-verification.pdf");
     expect(markup).toContain("Attach evidence");
-    expect(markup).not.toContain("Nifty synced");
+    expect(markup).not.toContain("Recorded");
   });
 });

@@ -164,7 +164,7 @@ export function SuggestionReviewModal({ suggestions, busyId, error, onDecide, on
         <header className="suggestion-modal-head">
           <div>
             <h2 id="suggestion-modal-title">Suggestion review</h2>
-            <p>Task changes {MASCOT.name} proposed that still need a decision. Nothing reaches Nifty until you approve it.</p>
+            <p>Task changes {MASCOT.name} proposed that still need a decision. Nothing is written until you approve it.</p>
           </div>
           <button type="button" className="suggestion-modal-close" aria-label="Close suggestion review" onClick={onClose}><X size={16} /></button>
         </header>

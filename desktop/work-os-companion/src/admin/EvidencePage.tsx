@@ -37,7 +37,7 @@ const SOURCE_OPTIONS = [
   { value: "worktivity", label: "Worktivity (activity)" },
   { value: "github", label: "GitHub" },
   { value: "loom", label: "Loom" },
-  { value: "nifty", label: "Nifty" },
+  { value: "nifty", label: "Legacy import" },
 ];
 
 function screenshotOf(row: EvidenceRow) {

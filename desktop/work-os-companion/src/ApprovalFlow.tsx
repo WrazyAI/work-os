@@ -109,7 +109,7 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
             <span aria-hidden="true">{result.status === "failed" ? <CircleAlert size={14} /> : result.status === "processing" ? <Loader size={14} /> : <Check size={14} />}</span>
             <div><strong>{operationLabel(result.op.op)} {result.op.taskTitle ?? "update"}</strong><p>{result.message}</p></div>
             <em>{statusLabel(result)}</em>
-            {result.retryable && result.op.proposalId && onRetry ? <button type="button" className="approval-retry" onClick={() => onRetry(result)} title={result.createResolution ? "Confirms Nifty holds no copy of this task, clears the recorded attempt, and files it." : undefined}>{result.createResolution ? "Nothing was created — retry" : "Retry"}</button> : null}
+            {result.retryable && result.op.proposalId && onRetry ? <button type="button" className="approval-retry" onClick={() => onRetry(result)} title={result.createResolution ? "Confirms no earlier copy of this task exists, clears the recorded attempt, and files it." : undefined}>{result.createResolution ? "Nothing was created — retry" : "Retry"}</button> : null}
           </article>
         ))}
       </div>

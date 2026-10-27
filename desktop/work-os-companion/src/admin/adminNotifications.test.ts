@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_OVERVIEW_STALE_AFTER_MS,
   adminRoleLabel,
-  niftySyncReceipt,
   overviewStaleMessage,
   workspaceDegradedNotice,
 } from "./adminNotifications";
@@ -20,25 +19,13 @@ describe("administration notifications", () => {
   });
 
   it("names only the degraded states the status endpoint reports", () => {
-    expect(workspaceDegradedNotice({ schema: { ready: false, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } })?.title).toBe("Work OS schema is not ready");
-    expect(workspaceDegradedNotice({ schema: { ready: true, migration: "0021" }, nifty: { canCallApi: false, hasRefreshToken: false } })?.title).toBe("Nifty needs a connection");
-    expect(workspaceDegradedNotice({ schema: { ready: true, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } })).toBeNull();
+    expect(workspaceDegradedNotice({ schema: { ready: false, migration: "0021" } })?.title).toBe("Work OS schema is not ready");
+    expect(workspaceDegradedNotice({ schema: { ready: true, migration: "0021" } })).toBeNull();
     expect(workspaceDegradedNotice(undefined)).toBeNull();
     // The schema caveat comes first: a missing migration is the blocking state.
-    expect(workspaceDegradedNotice({ schema: { ready: false, migration: "0021" }, nifty: { canCallApi: false, hasRefreshToken: false } })?.title).toBe("Work OS schema is not ready");
+    expect(workspaceDegradedNotice({ schema: { ready: false, migration: "0021" } })?.title).toBe("Work OS schema is not ready");
   });
 
-  it("repeats the Nifty sync's own counts and never invents them", () => {
-    expect(niftySyncReceipt({ nifty: { tasks: 12, projects: 3, members: 8, syncedAt: "2026-10-15T12:00:00.000Z" } }))
-      .toBe("The sync read 12 tasks, 3 projects, and 8 members from Nifty and refreshed the mirror.");
-    expect(niftySyncReceipt({ nifty: { tasks: 1, projects: 0, members: 0 } }))
-      .toBe("The sync read 1 task from Nifty and refreshed the mirror.");
-    expect(niftySyncReceipt({ nifty: { tasks: 0, projects: 0, members: 0 } }))
-      .toBe("Nifty returned no tasks, projects, or members to mirror.");
-    expect(niftySyncReceipt({ nifty: { syncedAt: "2026-10-15T12:00:00.000Z" } }))
-      .toBe("The task record finished syncing with Nifty.");
-    expect(niftySyncReceipt(undefined)).toBe("The task record finished syncing with Nifty.");
-  });
 
   it("uses the role names the workspace's own selects show", () => {
     expect(adminRoleLabel("admin")).toBe("Administrator");

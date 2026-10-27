@@ -334,7 +334,6 @@ export interface ConnectionsResponse {
 
 export interface SystemStatusResponse {
   schema: { ready: boolean; migration: string; error?: string };
-  nifty: { canCallApi: boolean; hasRefreshToken: boolean; hasAccessToken?: boolean };
 }
 
 /** One embedded relation that may arrive as a row, an array of rows, or null. */

@@ -87,7 +87,7 @@ describe("unified Tasks workspace", () => {
   it("replaces provider failure payloads with deliberate fallback copy", () => {
     expect(safeTaskText("TypeError: Failed to fetch", "No description added.")).toBe("No description added.");
     expect(safeTaskText("  A useful task description  ", "No description added.")).toBe("A useful task description");
-    expect(safeTaskText({ message: "failure" }, "Untitled Nifty task")).toBe("Untitled Nifty task");
+    expect(safeTaskText({ message: "failure" }, "Untitled task")).toBe("Untitled task");
   });
 
   it("filters tasks by case-insensitive task text", () => {

@@ -191,3 +191,10 @@ test("subtask move refusals are caller errors, not server faults", async () => {
   assert.doesNotMatch(target, /throw new Error\(/);
   assert.match(target, /WorkOsValidationError/);
 });
+
+test("agent create accepts story points like the employee composer", () => {
+  assert.deepEqual(
+    validateAgentTaskCreate({ name: "Size the work", story_points: 5 }),
+    { name: "Size the work", story_points: 5 },
+  );
+});

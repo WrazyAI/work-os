@@ -192,7 +192,7 @@ export function deterministicInsightBrief(days: Json[], references: Json[], extr
   const consistency = extras.consistency ?? null;
   const comparison = extras.comparison ?? null;
   const wins = [
-    completed ? `${completed} task outcome${completed === 1 ? "" : "s"} completed in this range.` : "No completed Nifty outcomes were recorded in this range.",
+    completed ? `${completed} task outcome${completed === 1 ? "" : "s"} completed in this range.` : "No completed task outcomes were recorded in this range.",
     progressed ? `${progressed} substantive progress update${progressed === 1 ? "" : "s"} recorded.` : "No substantive progress updates were recorded.",
     tracked ? `${tracked} tracked minute${tracked === 1 ? "" : "s"} of app/site activity context recorded (observed context, not a productivity score).` : "No Worktivity app/site activity context was recorded in this range.",
   ];
@@ -266,7 +266,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const personId = access.personId as string;
   const ownerId = workOsOrganizationOwnerId(access);
   const context = await employeeContext(access, now);
-  const [tasksResult, eventsResult, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult, providerConnectionsResult, sourceAccountsResult] = await Promise.all([
+  const [tasksResult, eventsResult, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult, taskFreshnessResult, providerConnectionsResult, sourceAccountsResult] = await Promise.all([
     db().from("work_tasks")
       .select("*,project:work_projects(id,name,provider_project_id)")
       .eq("user_id", ownerId)
@@ -286,11 +286,13 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       .eq("person_id", personId).gte("shift_date", windowFrom).lte("shift_date", through),
     db().from("work_evidence").select("id,evidence_date,source,title,metrics").eq("user_id", ownerId).eq("person_id", personId)
       .gte("evidence_date", windowFrom).lte("evidence_date", through),
-    db().from("work_organizations").select("nifty_synced_at,nifty_sync_error,feature_flags").eq("id", access.organizationId).single(),
+    db().from("work_organizations").select("feature_flags").eq("id", access.organizationId).single(),
+    db().from("work_tasks").select("updated_at").eq("organization_id", access.organizationId)
+      .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     db().from("work_provider_connections").select("provider,active").eq("organization_id", access.organizationId),
     db().from("work_source_accounts").select("provider,person_id,verified").eq("organization_id", access.organizationId).eq("person_id", personId),
   ]);
-  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
+  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["task freshness", taskFreshnessResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
     if (result.error) throw new Error(`load Work OS insight ${label}: ${result.error.message}`);
   }
   const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
@@ -387,8 +389,10 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const comparison = { range, from: previous.from, through: previous.through, days: previousDays, totals: previousTotals };
   const consistency = insightConsistency(currentDays, totals);
   const observed = (sessionsResult.data ?? []).map((item: any) => item.attendance_observed_at).filter(Boolean).sort().at(-1) ?? null;
-  const niftySyncedAt = orgResult.data?.nifty_synced_at ?? null;
-  const stale = !!orgResult.data?.nifty_sync_error || !niftySyncedAt || now.getTime() - Date.parse(niftySyncedAt) > 10 * 60_000;
+  const niftySyncedAt = (taskFreshnessResult.data as { updated_at?: string } | null)?.updated_at ?? null;
+  // Insights are computed live from the task record, so there is no provider
+  // sync that could lag behind. The timestamp stays for display only.
+  const stale = false;
   const activeProviders = new Set((providerConnectionsResult.data ?? []).filter((row: any) => row.active === true).map((row: any) => String(row.provider)));
   const verifiedProviders = new Set((sourceAccountsResult.data ?? []).filter((row: any) => row.verified === true).map((row: any) => String(row.provider)));
   const currentEvidenceRows = ((evidenceResult.data ?? []) as Json[]).filter((item) => String(item.evidence_date ?? "") >= from);
@@ -417,7 +421,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       authoritativeBreaks,
       stale,
       staleAt: stale ? niftySyncedAt : null,
-      error: orgResult.data?.nifty_sync_error ?? null,
+      error: null,
     },
   };
 }

@@ -4,7 +4,7 @@ export const DEFAULT_ROLE_PROFILES = [
   {
     slug: "crm_sales",
     name: "CRM / Sales",
-    description: "Assessed from assigned Nifty work and actor-attributed CRM outcomes, with activity retained only as supporting context.",
+    description: "Assessed from assigned work and actor-attributed CRM outcomes, with activity retained only as supporting context.",
     productivity_rules: {
       expectedOutcomes: ["timely follow-ups", "documented client communication", "appointments", "qualified pipeline movement"],
       primarySignals: ["ghl_notes", "completed_calls", "outbound_messages", "appointments", "pipeline_changes"],
@@ -12,7 +12,7 @@ export const DEFAULT_ROLE_PROFILES = [
       validBlockers: ["missing lead data", "client unavailable", "approval required", "CRM outage"],
       prohibitedInferences: ["screen time equals productivity", "CRM usage alone proves output", "assigned lead equals contacted lead"],
     },
-    evidence_requirements: ["actor-attributed GHL event", "client communication record", "appointment or pipeline change", "Nifty task linkage when available"],
+    evidence_requirements: ["actor-attributed GHL event", "client communication record", "appointment or pipeline change", "task linkage when available"],
   },
   {
     slug: "media_editor",
@@ -31,7 +31,7 @@ export const DEFAULT_ROLE_PROFILES = [
   {
     slug: "engineer",
     name: "Engineering",
-    description: "Assessed from assigned Nifty outcomes and verified engineering artifacts, reviews, deployments, and resolved incidents.",
+    description: "Assessed from assigned task outcomes and verified engineering artifacts, reviews, deployments, and resolved incidents.",
     productivity_rules: {
       expectedOutcomes: ["working changes", "reviewed code", "reliable deployments", "resolved incidents", "technical decisions"],
       primarySignals: ["merged_prs", "submitted_reviews", "successful_ci", "deployments", "resolved_incidents", "technical_documents"],
@@ -39,7 +39,7 @@ export const DEFAULT_ROLE_PROFILES = [
       validBlockers: ["dependency unavailable", "review required", "environment failure", "unclear acceptance criteria"],
       prohibitedInferences: ["commit count equals productivity", "lines of code measure value", "IDE time proves output", "activity alone proves completion"],
     },
-    evidence_requirements: ["verified GitHub account", "PR/review/deployment artifact", "Nifty task or explicit work claim", "technical blocker when incomplete"],
+    evidence_requirements: ["verified GitHub account", "PR/review/deployment artifact", "task record or explicit work claim", "technical blocker when incomplete"],
   },
   {
     slug: "manager",

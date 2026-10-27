@@ -48,7 +48,7 @@ const SOURCE_OPTIONS = [
   { value: "loom", label: "Loom" },
   { value: "manual", label: "Manual" },
   { value: "agent", label: "Agent" },
-  { value: "nifty", label: "Nifty" },
+  { value: "nifty", label: "Legacy import" },
   { value: "crm", label: "CRM" },
   { value: "media", label: "Media" },
 ];

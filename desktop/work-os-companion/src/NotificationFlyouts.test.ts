@@ -7,8 +7,8 @@ import { appendNotification, notificationAriaRole, notificationAutoDismissMs, no
 describe("application notification flyouts", () => {
   it("renders failures as assertive red flyouts and successes as green status flyouts", () => {
     const notifications: AppNotification[] = [
-      { id: "failure", tone: "error", title: "Could not save", message: "Nifty rejected the task." },
-      { id: "success", tone: "success", title: "Task created", message: "Nifty confirmed the new task." },
+      { id: "failure", tone: "error", title: "Could not save", message: "The workspace rejected the task." },
+      { id: "success", tone: "success", title: "Task created", message: "The workspace confirmed the new task." },
     ];
     const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications, onDismiss: () => undefined }));
     expect(markup).toContain('class="notification-flyout error transient"');

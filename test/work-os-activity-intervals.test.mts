@@ -408,7 +408,7 @@ test("interval messages carry recorded GitHub activity as its own labeled sectio
   const system = String(withGithub[0].content);
   assert.match(system, /Recorded GitHub activity is provider-recorded fact/);
   assert.match(system, /Keep the two GitHub relationships distinct/);
-  assert.match(system, /not Nifty task completion/);
+  assert.match(system, /not task completion/);
 });
 
 test("recorded activity is kept only when it matches the supplied GitHub list", () => {

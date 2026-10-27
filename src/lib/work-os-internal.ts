@@ -1,5 +1,4 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { withNiftyOrganization } from "@/lib/integrations/nifty";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import {
   localDateForTimezone,
@@ -32,13 +31,6 @@ function missingWorkOsSchema(message: string) {
 
 export function db() {
   return createAdminClient();
-}
-
-export async function niftyForOwner<T>(userId: string, operation: () => Promise<T>) {
-  const { data, error } = await db().from("work_organizations").select("id").eq("legacy_owner_id", userId).maybeSingle();
-  if (error) throw new Error(`load Nifty organization scope: ${error.message}`);
-  if (!data) throw new Error("Work OS organization is required before accessing Nifty");
-  return withNiftyOrganization(data.id, operation);
 }
 
 export function dateOnly(value?: unknown) {
@@ -77,14 +69,6 @@ export async function selectFirst<T = Json>(query: PromiseLike<{ data: T[] | nul
   const rows = await ensureNoError(query, label);
   if (!rows?.[0]) throw new Error(`${label}: no row returned`);
   return rows[0];
-}
-
-export function niftyIdentity(value: unknown) {
-  if (typeof value === "string" && value.trim()) return value.trim();
-  if (!value || typeof value !== "object") return null;
-  const row = value as Record<string, unknown>;
-  for (const key of ["id", "_id", "user_id", "member_id"]) if (typeof row[key] === "string" && row[key]) return row[key] as string;
-  return null;
 }
 
 export type ProposalOperation =
@@ -126,7 +110,7 @@ export async function organizationOwnerId(organizationId: string) {
     .single();
   if (error) throw new Error(`load Work OS organization: ${error.message}`);
   const ownerId = data.legacy_owner_id || data.created_by;
-  if (!ownerId) throw new Error("Work OS organization has no Nifty provider owner");
+  if (!ownerId) throw new Error("Work OS organization has no owner account");
   return ownerId as string;
 }
 

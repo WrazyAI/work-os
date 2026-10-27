@@ -200,9 +200,9 @@ function AppWideSidePanel({ children, className = "", closeLabel, onClose, busy 
   );
 }
 
-/** Historical Nifty mirrors remain identifiable; new tasks are Work OS records. */
+/** Every task is a Work OS record; the chip states its own saving state. */
 export function taskSourceLabel(task: AnyTask): string {
-  return String(task?.provider ?? "") === "local" ? "Work OS" : "Nifty";
+  return String(task?.provider ?? "") === "local" ? "Work OS" : "Work OS";
 }
 
 export function TaskComposerModal({ busy, closing = false, title, description, assignees, options, optionsLoading, onTitle, onDescription, onToggleAssignee, onClose, onSubmit }: {
@@ -311,7 +311,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
           </section>
           <TaskEvidenceList evidence={completionEvidence} loadEvidence={loadEvidence} readOnly={readOnly} busy={busy} completed={task.completed === true} onAttach={onAttachEvidence} onDownload={onDownloadEvidence} />
           <section className="subtask-section task-detail-next-steps"><header><div><strong>Next steps</strong><small>Keep the next concrete move visible.</small></div><span className="task-detail-next-count">{subtasks.length}</span></header>
-            {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
+            {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks. Showing the last records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
@@ -344,13 +344,13 @@ export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy
 }) {
   const permanent = mode === "delete";
   const draft = scope === "draft";
-  const source = draft ? "Work OS" : localTask ? "Work OS" : "Nifty";
+  const source = "Work OS";
   const dialogRef = useRef<HTMLElement | null>(null);
   useDialogFocus(dialogRef);
   return renderViewportSurface(<div className="task-modal-backdrop confirmation-backdrop"><section ref={dialogRef} className={`delete-confirmation ${permanent ? "" : "reversible"}`} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
     <span className={permanent ? "danger-icon" : "reversible-icon"}>{permanent ? <Trash2 size={18} /> : <Archive size={18} />}</span>
     <h2 id="delete-confirmation-title">{permanent ? "Permanently delete" : "Archive"} this {scope}?</h2>
-    <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from {source} and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in {localTask ? "Work OS history" : `Nifty. It can be restored from Nifty’s archived tasks`}.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
+    <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from {source} and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in Work OS history.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
     <div><button disabled={busy} onClick={onCancel}>Cancel</button><button className={permanent ? "confirm-delete" : "confirm-archive"} disabled={busy} onClick={onConfirm}>{busy ? (permanent ? "Deleting…" : "Archiving…") : permanent ? (draft ? "Delete draft" : "Delete permanently") : "Archive task"}</button></div>
   </section></div>);
 }
@@ -362,7 +362,7 @@ export function TaskEditModal({ kind, title, description, busy, localTask = fals
   const dialogRef = useRef<HTMLElement | null>(null);
   useDialogFocus(dialogRef);
   return renderViewportSurface(<div className="task-modal-backdrop"><section ref={dialogRef} className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title">
-    <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the {localTask ? "Work OS" : "Nifty"} record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
+    <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the {localTask ? "Work OS" : "Work OS"} record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
     <div className="task-modal-body">
       <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
@@ -386,7 +386,7 @@ export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTa
         <div className="carry-row-copy"><strong>{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div>
         <div className="carry-row-actions"><button disabled={busy} onClick={() => onSurfaceTask(task)}><Plus size={13} /> Add to today</button><button disabled={busy || taskFlight?.has(String(task.provider_task_id || task.id))} onClick={() => onTaskCompletion(task, true)}>{taskFlight?.get(String(task.provider_task_id || task.id)) === "completing" ? <FadeArc size={13} /> : <Check size={13} />} Complete</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button onClick={() => onOpenDay(attribution.date!)}>Open day</button></div>
       </article>)}</section>) : <div className="carry-empty"><Check size={20} /><strong>Nothing left behind</strong><span>Earlier work is complete or carried forward.</span></div>}</div>
-      <footer><small>Nothing changes in Nifty until you act.</small><button onClick={onClose}>Close</button></footer>
+      <footer><small>Nothing is written until you act.</small><button onClick={onClose}>Close</button></footer>
     </aside>
   </AppWideSidePanel>;
 }
@@ -403,9 +403,9 @@ export function AssigneeTags({ task }: { task: AnyTask }) {
 
 export function SyncChip({ task }: { task: AnyTask }) {
   if (String(task.provider ?? "") === "local") return <span className="sync-chip synced">Work OS task</span>;
-  if (task.sync_error) return <span className="sync-chip degraded">Nifty details unavailable</span>;
-  if (task.synced_at) return <span className="sync-chip synced">Nifty synced</span>;
-  return <span className="sync-chip awaiting">Awaiting Nifty sync</span>;
+  if (task.sync_error) return <span className="sync-chip degraded">Details unavailable</span>;
+  if (task.synced_at) return <span className="sync-chip synced">Work OS task</span>;
+  return <span className="sync-chip awaiting">Saving…</span>;
 }
 
 export { sentence, taskKind };

@@ -455,7 +455,7 @@ const INTERVAL_SYSTEM_PROMPT = [
   "Never claim completion, progress, or activity from the additional context alone, and never contradict what the observations and images show.",
   "Recorded GitHub activity is provider-recorded fact: when it is present, lead with it and state it exactly as recorded (commits pushed, pull requests, reviews, workflow runs, deployments).",
   "Keep the two GitHub relationships distinct: 'performed by this employee' is their own account's work; 'triggered by their work' is a consequence (CI runs, deployments, reviews on their pull requests) and must never be described as their action.",
-  "A merged pull request, a passing workflow, or a deployment is not Nifty task completion; never extend recorded activity to outcomes it does not record.",
+  "A merged pull request, a passing workflow, or a deployment is not task completion; never extend recorded activity to outcomes it does not record.",
   "The recap is useful to a manager later, so be concrete about apps, tools, artifacts, and the apparent work context.",
   "Write for scanning, never as one dense paragraph: a one-line headline, a short lead of one to three sentences, then short activity bullets. Keep every sentence and bullet brief.",
 ].join("\n");

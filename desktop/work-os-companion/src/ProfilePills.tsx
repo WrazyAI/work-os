@@ -69,7 +69,6 @@ export function ProviderAccountPills({ accounts, note }: { accounts: ProviderAcc
   const pills: Array<{ key: string; provider: string; Mark: LucideIcon; name: string; identifier: string | null; pending: boolean }> = [];
   if (accounts.worktivity.mapped) pills.push({ key: "worktivity", provider: "worktivity", Mark: Camera, name: "Worktivity", identifier: accounts.worktivity.email, pending: false });
   for (const account of accounts.github.accounts) pills.push({ key: `github:${account.id}`, provider: "github", Mark: Github, name: "GitHub", identifier: account.login, pending: !account.verified });
-  if (accounts.nifty.mapped) pills.push({ key: "nifty", provider: "nifty", Mark: ListChecks, name: "Nifty", identifier: accounts.nifty.email, pending: false });
 
   return <div className="profile-accounts">
     <fieldset className="profile-pill-group">

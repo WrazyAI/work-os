@@ -79,7 +79,7 @@ export async function recordTaskDayEvent(
     const result = await db().from("work_tasks").select("*").eq("organization_id", access.organizationId)
       .or(`id.eq.${providerTaskId},provider_task_id.eq.${providerTaskId}`).maybeSingle();
     if (result.error) throw new Error(`load task event target: ${result.error.message}`);
-    if (!result.data) throw new Error("Task event target was not mirrored from Nifty");
+    if (!result.data) throw new Error("Task event target was not found");
     task = result.data;
   }
   const exactAt = options.exactAt ?? null;
@@ -89,7 +89,7 @@ export async function recordTaskDayEvent(
     organization_id: access.organizationId,
     person_id: access.personId,
     task_id: task.id,
-    provider: task.provider ?? "nifty",
+    provider: task.provider ?? "local",
     provider_task_id: task.provider_task_id,
     local_date: localDate,
     event_type: eventType,

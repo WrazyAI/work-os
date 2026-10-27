@@ -309,7 +309,7 @@ export default function AdminOverviewPage() {
         <AdminCard className="lg:col-span-5">
           <SectionHeading icon={Database} title="Data sources" detail="When each source last delivered and today's volume." />
           <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
-            <SourceRow label="Nifty" at={data.freshness.niftySyncedAt} now={generatedAt} freshWithinMs={60 * 60_000} volume={`${data.freshness.niftyTasksToday} task${data.freshness.niftyTasksToday === 1 ? "" : "s"} synced today`} />
+            <SourceRow label="Tasks" at={data.freshness.niftySyncedAt} now={generatedAt} freshWithinMs={60 * 60_000} volume={`${data.freshness.niftyTasksToday} task${data.freshness.niftyTasksToday === 1 ? "" : "s"} created today`} />
             <SourceRow label="Worktivity" at={data.freshness.worktivityObservedAt} now={generatedAt} freshWithinMs={15 * 60_000} volume={`${data.counts.evidenceActivityToday} frame${data.counts.evidenceActivityToday === 1 ? "" : "s"} today`} />
             <SourceRow label="GitHub" at={data.freshness.githubLastEventAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} volume={`${data.freshness.githubEventsToday} event${data.freshness.githubEventsToday === 1 ? "" : "s"} today`} />
             <SourceRow label="Plans" at={data.freshness.lastPlanAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} volume="Plan edits and confirmations" />

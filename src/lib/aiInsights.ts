@@ -135,7 +135,7 @@ export function renderInsightSelection(selection: InsightSelection, data: Pick<I
  * model cannot borrow a number from its own instructions. */
 export function buildInsightGroundingText(data: InsightSource): string {
   const dayLines = data.days.map((day) =>
-    `- ${day.date}: ${formatDuration(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
+    `- ${day.date}: ${formatDuration(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} task outcomes`,
   ).join("\n");
   const kinds = data.updateKinds;
   const patterns = data.consistency;
@@ -144,10 +144,10 @@ export function buildInsightGroundingText(data: InsightSource): string {
     `Wins: ${insightFacts(data).wins.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
     `Needs attention: ${insightFacts(data).attention.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "nothing flagged"}`,
     `Next focus: ${insightFacts(data).focus.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
-    `Totals: ${formatDuration(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items, ${data.totals.outcomesOnTime ?? 0} outcomes on time, ${data.totals.outcomesLate ?? 0} outcomes late.`,
+    `Totals: ${formatDuration(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} task outcomes, ${data.totals.outputEvidence} output evidence items, ${data.totals.outcomesOnTime ?? 0} outcomes on time, ${data.totals.outcomesLate ?? 0} outcomes late.`,
     ...(kinds ? [`Update mix: ${kinds.progress} progress, ${kinds.starting} starts, ${kinds.completionClaim} completion claims, ${kinds.blocked} blockers, ${kinds.priorityChange} priority changes, ${kinds.unplannedWork} unplanned work.`] : []),
     ...(patterns ? [`Rhythm: ${patterns.daysWithGoal}/${patterns.dayCount} days with a written goal, ${patterns.daysWithUpdate}/${patterns.dayCount} days with a substantive update, ${patterns.daysWithCompletion}/${patterns.dayCount} days with a completed outcome, ${patterns.currentStreak}-day closing streak${patterns.bestDay ? `, best day ${patterns.bestDay.date} with ${patterns.bestDay.tasksCompleted} completed` : ""}.`] : []),
-    ...(data.previousTotals ? [`Earlier equal period: ${data.previousTotals.tasksCompleted ?? 0} Nifty outcomes, ${formatDuration(Number(data.previousTotals.observedSeconds ?? 0))} observed, ${data.previousTotals.plannedCompleted ?? 0}/${data.previousTotals.planned ?? 0} planned tasks completed.`] : []),
+    ...(data.previousTotals ? [`Earlier equal period: ${data.previousTotals.tasksCompleted ?? 0} task outcomes, ${formatDuration(Number(data.previousTotals.observedSeconds ?? 0))} observed, ${data.previousTotals.plannedCompleted ?? 0}/${data.previousTotals.planned ?? 0} planned tasks completed.`] : []),
     "Daily record:",
     dayLines || "(no days recorded)",
   ].join("\n");

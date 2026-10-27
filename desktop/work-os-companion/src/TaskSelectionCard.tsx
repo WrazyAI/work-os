@@ -353,7 +353,7 @@ export function TaskSelectionCard({
 
   const titleById = new Map<string, string>();
   for (const task of listedTasks) {
-    titleById.set(task.id, safeTaskText(task.title, "Untitled Nifty task"));
+    titleById.set(task.id, safeTaskText(task.title, "Untitled task"));
     for (const child of childrenOf(task) ?? []) titleById.set(child.id, safeTaskText(child.title, "Untitled subtask"));
   }
 
@@ -508,7 +508,7 @@ export function TaskSelectionCard({
   };
 
   const renderListRow = (task: TaskSelectionCardTask) => {
-    const titleText = titleById.get(task.id) ?? "Untitled Nifty task";
+    const titleText = titleById.get(task.id) ?? "Untitled task";
     const overdue = task.state === "overdue";
     const proposed = proposedIds.has(task.id);
     const selected = selectedIds.has(task.id) && !proposed;
@@ -519,7 +519,7 @@ export function TaskSelectionCard({
     const total = children.length || Number(task.subtaskTotal ?? 0);
     const completed = children.length ? completedChildren : Number(task.subtaskCompleted ?? 0);
     const metadata = [
-      task.projectName ? safeTaskText(task.projectName, "Nifty") : "Nifty",
+      task.projectName ? safeTaskText(task.projectName, "Work OS") : "Work OS",
       task.priority ? `${task.priority} priority` : null,
       task.dueDate ? `Due ${formatWorkOsDate(task.dueDate)}` : overdue ? "Overdue" : null,
     ].filter(Boolean).join(" · ");
@@ -566,7 +566,7 @@ export function TaskSelectionCard({
   };
 
   const renderTableRow = (task: TaskSelectionCardTask) => {
-    const titleText = titleById.get(task.id) ?? "Untitled Nifty task";
+    const titleText = titleById.get(task.id) ?? "Untitled task";
     const overdue = task.state === "overdue";
     const proposed = proposedIds.has(task.id);
     const selected = selectedIds.has(task.id) && !proposed;
@@ -600,7 +600,7 @@ export function TaskSelectionCard({
           </span>
           <span role="cell" className={overdue ? "is-overdue" : ""}>{task.dueDate ? formatWorkOsDate(task.dueDate) : "No date"}</span>
           <span role="cell"><em className={proposed ? "is-proposed" : overdue ? "is-overdue" : "is-pending"}>{proposed ? "Proposed" : overdue ? "Overdue" : "Pending"}</em></span>
-          <span role="cell" title={task.projectName ?? "Nifty"}>{task.projectName ? safeTaskText(task.projectName, "Nifty") : "Nifty"}</span>
+          <span role="cell" title={task.projectName ?? "Work OS"}>{task.projectName ? safeTaskText(task.projectName, "Work OS") : "Work OS"}</span>
         </div>
         {expandable(task) && (
           <div role="row" className="chat-task-table-detail" hidden={!open}>

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       tasks = await loadInterpretationTasks(ownerId, auth.access.personId as string);
     } catch (error) {
       return NextResponse.json({
-        error: "Nifty tasks could not be loaded. You can still record this update manually.",
+        error: "Tasks could not be loaded. You can still record this update manually.",
         reason: "nifty_failure",
       }, { status: 502 });
     }

@@ -15,7 +15,7 @@ const FRAMES = [
   { summaryId: "preview-shot-3", capturedAt: "2026-09-14T15:21:00.000Z", visibleApp: "Windows Terminal Host", summary: "A terminal window shows a passing test run.", confidence: 0.98 },
   { summaryId: "preview-shot-4", capturedAt: "2026-09-14T16:05:00.000Z", visibleApp: "Google Chrome", summary: "A pull request review page shows an approved check suite.", confidence: 0.96 },
   { summaryId: "preview-shot-5", capturedAt: "2026-09-14T16:44:00.000Z", visibleApp: "VS Code", summary: "A diff view shows stylesheet changes for the screenshot gallery.", confidence: 0.95 },
-  { summaryId: "preview-shot-6", capturedAt: "2026-09-14T17:12:00.000Z", visibleApp: "Nifty", summary: "A task board shows the in-progress workstream for the day.", confidence: 0.93 },
+  { summaryId: "preview-shot-6", capturedAt: "2026-09-14T17:12:00.000Z", visibleApp: "Work OS", summary: "A task board shows the in-progress workstream for the day.", confidence: 0.93 },
   { summaryId: "preview-shot-7", capturedAt: "2026-09-14T17:55:00.000Z", visibleApp: "Google Chrome", summary: "A dashboard page shows the deployment status as healthy.", confidence: 0.94 },
   { summaryId: "preview-shot-8", capturedAt: "2026-09-14T18:21:26.068Z", visibleApp: "Windows Terminal Host", summary: "A dark terminal window is visible in front of a browser showing test output.", confidence: 0.98 },
   { summaryId: "preview-shot-9", capturedAt: "2026-09-14T18:30:27.095Z", visibleApp: "Google Chrome", summary: "A browser window visibly shows a GitHub repository page for the work-os project.", confidence: 0.99 },

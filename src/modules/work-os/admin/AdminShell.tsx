@@ -132,15 +132,6 @@ export default function AdminShell({ section, children }: { section: AdminSectio
                 <StatusDot tone="warn">Migration required</StatusDot>
               )}
             </span>
-            {status.data && schemaReady ? (
-              <span>
-                {status.data.nifty.canCallApi ? (
-                  <StatusDot tone="ok">Nifty connected</StatusDot>
-                ) : (
-                  <StatusDot tone="warn">Nifty needs a connection</StatusDot>
-                )}
-              </span>
-            ) : null}
           </div>
         </header>
 

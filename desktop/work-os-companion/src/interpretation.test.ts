@@ -209,12 +209,12 @@ describe("fileApprovedOperations", () => {
     expect(outcome.recorded).toBe(1);
   });
 
-  it("offers the clear-and-retry recovery for an unresolved Nifty create", async () => {
+  it("offers the clear-and-retry recovery for an unresolved task create", async () => {
     const seen: Array<{ id: string; options?: { providerCreateResolution?: "no_task_created" } }> = [];
     const transport = {
       reviewProposal: async (id: string, options?: { providerCreateResolution?: "no_task_created" }) => {
         seen.push({ id, options });
-        return { id, status: "needs_review", outcome: "needs_review", failure_reason: "A previous attempt may have created this task in Nifty but it is not listed yet.", create_intent_unresolved: true };
+        return { id, status: "needs_review", outcome: "needs_review", failure_reason: "A previous attempt may have created this task earlier but it is not listed yet.", create_intent_unresolved: true };
       },
     };
     const outcome = await fileApprovedOperations(ops([{ op: "create_task", taskTitle: "New work" }]), transport, { createResolution: "no_task_created" });
@@ -236,7 +236,7 @@ describe("fileApprovedOperations", () => {
   it("offers the recovery from the timeout readback too", async () => {
     const outcome = await fileApprovedOperations(ops([{ op: "create_task", taskTitle: "New work" }]), {
       reviewProposal: async () => { throw new Error("signal timed out"); },
-      readProposal: async () => ({ proposal: { status: "needs_review", failure_reason: "A previous attempt may have created this task in Nifty but it is not listed yet.", create_intent_unresolved: true } }),
+      readProposal: async () => ({ proposal: { status: "needs_review", failure_reason: "A previous attempt may have created this task earlier but it is not listed yet.", create_intent_unresolved: true } }),
     });
     expect(outcome.results[0]?.retryable).toBe(true);
     expect(outcome.results[0]?.createResolution).toBe("no_task_created");

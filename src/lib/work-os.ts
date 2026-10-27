@@ -9,14 +9,6 @@ export {
   ensureWorkOsDefaults,
   listRoleProfiles,
 } from "@/lib/work-os-bootstrap";
-export {
-  canonicalNiftyEventTimestamp,
-  niftyTaskEventIdempotencyKey,
-  syncNifty,
-  upsertNiftyProject,
-  upsertNiftyTask,
-} from "@/lib/work-os-nifty";
-export { syncNiftyPersonTasks, syncNiftyTask } from "@/lib/work-os-nifty-sync";
 export { syncWorktivityEvidence, syncWorktivityRoster, upsertWorktivityEmployee } from "@/lib/work-os-worktivity";
 export {
   addTaskProgress,

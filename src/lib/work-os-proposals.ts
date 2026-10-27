@@ -4,7 +4,6 @@ import {
   DEFAULT_NIFTY_LEDGER_PROJECT_ID,
   getTaskByLocalOrProviderId,
   isNiftyTaskAttributableToMember,
-  syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
 import { addDaysIso } from "@/lib/work-os-dates";
@@ -167,7 +166,7 @@ export function interpretedOperations(value: unknown): InterpretedOperationEntry
     const batch = BATCH_OPERATIONS.includes(op);
     if (!batch && op !== "plan_import" && !["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
     if (["create_task", "add_task", "add_subtask"].includes(op) && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
-    if (op === "modify_task_status" && !taskGroupId) throw new Error("task_group_id is required for a Nifty status move");
+    if (op === "modify_task_status" && !taskGroupId) throw new Error("task_group_id is required for a status move");
     const tasks = batch ? interpretedBatchTasks(op, row.tasks) : undefined;
     if (batch && !tasks?.length) throw new Error(`Proposed update ${index + 1} carries no tasks`);
     const blueprintId = text(row.blueprint_id)?.slice(0, 80) ?? undefined;
@@ -998,7 +997,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (resolution && decision !== "accept") throw new Error("provider_create_resolution only applies to an accept decision");
   const confirmedNoTaskCreated = resolution === "no_task_created";
   if (confirmedNoTaskCreated && !proposalCreateIntentUnresolved(proposal as Json)) {
-    throw new Error("This update has no unresolved Nifty create to clear.");
+    throw new Error("This update has no unresolved task create to clear.");
   }
   if (decision === "reject" && ["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
     if (proposal.operation === "remove_from_plan") await restorePlanRemoval(access, proposal as Json);
@@ -1045,22 +1044,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     try {
       const ownerId = await organizationOwnerId(access.organizationId);
       const target = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
-      // Refresh only this one provider task. A full org sync takes minutes and
-      // does not fit inside an approval request. The refresh is bounded too:
-      // on timeout we compare against the last mirrored state and let the
-      // idempotent write proceed instead of failing the employee's decision.
-      // Work OS-native tasks have no provider record — the mirror is the
-      // authority, so a refresh would only fail with a 404.
-      if (target.provider !== "local" && text(target.provider_task_id)) {
-        try {
-          await withTimeout(syncNiftyTask(ownerId, String(target.provider_task_id)), STALENESS_REFRESH_TIMEOUT_MS, "Task refresh");
-        } catch (refreshError) {
-          // Only a timeout degrades to the mirrored state; real provider or
-          // authorization failures must surface to the outer handler so a
-          // conflicted approval is never applied blindly.
-          if (!(refreshError instanceof Error) || !/timed out after/i.test(refreshError.message)) throw refreshError;
-        }
-      }
+      // Work is native: the record read below is already the freshest state.
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       const before = (proposal.before_state ?? {}) as Json;
        const keys = ["title", "description", "status", "completed", "due_date", "start_date", "task_group_id", "assignee_person_ids", "parent_task_id", "parent_provider_task_id"];

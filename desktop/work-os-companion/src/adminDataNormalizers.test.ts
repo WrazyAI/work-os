@@ -284,7 +284,6 @@ describe("administration response normalizers", () => {
     expect(normalizeBlueprints({}).blueprints).toEqual([]);
     const status = normalizeSystemStatus({});
     expect(status.schema).toEqual({ ready: false, migration: "" });
-    expect(status.nifty).toEqual({ canCallApi: false, hasRefreshToken: false, hasAccessToken: false });
     expectNoLeaks([organization, connections, actors, repos, status]);
   });
 

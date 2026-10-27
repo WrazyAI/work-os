@@ -211,10 +211,10 @@ const actionSuccessMessages: Record<string, string> = {
   "task.create": "The task was created.",
   "task.complete": "The task was marked complete.",
   "task.reopen": "The task was reopened.",
-  "task.update": "The task was updated in Nifty.",
-  "task.subtask_create": "The subtask was created in Nifty.",
+  "task.update": "The task was updated.",
+  "task.subtask_create": "The subtask was created.",
   "task.subtask_move": "The subtask was moved.",
-  "task.archive": "The task was archived. You can restore it from Nifty.",
+  "task.archive": "The task was archived.",
   "task.delete": "The task was permanently deleted.",
   "workspace.task_surface": "The task was added to today.",
   "workspace.task_defer": "The task was deferred.",
@@ -3024,7 +3024,7 @@ export default function App() {
     try {
       const details = await loadTaskDetails(taskId);
       setTaskDetails({ ...details, task: details.task ?? task, subtasks: Array.isArray(details.subtasks) ? details.subtasks : [], moveTargets: Array.isArray(details.moveTargets) ? details.moveTargets : [] });
-      if (details.subtaskSync?.error) notifications.error("Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.", "Subtasks may be stale");
+      if (details.subtaskSync?.error) notifications.error("Couldn’t refresh subtasks. Showing the last records.", "Subtasks may be stale");
     }
     catch (value) { setTaskDetails(null); showError(value, "Could not open this task.", "Task unavailable"); }
     finally { setTaskDetailsLoading(false); }
@@ -3864,7 +3864,7 @@ export default function App() {
              : taskResult.providerStatus === "work_os_confirmed"
                ? `Added “${title}” to today’s Work OS tasks and recorded the update.`
                : taskResult.providerStatus === "nifty_confirmed"
-                 ? `Added “${title}” to today’s historical Nifty tasks and recorded the update.`
+                 ? `Added “${title}” to today’s tasks and recorded the update.`
                  : `Recorded “${title}”; task confirmation is still pending.`,
         });
       } else {
@@ -4745,10 +4745,10 @@ export function KpiStrip({ scheduledCount, yesterdayDueCount, completedCount, on
 export function DashboardTaskCard({ task, currentDate, onOpen, flight = null, onComplete, onRetryPendingTask, onDismissPendingTask }: { task: TaskRow; currentDate: string; onOpen: () => void; flight?: "completing" | "leaving" | null; onComplete?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void }) {
   const state = taskState(task, currentDate);
   const dueDate = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
-  const title = safeTaskText(task.title, "Untitled Nifty task");
+  const title = safeTaskText(task.title, "Untitled task");
   const description = safeTaskText(task.description, "");
   const progress = subtaskProgress(task);
-  const projectName = safeTaskText(task.project?.name, "Nifty");
+  const projectName = safeTaskText(task.project?.name, "Work OS");
   const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null;
   return <article className={`dashboard-task-card${pendingStatus ? " pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} role="button" tabIndex={0} data-list-key={String(task.provider_task_id || task.id)} onClick={() => { if (!pendingStatus && !flight) onOpen(); }} onKeyDown={(event) => { if (pendingStatus || flight) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }} aria-label={`Open ${title}`}>
     <div className="dashboard-task-head">
@@ -4762,7 +4762,7 @@ export function DashboardTaskCard({ task, currentDate, onOpen, flight = null, on
         ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} />
         : progress.total > 0
           ? <ProgressRing completed={progress.completed} total={progress.total} label="subtasks" />
-          : <span className="task-due">{projectName !== "Nifty" ? projectName : "Nifty task"}</span>}
+          : <span className="task-due">{projectName !== "Work OS" ? projectName : "Work OS task"}</span>}
     </div>
   </article>;
 }
@@ -4808,7 +4808,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
           if (seenDisplayCards.has(displayKey)) return null;
           seenDisplayCards.add(displayKey);
           const selectionTasks: TaskSelectionCardTask[] = selection.tasks.map((task) => ({
-            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
+            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled task",
             description: typeof task.description === "string" ? task.description : null,
             dueDate: typeof task.due_date === "string" ? task.due_date : null,
             projectName: typeof task.project_name === "string" ? task.project_name : null,
@@ -5235,7 +5235,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     : [];
 
   // The project line only earns its space when the view actually mixes projects.
-  const showRowProjects = new Set(displayedTasks.map((task) => safeTaskText(task.project?.name, "Nifty"))).size > 1;
+  const showRowProjects = new Set(displayedTasks.map((task) => safeTaskText(task.project?.name, "Work OS"))).size > 1;
   const listRef = useRef<HTMLDivElement | null>(null);
   useListShift(listRef);
   const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
@@ -5271,7 +5271,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const emptyCopy = hasFilters
     ? { title: "No tasks match these filters", body: "Try a different search or clear the date filters." }
     : historical
-      ? { title: "No tasks surfaced", body: "No Nifty tasks were recorded for this day." }
+      ? { title: "No tasks surfaced", body: "No tasks were recorded for this day." }
       : taskView === "today"
         ? { title: "Nothing is scheduled for today yet", body: "Pull unfinished work forward or add a task to shape the day." }
         : taskView === "unfinished"
@@ -5290,7 +5290,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       // chrome at once, so selection stopped discriminating.
       const onTodayPlan = selectedIds.has(String(task.id)) || selectedIds.has(String(task.provider_task_id));
       const state = taskState(task, currentDate);
-      const title = safeTaskText(task.title, "Untitled Nifty task");
+      const title = safeTaskText(task.title, "Untitled task");
       const description = safeTaskText(task.description, "");
       // §6.2: the description renders only when it adds something beyond the
       // title. Literal containment only caught a description that repeated the
@@ -5312,11 +5312,11 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
         const carried = descriptionWords.filter((word) => titleWords.has(word)).length;
         return carried / descriptionWords.length >= 0.8;
       })();
-      const projectName = safeTaskText(task.project?.name, "Nifty");
+      const projectName = safeTaskText(task.project?.name, "Work OS");
       const milestoneName = safeTaskText(task.milestone?.name, "");
       const dueDate = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
       const dueInline = dueDate ? (state === "overdue" ? `Overdue · ${formatWorkOsDate(dueDate)}` : dueDate === currentDate ? "Due today" : `Due ${formatWorkOsDate(dueDate)}`) : null;
-      const showProject = showRowProjects && projectName !== "Nifty";
+      const showProject = showRowProjects && projectName !== "Work OS";
       const metaParts = [milestoneName || null, task.priority ? `${sentence(String(task.priority))} priority` : null].filter(Boolean) as string[];
       // Per-row provenance is warning-only; a healthy "synced" chip on every
       // row is noise. The detail modal keeps the full provenance chip.

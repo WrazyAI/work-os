@@ -1,26 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { normalizeNiftyTask } from "../src/lib/integrations/nifty";
 import { daySortRow, projectWorkspaceDay, resolveTaskDayAttribution, taskRangeAttributionDate } from "../src/lib/work-os-daily-workspace";
 import { compareWorkspaceTasks } from "../src/lib/work-os-task-pagination";
 import { reliableElapsedSeconds } from "../src/lib/work-os-insights";
-import { canonicalNiftyEventTimestamp, niftyTaskEventIdempotencyKey } from "../src/lib/work-os";
-
-test("Nifty completed_on is normalized exactly", () => {
-  const completedOn = "2026-08-21T17:42:31.000Z";
-  assert.equal(normalizeNiftyTask({ id: "task-1", name: "Done", completed: true, completed_on: completedOn }).completedAt, completedOn);
-});
-
-test("Nifty event keys canonicalize equivalent timestamp representations", () => {
-  const sqlStyle = "2026-08-10 20:16:52.12+00";
-  const isoStyle = "2026-08-10T20:16:52.120Z";
-  assert.equal(canonicalNiftyEventTimestamp(sqlStyle), isoStyle);
-  assert.equal(
-    niftyTaskEventIdempotencyKey("completed", "task-1", sqlStyle),
-    niftyTaskEventIdempotencyKey("completed", "task-1", isoStyle),
-  );
-});
 
 test("task-day attribution follows due, surfaced, completed, creation, carry priority", () => {
   const date = "2026-08-21";
@@ -75,14 +58,3 @@ test("correction-required sessions cannot become the active daily workspace", as
   assert.match(source, /\.in\("state", \["clocked_in", "active", "paused", "eod_due"\]\)[\s\S]*?\.neq\("correction_status", "needs_correction"\)\.maybeSingle\(\)/);
 });
 
-test("Nifty sync never overwrites a known completion with null", async () => {
-  const source = await readFile(new URL("../src/lib/work-os-nifty.ts", import.meta.url), "utf8");
-  assert.match(source, /\.\.\.\(task\.completedAt \? \{ completed_at: task\.completedAt \} : \{\}\)/);
-});
-
-test("Nifty sync records idempotent exact completion and observed reopen events", async () => {
-  const source = await readFile(new URL("../src/lib/work-os-nifty.ts", import.meta.url), "utf8");
-  assert.match(source, /mirrorNiftyTaskDayEvents/);
-  assert.match(source, /event_type: "completed", provenance: "nifty_exact"/);
-  assert.match(source, /event_type: "reopened", provenance: "provider_observed"/);
-});

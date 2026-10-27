@@ -443,7 +443,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   } satisfies ConnectionsResponse);
   queryClient.setQueryData(adminKeys.fieldMappings(), { mappings: [{ id: "m-1", field: "priority", provider_field_id: "customfield_10012" }] });
   queryClient.setQueryData(adminKeys.blueprints(), { blueprints: [{ id: "bp-1", name: "Client onboarding", kind: "template", updated_at: `${DATES[6]}T10:00:00.000Z` }] });
-  queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } } satisfies SystemStatusResponse);
+  queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" } } satisfies SystemStatusResponse);
   queryClient.setQueryData(adminKeys.organization(), {
     organization: { id: "org-preview", name: "Wrazy Internal", slug: "wrazy", feature_flags: { employee_companion: true, desktop_companion: true, screenshot_summaries: true, github_evidence: true, ghl_evidence: false, seo_mission_control: false, voice_input: true }, created_at: `${DATES[0]}T10:00:00.000Z` },
     memberships: PEOPLE.slice(0, 3).map((person, index) => ({ id: `mem-${index}`, user_id: `user-${index}`, person_id: person.id, role: index === 0 ? "admin" : index === 1 ? "manager" : "employee", active: true, feature_flags: null, person: { id: person.id, display_name: person.name, email: person.email } })),
@@ -675,7 +675,7 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
   });
   queryClient.setQueryData(adminKeys.fieldMappings(), {});
   queryClient.setQueryData(adminKeys.blueprints(), {});
-  queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } } satisfies SystemStatusResponse);
+  queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" } } satisfies SystemStatusResponse);
 }
 
 /* --- The account's own review notifications (the masthead bell) ----------

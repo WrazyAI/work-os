@@ -22,7 +22,7 @@ export default function EmployeeTaskDrawer({
 }: {
   mode: "create" | "edit";
   task?: AnyRow | null;
-  /** True for local Work OS tasks; provider tasks archive back to Nifty. */
+  /** Retained for callers that still pass it; every task is a Work OS task now. */
   isWorkOsTask?: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -97,7 +97,7 @@ export default function EmployeeTaskDrawer({
         <header className="flex items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
           <div>
             <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">{mode === "create" ? "Add task" : "Task details"}</h2>
-            {mode === "edit" ? <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{isWorkOsTask ? "Work OS task" : "Nifty task"}{task?.project?.name ? ` · ${task.project.name}` : ""}</p> : null}
+            {mode === "edit" ? <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{String(task?.provider ?? "local") === "local" ? "Work OS task" : "Imported task"}{task?.project?.name ? ` · ${task.project.name}` : ""}</p> : null}
           </div>
           <SecondaryButton onClick={onClose} aria-label="Close" className="!p-2">
             <X size={15} />
@@ -137,7 +137,7 @@ export default function EmployeeTaskDrawer({
                 {task?.milestone?.name ? (<><dt className="text-[var(--text-tertiary)]">Milestone</dt><dd className="text-[var(--text-primary)]">{task.milestone.name}</dd></>) : null}
                 {task?.due_date ? (<><dt className="text-[var(--text-tertiary)]">Due</dt><dd className="text-[var(--text-primary)]">{task.due_date}</dd></>) : null}
                 <dt className="text-[var(--text-tertiary)]">Source</dt>
-                <dd className="text-[var(--text-primary)]">{isWorkOsTask ? "Work OS task" : task?.synced_at ? "Nifty synced" : "Sync pending"}</dd>
+                <dd className="text-[var(--text-primary)]">{String(task?.provider ?? "local") === "local" ? "Work OS task" : "Imported task"}</dd>
               </dl>
             ) : null}
           </div>
@@ -148,14 +148,14 @@ export default function EmployeeTaskDrawer({
             <div className="flex flex-wrap gap-2">
               <SecondaryButton
                 disabled={remove.isPending}
-                onClick={() => window.confirm(isWorkOsTask ? "Archive this task? It will be hidden from active work but retained in Work OS history." : "Archive this task? It will be hidden from active work but retained and restorable in Nifty.") && remove.mutate("archive")}
+                onClick={() => window.confirm("Archive this task? It will be hidden from active work.") && remove.mutate("archive")}
               >
                 <Archive size={13} /> Archive
               </SecondaryButton>
               <SecondaryButton
                 disabled={remove.isPending}
                 style={{ color: "var(--status-error)" }}
-                onClick={() => window.confirm(isWorkOsTask ? "Permanently delete this task from Work OS? This cannot be undone." : "Permanently delete this task from Nifty? This cannot be undone.") && remove.mutate("delete")}
+                onClick={() => window.confirm("Permanently delete this task from Work OS? This cannot be undone.") && remove.mutate("delete")}
               >
                 <Trash2 size={13} /> Delete
               </SecondaryButton>

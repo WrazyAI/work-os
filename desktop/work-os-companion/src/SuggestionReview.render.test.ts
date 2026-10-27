@@ -99,7 +99,7 @@ describe("SuggestionCard", () => {
 describe("SuggestionReviewModal", () => {
   it("groups waiting and attention items under one dialog", () => {
     const html = renderToStaticMarkup(createElement(SuggestionReviewModal, {
-      suggestions: [proposal(), proposal({ id: "p2", status: "failed", failure_reason: "Nifty was unreachable." })],
+      suggestions: [proposal(), proposal({ id: "p2", status: "failed", failure_reason: "The workspace was unreachable." })],
       busyId: null,
       error: null,
       onDecide: noop,
@@ -109,7 +109,7 @@ describe("SuggestionReviewModal", () => {
     expect(html).toContain("Suggestion review");
     expect(html).toContain("Waiting for your decision");
     expect(html).toContain("Couldn");
-    expect(html).toContain("Nifty was unreachable.");
+    expect(html).toContain("The workspace was unreachable.");
   });
 
   it("renders an honest empty state and keeps errors visible", () => {

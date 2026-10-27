@@ -581,7 +581,6 @@ export default function EmployeeToday() {
             </Panel>
           ) : null}
 
-          {day.data?.niftySync?.error ? <Notice tone="warn">Nifty sync failed: {day.data.niftySync.error}</Notice> : null}
         </aside>
       </div>
 

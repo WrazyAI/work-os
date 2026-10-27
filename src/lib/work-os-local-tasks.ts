@@ -4,7 +4,7 @@ import { audit, db, nonEmptyString as text, organizationOwnerId, type Json } fro
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 
 /** Work OS-native tasks (SOD goals materialized on plan confirm). These never
- * touch Nifty: they are written straight into work_tasks with provider
+ * touch a provider: they are written straight into work_tasks with provider
  * "local", and every lifecycle write path branches on that provider. */
 export const LOCAL_TASK_PROVIDER = "local";
 const MAX_TITLE = 240;

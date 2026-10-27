@@ -134,10 +134,6 @@ function detailHarness() {
       if (!attributable(mirror, access.personId)) throw new Error("Task is not available to this employee");
       return { ownerId: "owner", task: mirror, niftyMemberId: "member" };
     },
-    TASK_DETAIL_MIRROR_FRESH_MS: 120_000,
-    TASK_DETAIL_PROVIDER_REFRESH_MS: 5_000,
-    withTimeout: (promise: Promise<unknown>) => promise,
-    syncNiftyTask: async () => undefined,
     getTaskByLocalOrProviderId: async () => mirror,
     db: () => ({ from: () => query }),
     isTaskAttributableToPerson: attributable,
@@ -154,21 +150,18 @@ function detailHarness() {
   );
   return {
     subject,
-    // A provider refresh writes the provider's current row into the mirror.
+    // The record is the authority, so the stored assignee decides access.
     reassignTo: (personId: string) => {
-      const next = {
+      mirror = {
         ...stale,
         assignee_person_ids: [personId],
         title: personId === "person" ? "Still mine" : "Another employee's task",
-      };
-      context.syncNiftyTask = async () => {
-        mirror = next;
       };
     },
   };
 }
 
-test("task detail rejects a task the provider refresh reassigned to another employee", async () => {
+test("task detail rejects a task assigned to another employee", async () => {
   const harness = detailHarness();
   harness.reassignTo("other-person");
   await assert.rejects(
@@ -177,7 +170,7 @@ test("task detail rejects a task the provider refresh reassigned to another empl
   );
 });
 
-test("task detail still returns a task the refresh left with the same employee", async () => {
+test("task detail returns a task assigned to this employee", async () => {
   const harness = detailHarness();
   harness.reassignTo("person");
   const details = await harness.subject({ organizationId: "org", personId: "person" }, "nifty-local");

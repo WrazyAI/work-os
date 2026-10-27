@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Tasks created today now appear in My day, with newer tasks first when their due dates match.
+- Work OS is now the only task record: the Nifty connection, its backup status, and its provider pill are gone.
 - Completion evidence now shows a type thumbnail for every file and previews images, PDFs, and text without leaving the task.
 - Word documents and ZIP or 7Z files can now be attached as evidence, with their details and a download action.
 

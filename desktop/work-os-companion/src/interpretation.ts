@@ -78,7 +78,7 @@ export interface ToolCallResult {
   data?: unknown;
   /** The stored proposal can be filed again with the same id (nothing claimed it). */
   retryable?: boolean;
-  /** Set only when the server reports an unresolved Nifty create: the retry
+  /** Set only when the server reports an unresolved task create: the retry
    * must first confirm nothing was created so the intent can be cleared. */
   createResolution?: "no_task_created";
 }

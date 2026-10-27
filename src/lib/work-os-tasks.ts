@@ -1,13 +1,3 @@
-import {
-  archiveNiftyTask,
-  completeNiftyTask,
-  deleteNiftyTask,
-  getNiftyTask,
-  listNiftyTasks,
-  normalizeNiftyTaskPayload,
-  updateNiftyTask,
-  updateNiftyTaskField,
-} from "@/lib/integrations/nifty";
 import { attachTaskAssigneeIdentities } from "@/lib/work-os-task-assignees";
 import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 import { todayIso as today } from "@/lib/work-os-dates";
@@ -16,11 +6,9 @@ import {
   db,
   ensureNoError,
   nonEmptyString,
-  niftyForOwner,
   selectFirst,
   type Json,
 } from "@/lib/work-os-internal";
-import { upsertNiftyTask } from "@/lib/work-os-nifty";
 import { WorkOsNotFoundError, WorkOsValidationError } from "@/lib/work-os-api";
 import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
 import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
@@ -33,44 +21,6 @@ function structuredDescription(description: string | null, expectedOutcome: unkn
   const outcome = nonEmptyString(expectedOutcome);
   const done = nonEmptyString(definitionOfDone);
   return [base, outcome ? `## Expected outcome\n${outcome}` : "", done ? `## Definition of done\n${done}` : ""].filter(Boolean).join("\n\n") || null;
-}
-
-async function applyMappedFields(userId: string, providerTaskId: string, values: Json) {
-  const supabase = db();
-  const { data: organization, error: organizationError } = await supabase.from("work_organizations").select("id").eq("legacy_owner_id", userId).maybeSingle();
-  if (organizationError) throw new Error(`load Nifty field organization: ${organizationError.message}`);
-  if (!organization) return;
-  const keys = Object.keys(values);
-  if (!keys.length) return;
-  const { data: mappings, error } = await supabase.from("work_provider_field_mappings").select("semantic_field,provider_field_id,config")
-    .eq("organization_id", organization.id).eq("provider", "nifty").in("semantic_field", keys);
-  if (error) throw new Error(`load Nifty field mappings: ${error.message}`);
-  for (const mapping of mappings ?? []) {
-    const config = (mapping.config ?? {}) as Json;
-    const valueMap = (config.valueMap ?? config.value_map ?? {}) as Json;
-    const raw = values[mapping.semantic_field];
-    const mapped = typeof raw === "string" && raw in valueMap ? valueMap[raw] : raw;
-    await niftyForOwner(userId, () => updateNiftyTaskField(providerTaskId, mapping.provider_field_id, mapped));
-  }
-}
-
-async function mappedSemanticFields(userId: string, fields: string[]) {
-  const { data: organization, error: organizationError } = await db().from("work_organizations").select("id").eq("legacy_owner_id", userId).maybeSingle();
-  if (organizationError) throw new Error(`load Nifty field organization: ${organizationError.message}`);
-  if (!organization || !fields.length) return new Set<string>();
-  const { data, error } = await db().from("work_provider_field_mappings").select("semantic_field")
-    .eq("organization_id", organization.id).eq("provider", "nifty").in("semantic_field", fields);
-  if (error) throw new Error(`load Nifty field mappings: ${error.message}`);
-  return new Set((data ?? []).map((mapping: any) => mapping.semantic_field as string));
-}
-
-async function mirrorExtendedTaskFields(taskId: string, values: Json) {
-  const patch: Json = { updated_at: new Date().toISOString() };
-  for (const key of ["priority", "estimated_effort", "estimated_effort_minutes", "effort_unit", "expected_outcome", "definition_of_done", "dependency_task_ids", "blocked", "blocked_reason"]) {
-    if (key in values) patch[key] = values[key];
-  }
-  if (Object.keys(patch).length === 1) return null;
-  return selectFirst(db().from("work_tasks").update(patch).eq("id", taskId).select("*"), "mirror extended task fields");
 }
 
 /** Server-side task ordering. Workspace variants are used by the paginated
@@ -103,7 +53,8 @@ export interface TaskListOptions {
   search?: string | null;
   organizationId?: string | null;
   excludeTaskIds?: string[];
-  /** SQL-side attribution filters used to mirror Nifty creator/subscriber metadata. */
+  /** SQL-side attribution filters for rows imported with provider creator/subscriber
+   * metadata. Historical provenance only; no provider call is made. */
   rawCreatedBy?: string | null;
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
@@ -133,7 +84,7 @@ async function resolveActiveTaskPeople(organizationId: string, value: unknown) {
 }
 
 /** One attribution rule for every task surface: the local person id, the
- * Nifty assignee mapping, or Nifty creator/subscriber metadata. */
+ * historical provider assignee mapping or creator/subscriber metadata. */
 export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
   if (personId && stringValues(task.assignee_person_ids).includes(String(personId))) return true;
   return isNiftyTaskAttributableToMember(task, niftyMemberId);
@@ -567,95 +518,37 @@ export function effortMinutesPatch(value: unknown): number | null {
 
 export async function updateTask(userId: string, taskId: string, patch: Json) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
-  if (task.provider === "local") {
-    const row: Json = {};
-    if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
-    if ("description" in patch) row.description = nonEmptyString(patch.description);
-    for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason", "task_group_id", "effort_unit"]) {
-      if (key in patch) row[key] = nonEmptyString(patch[key]);
-    }
-    if ("estimated_effort_minutes" in patch) row.estimated_effort_minutes = effortMinutesPatch(patch.estimated_effort_minutes);
-    for (const key of ["labels", "story_points", "blocked"]) {
-      if (key in patch) row[key] = patch[key];
-    }
-    if ("assignee_person_ids" in patch) {
-      const people = await resolveActiveTaskPeople(task.organization_id as string, patch.assignee_person_ids);
-      row.assignee_person_ids = people.map((person) => String(person.id));
-    }
-    if ("blocked" in patch) row.blocked = patch.blocked === true;
-    if ("completed" in patch) {
-      row.completed = patch.completed === true;
-      row.status = row.completed ? "completed" : "open";
-      row.completed_at = row.completed ? new Date().toISOString() : null;
-    }
-    return selectFirst(
-      db().from("work_tasks").update({ ...row, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("id", task.id).select("*"),
-      "update Work OS task",
-    );
+  const row: Json = {};
+  if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
+  if ("description" in patch) row.description = nonEmptyString(patch.description);
+  for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason", "task_group_id", "effort_unit"]) {
+    if (key in patch) row[key] = nonEmptyString(patch[key]);
   }
-  const providerTaskId = task.provider_task_id as string;
-  const allowed: Json = {};
-  for (const key of ["name", "description", "milestone_id", "due_date", "start_date", "task_group_id", "assignees", "labels", "story_points", "priority", "dependencies"]) {
-    if (key in patch) allowed[key] = patch[key];
+  if ("estimated_effort_minutes" in patch) row.estimated_effort_minutes = effortMinutesPatch(patch.estimated_effort_minutes);
+  for (const key of ["labels", "story_points", "blocked"]) {
+    if (key in patch) row[key] = patch[key];
   }
   if ("assignee_person_ids" in patch) {
     const people = await resolveActiveTaskPeople(task.organization_id as string, patch.assignee_person_ids);
-    const providerIds = people.map((person) => nonEmptyString(person.nifty_member_id));
-    if (providerIds.some((providerId) => !providerId)) throw new Error("Historical Nifty tasks require mapped Nifty assignees");
-    allowed.assignees = providerIds;
+    row.assignee_person_ids = people.map((person) => String(person.id));
   }
-  if ("expected_outcome" in patch || "definition_of_done" in patch) {
-    const structuredMappings = await mappedSemanticFields(userId, ["expected_outcome", "definition_of_done"]);
-    allowed.description = structuredDescription(
-      nonEmptyString(patch.description) ?? nonEmptyString(task.description),
-      structuredMappings.has("expected_outcome") ? null : patch.expected_outcome ?? task.expected_outcome,
-      structuredMappings.has("definition_of_done") ? null : patch.definition_of_done ?? task.definition_of_done,
-    );
+  if ("blocked" in patch) row.blocked = patch.blocked === true;
+  if ("completed" in patch) {
+    row.completed = patch.completed === true;
+    row.status = row.completed ? "completed" : "open";
+    row.completed_at = row.completed ? new Date().toISOString() : null;
   }
-  // Nifty's partial task update clears completion unless it is sent explicitly.
-  if (Object.keys(allowed).length && !("completed" in allowed)) allowed.completed = task.completed === true;
-  const result = Object.keys(allowed).length
-    ? await niftyForOwner(userId, () => updateNiftyTask(providerTaskId, allowed))
-    : null;
-  await applyMappedFields(userId, providerTaskId, patch);
-  const normalized = normalizeNiftyTaskPayload(result) ?? normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
-  if (normalized) {
-    const mirrored = await upsertNiftyTask(userId, normalized) as Json;
-    return await mirrorExtendedTaskFields(mirrored.id as string, patch) ?? mirrored;
-  }
-  return task;
+  return selectFirst(
+    db().from("work_tasks").update({ ...row, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("id", task.id).select("*"),
+    "update Work OS task",
+  );
 }
 
 export async function completeTask(userId: string, taskId: string, completed = true) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
-  if (task.provider === "local") {
-    // Idempotent: re-completing an already-completed task must not move its
-    // completion timestamp or emit a second day event.
-    if (task.completed === completed) return task;
-    return selectFirst(
-      db().from("work_tasks").update({
-        completed,
-        status: completed ? "completed" : "open",
-        completed_at: completed ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", userId).eq("id", task.id).select("*"),
-      "complete Work OS task",
-    );
-  }
-  const providerTaskId = task.provider_task_id as string;
-  const result = await niftyForOwner(userId, () => completeNiftyTask(providerTaskId, completed));
-  const normalized = normalizeNiftyTaskPayload(result) ?? normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
-  if (normalized) {
-    const mirrored = await upsertNiftyTask(userId, normalized) as Json;
-    if (!completed) {
-      return selectFirst(
-        db().from("work_tasks").update({ completed_at: null, updated_at: new Date().toISOString() })
-          .eq("user_id", userId).eq("id", mirrored.id as string).select("*"),
-        "clear reopened task completion timestamp",
-      );
-    }
-    return mirrored;
-  }
+  // Idempotent: re-completing an already-completed task must not move its
+  // completion timestamp or emit a second day event.
+  if (task.completed === completed) return task;
   return selectFirst(
     db().from("work_tasks").update({
       completed,
@@ -663,28 +556,12 @@ export async function completeTask(userId: string, taskId: string, completed = t
       completed_at: completed ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId).eq("id", task.id).select("*"),
-    "mark task complete",
+    "complete Work OS task",
   );
 }
 
 export async function archiveTask(userId: string, taskId: string) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
-  if (task.provider === "local") {
-    const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
-    const archived = await selectFirst(
-      db().from("work_tasks").update({
-        status: "archived",
-        raw: { ...raw, archived: true },
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", userId).eq("id", task.id).select("*"),
-      "archive Work OS task",
-    );
-    await removePlanItemsForTombstonedTask(String(archived.id));
-    return archived;
-  }
-  const providerTaskId = task.provider_task_id as string;
-  await niftyForOwner(userId, () => archiveNiftyTask(providerTaskId, true));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
   const archived = await selectFirst(
     db().from("work_tasks").update({
@@ -692,33 +569,15 @@ export async function archiveTask(userId: string, taskId: string) {
       raw: { ...raw, archived: true },
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
-    "archive task mirror",
+    }).eq("user_id", userId).eq("id", task.id).select("*"),
+    "archive Work OS task",
   );
-  // A tombstoned task can no longer back a plan item: mark its plan rows
-  // removed so no workspace surface keeps rendering unhittable work.
   await removePlanItemsForTombstonedTask(String(archived.id));
   return archived;
 }
 
 export async function deleteTask(userId: string, taskId: string) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
-  if (task.provider === "local") {
-    const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
-    const deleted = await selectFirst(
-      db().from("work_tasks").update({
-        status: "deleted",
-        raw: { ...raw, deleted: true, deleted_at: new Date().toISOString() },
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", userId).eq("id", task.id).select("*"),
-      "tombstone Work OS task",
-    );
-    await removePlanItemsForTombstonedTask(String(deleted.id));
-    return deleted;
-  }
-  const providerTaskId = task.provider_task_id as string;
-  await niftyForOwner(userId, () => deleteNiftyTask(providerTaskId));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
   const deleted = await selectFirst(
     db().from("work_tasks").update({
@@ -726,8 +585,8 @@ export async function deleteTask(userId: string, taskId: string) {
       raw: { ...raw, deleted: true, deleted_at: new Date().toISOString() },
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
-    "tombstone deleted task mirror",
+    }).eq("user_id", userId).eq("id", task.id).select("*"),
+    "tombstone Work OS task",
   );
   await removePlanItemsForTombstonedTask(String(deleted.id));
   return deleted;
@@ -775,47 +634,17 @@ export async function moveTaskToParent(userId: string, taskId: string, parentTas
     getTaskByLocalOrProviderId(userId, parentTaskId),
   ]);
   assertSubtaskMoveTarget(task, parent);
-  const localMove = task.provider === "local" || parent.provider === "local";
-  if (localMove) {
-    if (task.parent_task_id === parent.id || (parent.provider_task_id && task.parent_provider_task_id === parent.provider_task_id)) return task;
-    return selectFirst(
-      db().from("work_tasks").update({
-        parent_task_id: parent.id,
-        parent_provider_task_id: parent.provider_task_id ?? null,
-        project_id: parent.project_id ?? task.project_id ?? null,
-        provider_project_id: parent.provider_project_id ?? task.provider_project_id ?? null,
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", userId).eq("id", task.id).select("*"),
-      "move Work OS task beneath parent",
-    );
-  }
-  const providerTaskId = task.provider_task_id as string;
-  const providerParentId = parent.provider_task_id as string;
-  if (task.parent_provider_task_id === providerParentId) return task;
-  await niftyForOwner(userId, () => updateNiftyTask(providerTaskId, { task_id: providerParentId }));
-  let providerConfirmed = false;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const children = await niftyForOwner(userId, () => listNiftyTasks({ task_id: providerParentId, include_subtasks: "true", limit: "100", offset: "0" }));
-    if (children.tasks.some((candidate) => candidate.id === providerTaskId && candidate.parentTaskId === providerParentId)) {
-      providerConfirmed = true;
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  if (!providerConfirmed) throw new Error("Nifty did not confirm the subtask move");
+  if (task.parent_task_id === parent.id || (parent.provider_task_id && task.parent_provider_task_id === parent.provider_task_id)) return task;
   return selectFirst(
     db().from("work_tasks").update({
       parent_task_id: parent.id,
-      parent_provider_task_id: providerParentId,
-      provider_project_id: parent.provider_project_id,
-      project_id: parent.project_id,
-      milestone_id: parent.milestone_id,
-      task_group_id: parent.task_group_id,
+      parent_provider_task_id: parent.provider_task_id ?? null,
+      project_id: parent.project_id ?? task.project_id ?? null,
+      provider_project_id: parent.provider_project_id ?? task.provider_project_id ?? null,
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
-    "move task beneath parent",
+    }).eq("user_id", userId).eq("id", task.id).select("*"),
+    "move Work OS task beneath parent",
   );
 }
 

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { niftyOrganizationConfigStatus } from "@/lib/integrations/nifty";
 import { checkWorkOsSchemaReady } from "@/lib/work-os";
 import { jsonError, requireWorkOsAdmin } from "@/lib/work-os-api";
 
@@ -10,10 +9,7 @@ export async function GET(req: Request) {
   const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
-    return NextResponse.json({
-      schema: await checkWorkOsSchemaReady(),
-      nifty: await niftyOrganizationConfigStatus(auth.access.organizationId),
-    });
+    return NextResponse.json({ schema: await checkWorkOsSchemaReady() });
   } catch (err) {
     return jsonError(err);
   }

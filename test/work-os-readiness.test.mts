@@ -6,8 +6,8 @@ function baseInput(): WorkOsReadinessInput {
   return {
     organization: { id: "org-a", name: "A", slug: "a", featureFlags: { employee_companion: true, desktop_companion: true } },
     people: [
-      { id: "employee-a", active: true, authUserId: "user-a", niftyMemberId: "nifty-a", worktivityEmployeeId: "wt-a", roleProfileId: "role-a" },
-      { id: "manager-a", active: true, authUserId: "user-m", niftyMemberId: "nifty-m", worktivityEmployeeId: "wt-m", roleProfileId: "role-m" },
+      { id: "employee-a", active: true, authUserId: "user-a", worktivityEmployeeId: "wt-a", roleProfileId: "role-a" },
+      { id: "manager-a", active: true, authUserId: "user-m", worktivityEmployeeId: "wt-m", roleProfileId: "role-m" },
     ],
     memberships: [
       { personId: "employee-a", role: "employee", active: true },
@@ -24,7 +24,7 @@ function baseInput(): WorkOsReadinessInput {
     credentials: [{ provider: "nifty", expiresAt: "2099-01-01T00:00:00.000Z" }],
     sourceAccounts: [],
     tasks: [{ completed: false, assigneePersonIds: ["employee-a"], dueDate: "2026-08-12", priority: "high", estimatedEffortMinutes: 60, expectedOutcome: "Ship it", definitionOfDone: "Merged", taskGroupId: "group-a" }],
-    providerReady: { nifty: true, worktivity: true },
+    providerReady: { worktivity: true },
     runtime: {
       aiConfigured: true,
       providerSecretConfigured: true,

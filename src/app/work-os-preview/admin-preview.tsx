@@ -94,7 +94,7 @@ function overviewFixture(state: PreviewState) {
       status: "needs_setup",
       ready: false,
       issues: [
-        { code: "people_unmapped_nifty", severity: "needs_setup", count: 1, message: "active people are not mapped to a Nifty member" },
+        { code: "people_unmapped_provider", severity: "needs_setup", count: 1, message: "active people are not mapped to an evidence account" },
         { code: "schedules_missing", severity: "needs_setup", count: 1, message: "active people have no current schedule" },
       ],
       checks: { people: { active: 4 }, tasks: { open: 41 }, organization: { activeTeams: 2, activeSchedules: 3 } },

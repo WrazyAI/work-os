@@ -136,14 +136,13 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
       <AdminCard
         icon={ShieldCheck}
         title="Workspace status"
-        detail="Schema readiness and the read-only Nifty backup"
+        detail="Schema readiness and the workspace database"
       >
         {status.isLoading || organization.isLoading ? (
           <Skeleton className="h-16" />
         ) : (
           <div className="admin-chips">
             <Pill tone={status.data?.schema?.ready ? "ok" : "warn"}>{status.data?.schema?.ready ? "Work OS schema ready" : "Migration required"}</Pill>
-            <Pill tone={status.data?.nifty?.canCallApi ? "ok" : "warn"}>{status.data?.nifty?.canCallApi ? "Nifty connected" : "Nifty needs a connection"}</Pill>
             <Pill>{organization.data?.organization?.name ?? "Workspace"}</Pill>
             <Pill>slug {organization.data?.organization?.slug || "—"}</Pill>
           </div>
@@ -286,7 +285,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
               ))}
             </ul>
           ) : (
-            <p className="admin-empty-note">No provider connections yet. Connect Nifty and GitHub in the web console.</p>
+            <p className="admin-empty-note">No provider connections yet. Connect your evidence providers in the web console.</p>
           )}
           <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
         </AdminCard>

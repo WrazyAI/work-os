@@ -262,10 +262,10 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("id,person_id,shift_date,clocked_in_at,clocked_out_at,paused_seconds")
       .eq("organization_id", organizationId)
       .gte("shift_date", addDaysIso(date, -13)).lte("shift_date", date),
-    // Source freshness: when each stream last delivered anything.
-    db.from("work_projects").select("synced_at")
-      .eq("organization_id", organizationId).not("synced_at", "is", null)
-      .order("synced_at", { ascending: false }).limit(1).maybeSingle(),
+    // Source freshness: when the task record itself last changed.
+    db.from("work_tasks").select("updated_at")
+      .eq("organization_id", organizationId).not("updated_at", "is", null)
+      .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("work_attendance_observations").select("observed_at")
       .eq("organization_id", organizationId)
       .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
@@ -281,7 +281,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     // Today's volume per source, so the Data sources card can show more than a
     // last-seen timestamp.
     db.from("work_tasks").select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId).eq("provider", "nifty").gte("synced_at", `${date}T00:00:00.000Z`),
+      .eq("organization_id", organizationId).gte("created_at", `${date}T00:00:00.000Z`),
     db.from("work_evidence_events").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("provider", "github").gte("occurred_at", `${date}T00:00:00.000Z`),
     db.from("work_sessions")
@@ -310,9 +310,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["completed event counts", completedEventsTodayCountResult], ["pending report counts", pendingReportsCountResult],
     ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult], ["series evidence", seriesEvidenceResult],
     ["time series sessions", timeSeriesSessionsResult],
-    ["nifty freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
+    ["task freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
     ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
-    ["nifty volume", niftyTasksTodayResult], ["github volume", githubEventsTodayResult],
+    ["task volume", niftyTasksTodayResult], ["github volume", githubEventsTodayResult],
     ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult], ["outstanding events", windowEventsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
@@ -594,7 +594,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     (personId) => personName.get(personId) ?? null,
   );
   const freshness = {
-    niftySyncedAt: isoOrNull(freshnessNiftyResult.data?.synced_at),
+    niftySyncedAt: isoOrNull(freshnessNiftyResult.data?.updated_at),
     niftyTasksToday: niftyTasksTodayResult.count ?? 0,
     worktivityObservedAt: isoOrNull(freshnessAttendanceResult.data?.observed_at),
     githubLastEventAt: isoOrNull(freshnessGithubResult.data?.occurred_at),

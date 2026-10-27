@@ -839,10 +839,8 @@ export function normalizeBlueprints(raw: unknown): BlueprintsResponse {
 export function normalizeSystemStatus(raw: unknown): SystemStatusResponse {
   const source = asRecord(raw);
   const schema = asRecord(source.schema);
-  const nifty = asRecord(source.nifty);
   return {
     schema: { ready: asBoolean(schema.ready), migration: asText(schema.migration), ...(asTextOrNull(schema.error) ? { error: asText(schema.error) } : {}) },
-    nifty: { canCallApi: asBoolean(nifty.canCallApi), hasRefreshToken: asBoolean(nifty.hasRefreshToken), hasAccessToken: asBoolean(nifty.hasAccessToken) },
   };
 }
 

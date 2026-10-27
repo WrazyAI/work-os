@@ -46,7 +46,7 @@ export function historyDisplayTasks(selection: { view?: "pending" | "overdue"; t
   return Array.isArray(selection.tasks)
     ? selection.tasks.map((task) => ({
         id: String(task.id ?? ""),
-        title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
+        title: typeof task.title === "string" ? task.title : "Untitled task",
         description: typeof task.description === "string" ? task.description : null,
         dueDate: typeof task.due_date === "string" ? task.due_date : null,
         projectName: typeof task.project_name === "string" ? task.project_name : null,

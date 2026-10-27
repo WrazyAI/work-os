@@ -3,7 +3,7 @@ import { resolveProviderAttribution } from "@/lib/work-os-attribution";
 
 export type WorkOsReadinessStatus = "ready" | "needs_setup" | "blocked";
 export type WorkOsReadinessSeverity = "needs_setup" | "blocked";
-export type WorkOsProvider = "nifty" | "worktivity" | "github" | "ghl";
+export type WorkOsProvider = "worktivity" | "github" | "ghl";
 
 export interface WorkOsReadinessIssue {
   code: string;
@@ -23,7 +23,6 @@ export interface WorkOsReadinessInput {
     id: string;
     active?: boolean | null;
     authUserId?: string | null;
-    niftyMemberId?: string | null;
     worktivityEmployeeId?: string | null;
     roleProfileId?: string | null;
   }>;
@@ -89,7 +88,6 @@ export interface WorkOsReadinessReport {
     people: {
       active: number;
       withoutWorkOsAccount: number;
-      withoutNiftyMapping: number;
       withoutWorktivityMapping: number;
       withoutRoleProfile: number;
       withoutTeam: number;
@@ -122,7 +120,7 @@ export interface WorkOsReadinessReport {
   };
 }
 
-const providers: WorkOsProvider[] = ["nifty", "worktivity", "github", "ghl"];
+const providers: WorkOsProvider[] = ["worktivity", "github", "ghl"];
 
 function nonEmpty(value: string | number | null | undefined) {
   return value !== null && value !== undefined && String(value).trim() !== "";
@@ -201,7 +199,6 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   const peopleChecks = {
     active: activePeople.length,
     withoutWorkOsAccount: employeePeople.filter((person) => !nonEmpty(person.authUserId) || !membershipByPerson.has(person.id)).length,
-    withoutNiftyMapping: employeePeople.filter((person) => !nonEmpty(person.niftyMemberId)).length,
     withoutWorktivityMapping: employeePeople.filter((person) => !nonEmpty(person.worktivityEmployeeId)).length,
     withoutRoleProfile: employeePeople.filter((person) => !nonEmpty(person.roleProfileId)).length,
     withoutTeam: employeePeople.filter((person) => !teamPeople.has(person.id)).length,
@@ -236,7 +233,7 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   if (features.github_evidence) requiredProviders.push("github");
   if (features.ghl_evidence) requiredProviders.push("ghl");
   for (const provider of [...new Set(requiredProviders)]) {
-    addIssue(`provider.${provider}.unavailable`, provider === "nifty" ? "blocked" : "needs_setup", providerReady[provider] ? 0 : 1, `${provider} is required by the current pilot configuration but is not ready.`);
+    addIssue(`provider.${provider}.unavailable`, "needs_setup", providerReady[provider] ? 0 : 1, `${provider} is required by the current pilot configuration but is not ready.`);
   }
   if (features.github_evidence) addIssue("provider.github.identity_unverified", "needs_setup", verifiedAccounts.github ? 0 : 1, "At least one verified GitHub identity is required before GitHub evidence is attributable.");
   if (features.ghl_evidence) addIssue("provider.ghl.identity_unverified", "needs_setup", verifiedAccounts.ghl ? 0 : 1, "At least one verified GoHighLevel identity is required before CRM evidence is attributable.");

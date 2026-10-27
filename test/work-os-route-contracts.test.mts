@@ -54,7 +54,6 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(await source("src/lib/work-os-screenshots.ts"), /export function screenshotRunMode/);
   assert.match(await source("src/lib/work-os-screenshots.ts"), /terminallyAnalyzedFrames/);
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
-  const nifty = await source("src/lib/integrations/nifty.ts");
   const workOs = await source("src/lib/work-os-tasks.ts");
   assert.match(workOs, /raw->>created_by/);
   assert.match(workOs, /rawSubscriber/);
@@ -203,9 +202,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(interpretedProposals, /requirePerson: true/);
   assert.match(interpretedProposals, /proposeInterpretedWorkUpdate/);
   assert.doesNotMatch(day, /draftWorkOsEod/);
-  assert.match(nifty, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/assignees/);
-  assert.match(nifty, /method: "DELETE"/);
-  assert.match(workOs, /Historical Nifty tasks require mapped Nifty assignees/);
+  // The provider write surface is gone: tasks are deleted natively.
+  assert.doesNotMatch(workOs, /niftyForOwner|updateNiftyTask|deleteNiftyTask/);
   assert.match(workOs, /status: "deleted"/);
   assert.doesNotMatch(workday, /clockIn\(auth\.access/);
   assert.match(workday, /Attendance is controlled by Worktivity from the Windows Companion/);

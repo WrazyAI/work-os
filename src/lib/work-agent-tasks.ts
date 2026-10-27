@@ -118,6 +118,7 @@ const AGENT_TASK_CREATE_FIELDS = new Set([
   "start_date",
   "priority",
   "labels",
+  "story_points",
   "expected_outcome",
   "definition_of_done",
   "estimated_effort_minutes",

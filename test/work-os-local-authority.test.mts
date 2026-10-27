@@ -20,11 +20,12 @@ test("new task routes report Work OS confirmation", () => {
   assert.match(adminRoute, /createLocalWorkOsTask/);
 });
 
-test("local task updates persist local assignee ids while historical rows map them to Nifty", () => {
+test("task updates persist local assignee ids with no provider mapping", () => {
   const tasks = read("src/lib/work-os-tasks.ts");
   assert.match(tasks, /if \("assignee_person_ids" in patch\)/);
   assert.match(tasks, /resolveActiveTaskPeople/);
-  assert.match(tasks, /allowed\.assignees = providerIds/);
+  assert.match(tasks, /row\.assignee_person_ids = people\.map/);
+  assert.doesNotMatch(tasks, /allowed\.assignees = providerIds/);
 });
 
 test("assistant create and reassignment proposals use local authority", () => {

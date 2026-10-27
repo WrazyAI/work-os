@@ -49,7 +49,7 @@ describe("ApprovalFlow", () => {
   it("renders truthful result states after recording", () => {
     const blocker: ProposedOperation = { op: "record_blocker", statement: "Waiting on access", taskId: "task-3", taskTitle: "Access review", proposalId: "proposal-3", enabled: false };
     const results: ToolCallResult[] = [
-      { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: operations[0]!, status: "recorded", message: "Recorded." },
       { op: blocker, status: "processing", message: "Still processing this change." },
       { op: operations[1]!, status: "failed", message: "Provider unavailable." },
     ];
@@ -57,7 +57,7 @@ describe("ApprovalFlow", () => {
 
     expect(markup).toContain("Action results");
     expect(markup).toContain('data-workos-tool-surface="action-results"');
-    expect(markup).toContain("Recorded in Nifty.");
+    expect(markup).toContain("Recorded.");
     expect(markup).toContain("Provider unavailable.");
     expect(markup).toContain("Failed");
     expect(markup).toContain("Processing");
@@ -67,7 +67,7 @@ describe("ApprovalFlow", () => {
   it("does not count queued actions as recorded", () => {
     const queued: ToolCallResult = { op: operations[0]!, status: "queued", message: "Queued locally." };
     const markup = renderToStaticMarkup(createElement(ApprovalResults, {
-      results: [queued, { op: operations[1]!, status: "recorded", message: "Recorded in Nifty." }],
+      results: [queued, { op: operations[1]!, status: "recorded", message: "Recorded." }],
     }));
 
     expect(markup).toContain("1 recorded · 1 queued");
@@ -76,8 +76,8 @@ describe("ApprovalFlow", () => {
 
   it("collapses to an action-count summary and opens itself when something failed", () => {
     const recorded: ToolCallResult[] = [
-      { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
-      { op: operations[1]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: operations[0]!, status: "recorded", message: "Recorded." },
+      { op: operations[1]!, status: "recorded", message: "Recorded." },
     ];
     const calm = renderToStaticMarkup(createElement(ApprovalResults, { results: recorded }));
     expect(calm).toContain("2 actions recorded");
@@ -87,7 +87,7 @@ describe("ApprovalFlow", () => {
     expect(calm).toMatch(/class="approval-results-body"[^>]*hidden/);
 
     const failing: ToolCallResult[] = [
-      { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: operations[0]!, status: "recorded", message: "Recorded." },
       { op: operations[1]!, status: "failed", message: "Provider unavailable." },
     ];
     const alert = renderToStaticMarkup(createElement(ApprovalResults, { results: failing }));
@@ -116,7 +116,7 @@ describe("ApprovalFlow", () => {
   it("names the clear-and-retry recovery when the create outcome is unknown", () => {
     const uncreated = { ...operations[1]!, op: "create_task" as const, taskTitle: "New work" };
     const results: ToolCallResult[] = [
-      { op: uncreated, status: "failed", message: "A previous attempt may have created this task in Nifty but it is not listed yet.", retryable: true, createResolution: "no_task_created" },
+      { op: uncreated, status: "failed", message: "A previous attempt may have created this task earlier but it is not listed yet.", retryable: true, createResolution: "no_task_created" },
     ];
     const markup = renderToStaticMarkup(createElement(ApprovalResults, { results, onRetry: () => undefined }));
 

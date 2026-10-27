@@ -270,9 +270,9 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
       <AdminCard icon={Database} title="Data sources" detail="Where the record comes from and when each source last delivered" padded={false}>
         <ul className="admin-sources">
           <li>
-            <span><ListChecks size={14} aria-hidden /> Nifty</span>
+            <span><ListChecks size={14} aria-hidden /> Tasks</span>
             <small>{data.freshness.niftySyncedAt ? relativeTime(data.freshness.niftySyncedAt, Date.parse(data.generatedAt)) : "never"}</small>
-            <b>{data.freshness.niftyTasksToday} task{data.freshness.niftyTasksToday === 1 ? "" : "s"} today</b>
+            <b>{data.freshness.niftyTasksToday} task{data.freshness.niftyTasksToday === 1 ? "" : "s"} created today</b>
           </li>
           <li>
             <span><Clock3 size={14} aria-hidden /> Worktivity</span>

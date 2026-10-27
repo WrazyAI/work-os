@@ -122,8 +122,8 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
           : <span>No planned commitments were recorded in this range</span>}
         <span className="insight-summary-status">
           {data.freshness.stale
-            ? <em className="stale">Nifty sync delayed{staleAt ? " · " + formatWorkOsDateTime(staleAt) : ""}</em>
-            : <em>Nifty updated {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "—"}</em>}
+            ? <em className="stale">Task record stale{staleAt ? " · " + formatWorkOsDateTime(staleAt) : ""}</em>
+            : <em>Tasks updated {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "—"}</em>}
           <em>Worktivity {data.freshness.worktivityObservedAt ? "observed " + formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "not observed"}</em>
         </span>
       </div>
@@ -186,7 +186,7 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
         <section className="panel insight-evidence-context">
           <div className="card-title"><span><Fingerprint size={17} /> Evidence &amp; context</span><small>Source health and neutral activity context</small></div>
           <div className="insight-source-grid">
-            <div><strong>Nifty</strong><span>{data.freshness.stale ? "Sync delayed" : "Synced"}{data.freshness.niftySyncedAt ? " · " + formatWorkOsDateTime(data.freshness.niftySyncedAt) : ""}</span></div>
+            <div><strong>Tasks</strong><span>{data.freshness.stale ? "Sync delayed" : "Synced"}{data.freshness.niftySyncedAt ? " · " + formatWorkOsDateTime(data.freshness.niftySyncedAt) : ""}</span></div>
             <div><strong>Worktivity</strong><span>{data.freshness.worktivityObservedAt ? "Observed · " + formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "No observation in range"}</span></div>
             <div><strong>GitHub</strong><span>{githubSource?.connected ? !githubSource.enabled ? "Connected · evidence disabled" : githubSource.verifiedForPerson ? githubSource.evidenceCount + " evidence item" + (githubSource.evidenceCount === 1 ? "" : "s") + " · verified account" : "Connected · employee account not verified" : "Not connected"}</span></div>
             <div><strong>Output evidence</strong><span>{data.totals.outputEvidence} linked artifact{data.totals.outputEvidence === 1 ? "" : "s"} or record{data.totals.outputEvidence === 1 ? "" : "s"}</span></div>

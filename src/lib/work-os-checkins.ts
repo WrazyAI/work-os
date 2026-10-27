@@ -89,7 +89,7 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
         {
           role: "system",
           content: [
-            "You produce proposals for human review. Nifty is authoritative for tasks.",
+            "You produce proposals for human review. The Work OS task record is authoritative.",
             "Use an existing task when the text refers to one. Do not claim work, status, output, blockers, or completion unless the employee explicitly states it.",
             "Daily commitments are employee-reviewed planning context, not evidence. Never infer a commitment is completed or progressed from its presence.",
             "The live day state is authoritative for what is currently planned, completed, and blocked today.",
@@ -196,7 +196,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     }
   }
   const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
-  if (confirmedExisting && !tasks.length) throw new Error("there are no existing Nifty tasks to confirm as the current plan");
+  if (confirmedExisting && !tasks.length) throw new Error("there are no existing tasks to confirm as the current plan");
   const planItems = await db().from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,objective,success_criteria,disposition,completion_state)")
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("shift_date", shiftDate).maybeSingle();
   if (planItems.error) throw new Error(`load check-in planning context: ${planItems.error.message}`);
@@ -254,7 +254,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
       kind: "check_in",
       sourceTable: "work_check_ins",
       sourceId: String(checkIn.id),
-      content: input || (confirmedExisting ? "Confirmed existing Nifty tasks as the current plan." : "Check-in recorded without text."),
+      content: input || (confirmedExisting ? "Confirmed existing tasks as the current plan." : "Check-in recorded without text."),
       summary: input ? input.slice(0, 160) : null,
       metadata: { checkInKind: kind, updateKind, proposalCount: proposals.length },
       localDate: shiftDate,

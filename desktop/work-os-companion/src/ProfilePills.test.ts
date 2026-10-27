@@ -82,8 +82,11 @@ describe("ProviderAccountPills", () => {
     expect(markup).toContain("jamie@wrazy.com");
     expect(markup).toContain("GitHub");
     expect(markup).toContain("jamie-mensah");
-    expect(markup).toContain("Nifty");
     expect(markup).toContain("Connected accounts");
+  });
+
+  it("hides the retired provider once tasks are native", () => {
+    expect(markup.match(/jamie@wrazy\.com/g)?.length).toBe(1);
   });
 
   it("keeps the workspace as the authority over mappings", () => {

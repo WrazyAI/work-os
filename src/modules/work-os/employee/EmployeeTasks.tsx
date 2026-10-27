@@ -435,7 +435,7 @@ export default function EmployeeTasks() {
                           {task.project?.name ? <span>{task.project.name}</span> : null}
                           {task.milestone?.name ? <span>{task.milestone.name}</span> : null}
                           {task.priority ? <span>{operationLabel(String(task.priority))}</span> : null}
-                          <span>{isWorkOsTask ? "Work OS task" : task.synced_at ? "Nifty synced" : "Sync pending"}</span>
+                          <span>{String(task.provider ?? "local") === "local" ? "Work OS task" : "Imported task"}</span>
                         </div>
                       </div>
 
@@ -484,10 +484,10 @@ export default function EmployeeTasks() {
                               <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
                                 <Pencil size={13} /> Edit
                               </button>
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm(isWorkOsTask ? "Archive this task? It will be hidden from active work but retained in Work OS history." : "Archive this task? It will be hidden from active work but retained and restorable in Nifty.") && changeTask.mutate({ task, method: "DELETE", mode: "archive" })}>
+                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this task? It will be hidden from active work.") && changeTask.mutate({ task, method: "DELETE", mode: "archive" })}>
                                 <Archive size={13} /> Archive (reversible)
                               </button>
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm(isWorkOsTask ? "Permanently delete this task from Work OS? This cannot be undone." : "Permanently delete this task from Nifty? This cannot be undone.") && changeTask.mutate({ task, method: "DELETE", mode: "delete" })}>
+                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this task from Work OS? This cannot be undone.") && changeTask.mutate({ task, method: "DELETE", mode: "delete" })}>
                                 <Trash2 size={13} /> Delete permanently
                               </button>
                             </div>
@@ -543,10 +543,10 @@ export default function EmployeeTasks() {
                                           ))}
                                         </select>
                                       </label>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm(String(subtask.provider ?? "") === "local" ? "Archive this subtask? It will be hidden but retained in Work OS history." : "Archive this subtask? It will be hidden but retained and restorable in Nifty.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "archive" })}>
+                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this subtask? It will be hidden from active work.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "archive" })}>
                                         <Archive size={13} /> Archive (reversible)
                                       </button>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm(String(subtask.provider ?? "") === "local" ? "Permanently delete this subtask from Work OS? This cannot be undone." : "Permanently delete this subtask from Nifty? This cannot be undone.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "delete" })}>
+                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this subtask from Work OS? This cannot be undone.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "delete" })}>
                                         <Trash2 size={13} /> Delete permanently
                                       </button>
                                     </div>

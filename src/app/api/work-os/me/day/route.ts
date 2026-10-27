@@ -30,7 +30,6 @@ export async function GET(req: Request) {
     const at = localDate ? new Date(`${localDate}T12:00:00Z`) : atValue ? new Date(atValue) : new Date();
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "at must be a valid timestamp" }, { status: 400 });
     const day = await getWorkOsDay(auth.access, auth.access.personId as string, at, {
-      refreshNifty: url.searchParams.get("refreshProviders") === "true",
       refreshAttendance: url.searchParams.get("refreshAttendance") === "true",
       compact: url.searchParams.get("compact") === "true",
       localDate,

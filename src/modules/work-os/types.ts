@@ -1,19 +1,3 @@
-export interface WorkOsNiftyStatus {
-  status: {
-    apiBase: string;
-    hasAccessToken: boolean;
-    hasRefreshToken: boolean;
-    hasClientId: boolean;
-    hasClientSecret: boolean;
-    hasAuthorizeUrl: boolean;
-    hasRedirectUri: boolean;
-    canCallApi: boolean;
-    canStartOAuth: boolean;
-    redirectUri: string | null;
-  };
-  connectUrl: string | null;
-  error?: string;
-}
 
 export interface WorkOsProject {
   id: string;

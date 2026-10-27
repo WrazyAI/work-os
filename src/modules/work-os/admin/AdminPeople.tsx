@@ -190,7 +190,7 @@ export default function AdminPeoplePage() {
               <SectionHeading icon={ShieldCheck} title="Mappings" detail="Provider identities and the role profile used for planning." />
               <dl className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
                 <div className="flex items-center justify-between gap-3 py-2 first:pt-1 last:pb-1">
-                  <dt className="text-[11.5px] text-[var(--text-tertiary)]">Nifty member</dt>
+                  <dt className="text-[11.5px] text-[var(--text-tertiary)]">Task record</dt>
                   <dd className="min-w-0 truncate text-[12px] font-medium text-[var(--text-primary)]">{detail.data.person.nifty_member_id ?? "Not mapped"}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-2 first:pt-1 last:pb-1">

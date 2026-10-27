@@ -364,14 +364,14 @@ function InAppSection() {
 const noop = () => undefined;
 
 /** Dev-only fixture for the uncertain-create recovery: the server flags an
- * unresolved Nifty create and the result offers the clear-and-retry action. */
+ * unresolved task create and the result offers the clear-and-retry action. */
 function CreateRecoverySection() {
   const [requested, setRequested] = useState<string | null>(null);
   const results: ToolCallResult[] = [
     {
       op: { op: "create_task", statement: "Add “Prepare companion handoff” to today.", taskTitle: "Prepare companion handoff", proposalId: "preview-create-unresolved", enabled: false },
       status: "failed",
-      message: "A previous attempt may have created this task in Nifty but it is not listed yet. Retry to adopt it if it exists, or confirm nothing was created to clear the recorded attempt and file it once.",
+      message: "A previous attempt may have created this task earlier but it is not listed yet. Retry to adopt it if it exists, or confirm nothing was created to clear the recorded attempt and file it once.",
       retryable: true,
       createResolution: "no_task_created",
     },
@@ -384,7 +384,7 @@ function CreateRecoverySection() {
   ];
   return (
     <section aria-label="Uncertain create recovery preview" style={{ display: "grid", gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 14 }}>Uncertain Nifty create</h2>
+      <h2 style={{ margin: 0, fontSize: 14 }}>Uncertain task create</h2>
       <ApprovalResults
         results={results}
         onRetry={(result) => setRequested(`${result.createResolution ? "Clear-and-retry" : "Retry"} requested for ${result.op.taskTitle ?? "update"}.`)}
@@ -474,7 +474,7 @@ function InAppToolsSection() {
             op: operations[2]!, status: "recorded", message: "Pending tasks loaded.",
             data: { provider_result: { view: "pending", tasks: [
               { id: "t-9", title: "Document release evidence", description: "Capture the screenshots and validation states.", due_date: null, project_name: "Work OS", state: "pending" },
-              { id: "t-10", title: "Repair provider sync", description: "Verify the Nifty readback before release.", due_date: "2026-09-06", project_name: "Platform", state: "overdue" },
+              { id: "t-10", title: "Repair provider sync", description: "Verify the task readback before release.", due_date: "2026-09-06", project_name: "Platform", state: "overdue" },
               { id: "t-11", title: "Prepare companion handoff", due_date: "2026-09-11", project_name: "Desktop", state: "pending" },
             ] } },
           }],

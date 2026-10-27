@@ -1,5 +1,4 @@
 import { voiceInputConfigured } from "@/lib/aiTranscribe";
-import { niftyOrganizationConfigStatus } from "@/lib/integrations/nifty";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { evaluateWorkOsReadiness } from "@/lib/work-os-readiness";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -11,7 +10,7 @@ import { worktivityConfigured } from "@/lib/worktivity";
 export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
   const db = createAdminClient();
   const organizationId = access.organizationId;
-  const [organization, people, memberships, teams, schedules, roleProfiles, connections, credentials, sourceAccounts, tasks, niftyStatus] = await Promise.all([
+  const [organization, people, memberships, teams, schedules, roleProfiles, connections, credentials, sourceAccounts, tasks] = await Promise.all([
     db.from("work_organizations").select("id,name,slug,feature_flags").eq("id", organizationId).single(),
     db.from("work_people").select("id,active,auth_user_id,nifty_member_id,worktivity_employee_id,role_profile_id").eq("organization_id", organizationId),
     db.from("work_org_members").select("person_id,role,active").eq("organization_id", organizationId),
@@ -22,7 +21,6 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
     db.from("work_provider_credentials").select("provider,expires_at").eq("organization_id", organizationId),
     db.from("work_source_accounts").select("provider,person_id,verified,metadata").eq("organization_id", organizationId),
     db.from("work_tasks").select("completed,assignee_person_ids,due_date,priority,estimated_effort,estimated_effort_minutes,expected_outcome,definition_of_done,task_group_id").eq("organization_id", organizationId).eq("completed", false),
-    niftyOrganizationConfigStatus(organizationId),
   ]);
   const activeTeamIds = (teams.data ?? []).filter((team: any) => team.active !== false).map((team: any) => team.id as string);
   const teamMembers = activeTeamIds.length
@@ -34,7 +32,6 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
   if (!organization.data) throw new Error("Work OS organization not found");
   const connectionRows = connections.data ?? [];
   const providerReady = {
-    nifty: niftyStatus.canCallApi,
     worktivity: worktivityConfigured(),
     github: connectionRows.some((row: any) => row.provider === "github" && row.active !== false) && !!process.env.WORK_OS_GITHUB_WEBHOOK_SECRET,
     ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false) && !!process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY,
@@ -50,7 +47,6 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
       id: person.id,
       active: person.active,
       authUserId: person.auth_user_id,
-      niftyMemberId: person.nifty_member_id,
       worktivityEmployeeId: person.worktivity_employee_id,
       roleProfileId: person.role_profile_id,
     })),

@@ -21,7 +21,7 @@ export const PREVIEW_DATA: OnboardingData = {
     schedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [{ start: "12:30", end: "13:00" }] },
     notifications: { desktopEnabled: true },
     privacy: { screenshotAnalysisConsent: false, sensitiveAppExclusions: ["1password.com"] },
-    workPreferences: { archetypeId: "engineering", inferredArchetypeId: "engineering", customRoleTitle: "", specialtyIds: ["engineering:frontend"], items: [{ id: "engineering:responsibility:product-engineering", kind: "responsibility", label: "Product engineering", source: "suggested" }], responsibilities: ["Product engineering"], outputTypes: ["Pull requests"], evidenceSources: ["Nifty", "GitHub"], voiceUpdatesEnabled: true, githubUsername: "jamie" },
+    workPreferences: { archetypeId: "engineering", inferredArchetypeId: "engineering", customRoleTitle: "", specialtyIds: ["engineering:frontend"], items: [{ id: "engineering:responsibility:product-engineering", kind: "responsibility", label: "Product engineering", source: "suggested" }], responsibilities: ["Product engineering"], outputTypes: ["Pull requests"], evidenceSources: ["Work OS", "GitHub"], voiceUpdatesEnabled: true, githubUsername: "jamie" },
   },
   providerPrefill: {
     nifty: { mapped: true, timezone: "Africa/Accra", language: "en", team: "Product Engineering", role: "Developer" },

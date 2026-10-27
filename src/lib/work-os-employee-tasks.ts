@@ -11,7 +11,6 @@ import {
   listEvidence,
   listPersonTasks,
   moveTaskToParent,
-  syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
 import { getStorageBackend } from "@/lib/db/storage";
@@ -122,37 +121,18 @@ const TASK_DETAIL_MIRROR_FRESH_MS = 2 * 60_000;
 
 export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
   const { ownerId, task, niftyMemberId } = await employeeTaskContext(access, taskId);
-  const providerTaskId = String(task.provider_task_id ?? task.id);
-  const syncedAtMs = task.synced_at ? Date.parse(String(task.synced_at)) : 0;
-  let currentTask = task;
-  let refreshed = false;
-  // The mirror is authoritative enough within the freshness window. Outside
-  // it, refresh from Nifty quickly and fall back to the mirror on timeout —
-  // opening a task must never hang on a provider round-trip. Work OS-native
-  // tasks have no provider record, so they are never refreshed.
-  if (task.provider !== "local" && (!syncedAtMs || Date.now() - syncedAtMs > TASK_DETAIL_MIRROR_FRESH_MS)) {
-    try {
-      await withTimeout(syncNiftyTask(ownerId, providerTaskId), TASK_DETAIL_PROVIDER_REFRESH_MS, "Nifty task refresh");
-      currentTask = await getTaskByLocalOrProviderId(ownerId, taskId);
-      refreshed = true;
-    } catch (error) {
-      console.warn("[work-os] task detail provider refresh skipped", { taskId, message: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  // The refresh can reassign the task to another employee. Re-authorize the
-  // refreshed row through the same gate as the original lookup instead of
-  // trusting the stale pre-refresh mirror. This stays outside the try so a
-  // rejection is never mistaken for a provider timeout and swallowed.
-  if (refreshed) currentTask = (await employeeTaskContext(access, taskId)).task;
+  // The record itself is the authority: work is native, so opening a task is a
+  // single database read with no provider round-trip to wait on.
+  const currentTask = task;
   let subtasksQuery = db().from("work_tasks")
     .select("*, project:work_projects(id,name,provider_project_id)")
     .eq("organization_id", access.organizationId)
     .not("status", "in", "(archived,deleted)")
     .order("completed", { ascending: true })
     .order("provider_created_at", { ascending: true });
-  subtasksQuery = task.provider === "local"
-    ? subtasksQuery.eq("parent_task_id", task.id as string)
-    : subtasksQuery.eq("parent_provider_task_id", providerTaskId);
+  subtasksQuery = task.provider_task_id
+    ? subtasksQuery.or(`parent_task_id.eq.${task.id},parent_provider_task_id.eq.${task.provider_task_id}`)
+    : subtasksQuery.eq("parent_task_id", task.id as string);
   const [subtasksResult, evidenceResult] = await Promise.all([
     subtasksQuery,
     db().from("work_evidence")
@@ -177,17 +157,15 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     .not("status", "in", "(archived,deleted)")
     .order("provider_created_at", { ascending: false })
     .limit(200);
-  if (currentTask.provider === "local") {
-    moveQuery = (currentTask.project_id
-      ? moveQuery.eq("project_id", currentTask.project_id as string)
-      : moveQuery.is("project_id", null)).is("parent_task_id", null);
-  } else {
-    moveQuery = moveQuery.eq("provider_project_id", (currentTask.provider_project_id as string) ?? "").is("parent_provider_task_id", null);
-  }
+  moveQuery = (currentTask.project_id
+    ? moveQuery.eq("project_id", currentTask.project_id as string)
+    : moveQuery.is("project_id", null))
+    .is("parent_task_id", null)
+    .is("parent_provider_task_id", null);
   const { data: moveRows, error: moveError } = await moveQuery;
   if (moveError) throw new Error(`load task move targets: ${moveError.message}`);
   const moveTargets = (moveRows ?? []).filter((candidate: Record<string, unknown>) => {
-    if (String(candidate.provider_task_id ?? candidate.id) === providerTaskId) return false;
+    if (String(candidate.provider_task_id ?? candidate.id) === String(task.provider_task_id ?? task.id)) return false;
     return isTaskAttributableToPerson(candidate, access.personId as string, niftyMemberId);
   }).slice(0, 50).map((candidate: Record<string, unknown>) => ({
     id: candidate.id,
@@ -473,7 +451,7 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
  * Returns provider-backed task rows for a read-only assistant selection card.
  *
  * Both views answer with open work only, so a long completed history can never
- * crowd the card's window, and pending lists the newest activity first (Nifty
+ * crowd the card's window, and pending lists the newest activity first (the record
  * activity, then creation); overdue keeps oldest-due-first (design §27.3).
  */
 export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view: "pending" | "overdue", requestedLimit?: unknown) {
