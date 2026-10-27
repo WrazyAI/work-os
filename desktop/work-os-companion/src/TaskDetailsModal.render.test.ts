@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { TaskDetailsModal } from "./taskSurfaces";
+import { describe, expect, it, vi } from "vitest";
+import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { DueDateField, TaskDetailsModal, TaskEditModal, toggleAssigneeIds } from "./taskSurfaces";
 
 const noop = () => undefined;
 
@@ -86,5 +87,155 @@ describe("TaskDetailsModal subtask actions", () => {
     expect(markup).toContain("Download release-verification.pdf");
     expect(markup).toContain("Attach evidence");
     expect(markup).not.toContain("Recorded");
+  });
+});
+
+const TODAY = "2026-09-29";
+
+/** Task payloads from the server carry per-row capabilities; these fixtures
+ *  compute them with the same pure helper the API uses so the render assertions
+ *  exercise the real permission matrix. */
+const withCapabilities = (task: Record<string, any>, personId = "person-1") => ({
+  ...task,
+  capabilities: taskCapabilities(task, { role: "employee", personId }, TODAY),
+});
+
+const people = [
+  { id: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" },
+  { id: "person-2", displayName: "Alex Rivera", email: null },
+];
+
+const selfOwned = withCapabilities({
+  id: "task-1", provider: "local", title: "Ship the drawer", description: "Detail copy",
+  completed: false, due_date: TODAY, workflow_status: "pending",
+  assignee_person_ids: ["person-1"], assigned_by_person_id: "person-1",
+  assignees: [{ personId: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" }],
+});
+
+const assigneeOnly = withCapabilities({
+  ...selfOwned,
+  assignee_person_ids: ["person-1"], assigned_by_person_id: "person-2",
+  assignees: [{ personId: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" }],
+});
+
+const overdue = withCapabilities({ ...selfOwned, due_date: "2026-09-28" });
+
+const drawerMarkup = (task: Record<string, any>, extra: Record<string, any> = {}) => renderToStaticMarkup(createElement(TaskDetailsModal, {
+  ...base,
+  details: { task, subtasks: [], moveTargets: [] },
+  currentPersonId: "person-1",
+  assignablePeople: people,
+  onStatus: noop,
+  onCompleteTask: noop,
+  onArchive: noop,
+  onDelete: noop,
+  onAssign: noop,
+  ...extra,
+}));
+
+/** The visible text of every `role="menuitem"` control in the markup. */
+const menuItemLabels = (markup: string) => [...markup.matchAll(/role="menuitem"[^>]*>([\s\S]*?)<\/button>/g)]
+  .map((match) => match[1]!.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim())
+  .filter(Boolean);
+
+const buttonTag = (markup: string, label: string) => markup.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? "";
+
+/** The whole button, so its visible label is included. */
+const buttonText = (markup: string, label: string) => (markup.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)</button>`))?.[1] ?? "")
+  .replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+
+describe("TaskDetailsModal lifecycle actions", () => {
+  it("shows the current status on a control the assigner can use", () => {
+    const markup = drawerMarkup(selfOwned);
+    const trigger = buttonTag(markup, "Task status");
+    expect(trigger).toContain('aria-haspopup="menu"');
+    expect(trigger).not.toContain("disabled");
+    expect(buttonText(markup, "Task status")).toBe("Pending");
+  });
+
+  it("lists both manual statuses in the status menu", () => {
+    const labels = menuItemLabels(drawerMarkup(selfOwned, { initialMenu: "status" }));
+    expect(labels).toEqual(expect.arrayContaining(["Pending", "In progress"]));
+  });
+
+  it("keeps archive and permanent delete in the drawer actions menu", () => {
+    const markup = drawerMarkup(selfOwned, { initialMenu: "actions" });
+    const labels = menuItemLabels(markup);
+    expect(labels).toEqual(expect.arrayContaining(["Edit task", "Archive task", "Delete task"]));
+  });
+
+  it("offers assignment with the current assignees and a full next set", () => {
+    const markup = drawerMarkup(selfOwned, { initialMenu: "assignees" });
+    expect(buttonTag(markup, "Change assignees")).toContain('aria-expanded="true"');
+    expect(menuItemLabels(markup)).toEqual(expect.arrayContaining(["Dana Whitfield", "Alex Rivera", "Assign"]));
+  });
+
+  it("assigns by replacing the whole set", () => {
+    expect(toggleAssigneeIds([], "person-2")).toEqual(["person-2"]);
+    expect(toggleAssigneeIds(["person-1"], "person-2")).toEqual(["person-1", "person-2"]);
+    expect(toggleAssigneeIds(["person-1", "person-2"], "person-1")).toEqual(["person-2"]);
+  });
+
+  it("keeps an assignee on completion and status without lifecycle controls", () => {
+    const markup = drawerMarkup(assigneeOnly);
+    expect(markup).toContain("Mark complete");
+    expect(buttonTag(markup, "Task status")).not.toBe("");
+    expect(markup).not.toContain("Edit task");
+    expect(markup).not.toContain("Archive task");
+    expect(markup).not.toContain("Delete task");
+    expect(buttonTag(markup, "Change assignees")).toBe("");
+  });
+
+  it("locks the status control for an overdue task and names the fix", () => {
+    const markup = drawerMarkup(overdue);
+    expect(buttonTag(markup, "Task status")).toContain("disabled");
+    expect(markup).toContain("Update the due date first");
+    // The assigner can still reach the editor that moves the date.
+    expect(markup).toContain("Edit task");
+  });
+
+  it("keeps the historical read-only drawer free of lifecycle actions", () => {
+    const markup = drawerMarkup(selfOwned, { readOnly: true });
+    expect(markup).not.toContain("Task status");
+    expect(markup).not.toContain("Archive task");
+    expect(markup).not.toContain("Delete task");
+  });
+
+  it("omits cached capabilities instead of guessing them", () => {
+    const cached = { ...selfOwned } as Record<string, any>;
+    delete cached.capabilities;
+    const markup = drawerMarkup(cached);
+    expect(markup).not.toContain("Task status");
+    expect(markup).not.toContain("Mark complete");
+  });
+});
+
+describe("TaskEditModal due date", () => {
+  it("renders the due date for an editor and reports its changes", () => {
+    const markup = renderToStaticMarkup(createElement(TaskEditModal, {
+      kind: "task", title: "Ship the drawer", description: "Detail copy", busy: false,
+      dueDate: "2026-10-30", onTitle: noop, onDescription: noop, onDueDate: noop, onClose: noop, onSubmit: noop,
+    }));
+    const input = markup.match(/<input[^>]*type="date"[^>]*>/)?.[0] ?? "";
+    expect(markup).toContain(">Due<");
+    expect(input).toContain('value="2026-10-30"');
+    expect(input).not.toContain("disabled");
+  });
+
+  it("clears the due date when the field is emptied", () => {
+    const onDueDate = vi.fn();
+    const field = DueDateField({ value: "2026-10-30", disabled: false, onChange: onDueDate });
+    const input = (field.props.children as Array<{ type?: string; props?: Record<string, any> }>).find((child) => child?.type === "input");
+    expect(input).toBeTruthy();
+    input!.props!.onChange({ target: { value: "" } });
+    expect(onDueDate).toHaveBeenCalledWith("");
+  });
+
+  it("hides the due date from an actor who may not edit", () => {
+    const markup = renderToStaticMarkup(createElement(TaskEditModal, {
+      kind: "task", title: "Ship the drawer", description: "Detail copy", busy: false,
+      onTitle: noop, onDescription: noop, onClose: noop, onSubmit: noop,
+    }));
+    expect(markup).not.toContain('type="date"');
   });
 });

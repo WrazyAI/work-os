@@ -364,7 +364,9 @@ assert.match(taskSurfaces, /Add a subtask/);
 assert.match(taskSurfaces, /record/);
 assert.match(taskSurfaces, /Archive.*reversible/);
 assert.match(app, /method: "DELETE"/);
-assert.match(app, /Delete permanently/);
+// The row and drawer lifecycle menus resolve their copy in taskSurfaces since
+// the shared TaskActionMenuItems extraction; App keeps the DELETE wiring.
+assert.match(taskSurfaces, /Delete permanently/);
 assert.match(taskSurfaces, /task-assignee-tags/);
 assert.match(taskSurfaces, /retained in Work OS history/);
 assert.match(app, /role="alertdialog"/);

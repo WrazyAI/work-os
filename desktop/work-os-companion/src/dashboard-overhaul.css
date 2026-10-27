@@ -837,6 +837,47 @@ body {
 }
 .task-detail-breadcrumb span { display: inline-flex; align-items: center; gap: 5px; }
 .task-detail-breadcrumb svg { color: #a0afa0; }
+/* The drawer's action rail sits between the breadcrumb and the title so the
+ * status, the assignees, and the lifecycle menu are reachable before the copy. */
+.task-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: -4px 0 16px;
+}
+.task-detail-actions-primary { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; }
+.task-detail-actions > .ellipsis-button { flex: 0 0 auto; margin-left: auto; }
+.task-detail-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d5e1d0;
+  border-radius: 999px;
+  background: #f7faf4;
+  color: #4a5c47;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.task-detail-actions-trigger:hover:not(:disabled) { border-color: #b9cbb2; background: #fff; }
+.task-detail-actions-trigger[aria-expanded="true"] { border-color: #9fbd91; background: #edf7e7; }
+.task-detail-actions-trigger:disabled { cursor: default; color: #86927f; background: #f2f5ef; }
+.task-detail-actions-trigger:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
+.task-detail-actions-trigger svg { color: #6d8a63; }
+.task-detail-actions .ellipsis-button { width: 32px; height: 32px; border-color: #d5e1d0; border-radius: 9px; background: #f7faf4; }
+.task-detail-actions .ellipsis-button:hover { border-color: #b9cbb2; background: #fff; }
+.task-detail-status-note { color: #8a5a1e; font-size: 10px; font-weight: 700; }
+.task-detail-assignees { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.task-detail-assigned-by { color: #7d8a7b; font-size: 10px; font-weight: 700; }
+.task-detail-menu-mark { display: inline-block; width: 14px; height: 14px; border: 1px dashed #b8c6b2; border-radius: 4px; }
+.task-detail-menu { width: 216px; }
+.task-detail-menu > button small { margin-left: auto; color: #8a5a1e; font-size: 9px; font-weight: 700; }
+.task-detail-menu > p { padding: 6px 8px; margin: 0; color: #7d8a7b; font-size: 10px; line-height: 1.4; }
+.task-detail-menu > button.primary { justify-content: center; margin-top: 4px; background: #a8f15b; color: #203518; font-weight: 800; }
+.task-detail-menu > button.primary:disabled { background: #eef2ea; color: #8b9687; }
 .task-detail-intro { display: grid; gap: 12px; }
 .task-detail-title {
   margin: 0;

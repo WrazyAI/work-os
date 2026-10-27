@@ -19,6 +19,7 @@ import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
 import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
 import { displayTaskState, taskActionItems, taskStatusLabel, taskStatusOptions } from "./taskActions";
+import type { TaskCapabilities } from "../../../src/lib/work-os-task-permissions";
 
 export function TaskActionMenuItems({ task, currentDate, busy, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose }: {
   task: TaskRow; currentDate: string; busy: boolean;
@@ -289,7 +290,164 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
   </div>;
 }
 
-export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, completionEvidence = [], loadEvidence, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onAttachEvidence, onDownloadEvidence, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
+/** The assignment menu sends the whole next set; a person already on the task
+ *  is removed rather than duplicated. */
+export function toggleAssigneeIds(current: string[], personId: string): string[] {
+  return current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId];
+}
+
+/** Server payloads carry the id list; local previews may only carry the joined
+ *  assignee identities, so both shapes resolve to the same editable set. */
+function currentAssigneeIds(task: AnyTask): string[] {
+  const ids = Array.isArray(task.assignee_person_ids)
+    ? task.assignee_person_ids.filter((id: unknown): id is string => typeof id === "string")
+    : [];
+  if (ids.length) return ids;
+  return Array.isArray(task.assignees)
+    ? task.assignees.map((person: AnyTask) => person?.personId).filter((id: unknown): id is string => typeof id === "string")
+    : [];
+}
+
+/**
+ * A menu that lives inside the task drawer. Placement, focus handoff, and the
+ * outside-press boundary are shared with the subtask menus, but Escape is
+ * claimed in the capture phase: the App-level dialog trap listens later on the
+ * document's bubble phase and would otherwise close the whole drawer instead of
+ * this menu.
+ */
+function DetailMenu({ open, label, triggerClassName = "task-detail-actions-trigger", menuClassName = "", disabled = false, trigger, children, onToggle, onClose }: {
+  open: boolean; label: string; triggerClassName?: string; menuClassName?: string; disabled?: boolean;
+  trigger: ReactNode; children: ReactNode; onToggle: () => void; onClose: () => void;
+}) {
+  const { triggerRef, menuRef, style } = useAnchoredMenu(open);
+  const triggerRefs = useMemo(() => [triggerRef], [triggerRef]);
+  const menuRefs = useMemo(() => [menuRef], [menuRef]);
+  usePortalMenuInteraction({ open, triggerRefs, menuRefs, focusMenuRef: menuRef, onClose });
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose, open]);
+  return <>
+    <button
+      type="button"
+      className={triggerClassName}
+      aria-label={label}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      disabled={disabled}
+      ref={(node) => { triggerRef.current = node; }}
+      onClick={onToggle}
+    >{trigger}</button>
+    {open && renderViewportSurface(
+      <div className={`subtask-menu task-detail-menu anchored-menu ${menuClassName}`.trim()} role="menu" aria-label={label} style={style} ref={menuRef}>{children}</div>,
+    )}
+  </>;
+}
+
+/** Status, assignment, and lifecycle actions for the open task. Every control
+ *  is driven by the payload's capability flags; a cached payload without them
+ *  renders nothing rather than advertising an action the server would refuse. */
+export function TaskDetailActions({ task, currentDate, currentPersonId = null, assignablePeople = [], busy, initialMenu = null, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete }: {
+  task: AnyTask; currentDate: string; currentPersonId?: string | null;
+  assignablePeople?: Array<{ id: string; displayName: string; email: string | null }>;
+  busy: boolean; initialMenu?: "status" | "actions" | "assignees" | null;
+  onStatus: (status: "pending" | "in_progress") => void;
+  onComplete: (completed: boolean) => void;
+  onEdit: () => void;
+  onAssign?: (personIds: string[]) => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  const capabilities = (task.capabilities ?? {}) as Partial<TaskCapabilities>;
+  const [menu, setMenu] = useState<"status" | "actions" | "assignees" | null>(initialMenu);
+  const [selected, setSelected] = useState<string[]>(() => currentAssigneeIds(task));
+  const close = () => setMenu(null);
+  const state = displayTaskState(task, currentDate);
+  const statusOptions = taskStatusOptions(task, currentDate);
+  const statusNote = statusOptions.find((option) => option.note)?.note;
+  // An overdue task keeps its control, disabled with the due-date note; an actor
+  // who may not change status gets no dead control at all.
+  const showStatus = statusOptions.some((option) => !option.disabled || option.note);
+  const actions = taskActionItems(task, currentDate);
+  const lifecycle = actions.filter((action) => action === "edit" || action === "archive" || action === "delete");
+  const canAssign = capabilities.canAssign === true && !!onAssign;
+  const assignedByYou = typeof task.assigned_by_person_id === "string"
+    && currentPersonId !== null
+    && task.assigned_by_person_id === currentPersonId;
+  const assignees = currentAssigneeIds(task);
+  const changed = assignees.length !== selected.length || assignees.some((id) => !selected.includes(id));
+  if (!showStatus && !lifecycle.length && !canAssign) return null;
+  return <div className="task-detail-actions" role="group" aria-label="Task actions">
+    <div className="task-detail-actions-primary">
+      {showStatus && <DetailMenu
+        open={menu === "status"}
+        label="Task status"
+        disabled={busy || statusOptions.every((option) => option.disabled)}
+        onToggle={() => setMenu(menu === "status" ? null : "status")}
+        onClose={close}
+        trigger={<><Clock3 size={13} aria-hidden="true" /><span>{taskStatusLabel(state)}</span><ChevronRight size={12} aria-hidden="true" /></>}
+      >
+        {statusOptions.map((option) => <button
+          key={option.value}
+          role="menuitem"
+          disabled={busy || option.disabled}
+          onClick={() => { close(); onStatus(option.value); }}
+        >
+          {state === option.value ? <Check size={14} aria-hidden="true" /> : <Clock3 size={14} aria-hidden="true" />}{option.label}
+          {option.note && <small>{option.note}</small>}
+        </button>)}
+      </DetailMenu>}
+      {statusNote && <small className="task-detail-status-note">{statusNote}</small>}
+      {canAssign && <div className="task-detail-assignees">
+        <DetailMenu
+          open={menu === "assignees"}
+          label="Change assignees"
+          disabled={busy}
+          onToggle={() => { setSelected(assignees); setMenu(menu === "assignees" ? null : "assignees"); }}
+          onClose={close}
+          trigger={<><UserRound size={13} aria-hidden="true" /><span>Assignees</span></>}
+        >
+          {assignablePeople.length ? assignablePeople.map((person) => {
+            const checked = selected.includes(person.id);
+            return <button
+              key={person.id}
+              role="menuitem"
+              aria-label={`${checked ? "Remove" : "Add"} ${person.displayName}`}
+              onClick={() => setSelected((current) => toggleAssigneeIds(current, person.id))}
+            >
+              {checked ? <Check size={14} aria-hidden="true" /> : <span className="task-detail-menu-mark" aria-hidden="true" />}{person.displayName}
+            </button>;
+          }) : <p>No one else is available to assign.</p>}
+          <button role="menuitem" className="primary" disabled={busy || !changed} onClick={() => { onAssign?.(selected); close(); }}>Assign</button>
+        </DetailMenu>
+        {assignedByYou && <small className="task-detail-assigned-by">Assigned by you</small>}
+      </div>}
+    </div>
+    {lifecycle.length > 0 && <DetailMenu
+      open={menu === "actions"}
+      label="More task actions"
+      triggerClassName="ellipsis-button"
+      menuClassName="task-detail-actions-menu"
+      disabled={busy}
+      onToggle={() => setMenu(menu === "actions" ? null : "actions")}
+      onClose={close}
+      trigger={<MoreHorizontal size={17} aria-hidden="true" />}
+    >
+      {actions.includes("edit") && <button role="menuitem" disabled={busy} onClick={() => { close(); onEdit(); }}><Pencil size={14} aria-hidden="true" /> Edit task</button>}
+      {actions.includes("archive") && <button role="menuitem" disabled={busy} onClick={() => { close(); onArchive(); }}><Archive size={14} aria-hidden="true" /> Archive task</button>}
+      {actions.includes("delete") && <button className="danger" role="menuitem" disabled={busy} onClick={() => { close(); onDelete(); }}><Trash2 size={14} aria-hidden="true" /> Delete task</button>}
+    </DetailMenu>}
+  </div>;
+}
+
+export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, completionEvidence = [], loadEvidence, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onAttachEvidence, onDownloadEvidence, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, currentPersonId = null, assignablePeople = [], initialMenu = null, onStatus, onAssign, onArchive, onDelete, onClose }: {
   details: { task: AnyTask; subtasks: AnyTask[]; moveTargets: AnyTask[]; subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null } };
   loading: boolean; readOnly: boolean; currentDate: string; busy: boolean;
   subtaskTitle: string; subtaskDescription: string; subtaskMenuId: string | null; moveMenuId: string | null;
@@ -297,11 +455,23 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
   loadEvidence: EvidenceLoader;
   onSubtaskTitle: (value: string) => void; onSubtaskDescription: (value: string) => void;
   onSubtaskMenu: (id: string | null) => void; onMoveMenu: (id: string | null) => void;
-  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: () => void; onAttachEvidence?: () => void; onDownloadEvidence?: (evidence: TaskEvidenceRecord) => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
-  onToggleSubtask: (subtask: AnyTask) => void; onArchiveSubtask: (subtask: AnyTask) => void; onDeleteSubtask: (subtask: AnyTask) => void; onClose: () => void;
+  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: (completed: boolean) => void; onAttachEvidence?: () => void; onDownloadEvidence?: (evidence: TaskEvidenceRecord) => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
+  onToggleSubtask: (subtask: AnyTask) => void; onArchiveSubtask: (subtask: AnyTask) => void; onDeleteSubtask: (subtask: AnyTask) => void;
+  currentPersonId?: string | null;
+  assignablePeople?: Array<{ id: string; displayName: string; email: string | null }>;
+  initialMenu?: "status" | "actions" | "assignees" | null;
+  onStatus?: (status: "pending" | "in_progress") => void;
+  onAssign?: (personIds: string[]) => void;
+  onArchive?: () => void;
+  onDelete?: () => void;
+  onClose: () => void;
 }) {
   const task = details.task;
   const state = displayTaskState(task, currentDate);
+  const capabilities = (task.capabilities ?? {}) as Partial<TaskCapabilities>;
+  const canEdit = !readOnly && capabilities.canEdit === true;
+  const canComplete = !readOnly && !!onCompleteTask && task.completed !== true && capabilities.canComplete === true;
+  const canReopen = !readOnly && !!onCompleteTask && task.completed === true && capabilities.canReopen === true;
   const subtasks = Array.isArray(details.subtasks) ? details.subtasks : [];
   const moveTargets = Array.isArray(details.moveTargets) ? details.moveTargets : [];
   const sync = details.subtaskSync;
@@ -324,6 +494,20 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
         {loading ? <><h2 className="task-detail-title" id="task-detail-title">{title}</h2><TaskDetailSkeleton /></> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
           <nav className="task-detail-breadcrumb" aria-label="Task location">{breadcrumbs.map((crumb, index) => <span key={`${crumb}-${index}`}>{index > 0 && <ChevronRight size={13} aria-hidden="true" />}{crumb}</span>)}</nav>
+          {!readOnly && <TaskDetailActions
+            task={task}
+            currentDate={currentDate}
+            currentPersonId={currentPersonId}
+            assignablePeople={assignablePeople}
+            busy={busy}
+            initialMenu={initialMenu}
+            onStatus={(status) => onStatus?.(status)}
+            onComplete={(completed) => onCompleteTask?.(completed)}
+            onEdit={() => onEditTask(task)}
+            onAssign={onAssign}
+            onArchive={() => onArchive?.()}
+            onDelete={() => onDelete?.()}
+          />}
           <section className="task-detail-intro"><h2 className="task-detail-title" id="task-detail-title">{title}</h2><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /></section>
           {String(task.expected_outcome ?? "").trim() ? <section className="task-detail-outcome" aria-label="Expected outcome"><span>Expected outcome</span><p>{safeTaskText(task.expected_outcome, "")}</p></section> : null}
           <section className="task-detail-meta" aria-label="Task metadata">
@@ -360,7 +544,12 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
           <div className="task-detail-provenance"><span className={`task-state ${state}`}>{taskStatusLabel(state)}</span><SyncChip task={task} /></div>
         </>}
       </div>
-      <footer className="task-detail-footer"><small>{project} · {taskSourceLabel(task)} is the task record</small><div className="task-detail-footer-actions">{!readOnly && !task.completed ? <><button disabled={busy} onClick={() => onEditTask(task)}>Edit task</button><button className="primary" disabled={busy} onClick={() => onCompleteTask?.()}><Check size={15} /> Mark complete</button></> : <button onClick={onClose}>Close</button>}</div></footer>
+      <footer className="task-detail-footer"><small>{project} · {taskSourceLabel(task)} is the task record</small><div className="task-detail-footer-actions">
+        {canEdit && <button disabled={busy} onClick={() => onEditTask(task)}>Edit task</button>}
+        {canComplete && <button className="primary" disabled={busy} onClick={() => onCompleteTask?.(true)}><Check size={15} /> Mark complete</button>}
+        {canReopen && <button className="primary" disabled={busy} onClick={() => onCompleteTask?.(false)}><RotateCcw size={15} /> Reopen</button>}
+        {!canEdit && !canComplete && !canReopen && <button onClick={onClose}>Close</button>}
+      </div></footer>
     </section>
   </AppWideSidePanel>;
 }
@@ -381,9 +570,16 @@ export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy
   </section></div>);
 }
 
-export function TaskEditModal({ kind, title, description, busy, localTask = false, onTitle, onDescription, onClose, onSubmit }: {
-  kind: "task" | "subtask"; title: string; description: string; busy: boolean; localTask?: boolean;
-  onTitle: (value: string) => void; onDescription: (value: string) => void; onClose: () => void; onSubmit: () => void;
+/** The one due-date control: an emptied field means "no due date", which the
+ *  caller turns into an explicit null instead of guessing a replacement. */
+export function DueDateField({ value, disabled = false, onChange }: { value: string; disabled?: boolean; onChange: (value: string) => void }) {
+  return <label className="task-edit-due"><span>Due</span><input type="date" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+export function TaskEditModal({ kind, title, description, dueDate = "", busy, localTask = false, onTitle, onDescription, onDueDate, onClose, onSubmit }: {
+  kind: "task" | "subtask"; title: string; description: string; dueDate?: string; busy: boolean; localTask?: boolean;
+  onTitle: (value: string) => void; onDescription: (value: string) => void; onDueDate?: (value: string) => void;
+  onClose: () => void; onSubmit: () => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
   useDialogFocus(dialogRef);
@@ -392,6 +588,7 @@ export function TaskEditModal({ kind, title, description, busy, localTask = fals
     <div className="task-modal-body">
       <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
+      {onDueDate && <DueDateField value={dueDate} disabled={busy} onChange={onDueDate} />}
     </div>
     <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>Save changes</button></footer>
   </section></div>);

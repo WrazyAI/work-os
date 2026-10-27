@@ -64,7 +64,7 @@ import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversation
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
@@ -539,6 +539,7 @@ export default function App() {
   const [editRequest, setEditRequest] = useState<TaskEditRequest | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
   const [clockInConfirmation, setClockInConfirmation] = useState<ClockInConfirmation | null>(null);
   const [clockOutConfirmation, setClockOutConfirmation] = useState(false);
   const [missedClockOut, setMissedClockOut] = useState<MissedClockOutCorrection | null>(null);
@@ -1350,6 +1351,8 @@ export default function App() {
   // when a workspace that needs them opens.
   const compactDayQuery = useDayQuery({ enabled: employeeBootstrapEnabled, variant: "compact", pollMs: 60_000 });
   const detailsDayQuery = useDayQuery({ enabled: employeeBootstrapEnabled && detailsViews, variant: "details" });
+  // Share the scoped options cache between the drawer and the composer.
+  const drawerAssigneeQuery = useTaskOptionsQuery({ enabled: employeeBootstrapEnabled && !!taskDetails && !taskDetailsReadOnly });
   const onboardingQuery = useOnboardingQuery({ enabled: employeeBootstrapEnabled });
   const setWorkspaceMode = (next: "employee" | "admin") => {
     if (next === workspace) return;
@@ -3805,6 +3808,9 @@ export default function App() {
     const cached = queryClient.getQueryData<TaskDetails>(workOsKeys.taskDetails(taskId));
     setTaskDetails(cached ?? { task, subtasks: [], moveTargets: [] });
     if (syncBypassRef.current) {
+      // The debug fixture has no options endpoint; mirror the composer so the
+      // drawer's assignment control exercises the same list shape.
+      setTaskAssigneeOptions([{ id: "debug-person-1", displayName: visibleOnboarding?.profile.displayName || "David Z", email: visibleOnboarding?.profile.email ?? null }]);
       setTaskDetailsLoading(false);
       return;
     }
@@ -4082,32 +4088,80 @@ export default function App() {
     setEditRequest({ task, kind: taskKind(task) });
     setEditTitle(String(task.title ?? ""));
     setEditDescription(String(task.description ?? ""));
+    setEditDueDate(typeof task.due_date === "string" ? task.due_date.slice(0, 10) : "");
     setSubtaskMenuId(null); setMoveMenuId(null);
+  }
+
+  /** The drawer's assignment menu sends the full next set of person ids. */
+  function assignTask(task: TaskRow, personIds: string[]) {
+    const taskId = String(task.provider_task_id || task.id);
+    if (syncBypassRef.current) {
+      setTaskDetails((current) => current ? {
+        ...current,
+        task: {
+          ...current.task,
+          assignee_person_ids: personIds,
+          assigned_by_person_id: visibleDay?.access?.personId ?? current.task.assigned_by_person_id,
+          assignees: personIds.flatMap((id) => {
+            const person = taskAssigneeOptions.find((option) => option.id === id);
+            return person ? [{ personId: person.id, displayName: person.displayName, email: person.email }] : [];
+          }),
+        },
+      } : current);
+      notifications.success(actionSuccessMessages["task.update"]);
+      return;
+    }
+    void act("task.update", async () => {
+      await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ assignee_person_ids: personIds }) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") }),
+        queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") }),
+        queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() }),
+        queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() }),
+        queryClient.invalidateQueries({ queryKey: workOsKeys.taskDetails(taskId) }),
+      ]);
+      // Never resurrect a drawer the employee already closed while the request
+      // was in flight.
+      const refreshed = await loadTaskDetails(taskId);
+      setTaskDetails((current) => current && String(current.task.provider_task_id || current.task.id) === taskId ? refreshed : current);
+    });
   }
 
   function setTaskStatus(task: TaskRow, workflow_status: "pending" | "in_progress") {
     const taskId = String(task.provider_task_id || task.id);
     if (syncBypassRef.current) {
       setDay((current) => current ? { ...current, tasks: current.tasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, workflow_status } : row) } : current);
+      setTaskDetails((current) => current && String(current.task.provider_task_id || current.task.id) === taskId
+        ? { ...current, task: { ...current.task, workflow_status } }
+        : current);
       return;
     }
     void act("task.update", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ workflow_status }) });
       patchTaskCaches(taskId, { workflow_status });
+      setTaskDetails((current) => current && String(current.task.provider_task_id || current.task.id) === taskId
+        ? { ...current, task: { ...current.task, workflow_status } }
+        : current);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") }),
         queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") }),
         queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() }),
         queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() }),
+        queryClient.invalidateQueries({ queryKey: workOsKeys.taskDetails(taskId) }),
       ]);
     });
   }
 
   function submitTaskEdit() {
     if (!editRequest || !editTitle.trim()) return;
+    // The due date is only part of the patch for an actor the server will let
+    // edit this record; an empty field clears it rather than keeping the old one.
+    const dueDateEditable = editRequest.task.capabilities?.canEdit === true;
+    const dueDate = editDueDate.trim() ? editDueDate.trim() : null;
+    const dueDatePatch = dueDateEditable ? { due_date: dueDate } : {};
     if (syncBypassRef.current) {
       const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
-      const patch = (row: Record<string, any>) => String(row.provider_task_id || row.id) === taskId ? { ...row, title: editTitle.trim(), description: editDescription } : row;
+      const patch = (row: Record<string, any>) => String(row.provider_task_id || row.id) === taskId ? { ...row, title: editTitle.trim(), description: editDescription, ...dueDatePatch } : row;
       setDay((current) => current ? { ...current, tasks: current.tasks.map((row) => patch(row as Record<string, any>)) } : current);
       setTaskDetails((current) => current ? { ...current, task: patch(current.task), subtasks: current.subtasks.map(patch) } : current);
       setEditRequest(null);
@@ -4116,8 +4170,8 @@ export default function App() {
     }
     const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
     void act("task.update", async () => {
-      await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ name: editTitle.trim(), description: editDescription }) });
-      patchTaskCaches(taskId, { title: editTitle.trim(), description: editDescription });
+      await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ name: editTitle.trim(), description: editDescription, ...dueDatePatch }) });
+      patchTaskCaches(taskId, { title: editTitle.trim(), description: editDescription, ...dueDatePatch });
       setEditRequest(null);
       if (taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
@@ -5392,7 +5446,7 @@ export default function App() {
       />}
     </section>
     {taskComposerOpen && <TaskComposerModal closing={taskComposerClosing} busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={closeTaskComposer} onSubmit={submitTaskFromDesktop} />}
-        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => requestTaskCompletion(taskDetails.task as TaskRow, true, true)} onAttachEvidence={() => requestTaskEvidence(taskDetails.task as TaskRow)} onDownloadEvidence={(evidence) => void downloadTaskEvidence(evidence)} completionEvidence={taskDetails.completionEvidence ?? []} loadEvidence={loadTaskEvidence} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={(completed) => requestTaskCompletion(taskDetails.task as TaskRow, completed, true)} onAttachEvidence={() => requestTaskEvidence(taskDetails.task as TaskRow)} onDownloadEvidence={(evidence) => void downloadTaskEvidence(evidence)} completionEvidence={taskDetails.completionEvidence ?? []} loadEvidence={loadTaskEvidence} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} currentPersonId={visibleDay?.access?.personId ?? null} assignablePeople={drawerAssigneeQuery.data?.people ?? taskAssigneeOptions} onStatus={(status) => setTaskStatus(taskDetails.task as TaskRow, status)} onAssign={(personIds) => assignTask(taskDetails.task as TaskRow, personIds)} onArchive={() => requestTaskRemoval(taskDetails.task, true, "archive")} onDelete={() => requestTaskRemoval(taskDetails.task, true, "delete")} onClose={() => setTaskDetails(null)} />}
         {taskEvidenceRequest && <TaskEvidenceDialog
           task={taskEvidenceRequest.task}
           mode={taskEvidenceRequest.mode}
@@ -5405,7 +5459,7 @@ export default function App() {
         />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {eodDeleteConfirmation && <TaskRemovalConfirmation mode="delete" scope="draft" title={String(reviewDay?.report?.title ?? "Your EOD draft")} subtaskCount={0} busy={eodDeleting} onCancel={() => setEodDeleteConfirmation(false)} onConfirm={() => void deleteEodDraft()} />}
-    {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
+    {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} dueDate={editDueDate} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onDueDate={editRequest.task.capabilities?.canEdit === true ? setEditDueDate : undefined} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {renderGlobalOverlays()}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
