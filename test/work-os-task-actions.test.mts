@@ -24,6 +24,7 @@ test("assignment scope keeps all, self, or none without widening access", () => 
 
 for (const [name, capability, write] of [
   ["updateWorkOsEmployeeTask", "canEdit", "await updateTask("],
+  ["updateWorkOsAgentTask", "canEdit", "await moveWorkOsEmployeeSubtask("],
   ["updateWorkOsEmployeeTaskStatus", "canChangeStatus", "await updateTask("],
   ["setWorkOsEmployeeTaskCompletion", "canComplete", "await applyTaskCompletion("],
   ["completeWorkOsTask", "canComplete", "await applyTaskCompletion("],
@@ -85,7 +86,7 @@ class Conflict extends Error {
 }
 const access = { role: "employee", personId: "employee", organizationId: "org" };
 const row = { id: "task", organization_id: "org", title: "Original", provider: "local", completed: false, assigned_by_person_id: "manager", assignee_person_ids: ["employee"], due_date: "2026-10-28" };
-function harness(name: string, task: Record<string, unknown> = row, optionsPeople = ["employee"]) {
+function harness(name: string, task: Record<string, unknown> = row, optionsPeople = ["employee"], overrides: Record<string, unknown> = {}) {
   const writes: Array<Record<string, unknown>> = [];
   const events: string[] = [];
   const dependencies = {
@@ -110,8 +111,12 @@ function harness(name: string, task: Record<string, unknown> = row, optionsPeopl
     archiveTask: async () => { writes.push({ archive: true }); return task; },
     deleteTask: async () => { writes.push({ delete: true }); return task; },
     moveTaskToParent: async () => { writes.push({ move: true }); return task; },
+    moveWorkOsEmployeeSubtask: async () => { writes.push({ move: true }); return task; },
+    effortMinutesPatch: (value: unknown) => value,
+    ...overrides,
   };
-  const javascript = ts.transpileModule(`${declaration("validateAgentAssignment")}\n${declaration(name)}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const agentValidation = name === "updateWorkOsAgentTask" ? `${employee.match(/const AGENT_TASK_UPDATE_FIELDS = new Set\(\[[\s\S]*?\]\);/)?.[0]}\n${declaration("validateAgentTaskUpdate")}` : "";
+  const javascript = ts.transpileModule(`${agentValidation}\n${declaration("validateAgentAssignment")}\n${declaration(name)}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: Record<string, any> = {};
   new Function("exports", ...Object.keys(dependencies), javascript)(exports, ...Object.values(dependencies));
   return { run: exports[name], writes, events };
@@ -150,6 +155,91 @@ test("status rejects invalid, invisible, completed, overdue, and unauthorized wo
     await assert.rejects(run(access, fixture.id, fixture.status), (error: unknown) => error instanceof fixture.error && (!fixture.reason || error instanceof Conflict && error.reason === fixture.reason));
     assert.deepEqual(writes, []);
   }
+});
+
+test("agent updates enforce the owner's edit, assignment, and move capabilities before any write", async () => {
+  for (const patch of [{ name: "Changed" }, { assignee_person_ids: ["employee"] }, { parent_task_id: "parent" }, { parent_task_id: "parent", assignee_person_ids: ["employee"], name: "Changed" }]) {
+    const h = harness("updateWorkOsAgentTask", { ...row, parent_task_id: "old-parent" });
+    await assert.rejects(h.run(access, "task", patch, { tokenId: "token", tokenName: "Agent" }), Forbidden);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.events, []);
+  }
+});
+
+test("an agent reassignment records its owner as assigner and emits the assignment audit", async () => {
+  const h = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "employee" }, ["employee", "teammate"]);
+  await h.run(access, "task", { assignee_person_ids: ["teammate"] }, { tokenId: "token", tokenName: "Agent" });
+  assert.deepEqual(h.writes, [{ assignee_person_ids: ["teammate"], assigned_by_person_id: "employee" }]);
+  assert.ok(h.events.includes("task.assigned"));
+  assert.ok(h.events.includes("agent.task.updated"));
+});
+
+test("the shared assignment validator enforces an explicit allowed set", () => {
+  const javascript = ts.transpileModule(declaration("validateAgentAssignment"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports: Record<string, any> = {};
+  new Function("exports", "WorkOsValidationError", javascript)(exports, Validation);
+  const validate = exports.validateAgentAssignment;
+  assert.deepEqual(validate(["manager", "teammate"], ["teammate", "manager", "teammate"]), ["teammate", "manager"]);
+  assert.deepEqual(validate(["manager", "teammate"], []), []);
+  for (const requested of [["outsider"], ["manager", "outsider"], [42], "teammate", null]) {
+    assert.throws(() => validate(["manager", "teammate"], requested), Validation);
+  }
+  assert.throws(() => validate([], ["manager"]), Validation);
+});
+
+test("create and update enforce manager assignment scope through the real creation-options seam", async () => {
+  const manager = { ...access, role: "manager", personId: "manager" };
+  const scopeCalls: unknown[] = [];
+  const people = ["manager", "teammate", "outsider", "admin"].map((id) => ({ id, display_name: id, email: null }));
+  const optionDependencies = {
+    accessibleWorkOsPersonIds: async (actor: unknown) => { scopeCalls.push(actor); return ["manager", "teammate"]; },
+    scopedAssignableTaskPeople,
+    db: () => ({ from: (table: string) => {
+      const query = {
+        select: () => query,
+        eq: () => query,
+        order: async () => ({ data: table === "work_people" ? people : [], error: null }),
+      };
+      return query;
+    } }),
+  };
+  const javascript = ts.transpileModule(declaration("getWorkOsTaskCreationOptions"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports: Record<string, any> = {};
+  new Function("exports", ...Object.keys(optionDependencies), javascript)(exports, ...Object.values(optionDependencies));
+  const creations: Record<string, unknown>[] = [];
+  for (const name of ["createWorkOsEmployeeTask", "updateWorkOsEmployeeTask"]) {
+    const h = harness(name, { ...row, assigned_by_person_id: "manager" }, [], {
+      getWorkOsTaskCreationOptions: exports.getWorkOsTaskCreationOptions,
+      defaultWorkOsTaskProjectId: async () => null,
+      createLocalWorkOsTask: async (_actor: unknown, input: Record<string, unknown>) => { creations.push(input); return { id: "created" }; },
+    });
+    const run = (ids: string[]) => name === "createWorkOsEmployeeTask"
+      ? h.run(manager, { name: "Task", assignee_person_ids: ids })
+      : h.run(manager, "task", { assignee_person_ids: ids });
+    const initialCreations = creations.length;
+    await assert.rejects(run(["outsider"]), /Assignees must be active Work OS organization members/);
+    assert.deepEqual(h.writes, []);
+    assert.equal(creations.length, initialCreations);
+    await run(["teammate"]);
+    if (name === "createWorkOsEmployeeTask") {
+      assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["teammate"]);
+      assert.equal(creations.at(-1)?.assignedByPersonId, "manager");
+    } else {
+      assert.deepEqual(h.writes, [{ assignee_person_ids: ["teammate"], assigned_by_person_id: "manager" }]);
+    }
+  }
+  assert.deepEqual(scopeCalls, [manager, manager, manager, manager]);
+  for (const name of ["createWorkOsEmployeeTask", "updateWorkOsEmployeeTask"]) {
+    assert.match(functionSource(name), /getWorkOsTaskCreationOptions\(access\)/);
+  }
+  assert.match(functionSource("updateWorkOsEmployeeTask"), /validateAgentAssignment\(options.people.map/);
+});
+
+test("an authorized agent's out-of-scope assignment is refused before a requested move", async () => {
+  const h = harness("updateWorkOsAgentTask", { ...row, parent_task_id: "old-parent", assigned_by_person_id: "employee" });
+  await assert.rejects(h.run(access, "task", { parent_task_id: "parent", assignee_person_ids: ["outsider"] }, { tokenId: "token", tokenName: "Agent" }), Validation);
+  assert.deepEqual(h.writes, []);
+  assert.deepEqual(h.events, []);
 });
 test("assignees may change status and the status write retains workflow provenance", async () => {
   const { run, writes, events } = harness("updateWorkOsEmployeeTaskStatus");
@@ -200,10 +290,10 @@ test("PATCH routes status-only changes and rejects mixed or malformed workflow r
   const calls: unknown[] = [];
   const exports: Record<string, any> = {};
   const unexpected = () => { throw new Error("status request reached a different mutation"); };
-  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", "jsonError", javascript)(
+  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", "jsonError", "WorkOsValidationError", javascript)(
     exports, async () => ({ access }), Response, isWorkflowStatus,
     async (...args: unknown[]) => { calls.push(args); return { task: { workflow_status: args[2] } }; },
-    unexpected, unexpected, unexpected, (error: Error) => Response.json({ error: error.message }, { status: 500 }),
+    unexpected, unexpected, unexpected, (error: Error) => Response.json({ error: error.message }, { status: error instanceof Validation ? 400 : 500 }), Validation,
   );
   const context = { params: Promise.resolve({ taskId: "task" }) };
   for (const body of [null, [], { workflow_status: null }, { workflow_status: "complete" }, { workflow_status: "pending", completed: true }, { workflow_status: "pending", name: "Changed" }, { workflow_status: "pending", parent_task_id: "parent" }]) {
@@ -214,4 +304,36 @@ test("PATCH routes status-only changes and rejects mixed or malformed workflow r
   const response = await exports.PATCH(new Request("http://localhost/tasks/task", { method: "PATCH", body: JSON.stringify({ workflow_status: "in_progress" }) }), context);
   assert.equal(response.status, 200);
   assert.deepEqual(calls, [[access, "task", "in_progress"]]);
+});
+
+test("PATCH refuses all mixed lifecycle shapes before dispatch while single shapes still work", async () => {
+  const routeAst = ts.createSourceFile("route.ts", route, ts.ScriptTarget.Latest, true);
+  const node = routeAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "PATCH");
+  assert.ok(node);
+  const javascript = ts.transpileModule(node.getText(routeAst), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const calls: string[] = [];
+  const exports: Record<string, any> = {};
+  const mutation = (kind: string) => async () => { calls.push(kind); return { task: {} }; };
+  new Function("exports", "access", "NextResponse", "isWorkflowStatus", "WorkOsValidationError", "jsonError", "updateWorkOsEmployeeTaskStatus", "setWorkOsEmployeeTaskCompletion", "moveWorkOsEmployeeSubtask", "updateWorkOsEmployeeTask", javascript)(
+    exports, async () => ({ access }), Response, isWorkflowStatus, Validation,
+    (error: Error) => Response.json({ error: error.message }, { status: error instanceof Validation ? 400 : 500 }),
+    mutation("status"), mutation("completion"), mutation("move"), mutation("edit"),
+  );
+  const send = (body: unknown) => exports.PATCH(new Request("http://localhost/tasks/task", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ taskId: "task" }) });
+  for (const body of [
+    { completed: true, assignee_person_ids: ["forged-id"] },
+    { completed: false, name: "Changed" },
+    { parent_task_id: "parent", priority: "high" },
+    { completed: true, parent_task_id: "parent" },
+    { workflow_status: "pending", name: "Changed" },
+  ]) {
+    const response = await send(body);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Send one task change at a time" });
+    assert.deepEqual(calls, []);
+  }
+  for (const body of [{ name: "Changed" }, { name: "Changed", priority: "high" }, { completed: true }, { parent_task_id: "parent" }, { workflow_status: "pending" }]) {
+    assert.equal((await send(body)).status, 200);
+  }
+  assert.deepEqual(calls, ["edit", "edit", "completion", "move", "status"]);
 });

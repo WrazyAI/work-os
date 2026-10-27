@@ -327,15 +327,21 @@ export function validateAgentAssignment(allowed: Iterable<string>, requested: un
 export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string, body: Json, actor: AgentActor) {
   const patch = validateAgentTaskUpdate(body);
   const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const editsFields = Object.keys(patch).some((key) => key !== "assignee_person_ids" && key !== "parent_task_id");
+  if (editsFields && !capabilities.canEdit) throw new WorkOsForbiddenError();
+  if ("assignee_person_ids" in patch && !capabilities.canAssign) throw new WorkOsForbiddenError();
+  if ("parent_task_id" in patch && !capabilities.canMove) throw new WorkOsForbiddenError();
+  let assignmentChanged = false;
   // Every rejection happens before the first write, so a refused assignment can
   // never leave the subtask already moved under a new parent.
   if ("assignee_person_ids" in patch) {
     const options = await getWorkOsTaskCreationOptions(access);
     const assignees = validateAgentAssignment(options.people.map((person) => person.id), patch.assignee_person_ids);
-    // Honored exactly, so a token can hand work to someone else. The tradeoff is
-    // explicit: a task with no assignee matching this token answers 404 to it,
-    // and the new assignee or an administrator hands it back.
+    const previousAssignees = Array.isArray(task.assignee_person_ids) ? task.assignee_person_ids : [];
+    assignmentChanged = previousAssignees.length !== assignees.length || assignees.some((id) => !previousAssignees.includes(id));
     patch.assignee_person_ids = assignees;
+    if (assignmentChanged) patch.assigned_by_person_id = access.personId;
     const finalAssignees = patch.assignee_person_ids as string[];
     if (String(task.provider ?? "") !== "local" && finalAssignees.length) {
       const mapped = await db().from("work_people").select("id,nifty_member_id")
@@ -384,6 +390,12 @@ export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string
     }
   }
   const updated = await updateTask(ownerId, String(task.provider_task_id ?? task.id), patch);
+  if (assignmentChanged) await audit(access, "task.assigned", String(task.provider ?? "") === "local" ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
+    assigneePersonIds: patch.assignee_person_ids,
+    assignedByPersonId: access.personId,
+    tokenId: actor.tokenId,
+    tokenName: actor.tokenName,
+  });
   await audit(access, "agent.task.updated", "work_os_task", String(task.provider_task_id ?? task.id), {
     tokenId: actor.tokenId,
     tokenName: actor.tokenName,

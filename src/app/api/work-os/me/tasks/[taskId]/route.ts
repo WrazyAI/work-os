@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { archiveWorkOsEmployeeTask, deleteWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, moveWorkOsEmployeeSubtask, setWorkOsEmployeeTaskCompletion, updateWorkOsEmployeeTask } from "@/lib/work-os-companion";
-import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { jsonError, requireWorkOsAccess, WorkOsValidationError } from "@/lib/work-os-api";
 import { updateWorkOsEmployeeTaskStatus } from "@/lib/work-os-employee-tasks";
 import { isWorkflowStatus } from "@/lib/work-os-task-permissions";
 
@@ -50,6 +50,9 @@ export async function PATCH(req: Request, context: { params: Promise<{ taskId: s
     const { taskId } = await context.params;
     const body = await req.json();
     if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Task patch must be an object" }, { status: 400 });
+    if (["completed", "workflow_status", "parent_task_id"].some((key) => key in body) && Object.keys(body).length !== 1) {
+      throw new WorkOsValidationError("Send one task change at a time");
+    }
     if ("workflow_status" in body) {
       if (!isWorkflowStatus(body.workflow_status) || Object.keys(body).some((key) => key !== "workflow_status")) {
         return NextResponse.json({ error: "Provide only workflow_status, set to pending or in_progress" }, { status: 400 });
