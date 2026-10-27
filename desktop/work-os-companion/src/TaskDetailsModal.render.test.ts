@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { DueDateField, TaskDetailsModal, TaskEditModal, toggleAssigneeIds } from "./taskSurfaces";
+import { TaskDetailsModal, TaskEditModal, TaskEditModalForm, toggleAssigneeIds } from "./taskSurfaces";
 
 const noop = () => undefined;
 
@@ -161,7 +161,8 @@ describe("TaskDetailsModal lifecycle actions", () => {
   it("keeps archive and permanent delete in the drawer actions menu", () => {
     const markup = drawerMarkup(selfOwned, { initialMenu: "actions" });
     const labels = menuItemLabels(markup);
-    expect(labels).toEqual(expect.arrayContaining(["Edit task", "Archive task", "Delete task"]));
+    expect(labels).toEqual(expect.arrayContaining(["Edit task", "Delete task"]));
+    expect(labels.some((label) => /^Archive task\b.*reversible/.test(label))).toBe(true);
   });
 
   it("offers assignment with the current assignees and a full next set", () => {
@@ -194,6 +195,55 @@ describe("TaskDetailsModal lifecycle actions", () => {
     expect(markup).toContain("Edit task");
   });
 
+  it("links the overdue note to its disabled status control", () => {
+    const markup = drawerMarkup(overdue);
+    const describedBy = buttonTag(markup, "Task status").match(/aria-describedby="([^"]+)"/)?.[1] ?? "";
+    expect(describedBy).not.toBe("");
+    const noteIndex = markup.indexOf(`id="${describedBy}"`);
+    expect(noteIndex).toBeGreaterThan(-1);
+    expect(markup.slice(noteIndex, noteIndex + 200)).toContain("Update the due date first");
+  });
+
+  it("locks assignment when a current assignee is outside the actor's scope", () => {
+    const outsideScope = withCapabilities({
+      ...selfOwned,
+      assignee_person_ids: ["me", "gone"],
+      assigned_by_person_id: "me",
+      assignees: [{ personId: "me", displayName: "Me Person", email: null }],
+    }, "me");
+    const markup = drawerMarkup(outsideScope, {
+      currentPersonId: "me",
+      assignablePeople: [{ id: "me", displayName: "Me Person", email: null }],
+    });
+    expect(buttonTag(markup, "Change assignees")).toContain("disabled");
+    expect(markup).toContain("This task has an assignee outside your assignment scope.");
+    expect(markup).toContain("Another assignee");
+  });
+
+  it("names an out-of-scope assignee when the payload carries the identity", () => {
+    const outsideScope = withCapabilities({
+      ...selfOwned,
+      assignee_person_ids: ["me", "gone"],
+      assigned_by_person_id: "me",
+      assignees: [
+        { personId: "me", displayName: "Me Person", email: null },
+        { personId: "gone", displayName: "Gone Person", email: null },
+      ],
+    }, "me");
+    const markup = drawerMarkup(outsideScope, {
+      currentPersonId: "me",
+      assignablePeople: [{ id: "me", displayName: "Me Person", email: null }],
+    });
+    const row = markup.match(/<span class="task-detail-assignee-outside"[^>]*>([\s\S]*?)<\/span>/)?.[1] ?? "";
+    expect(row).toContain("Gone Person");
+  });
+
+  it("stops claiming Today once the due date is cleared", () => {
+    const markup = drawerMarkup({ ...selfOwned, due_date: null });
+    expect(markup).toContain(">No date<");
+    expect(markup).not.toContain(">Today<");
+  });
+
   it("keeps the historical read-only drawer free of lifecycle actions", () => {
     const markup = drawerMarkup(selfOwned, { readOnly: true });
     expect(markup).not.toContain("Task status");
@@ -222,10 +272,16 @@ describe("TaskEditModal due date", () => {
     expect(input).not.toContain("disabled");
   });
 
-  it("clears the due date when the field is emptied", () => {
+  it("clears the due date through the editor's own input handler", () => {
     const onDueDate = vi.fn();
-    const field = DueDateField({ value: "2026-10-30", disabled: false, onChange: onDueDate });
-    const input = (field.props.children as Array<{ type?: string; props?: Record<string, any> }>).find((child) => child?.type === "input");
+    const body = TaskEditModalForm({
+      kind: "task", title: "Ship the drawer", description: "Detail copy", dueDate: "2026-10-30", busy: false,
+      onTitle: noop, onDescription: noop, onDueDate,
+    });
+    const dueField = (body.props.children as Array<{ props?: Record<string, any> }>)
+      .find((child) => child?.props?.className === "task-edit-due");
+    const input = (dueField?.props?.children as Array<{ type?: string; props?: Record<string, any> }> | undefined)
+      ?.find((child) => child?.type === "input" && child?.props?.type === "date");
     expect(input).toBeTruthy();
     input!.props!.onChange({ target: { value: "" } });
     expect(onDueDate).toHaveBeenCalledWith("");

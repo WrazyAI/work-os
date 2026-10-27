@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
@@ -315,8 +315,8 @@ function currentAssigneeIds(task: AnyTask): string[] {
  * document's bubble phase and would otherwise close the whole drawer instead of
  * this menu.
  */
-function DetailMenu({ open, label, triggerClassName = "task-detail-actions-trigger", menuClassName = "", disabled = false, trigger, children, onToggle, onClose }: {
-  open: boolean; label: string; triggerClassName?: string; menuClassName?: string; disabled?: boolean;
+function DetailMenu({ open, label, triggerClassName = "task-detail-actions-trigger", menuClassName = "", disabled = false, describedBy, trigger, children, onToggle, onClose }: {
+  open: boolean; label: string; triggerClassName?: string; menuClassName?: string; disabled?: boolean; describedBy?: string;
   trigger: ReactNode; children: ReactNode; onToggle: () => void; onClose: () => void;
 }) {
   const { triggerRef, menuRef, style } = useAnchoredMenu(open);
@@ -341,6 +341,7 @@ function DetailMenu({ open, label, triggerClassName = "task-detail-actions-trigg
       aria-label={label}
       aria-haspopup="menu"
       aria-expanded={open}
+      aria-describedby={describedBy}
       disabled={disabled}
       ref={(node) => { triggerRef.current = node; }}
       onClick={onToggle}
@@ -354,12 +355,11 @@ function DetailMenu({ open, label, triggerClassName = "task-detail-actions-trigg
 /** Status, assignment, and lifecycle actions for the open task. Every control
  *  is driven by the payload's capability flags; a cached payload without them
  *  renders nothing rather than advertising an action the server would refuse. */
-export function TaskDetailActions({ task, currentDate, currentPersonId = null, assignablePeople = [], busy, initialMenu = null, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete }: {
+export function TaskDetailActions({ task, currentDate, currentPersonId = null, assignablePeople = [], busy, initialMenu = null, onStatus, onEdit, onAssign, onArchive, onDelete }: {
   task: AnyTask; currentDate: string; currentPersonId?: string | null;
   assignablePeople?: Array<{ id: string; displayName: string; email: string | null }>;
   busy: boolean; initialMenu?: "status" | "actions" | "assignees" | null;
   onStatus: (status: "pending" | "in_progress") => void;
-  onComplete: (completed: boolean) => void;
   onEdit: () => void;
   onAssign?: (personIds: string[]) => void;
   onArchive: () => void;
@@ -368,6 +368,8 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
   const capabilities = (task.capabilities ?? {}) as Partial<TaskCapabilities>;
   const [menu, setMenu] = useState<"status" | "actions" | "assignees" | null>(initialMenu);
   const [selected, setSelected] = useState<string[]>(() => currentAssigneeIds(task));
+  const statusNoteId = useId();
+  const assigneeNoteId = useId();
   const close = () => setMenu(null);
   const state = displayTaskState(task, currentDate);
   const statusOptions = taskStatusOptions(task, currentDate);
@@ -382,6 +384,21 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
     && currentPersonId !== null
     && task.assigned_by_person_id === currentPersonId;
   const assignees = currentAssigneeIds(task);
+  const assignableIds = new Set(assignablePeople.map((person) => person.id));
+  // The menu renders only the people this actor may assign. A current assignee
+  // outside that scope would be invisible but still ride along in the full next
+  // set, so the server would reject every change. Lock the control instead and
+  // say why; an empty scoped list means the options are still loading (a
+  // canAssign actor always includes themselves), so it is not a scope verdict.
+  const outsideScopeIds = assignablePeople.length ? assignees.filter((id) => !assignableIds.has(id)) : [];
+  const assigneeLocked = canAssign && outsideScopeIds.length > 0;
+  const outsideScopeRows = outsideScopeIds.map((id) => {
+    const person = Array.isArray(task.assignees)
+      ? task.assignees.find((candidate: AnyTask) => candidate?.personId === id)
+      : null;
+    const name = typeof person?.displayName === "string" ? person.displayName.trim() : "";
+    return { id, name };
+  });
   const changed = assignees.length !== selected.length || assignees.some((id) => !selected.includes(id));
   if (!showStatus && !lifecycle.length && !canAssign) return null;
   return <div className="task-detail-actions" role="group" aria-label="Task actions">
@@ -390,6 +407,7 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
         open={menu === "status"}
         label="Task status"
         disabled={busy || statusOptions.every((option) => option.disabled)}
+        describedBy={statusNote ? statusNoteId : undefined}
         onToggle={() => setMenu(menu === "status" ? null : "status")}
         onClose={close}
         trigger={<><Clock3 size={13} aria-hidden="true" /><span>{taskStatusLabel(state)}</span><ChevronRight size={12} aria-hidden="true" /></>}
@@ -404,12 +422,13 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
           {option.note && <small>{option.note}</small>}
         </button>)}
       </DetailMenu>}
-      {statusNote && <small className="task-detail-status-note">{statusNote}</small>}
+      {statusNote && <small className="task-detail-status-note" id={statusNoteId}>{statusNote}</small>}
       {canAssign && <div className="task-detail-assignees">
         <DetailMenu
           open={menu === "assignees"}
           label="Change assignees"
-          disabled={busy}
+          disabled={busy || assigneeLocked}
+          describedBy={assigneeLocked ? assigneeNoteId : undefined}
           onToggle={() => { setSelected(assignees); setMenu(menu === "assignees" ? null : "assignees"); }}
           onClose={close}
           trigger={<><UserRound size={13} aria-hidden="true" /><span>Assignees</span></>}
@@ -425,8 +444,10 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
               {checked ? <Check size={14} aria-hidden="true" /> : <span className="task-detail-menu-mark" aria-hidden="true" />}{person.displayName}
             </button>;
           }) : <p>No one else is available to assign.</p>}
-          <button role="menuitem" className="primary" disabled={busy || !changed} onClick={() => { onAssign?.(selected); close(); }}>Assign</button>
+          <button role="menuitem" className="primary" disabled={busy || !changed || assigneeLocked || !assignablePeople.length} onClick={() => { onAssign?.(selected); close(); }}>Assign</button>
         </DetailMenu>
+        {assigneeLocked && <small className="task-detail-assignee-note" id={assigneeNoteId}>This task has an assignee outside your assignment scope.</small>}
+        {assigneeLocked && <span className="task-detail-assignee-outside-list">{outsideScopeRows.map((person) => <span className="task-detail-assignee-outside" key={person.id} title={person.name || "Another assignee"}>{person.name || "Another assignee"}</span>)}</span>}
         {assignedByYou && <small className="task-detail-assigned-by">Assigned by you</small>}
       </div>}
     </div>
@@ -441,7 +462,7 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
       trigger={<MoreHorizontal size={17} aria-hidden="true" />}
     >
       {actions.includes("edit") && <button role="menuitem" disabled={busy} onClick={() => { close(); onEdit(); }}><Pencil size={14} aria-hidden="true" /> Edit task</button>}
-      {actions.includes("archive") && <button role="menuitem" disabled={busy} onClick={() => { close(); onArchive(); }}><Archive size={14} aria-hidden="true" /> Archive task</button>}
+      {actions.includes("archive") && <button role="menuitem" disabled={busy} onClick={() => { close(); onArchive(); }}><Archive size={14} aria-hidden="true" /> Archive task <small>reversible</small></button>}
       {actions.includes("delete") && <button className="danger" role="menuitem" disabled={busy} onClick={() => { close(); onDelete(); }}><Trash2 size={14} aria-hidden="true" /> Delete task</button>}
     </DetailMenu>}
   </div>;
@@ -485,7 +506,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
   const priority = task.priority ? sentence(String(task.priority)) : "Normal";
   const completedSubtasks = subtasks.filter((subtask) => subtask.completed === true).length;
   const progressPercent = subtasks.length ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
-  const contextDay = typeof task.due_date === "string" && task.due_date.slice(0, 10) === currentDate ? "Today" : task.due_date ? formatWorkOsDate(task.due_date) : "Today";
+  const contextDay = typeof task.due_date === "string" && task.due_date.slice(0, 10) === currentDate ? "Today" : task.due_date ? formatWorkOsDate(task.due_date) : "No date";
   const breadcrumbs = [contextDay, taskSourceLabel(task), project !== taskSourceLabel(task) ? project : null, milestone || null].filter(Boolean) as string[];
   return <AppWideSidePanel className="task-detail-layer" closeLabel="Close task details" onClose={onClose} busy={busy}>
     <section className="task-modal task-detail-modal work-os-side-panel" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
@@ -502,7 +523,6 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             busy={busy}
             initialMenu={initialMenu}
             onStatus={(status) => onStatus?.(status)}
-            onComplete={(completed) => onCompleteTask?.(completed)}
             onEdit={() => onEditTask(task)}
             onAssign={onAssign}
             onArchive={() => onArchive?.()}
@@ -570,10 +590,19 @@ export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy
   </section></div>);
 }
 
-/** The one due-date control: an emptied field means "no due date", which the
- *  caller turns into an explicit null instead of guessing a replacement. */
-export function DueDateField({ value, disabled = false, onChange }: { value: string; disabled?: boolean; onChange: (value: string) => void }) {
-  return <label className="task-edit-due"><span>Due</span><input type="date" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
+/** The editor body, kept separate from the dialog chrome so the exact
+ *  input-to-callback wiring the modal renders can be exercised without a DOM. */
+export function TaskEditModalForm({ title, description, dueDate = "", busy, onTitle, onDescription, onDueDate }: {
+  kind: "task" | "subtask"; title: string; description: string; dueDate?: string; busy: boolean;
+  onTitle: (value: string) => void; onDescription: (value: string) => void; onDueDate?: (value: string) => void;
+}) {
+  return <>
+    <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
+    <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
+    {/* An emptied field means "no due date"; the caller turns "" into an explicit
+        null instead of guessing a replacement. */}
+    {onDueDate && <label className="task-edit-due"><span>Due</span><input type="date" value={dueDate} disabled={busy} onChange={(event) => onDueDate(event.target.value)} /></label>}
+  </>;
 }
 
 export function TaskEditModal({ kind, title, description, dueDate = "", busy, localTask = false, onTitle, onDescription, onDueDate, onClose, onSubmit }: {
@@ -586,9 +615,7 @@ export function TaskEditModal({ kind, title, description, dueDate = "", busy, lo
   return renderViewportSurface(<div className="task-modal-backdrop"><section ref={dialogRef} className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title">
     <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the {localTask ? "Work OS" : "Work OS"} record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
     <div className="task-modal-body">
-      <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
-      <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
-      {onDueDate && <DueDateField value={dueDate} disabled={busy} onChange={onDueDate} />}
+      <TaskEditModalForm kind={kind} title={title} description={description} dueDate={dueDate} busy={busy} onTitle={onTitle} onDescription={onDescription} onDueDate={onDueDate} />
     </div>
     <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>Save changes</button></footer>
   </section></div>);

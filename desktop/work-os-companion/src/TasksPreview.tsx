@@ -6,6 +6,7 @@ import { TaskEvidenceDialog, type TaskEvidenceDialogPhase } from "./CompletionEv
 import { TaskSelectionCard } from "./TaskSelectionCard";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import { DEFAULT_TASK_SORT, suggestDailyGoal, taskKind, unfinishedBefore, type TaskRow, type TaskSort } from "./taskWorkspace";
+import { taskDueDateSeed } from "./taskActions";
 import type { DailyPlan } from "./types";
 import { formatWorkOsDate } from "./dateFormat";
 import { TaskDateNavigator } from "./TaskDateNavigator";
@@ -135,7 +136,7 @@ export default function TasksPreview() {
   const history = params.has("history");
   const scenario = params.get("scenario");
   const detailScenario = scenario === "details" || scenario === "details-readonly" || scenario === "details-interactive"
-    || scenario === "details-assignee" || scenario === "details-overdue"
+    || scenario === "details-assignee" || scenario === "details-overdue" || scenario === "details-outside-assignee"
     || scenario === "details-status-menu" || scenario === "details-actions-menu" || scenario === "details-assign-menu"
     || scenario === "evidence-missing" || scenario === "evidence-corrupt";
   const detailInitialMenu = scenario === "details-status-menu" ? "status" as const
@@ -180,7 +181,11 @@ export default function TasksPreview() {
   // The drawer fixture is state, not a frozen literal, so status, completion,
   // assignment, and field edits all read back truthfully in the preview.
   const [previewDetailTask, setPreviewDetailTask] = useState<TaskRow>(() => {
+    const outsideScope = scenario === "details-outside-assignee";
     const source = scenario === "details-assignee" ? tasks[1]! : tasks[0]!;
+    const assigneeIds: string[] = outsideScope
+      ? ["person-1", "person-9"]
+      : Array.isArray(source.assignee_person_ids) ? source.assignee_person_ids : [];
     return {
       ...source,
       description: "Finish the desktop implementation, validate the workflow end to end, and attach the signed verification record.",
@@ -188,7 +193,10 @@ export default function TasksPreview() {
       // has its own scenario and hides the status control by design.
       ...(scenario === "details-assignee" ? { due_date: CURRENT_DATE } : {}),
       ...(scenario === "details-overdue" ? { due_date: "2026-08-19" } : {}),
-      assignees: previewPeople(Array.isArray(source.assignee_person_ids) ? source.assignee_person_ids : []),
+      // `person-9` is deliberately outside the preview's assignable list: the
+      // drawer must lock assignment instead of sending a set the server rejects.
+      ...(outsideScope ? { assignee_person_ids: assigneeIds, assigned_by_person_id: "person-1" } : {}),
+      assignees: previewPeople(assigneeIds),
     };
   });
   const patchPreviewDetail = (patch: Record<string, any>) => setPreviewDetailTask((current) => ({ ...current, ...patch }));
@@ -220,7 +228,7 @@ export default function TasksPreview() {
     setPreviewEditKind(taskKind(task));
     setPreviewEditTitle(String(task.title ?? ""));
     setPreviewEditDescription(String(task.description ?? ""));
-    setPreviewEditDueDate(typeof task.due_date === "string" ? task.due_date.slice(0, 10) : "");
+    setPreviewEditDueDate(taskDueDateSeed(task.due_date));
     setSubtaskMenuId(null);
     setMoveMenuId(null);
   };
@@ -255,7 +263,6 @@ export default function TasksPreview() {
     currentPersonId: "person-1",
     assignablePeople: PREVIEW_PEOPLE,
     onStatus: (status: "pending" | "in_progress") => patchPreviewDetail({ workflow_status: status }),
-    onComplete: previewDetailCompleted,
     onAssign: (personIds: string[]) => patchPreviewDetail({ assignee_person_ids: personIds, assigned_by_person_id: "person-1", assignees: previewPeople(personIds) }),
     onArchive: () => setPreviewRemoval({ task: previewDetailTask, mode: "archive", scope: "task" }),
     onDelete: () => setPreviewRemoval({ task: previewDetailTask, mode: "delete", scope: "task" }),

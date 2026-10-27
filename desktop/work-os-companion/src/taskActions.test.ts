@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { displayTaskState, hasTaskMenu, taskActionItems, taskStatusLabel, taskStatusOptions } from "./taskActions";
+import { displayTaskState, hasTaskMenu, taskActionItems, taskDueDateSeed, taskStatusLabel, taskStatusOptions } from "./taskActions";
 import { taskState } from "./taskWorkspace";
 
 const today = "2026-10-27";
@@ -66,5 +66,15 @@ describe("task actions", () => {
     expect(taskStatusOptions(base, today)).toEqual([]);
     expect(hasTaskMenu(base, today)).toBe(false);
     expect(taskActionItems({ ...base, assignee_person_ids: [] }, today)).toEqual([]);
+  });
+  it("seeds the due-date editor only from a calendar-date prefix", () => {
+    expect(taskDueDateSeed("2026-10-30")).toBe("2026-10-30");
+    expect(taskDueDateSeed("2026-10-30T09:00:00Z")).toBe("2026-10-30");
+    expect(taskDueDateSeed("2026-1-30")).toBe("");
+    expect(taskDueDateSeed("soon")).toBe("");
+    expect(taskDueDateSeed("")).toBe("");
+    expect(taskDueDateSeed(null)).toBe("");
+    expect(taskDueDateSeed(undefined)).toBe("");
+    expect(taskDueDateSeed(20261030)).toBe("");
   });
 });

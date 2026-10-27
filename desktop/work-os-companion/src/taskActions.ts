@@ -60,3 +60,10 @@ export function hasTaskMenu(task: TaskRow, today: string): boolean {
   return taskActionItems(task, today).length > 0
     || taskStatusOptions(task, today).some((option) => !option.disabled || option.note);
 }
+
+/** The value the due-date editor starts from: only a real `YYYY-MM-DD` prefix
+ *  seeds it, so a malformed payload opens empty instead of letting a bad string
+ *  reach the PATCH. */
+export function taskDueDateSeed(value: unknown): string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : "";
+}

@@ -38,7 +38,7 @@ import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { hasTaskMenu, displayTaskState, taskStatusLabel } from "./taskActions";
+import { hasTaskMenu, displayTaskState, taskDueDateSeed, taskStatusLabel } from "./taskActions";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -4088,7 +4088,7 @@ export default function App() {
     setEditRequest({ task, kind: taskKind(task) });
     setEditTitle(String(task.title ?? ""));
     setEditDescription(String(task.description ?? ""));
-    setEditDueDate(typeof task.due_date === "string" ? task.due_date.slice(0, 10) : "");
+    setEditDueDate(taskDueDateSeed(task.due_date));
     setSubtaskMenuId(null); setMoveMenuId(null);
   }
 

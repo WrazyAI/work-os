@@ -870,7 +870,24 @@ body {
 .task-detail-actions .ellipsis-button { width: 32px; height: 32px; border-color: #d5e1d0; border-radius: 9px; background: #f7faf4; }
 .task-detail-actions .ellipsis-button:hover { border-color: #b9cbb2; background: #fff; }
 .task-detail-status-note { color: #8a5a1e; font-size: 10px; font-weight: 700; }
-.task-detail-assignees { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.task-detail-assignees { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; }
+.task-detail-assignee-note { color: #8a5a1e; font-size: 10px; font-weight: 700; }
+.task-detail-assignee-outside-list { display: inline-flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+/* An assignee the actor cannot manage stays visible as a quiet, read-only row
+ * instead of becoming invisible while still sitting in the assignment set. */
+.task-detail-assignee-outside {
+  overflow: hidden;
+  max-width: 180px;
+  padding: 2px 8px;
+  border: 1px solid #e2e7de;
+  border-radius: 999px;
+  background: #f4f6f1;
+  color: #73806f;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .task-detail-assigned-by { color: #7d8a7b; font-size: 10px; font-weight: 700; }
 .task-detail-menu-mark { display: inline-block; width: 14px; height: 14px; border: 1px dashed #b8c6b2; border-radius: 4px; }
 .task-detail-menu { width: 216px; }
