@@ -18,6 +18,32 @@ import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations
 import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
 import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
+import { displayTaskState, taskActionItems, taskStatusOptions } from "./taskActions";
+
+export function TaskActionMenuItems({ task, currentDate, busy, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose }: {
+  task: TaskRow; currentDate: string; busy: boolean;
+  onStatus: (status: "pending" | "in_progress") => void;
+  onComplete: (completed: boolean) => void;
+  onEdit: () => void; onAssign?: () => void; onArchive: () => void; onDelete: () => void; onClose: () => void;
+}) {
+  const actions = taskActionItems(task, currentDate);
+  const choose = (action: () => void) => { onClose(); action(); };
+  const state = displayTaskState(task, currentDate);
+  const statusOptions = taskStatusOptions(task, currentDate);
+  // An overdue task keeps its status control, disabled with the due-date note.
+  // Otherwise an actor who may not change status gets no dead control at all.
+  const showStatus = statusOptions.some((option) => !option.disabled || option.note);
+  if (!showStatus && !actions.length) return null;
+  return <>
+    {showStatus && statusOptions.map((option) => <button key={option.value} role="menuitem" disabled={busy || option.disabled} onClick={() => choose(() => onStatus(option.value))}>{state === option.value && <Check size={14} aria-hidden="true" />}{option.label}{option.note && <small>{option.note}</small>}</button>)}
+    {actions.includes("complete") && <button role="menuitem" disabled={busy} onClick={() => choose(() => onComplete(true))}><CheckCircle2 size={14} /> Mark task done</button>}
+    {actions.includes("reopen") && <button role="menuitem" disabled={busy} onClick={() => choose(() => onComplete(false))}><RotateCcw size={14} /> Reopen task</button>}
+    {actions.includes("edit") && <button role="menuitem" disabled={busy} onClick={() => choose(onEdit)}><Pencil size={14} /> Edit task</button>}
+    {actions.includes("assign") && onAssign && <button role="menuitem" disabled={busy} onClick={() => choose(onAssign)}><UserRound size={14} /> Assign</button>}
+    {actions.includes("archive") && <button role="menuitem" disabled={busy} onClick={() => choose(onArchive)}><Archive size={14} /> Archive <small>reversible</small></button>}
+    {actions.includes("delete") && <button className="danger" role="menuitem" disabled={busy} onClick={() => choose(onDelete)}><Trash2 size={14} /> Delete permanently</button>}
+  </>;
+}
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const formatLoomLength = (seconds: number | null | undefined) => {
@@ -93,7 +119,7 @@ function usePortalMenuInteraction({ open, triggerRefs, menuRefs, focusMenuRef, o
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => focusMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+    const frame = window.requestAnimationFrame(() => focusMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus());
     const isInsideMenu = (target: Node) => triggerRefs.some((ref) => ref.current?.contains(target)) || menuRefs.some((ref) => ref.current?.contains(target));
     const onKey = (event: KeyboardEvent) => {
       // The App-level dialog trap may receive the same event first. Avoid

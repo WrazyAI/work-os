@@ -806,6 +806,14 @@ button:disabled {
   background: #edf0ea;
   color: #4c554b;
 }
+/* Manual workflow statuses share open's quiet treatment; the label carries the
+   difference, and neither state competes with the overdue or done pills. */
+.task-state.pending,
+.task-state.in_progress {
+  border-color: transparent;
+  background: #edf0ea;
+  color: #4c554b;
+}
 .task-state.complete {
   border-color: transparent;
   background: #e8f4da;

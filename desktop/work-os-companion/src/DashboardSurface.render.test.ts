@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
+import { TaskActionMenuItems } from "./taskSurfaces";
+import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
 
 const shift = { startsAt: "2026-08-26T15:00:00Z", endsAt: "2026-08-26T20:00:00Z", timezone: "UTC", breaks: [] };
 const attendance = { source: "worktivity" as const, state: "off_shift" as const, status: "yet_to_start" as const, observedAt: "2026-08-26T12:08:00Z", clockedInAt: null, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "No activity observed yet" };
@@ -21,6 +23,33 @@ function baseActions() {
 }
 
 describe("dashboard surfaces", () => {
+  it("offers off-shift task actions without changing the row controls", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [assigned], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [assigned], currentDate: "2026-08-26" }));
+    expect(markup).toContain('aria-label="Actions for Make the first task visible"');
+    expect(markup).toContain('aria-label="Complete Make the first task visible"');
+    const unassigned = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model: buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now), tasks: [task], currentDate: "2026-08-26" }));
+    expect(unassigned).not.toContain('aria-label="Actions for Make the first task visible"');
+    const menu = (personId: string, extra = {}) => renderToStaticMarkup(createElement(TaskActionMenuItems, {
+      task: { ...assigned, ...extra, capabilities: taskCapabilities({ ...assigned, ...extra }, { role: "employee", personId }, "2026-08-26") },
+      currentDate: "2026-08-26", busy: false, onStatus: noop, onComplete: noop, onEdit: noop, onAssign: noop, onArchive: noop, onDelete: noop, onClose: noop,
+    }));
+    const assigner = menu("owner");
+    for (const label of ["Pending", "In progress", "Edit task", "Assign", "Archive", "reversible", "Delete permanently"]) expect(assigner).toContain(label);
+    expect(assigner).not.toContain("Mark task done");
+    const assignee = menu("worker");
+    expect(assignee).toContain("Mark task done");
+    for (const label of ["Edit task", ">Assign", "Archive", "Delete permanently"]) expect(assignee).not.toContain(label);
+    const overdue = menu("worker", { due_date: "2026-08-25" });
+    expect(overdue.match(/disabled=""/g)).toHaveLength(2);
+    expect(overdue.match(/Update the due date first/g)).toHaveLength(2);
+    const completed = menu("worker", { completed: true });
+    expect(completed).toContain("Reopen task");
+    expect(completed).not.toContain("Mark task done");
+    expect(menu("viewer")).toBe("");
+  });
   it("keeps Mac attendance visible without advertising unsupported clock controls", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "Make the first task visible", focusSource: "Written by you" }, now);

@@ -7,10 +7,16 @@ import { ProgressRing } from "./ProgressRing";
 import { FadeArc } from "./LoadingUi";
 import { OverflowPanText } from "./OverflowPan";
 import { safeTaskText, subtaskProgress, taskState, type TaskRow } from "./taskWorkspace";
+import { EllipsisMenu, TaskActionMenuItems } from "./taskSurfaces";
+import { taskActionItems } from "./taskActions";
 
 export type DashboardTaskView = "today" | "unfinished" | "completed";
 
 export interface DashboardSurfaceActions {
+  onEditTask?: (task: TaskRow) => void;
+  onArchiveTask?: (task: TaskRow) => void;
+  onDeleteTask?: (task: TaskRow) => void;
+  onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
   onOpenTasks: (view?: DashboardTaskView) => void;
   onOpenCarryover: () => void;
   onOpenFocus: () => void;
@@ -70,7 +76,8 @@ function BandFact({ value, label, review, danger = false, onClick }: {
     : <span className="band-fact is-empty">{content}</span>;
 }
 
-function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenTask, onToggleTask, onRetryPendingTask, onDismissPendingTask }: {
+function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenTask, onToggleTask, onRetryPendingTask, onDismissPendingTask, actions }: {
+  actions: Partial<DashboardSurfaceActions>;
   task: TaskRow;
   currentDate: string;
   busy?: boolean;
@@ -80,6 +87,7 @@ function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenT
   onRetryPendingTask?: (task: TaskRow) => void;
   onDismissPendingTask?: (task: TaskRow) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const id = String(task.provider_task_id ?? task.id);
   const title = safeTaskText(task.title, "Untitled task");
   const pending = task.pending_status === "syncing" || task.pending_status === "failed" ? task.pending_status : null;
@@ -99,11 +107,13 @@ function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenT
       {progress.total > 0 && <ProgressRing completed={progress.completed} total={progress.total} size={24} stroke={3} label="subtasks" />}
       {due && <span className={state === "overdue" ? "is-overdue" : ""}>{formatWorkOsDate(due)}</span>}
       {pending === "failed" && <span className="dashboard-pending-actions"><button type="button" title={task.pending_error || "Retry adding task"} aria-label={`Retry adding ${title}`} onClick={() => onRetryPendingTask?.(task)}><RefreshCw size={13} /></button><button type="button" aria-label={`Dismiss ${title}`} onClick={() => onDismissPendingTask?.(task)}><Check size={12} /></button></span>}
+      {!pending && taskActionItems(task, currentDate).length > 0 && <div className={`dashboard-task-menu ${menuOpen ? "open" : ""}`}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy || !!flight} onToggle={() => setMenuOpen((value) => !value)} onClose={() => setMenuOpen(false)}><TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => actions.onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={() => actions.onEditTask?.(task)} onArchive={() => actions.onArchiveTask?.(task)} onDelete={() => actions.onDeleteTask?.(task)} onClose={() => setMenuOpen(false)} /></EllipsisMenu></div>}
     </div>
   </article>;
 }
 
-function DashboardTaskQueue({ tasks, currentDate, emptyTitle, emptyBody, busy, taskFlight, onOpenTask, onToggleTask, onRetryPendingTask, onDismissPendingTask }: {
+function DashboardTaskQueue({ tasks, currentDate, emptyTitle, emptyBody, busy, taskFlight, onOpenTask, onToggleTask, onRetryPendingTask, onDismissPendingTask, actions }: {
+  actions: Partial<DashboardSurfaceActions>;
   tasks: TaskRow[];
   currentDate: string;
   emptyTitle: string;
@@ -117,7 +127,7 @@ function DashboardTaskQueue({ tasks, currentDate, emptyTitle, emptyBody, busy, t
 }) {
   const openTasks = tasks.filter((task) => task.completed !== true).slice(0, 5);
   return openTasks.length
-    ? <div className="dashboard-task-queue">{openTasks.map((task) => <DashboardTaskRow key={String(task.provider_task_id ?? task.id)} task={task} currentDate={currentDate} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />)}</div>
+    ? <div className="dashboard-task-queue">{openTasks.map((task) => <DashboardTaskRow actions={actions} key={String(task.provider_task_id ?? task.id)} task={task} currentDate={currentDate} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />)}</div>
     : <div className="dashboard-empty-state"><span className="dashboard-empty-icon"><CheckCircle2 size={18} /></span><strong>{emptyTitle}</strong><p>{emptyBody}</p></div>;
 }
 
@@ -135,7 +145,7 @@ function PulseTimeline({ model, showPosition = true }: { model: WorkdayDashboard
   </div>;
 }
 
-export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask }: OffShiftDashboardProps) {
+export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
   const taskCopy = model.metrics.carryover > 0
     ? { title: "Start by clearing the oldest decision", body: `${model.metrics.carryover} unfinished task${model.metrics.carryover === 1 ? "" : "s"} is waiting from an earlier workday.` }
     : { title: "Your agenda is open", body: "Choose a first priority or use the composer below to add one without clocking in." };
@@ -200,7 +210,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
         </div>
       </header>
       <div className="work-queue-list">
-        <DashboardTaskQueue tasks={tasks} currentDate={currentDate} emptyTitle={taskCopy.title} emptyBody={taskCopy.body} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
+        <DashboardTaskQueue actions={actions} tasks={tasks} currentDate={currentDate} emptyTitle={taskCopy.title} emptyBody={taskCopy.body} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
       </div>
       <footer className="dashboard-panel-footer">
         <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
@@ -211,7 +221,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
@@ -296,7 +306,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         </div>
       </header>
       <div className="work-queue-list" role="tabpanel" id="work-queue-list" aria-labelledby={`work-queue-tab-${tab}`}>
-        <DashboardTaskQueue tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
+        <DashboardTaskQueue actions={actions} tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
       </div>
       <footer className="dashboard-panel-footer">
         <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>

@@ -311,8 +311,11 @@ describe("operational visualizations", () => {
     expect(app).toContain("onEditFocus={openPlanningSession}");
     expect(app).not.toContain('className="panel daily-goal-card"');
     expect(app).toContain("function TaskLifecycleMenu");
-    expect(app).toContain("Delete permanently");
-    expect(app).toContain("Archive <small>reversible</small>");
+    expect(app).toContain("<TaskActionMenuItems");
+    // The lifecycle items live in the shared action menu now, so every surface
+    // (dashboard queue, workspace rows, admin rows) renders the same vocabulary.
+    expect(taskSurfaces).toContain("Delete permanently");
+    expect(taskSurfaces).toContain("Archive <small>reversible</small>");
     expect(workspaceStyles).toContain(".task-agenda-strip");
     expect(workspaceStyles).toContain(".dashboard-task-menu");
     expect(workspaceStyles).toContain(".goal-composer-panel .composer-goal-suggestion");
