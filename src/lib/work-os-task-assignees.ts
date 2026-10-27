@@ -8,18 +8,14 @@ export interface TaskAssigneeIdentity {
   email: string | null;
 }
 
-/**
- * Keep admin-only identities out of employee task assignment while preserving
- * the authenticated worker's own person mapping when they also hold admin
- * privileges for the organization.
- */
-export function filterAssignableTaskPeople<T extends WorkOsTaskAssigneeCandidate>(
+/** Restrict assignment to the caller's canonical organization/team scope. */
+export function scopedAssignableTaskPeople<T extends WorkOsTaskAssigneeCandidate>(
   people: T[],
-  adminPersonIds: Iterable<string>,
-  actorPersonId: string | null,
-) {
-  const administrators = new Set(adminPersonIds);
-  return people.filter((person) => person.id === actorPersonId || !administrators.has(person.id));
+  allowedPersonIds: string[] | null,
+): T[] {
+  if (allowedPersonIds === null) return people;
+  const allowed = new Set(allowedPersonIds);
+  return people.filter((person) => allowed.has(person.id));
 }
 
 export function attachTaskAssigneeIdentities<T extends Record<string, unknown>>(

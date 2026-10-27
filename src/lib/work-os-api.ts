@@ -77,6 +77,14 @@ export class WorkOsNotFoundError extends Error {
   }
 }
 
+/** The caller can see the record but may not take this action. */
+export class WorkOsForbiddenError extends Error {
+  constructor(message = "You do not have permission to change this task") {
+    super(message);
+    this.name = "WorkOsForbiddenError";
+  }
+}
+
 type WorkOsAccessResult =
   | { access: WorkOsAccess; response?: never }
   | { response: NextResponse; access?: never };
@@ -461,6 +469,9 @@ export function jsonError(err: unknown, status?: number) {
   }
   if (err instanceof WorkOsValidationError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  if (err instanceof WorkOsForbiddenError) {
+    return NextResponse.json({ error: err.message }, { status: 403 });
   }
   const message = err instanceof Error ? err.message : "Request failed";
   if (message.includes("Employee Companion migration required")) {

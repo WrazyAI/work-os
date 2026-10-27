@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { archiveWorkOsEmployeeTask, deleteWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, moveWorkOsEmployeeSubtask, setWorkOsEmployeeTaskCompletion, updateWorkOsEmployeeTask } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { updateWorkOsEmployeeTaskStatus } from "@/lib/work-os-employee-tasks";
+import { isWorkflowStatus } from "@/lib/work-os-task-permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +49,13 @@ export async function PATCH(req: Request, context: { params: Promise<{ taskId: s
     if (auth.response) return auth.response;
     const { taskId } = await context.params;
     const body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Task patch must be an object" }, { status: 400 });
+    if ("workflow_status" in body) {
+      if (!isWorkflowStatus(body.workflow_status) || Object.keys(body).some((key) => key !== "workflow_status")) {
+        return NextResponse.json({ error: "Provide only workflow_status, set to pending or in_progress" }, { status: 400 });
+      }
+      return NextResponse.json(await updateWorkOsEmployeeTaskStatus(auth.access, taskId, body.workflow_status));
+    }
     return NextResponse.json(
       typeof body.completed === "boolean"
         ? await setWorkOsEmployeeTaskCompletion(auth.access, taskId, body.completed)

@@ -57,6 +57,7 @@ export type CreateLocalWorkOsTaskInput = {
   projectId?: string | null;
   providerProjectId?: string | null;
   assigneePersonIds?: string[];
+  assignedByPersonId?: string | null;
   parent?: Json | null;
   raw?: Json;
   /** Agent provenance: the token that created this row and the request key
@@ -211,6 +212,8 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
     status: "open",
     completed: false,
     assignee_person_ids: assigneePersonIds,
+    assigned_by_person_id: input.assignedByPersonId ?? access.personId ?? null,
+    workflow_status: "pending",
     due_date: input.dueDate ?? null,
     start_date: input.startDate ?? null,
     parent_task_id: input.parent ? String(input.parent.id) : null,

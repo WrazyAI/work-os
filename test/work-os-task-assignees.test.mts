@@ -1,33 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachTaskAssigneeIdentities, filterAssignableTaskPeople } from "../src/lib/work-os-task-assignees";
+import { attachTaskAssigneeIdentities, scopedAssignableTaskPeople } from "../src/lib/work-os-task-assignees";
 
 const people = [
   { id: "employee", name: "Employee" },
   { id: "admin-worker", name: "Admin worker" },
   { id: "admin-only", name: "Admin only" },
 ];
-const administrators = ["admin-worker", "admin-only"];
-
-test("keeps the authenticated worker assignable when they also hold admin privileges", () => {
+test("administrators may assign every active candidate", () => {
   assert.deepEqual(
-    filterAssignableTaskPeople(people, administrators, "admin-worker").map((person) => person.id),
-    ["employee", "admin-worker"],
+    scopedAssignableTaskPeople(people, null).map((person) => person.id),
+    ["employee", "admin-worker", "admin-only"],
   );
 });
 
-test("continues to exclude admin-only peers", () => {
+test("employees may assign only themselves", () => {
   assert.deepEqual(
-    filterAssignableTaskPeople(people, administrators, "employee").map((person) => person.id),
+    scopedAssignableTaskPeople(people, ["employee"]).map((person) => person.id),
     ["employee"],
   );
 });
 
-test("does not expose administrators when no worker identity is mapped", () => {
+test("an empty access scope exposes nobody", () => {
   assert.deepEqual(
-    filterAssignableTaskPeople(people, administrators, null).map((person) => person.id),
-    ["employee"],
+    scopedAssignableTaskPeople(people, []).map((person) => person.id),
+    [],
   );
+});
+
+test("managers may assign themselves and their managed team only", () => {
+  assert.deepEqual(scopedAssignableTaskPeople(people, ["employee", "admin-worker"]).map((person) => person.id), ["employee", "admin-worker"]);
 });
 
 test("projects ordered assignee identity tags without exposing unknown mappings", () => {
