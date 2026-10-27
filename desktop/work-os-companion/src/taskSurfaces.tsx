@@ -18,7 +18,7 @@ import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations
 import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
 import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
-import { displayTaskState, taskActionItems, taskStatusOptions } from "./taskActions";
+import { displayTaskState, taskActionItems, taskStatusLabel, taskStatusOptions } from "./taskActions";
 
 export function TaskActionMenuItems({ task, currentDate, busy, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose }: {
   task: TaskRow; currentDate: string; busy: boolean;
@@ -301,7 +301,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
   onToggleSubtask: (subtask: AnyTask) => void; onArchiveSubtask: (subtask: AnyTask) => void; onDeleteSubtask: (subtask: AnyTask) => void; onClose: () => void;
 }) {
   const task = details.task;
-  const state = task.completed ? "complete" as const : typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
+  const state = displayTaskState(task, currentDate);
   const subtasks = Array.isArray(details.subtasks) ? details.subtasks : [];
   const moveTargets = Array.isArray(details.moveTargets) ? details.moveTargets : [];
   const sync = details.subtaskSync;
@@ -340,8 +340,8 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks. Showing the last records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
-              const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
-              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy">{readOnly ? <strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong> : <button type="button" className="task-detail-subtask-title" disabled={busy} title="Edit subtask" aria-label={`Edit ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onEditTask(subtask)}>{safeTaskText(subtask.title, "Untitled subtask")}</button>}{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
+              const subtaskState = displayTaskState(subtask, currentDate);
+              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy">{readOnly ? <strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong> : <button type="button" className="task-detail-subtask-title" disabled={busy} title="Edit subtask" aria-label={`Edit ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onEditTask(subtask)}>{safeTaskText(subtask.title, "Untitled subtask")}</button>}{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{taskStatusLabel(subtaskState)}</span>{!readOnly && <SubtaskActions
                 subtask={subtask} busy={busy}
                 menuOpen={subtaskMenuId === subtaskId} moveOpen={moveMenuId === subtaskId}
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}
@@ -357,7 +357,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
             {!readOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => onSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => onSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={onSubtaskCreate}><Plus size={14} /> Add subtask</button></div>}
           </section>
-          <div className="task-detail-provenance"><span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div>
+          <div className="task-detail-provenance"><span className={`task-state ${state}`}>{taskStatusLabel(state)}</span><SyncChip task={task} /></div>
         </>}
       </div>
       <footer className="task-detail-footer"><small>{project} · {taskSourceLabel(task)} is the task record</small><div className="task-detail-footer-actions">{!readOnly && !task.completed ? <><button disabled={busy} onClick={() => onEditTask(task)}>Edit task</button><button className="primary" disabled={busy} onClick={() => onCompleteTask?.()}><Check size={15} /> Mark complete</button></> : <button onClick={onClose}>Close</button>}</div></footer>

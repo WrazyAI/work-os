@@ -377,7 +377,7 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Soon work"));
   });
 
-  it("preserves the server-provided Name sort and keeps an explicit Open status cell", () => {
+  it("preserves the server-provided Name sort and keeps an explicit Pending status cell", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
       historyOrder: "server",
@@ -386,7 +386,26 @@ describe("Tasks workspace ordering contract", () => {
     }));
     expect(markup.indexOf("Soon work")).toBeLessThan(markup.indexOf("Late work"));
     expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Finished work"));
-    expect(markup).toContain('class="task-state open">Open</span>');
+    expect(markup).toContain('class="task-state pending">Pending</span>');
+  });
+
+  it("renders the four-state pill vocabulary with derived overdue", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      historyOrder: "server",
+      taskHistory: [
+        { id: "pending", title: "Pending work", due_date: "2026-08-28", completed: false },
+        { id: "progress", title: "In-progress work", due_date: "2026-08-28", completed: false, workflow_status: "in_progress" },
+        { id: "overdue", title: "Overdue work", due_date: "2026-08-20", completed: false, workflow_status: "in_progress" },
+        { id: "done", title: "Done work", completed: true },
+      ],
+    }));
+    expect(markup).toContain('class="task-state pending">Pending</span>');
+    expect(markup).toContain('class="task-state in_progress">In progress</span>');
+    // Overdue is derived: it wins over a stored in-progress status.
+    expect(markup).toContain('class="task-state overdue">Overdue</span>');
+    expect(markup).toContain('class="task-state complete">Done</span>');
+    expect(markup).not.toContain(">Open</span>");
   });
 });
 

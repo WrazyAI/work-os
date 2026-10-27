@@ -28,9 +28,17 @@ describe("task actions", () => {
   it("keeps completion when the assigner is also an assignee", () => {
     expect(taskActionItems(row("owner", { assignee_person_ids: ["owner", "worker"] }), today)).toEqual(["pending", "in_progress", "complete", "edit", "assign", "archive", "delete"]);
   });
-  it("locks overdue status while keeping completion", () => {
+  it("hides the status control from an assignee of an overdue task", () => {
     const task = row("worker", { due_date: "2026-10-26" });
     expect(taskActionItems(task, today)).toEqual(["complete"]);
+    expect(taskStatusOptions(task, today)).toEqual([
+      { value: "pending", label: "Pending", disabled: true },
+      { value: "in_progress", label: "In progress", disabled: true },
+    ]);
+  });
+  it("keeps the due-date note for an assigner of an overdue task", () => {
+    const task = row("owner", { due_date: "2026-10-26" });
+    expect(taskActionItems(task, today)).toEqual(["edit", "assign", "archive", "delete"]);
     expect(taskStatusOptions(task, today)).toEqual([
       { value: "pending", label: "Pending", disabled: true, note: "Update the due date first" },
       { value: "in_progress", label: "In progress", disabled: true, note: "Update the due date first" },

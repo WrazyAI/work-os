@@ -59,7 +59,8 @@ describe("operational visualizations", () => {
     expect(styles).toMatch(/\.task-state\.complete[\s\S]*#e8f4da/);
     expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fbe7e3/);
     expect(styles).toMatch(/\.task-state\.sync-issue[\s\S]*#fff3d1/);
-    expect(app).toContain('className={`task-state ${state}`}');
+    expect(app).toContain('className={`task-state ${displayState}`}');
+    expect(app).toContain("taskStatusLabel(displayState)");
   });
 
   it("keeps the EOD Review page on the EOD flow without a proposal queue", () => {

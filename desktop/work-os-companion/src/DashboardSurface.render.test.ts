@@ -42,9 +42,14 @@ describe("dashboard surfaces", () => {
     const assignee = menu("worker");
     expect(assignee).toContain("Mark task done");
     for (const label of ["Edit task", ">Assign", "Archive", "Delete permanently"]) expect(assignee).not.toContain(label);
-    const overdue = menu("worker", { due_date: "2026-08-25" });
-    expect(overdue.match(/disabled=""/g)).toHaveLength(2);
-    expect(overdue.match(/Update the due date first/g)).toHaveLength(2);
+    const overdueAssignee = menu("worker", { due_date: "2026-08-25" });
+    expect(overdueAssignee).toContain("Mark task done");
+    expect(overdueAssignee).not.toContain("Update the due date first");
+    expect(overdueAssignee).not.toContain(">Pending");
+    expect(overdueAssignee).not.toContain(">In progress");
+    const overdueAssigner = menu("owner", { due_date: "2026-08-25" });
+    expect(overdueAssigner.match(/disabled=""/g)).toHaveLength(2);
+    expect(overdueAssigner.match(/Update the due date first/g)).toHaveLength(2);
     const completed = menu("worker", { completed: true });
     expect(completed).toContain("Reopen task");
     expect(completed).not.toContain("Mark task done");

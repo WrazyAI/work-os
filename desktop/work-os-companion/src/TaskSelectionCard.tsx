@@ -486,7 +486,7 @@ export function TaskSelectionCard({
                     <span aria-hidden="true"><Check size={12} strokeWidth={3} /></span>
                   </label>
                   <span className="chat-task-subtask-title"><OverflowPanText>{childTitle}</OverflowPanText></span>
-                  <span className={statusChipClass(undefined, proposed)}>{proposed ? "Proposed" : done ? "Done" : "Open"}</span>
+                  <span className={statusChipClass(undefined, proposed)}>{proposed ? "Proposed" : done ? "Done" : "Pending"}</span>
                 </li>
               );
             })}
