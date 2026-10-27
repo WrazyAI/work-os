@@ -259,6 +259,23 @@ function taskStateTone(state: "pending" | "in_progress" | "overdue" | "complete"
   return "neutral";
 }
 
+/** The one status record this surface reads. The effective due date — recorded,
+ *  else one day after creation (design.md §16.2) — is the date the row, the row
+ *  menu, and the drawer all judge, and the capability lock follows it so those
+ *  three can never disagree. The source row keeps its real `due_date`, so an
+ *  editor never writes the derived default back as a recorded date. */
+export function adminTaskStatusRecord(task: AdminTaskRow, today: string): AdminTaskRow {
+  const effectiveDue = taskEffectiveDueDate(task);
+  const overdue = task.completed !== true && !!effectiveDue && effectiveDue < today;
+  return {
+    ...task,
+    due_date: effectiveDue ?? task.due_date ?? null,
+    capabilities: task.capabilities
+      ? { ...task.capabilities, overdue, statusLocked: overdue || task.capabilities.statusLocked === true }
+      : undefined,
+  };
+}
+
 /** The row menu body. Exported so the render test can assert the exact
  *  vocabulary the page wires without a portal; a row renders it inside the
  *  anchored, keyboard-reachable `EllipsisMenu`. */
@@ -461,12 +478,11 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const sortedRows = useMemo(() => sortTaskRows(rows, sort, today), [rows, sort, today]);
   const summary = tasks.data?.summary;
   const drawerTask = detail.data?.task ?? null;
-  // The drawer reads the same effective due date as the row, so an Overdue pill
-  // can never open into a drawer that calls the same task Pending.
-  const drawerDue = drawerTask ? taskEffectiveDueDate(drawerTask) : null;
-  const drawerOverdue = !!drawerTask && drawerTask.completed !== true && !!drawerDue && drawerDue < today;
-  const drawerState = drawerTask ? (drawerOverdue ? "overdue" : displayTaskState(drawerTask, today)) : null;
-  const drawerStatusOptions = drawerTask ? taskStatusOptions(drawerTask, today) : [];
+  // The drawer and the row menu read the same derived status record, so an
+  // Overdue pill can never open into a drawer that calls the task Pending.
+  const drawerStatusTask = drawerTask ? adminTaskStatusRecord(drawerTask, today) : null;
+  const drawerState = drawerStatusTask ? displayTaskState(drawerStatusTask, today) : null;
+  const drawerStatusOptions = drawerStatusTask ? taskStatusOptions(drawerStatusTask, today) : [];
   const drawerStatusNote = drawerStatusOptions.find((option) => option.note)?.note;
   const drawerAssigneeId = drawerTask ? taskAssigneeIds(drawerTask)[0] ?? "" : "";
   const drawerCaps = (drawerTask?.capabilities ?? {}) as Partial<TaskCapabilities>;
@@ -537,11 +553,10 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   const overdue = task.completed !== true && !!due && due < today;
                   const priority = trimmedText(task.priority);
                   const description = trimmedText(task.description);
-                  // Overdue outranks the stored workflow status. The record's
-                  // effective due date keeps the derived Overdue reading the
-                  // row already showed; everything else is the shared
-                  // four-state vocabulary.
-                  const state = overdue ? "overdue" : displayTaskState(task, today);
+                  // One status record drives the pill, the row menu, and the
+                  // drawer: the effective due date and its lock.
+                  const statusTask = adminTaskStatusRecord(task, today);
+                  const state = displayTaskState(statusTask, today);
                   const busy = complete.isPending || statusChange.isPending || removeTask.isPending;
                   return (
                     <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} data-pan-row="true" onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
@@ -581,7 +596,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                           >
                             {task.completed ? "Reopen" : "Complete"}
                           </AdminButton>
-                          {hasTaskMenu(task, today) ? (
+                          {hasTaskMenu(statusTask, today) ? (
                             <EllipsisMenu
                               open={menuTaskId === id}
                               label={`Actions for ${taskTitle(task)}`}
@@ -590,7 +605,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                               onClose={() => setMenuTaskId(null)}
                             >
                               <AdminTaskMenuItems
-                                task={task}
+                                task={statusTask}
                                 today={today}
                                 busy={busy}
                                 onStatus={(status) => statusChange.mutate({ id, status })}
@@ -653,16 +668,14 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                     <AdminButton
                       key={option.value}
                       variant={option.value === (drawerTask.workflow_status ?? "pending") ? "primary" : "secondary"}
-                      disabled={option.disabled || drawerOverdue || statusChange.isPending}
+                      disabled={option.disabled || statusChange.isPending}
                       onClick={() => statusChange.mutate({ id: String(drawerTask.id), status: option.value })}
                     >
                       {option.label}
                     </AdminButton>
                   ))}
                 </div>
-                {drawerStatusNote || drawerOverdue ? (
-                  <Notice tone="warn">{`${drawerStatusNote ?? "Update the due date first"}. This task is past its due date.`}</Notice>
-                ) : null}
+                {drawerStatusNote ? <Notice tone="warn">{drawerStatusNote}.</Notice> : null}
               </section>
             ) : null}
             <section className="admin-block">
