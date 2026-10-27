@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { displayTaskState, taskActionItems, taskStatusLabel, taskStatusOptions } from "./taskActions";
+import { displayTaskState, hasTaskMenu, taskActionItems, taskStatusLabel, taskStatusOptions } from "./taskActions";
 import { taskState } from "./taskWorkspace";
 
 const today = "2026-10-27";
@@ -46,10 +46,25 @@ describe("task actions", () => {
   });
   it("offers all admin actions and replaces completion with reopen", () => {
     expect(taskActionItems(row("admin", {}, "admin"), today)).toEqual(["pending", "in_progress", "complete", "edit", "assign", "archive", "delete"]);
-    expect(taskActionItems(row("admin", { completed: true }, "admin"), today)).toEqual(["pending", "in_progress", "reopen", "edit", "assign", "archive", "delete"]);
+    expect(taskActionItems(row("admin", { completed: true }, "admin"), today)).toEqual(["reopen", "edit", "assign", "archive", "delete"]);
   });
-  it("keeps cached payload fallback free of management permissions", () => {
-    expect(taskActionItems(base, today)).toEqual(["pending", "in_progress", "complete"]);
+  it("never offers a status change on a completed task", () => {
+    const task = row("worker", { completed: true });
+    expect(taskActionItems(task, today)).toEqual(["reopen"]);
+    expect(taskStatusOptions(task, today)).toEqual([
+      { value: "pending", label: "Pending", disabled: true },
+      { value: "in_progress", label: "In progress", disabled: true },
+    ]);
+    expect(hasTaskMenu(task, today)).toBe(true);
+  });
+  it("derives the trigger from the shared menu contents", () => {
+    expect(hasTaskMenu(row("worker"), today)).toBe(true);
+    expect(hasTaskMenu(row("viewer"), today)).toBe(false);
+  });
+  it("keeps cached payloads menu-free instead of guessing permissions", () => {
+    expect(taskActionItems(base, today)).toEqual([]);
+    expect(taskStatusOptions(base, today)).toEqual([]);
+    expect(hasTaskMenu(base, today)).toBe(false);
     expect(taskActionItems({ ...base, assignee_person_ids: [] }, today)).toEqual([]);
   });
 });

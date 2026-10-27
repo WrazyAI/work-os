@@ -55,7 +55,7 @@ describe("operational visualizations", () => {
   });
 
   it("uses unmistakable task-state semantics", () => {
-    expect(styles).toMatch(/\.task-state\.open[\s\S]*#edf0ea/);
+    expect(styles).toMatch(/\.task-state\.open \{[^}]*#edf0ea/);
     expect(styles).toMatch(/\.task-state\.complete[\s\S]*#e8f4da/);
     expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fbe7e3/);
     expect(styles).toMatch(/\.task-state\.sync-issue[\s\S]*#fff3d1/);

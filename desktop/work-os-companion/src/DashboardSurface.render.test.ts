@@ -1,6 +1,6 @@
-import { createElement } from "react";
+import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
@@ -26,8 +26,9 @@ describe("dashboard surfaces", () => {
   it("offers off-shift task actions without changing the row controls", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
-    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [assigned], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
-    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [assigned], currentDate: "2026-08-26" }));
+    const workerRow = { ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId: "worker" }, "2026-08-26") };
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [workerRow], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [workerRow], currentDate: "2026-08-26" }));
     expect(markup).toContain('aria-label="Actions for Make the first task visible"');
     expect(markup).toContain('aria-label="Complete Make the first task visible"');
     const unassigned = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model: buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now), tasks: [task], currentDate: "2026-08-26" }));
@@ -53,7 +54,60 @@ describe("dashboard surfaces", () => {
     const completed = menu("worker", { completed: true });
     expect(completed).toContain("Reopen task");
     expect(completed).not.toContain("Mark task done");
+    expect(completed).not.toContain(">Pending");
+    expect(completed).not.toContain(">In progress");
+    expect(completed).not.toContain("Update the due date first");
     expect(menu("viewer")).toBe("");
+  });
+
+  it("wires the off-shift management actions and keeps their order", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
+    const manager = { ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId: "owner" }, "2026-08-26") };
+    const selfOwned = { ...task, assignee_person_ids: ["owner"], assigned_by_person_id: "owner", completed: false };
+    const selfOwnedRow = { ...selfOwned, capabilities: taskCapabilities(selfOwned, { role: "employee", personId: "owner" }, "2026-08-26") };
+    const onEdit = vi.fn();
+    const onArchive = vi.fn();
+    const onDelete = vi.fn();
+    const onAssign = vi.fn();
+    const onClose = vi.fn();
+    const onStatus = vi.fn();
+    const onComplete = vi.fn();
+    const handlers = { busy: false, currentDate: "2026-08-26", onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose };
+
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [manager], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const dashboard = renderToStaticMarkup(createElement(OffShiftDashboard, {
+      ...baseActions(), model, tasks: [manager], currentDate: "2026-08-26",
+      onEditTask: onEdit, onArchiveTask: onArchive, onDeleteTask: onDelete, onStatusTask: onStatus,
+    }));
+    expect(dashboard).toContain('aria-label="Actions for Make the first task visible"');
+
+    const menuElement = TaskActionMenuItems({ task: manager, ...handlers }) as ReactElement<{ children: ReactNode }>;
+    const managerMarkup = renderToStaticMarkup(menuElement);
+    for (const label of ["Edit task", "Archive", "Delete permanently"]) expect(managerMarkup).toContain(label);
+    const buttons = Children.toArray(menuElement.props.children)
+      .filter((node) => isValidElement(node)) as Array<ReactElement<{ onClick: () => void }>>;
+    const buttonFor = (label: string) => {
+      const found = buttons.find((node) => renderToStaticMarkup(node).includes(label));
+      expect(found).toBeDefined();
+      return found!;
+    };
+
+    buttonFor("Edit task").props.onClick();
+    buttonFor("Archive").props.onClick();
+    buttonFor("Delete permanently").props.onClick();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onArchive).toHaveBeenCalledTimes(1);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(3);
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onEdit.mock.invocationCallOrder[0]);
+
+    // Order contract: status, then complete/reopen, then management, archive, delete.
+    const ordered = renderToStaticMarkup(TaskActionMenuItems({ task: selfOwnedRow, ...handlers }));
+    const labels = ["Pending", "In progress", "Mark task done", "Edit task", "Assign", "Archive", "Delete permanently"];
+    labels.slice(1).forEach((label, index) => {
+      expect(ordered.indexOf(label)).toBeGreaterThan(ordered.indexOf(labels[index]));
+    });
   });
   it("keeps Mac attendance visible without advertising unsupported clock controls", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
