@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { displayTaskState, hasTaskMenu, taskActionItems, taskDueDateSeed, taskStatusLabel, taskStatusOptions } from "./taskActions";
+import { currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
+import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
 
 const today = "2026-10-27";
@@ -9,6 +15,12 @@ const row = (personId: string, extra = {}, role: "employee" | "admin" = "employe
   const task = { ...base, ...extra };
   return { ...task, capabilities: taskCapabilities(task, { role, personId }, today) };
 };
+const appSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "App.tsx"), "utf8");
+/** The whole status menu markup, so the assertion sees its disabled attribute
+ *  rather than only its visible label. */
+const menuItemTag = (markup: string, label: string) => [...markup.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]
+  .map((match) => match[0])
+  .find((tag) => tag.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() === label) ?? "";
 
 describe("task actions", () => {
   it("labels all four display states and preserves legacy states", () => {
@@ -32,16 +44,16 @@ describe("task actions", () => {
     const task = row("worker", { due_date: "2026-10-26" });
     expect(taskActionItems(task, today)).toEqual(["complete"]);
     expect(taskStatusOptions(task, today)).toEqual([
-      { value: "pending", label: "Pending", disabled: true },
-      { value: "in_progress", label: "In progress", disabled: true },
+      { value: "pending", label: "Pending", disabled: true, active: false },
+      { value: "in_progress", label: "In progress", disabled: true, active: false },
     ]);
   });
   it("keeps the due-date note for an assigner of an overdue task", () => {
     const task = row("owner", { due_date: "2026-10-26" });
     expect(taskActionItems(task, today)).toEqual(["edit", "assign", "archive", "delete"]);
     expect(taskStatusOptions(task, today)).toEqual([
-      { value: "pending", label: "Pending", disabled: true, note: "Update the due date first" },
-      { value: "in_progress", label: "In progress", disabled: true, note: "Update the due date first" },
+      { value: "pending", label: "Pending", disabled: true, active: false, note: "Update the due date first" },
+      { value: "in_progress", label: "In progress", disabled: true, active: false, note: "Update the due date first" },
     ]);
   });
   it("offers all admin actions and replaces completion with reopen", () => {
@@ -52,10 +64,62 @@ describe("task actions", () => {
     const task = row("worker", { completed: true });
     expect(taskActionItems(task, today)).toEqual(["reopen"]);
     expect(taskStatusOptions(task, today)).toEqual([
-      { value: "pending", label: "Pending", disabled: true },
-      { value: "in_progress", label: "In progress", disabled: true },
+      { value: "pending", label: "Pending", disabled: true, active: false },
+      { value: "in_progress", label: "In progress", disabled: true, active: false },
     ]);
     expect(hasTaskMenu(task, today)).toBe(true);
+  });
+  it("marks the status the row displays and makes choosing it a no-op", () => {
+    const pending = taskStatusOptions(row("worker"), today);
+    expect(pending).toEqual([
+      { value: "pending", label: "Pending", disabled: true, active: true },
+      { value: "in_progress", label: "In progress", disabled: false, active: false },
+    ]);
+    const inProgress = taskStatusOptions(row("worker", { workflow_status: "in_progress" }), today);
+    expect(inProgress).toEqual([
+      { value: "pending", label: "Pending", disabled: false, active: false },
+      { value: "in_progress", label: "In progress", disabled: true, active: true },
+    ]);
+    // An overdue row has no active option to mark: the Overdue pill leads.
+    expect(taskStatusOptions(row("worker", { due_date: "2026-10-26" }), today).some((option) => option.active)).toBe(false);
+  });
+  it("reads the stored workflow status and skips a status write that changes nothing", () => {
+    expect(currentTaskStatus({ workflow_status: "in_progress" })).toBe("in_progress");
+    expect(currentTaskStatus({ workflow_status: "pending" })).toBe("pending");
+    expect(currentTaskStatus({})).toBe("pending");
+    expect(currentTaskStatus({ workflow_status: "done" })).toBe("pending");
+    expect(taskStatusWriteRequired(row("worker"), "pending")).toBe(false);
+    expect(taskStatusWriteRequired({ ...base }, "pending")).toBe(false);
+    expect(taskStatusWriteRequired(row("worker", { workflow_status: "in_progress" }), "pending")).toBe(true);
+    expect(taskStatusWriteRequired(row("worker"), "in_progress")).toBe(true);
+    expect(taskStatusWriteRequired(row("worker", { workflow_status: "in_progress" }), "in_progress")).toBe(false);
+  });
+  it("returns from the setter before writing a status the task already holds", () => {
+    const start = appSource.indexOf("function setTaskStatus(");
+    const setter = appSource.slice(start, appSource.indexOf("function submitTaskEdit(", start));
+    expect(start).toBeGreaterThan(-1);
+    expect(setter).toContain("if (!taskStatusWriteRequired(task, workflow_status)) return;");
+    expect(setter.indexOf("taskStatusWriteRequired")).toBeLessThan(setter.indexOf("apiRequest("));
+    expect(setter.indexOf("taskStatusWriteRequired")).toBeLessThan(setter.indexOf("syncBypassRef"));
+  });
+  it("disables the active status option in the row menu", () => {
+    const menu = (task: ReturnType<typeof row>) => renderToStaticMarkup(createElement(TaskActionMenuItems, {
+      task,
+      currentDate: today,
+      busy: false,
+      onStatus: () => undefined,
+      onComplete: () => undefined,
+      onEdit: () => undefined,
+      onArchive: () => undefined,
+      onDelete: () => undefined,
+      onClose: () => undefined,
+    }));
+    const pending = menu(row("worker"));
+    expect(menuItemTag(pending, "Pending")).toContain("disabled");
+    expect(menuItemTag(pending, "In progress")).not.toContain("disabled");
+    const inProgress = menu(row("worker", { workflow_status: "in_progress" }));
+    expect(menuItemTag(inProgress, "In progress")).toContain("disabled");
+    expect(menuItemTag(inProgress, "Pending")).not.toContain("disabled");
   });
   it("derives the trigger from the shared menu contents", () => {
     expect(hasTaskMenu(row("worker"), today)).toBe(true);

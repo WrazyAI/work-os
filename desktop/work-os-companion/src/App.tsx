@@ -38,7 +38,7 @@ import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { hasTaskMenu, displayTaskState, taskDueDateSeed, taskStatusLabel } from "./taskActions";
+import { hasTaskMenu, displayTaskState, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -4128,6 +4128,9 @@ export default function App() {
   }
 
   function setTaskStatus(task: TaskRow, workflow_status: "pending" | "in_progress") {
+    // Choosing the status a task already holds would write and audit a no-op;
+    // a payload with no stored value is pending, the server's own default.
+    if (!taskStatusWriteRequired(task, workflow_status)) return;
     const taskId = String(task.provider_task_id || task.id);
     if (syncBypassRef.current) {
       setDay((current) => current ? { ...current, tasks: current.tasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, workflow_status } : row) } : current);

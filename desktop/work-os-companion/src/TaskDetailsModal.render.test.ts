@@ -138,6 +138,11 @@ const menuItemLabels = (markup: string) => [...markup.matchAll(/role="menuitem"[
   .map((match) => match[1]!.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim())
   .filter(Boolean);
 
+/** One menu item's whole button, so its disabled attribute is visible too. */
+const menuItemTag = (markup: string, label: string) => [...markup.matchAll(/<button[^>]*role="menuitem"[^>]*>[\s\S]*?<\/button>/g)]
+  .map((match) => match[0])
+  .find((tag) => tag.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().startsWith(label)) ?? "";
+
 const buttonTag = (markup: string, label: string) => markup.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? "";
 
 /** The whole button, so its visible label is included. */
@@ -156,6 +161,16 @@ describe("TaskDetailsModal lifecycle actions", () => {
   it("lists both manual statuses in the status menu", () => {
     const labels = menuItemLabels(drawerMarkup(selfOwned, { initialMenu: "status" }));
     expect(labels).toEqual(expect.arrayContaining(["Pending", "In progress"]));
+  });
+
+  it("disables the status the task already holds", () => {
+    const pending = drawerMarkup(selfOwned, { initialMenu: "status" });
+    expect(menuItemTag(pending, "Pending")).toContain("disabled");
+    expect(menuItemTag(pending, "In progress")).not.toContain("disabled");
+    const inProgress = withCapabilities({ ...selfOwned, workflow_status: "in_progress" });
+    const markup = drawerMarkup(inProgress, { initialMenu: "status" });
+    expect(menuItemTag(markup, "In progress")).toContain("disabled");
+    expect(menuItemTag(markup, "Pending")).not.toContain("disabled");
   });
 
   it("keeps archive and permanent delete in the drawer actions menu", () => {

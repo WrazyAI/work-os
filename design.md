@@ -555,7 +555,10 @@ The menu is detached (§8.3) and opens beside its trigger, so the row keeps its
 height and no action is inlined as text. A row with nothing available to this
 actor renders no trigger — an empty menu is never offered — and a cached
 payload that predates the capability answer waits for the refresh instead of
-guessing from assignees.
+guessing from assignees. The status items are the one place a menu states a
+stored state: the option that matches the status the row displays carries the
+check mark and is disabled, because choosing it would write the value the task
+already holds.
 
 The Tasks page has one date navigator in the masthead, one task-list panel, and
 one task list. The panel header carries the views, a compact search, and the
@@ -733,15 +736,15 @@ capabilities shows no controls rather than advertising an action the server
 would refuse, and a completed task has no status path until it is reopened.
 
 The status control states the task's current status and opens the detached
-menu of §8.3, listing Pending and In progress with the current option marked.
-An overdue task keeps it disabled with the note "Update the due date first":
-overdue is derived from the due date, so the control unlocks only once the due
-date is today or later, and reopening a completed task restores the status it
-held before completion (reading Overdue again if its due date has since
-passed). The assignee control lists only the people this actor may assign; when
-a current assignee sits outside that scope the control locks and states why, so
-a client never submits a set the server would reject. Replacing the assignees
-records the actor as the task's assigner.
+menu of §8.3, listing Pending and In progress with the current option marked
+and inert. An overdue task keeps it disabled with the note "Update the due date
+first": overdue is derived from the due date, so the control unlocks only once
+the due date is today or later, and reopening a completed task restores the
+status it held before completion (reading Overdue again if its due date has
+since passed). The assignee control lists only the people this actor may
+assign; when a current assignee sits outside that scope the control locks and
+states why, so a client never submits a set the server would reject. Replacing
+the assignees records the actor as the task's assigner.
 
 At narrow widths it becomes a bottom sheet with a safe viewport inset and an
 internal scroll region. Menus and drawers must collide with the viewport, close
@@ -1007,10 +1010,12 @@ The task status control behaves as one menu wherever it appears: in the drawer
 it is a trigger that states the current status, and in a row or administration
 menu it is the same item list inside that row's action menu. Opening it focuses
 the first enabled item, and Escape, an outside press, or running an item closes
-it and returns focus to the trigger. Its items are Pending and In progress with
-the current option marked, and an overdue task's options are disabled with the
-due-date note. It is never a segmented control, a native select, or an inline
-panel, and it never changes the row's height.
+it and returns focus to the trigger. Its items are Pending and In progress;
+whichever matches the status the row displays is marked and disabled, because
+choosing it would write the value the task already holds. An overdue task's
+options are all disabled with the due-date note. It is never a segmented
+control, a native select, or an inline panel, and it never changes the row's
+height.
 
 ### 8.4 Worktivity attendance controls
 

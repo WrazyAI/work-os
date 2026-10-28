@@ -41,17 +41,42 @@ export function taskActionItems(task: TaskRow, today: string): TaskMenuAction[] 
   ];
 }
 
-export function taskStatusOptions(task: TaskRow, today: string): Array<{ value: "pending" | "in_progress"; label: string; disabled: boolean; note?: string }> {
+/** The stored manual status a payload carries. A missing value is the pending
+ *  default the server writes, so a cached row and a fresh row agree. */
+export function currentTaskStatus(task: TaskRow): "pending" | "in_progress" {
+  return task.workflow_status === "in_progress" ? "in_progress" : "pending";
+}
+
+/** Whether a status request would change anything. Rewriting the status a task
+ *  already holds is a no-op write and an extra audit row, so callers skip it. */
+export function taskStatusWriteRequired(task: TaskRow, status: "pending" | "in_progress"): boolean {
+  return currentTaskStatus(task) !== status;
+}
+
+export function taskStatusOptions(task: TaskRow, today: string): Array<{ value: "pending" | "in_progress"; label: string; disabled: boolean; active: boolean; note?: string }> {
   const caps = capabilitiesFor(task);
   if (!caps) return [];
   const completed = task.completed === true;
   const allowed = canRequestStatus(caps);
+  // The option that carries the check mark is the status the row displays, so
+  // the mark and the disabled state can never disagree. Choosing it would write
+  // the value the task already holds, so it is inert.
+  const displayed = displayTaskState(task, today);
   // The due-date note is only truthful for someone who can actually move the
   // due date. An assignee of an overdue task may not, so they get no status
   // control at all rather than a note they cannot act on. A completed task has
   // no status path at all: the server refuses to change a done task's status.
   const note = !completed && caps.statusLocked && caps.canEdit ? "Update the due date first" : undefined;
-  return (["pending", "in_progress"] as const).map((value) => ({ value, label: taskStatusLabel(value), disabled: completed || !allowed || caps.statusLocked, ...(note ? { note } : {}) }));
+  return (["pending", "in_progress"] as const).map((value) => {
+    const active = displayed === value;
+    return {
+      value,
+      label: taskStatusLabel(value),
+      disabled: completed || !allowed || caps.statusLocked || active,
+      active,
+      ...(note ? { note } : {}),
+    };
+  });
 }
 
 /** One predicate for "this row has a menu", shared by every trigger so a row

@@ -29,14 +29,13 @@ export function TaskActionMenuItems({ task, currentDate, busy, onStatus, onCompl
 }) {
   const actions = taskActionItems(task, currentDate);
   const choose = (action: () => void) => { onClose(); action(); };
-  const state = displayTaskState(task, currentDate);
   const statusOptions = taskStatusOptions(task, currentDate);
   // An overdue task keeps its status control, disabled with the due-date note.
   // Otherwise an actor who may not change status gets no dead control at all.
   const showStatus = statusOptions.some((option) => !option.disabled || option.note);
   if (!showStatus && !actions.length) return null;
   return <>
-    {showStatus && statusOptions.map((option) => <button key={option.value} role="menuitem" disabled={busy || option.disabled} onClick={() => choose(() => onStatus(option.value))}>{state === option.value && <Check size={14} aria-hidden="true" />}{option.label}{option.note && <small>{option.note}</small>}</button>)}
+    {showStatus && statusOptions.map((option) => <button key={option.value} role="menuitem" disabled={busy || option.disabled} onClick={() => choose(() => onStatus(option.value))}>{option.active && <Check size={14} aria-hidden="true" />}{option.label}{option.note && <small>{option.note}</small>}</button>)}
     {actions.includes("complete") && <button role="menuitem" disabled={busy} onClick={() => choose(() => onComplete(true))}><CheckCircle2 size={14} /> Mark task done</button>}
     {actions.includes("reopen") && <button role="menuitem" disabled={busy} onClick={() => choose(() => onComplete(false))}><RotateCcw size={14} /> Reopen task</button>}
     {actions.includes("edit") && <button role="menuitem" disabled={busy} onClick={() => choose(onEdit)}><Pencil size={14} /> Edit task</button>}
@@ -418,7 +417,7 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
           disabled={busy || option.disabled}
           onClick={() => { close(); onStatus(option.value); }}
         >
-          {state === option.value ? <Check size={14} aria-hidden="true" /> : <Clock3 size={14} aria-hidden="true" />}{option.label}
+          {option.active ? <Check size={14} aria-hidden="true" /> : <Clock3 size={14} aria-hidden="true" />}{option.label}
           {option.note && <small>{option.note}</small>}
         </button>)}
       </DetailMenu>}
