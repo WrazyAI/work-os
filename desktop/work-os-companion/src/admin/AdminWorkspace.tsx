@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeftRight, CircleHelp, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, CircleHelp, MessageCircle, RefreshCw } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import SidebarNav from "../SidebarNav";
 import { NotificationsBell } from "../NotificationsBell";
@@ -136,6 +136,11 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
           <div className="mast-actions">
+            {onNewChat ? (
+              <button type="button" className="admin-switch admin-ask-otto" onClick={onNewChat}>
+                <MessageCircle size={14} aria-hidden /> Ask Otto
+              </button>
+            ) : null}
             {session.role === "admin" && guideView && onOpenGuide ? (
               <button
                 type="button"

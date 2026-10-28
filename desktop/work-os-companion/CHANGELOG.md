@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Admins can now open Otto from the labeled Ask Otto button in the administration header, even in a narrow window.
+
 ## 0.5.11 — 2026-10-28
 
 - Tasks created today now appear in My day, with newer tasks first when their due dates match.

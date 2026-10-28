@@ -339,6 +339,12 @@ assert.match(adminWorkspace, /import \{ ProfileAvatar \} from "\.\.\/ProfileSett
 assert.match(adminWorkspace, /aria-label=\{`Profile for \$\{profile\.name\}`\}/);
 assert.match(adminWorkspace, /title="Open profile settings"/);
 assert.match(adminWorkspace, /onOpenWhatsNew/);
+assert.match(adminWorkspace, /className="admin-switch admin-ask-otto"/);
+assert.match(adminWorkspace, /onClick=\{onNewChat\}/);
+assert.match(adminWorkspace, /Ask Otto/);
+assert.match(app, /const openAdminOtto = \(\) => openAdminOttoSurface\(\{ newChat: true \}\);/);
+assert.match(app, /onNewChat=\{openAdminOtto\}/);
+assert.equal((app.match(/onNewChat=\{openAdminOtto\}/g) ?? []).length, 1);
 const sidebarNav = read("src/SidebarNav.tsx");
 assert.match(sidebarNav, /What's new/);
 assert.match(sidebarNav, /onWhatsNew/);

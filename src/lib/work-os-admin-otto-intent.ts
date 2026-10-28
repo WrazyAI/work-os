@@ -54,6 +54,13 @@ const MAX_CONTEXT_PEOPLE = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ACTIONS = new Set<string>(ADMIN_OTTO_INTENT_ACTIONS);
+/** A broad "tell me about this person" phrasing the model can occasionally
+ * leave unsupported even though it is exactly the recent-records read. */
+const PERSON_OVERVIEW = /^(?:what\s+do\s+you\s+know\s+about|what\s+can\s+you\s+tell\s+me\s+about|tell\s+me\s+about)\s+(.+)$/i;
+const TEAM_OVERVIEW = /^(?:the\s+team|everyone|all\s+employees)$/i;
+/** A person overview names a person, never an operation or another target. */
+const UNSUPPORTED_NAME_WORDS = /\b(?:send|message|email|reply|notify|delete|remove|archive|create|update|assign|approve|reject|comment|task|project|account|password|login)\b/i;
+const UNSAFE_NAME = /[!?;:"<>[\]{}|\\/]|\band\b/i;
 
 /** Strict JSON schema for the one structured call. Every field is required so
  * a partial answer is a malformed provider response, not an implicit default. */
@@ -245,6 +252,33 @@ export function requireAdminOttoIntent(value: unknown): ReadIntent {
   return intent;
 }
 
+/**
+ * Deterministic coverage for a broad person overview that the provider
+ * honestly returned as unsupported. It only ever produces the existing
+ * read-only records intent; the name stays unresolved data for the server
+ * resolver, and null dates leave the server's recent window in charge.
+ */
+function personOverviewFallback(text: string): ReadIntent | null {
+  const match = PERSON_OVERVIEW.exec(text);
+  if (!match) return null;
+  // A newline separates requests; only a single-line name is a person.
+  if (/[\r\n]/.test(match[1])) return null;
+  const requested = match[1].replace(/\s+/g, " ").trim().replace(/[.,!?;:]+$/, "").trim();
+  if (!requested || requested.length > MAX_NAME_LENGTH) return null;
+  if (UNSUPPORTED_NAME_WORDS.test(requested) || UNSAFE_NAME.test(requested) || /\d/.test(requested)) return null;
+  const target: Target = TEAM_OVERVIEW.test(requested) ? { kind: "team" } : { kind: "names", names: [requested] };
+  return {
+    action: "records",
+    target,
+    date: null,
+    from: null,
+    through: null,
+    relativeDay: null,
+    overdueOnly: false,
+    latest: false,
+  };
+}
+
 function contextPeople(people: unknown): PersonRef[] {
   if (!Array.isArray(people)) return [];
   const result: PersonRef[] = [];
@@ -301,6 +335,8 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "- Use target.kind team only when the administrator explicitly says the team, everyone, or all employees.",
     "- Use target.kind names with the exact name text the administrator used; never expand a first name into a full name and never invent one. Unresolved names stay names for the server resolver.",
     "- Use target.kind ids only for a pronoun or a follow-up that refers to the last resolved people, and copy those ids exactly.",
+    '- A broad person overview such as "What do you know about David?" or "Tell me about David" is records for that person with no date filter; the server uses its recent record window.',
+    '- A broad team overview such as "Tell me about the team" is records for the whole team with no date filter.',
     '- A request that is not one of these reads returns {"action":null,...} with empty/null fields. Do not invent a read.',
     "- Explicit dates are calendar days in YYYY-MM-DD form. Use relativeDay today/yesterday for relative days.",
     "- A missing record is not evidence that no work happened; the server writes the reply.",
@@ -379,10 +415,14 @@ export async function parseAdminOttoIntent(
   } catch {
     malformed("invalid intent JSON");
   }
+  let validated: ReadIntent | null;
   try {
-    return validateAdminOttoIntent(raw);
+    validated = validateAdminOttoIntent(raw);
   } catch (error) {
     if (error instanceof WorkOsValidationError) malformed(error.message);
     throw error;
   }
+  // The fallback runs only after an honest `action:null`; a malformed or
+  // actionable provider answer can never be reinterpreted here.
+  return validated ?? personOverviewFallback(input);
 }

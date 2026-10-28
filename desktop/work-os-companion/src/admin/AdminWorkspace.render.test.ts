@@ -67,6 +67,22 @@ describe("administration masthead profile entry", () => {
   });
 });
 
+describe("administration masthead Otto entry", () => {
+  it("renders a labeled Ask Otto button when the shell supplies the new-chat callback", () => {
+    // No mapped personal workday: the administration entry must not depend on
+    // the employee switch being available.
+    const markup = render({ session: { ...session, personId: null }, notifications: null, onNewChat: noop });
+    expect(markup).toContain('class="admin-switch admin-ask-otto"');
+    expect(markup).toContain("Ask Otto");
+    expect(markup).toContain("No personal workday is mapped");
+  });
+
+  it("omits the entry when the shell supplies no callback", () => {
+    const markup = render();
+    expect(markup).not.toContain("Ask Otto");
+  });
+});
+
 describe("administration settings personal half", () => {
   it("forwards the supplied personal settings into the settings section only", () => {
     const personalSettings = createElement("p", null, "PERSONAL-HALF-MARKER");

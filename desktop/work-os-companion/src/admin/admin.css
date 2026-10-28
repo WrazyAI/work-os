@@ -48,6 +48,9 @@
   grid-row: 1;
   align-self: end;
   justify-self: end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .admin-workspace .masthead .admin-purpose {
@@ -74,6 +77,8 @@
     grid-column: 1;
     grid-row: 3;
     justify-self: start;
+    justify-content: flex-start;
+    row-gap: 8px;
   }
 }
 
@@ -128,6 +133,13 @@ body:has(.admin-workspace) .notifications-card {
 
 .admin-switch-ghost:hover {
   color: var(--ink);
+}
+
+/* The masthead's labeled admin Otto entry: same control material as the
+   workspace switch, but it keeps its label on one line when the utility row
+   wraps at narrow widths. */
+.admin-ask-otto {
+  white-space: nowrap;
 }
 
 /* --- KPI strip ---------------------------------------------------------- */

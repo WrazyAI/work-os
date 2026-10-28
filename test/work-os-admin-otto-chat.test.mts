@@ -1086,6 +1086,69 @@ test("parse_intent_strict_schema_and_untrusted_text", async () => {
   );
 });
 
+test("parse_intent_person_overview_falls_back_after_null_only", async () => {
+  const mod = await intentModule();
+  const nullIntent = {
+    action: null,
+    target: { kind: "team", names: null, ids: null },
+    date: null,
+    from: null,
+    through: null,
+    relativeDay: null,
+    overdueOnly: false,
+    latest: false,
+  };
+  const respond = (content: unknown) => async (input: RequestInfo | URL, init?: RequestInit) => {
+    void input;
+    void init;
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) } }],
+    }), { status: 200 });
+  };
+  const ask = (text: string, fetch = respond(nullIntent)) => mod.parseAdminOttoIntent(text, { people: [], lastIntent: null }, {
+    fetch, env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
+  });
+  const records = (target: unknown) => ({
+    action: "records",
+    target,
+    date: null,
+    from: null,
+    through: null,
+    relativeDay: null,
+    overdueOnly: false,
+    latest: false,
+  });
+
+  const expected = records({ kind: "names", names: ["David"] });
+  for (const text of [
+    "What do you know about David?",
+    "Tell me about David",
+    "What can you tell me about David?",
+  ]) {
+    const parsed = await ask(text);
+    assert.deepEqual(parsed, expected, text);
+    assert.deepEqual(mod.requireAdminOttoIntent(parsed), expected, `${text} rehydrates through the shared schema`);
+  }
+
+  for (const text of ["Tell me about the team", "What do you know about everyone?", "What can you tell me about all employees?"]) {
+    assert.deepEqual(await ask(text), records({ kind: "team" }), text);
+  }
+
+  for (const text of ["Send Alex a message.", "Delete Alex's task."]) {
+    assert.equal(await ask(text), null, text);
+  }
+  assert.equal(await ask(`Tell me about ${"A".repeat(121)}`), null, "names are bounded at 120 characters");
+  assert.equal(await ask("Tell me about David\nSend Alex a message."), null, "a newline is never a name");
+  assert.equal(await ask(`What do you know about ${personA}?`), null, "an id is not a person name");
+
+  const providerRecords = records({ kind: "names", names: ["Alex"] });
+  assert.deepEqual(
+    await ask("What do you know about David?", respond(providerRecords)),
+    providerRecords,
+    "the fallback only runs after the provider returns action:null",
+  );
+});
+
 test("model_outage_retains_draft_and_adds_no_turns", async () => {
   const f = await fixture();
   try {
