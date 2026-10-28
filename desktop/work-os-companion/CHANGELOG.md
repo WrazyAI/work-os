@@ -25,6 +25,9 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.12 — 2026-10-28
+
+- Asking Otto what it knows about a teammate now returns their recent record.
 - Admins can now open Otto from the labeled Ask Otto button in the administration header, even in a narrow window.
 
 ## 0.5.11 — 2026-10-28
