@@ -14,6 +14,13 @@ import {
   requireAdminOttoIntent,
   type AdminOttoIntentContext,
 } from "@/lib/work-os-admin-otto-intent";
+import {
+  adminOttoConversationReply,
+  adminOttoMessageRef,
+  matchAdminOttoConversation,
+  readAdminOttoMessageRef,
+  type AdminOttoMessageRef,
+} from "@/lib/work-os-admin-otto-conversation";
 import type {
   AdminRead,
   ChatRequest,
@@ -25,6 +32,7 @@ import type {
   Resolution,
   ReviewedRecap,
   Target,
+  WorkRecord,
 } from "@/modules/work-os/admin-otto/contracts";
 
 /**
@@ -126,6 +134,7 @@ type StoredReadRefs =
       resolution: Resolution;
       pending: PendingTargetState | null;
     }
+  | AdminOttoMessageRef
   | { v: 1; kind: "unsupported" };
 
 type ExecutedRead = {
@@ -799,6 +808,73 @@ async function executeRead(
   };
 }
 
+function identityReply(
+  person: PersonRef,
+  page: Page<WorkRecord>,
+  windows: LocalWindow[],
+  turnNumber: number,
+): string {
+  const name = person.displayName.replace(/\s+/g, " ").trim();
+  const scope = windowSummary(windows);
+  if (!page.total) {
+    return turnNumber % 2 === 0
+      ? `${name} is active in your organization, and I found no records in ${scope}. A missing record does not mean no work was done.`
+      : `${name} is an active employee. No recent records were found in ${scope}; that does not mean no work was done.`;
+  }
+  const shown = page.items.length < page.total ? ` Showing ${page.items.length} of ${page.total}.` : "";
+  return turnNumber % 2 === 0
+    ? `${name} is active in your organization. I found ${plural(page.total, "record")} in ${scope}.${shown}`
+    : `${name} is an active employee. Recent records: ${plural(page.total, "record")} in ${scope}.${shown}`;
+}
+
+/** Identity questions are a read of the authorized directory plus the existing
+ * recent-records read. Ambiguous and missing names reuse the normal resolution
+ * card and choice flow; nothing is guessed and no id is written into the reply. */
+async function executeIdentityQuestion(
+  access: WorkOsAccess,
+  name: string,
+  now: Date,
+  turnNumber: number,
+): Promise<ExecutedRead> {
+  const baseIntent: ReadIntent = {
+    action: "records",
+    target: { kind: "names", names: [name] },
+    date: null,
+    from: null,
+    through: null,
+    relativeDay: null,
+    overdueOnly: false,
+    latest: false,
+  };
+  const resolution = await resolveAdminOttoPeople(access, baseIntent.target);
+  if (resolution.kind === "resolved" && resolution.people.length === 1) {
+    const person = resolution.people[0];
+    const intent: ReadIntent = { ...baseIntent, target: { kind: "ids", ids: [person.id] } };
+    const windows = adminRecordWindows([person], {}, now);
+    const executed = await executeRead(access, intent, [person], now, windows, []);
+    if (executed.read?.kind === "records") {
+      return { ...executed, reply: identityReply(person, executed.read.page, windows, turnNumber) };
+    }
+    return executed;
+  }
+  const state: PendingTargetState = resolution.kind === "ambiguous"
+    ? {
+        v: 1,
+        intent: baseIntent,
+        resolved: [],
+        ambiguous: [{ name: resolution.name, choices: resolution.choices }],
+        missing: [],
+      }
+    : {
+        v: 1,
+        intent: baseIntent,
+        resolved: [],
+        ambiguous: [],
+        missing: [resolution.kind === "missing" ? resolution.name : name],
+      };
+  return resolutionExecuted(baseIntent, state);
+}
+
 function normalizePersonSnapshots(value: unknown): Array<{ id: string; displayName: string }> | null {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.length > MAX_PEOPLE) return null;
@@ -863,6 +939,7 @@ function refsValue(value: unknown): StoredReadRefs | null {
   const row = value as Record<string, unknown>;
   if (row.v !== 1) return null;
   if (row.kind === "unsupported") return { v: 1, kind: "unsupported" };
+  if (row.kind === "message") return readAdminOttoMessageRef(row);
   let intent: ReadIntent;
   try {
     intent = requireAdminOttoIntent(row.intent);
@@ -992,6 +1069,12 @@ async function validateReadRefs(access: WorkOsAccess, refs: Extract<StoredReadRe
 async function executeStoredRead(access: WorkOsAccess, refs: StoredReadRefs, now: Date): Promise<ExecutedRead> {
   if (refs.kind === "unsupported") {
     return { read: null, refs, reply: UNSUPPORTED_REPLY, errorCode: "unsupported" };
+  }
+  // A conversational turn persists only its own bounded, server-owned text.
+  // There is no read to re-run and no error code: rehydration and replay return
+  // the same natural reply instead of the unsupported fallback.
+  if (refs.kind === "message") {
+    return { read: null, refs, reply: refs.text };
   }
   if (refs.kind === "resolution") {
     const current = await validateResolutionRefs(access, refs);
@@ -1532,6 +1615,24 @@ export async function executeAdminOttoChat(
       executed = resolutionExecuted(pending.intent, state);
     }
     await recheckAfterRead(access, deps);
+    return persistExecution(access, thread, request, executed, deps, now, newId);
+  }
+
+  // Ordinary conversation is answered deterministically before any model call.
+  // Identity questions read only the authorized directory and the existing
+  // recent-records projection; greetings/thanks/capability questions persist a
+  // bounded message ref with no result card and no error code.
+  const conversation = matchAdminOttoConversation(request.text);
+  if (conversation) {
+    const turnNumber = thread ? Number(thread.context_version) : 0;
+    let executed: ExecutedRead;
+    if (conversation.kind === "identity") {
+      executed = await executeIdentityQuestion(access, conversation.name, now, turnNumber);
+      await recheckAfterRead(access, deps);
+    } else {
+      const reply = adminOttoConversationReply(conversation, turnNumber);
+      executed = { read: null, refs: adminOttoMessageRef(reply), reply };
+    }
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
 
