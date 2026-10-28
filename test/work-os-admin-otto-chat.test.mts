@@ -22,6 +22,7 @@ process.env.DATABASE_URL ??= "postgres://pglite-test/work-os";
 const NOW = new Date("2026-10-23T12:00:00.000Z");
 const chat = () => import("../src/lib/work-os-admin-otto-chat");
 const intentModule = () => import("../src/lib/work-os-admin-otto-intent");
+const conversationModule = () => import("../src/lib/work-os-admin-otto-conversation");
 
 type Db = Pick<PGlite, "query">;
 
@@ -1498,6 +1499,41 @@ test("concurrent_cas_overlap_rejects_one_stale_writer", async () => {
   } finally { await f.close(); }
 });
 
+test("conversation_matcher_rejects_qualified_names_and_handles_self_identity", async () => {
+  const mod = await conversationModule();
+  for (const text of [
+    "do you know who David is?",
+    "who is David?",
+    "tell me about David",
+    "What do you know about David?",
+    "Do you know anything about David?",
+    "Do you know something about David?",
+    "Do you know about David?",
+    "Tell me about David, please",
+    "Tell me about David for me",
+    "Tell me more about David",
+    "Tell me anything about David",
+  ]) {
+    assert.deepEqual(mod.matchAdminOttoConversation(text), { kind: "identity", name: "David" }, text);
+  }
+  for (const text of [
+    "Tell me about David today",
+    "What do you know about David lately?",
+    "What do you know about David recently?",
+    "Tell me about David now",
+    "Tell me about me",
+    "Tell me about us",
+    "Do you know anything about yourself?",
+  ]) {
+    assert.equal(mod.matchAdminOttoConversation(text), null, `${text} delegates instead of inventing a person`);
+  }
+  for (const text of ["Tell me about yourself", "Tell me about you", "Tell me more about yourself", "who are you?", "what are you?"]) {
+    assert.deepEqual(mod.matchAdminOttoConversation(text), { kind: "self" }, text);
+  }
+  assert.deepEqual(mod.matchAdminOttoConversation("Hi there, Otto"), { kind: "greeting" });
+  assert.deepEqual(mod.matchAdminOttoConversation("Thanks a lot, Otto"), { kind: "thanks" });
+});
+
 test("conversation_preflight_handles_greetings_thanks_and_capability_without_model", async () => {
   const f = await fixture();
   try {
@@ -1533,6 +1569,7 @@ test("conversation_preflight_handles_greetings_thanks_and_capability_without_mod
     });
     assertNatural(thanksAgain, "thank you");
     assert.notEqual(thanksAgain.reply, thanks.reply);
+    assertNatural(await chatWith(parseIntent, { text: "Thanks a lot, Otto" }), "Thanks a lot, Otto");
 
     const capabilityTexts = new Set<string>();
     const capabilityConversation = await chatWith(parseIntent, { text: "what can you do" });
@@ -1545,11 +1582,11 @@ test("conversation_preflight_handles_greetings_thanks_and_capability_without_mod
     }
     assert.equal(capabilityTexts.size, 3, "successive capability answers rotate their wording");
 
-    for (const text of ["Hello", "Hey", "Good morning", "Good afternoon"]) {
+    for (const text of ["Hello", "Hey", "Good morning", "Good afternoon", "Hi there, Otto"]) {
       assertNatural(await chatWith(parseIntent, { text }), text);
     }
     assert.equal(parses, 0, "ordinary conversation never calls the model");
-    assert.equal(await turnCount(f.db), 22, "each conversational turn is still persisted as two bounded turns");
+    assert.equal(await turnCount(f.db), 26, "each conversational turn is still persisted as two bounded turns");
   } finally { await f.close(); }
 });
 
@@ -1571,6 +1608,9 @@ test("conversation_identity_phrases_resolve_directory_and_recent_records", async
       "tell me about David",
       "What do you know about David?",
       "What can you tell me about David?",
+      "Do you know anything about David?",
+      "Do you know something about David?",
+      "Tell me about David, please",
     ]) {
       const result = await chatWith(parseIntent, { text });
       assert.equal(result.errorCode, undefined, text);
@@ -1599,6 +1639,145 @@ test("conversation_identity_phrases_resolve_directory_and_recent_records", async
     }), { text: "Tell me about the team" });
     assert.equal(expectKind(team.result, "records").page.total, 1);
     assert.equal(teamLog.length, 1, "the team overview is not mistaken for a person identity question");
+  } finally { await f.close(); }
+});
+
+test("conversation_self_identity_returns_read_only_capability_without_model", async () => {
+  const f = await fixture();
+  try {
+    let parses = 0;
+    const parseIntent = async (): Promise<ReadIntent | null> => {
+      parses += 1;
+      return null;
+    };
+    const first = await chatWith(parseIntent, { text: "tell me about yourself" });
+    assert.equal(first.result, null);
+    assert.equal(first.errorCode, undefined);
+    assert.match(first.reply, /read-only|records|tasks/i);
+    const second = await chatWith(parseIntent, {
+      conversationId: first.conversationId,
+      text: "who are you?",
+    });
+    assert.equal(second.result, null);
+    assert.equal(second.errorCode, undefined);
+    assert.match(second.reply, /read-only|records|tasks/i);
+    assert.notEqual(second.reply, first.reply);
+    const third = await chatWith(parseIntent, {
+      conversationId: first.conversationId,
+      text: "what are you?",
+    });
+    assert.equal(third.result, null);
+    assert.equal(third.errorCode, undefined);
+    assert.match(third.reply, /read-only|records|tasks/i);
+    assert.notEqual(third.reply, second.reply);
+    assert.equal(parses, 0, "self-identity is answered without the model");
+    assert.equal(await turnCount(f.db), 6);
+  } finally { await f.close(); }
+});
+
+test("conversation_qualified_overviews_delegate_to_the_typed_path", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedCheckIn(f.db, personC, { text: "Today update", at: "2026-10-23T09:00:00.000Z" });
+    const log: Array<{ text: string; context: IntentContext }> = [];
+    const parseIntent = parser(log, {
+      "Tell me about David today":
+        readIntent("records", { kind: "names", names: ["David"] }, { relativeDay: "today" }),
+      "What do you know about David lately?":
+        readIntent("records", { kind: "names", names: ["David"] }),
+    });
+    const today = await chatWith(parseIntent, { text: "Tell me about David today" });
+    assert.equal(today.errorCode, undefined);
+    assert.equal(resultPage(today.result).total, 1);
+    assert.deepEqual(resultWindows(today.result).map((window) => [window.from, window.through]), [["2026-10-23", "2026-10-23"]]);
+    assert.equal(log.length, 1, "a time-qualified overview is delegated, not resolved as a name");
+    assert.equal(log[0].text, "Tell me about David today");
+
+    const lately = await chatWith(parseIntent, { text: "What do you know about David lately?" });
+    assert.equal(lately.errorCode, undefined);
+    assert.equal(expectKind(lately.result, "records").page.total, 1);
+    assert.equal(log.length, 2);
+
+    const delegated = await chatWith(async () => null, { text: "Tell me about David today" });
+    assert.equal(delegated.result, null);
+    assert.equal(delegated.errorCode, "unsupported", "an unparsed qualified overview is never a false missing person");
+  } finally { await f.close(); }
+});
+
+test("conversation_identity_replays_by_request_id", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedCheckIn(f.db, personC, { text: "Submitted the audit report", at: "2026-10-22T15:00:00.000Z" });
+    const requestId = randomUUID();
+    const parseIntent = async (): Promise<ReadIntent | null> => {
+      assert.fail("identity preflight must not call the model");
+    };
+    const first = await chatWith(parseIntent, { requestId, text: "who is David?" });
+    assert.equal(expectKind(first.result, "records").page.total, 1);
+    const replay = await chatWith(parseIntent, {
+      conversationId: first.conversationId,
+      requestId,
+      text: "who is David?",
+    });
+    assert.equal(replay.turnId, first.turnId);
+    assert.equal(replay.reply, first.reply);
+    assert.equal(expectKind(replay.result, "records").page.total, 1);
+    assert.equal(await turnCount(f.db), 2, "an identity retry replays without adding turns");
+  } finally { await f.close(); }
+});
+
+test("conversation_identity_rehydrates_stale_after_a_new_record", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedCheckIn(f.db, personC, { text: "First update", at: "2026-10-22T15:00:00.000Z" });
+    const parseIntent = async (): Promise<ReadIntent | null> => {
+      assert.fail("identity preflight must not call the model");
+    };
+    const identity = await chatWith(parseIntent, { text: "who is David?" });
+    assert.equal(resultPage(identity.result).total, 1);
+
+    await seedCheckIn(f.db, personC, { text: "Second update", at: "2026-10-23T09:00:00.000Z" });
+    const service = await chat();
+    const view = await service.loadAdminOttoThread(adminAccess, identity.conversationId, { now: () => NOW });
+    assert.equal(view.resultStatus, "stale");
+    assert.equal(view.result, null);
+    assert.equal(view.turns[view.turns.length - 1].text, identity.reply);
+  } finally { await f.close(); }
+});
+
+test("conversation_message_turn_preserves_a_pending_identity_choice", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personB, name: "Sam Lee" });
+    await seedPerson(f.db, { id: personC, name: "Sam Lee" });
+    const parseIntent = async (): Promise<ReadIntent | null> => {
+      assert.fail("conversation, identity, and choice turns must not call the model");
+    };
+    const ambiguous = await chatWith(parseIntent, { text: "who is Sam?" });
+    assert.equal(ambiguous.errorCode, "ambiguous");
+    const hi = await chatWith(parseIntent, {
+      conversationId: ambiguous.conversationId,
+      text: "Hi",
+    });
+    assert.equal(hi.result, null);
+    assert.equal(hi.errorCode, undefined);
+
+    const thread = await rows<{ pending_resolution: unknown; last_intent: unknown }>(f.db,
+      "select pending_resolution, last_intent from work_admin_otto_threads where id = $1",
+      [ambiguous.conversationId]);
+    assert.ok(thread[0]?.pending_resolution, "a message turn preserves the pending choice");
+    assert.ok(thread[0]?.last_intent, "a message turn preserves the last read intent");
+
+    const chosen = await chatWith(parseIntent, {
+      conversationId: ambiguous.conversationId,
+      text: "Sam Lee",
+      choicePersonId: personB,
+    });
+    assert.equal(chosen.errorCode, undefined);
+    assert.equal(expectKind(chosen.result, "records").windows[0].personId, personB);
   } finally { await f.close(); }
 });
 

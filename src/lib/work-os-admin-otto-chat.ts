@@ -36,11 +36,14 @@ import type {
 } from "@/modules/work-os/admin-otto/contracts";
 
 /**
- * Admin Otto's read-only conversational runner. The model classifies a bounded
- * intent; this module owns the actor/organization context, resolves names
- * against the active authorized roster, executes the typed Task 5 readers, and
- * writes only thread/turn bookkeeping. It has no mutation, proposal, private
- * employee-chat, memory, draft, URL, SQL or host-execution path.
+ * Admin Otto's read-only conversational runner. A deterministic preflight
+ * answers greetings, thanks, capability/self-identity questions and clean
+ * single-person identity questions before any model call; qualified overviews
+ * fall through to the bounded intent parser. This module owns the
+ * actor/organization context, resolves names against the active authorized
+ * roster, executes the typed Task 5 readers, and writes only thread/turn
+ * bookkeeping. It has no mutation, proposal, private employee-chat, memory,
+ * draft, URL, SQL or host-execution path.
  */
 
 export type AdminOttoChatDeps = {
@@ -1620,8 +1623,10 @@ export async function executeAdminOttoChat(
 
   // Ordinary conversation is answered deterministically before any model call.
   // Identity questions read only the authorized directory and the existing
-  // recent-records projection; greetings/thanks/capability questions persist a
-  // bounded message ref with no result card and no error code.
+  // recent-records projection; greetings/thanks/capability/self questions
+  // persist a bounded message ref with no result card and no error code. A
+  // qualified overview that is not a clean identity name returns null from the
+  // matcher and stays with the normal typed parser.
   const conversation = matchAdminOttoConversation(request.text);
   if (conversation) {
     const turnNumber = thread ? Number(thread.context_version) : 0;

@@ -1,17 +1,21 @@
 /**
  * Deterministic conversational preflight for Admin Otto.
  *
- * Greetings, thanks, capability questions and person-identity questions are
- * answered from server-owned text before any model call. The matcher only
- * classifies the administrator's words; it never selects a mutation, a tool, a
- * URL, an employee-chat path or a provider. Identity questions produce a name
- * for the existing authorized directory resolver and nothing else.
+ * Greetings, thanks, capability/self-identity questions and clean person
+ * identity questions are answered from server-owned text before any model
+ * call. The matcher only classifies the administrator's words; it never selects
+ * a mutation, a tool, a URL, an employee-chat path or a provider. Identity
+ * questions produce a name for the existing authorized directory resolver and
+ * nothing else. Qualified overviews that cannot be reduced to a clean name
+ * (time windows, self references, extra instructions) are deliberately left to
+ * the normal typed parser rather than becoming a false missing-person card.
  */
 
 export type AdminOttoConversationMatch =
   | { kind: "greeting" }
   | { kind: "thanks" }
   | { kind: "capability"; followUp: boolean }
+  | { kind: "self" }
   | { kind: "identity"; name: string };
 
 export type AdminOttoConversationalMatch = Exclude<AdminOttoConversationMatch, { kind: "identity" }>;
@@ -26,10 +30,22 @@ const MAX_MESSAGE_LENGTH = 2_000;
 
 const MESSAGE_KEYS = ["v", "kind", "text"] as const;
 
-const GREETING = /^(?:hi|hello|hey|howdy|yo|good\s+(?:morning|afternoon|evening)|morning|afternoon|evening)(?:[,\s]+(?:there|otto|admin\s+otto))?$/u;
-const THANKS = /^(?:thanks|thank\s+you|thx|ty)(?:[,\s]+(?:a\s+lot|so\s+much|very\s+much|again|otto|admin\s+otto))?$/u;
+const GREETING = /^(?:hi|hello|hey|howdy|yo|good\s+(?:morning|afternoon|evening)|morning|afternoon|evening)(?:[,\s]+(?:there|otto|admin\s+otto)){0,2}$/u;
+const THANKS = /^(?:thanks|thank\s+you|thx|ty)(?:[,\s]+(?:a\s+lot|so\s+much|very\s+much|again))?(?:[,\s]+(?:otto|admin\s+otto))?$/u;
 const CAPABILITY_MORE = /^(?:what\s+else(?:\s+can\s+you\s+do|\s+can\s+i\s+ask|\s+is\s+there)?|anything\s+else|more\s+examples?)$/u;
 const CAPABILITY = /^(?:help|what\s+can\s+you\s+do|what\s+do\s+you\s+do|what\s+can\s+i\s+ask(?:\s+you)?|what\s+are\s+(?:your\s+)?capabilities|what\s+are\s+you\s+able\s+to\s+do|how\s+does\s+(?:this|it)\s+work(?:\s+then)?|how\s+do\s+you\s+work)$/u;
+/** Assistant identity, not an employee name. */
+const SELF = /^(?:tell\s+me\s+(?:(?:anything|something|more|a\s+bit|a\s+little)\s+)?about\s+(?:yourself|you)|who\s+are\s+you|what\s+are\s+you)$/u;
+
+/** Benign leading filler that does not narrow or change the directory query. */
+const LEADING_ABOUT = /^(?:(?:anything|something|more|a\s+bit|a\s+little)\s+about|about)\s+/iu;
+/** Benign request suffixes; they address the assistant, not the employee. */
+const TRAILING_REQUEST = /(?:[,\s]+(?:please|for\s+me))+$/iu;
+/** Words that make an overview qualified rather than a clean identity name.
+ * They must never be persisted as part of an employee name. */
+const QUALIFIER_WORD = /\b(?:anything|something|about|please|today|yesterday|tomorrow|tonight|now|lately|recently|so\s+far|this\s+week|last\s+week|this\s+month|last\s+month)\b/iu;
+/** Self references are assistant/capability subjects, never employee names. */
+const SELF_WORD = /\b(?:yourself|myself|ourselves|me|you|us)\b/iu;
 
 /** A polite lead-in is still the same request: "Sure, what else can you do?". */
 const LEAD_IN = /^(?:sure|ok|okay|yes|yeah|yep|cool|great|alright|all right|got it|sounds good|please)[,\s]+/iu;
@@ -39,7 +55,7 @@ const IDENTITY_PATTERNS = [
   /^do\s+you\s+know\s+(.+)$/iu,
   /^who\s+is\s+(.+)$/iu,
   /^who's\s+(.+)$/iu,
-  /^tell\s+me\s+about\s+(.+)$/iu,
+  /^tell\s+me\s+(?:(?:anything|something|more|a\s+bit|a\s+little)\s+)?about\s+(.+)$/iu,
   /^what\s+do\s+you\s+know\s+about\s+(.+)$/iu,
   /^what\s+can\s+you\s+tell\s+me\s+about\s+(.+)$/iu,
 ];
@@ -76,10 +92,24 @@ function trimPunctuation(value: string): string {
 }
 
 function cleanName(value: string): string | null {
-  const name = value.replace(/\s+/g, " ").trim();
+  let name = value.replace(/\s+/g, " ").trim();
+  for (let index = 0; index < 2; index += 1) {
+    const next = name.replace(LEADING_ABOUT, "").trim();
+    if (next === name) break;
+    name = next;
+  }
+  for (let index = 0; index < 2; index += 1) {
+    const next = name.replace(TRAILING_REQUEST, "").trim();
+    if (next === name) break;
+    name = next;
+  }
   if (!name || name.length > MAX_NAME_LENGTH) return null;
   if (name.normalize("NFC") !== name) return null;
   if (UUID.test(name)) return null;
+  // A qualified overview or a self reference is not an employee name. Return
+  // null so executeAdminOttoChat delegates to the normal typed parser instead
+  // of resolving a literal phrase such as "David today" as missing.
+  if (QUALIFIER_WORD.test(name) || SELF_WORD.test(name)) return null;
   if (!PERSON_NAME.test(name)) return null;
   if (NON_PERSON.test(name) || COMPOUND.test(name) || UNSAFE_NAME.test(name) || POSSESSIVE.test(name)) return null;
   return name;
@@ -106,6 +136,7 @@ export function matchAdminOttoConversation(text: unknown): AdminOttoConversation
   if (THANKS.test(lower)) return { kind: "thanks" };
   if (CAPABILITY_MORE.test(lower)) return { kind: "capability", followUp: true };
   if (CAPABILITY.test(lower)) return { kind: "capability", followUp: false };
+  if (SELF.test(lower)) return { kind: "self" };
   const name = identityName(value);
   return name ? { kind: "identity", name } : null;
 }
@@ -120,6 +151,12 @@ const THANKS_REPLIES = [
   "You're welcome. Ask for another read whenever you need one.",
   "Happy to help. I can keep looking up tasks, records, recaps, or workdays.",
   "Anytime. If you want another read, name someone or say \"the team.\"",
+] as const;
+
+const SELF_REPLIES = [
+  "I'm Admin Otto, a read-only assistant for Work OS. I can look up unfinished or overdue tasks, work records, reviewed recaps, and workdays — for example, \"Show Alex's unfinished tasks.\" I can't change, message, approve, or run anything.",
+  "I'm Otto, the read-only administration assistant. I answer from existing Work OS records: tasks, updates and EOD text, reviewed recaps, and workdays. Try \"What did David report yesterday?\"",
+  "I'm Admin Otto. I only read existing Work OS records — open tasks, work records, reviewed recaps, and workdays. Ask about a person or the team, and I'll show what's already on file.",
 ] as const;
 
 const CAPABILITY_REPLIES = [
@@ -144,6 +181,7 @@ function variant(replies: readonly string[], turnNumber: number): string {
 export function adminOttoConversationReply(match: AdminOttoConversationalMatch, turnNumber: number): string {
   if (match.kind === "greeting") return variant(GREETING_REPLIES, turnNumber);
   if (match.kind === "thanks") return variant(THANKS_REPLIES, turnNumber);
+  if (match.kind === "self") return variant(SELF_REPLIES, turnNumber);
   return match.followUp
     ? variant(CAPABILITY_FOLLOW_UP_REPLIES, turnNumber)
     : variant(CAPABILITY_REPLIES, turnNumber);
