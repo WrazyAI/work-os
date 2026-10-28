@@ -4673,6 +4673,9 @@ export default function App() {
     if (bootPhase === "boot:vault_failed") {
       diagnostics.error("vault.gate.failed", "The local vault gate failed; the retry screen is up", {
         code: vaultFailure?.requiresReset ? "unlock_failed" : vaultFailure?.confirmationRequired ? "confirmation_required" : "unknown",
+        message: vaultFailure?.message,
+        requiresReset: vaultFailure?.requiresReset === true,
+        confirmationRequired: vaultFailure?.confirmationRequired === true,
       });
     }
   }, [bootPhase, vaultFailure?.confirmationRequired, vaultFailure?.requiresReset]);
