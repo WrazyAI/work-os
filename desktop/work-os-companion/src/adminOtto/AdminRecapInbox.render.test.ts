@@ -17,7 +17,7 @@ const render = (props: Partial<Parameters<typeof AdminRecapInbox>[0]> = {}) =>
 describe("admin recap inbox", () => {
   it("inbox_initial_loading_is_not_an_empty_or_failed_record", () => {
     const html = render();
-    expect(html).toContain("Loading reviewed recaps");
+    expect(html).toContain("Getting reviewed recaps");
     expect(html).not.toContain("No reviewed recaps");
     expect(html).not.toContain("Couldn't");
     expect(html).toContain('aria-busy="true"');
@@ -32,6 +32,10 @@ describe("admin recap inbox", () => {
     expect(html).toContain("Listen");
     expect(html).toContain("Showing 1 of 1");
     expect(html).not.toContain("Load more");
+    // Order-facing actions share one horizontal card footer instead of a
+    // stacked action column.
+    expect(html).toContain('class="admin-otto-inbox-actions"');
+    expect(html).toContain("Not listened, unread");
     // A row is a record, never an employee decision surface.
     expect(html).not.toMatch(/Looks right|Looks good|Add or correct|Confirm recap|Clock in|Clock out/);
   });
@@ -54,15 +58,15 @@ describe("admin recap inbox", () => {
     expect(empty).toContain("No reviewed recaps yet");
     expect(empty).not.toContain("Couldn&#x27;t load");
     const failed = render({ initialError: "The inbox could not be reached." });
-    expect(failed).toContain("Couldn&#x27;t load reviewed recaps");
-    expect(failed).toContain("Retry");
+    expect(failed).toContain("Otto couldn&#x27;t load the recaps");
+    expect(failed).toContain("Try again");
     expect(failed).not.toContain("No reviewed recaps yet");
   });
 
   it("keeps existing records visible while the inbox is refreshing", () => {
     const html = render({ initialPage: fixtureInboxPage({ count: 2, total: 20 }), refreshing: true });
     expect(html).toContain("Synthetic Ada");
-    expect(html).toContain("Refreshing");
+    expect(html).toContain("Checking for new recaps");
     expect(html).toContain('aria-busy="true"');
     expect(html).not.toContain("Loading reviewed recaps");
   });

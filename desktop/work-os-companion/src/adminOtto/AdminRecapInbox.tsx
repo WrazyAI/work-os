@@ -98,8 +98,8 @@ export function AdminRecapInbox({
           <h3>Reviewed recaps</h3>
           <p>
             {page
-              ? `${page.total} reviewed recap${page.total === 1 ? "" : "s"} from the last 30 days`
-              : "Confirmed or corrected recaps from the administration inbox"}
+              ? `${page.total} recap${page.total === 1 ? "" : "s"} from the last 30 days`
+              : "Confirmed or corrected by employees"}
           </p>
         </div>
         <button
@@ -120,23 +120,23 @@ export function AdminRecapInbox({
           <span className="admin-otto-skeleton" aria-hidden="true" />
           <span className="admin-otto-skeleton" aria-hidden="true" />
           <span className="admin-otto-skeleton" aria-hidden="true" />
-          <p>Loading reviewed recaps</p>
+          <p>Getting reviewed recaps…</p>
         </div>
       ) : null}
 
-      {refreshing ? <p className="admin-otto-inbox-refreshing" role="status">Refreshing reviewed recaps…</p> : null}
+      {refreshing ? <p className="admin-otto-inbox-refreshing" role="status">Checking for new recaps…</p> : null}
 
       {initialFailed ? (
         <div className="admin-otto-inbox-error" role="alert">
-          <p>{"Couldn't load reviewed recaps."} {presentedError}</p>
-          <button type="button" className="admin-otto-secondary" onClick={() => void controller.refresh()}>Retry</button>
+          <p>{"Otto couldn't load the recaps."} {presentedError}</p>
+          <button type="button" className="admin-otto-secondary" onClick={() => void controller.refresh()}>Try again</button>
         </div>
       ) : null}
 
       {empty ? (
         <div className="admin-otto-empty">
           <p>No reviewed recaps yet.</p>
-          <p className="admin-otto-quiet">When an employee confirms or corrects an interval recap, it appears here. Nothing is waiting.</p>
+          <p className="admin-otto-quiet">When someone confirms or corrects a recap, it appears here.</p>
         </div>
       ) : null}
 
@@ -155,22 +155,19 @@ export function AdminRecapInbox({
               return (
                 <li key={item.deliveryId}>
                   <article className="admin-otto-inbox-item" aria-label={`Reviewed recap for ${recap.person.displayName}`}>
-                    <div className="admin-otto-inbox-item-main">
-                      <div className="admin-otto-inbox-item-head">
-                        <strong>{recap.person.displayName}</strong>
-                        <span className={`admin-otto-review-status is-${recap.reviewStatus}`}>
-                          {adminReviewStatusLabel(recap.reviewStatus)}
-                        </span>
-                      </div>
-                      <p className="admin-otto-inbox-when">{adminRecapWindow(recap)}</p>
-                      {recap.original.headline ? <p className="admin-otto-inbox-headline">{recap.original.headline}</p> : null}
-                      {recap.original.detail ? <p className="admin-otto-inbox-detail">{recap.original.detail}</p> : null}
-                      <p className="admin-otto-inbox-meta">
-                        {item.listenedAt ? <span>Listened</span> : <span>Not listened yet</span>}
-                        {item.seenAt ? <span>Seen</span> : <span>Unread</span>}
-                      </p>
-                    </div>
-                    <div className="admin-otto-inbox-actions">
+                    <header className="admin-otto-inbox-item-head">
+                      <strong>{recap.person.displayName}</strong>
+                      <span className={`admin-otto-review-status is-${recap.reviewStatus}`}>
+                        {adminReviewStatusLabel(recap.reviewStatus)}
+                      </span>
+                    </header>
+                    <p className="admin-otto-inbox-when">{adminRecapWindow(recap)}</p>
+                    {recap.original.headline ? <p className="admin-otto-inbox-headline">{recap.original.headline}</p> : null}
+                    {recap.original.detail ? <p className="admin-otto-inbox-detail">{recap.original.detail}</p> : null}
+                    <p className="admin-otto-inbox-meta">
+                      {item.listenedAt ? "Listened" : "Not listened"}, {item.seenAt ? "seen" : "unread"}
+                    </p>
+                    <footer className="admin-otto-inbox-actions">
                       <button
                         type="button"
                         className="admin-otto-secondary"
@@ -188,7 +185,7 @@ export function AdminRecapInbox({
                         {listening ? <Square size={12} aria-hidden="true" /> : <Volume2 size={14} aria-hidden="true" />}
                         {listening ? "Stop" : "Listen"}
                       </button>
-                    </div>
+                    </footer>
                   </article>
                 </li>
               );

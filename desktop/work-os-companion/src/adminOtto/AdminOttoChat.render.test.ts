@@ -24,7 +24,13 @@ describe("admin Otto chat", () => {
     expect(html).toContain('role="tablist"');
     expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*>Chat/);
     expect(html).toContain("Recaps");
-    expect(html).toContain("Read-only");
+    // The employee header is the authority: one row with the shared pane title,
+    // presence dot, quiet admin subtitle, peer tabs, and close action.
+    expect(html).toContain("workos-chat-head admin-otto-head");
+    expect(html).toContain("conversation-pane-title");
+    expect(html).toContain("Administration, read-only");
+    expect(html).not.toContain("WORK OS · ADMINISTRATION");
+    expect(html).not.toContain("admin-otto-tabs-row");
     expect(html).toContain("chat-composer");
     expect(html).not.toContain("Clock in");
     expect(html).not.toContain("Clock out");

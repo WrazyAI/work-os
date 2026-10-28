@@ -62,13 +62,12 @@ export function AdminRecapView({
   return (
     <article className="admin-otto-recap" aria-label={`Reviewed recap for ${recap.person.displayName}`}>
       <header className="admin-otto-recap-head">
-        <div>
-          <p className="admin-otto-eyebrow">Reviewed recap</p>
+        <div className="admin-otto-recap-title">
+          <p className="admin-otto-recap-kicker">Reviewed recap</p>
           <h3>{recap.person.displayName}</h3>
           <p className="admin-otto-recap-when">
             <time dateTime={recap.windowStart}>{adminRecapWindow(recap)}</time>
-            <span aria-hidden="true"> · </span>
-            <span>{recap.timezone}</span>
+            <span>, {recap.timezone}</span>
           </p>
         </div>
         <span className={`admin-otto-review-status is-${recap.reviewStatus}`}>
@@ -87,19 +86,19 @@ export function AdminRecapView({
               {finished
                 ? "Read complete"
                 : preparing
-                  ? (playback?.slow ? "Still preparing the read…" : "Preparing the read…")
-                  : "Reading this reviewed recap"}
+                  ? (playback?.slow ? "Taking longer than usual" : "Getting your recap…")
+                  : "Otto is reading"}
             </span>
             {listening ? (
               <button
                 type="button"
                 className="admin-otto-listen is-listening"
-                aria-label={preparing ? "Cancel reading the recap" : `Stop reading the recap for ${recap.person.displayName}`}
+                aria-label={preparing && playback?.slow ? "Cancel reading the recap" : `Stop reading the recap for ${recap.person.displayName}`}
                 aria-pressed="true"
                 onClick={() => onListen(recap)}
               >
                 <Square size={12} aria-hidden="true" />
-                {preparing ? "Cancel" : "Stop"}
+                {preparing && playback?.slow ? "Cancel" : "Stop"}
               </button>
             ) : null}
           </div>
@@ -140,25 +139,27 @@ export function AdminRecapView({
         <p className="admin-otto-quiet">
           Reviewed by the employee. Observed activity is context, not task completion or attendance.
         </p>
-        {!listening ? (
-          <button
-            type="button"
-            className="admin-otto-listen"
-            aria-label={finished ? `Listen again to the recap for ${recap.person.displayName}` : `Listen to the recap for ${recap.person.displayName}`}
-            aria-pressed={false}
-            onClick={() => onListen(recap)}
-          >
-            <Volume2 size={14} aria-hidden="true" />
-            {finished ? "Listen again" : "Listen"}
-          </button>
-        ) : null}
-        {recordUrl ? (
-          <a
-            className="admin-otto-record-link"
-            href={recordUrl}
-            onClick={(event) => { event.preventDefault(); onOpenRecord(recordUrl); }}
-          >Open record</a>
-        ) : null}
+        <div className="admin-otto-recap-actions">
+          {!listening ? (
+            <button
+              type="button"
+              className="admin-otto-listen"
+              aria-label={finished ? `Listen again to the recap for ${recap.person.displayName}` : `Listen to the recap for ${recap.person.displayName}`}
+              aria-pressed={false}
+              onClick={() => onListen(recap)}
+            >
+              <Volume2 size={14} aria-hidden="true" />
+              {finished ? "Listen again" : "Listen"}
+            </button>
+          ) : null}
+          {recordUrl ? (
+            <a
+              className="admin-otto-record-link"
+              href={recordUrl}
+              onClick={(event) => { event.preventDefault(); onOpenRecord(recordUrl); }}
+            >Open record</a>
+          ) : null}
+        </div>
       </footer>
     </article>
   );

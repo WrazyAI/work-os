@@ -600,20 +600,11 @@ export function AdminOttoChat({
   return (
     <ConversationSurface surface="in-app" open ariaLabel="Admin Otto" className="admin-otto-surface">
       <section className="chat-surface admin-otto-sheet" role="dialog" aria-label="Admin Otto" data-admin-otto-surface>
-        <header className="admin-otto-head">
-          <div className="admin-otto-head-copy">
-            <span className="admin-otto-eyebrow">Work OS · Administration</span>
-            <h2>Ask Otto about the team</h2>
-            <span className="admin-otto-readonly">Read-only</span>
-          </div>
-          {onClose ? (
-            <button type="button" className="admin-otto-close" aria-label="Close admin Otto" title="Close" onClick={onClose}>
-              <X size={16} aria-hidden="true" />
-            </button>
-          ) : null}
-        </header>
-
-        <div className="admin-otto-tabs-row">
+        <header className="workos-chat-head admin-otto-head">
+          <span className="admin-otto-head-title">
+            <span className="conversation-pane-title">Otto</span>
+            <span className="admin-otto-head-sub">Administration, read-only</span>
+          </span>
           <ChatTabs
             tabs={tabs}
             active={state.tab}
@@ -624,27 +615,31 @@ export function AdminOttoChat({
             }}
             ariaLabel="Admin Otto views"
           />
-          <p className="admin-otto-readonly-note">
-            Otto can read tasks, records, workdays and reviewed recaps. It cannot change employee data.
-          </p>
-        </div>
+          <span className="progress-header-actions">
+            {onClose ? (
+              <button type="button" className="admin-otto-close" aria-label="Close admin Otto" title="Close" onClick={onClose}>
+                <X size={16} aria-hidden="true" />
+              </button>
+            ) : null}
+          </span>
+        </header>
 
         {state.tab === "chat" ? (
           <>
             <div className="conversation-scroll-region admin-otto-thread" role="log" aria-live="polite" aria-label="Conversation">
-              {chat.hydration === "loading" ? <p className="admin-otto-status" role="status">Loading conversation…</p> : null}
+              {chat.hydration === "loading" ? <p className="admin-otto-status" role="status">Opening the conversation…</p> : null}
               {chat.hydration === "failed" ? (
                 <div className="admin-otto-error" role="alert">
-                  <p>{chat.error ?? "The conversation could not be loaded."}</p>
+                  <p>{chat.error ?? "Otto couldn't load this conversation."}</p>
                   <button type="button" className="admin-otto-secondary" onClick={() => { if (chat.conversationId) void controller.open(chat.conversationId); }}>
-                    Retry loading conversation
+                    Try again
                   </button>
                 </div>
               ) : null}
               {!chat.turns.length && chat.hydration === "idle" ? (
                 <div className="admin-otto-welcome">
-                  <p>Ask about unfinished work, a person&apos;s day, an EOD report, or a reviewed recap.</p>
-                  <p className="admin-otto-quiet">Answers are read-only records. Nothing here changes employee data.</p>
+                  <p>Ask about work, people, EOD reports, or recaps.</p>
+                  <p className="admin-otto-quiet">Answers come from records you can already open. Nothing here changes employee data.</p>
                 </div>
               ) : null}
               {chat.turns.map((turn, index) => (
@@ -671,14 +666,14 @@ export function AdminOttoChat({
                 </ChatTurn>
               ))}
               {chat.error && chat.hydration === "idle" ? <p className="admin-otto-error" role="alert">{chat.error}</p> : null}
-              {chat.busy ? <p className="admin-otto-status" role="status">Otto is reading the record…</p> : null}
+              {chat.busy ? <p className="admin-otto-status" role="status">Otto is reading</p> : null}
             </div>
             <div className="admin-otto-composer">
               <WorkOsPromptBar
                 value={chat.draft}
                 onChange={(next) => controller.setDraft(next)}
                 onSend={send}
-                placeholder="Ask about unfinished work, a person's day, or a reviewed recap…"
+                placeholder="Ask about work, people, or recaps…"
                 ariaLabel="Ask Otto about the team"
                 canSend={!!chat.draft.trim() && chat.hydration === "idle"}
                 busy={chat.busy}
@@ -693,15 +688,19 @@ export function AdminOttoChat({
             {!activeRecap && playback && (playback.status === "loading" || playback.status === "playing") ? (
               <section className="admin-otto-reading admin-otto-inbox-reading" aria-label="Reading aloud">
                 <div className="admin-otto-reading-head">
-                  <span>{playback.status === "loading" ? (playback.slow ? "Still preparing the read…" : "Preparing the read…") : "Reading this reviewed recap"}</span>
+                  <span>
+                    {playback.status === "loading"
+                      ? (playback.slow ? "Taking longer than usual" : "Getting your recap…")
+                      : "Otto is reading"}
+                  </span>
                   <button
                     type="button"
                     className="admin-otto-listen is-listening"
-                    aria-label={playback.status === "loading" ? "Cancel reading the reviewed recap" : "Stop reading the reviewed recap"}
+                    aria-label={playback.status === "loading" && playback.slow ? "Cancel reading the recap" : "Stop reading the recap"}
                     aria-pressed="true"
                     onClick={() => onStopListening?.()}
                   >
-                    {playback.status === "loading" ? "Cancel" : "Stop"}
+                    {playback.status === "loading" && playback.slow ? "Cancel" : "Stop"}
                   </button>
                 </div>
                 {playback.lines.length ? (
@@ -716,7 +715,7 @@ export function AdminOttoChat({
               </section>
             ) : null}
             {!activeRecap && playback?.status === "finished" ? (
-              <p className="admin-otto-inbox-refreshing" role="status">Read complete. The words stay in the recap.</p>
+              <p className="admin-otto-inbox-refreshing" role="status">Read complete. The recap is still here.</p>
             ) : null}
             {arrival && arrival.count > 0 ? (
               <section className="admin-otto-arrival" aria-label="Recap arrival" role="status">

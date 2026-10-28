@@ -22,6 +22,9 @@ describe("admin recap view", () => {
   it("admin_view_has_no_employee_confirm_controls", () => {
     const html = render();
     expect(html).toContain("Corrected by employee");
+    expect(html).toContain("admin-otto-recap-kicker");
+    expect(html).toContain("Reviewed recap");
+    expect(html).not.toContain("admin-otto-eyebrow");
     expect(html).toContain("Original recap");
     expect(html).toContain("Employee correction");
     expect(html).toContain(reviewed.original.headline);
@@ -84,13 +87,22 @@ describe("admin recap view", () => {
     const preparing = render({
       playback: { status: "loading", intervalId: FIXTURE_REVIEWED_RECAP.intervalId, lines: [], progress: 0, activeIndex: 0, slow: false, error: null },
     }, FIXTURE_REVIEWED_RECAP);
-    expect(preparing).toContain("Preparing the read");
-    expect(preparing).toContain("Cancel");
-    expect(preparing).not.toContain("Stop");
+    expect(preparing).toContain("Getting your recap…");
+    expect(preparing).toContain(">Stop<");
+    expect(preparing).not.toContain("Read complete");
     const slow = render({
       playback: { status: "loading", intervalId: FIXTURE_REVIEWED_RECAP.intervalId, lines: [], progress: 0, activeIndex: 0, slow: true, error: null },
     }, FIXTURE_REVIEWED_RECAP);
-    expect(slow).toContain("Still preparing the read");
+    expect(slow).toContain("Taking longer than usual");
+    expect(slow).toContain(">Cancel<");
+    const playing = render({
+      playback: {
+        status: "playing", intervalId: FIXTURE_REVIEWED_RECAP.intervalId,
+        lines: FIXTURE_REVIEWED_RECAP.speechLines, progress: 0.4, activeIndex: 1, slow: false, error: null,
+      },
+    }, FIXTURE_REVIEWED_RECAP);
+    expect(playing).toContain("Otto is reading");
+    expect(playing).toContain(">Stop<");
     const finished = render({
       playback: {
         status: "finished", intervalId: FIXTURE_REVIEWED_RECAP.intervalId,

@@ -1,6 +1,8 @@
 import { useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
 import { Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Setting } from "../Setting";
+import { SettingsChoice } from "../SettingsChoice";
 import type {
   FollowSettings,
   OttoScope,
@@ -525,9 +527,8 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
       <section className="settings-panel" aria-busy={state.loadingPreferences || (state.draft.mode === "selected" && state.loadingDirectory)}>
         <div className="settings-follow">
           <p className="settings-group-note">
-            Choose which reviewed recaps alert you here. Following never changes what you can open.
-            Following filters never limit on-demand queries by name. Recap alerts are separate from the
-            voice this device reads them in.
+            Choose which reviewed recaps alert you. Following changes alerts only. It never changes
+            what you can open, and asking about someone by name still works.
           </p>
 
           {state.loadingPreferences && !preferences ? (
@@ -580,39 +581,21 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
                 </div>
               ) : null}
 
-              <fieldset className="settings-follow-choice">
-                <legend>Who should send recap alerts</legend>
-                <label className={`settings-follow-option${state.draft.mode === "all" ? " is-selected" : ""}`}>
-                  <input
-                    type="radio"
-                    name={`admin-otto-follow-mode:${scope.userId}`}
-                    value="all"
-                    aria-label="All active employees"
-                    checked={state.draft.mode === "all"}
-                    disabled={state.saving}
-                    onChange={() => controller.setMode("all")}
-                  />
-                  <span>
-                    <b>All active employees</b>
-                    <small>Every active employee, including people who join later.</small>
-                  </span>
-                </label>
-                <label className={`settings-follow-option${state.draft.mode === "selected" ? " is-selected" : ""}`}>
-                  <input
-                    type="radio"
-                    name={`admin-otto-follow-mode:${scope.userId}`}
-                    value="selected"
-                    aria-label="Selected employees"
-                    checked={state.draft.mode === "selected"}
-                    disabled={state.saving}
-                    onChange={() => controller.setMode("selected")}
-                  />
-                  <span>
-                    <b>Selected employees</b>
-                    <small>Only the people you tick. Selected none means no recap alerts.</small>
-                  </span>
-                </label>
-              </fieldset>
+              <Setting
+                title="Recap alerts"
+                detail="All active employees, including people who join later, or only the people you choose."
+              >
+                <SettingsChoice<"all" | "selected">
+                  label="Who should send recap alerts"
+                  value={state.draft.mode}
+                  disabled={state.saving}
+                  onChange={(mode) => controller.setMode(mode)}
+                  options={[
+                    { value: "all", label: "All" },
+                    { value: "selected", label: "Selected" },
+                  ]}
+                />
+              </Setting>
 
               {state.draft.mode === "selected" ? (
                 <div className="settings-follow-selected">
@@ -623,7 +606,7 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
                       Saved choices need attention before the alert count can be confirmed.
                     </p>
                   ) : selectedActiveCount === 0 ? (
-                    <p className="settings-follow-alert" role="status">
+                    <p className="settings-follow-state" role="status">
                       <b>No recap alerts.</b> You will not receive reviewed recap alerts for any employee.
                     </p>
                   ) : (
@@ -667,42 +650,40 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
                           onChange={(event) => controller.setSearch(event.target.value)}
                         />
                       </label>
-                      <div className="settings-follow-list-wrap">
-                        <ul className="settings-follow-list" aria-label="Employees who can send recap alerts">
-                          {inactiveSaved.map((person) => (
-                            <li key={person.id} className="is-inactive">
-                              <label className="settings-follow-person">
-                                <input type="checkbox" checked disabled onChange={() => undefined} />
-                                <span>
-                                  <b>{person.displayName || "Saved employee"}</b>
-                                  <small>No longer active · excluded from delivery</small>
-                                </span>
-                              </label>
-                            </li>
-                          ))}
-                          {activeMatches.map((person) => (
-                            <li key={person.id}>
-                              <label className="settings-follow-person">
-                                <input
-                                  type="checkbox"
-                                  checked={state.draft.selectedPersonIds.includes(person.id)}
-                                  disabled={state.saving}
-                                  onChange={() => controller.togglePerson(person.id)}
-                                />
-                                <span>
-                                  <b>{person.displayName || "Unnamed employee"}</b>
-                                  <small>{person.timezone || "Timezone unavailable"}</small>
-                                </span>
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                        {!activeMatches.length && !inactiveSaved.length ? (
-                          <p className="settings-follow-empty">
-                            {search ? "No loaded employees match this search." : "No active employees are in this directory yet."}
-                          </p>
-                        ) : null}
-                      </div>
+                      <ul className="settings-follow-list" aria-label="Employees who can send recap alerts">
+                        {inactiveSaved.map((person) => (
+                          <li key={person.id} className="is-inactive">
+                            <label className="settings-follow-person">
+                              <input type="checkbox" checked disabled onChange={() => undefined} />
+                              <span>
+                                <b>{person.displayName || "Saved employee"}</b>
+                                <small>No longer active, excluded from delivery</small>
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                        {activeMatches.map((person) => (
+                          <li key={person.id}>
+                            <label className="settings-follow-person">
+                              <input
+                                type="checkbox"
+                                checked={state.draft.selectedPersonIds.includes(person.id)}
+                                disabled={state.saving}
+                                onChange={() => controller.togglePerson(person.id)}
+                              />
+                              <span>
+                                <b>{person.displayName || "Unnamed employee"}</b>
+                                <small>{person.timezone || "Timezone unavailable"}</small>
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      {!activeMatches.length && !inactiveSaved.length ? (
+                        <p className="settings-follow-empty">
+                          {search ? "No loaded employees match this search." : "No active employees are in this directory yet."}
+                        </p>
+                      ) : null}
                       <div className="settings-follow-directory-foot">
                         <span className="settings-follow-quiet">
                           {search
@@ -732,15 +713,14 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
                 </div>
               ) : (
                 <p className="settings-follow-note">
-                  All active employees, including new hires, send their reviewed recaps here. Choosing
-                  Selected saves only the employees you tick; choosing none saves an explicit empty list
-                  and never falls back to All.
+                  Choosing Selected saves only the people you tick. Choosing none saves an explicit
+                  empty list, never All.
                 </p>
               )}
 
               <div className="settings-follow-actions">
                 <span className="settings-follow-quiet">
-                  Changes stay as a draft until you choose Save.
+                  Changes stay as a draft until you save.
                 </span>
                 <button
                   type="button"
@@ -762,7 +742,7 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
           ) : null}
 
           <p className="settings-follow-quiet">
-            Follows affect recap alerts only. They do not grant or remove access to any employee record.
+            Recap alerts only. Following never grants or removes access to an employee record.
           </p>
         </div>
       </section>

@@ -312,6 +312,7 @@ describe("admin Otto recap follows", () => {
     const during = renderGroup(deferred);
     expect(during).toMatch(/type="checkbox"[^>]*disabled/);
     expect(during).toMatch(/type="search"[^>]*disabled/);
+    expect(during).toMatch(/role="radio"[^>]*disabled/);
     deferred.togglePerson(second);
     expect(deferred.snapshot().draft.selectedPersonIds).toEqual([first, second]);
 
@@ -356,7 +357,7 @@ describe("admin Otto recap follows", () => {
     const fixture = createAdminOttoFollowFixture({ scenario: "selected-none", persist: false });
     const controller = await ready(fixture);
     expect(controller.snapshot().draft).toMatchObject({ mode: "selected", selectedPersonIds: [] });
-    expect(renderGroup(controller)).toContain("never limit on-demand queries by name");
+    expect(renderGroup(controller)).toContain("asking about someone by name still works");
 
     vi.stubGlobal("window", { location: { search: "" } });
     setDebugSession({
@@ -482,10 +483,18 @@ describe("admin Otto recap follows", () => {
     expect(noMatch).toContain("No loaded employees match");
     expect(noMatch).toContain("0 matches in 120 loaded of 120 employees");
     expect(noMatch).toContain("Save");
-    // Native controls stay keyboard reachable: no negative tab index, and the
-    // group is one two-column content child rather than a stray overlay.
-    expect(noMatch).not.toContain('tabindex="-1"');
+    // The All/Selected choice keeps one radio-group tab stop and arrow-key
+    // semantics, while every checklist control stays natively reachable.
+    expect(noMatch).toContain('role="radiogroup"');
+    expect(noMatch).toMatch(/data-value="selected"[^>]*aria-checked="true"[^>]*tabindex="0"/);
+    expect(noMatch).toMatch(/data-value="all"[^>]*aria-checked="false"[^>]*tabindex="-1"/);
     expect(noMatch).not.toContain('role="dialog"');
+    // The checklist is flat on the Settings surface: no option cards, nested
+    // list card, or second form shell.
+    expect(noMatch).not.toContain("settings-follow-option");
+    expect(noMatch).not.toContain("settings-follow-list-wrap");
+    expect(noMatch).toContain('<div class="settings-follow">');
+    expect(noMatch).toContain("Employees who can send recap alerts");
     const group = noMatch.slice(noMatch.indexOf('<section class="settings-group"'));
     expect(group).toContain('aria-labelledby="settings-follow-title"');
     const body = group.slice(group.indexOf("</header>") + "</header>".length);

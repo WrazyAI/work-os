@@ -87,9 +87,8 @@ describe("admin recap playback events", () => {
       enabled: true,
     });
     const loading = renderView(state.snapshot);
-    expect(loading).toContain("Preparing the read");
-    expect(loading).toContain("Cancel");
-    expect(loading).not.toContain("Stop reading");
+    expect(loading).toContain("Getting your recap…");
+    expect(loading).toContain(">Stop<");
     pendingFetch.finish?.();
     await pending;
     expect(state.snapshot?.status).toBe("playing");
@@ -98,7 +97,7 @@ describe("admin recap playback events", () => {
     expect(state.snapshot?.status).toBe("finished");
     const finished = renderView(state.snapshot);
     expect(finished).toContain("Read complete");
-    expect(finished).not.toContain("Reading this reviewed recap");
+    expect(finished).not.toContain("Otto is reading");
     expect(finished).not.toContain("Stop reading");
     expect(finished).toContain("Listen again");
     expect(finished).toContain("recap-prompter");

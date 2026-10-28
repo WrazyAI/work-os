@@ -1620,89 +1620,34 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 
 /* Recap follows: one content child in the shared two-column Settings group.
-   The note, choice, searchable checklist, and Save travel together, so the
-   label column stays a label column at every width. */
+   The All/Selected choice is a standard Setting row with the shared segmented
+   control; the searchable checklist is a flat list on the Settings surface,
+   never a card inside the group. */
 .settings-follow {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   align-content: start;
   min-width: 0;
   padding-top: 17px;
 }
-.settings-follow-choice {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  margin: 0;
-  border: 0;
-  padding: 0;
-}
-.settings-follow-choice legend {
-  padding: 0 0 2px;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.settings-follow-option {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-  cursor: pointer;
-}
-.settings-follow-option:hover { border-color: #b8b9af; }
-.settings-follow-option.is-selected {
-  border-color: #9fc24d;
-  box-shadow: inset 0 0 0 1px rgba(159, 194, 77, 0.34);
-}
-.settings-follow-option input,
-.settings-follow-person input {
-  width: 16px;
-  height: 16px;
-  margin: 1px 0 0;
-  flex: none;
-  accent-color: #6f8f2b;
-}
-.settings-follow-option span,
-.settings-follow-person span {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.settings-follow-option b,
-.settings-follow-person b {
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 700;
-}
-.settings-follow-option small,
-.settings-follow-person small {
-  color: var(--muted);
-  font-size: 10.5px;
-  line-height: 1.45;
-}
+.settings-follow .setting { border-top: 0; padding-top: 0; }
 .settings-follow-selected {
   display: grid;
   gap: 10px;
   min-width: 0;
 }
-.settings-follow-alert {
+/* A neutral state note, not a warning card: no alerts is a valid choice. */
+.settings-follow-state {
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #e2c98f;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
   border-radius: 9px;
-  background: #fff8e7;
-  color: #6b4c11;
+  background: color-mix(in srgb, var(--paper) 60%, #fff 40%);
+  color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
+.settings-follow-state b { color: var(--ink); }
 .settings-follow-search {
   display: flex;
   align-items: center;
@@ -1721,45 +1666,59 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .settings-follow-search input {
   min-width: 0;
   width: 100%;
-  min-height: 36px;
+  min-height: 38px;
   border: 0;
   background: transparent;
   color: var(--ink);
   font-size: 12px;
   outline: 0;
 }
-.settings-follow-list-wrap {
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-}
 .settings-follow-list {
   display: grid;
   gap: 0;
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
   margin: 0;
-  padding: 4px;
+  padding: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
   list-style: none;
 }
 .settings-follow-list li + li { border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); }
 .settings-follow-person {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 9px 8px;
-  border-radius: 7px;
+  padding: 9px 2px;
+  border-radius: 0;
   cursor: pointer;
 }
-.settings-follow-person:hover { background: color-mix(in srgb, #eef0e9 62%, transparent); }
-.settings-follow-list li.is-inactive .settings-follow-person {
-  cursor: default;
-  background: color-mix(in srgb, #f2ece2 58%, transparent);
+.settings-follow-list li.is-inactive .settings-follow-person { cursor: default; }
+.settings-follow-list li.is-inactive b { color: var(--muted); }
+.settings-follow-person input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  accent-color: #6f8f2b;
 }
-.settings-follow-list li.is-inactive b { color: #6f6252; }
+.settings-follow-person span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.settings-follow-person b {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.settings-follow-person small {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
 .settings-follow-empty,
 .settings-follow-note,
 .settings-follow-quiet {
@@ -1770,7 +1729,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .settings-follow-note { display: grid; gap: 6px; justify-items: start; }
 .settings-follow-note p { margin: 0; }
-.settings-follow-empty { padding: 12px; }
+.settings-follow-empty { padding: 8px 2px; }
 .settings-follow-directory-foot,
 .settings-follow-actions {
   display: flex;
@@ -1780,19 +1739,22 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 8px 14px;
   min-width: 0;
 }
-.settings-follow-actions { padding-top: 2px; }
+.settings-follow-actions {
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+}
 .settings-follow-save {
   min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid #6f8f2b;
-  border-radius: 8px;
-  background: #6f8f2b;
-  color: #fffef8;
+  padding: 0 16px;
+  border: 1px solid var(--ink);
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--paper);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
-.settings-follow-save:not(:disabled):hover { background: #5e7a24; }
+.settings-follow-save:not(:disabled):hover { background: #2b362b; }
 .settings-follow-save:disabled {
   border-color: var(--line);
   background: color-mix(in srgb, var(--paper) 76%, #d9d8cf 24%);
@@ -2524,6 +2486,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   font-weight: 650;
 }
 .settings-choice button:hover { color: var(--ink); }
+.settings-choice button:disabled { cursor: default; opacity: 0.55; }
 .settings-choice button[aria-checked="true"] {
   background: var(--ink);
   color: #f3f1e8;
