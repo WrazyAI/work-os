@@ -10,8 +10,11 @@
   bottom: 24px;
   z-index: 5100;
   width: min(480px, calc(100vw - 48px));
-  height: min(680px, calc(100dvh - 48px));
-  max-height: calc(100dvh - 48px);
+  /* Compact-desktop guard: the standing notification band ends at ~101px.
+   * Capping the sheet against the viewport keeps its top below that band at
+   * 1024×768 and other short desktops, while 1440×900 still gets full 680px. */
+  height: min(680px, calc(100dvh - 160px));
+  max-height: calc(100dvh - 160px);
   pointer-events: none;
 }
 
@@ -53,6 +56,7 @@
   display: inline-grid;
   width: 34px;
   height: 34px;
+  flex: 0 0 auto;
   place-items: center;
   border: 1px solid transparent;
   border-radius: 50%;
@@ -232,7 +236,7 @@
 .admin-otto-refresh {
   min-height: 30px;
   padding: 0 10px;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 /* A grouped arrival is a quiet note above the inbox, not a warning card. */
@@ -609,6 +613,10 @@
   align-items: center;
   gap: 8px 12px;
 }
+.admin-otto-recap-actions .admin-otto-record-link {
+  font-size: 11px;
+  font-weight: 650;
+}
 
 /* ── Chat result cards ──────────────────────────────────────────────────── */
 
@@ -692,8 +700,7 @@
     right: 12px;
     bottom: 12px;
     width: min(480px, calc(100vw - 24px));
-    height: min(680px, calc(100dvh - 24px));
-    max-height: calc(100dvh - 24px);
+    /* Height stays on the compact-desktop cap above; do not reset it here. */
   }
 }
 
@@ -710,12 +717,30 @@
   /* Keep the full quiet subtitle at 390px: tighten the header rhythm instead
    * of truncating the administration context. */
   .admin-otto-head { gap: 8px; }
-  .admin-otto-head .chat-tab { padding-right: 9px; padding-left: 9px; }
-  .admin-otto-head-sub { max-width: 122px; font-size: 9.5px; }
+  [data-conversation-surface="in-app"] .admin-otto-head .chat-tab {
+    min-height: 40px;
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+  .admin-otto-head-sub { max-width: 122px; font-size: 10px; }
   .admin-otto-thread,
   .admin-otto-recaps { padding: 20px 14px 14px; }
   .admin-otto-composer { margin: 10px 10px 12px; }
-  .admin-otto-close { width: 34px; height: 34px; }
+  /* Every touch action keeps the 40px blueprint minimum; desktop density is
+   * unchanged above this breakpoint. */
+  .admin-otto-close,
+  .admin-otto-secondary,
+  .admin-otto-listen,
+  .admin-otto-refresh,
+  .admin-otto-back,
+  .admin-otto-inbox-inline-error button,
+  .admin-otto-inbox-error button { min-height: 40px; }
+  [data-conversation-surface="in-app"] .admin-otto-head .admin-otto-close { width: 40px; height: 40px; }
+  .admin-otto-recap-actions .admin-otto-record-link {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+  }
   .admin-otto-arrival { flex-direction: column; align-items: flex-start; }
   .admin-otto-arrival-actions { justify-content: flex-start; }
   .admin-otto-inbox-actions { justify-content: flex-start; }

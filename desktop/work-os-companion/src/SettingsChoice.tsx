@@ -6,7 +6,9 @@ import type { KeyboardEvent } from "react";
 export function SettingsChoice<T extends string>({ label, value, options, onChange, disabled = false }: {
   label: string;
   value: T;
-  options: { value: T; label: string }[];
+  /** `accessibleLabel` keeps a short visual label while the screen-reader
+   * name still states the full consequence. Existing callers may omit it. */
+  options: { value: T; label: string; accessibleLabel?: string }[];
   onChange: (value: T) => void;
   /** Freeze the choice while its owner is saving. Existing callers omit it. */
   disabled?: boolean;
@@ -31,6 +33,7 @@ export function SettingsChoice<T extends string>({ label, value, options, onChan
           type="button"
           role="radio"
           data-value={option.value}
+          aria-label={option.accessibleLabel}
           aria-checked={value === option.value}
           disabled={disabled}
           tabIndex={value === option.value ? 0 : -1}

@@ -486,8 +486,11 @@ describe("admin Otto recap follows", () => {
     // The All/Selected choice keeps one radio-group tab stop and arrow-key
     // semantics, while every checklist control stays natively reachable.
     expect(noMatch).toContain('role="radiogroup"');
+    expect(noMatch).toContain('aria-label="All active employees"');
+    expect(noMatch).toContain('aria-label="Selected employees"');
     expect(noMatch).toMatch(/data-value="selected"[^>]*aria-checked="true"[^>]*tabindex="0"/);
     expect(noMatch).toMatch(/data-value="all"[^>]*aria-checked="false"[^>]*tabindex="-1"/);
+    expect(noMatch).not.toMatch(/type="(search|checkbox)"[^>]*tabindex="-1"/);
     expect(noMatch).not.toContain('role="dialog"');
     // The checklist is flat on the Settings surface: no option cards, nested
     // list card, or second form shell.

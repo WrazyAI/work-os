@@ -591,8 +591,8 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
                   disabled={state.saving}
                   onChange={(mode) => controller.setMode(mode)}
                   options={[
-                    { value: "all", label: "All" },
-                    { value: "selected", label: "Selected" },
+                    { value: "all", label: "All", accessibleLabel: "All active employees" },
+                    { value: "selected", label: "Selected", accessibleLabel: "Selected employees" },
                   ]}
                 />
               </Setting>
@@ -740,10 +740,6 @@ export function AdminOttoSettings({ scope, transport, controller: supplied }: Ad
               {state.savedNotice ? <p className="settings-follow-success" role="status">{state.savedNotice}</p> : null}
             </>
           ) : null}
-
-          <p className="settings-follow-quiet">
-            Recap alerts only. Following never grants or removes access to an employee record.
-          </p>
         </div>
       </section>
     </section>

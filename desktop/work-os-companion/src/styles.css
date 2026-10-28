@@ -1644,7 +1644,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-radius: 9px;
   background: color-mix(in srgb, var(--paper) 60%, #fff 40%);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.5;
 }
 .settings-follow-state b { color: var(--ink); }
@@ -1711,12 +1711,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .settings-follow-person b {
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 .settings-follow-person small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 10px;
   line-height: 1.45;
 }
 .settings-follow-empty,
@@ -1724,7 +1724,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .settings-follow-quiet {
   margin: 0;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 10px;
   line-height: 1.5;
 }
 .settings-follow-note { display: grid; gap: 6px; justify-items: start; }
@@ -1743,7 +1743,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   padding-top: 14px;
   border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
 }
-.settings-follow-save {
+.settings-panel .settings-follow-save {
   min-height: 34px;
   padding: 0 16px;
   border: 1px solid var(--ink);
@@ -1754,8 +1754,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   font-weight: 700;
   cursor: pointer;
 }
-.settings-follow-save:not(:disabled):hover { background: #2b362b; }
-.settings-follow-save:disabled {
+.settings-panel .settings-follow-save:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 90%, var(--paper) 10%); }
+.settings-panel .settings-follow-save:disabled {
   border-color: var(--line);
   background: color-mix(in srgb, var(--paper) 76%, #d9d8cf 24%);
   color: var(--muted);
@@ -1771,7 +1771,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-radius: 9px;
   background: #fff3ef;
   color: #8e3a2f;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.5;
 }
 .settings-follow-error p { margin: 0; }
@@ -1786,10 +1786,16 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 @media (max-width: 850px) {
   .settings-follow { padding-top: 0; }
 }
+@media (max-width: 700px) {
+  .settings-follow .settings-choice button { min-width: 40px; min-height: 40px; }
+  .settings-follow-search input { min-height: 40px; }
+  .settings-follow-person { min-height: 40px; }
+  .settings-panel .settings-follow-save { min-height: 40px; }
+}
 @media (max-width: 640px) {
   .settings-follow-directory-foot,
   .settings-follow-actions { align-items: flex-start; flex-direction: column; }
-  .settings-follow-save { width: 100%; }
+  .settings-panel .settings-follow-save { width: 100%; }
 }
 
 /* Profile settings use the same restrained hierarchy as the main Settings
