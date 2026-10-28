@@ -29,6 +29,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Work OS is now the only task record: the Nifty connection, its backup status, and its provider pill are gone.
 - Completion evidence now shows a type thumbnail for every file and previews images, PDFs, and text without leaving the task.
 - Word documents and ZIP or 7Z files can now be attached as evidence, with their details and a download action.
+- Admins can now read reviewed team recaps, hear them read aloud, and see their original and corrected summaries in one place.
+- Choose which employees send you reviewed recap alerts, without changing what you can open.
 
 ## 0.5.10 — 2026-10-23
 
@@ -98,8 +100,6 @@ chores, and internal tooling unless they change what the employee sees or does.
 - **Try again** now fits its bubble — the two buttons are no longer cut off.
 - The elapsed-time pill stays under Otto while a recap or **Try again** is open.
 - Otto's small progress dot is a clean ring instead of a stray wedge.
-- Admins can now read reviewed team recaps, hear them read aloud, and see their original and corrected summaries in one place.
-- Choose which employees send you reviewed recap alerts, without changing what you can open.
 
 ## 0.4.94 — 2026-10-21
 

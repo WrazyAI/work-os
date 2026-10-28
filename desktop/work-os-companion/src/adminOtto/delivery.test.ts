@@ -122,6 +122,26 @@ describe("pre-presentation claim failures", () => {
     expect(h.calls.states.every((state) => state.action === "release")).toBe(true);
     await h.controller.stop();
   });
+  it("presents a fresh lease even when the local clock runs ahead of the server", async () => {
+    // The server stamps its lease from its own clock. A workstation two minutes
+    // fast must not treat that timestamp as already expired and silently drop
+    // every arrival; the local deadline is measured from receipt instead.
+    const h = harness({
+      claims: [{ ...lease(["event-1"], 1), expiresAt: new Date(now() - 120_000).toISOString() }],
+    });
+    await h.controller.pollNow();
+    expect(h.arrivals).toHaveLength(1);
+    expect(h.calls.states).toEqual([{ eventIds: ["event-1"], action: "presented", leaseToken: "lease-event-1" }]);
+    expect(h.errors).toEqual([]);
+    await h.controller.stop();
+  });
+  it("releases a lease with an unparseable expiry instead of presenting it", async () => {
+    const h = harness({ claims: [{ ...lease(["event-1"], 1), expiresAt: "not-a-time" }] });
+    await h.controller.pollNow();
+    expect(h.arrivals).toEqual([]);
+    expect(h.calls.states).toEqual([{ eventIds: ["event-1"], action: "release", leaseToken: "lease-event-1" }]);
+    await h.controller.stop();
+  });
   it.each(["employee", "manager"] as const)("does not start or poll admin delivery for %s", async (role) => {
     vi.useFakeTimers();
     const fetchInbox = vi.fn(async () => inbox(0, false));

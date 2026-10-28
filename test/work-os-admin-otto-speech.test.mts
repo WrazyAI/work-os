@@ -127,10 +127,10 @@ function speechDeps(recap: ReviewedRecap, overrides: Partial<AdminSpeechDeps> = 
 
 function speechRequest(body: unknown, init: RequestInit = {}) {
   return new Request(`https://app.example.test/api/work-os/admin/otto/recaps/${intervalA}/speech`, {
+    ...init,
     method: "POST",
     headers: { authorization: "Bearer desktop", "content-type": "application/json", ...(init.headers ?? {}) },
     body: JSON.stringify(body),
-    ...init,
   });
 }
 
@@ -860,7 +860,7 @@ function transcribeRequest(init: RequestInit = {}) {
   const form = new FormData();
   form.set("audio", new Blob([new Uint8Array([1, 2])], { type: "audio/webm" }));
   return new Request("https://app.example.test/api/work-os/admin/otto/transcribe", {
-    method: "POST", body: form, headers: { authorization: "Bearer desktop", ...(init.headers ?? {}) }, ...init,
+    ...init, method: "POST", body: form, headers: { authorization: "Bearer desktop", ...(init.headers ?? {}) },
   });
 }
 

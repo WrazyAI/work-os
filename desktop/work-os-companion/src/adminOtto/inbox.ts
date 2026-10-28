@@ -91,12 +91,22 @@ export function createAdminInboxController(
         const previousIds = previous?.items.map((item) => item.deliveryId) ?? [];
         const seen = new Set(page.items.map((item) => item.deliveryId));
         const items = [...page.items];
+        // The mounted window can only shift down by the rows that arrived above
+        // it, so its old size plus those arrivals bounds the top-up. A removed
+        // row never comes back; once a page brings none of the old rows, stop
+        // instead of scanning the ten-page cap for it on every refresh.
+        const previousIdSet = new Set(previousIds);
+        const arrivedSince = page.items.filter((item) => !previousIdSet.has(item.deliveryId)).length;
+        const retainedTarget = previousIds.length + arrivedSince;
+        const missingPrevious = () => previousIds.some((id) => !seen.has(id));
         let lastPage = page;
         let pagesRead = 1;
+        let pageKeptPrevious = page.items.some((item) => previousIdSet.has(item.deliveryId));
         // Keep every row the administrator had already mounted, not merely the
         // same count: one new arrival shifts the page boundary, so the last
         // previously loaded row can move onto the next page.
-        while (previousIds.some((id) => !seen.has(id)) && lastPage.nextCursor && pagesRead < 10) {
+        while (lastPage.nextCursor && pagesRead < 10
+          && (items.length < retainedTarget || (pageKeptPrevious && missingPrevious()))) {
           const next = await load({ limit: ADMIN_INBOX_PAGE_SIZE, cursor: lastPage.nextCursor });
           if (disposed || generation !== firstPageGeneration) return;
           for (const item of next.items) {
@@ -104,10 +114,14 @@ export function createAdminInboxController(
             seen.add(item.deliveryId);
             items.push(item);
           }
+          pageKeptPrevious = next.items.some((item) => previousIdSet.has(item.deliveryId));
           lastPage = next;
           pagesRead += 1;
         }
-        const total = Math.max(page.total, previous?.total ?? 0, items.length);
+        // The server's current total wins; the number retained only prevents a
+        // count that under-reports what is on screen. A shrinking server total
+        // (dismissed, unfollowed, aged out) must not be carried forward.
+        const total = Math.max(page.total, items.length);
         const merged = previous ? {
           ...page,
           items,
@@ -143,11 +157,17 @@ export function createAdminInboxController(
           seen.add(item.deliveryId);
           return true;
         });
+        const merged = [...page.items, ...appended];
+        // A refreshed server total may have shrunk below the rows already
+        // mounted. Keep the count truthful and drop Load more once the list is
+        // complete instead of carrying the older, larger total forward.
+        const total = Math.max(next.total, merged.length);
         set({
           page: {
             ...next,
-            items: [...page.items, ...appended],
-            total: Math.max(next.total, page.total),
+            items: merged,
+            total,
+            nextCursor: merged.length < total ? next.nextCursor : null,
           },
           loadingMore: false,
           error: null,

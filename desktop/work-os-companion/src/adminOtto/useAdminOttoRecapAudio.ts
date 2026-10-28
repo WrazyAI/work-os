@@ -5,6 +5,7 @@ import { requestOttoAudio, requestOttoAudioStop, onOttoSpeechStop, type OttoAudi
 import { createAdminSpeechFetcher } from "./speech";
 import type { AdminSpeechSpeak } from "./speech";
 import { adminListenedKey } from "./listened";
+import { recapAudioScopeKey } from "./recapAudioScope";
 import { browserRecapAudio, createRecapSpeechPlayer, IDLE_RECAP_SPEECH, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "../recapSpeechPlayer";
 import type { AdminRecapPlayback } from "./AdminRecapView";
 
@@ -46,6 +47,10 @@ export function useAdminOttoRecapAudio(input: {
     leaseRef.current = null;
   }, []);
 
+  /* The host may hand us a new but equal scope object on every render. Only a
+   * changed actor/organization/mode, epoch or enabled flag is a real boundary. */
+  const scopeKey = recapAudioScopeKey(input.scope);
+
   /* A new actor/org/mode/epoch is a hard boundary: old recap text, errors,
    * updates and listened keys cannot survive into the new scope. */
   useEffect(() => {
@@ -55,7 +60,7 @@ export function useAdminOttoRecapAudio(input: {
     setSnapshot(IDLE_RECAP_SPEECH);
     setError(null);
     setRecapUpdates({});
-  }, [input.scope?.userId, input.scope?.organizationId, input.scope?.mode, input.epoch, releaseLease]);
+  }, [scopeKey, input.epoch, releaseLease]);
 
   const stop = useCallback(() => {
     playerRef.current?.stop();
@@ -70,14 +75,17 @@ export function useAdminOttoRecapAudio(input: {
   }), [releaseLease]);
 
   useEffect(() => {
-    const scope = input.scope;
-    if (!scope || scope.mode !== "admin" || !input.enabled) {
+    // Read the live scope object (not a captured one): an equal recreated object
+    // must not restart playback, but the newest fields are what the player uses.
+    const scope = inputRef.current.scope;
+    const enabled = inputRef.current.enabled;
+    if (!scope || scope.mode !== "admin" || !enabled) {
       playerRef.current?.dispose();
       playerRef.current = null;
       releaseLease();
       return;
     }
-    const epoch = input.epoch;
+    const epoch = inputRef.current.epoch;
     const activeScope = { ...scope };
     const isCurrent = () => {
       const current = inputRef.current;
@@ -136,7 +144,7 @@ export function useAdminOttoRecapAudio(input: {
       player.dispose();
       if (playerRef.current === player) playerRef.current = null;
     };
-  }, [input.scope, input.epoch, input.enabled, releaseLease]);
+  }, [scopeKey, input.epoch, input.enabled, releaseLease]);
 
   const listen = useCallback(async (recap: ReviewedRecap) => {
     const current = inputRef.current;

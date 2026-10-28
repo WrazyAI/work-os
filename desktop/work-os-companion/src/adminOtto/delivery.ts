@@ -76,7 +76,13 @@ export type AdminRecapDeliveryHandle = {
   stop: () => Promise<void>;
 };
 
-type Claimed = { lease: DeliveryLease; eventIds: string[] };
+type Claimed = { lease: DeliveryLease; eventIds: string[]; deadline: number };
+
+/** Local claim deadline, deliberately under the server's 30-second lease. It is
+ * measured from receipt with this device's clock, so a workstation clock ahead
+ * of the server cannot make a fresh lease look expired; the server's own lease
+ * check remains authoritative for a presented acknowledgement. */
+export const ADMIN_RECAP_LOCAL_LEASE_MS = 25_000;
 
 export type AuthorizedAdminDeliveryDeps = AdminRecapDeliveryDeps & {
   signedIn: boolean;
@@ -200,6 +206,7 @@ export function startAdminRecapDelivery(deps: AdminRecapDeliveryDeps): AdminReca
 
   const acceptLease = async (lease: DeliveryLease): Promise<Claimed | null> => {
     if (!lease || !Array.isArray(lease.eventIds)) return null;
+    const claimedAt = now();
     const seen = new Set<string>();
     const eventIds = lease.eventIds.filter((id) => {
       if (typeof id !== "string" || !id || seen.has(id)) return false;
@@ -207,11 +214,13 @@ export function startAdminRecapDelivery(deps: AdminRecapDeliveryDeps): AdminReca
       return true;
     });
     if (!eventIds.length) return null;
-    if (!Number.isFinite(Date.parse(lease.expiresAt)) || Date.parse(lease.expiresAt) <= now()) {
+    // A malformed expiry is still a malformed lease. A parseable one is never
+    // compared to this clock: the server may run behind it.
+    if (!Number.isFinite(Date.parse(lease.expiresAt))) {
       await deps.api.updateState({ eventIds, action: "release", leaseToken: lease.token }).catch(() => undefined);
       return null;
     }
-    return { lease, eventIds };
+    return { lease, eventIds, deadline: claimedAt + ADMIN_RECAP_LOCAL_LEASE_MS };
   };
 
   const poll = async (source: AdminRecapArrival["source"]) => {
@@ -267,7 +276,7 @@ export function startAdminRecapDelivery(deps: AdminRecapDeliveryDeps): AdminReca
       await releaseAll();
       return;
     }
-    if (claimed.some((item) => Date.parse(item.lease.expiresAt) <= now())) {
+    if (claimed.some((item) => item.deadline <= now())) {
       await releaseAll();
       throw new Error("The recap delivery lease expired while catching up.");
     }
@@ -308,9 +317,10 @@ export function startAdminRecapDelivery(deps: AdminRecapDeliveryDeps): AdminReca
         await releaseAll();
         return;
       }
-      // The server's 30-second lease is authoritative. A late presentation
-      // leaves the delivery in the inbox rather than acknowledging it.
-      if (Date.parse(item.lease.expiresAt) <= now()) {
+      // The local claim deadline sits inside the server's 30-second lease. A
+      // late presentation leaves the delivery in the inbox rather than
+      // acknowledging it, and the server re-checks its own expiry.
+      if (item.deadline <= now()) {
         active = active.filter((entry) => entry !== item);
         await deps.api.updateState({
           eventIds: item.eventIds,

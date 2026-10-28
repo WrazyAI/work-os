@@ -118,6 +118,59 @@ describe("admin inbox controller", () => {
     controller.dispose();
   });
 
+  it("a refresh after a removed row keeps the server total and stops topping up", async () => {
+    // The administrator had mounted two pages (24 of 48). One mounted recap is
+    // then dismissed, so its id can never appear again.
+    const server = fixtureInboxPage({ count: 34, total: 48 });
+    const removed = server.items[5].deliveryId;
+    const remaining = server.items.filter((item) => item.deliveryId !== removed);
+    const pageOf = (items: typeof server.items, total: number, nextCursor: string | null) => ({
+      ...fixtureInboxPage({ count: 0, total }), items, total, nextCursor,
+    });
+    const first = pageOf(server.items.slice(0, 12), 48, "cursor-2");
+    const second = pageOf(server.items.slice(12, 24), 48, "cursor-3");
+    const refreshedFirst = pageOf(remaining.slice(0, 12), 40, "cursor-r2");
+    const refreshedSecond = pageOf(remaining.slice(12, 24), 40, "cursor-r3");
+    const refreshedThird = pageOf(remaining.slice(24), 40, "cursor-r4");
+    const load = vi.fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+      .mockResolvedValueOnce(refreshedFirst)
+      .mockResolvedValueOnce(refreshedSecond)
+      .mockResolvedValueOnce(refreshedThird);
+    const controller = createAdminInboxController(load);
+    await controller.refresh();
+    await controller.loadMore();
+    await controller.refresh();
+    const page = controller.snapshot().page!;
+    // Two initial reads plus three refresh reads; the removed id never triggers
+    // the ten-page top-up loop.
+    expect(load).toHaveBeenCalledTimes(5);
+    expect(controller.snapshot().error).toBe(null);
+    // The current server total wins over the larger total seen before the dismissal.
+    expect(page.total).toBe(40);
+    expect(page.items).toHaveLength(33);
+    expect(page.nextCursor).toBe("cursor-r4");
+    expect(new Set(page.items.map((item) => item.deliveryId)).size).toBe(33);
+    controller.dispose();
+  });
+
+  it("a shrinking server total on Load more is not carried forward", async () => {
+    const first = fixtureInboxPage({ count: 12, total: 25, nextCursor: "cursor-2" });
+    const second = fixtureInboxPage({ count: 12, total: 20, nextCursor: null, offset: 12 });
+    const load = vi.fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const controller = createAdminInboxController(load);
+    await controller.refresh();
+    await controller.loadMore();
+    const page = controller.snapshot().page!;
+    expect(page.items).toHaveLength(24);
+    expect(page.total).toBe(24);
+    expect(page.nextCursor).toBe(null);
+    controller.dispose();
+  });
+
   it("a failed Load more retries the same cursor instead of resetting to page one", async () => {
     const first = fixtureInboxPage({ count: 12, total: 25, nextCursor: "cursor-2" });
     const second = fixtureInboxPage({ count: 12, total: 25, nextCursor: null, offset: 12 });

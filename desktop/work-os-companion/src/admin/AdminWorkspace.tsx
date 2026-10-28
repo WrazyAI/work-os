@@ -148,9 +148,11 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
               </button>
             ) : null}
             {session.personId ? (
-              <button type="button" className="admin-switch" onClick={onSwitchToEmployee} title="Open your own workday">
-                <ArrowLeftRight size={14} aria-hidden /> Switch to employee view
-              </button>
+              onSwitchToEmployee ? (
+                <button type="button" className="admin-switch" onClick={onSwitchToEmployee} title="Open your own workday">
+                  <ArrowLeftRight size={14} aria-hidden /> Switch to employee view
+                </button>
+              ) : null
             ) : (
               <span className="admin-quiet">No personal workday is mapped to this account</span>
             )}

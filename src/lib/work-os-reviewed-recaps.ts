@@ -90,6 +90,23 @@ async function latest(client: PoolClient, row: ActivityIntervalRecord): Promise<
   return rows[0];
 }
 
+/** The lock-free read of an existing review. It joins the interval so the same
+ * review-status and owner scoping decisions apply, and it never takes the
+ * organization clock lock: detail, speech and record pages read constantly, and
+ * that lock also serializes employee decisions across the organization. */
+async function latestExisting(access: WorkOsAccess, intervalId: string): Promise<ReviewedRecap | null> {
+  const { rows } = await getPool().query<{ payload: ReviewedRecap }>(`SELECT r.payload
+    FROM work_recap_reviews r
+    JOIN work_activity_intervals i
+      ON i.organization_id = r.organization_id AND i.id = r.interval_id
+    WHERE r.organization_id = $1 AND r.interval_id = $2
+      AND i.review_status IN ('confirmed','amended')
+      AND ($3::boolean OR i.person_id = $4::uuid)
+    ORDER BY r.version DESC LIMIT 1`,
+  [access.organizationId, intervalId, access.role === "admin", access.personId]);
+  return rows[0]?.payload ?? null;
+}
+
 async function append(client: PoolClient, row: ActivityIntervalRecord, version: number, arrivalEligible: boolean): Promise<ReviewEvent> {
   // Historical version-1 identity is deterministic even across retried lazy reads.
   const digest = hash([row.organization_id, row.id, "historical-reviewed-v1"]);
@@ -109,6 +126,12 @@ async function append(client: PoolClient, row: ActivityIntervalRecord, version: 
  * snapshots never publish an arrival and do not mutate the employee interval. */
 export async function loadReviewedRecap(access: WorkOsAccess, intervalId: string): Promise<ReviewedRecap | null> {
   if (access.role !== "admin" && !access.personId) return null;
+  // Every detail, speech and record page reads a reviewed recap. Reading the
+  // latest snapshot outside the transaction keeps those reads off the
+  // organization clock lock; the lock is only needed to create a missing
+  // version-1 snapshot, and its unique version constraint guards that write.
+  const existing = await latestExisting(access, intervalId);
+  if (existing) return existing;
   return transaction(access, async (client) => {
     const row = await loadLocked(client, access, intervalId, false);
     if (!row || !reviewed(row)) return null;

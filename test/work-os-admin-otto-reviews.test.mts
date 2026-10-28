@@ -109,8 +109,11 @@ test("legacy_lazy_snapshot_is_stable_and_never_an_arrival_then_new_review_is_ver
     const { activityIntervalFullView } = await import("../src/lib/work-os-activity-intervals");
     const legacyRow = (await f.db.query<Record<string, unknown>>("select * from work_activity_intervals")).rows[0] as unknown as ActivityIntervalRecord;
     assert.equal((await activityIntervalFullView(legacyRow)).reviewVersion, 1, "a reviewed row implies the lazy snapshot version 1 before it is read");
+    const releasesBefore = f.releases();
     const first = await loadReviewedRecap(access, interval);
+    assert.equal(f.releases(), releasesBefore + 1, "the missing version-1 snapshot is created inside one locked transaction");
     assert.deepEqual(await loadReviewedRecap(access, interval), first);
+    assert.equal(f.releases(), releasesBefore + 1, "the existing snapshot is read without opening a transaction");
     assert.equal((await activityIntervalFullView(legacyRow)).reviewVersion, 1);
     assert.equal(first?.reviewVersion, 1);
     assert.equal(first?.reviewedAt, "2026-10-21T10:02:00.000Z");
@@ -118,6 +121,23 @@ test("legacy_lazy_snapshot_is_stable_and_never_an_arrival_then_new_review_is_ver
     await decideReviewedRecap(access, interval, { action: "amend", feedback: "Correction", expectedReviewVersion: 1 });
     assert.deepEqual((await f.db.query("select version, arrival_eligible from work_recap_reviews order by version")).rows,
       [{ version: 1, arrival_eligible: false }, { version: 2, arrival_eligible: true }]);
+  } finally { await f.close(); }
+});
+
+test("existing_reviewed_reads_take_no_transaction_and_no_clock_lock", async () => {
+  const f = await fixture();
+  try {
+    const { decideReviewedRecap, loadReviewedRecap } = await service();
+    await decideReviewedRecap(access, interval, { action: "confirm" });
+    const clock = (await f.db.query<{ sequence: number }>(
+      "select sequence from work_admin_otto_clock where organization_id = $1", [org])).rows[0];
+    const releases = f.releases();
+    const recap = await loadReviewedRecap(access, interval);
+    assert.equal(recap?.reviewVersion, 1);
+    // Detail, speech and record pages read this constantly; an existing
+    // snapshot must not open a transaction or take the organization clock lock.
+    assert.equal(f.releases(), releases, "no transaction is opened for an existing review");
+    assert.deepEqual((await f.db.query("select sequence from work_admin_otto_clock where organization_id = $1", [org])).rows[0], clock);
   } finally { await f.close(); }
 });
 

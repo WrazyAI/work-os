@@ -17,6 +17,8 @@ import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
+import { avatarPlaybackAllowed } from "./avatarSpeech";
+import { avatarDayAccess } from "./avatarDay";
 import { claimAdminOttoDelivery, fetchAdminOttoInbox, updateAdminOttoDelivery } from "./adminOtto/api";
 import { OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, adminOttoChangedEvent, parseAdminOttoChangedEvent, parseOttoContextEvent, sameOttoScope, type OttoContextEvent } from "./adminOtto/mode";
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
@@ -65,7 +67,8 @@ import {
 import "./avatar.css";
 
 type SessionInfo = { apiBase: string; token: string; organizationId: string; expiresAt: string };
-type DaySyncState = "loading" | "ready" | "stale" | "error";
+type AvatarMembership = { userId: string; organizationId: string; role: PersonalBootstrapRole; personId: string | null };
+type DaySyncState = "loading" | "ready" | "stale" | "error" | "unmapped";
 
 /** One filing transport for approvals and retries: the accept request plus the
  * owner-scoped readback used to reconcile an interrupted response. */
@@ -330,7 +333,7 @@ export default function AvatarApp(): React.ReactElement {
         })
       : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
     createAudio: browserRecapAudio,
-    isPlaybackAllowed: () => recapLease.current?.isActive() ?? !adminOttoContextRef.current,
+    isPlaybackAllowed: () => avatarPlaybackAllowed(recapLease.current, currentAvatarAudioContext()),
     onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
     onFailure: (message) => {
       flashRecapFailure();
@@ -372,14 +375,16 @@ export default function AvatarApp(): React.ReactElement {
     }
     voiceCancelRef.current?.();
     requestOttoAudioStop();
-    if (!adminOttoContextRef.current) {
+    // Any identified actor (employee or administrator) takes the speech lease
+    // first, so the main window's player cannot start a second read beside it.
+    const requestedContext = currentAvatarAudioContext();
+    if (!requestedContext) {
       void recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
       return;
     }
-    const requestedContext = adminOttoContextRef.current;
     void requestAvatarAudio("speech").then(async (lease) => {
       if (!lease || !lease.isActive()) { lease?.release(); return; }
-      const context = adminOttoContextRef.current;
+      const context = currentAvatarAudioContext();
       if (!context || context.epoch !== requestedContext.epoch
         || !sameOttoScope(context.scope, requestedContext.scope)) { lease.release(); return; }
       recapLease.current?.release();
@@ -413,7 +418,7 @@ export default function AvatarApp(): React.ReactElement {
         })
       : (input) => apiRequestAudio("/api/work-os/voice/next-steps", input),
     createAudio: browserRecapAudio,
-    isPlaybackAllowed: () => nextStepsLease.current?.isActive() ?? !adminOttoContextRef.current,
+    isPlaybackAllowed: () => avatarPlaybackAllowed(nextStepsLease.current, currentAvatarAudioContext()),
     onSnapshot: setNextStepsSpeech,
     onFailure: (message) => {
       flashRecapFailure();
@@ -431,7 +436,8 @@ export default function AvatarApp(): React.ReactElement {
     }
     voiceCancelRef.current?.();
     requestOttoAudioStop();
-    if (!adminOttoContextRef.current) {
+    const requestedContext = currentAvatarAudioContext();
+    if (!requestedContext) {
       void nextStepsPlayer.toggle({
         intervalId: moment.intervalId,
         revision: null,
@@ -440,10 +446,9 @@ export default function AvatarApp(): React.ReactElement {
       });
       return;
     }
-    const requestedContext = adminOttoContextRef.current;
     void requestAvatarAudio("speech").then(async (lease) => {
       if (!lease || !lease.isActive()) { lease?.release(); return; }
-      const context = adminOttoContextRef.current;
+      const context = currentAvatarAudioContext();
       if (!context || context.epoch !== requestedContext.epoch
         || !sameOttoScope(context.scope, requestedContext.scope)) { lease.release(); return; }
       nextStepsLease.current?.release();
@@ -906,13 +911,30 @@ export default function AvatarApp(): React.ReactElement {
     try {
       // The floating window has its own boot/refresh path. Resolve membership
       // before touching personal endpoints, even before main broadcasts context.
-      const membership = await apiRequest<{ userId: string; organizationId: string; role: PersonalBootstrapRole; personId: string | null }>("/api/work-os/session");
+      let membership: AvatarMembership | null = null;
+      try {
+        membership = await apiRequest<AvatarMembership>("/api/work-os/session");
+      } catch (value) {
+        // This membership read is only the administration gate; /me/day is
+        // authorized by the same session cookie. A failed gate must not mark an
+        // employee's today stale — the gate retries on the next poll.
+        if (value instanceof ApiRequestError && value.status === 401) throw value;
+      }
       if (sessionRevision !== daySessionRevision.current) return;
-      const access = personalBootstrapAccess({
+      const access = membership ? personalBootstrapAccess({
         signedIn: true, syncBypass: false, role: membership.role, workspace: "employee", identity: membership,
         adminContext: { status: "ready", personId: membership.personId, scope: membership },
-      });
-      if (!access.day) return;
+      }) : null;
+      const dayAccess = avatarDayAccess(access);
+      if (dayAccess === "unmapped") {
+        // Administration continues without a personal workday. Settle the
+        // avatar instead of leaving "Loading today…" with a Retry that repeats
+        // this same early return.
+        setConnected(true);
+        setDaySyncState("unmapped");
+        return;
+      }
+      if (dayAccess === "wait") return;
       if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
       // Shared query cache: a fresh cached day is served without a network
       // round-trip; stale data refreshes in the background.
@@ -2518,13 +2540,15 @@ export default function AvatarApp(): React.ReactElement {
   const showBadge = mascotVisual.pose === "alert";
   const statusText = facts.lateReasonRequired
     ? "Late start — add a reason"
-    : !facts.loaded
-      ? (daySyncState === "error" ? "Today is syncing" : "Loading today…")
-      : facts.niftySyncError || daySyncState === "stale"
-        ? "Showing last update"
-        : facts.niftySyncing
-          ? "Today is syncing"
-          : formatWorkOsDate(facts.shiftDate);
+    : daySyncState === "unmapped"
+      ? "No personal workday"
+      : !facts.loaded
+        ? (daySyncState === "error" ? "Today is syncing" : "Loading today…")
+        : facts.niftySyncError || daySyncState === "stale"
+          ? "Showing last update"
+          : facts.niftySyncing
+            ? "Today is syncing"
+            : formatWorkOsDate(facts.shiftDate);
 
   // Agenda opens the composer once when it first becomes due; an explicit
   // collapse is respected until the shift or plan state actually changes.
@@ -2798,7 +2822,7 @@ export default function AvatarApp(): React.ReactElement {
                 />
               </div>
               <div className="avatar-head-actions">
-                {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }} title="Refresh today's record" aria-label="Refresh today's record">Retry</button>}
+                {daySyncState !== "ready" && daySyncState !== "unmapped" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }} title="Refresh today's record" aria-label="Refresh today's record">Retry</button>}
                 {chat.length > 0 && <button className="avatar-icon" onClick={clearAvatarConversation} aria-label="New conversation" title="New conversation"><SquarePen size={15} aria-hidden="true" /></button>}
                 <button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button>
               </div>

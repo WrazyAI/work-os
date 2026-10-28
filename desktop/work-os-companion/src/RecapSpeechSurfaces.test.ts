@@ -32,6 +32,12 @@ describe("the recap read is offered wherever a recap is", () => {
     const avatar = read("./AvatarApp.tsx");
     expect(avatar).toContain("createAudio: browserRecapAudio,");
     expect(avatar).toContain("const [recapPlayer] = useState<RecapSpeechPlayer>");
+    // Every identified actor (employee or administrator) takes the speech lease
+    // before a read; direct playback remains only for the pre-session window.
+    expect(avatar.match(/const requestedContext = currentAvatarAudioContext\(\);/g) ?? []).toHaveLength(2);
+    expect(avatar).not.toContain("if (!adminOttoContextRef.current) {");
+    expect(avatar).toContain("avatarPlaybackAllowed(recapLease.current, currentAvatarAudioContext())");
+    expect(avatar).toContain("avatarPlaybackAllowed(nextStepsLease.current, currentAvatarAudioContext())");
   });
 
   it("opens the player inside the press, before the clip is awaited", () => {

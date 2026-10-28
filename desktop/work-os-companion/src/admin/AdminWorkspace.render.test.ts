@@ -57,6 +57,14 @@ describe("administration masthead profile entry", () => {
     expect(markup).not.toContain("Profile for ");
     expect(markup).toContain("Switch to employee view");
   });
+
+  it("hides the switch action while the shell withholds the callback", () => {
+    // A mapped admin whose context is loading or failed has a personId but no
+    // usable switch target; the button must not render a dead control.
+    const markup = render({ onSwitchToEmployee: undefined });
+    expect(markup).not.toContain("Switch to employee view");
+    expect(markup).not.toContain("No personal workday is mapped");
+  });
 });
 
 describe("administration settings personal half", () => {
