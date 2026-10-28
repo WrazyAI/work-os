@@ -34,7 +34,7 @@ describe("admin Otto shell wiring", () => {
     expect(app).toMatch(/useDayQuery\(\{ enabled: employeeBootstrapEnabled/);
     expect(app).toMatch(/useOnboardingQuery\(\{ enabled: employeeBootstrapEnabled/);
     expect(app).toContain("adminOtto: workSessionQuery.data?.role === \"admin\"");
-    expect(app).toContain("personalBootstrapFlags({\n    syncBypass,");
+    expect(app).toMatch(/personalBootstrapFlags\(\{\s+syncBypass,/);
     expect(app).toContain("adminOttoRoleAllowed");
     expect(app).toContain("enabled: signedIn && !syncBypass && adminOttoRoleAllowed");
     expect(app).toContain("personalBootstrapAccess");
