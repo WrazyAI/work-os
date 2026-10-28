@@ -6,7 +6,8 @@ import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId, listBlueprints } from "@/lib/work-os";
 import { loadShiftData } from "@/lib/work-os-internal";
 import { persistInterpretHistory } from "@/lib/work-conversations";
-import { foldConversationSummary, loadConversationContext } from "@/lib/work-conversations-summary";
+import { CONVERSATION_VERBATIM_TURNS, foldConversationSummary, loadConversationContext } from "@/lib/work-conversations-summary";
+import { conversationTurnFromHistory } from "@/lib/work-memory-core";
 import { annotateBatchStatusNames } from "@/lib/aiBatchLabels";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
@@ -45,14 +46,17 @@ export async function POST(req: Request) {
       personId: auth.access.personId as string,
       localDate,
     };
+    // Dialogue is needed even without long-term memory. The latest assistant
+    // offer may only be in client history: it is persisted after interpretation.
+    const conversationContext = await loadConversationContext(conversationScope);
+    const history = (Array.isArray(body.history) ? body.history.slice(-24) : [])
+      .map(conversationTurnFromHistory)
+      .filter((turn) => turn !== null)
+      .slice(-CONVERSATION_VERBATIM_TURNS);
     const memoryContext = memoryEnabled(auth.access.featureFlags)
       ? {
           todayBlock: await buildTodaySnapshot(conversationScope),
           memoryBlock: await buildMemoryPromptBlock(conversationScope, body.input, { limit: 8 }),
-          ...await loadConversationContext(conversationScope).then((context) => ({
-            conversation: context.turns,
-            conversationSummary: context.summary,
-          })),
         }
       : {};
     // A Loom link anywhere in the update reaches the analyze tool; its output
@@ -91,6 +95,8 @@ export async function POST(req: Request) {
     }
     const interpretContext: InterpretContext = {
       ...memoryContext,
+      conversation: history.length ? history : conversationContext.turns,
+      conversationSummary: conversationContext.summary,
       ...(loomContext ? { loom: loomContext } : {}),
       ...(blueprints?.length ? { blueprints } : {}),
     };
