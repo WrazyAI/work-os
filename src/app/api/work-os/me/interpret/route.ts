@@ -51,8 +51,26 @@ export async function POST(req: Request) {
     const conversationContext = await loadConversationContext(conversationScope);
     const history = (Array.isArray(body.history) ? body.history.slice(-24) : [])
       .map(conversationTurnFromHistory)
-      .filter((turn) => turn !== null)
-      .slice(-CONVERSATION_VERBATIM_TURNS);
+      .filter((turn) => turn !== null);
+    // Both desktop clients include the current input in history. It belongs
+    // only in the final input block; older identical turns are still dialogue.
+    const latest = history.at(-1);
+    const includesCurrentInput = latest?.role === "user" && latest.content === body.input;
+    const clientTurns = history.slice(-(CONVERSATION_VERBATIM_TURNS + (includesCurrentInput ? 1 : 0)));
+    const serverTurns = conversationContext.turns;
+    // A partial client history must not replace the server's earlier context.
+    // Collapse only an exact shared suffix/prefix, never repeated turns within
+    // either history. The prompt keeps the same bounded verbatim window.
+    let overlap = Math.min(serverTurns.length, clientTurns.length);
+    while (overlap > 0 && !clientTurns.slice(0, overlap).every((turn, index) => {
+      const stored = serverTurns[serverTurns.length - overlap + index];
+      return turn.role === stored.role && turn.content === stored.content;
+    })) overlap--;
+    const mergedTurns = [...serverTurns, ...clientTurns.slice(overlap)];
+    // Strip after merging so a retry's already-persisted current turn is also
+    // removed, but do not mistake an older server-only turn for today's input.
+    if (includesCurrentInput) mergedTurns.pop();
+    const conversation = mergedTurns.slice(-CONVERSATION_VERBATIM_TURNS);
     const memoryContext = memoryEnabled(auth.access.featureFlags)
       ? {
           todayBlock: await buildTodaySnapshot(conversationScope),
@@ -95,7 +113,7 @@ export async function POST(req: Request) {
     }
     const interpretContext: InterpretContext = {
       ...memoryContext,
-      conversation: history.length ? history : conversationContext.turns,
+      conversation,
       conversationSummary: conversationContext.summary,
       ...(loomContext ? { loom: loomContext } : {}),
       ...(blueprints?.length ? { blueprints } : {}),
