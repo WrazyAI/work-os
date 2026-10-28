@@ -39,7 +39,7 @@ function addDesktopCors(response: NextResponse, origin: string | null) {
   // A cross-origin caller can read the body but not custom headers unless they
   // are named here: the companion's prompter is built from these, and without
   // them the clip plays with no words on screen.
-  response.headers.set("Access-Control-Expose-Headers", "X-Work-OS-Recap-Lines, X-Work-OS-Recap-Revision, X-Work-OS-Recap-Voice, X-Work-OS-Recap-Stale, X-Work-OS-Next-Steps-Lines, X-Work-OS-Next-Steps-Voice");
+  response.headers.set("Access-Control-Expose-Headers", "X-Work-OS-Recap-Lines, X-Work-OS-Recap-Revision, X-Work-OS-Recap-Voice, X-Work-OS-Recap-Stale, X-Work-OS-Recap-Review-Key, X-Work-OS-Recap-Script-Hash, X-Work-OS-Next-Steps-Lines, X-Work-OS-Next-Steps-Voice");
   response.headers.append("Vary", "Origin");
   return response;
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Bug, ChevronRight, LogOut, RotateCcw } from "lucide-react";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { MemorySummary } from "./MemorySettings";
@@ -11,12 +12,18 @@ import type { MemoryFact } from "./types";
 
 /** The account's own settings — the groups the employee Settings page carries.
  * One component renders them on every surface that shows them, so the
- * employee workspace and the administration shell can never drift apart. */
+ * employee workspace and the administration shell can never drift apart. The
+ * administration shell also supplies its recap-follow group through the
+ * `adminOttoSettings` slot; unlike the workday groups it always renders. */
 export type PersonalSettingsProps = {
   /** Whether the account has its own workday record. The record-dependent
    * groups (profile, workday status, memory, suggestions, onboarding reset)
    * render only when it does. */
   hasPersonalRecord: boolean;
+  /** The administration shell's own recap-follow group. It is deliberately
+   * outside `hasPersonalRecord`: an administrator with no mapped employee day
+   * still chooses which reviewed recaps alert them. */
+  adminOttoSettings?: ReactNode;
   /** Which workspace's tour the Page guides group replays. */
   tourScope: "employee" | "admin";
   onReplayTour: () => void;
@@ -61,6 +68,7 @@ export type PersonalSettingsProps = {
 
 export function PersonalSettings({
   hasPersonalRecord,
+  adminOttoSettings,
   tourScope,
   onReplayTour,
   onOpenProfile,
@@ -139,6 +147,8 @@ export function PersonalSettings({
           </Setting>
         </section>
       </section>
+
+      {adminOttoSettings}
 
       <section className="settings-group" aria-labelledby="settings-voice-title">
         <header className="settings-group-head"><h3 id="settings-voice-title">Otto's voice</h3></header>

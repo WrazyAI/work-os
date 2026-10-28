@@ -43,7 +43,9 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * The page leads with the account's own settings when the shell supplies them
  * — the same groups the employee Settings page carries, one shared component —
  * so an administrator never has to switch workspaces to change their own
- * device, appearance, or guide preferences. */
+ * device, appearance, or guide preferences. The shell's node also carries the
+ * account's recap-follow group, which stays present without a personal
+ * workday record; this page only hosts it above the workspace configuration. */
 export default function SettingsPage({ personalSettings }: { personalSettings?: ReactNode }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();

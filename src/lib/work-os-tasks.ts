@@ -84,18 +84,21 @@ async function resolveActiveTaskPeople(organizationId: string, value: unknown) {
 }
 
 /** One attribution rule for every task surface: the local person id, the
- * historical provider assignee mapping or creator/subscriber metadata. */
+ * historical provider assignee mapping or creator/subscriber metadata. The
+ * mapping id is trimmed and blank mappings never attribute, matching the
+ * organization read SQL. */
 export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
   if (personId && stringValues(task.assignee_person_ids).includes(String(personId))) return true;
   return isNiftyTaskAttributableToMember(task, niftyMemberId);
 }
 
 export function isNiftyTaskAttributableToMember(task: Record<string, any>, niftyMemberId: string | null | undefined) {
-  if (!niftyMemberId) return false;
+  const memberId = typeof niftyMemberId === "string" ? niftyMemberId.trim() : niftyMemberId;
+  if (!memberId) return false;
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Record<string, unknown> : {};
-  return stringValues(task.assignee_provider_ids).includes(niftyMemberId)
-    || raw.created_by === niftyMemberId
-    || stringValues(raw.subscribers).includes(niftyMemberId);
+  return stringValues(task.assignee_provider_ids).includes(memberId)
+    || raw.created_by === memberId
+    || stringValues(raw.subscribers).includes(memberId);
 }
 
 /** Query one stable page of mirrored tasks using provider-neutral filters. */
@@ -113,6 +116,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
       .order("id", { ascending: true });
   query = query.range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
   query = query.not("status", "in", "(archived,deleted)");
+  if (opts.organizationId) query = query.eq("organization_id", opts.organizationId);
   if (opts.completed === "true") query = query.eq("completed", true);
   if (opts.completed === "false") query = query.eq("completed", false);
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
@@ -134,23 +138,21 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   return ensureNoError(query, "load tasks");
 }
 
-export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[]) {
+export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[], organizationId?: string | null) {
   const personIds = [...new Set(tasks.flatMap((task) => stringValues(task.assignee_person_ids)))];
   if (!personIds.length) return attachTaskAssigneeIdentities(tasks, []);
-  const people = await ensureNoError(
-    db().from("work_people").select("id,display_name,email").eq("user_id", userId).in("id", personIds),
-    "load task assignee identities",
-  );
+  let query = db().from("work_people").select("id,display_name,email").eq("user_id", userId).in("id", personIds);
+  if (organizationId) query = query.eq("organization_id", organizationId);
+  const people = await ensureNoError(query, "load task assignee identities");
   return attachTaskAssigneeIdentities(tasks, people ?? []);
 }
 
-async function hydrateTaskProjects(userId: string, tasks: Record<string, any>[]) {
+async function hydrateTaskProjects(userId: string, tasks: Record<string, any>[], organizationId?: string | null) {
   const projectIds = [...new Set(tasks.map((task) => task.project_id).filter((id) => id != null).map(String))];
   if (!projectIds.length) return tasks.map((task) => ({ ...task, project: null }));
-  const projects = await ensureNoError(
-    db().from("work_projects").select("*").eq("user_id", userId).in("id", projectIds),
-    "load task projects",
-  );
+  let query = db().from("work_projects").select("*").eq("user_id", userId).in("id", projectIds);
+  if (organizationId) query = query.eq("organization_id", organizationId);
+  const projects = await ensureNoError(query, "load task projects");
   const byId = new Map((projects ?? []).map((project) => [String(project.id), project]));
   return tasks.map((task) => ({ ...task, project: byId.get(String(task.project_id)) ?? null }));
 }
@@ -271,20 +273,31 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const workspaceOrder = typeof opts.order === "string" && /^(?:title|due|status)_(?:asc|desc)$/.test(opts.order);
   const candidateLimit = Math.min(1000, offset + limit);
   const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
-  const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
+  const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId)
+    .maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
-  const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
+  if (opts.organizationId) {
+    const personOrg = await db().from("work_people").select("id").eq("user_id", userId).eq("id", personId)
+      .eq("organization_id", opts.organizationId).maybeSingle();
+    if (personOrg.error) throw new Error(`load task person organization: ${personOrg.error.message}`);
+    if (!personOrg.data) throw new Error("Task person must belong to the authorized organization");
+  }
+  const niftyMemberId = typeof personResult.data?.nifty_member_id === "string"
+    ? personResult.data.nifty_member_id.trim() || null
+    : personResult.data?.nifty_member_id as string | null | undefined;
   // The Tasks workspace's All / Completed history is the only paginated path
   // that needs global Name / Due / Status ordering. Keep that work in one SQL
   // query so later pages do not reload the complete history through four
   // attribution scans.
-  if (workspaceOrder && opts.includeLedgerHistory === true && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId) {
+  if (workspaceOrder && opts.includeLedgerHistory === true && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && !opts.organizationId) {
     const selected = await listPersonWorkspaceTaskPage(userId, personId, niftyMemberId, opts);
     const parentProviderIds = selected
       .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
       .map((task) => String(task.provider_task_id));
+    let childrenQuery = db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)");
+    if (opts.organizationId) childrenQuery = childrenQuery.eq("organization_id", opts.organizationId);
     const childrenResult = parentProviderIds.length
-      ? await db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)").in("parent_provider_task_id", parentProviderIds)
+      ? await childrenQuery.in("parent_provider_task_id", parentProviderIds)
       : { data: [], error: null };
     if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
     const progress = new Map<string, { total: number; completed: number }>();
@@ -301,7 +314,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
         : { total: 0, completed: 0 };
       return { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed };
     });
-    return hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress));
+    return hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress, opts.organizationId), opts.organizationId);
   }
   // Metadata-attributable work lives in every project, not only the ledger, so
   // the same attribution rule runs against each provenance path in SQL.
@@ -335,8 +348,10 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
     .map((task) => String(task.provider_task_id));
+  let childrenQuery = db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)");
+  if (opts.organizationId) childrenQuery = childrenQuery.eq("organization_id", opts.organizationId);
   const childrenResult = parentProviderIds.length
-    ? await db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)").in("parent_provider_task_id", parentProviderIds)
+    ? await childrenQuery.in("parent_provider_task_id", parentProviderIds)
     : { data: [], error: null };
   if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
   const progress = new Map<string, { total: number; completed: number }>();
@@ -351,7 +366,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
-  return hydrateTaskAssignees(userId, withProgress);
+  return hydrateTaskAssignees(userId, withProgress, opts.organizationId);
 }
 
 export type PersonTaskPage = {
@@ -458,7 +473,7 @@ export async function listPersonTaskPage(
     const count = progress.get(String(task.provider_task_id)) ?? progress.get(String(task.id)) ?? { total: 0, completed: 0 };
     return { ...task, subtask_total: count.total, subtask_completed: count.completed };
   });
-  const hydrated = await hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress));
+  const hydrated = await hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress, organizationId), organizationId);
   return { tasks: hydrated, totalCount, counts, nextCursor };
 }
 

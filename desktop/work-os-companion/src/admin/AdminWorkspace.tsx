@@ -59,7 +59,7 @@ export type AdminProfileEntry = {
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide, personalSettings }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -73,7 +73,13 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   section: AdminSection;
   focus: AdminSectionFocus;
   onNavigate: (section: AdminSection, focus?: AdminSectionFocus) => void;
-  onSwitchToEmployee: () => void;
+  /** Absent when this administrator has no mapped personal workday. */
+  onSwitchToEmployee?: (() => void) | undefined;
+  /** The administration New chat entry. It starts the shared admin Otto
+   * thread; it is never a dead sidebar control. */
+  onNewChat?: (() => void) | undefined;
+  /** A truthful blocked/loading line for the admin Otto context. */
+  ottoNotice?: string | null;
   onSignOut: () => void;
   /** The page guide for the current section, and how to reopen it. */
   guideView?: GuideView | null;
@@ -117,7 +123,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
         onNavigate={() => undefined}
         adminSection={section}
         onAdminNavigate={(next) => navigate(next)}
-        onNewChat={() => undefined}
+        onNewChat={() => onNewChat?.()}
         onSwitchWorkspace={onSwitchToEmployee}
         switchLabel="Switch to employee view"
         onWhatsNew={onOpenWhatsNew}
@@ -172,6 +178,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
           {session.role === "admin" ? <p className="admin-purpose">{meta.purpose}</p> : null}
         </header>
         <main className="page admin-page">
+          {ottoNotice ? <Notice tone="warn">{ottoNotice}</Notice> : null}
           {session.role === "admin" ? (
             content
           ) : (

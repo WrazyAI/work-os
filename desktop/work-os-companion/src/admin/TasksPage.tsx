@@ -22,7 +22,12 @@ import {
   statusLabel,
   todayIso,
 } from "./data";
-import { formatWorkOsFullDate, shiftWorkOsDate } from "../dateFormat";
+import { formatWorkOsFullDate } from "../dateFormat";
+import {
+  adminTaskDates,
+  adminTaskStatusRank,
+  compareAdminTaskDefaultOrder,
+} from "../../../../src/modules/work-os/admin-task-model";
 import { OverflowPanText } from "../OverflowPan";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
@@ -67,21 +72,11 @@ function trimmedText(value: unknown) {
   return String(value ?? "").trim();
 }
 
-const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** The recorded calendar day a date-shaped value states, if it states one; an
- * empty or unreadable value is "not recorded" and never paints. */
-function recordedDate(value: unknown): string | null {
-  const day = trimmedText(value).slice(0, 10);
-  return STRICT_DATE.test(day) ? day : null;
-}
-
 /** The created date the row states: the provider's own creation stamp first,
- * then the local record — the same precedence the employee task detail reads.
- * Both shapes keep their recorded calendar day instead of shifting with the
- * viewer's timezone. */
+ * then the local record. Both shapes keep their recorded calendar day instead
+ * of shifting with the viewer's timezone. */
 export function taskCreatedDate(task: AdminTaskRow): string | null {
-  return recordedDate(trimmedText(task.provider_created_at) || trimmedText(task.created_at));
+  return adminTaskDates(task).createdDate;
 }
 
 /** The row's effective due date: the recorded due date when the task has one,
@@ -92,10 +87,7 @@ export function taskCreatedDate(task: AdminTaskRow): string | null {
  * marker. Only a task whose created date is also missing has no effective due
  * date and keeps the dash. */
 export function taskEffectiveDueDate(task: AdminTaskRow): string | null {
-  const recorded = recordedDate(task.due_date);
-  if (recorded) return recorded;
-  const created = taskCreatedDate(task);
-  return created ? shiftWorkOsDate(created, 1) || null : null;
+  return adminTaskDates(task).effectiveDueDate;
 }
 
 function taskLabel(task: AdminTaskRow): string | null {
@@ -125,15 +117,7 @@ function dayValue(value: unknown): number | null {
  * rank and sorts last in both directions (the pill's Open is a display default
  * only). */
 function statusRank(task: AdminTaskRow, today: string): number | null {
-  if (typeof task.completed !== "boolean") return null;
-  if (task.completed) return 2;
-  const due = taskEffectiveDueDate(task);
-  return due && due < today ? 0 : 1;
-}
-
-function updatedValue(task: AdminTaskRow): number | null {
-  const parsed = Date.parse(trimmedText(task.updated_at));
-  return Number.isFinite(parsed) ? parsed : null;
+  return adminTaskStatusRank(task, today);
 }
 
 function compareText(a: string, b: string) {
@@ -164,12 +148,7 @@ function compareTiebreak(a: AdminTaskRow, b: AdminTaskRow) {
  * date orders exactly like a recorded one. */
 export function compareAdminTasks(a: AdminTaskRow, b: AdminTaskRow, sort: TaskSortState | null, today = todayIso()) {
   const numeric = (left: number, right: number) => left - right;
-  if (!sort) {
-    return compareNullable(dayValue(taskCreatedDate(a)), dayValue(taskCreatedDate(b)), -1, numeric)
-      || compareNullable(updatedValue(a), updatedValue(b), -1, numeric)
-      || compareNullable(dayValue(taskEffectiveDueDate(a)), dayValue(taskEffectiveDueDate(b)), -1, numeric)
-      || compareTiebreak(a, b);
-  }
+  if (!sort) return compareAdminTaskDefaultOrder(a, b);
   const direction: 1 | -1 = sort.direction === "desc" ? -1 : 1;
   const primary = sort.key === "task"
     ? compareNullable(taskLabel(a), taskLabel(b), direction, compareText)
@@ -254,7 +233,10 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
   const projects = useQuery({ queryKey: adminKeys.projects(), queryFn: fetchProjects, select: normalizeProjects, staleTime: ADMIN_STALE_MS });
   const completedParam = filter === "open" ? "false" : filter === "completed" ? "true" : "";
-  const taskFilters: Record<string, string> = { filter, personId, projectId, limit: "200", completed: completedParam };
+  // The stated day drives both the server's exact overdue count and the rows'
+  // effective-due status, so the summary and the pills cannot disagree.
+  const today = todayIso();
+  const taskFilters: Record<string, string> = { filter, personId, projectId, limit: "200", completed: completedParam, date: today };
   const tasks = useQuery({
     queryKey: adminKeys.tasks(taskFilters),
     queryFn: () => fetchAdminTasks(taskFilters),
@@ -316,7 +298,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   // No column active means the record's default order — newest created first,
   // updated as the tiebreak; client-side sorting is honest here because the
   // page holds the full normalized list.
-  const sortedRows = useMemo(() => sortTaskRows(rows, sort), [rows, sort]);
+  const sortedRows = useMemo(() => sortTaskRows(rows, sort, today), [rows, sort, today]);
   const summary = tasks.data?.summary;
 
   return (
@@ -378,7 +360,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   // it drives the cell, the overdue warning, and the pill
                   // exactly as a recorded due date would (design.md §16.2).
                   const due = taskEffectiveDueDate(task);
-                  const overdue = task.completed !== true && !!due && due < todayIso();
+                  const overdue = task.completed !== true && !!due && due < today;
                   const priority = trimmedText(task.priority);
                   const description = trimmedText(task.description);
                   return (

@@ -190,6 +190,18 @@ Return 50 task rows per page, page size bounded at 100, with a continuation
 cursor and complete filtered total. Multi-person assignment must not duplicate
 a task or imply each assignee owns a separate copy.
 
+Date implementation note (2026-10-22, controller ruling for Task 5; this is a
+narrow implementation correction, not a claim of user reapproval): PostgreSQL
+`timestamptz` stores an instant and irreversibly loses the provider's original
+UTC offset. The admin read model therefore canonicalizes every timestamp-shaped
+instant to its stored UTC calendar day consistently in SQL, pg `Date` values and
+serialized strings. A date-only `YYYY-MM-DD` column keeps its exact validated
+recorded day. No viewer-local conversion is applied. This means an old
+offset-bearing provider creation timestamp can display on the UTC day rather
+than the provider's local calendar day; preserving that original day would
+require a calendar-date field at ingestion and is not reconstructed from
+unrelated raw metadata in this read-only feature.
+
 Date-bound queries state the local day/timezone being used. For multiple people,
 "yesterday" is resolved in each employee's configured timezone and shown as
 such. No date means open backlog for unfinished tasks, latest reviewed interval

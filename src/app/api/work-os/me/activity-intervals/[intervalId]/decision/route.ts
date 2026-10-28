@@ -25,12 +25,17 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     });
     if (auth.response) return auth.response;
     const { intervalId } = await params;
-    const body = await req.json().catch(() => ({})) as { action?: unknown; feedback?: unknown };
+    const body = await req.json().catch(() => ({})) as { action?: unknown; feedback?: unknown; expectedReviewVersion?: unknown };
     const action: ActivityIntervalDecision | null = body.action === "confirm" ? "confirm" : body.action === "amend" ? "amend" : null;
     if (!action) return NextResponse.json({ error: "action must be confirm or amend" }, { status: 400 });
+    if (body.expectedReviewVersion !== undefined && (typeof body.expectedReviewVersion !== "number"
+      || !Number.isSafeInteger(body.expectedReviewVersion) || body.expectedReviewVersion < 0)) {
+      return NextResponse.json({ error: "expectedReviewVersion must be a non-negative integer" }, { status: 400 });
+    }
     const interval = await decideActivityInterval(auth.access, intervalId, {
       action,
       feedback: typeof body.feedback === "string" ? body.feedback : undefined,
+      expectedReviewVersion: body.expectedReviewVersion as number | undefined,
     });
     after(() => ensureRecapNextStepsForInterval(auth.access, intervalId).catch(() => undefined));
     return NextResponse.json({ interval: await activityIntervalFullView(interval) }, { headers: { "Cache-Control": "no-store" } });

@@ -17,6 +17,16 @@ import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
+import { claimAdminOttoDelivery, fetchAdminOttoInbox, updateAdminOttoDelivery } from "./adminOtto/api";
+import { OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, adminOttoChangedEvent, parseAdminOttoChangedEvent, parseOttoContextEvent, sameOttoScope, type OttoContextEvent } from "./adminOtto/mode";
+import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
+import { createAvatarContextController, type AvatarSessionIdentity } from "./adminOtto/avatarContext";
+import type { OttoScope } from "../../../src/modules/work-os/admin-otto/contracts";
+import { personalBootstrapAccess, type PersonalBootstrapRole } from "./adminOtto/personalBootstrap";
+import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
+import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from "./adminOtto/delivery";
+import { presentAdminRecapArrival } from "./adminOtto/notifications";
+import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep } from "./workOsQueries";
 import { resolveDashboardShift } from "./dashboardModel";
@@ -221,20 +231,20 @@ export default function AvatarApp(): React.ReactElement {
   const avatarRecapRetryFixture = avatarRecapRetryFixtureRequested(window.location.search);
   const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>(avatarRecapSlowFixture
     // The wait has passed the usual window: the quiet line and Cancel are up.
-    ? { status: "loading", lines: [], progress: 0, activeIndex: 0, revision: 1, intervalId: "fixture-recap", slow: true, retryIntervalId: null }
+    ? { status: "loading", lines: [], progress: 0, activeIndex: 0, revision: 1, reviewKey: null, intervalId: "fixture-recap", slow: true, retryIntervalId: null }
     : avatarRecapRetryFixture
       // The read was cancelled or failed: the recap stays, the control offers
       // another try (the API/fixture is never called by this frame).
-      ? { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: "fixture-recap" }
+      ? { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, reviewKey: null, intervalId: null, slow: false, retryIntervalId: "fixture-recap" }
       : avatarRecapReadingDoneFixture
     // The finished frame: the words stay on screen and the ask is up, exactly as
     // it is the moment the voice stops.
-    ? { status: "finished", lines: avatarRecapReadingFixtureLines(), progress: 1, activeIndex: 4, revision: 1, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
+    ? { status: "finished", lines: avatarRecapReadingFixtureLines(), progress: 1, activeIndex: 4, revision: 1, reviewKey: null, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
     : avatarRecapReadingStillFixture
       // The frozen frame: mid-read, no audio, so the prompter's shape can be
       // reviewed without a session, a provider call, or a browser gesture.
-      ? { status: "playing", lines: avatarRecapReadingFixtureLines(), progress: 0.42, activeIndex: 2, revision: 1, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
-      : { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null });
+      ? { status: "playing", lines: avatarRecapReadingFixtureLines(), progress: 0.42, activeIndex: 2, revision: 1, reviewKey: null, intervalId: "fixture-recap", slow: false, retryIntervalId: null }
+      : { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, reviewKey: null, intervalId: null, slow: false, retryIntervalId: null });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const recapVoiceRef = useRef<string>(recapVoice);
   recapVoiceRef.current = recapVoice;
@@ -260,6 +270,8 @@ export default function AvatarApp(): React.ReactElement {
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
+  const adminOttoSessionRef = useRef(desktopSession);
+  adminOttoSessionRef.current = desktopSession;
   const [now, setNow] = useState(() => Date.now());
   const [chat, setChat] = useState<ChatEntry[]>(() => avatarNextStepsPairFixture
     ? avatarNextStepsPairFixtureChat()
@@ -299,6 +311,14 @@ export default function AvatarApp(): React.ReactElement {
   const [nextStepsBubbleId, setNextStepsBubbleId] = useState<string | null>(avatarNextStepsFixture && nextStepsFixtureMoment
     ? `next-steps-${nextStepsFixtureMoment.intervalId}` : null);
   const [nextStepsCelebration, setNextStepsCelebration] = useState(false);
+  /* The leases exist before the players: their playback gate must be able to
+   * read the lease synchronously, including during the first render. */
+  const recapLease = useRef<OttoAudioLease | null>(null);
+  const nextStepsLease = useRef<OttoAudioLease | null>(null);
+  const recordingLease = useRef<OttoAudioLease | null>(null);
+  const avatarIdentityRef = useRef<AvatarSessionIdentity | null>(null);
+  const adminOttoContextRef = useRef<OttoContextEvent | null>(null);
+  const voiceCancelRef = useRef<(() => void) | null>(null);
   const [recapPlayer] = useState<RecapSpeechPlayer>(() => createRecapSpeechPlayer({
     fetchClip: avatarRecapReadingFixture
       ? async () => ({
@@ -310,6 +330,7 @@ export default function AvatarApp(): React.ReactElement {
         })
       : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
     createAudio: browserRecapAudio,
+    isPlaybackAllowed: () => recapLease.current?.isActive() ?? !adminOttoContextRef.current,
     onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
     onFailure: (message) => {
       flashRecapFailure();
@@ -317,10 +338,60 @@ export default function AvatarApp(): React.ReactElement {
     },
     onStaleCard: () => { void loadDayRef.current?.(true); },
   }));
+  const currentAvatarAudioContext = useCallback((): { scope: OttoScope; epoch: number } | null => {
+    const adopted = adminOttoContextRef.current;
+    const identity = avatarIdentityRef.current;
+    const scope = adopted?.scope ?? (identity
+      ? { userId: identity.userId, organizationId: identity.organizationId, mode: "employee" as const }
+      : null);
+    if (!scope) return null;
+    return { scope, epoch: adopted?.epoch ?? 1 };
+  }, []);
+  const requestAvatarAudio = useCallback(async (kind: "speech" | "recording"): Promise<OttoAudioLease | null> => {
+    const context = currentAvatarAudioContext();
+    if (!context) return null;
+    try {
+      return await requestOttoAudio(context.scope, context.epoch, kind);
+    } catch (error) {
+      flashRecapFailure();
+      setChat((current) => [...current, {
+        id: `audio-owner-error-${Date.now()}`,
+        role: "system",
+        text: error instanceof Error && error.message ? error.message : "Audio is busy in another companion window.",
+      }]);
+      return null;
+    }
+  }, [flashRecapFailure]);
   const toggleRecapRead = useCallback((intervalId: string, revision: number | null): void => {
-    void recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
-  }, [recapPlayer, facts.voiceAvailable]);
-  const stopRecapRead = useCallback((): void => recapPlayer.stop(), [recapPlayer]);
+    const active = recapPlayer.snapshot();
+    if (active.intervalId === intervalId && active.status !== "idle") {
+      recapLease.current?.release();
+      recapLease.current = null;
+      recapPlayer.stop();
+      return;
+    }
+    voiceCancelRef.current?.();
+    requestOttoAudioStop();
+    if (!adminOttoContextRef.current) {
+      void recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
+      return;
+    }
+    const requestedContext = adminOttoContextRef.current;
+    void requestAvatarAudio("speech").then(async (lease) => {
+      if (!lease || !lease.isActive()) { lease?.release(); return; }
+      const context = adminOttoContextRef.current;
+      if (!context || context.epoch !== requestedContext.epoch
+        || !sameOttoScope(context.scope, requestedContext.scope)) { lease.release(); return; }
+      recapLease.current?.release();
+      recapLease.current = lease;
+      await recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
+    });
+  }, [facts.voiceAvailable, recapPlayer, requestAvatarAudio]);
+  const stopRecapRead = useCallback((): void => {
+    recapLease.current?.release();
+    recapLease.current = null;
+    recapPlayer.stop();
+  }, [recapPlayer]);
   /** Leaving a wait is a failure-shaped moment for the mascot, even though the
    * synthesis itself keeps running for the retry. */
   const cancelRecapWait = useCallback((): void => {
@@ -342,6 +413,7 @@ export default function AvatarApp(): React.ReactElement {
         })
       : (input) => apiRequestAudio("/api/work-os/voice/next-steps", input),
     createAudio: browserRecapAudio,
+    isPlaybackAllowed: () => nextStepsLease.current?.isActive() ?? !adminOttoContextRef.current,
     onSnapshot: setNextStepsSpeech,
     onFailure: (message) => {
       flashRecapFailure();
@@ -350,14 +422,274 @@ export default function AvatarApp(): React.ReactElement {
     onStaleCard: () => undefined,
   }));
   const toggleNextStepsRead = useCallback((moment: RecapNextStepsMoment): void => {
-    void nextStepsPlayer.toggle({
-      intervalId: moment.intervalId,
-      revision: null,
-      voice: recapVoiceRef.current,
-      enabled: facts.voiceAvailable,
+    const active = nextStepsPlayer.snapshot();
+    if (active.intervalId === moment.intervalId && active.status !== "idle") {
+      nextStepsLease.current?.release();
+      nextStepsLease.current = null;
+      nextStepsPlayer.stop();
+      return;
+    }
+    voiceCancelRef.current?.();
+    requestOttoAudioStop();
+    if (!adminOttoContextRef.current) {
+      void nextStepsPlayer.toggle({
+        intervalId: moment.intervalId,
+        revision: null,
+        voice: recapVoiceRef.current,
+        enabled: facts.voiceAvailable,
+      });
+      return;
+    }
+    const requestedContext = adminOttoContextRef.current;
+    void requestAvatarAudio("speech").then(async (lease) => {
+      if (!lease || !lease.isActive()) { lease?.release(); return; }
+      const context = adminOttoContextRef.current;
+      if (!context || context.epoch !== requestedContext.epoch
+        || !sameOttoScope(context.scope, requestedContext.scope)) { lease.release(); return; }
+      nextStepsLease.current?.release();
+      nextStepsLease.current = lease;
+      await nextStepsPlayer.toggle({
+        intervalId: moment.intervalId,
+        revision: null,
+        voice: recapVoiceRef.current,
+        enabled: facts.voiceAvailable,
+      });
     });
-  }, [nextStepsPlayer, facts.voiceAvailable]);
-  const stopNextStepsRead = useCallback((): void => nextStepsPlayer.stop(), [nextStepsPlayer]);
+  }, [facts.voiceAvailable, nextStepsPlayer, requestAvatarAudio]);
+  const stopNextStepsRead = useCallback((): void => {
+    nextStepsLease.current?.release();
+    nextStepsLease.current = null;
+    nextStepsPlayer.stop();
+  }, [nextStepsPlayer]);
+  useEffect(() => onOttoSpeechStop(() => {
+    stopRecapRead();
+    stopNextStepsRead();
+  }), [stopNextStepsRead, stopRecapRead]);
+  useEffect(() => onOttoAudioStop(() => {
+    recordingLease.current?.release();
+    recordingLease.current = null;
+    voiceCancelRef.current?.();
+  }), []);
+  useEffect(() => {
+    const requester = createOttoAudioRequester({
+      windowId: "avatar",
+      bus: tauriAudioBus(),
+      onRevoke: (_token, kind) => {
+        // A revoked speech read never cancels a capture that opened after it;
+        // a revoked recording closes the microphone before acknowledging.
+        if (kind === "recording") {
+          recordingLease.current?.release();
+          recordingLease.current = null;
+          voiceCancelRef.current?.();
+          return;
+        }
+        stopRecapRead();
+        stopNextStepsRead();
+      },
+    });
+    const uninstall = installOttoAudioRequester(requester);
+    return () => {
+      uninstall();
+      requester.dispose();
+    };
+  }, [stopNextStepsRead, stopRecapRead]);
+
+  useEffect(() => {
+    if (recapSpeech.status !== "idle" && recapSpeech.status !== "finished") return;
+    recapLease.current?.release();
+    recapLease.current = null;
+  }, [recapSpeech.status]);
+  useEffect(() => {
+    if (nextStepsSpeech.status !== "idle" && nextStepsSpeech.status !== "finished") return;
+    nextStepsLease.current?.release();
+    nextStepsLease.current = null;
+  }, [nextStepsSpeech.status]);
+  const [adminOttoContext, setAdminOttoContext] = useState<OttoContextEvent | null>(null);
+  const [deliveryOwnedContext, setDeliveryOwnedContext] = useState<string | null>(null);
+  const [avatarVisible, setAvatarVisible] = useState<boolean | null>(null);
+  const adminDeliveryRef = useRef<AdminRecapDeliveryHandle | null>(null);
+  const [avatarContextController] = useState(() => createAvatarContextController({
+    onContext: (next) => {
+      adminOttoContextRef.current = next;
+      setAdminOttoContext(next);
+    },
+    stopActiveWork: () => {
+      stopRecapRead();
+      stopNextStepsRead();
+      recordingLease.current?.release();
+      recordingLease.current = null;
+      avatarIdentityRef.current = null;
+      voiceRef.current.cancel();
+      void adminDeliveryRef.current?.stop();
+    },
+  }));
+  const avatarSessionPresent = desktopSession !== null;
+
+  /* The avatar's own authoritative identity is needed to reject a
+     same-organization account change at epoch 1. The session route returns the
+     user/org; /me/day and onboarding still belong only to the employee shell. */
+  useEffect(() => {
+    void avatarContextController.sessionChanged(() => avatarSessionPresent
+      ? apiRequest<AvatarSessionIdentity>("/api/work-os/session") : Promise.resolve(null)).then(() => {
+        avatarIdentityRef.current = avatarContextController.identity();
+      });
+    return () => avatarContextController.clear();
+  }, [avatarSessionPresent, desktopSession?.token, desktopSession?.organizationId, avatarContextController]);
+
+  /* Main broadcasts the one shared actor/organization/mode epoch. The avatar
+     adopts it only for its own user, stops old audio/mic/network on a real
+     boundary, and never trusts a lower same-account epoch. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_CONTEXT_EVENT, (event) => {
+      const next = parseOttoContextEvent(event.payload);
+      if (!next) return;
+      avatarContextController.receive(next);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [avatarContextController]);
+
+  /* A changed conversation or delivery record set only wakes the existing
+     loop; it never carries team text or a lease token. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_CHANGED_EVENT, (event) => {
+      const changed = parseAdminOttoChangedEvent(event.payload);
+      const current = adminOttoContextRef.current;
+      if (!changed || !current) return;
+      if (changed.scope.userId !== current.scope.userId
+        || changed.scope.organizationId !== current.scope.organizationId
+        || changed.scope.mode !== current.scope.mode
+        || changed.epoch !== current.epoch) return;
+      void adminDeliveryRef.current?.pollNow("manual");
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
+
+  /* A saved follow filter changes which reviewed arrivals the existing delivery
+     feed may claim. Wake that one feed only for this window's live account; the
+     signal never carries a recap, name, token, or settings object. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listenAdminOttoFollowChanged((changed) => {
+      if (cancelled) return;
+      const current = adminOttoContextRef.current;
+      if (!current || !adminOttoFollowChangedAppliesTo(changed, current.scope)) return;
+      void adminDeliveryRef.current?.pollNow("manual");
+    }).then((fn) => {
+      if (cancelled) fn(); else unlisten = fn;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  /* Sign-out clears the shared context even when no new epoch follows. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen(OTTO_CONTEXT_CLEARED_EVENT, () => {
+      void avatarContextController.sessionChanged(() => apiRequest<AvatarSessionIdentity>("/api/work-os/session"));
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [avatarContextController]);
+
+  /* A visible avatar has deterministic priority; main's bounded fallback
+     stands down on its heartbeat. Renewals never restart delivery. */
+  useEffect(() => {
+    if (!adminOttoContext || avatarFixture || avatarVisible !== true) return;
+    const key = deliveryOwnershipKey(adminOttoContext);
+    return startDeliveryOwnership({ window: "avatar", context: adminOttoContext, avatarVisible: true,
+      onChange: (owns) => setDeliveryOwnedContext(owns ? key : null),
+    });
+  }, [adminOttoContext, avatarFixture, avatarVisible]);
+
+  /* A hidden avatar never claims or acknowledges a team delivery; main's
+     fallback takes over. Visibility failures are conservative: this window is
+     not treated as visible, so the fallback owns delivery. */
+  useEffect(() => {
+    if (!win) { setAvatarVisible(false); return; }
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const visible = await win.isVisible();
+        if (!cancelled) setAvatarVisible(visible);
+      } catch {
+        if (!cancelled) setAvatarVisible(false);
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 60_000);
+    const onVisibility = () => { void check(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [win]);
+
+  /* Avatar-first delivery. It runs while the window is visible; a hidden
+     avatar releases its lease and lets main's fallback take over. Personal mode
+     keeps the feed count but never claims or acknowledges the team delivery. */
+  useEffect(() => {
+    const context = adminOttoContext;
+    if (!context || avatarFixture || avatarVisible !== true) return;
+    if (deliveryOwnedContext !== deliveryOwnershipKey(context)) return;
+    let cancelled = false;
+    const controller = startAuthorizedAdminRecapDelivery({
+      signedIn: avatarSessionPresent, syncBypass: !!avatarFixture, session: avatarContextController.identity(),
+      scope: context.scope,
+      epoch: context.epoch,
+      deviceId: `avatar:${desktopSession?.organizationId ?? "local"}`,
+      windowId: "avatar",
+      api: {
+        fetchInbox: (input) => fetchAdminOttoInbox(input),
+        claim: (input) => claimAdminOttoDelivery(input),
+        updateState: (input) => updateAdminOttoDelivery(input),
+      },
+      isCurrent: () => !cancelled && adminOttoSessionRef.current?.token === desktopSession?.token
+        && adminOttoSessionRef.current?.organizationId === desktopSession?.organizationId
+        && avatarContextController.isCurrent(context),
+      getMode: () => context.scope.mode,
+      canPresent: async () => {
+        try {
+          return win ? await win.isVisible() : false;
+        } catch {
+          return false;
+        }
+      },
+      onArrival: async (arrival, fence) => {
+        const presented = await presentAdminRecapArrival(arrival.count, fence);
+        if (presented && fence.isCurrent()) {
+          void emit(OTTO_CHANGED_EVENT, adminOttoChangedEvent({
+            scope: context.scope,
+            epoch: context.epoch,
+            eventIds: arrival.eventIds,
+          }));
+        }
+        return presented;
+      },
+      onError: () => undefined,
+    });
+    if (!controller) return;
+    adminDeliveryRef.current = controller;
+    void controller.pollNow("manual");
+    const refresh = () => { void controller.pollNow("focus"); };
+    const reconnect = () => { void controller.pollNow("reconnect"); };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", reconnect);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", reconnect);
+      void controller.stop();
+      if (adminDeliveryRef.current === controller) adminDeliveryRef.current = null;
+    };
+  }, [adminOttoContext, deliveryOwnedContext, avatarFixture, avatarVisible, avatarSessionPresent, avatarContextController, desktopSession?.token, desktopSession?.organizationId, win]);
+
+  useEffect(() => () => { void adminDeliveryRef.current?.stop(); }, []);
 
   // One audio owner: whichever read starts, the other stops. The effect (rather
   // than each handler) keeps the rule true for the fixture players too.
@@ -440,12 +772,42 @@ export default function AvatarApp(): React.ReactElement {
     onRecordingStart: () => {
       setAvatarTab("chat");
       void toggleExpanded(true);
+      // Stop narration in this window, but never fan out to the all-audio
+      // seam: that seam cancels the capture that is opening right now.
+      stopRecapRead();
+      stopNextStepsRead();
+      requestOttoSpeechStop();
+    },
+    beforeCapture: async () => {
+      // The microphone opens only after this window owns recording audio. A
+      // grant that was revoked before media starts refuses the capture.
+      const requested = currentAvatarAudioContext();
+      if (!requested) return null;
+      const lease = await requestAvatarAudio("recording");
+      if (!lease) return "Audio is busy in another companion window.";
+      const current = currentAvatarAudioContext();
+      if (!lease.isActive()
+        || !current
+        || current.epoch !== requested.epoch
+        || !sameOttoScope(current.scope, requested.scope)) {
+        lease.release();
+        return "Audio is busy in another companion window.";
+      }
+      recordingLease.current?.release();
+      recordingLease.current = lease;
+      return null;
     },
   });
   /* The hold-to-talk listener is registered once; this ref keeps it on the
      newest recorder without re-subscribing on every render. */
   const voiceRef = useRef(voice);
   useEffect(() => { voiceRef.current = voice; }, [voice]);
+  voiceCancelRef.current = voice.cancel;
+  useEffect(() => {
+    if (voice.state !== "idle" && voice.state !== "transcribing") return;
+    recordingLease.current?.release();
+    recordingLease.current = null;
+  }, [voice.state]);
   // DEV fixture: render either mascot size without the vault.
   useEffect(() => {
     if (avatarMascotFixture) document.documentElement.dataset.mascotSize = avatarMascotFixture;
@@ -542,6 +904,15 @@ export default function AvatarApp(): React.ReactElement {
     dayLoadInFlight.current = true;
     const sessionRevision = daySessionRevision.current;
     try {
+      // The floating window has its own boot/refresh path. Resolve membership
+      // before touching personal endpoints, even before main broadcasts context.
+      const membership = await apiRequest<{ userId: string; organizationId: string; role: PersonalBootstrapRole; personId: string | null }>("/api/work-os/session");
+      if (sessionRevision !== daySessionRevision.current) return;
+      const access = personalBootstrapAccess({
+        signedIn: true, syncBypass: false, role: membership.role, workspace: "employee", identity: membership,
+        adminContext: { status: "ready", personId: membership.personId, scope: membership },
+      });
+      if (!access.day) return;
       if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
       // Shared query cache: a fresh cached day is served without a network
       // round-trip; stale data refreshes in the background.
@@ -800,7 +1171,7 @@ export default function AvatarApp(): React.ReactElement {
     void emit("work-os://avatar-day-changed");
   }, [loadDay]);
   useAttendanceWatch({
-    enabled: connected === true,
+    enabled: connected === true && facts.personId !== null,
     input: { sessionState: facts.sessionState, shiftStartsAt: facts.shiftStartsAt, shiftEndsAt: facts.shiftEndsAt },
     onChange: onAttendanceChange,
   });
@@ -1458,7 +1829,7 @@ export default function AvatarApp(): React.ReactElement {
   // Confirm/amend an Activity Interval Review. The AI inference never becomes
   // an employee check-in and never advances the check-in cadence; only the
   // employee's own decision on this recap is recorded.
-  const decideActivityPrompt = useCallback(async (id: string, action: "confirm" | "amend", feedback?: string): Promise<void> => {
+  const decideActivityPrompt = useCallback(async (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number): Promise<void> => {
     if (avatarRecapLiveFixture && action === "confirm") {
       // The recap leaves `inferred`, which is what retires the bubble, and the
       // approval hands straight to the next-steps moment in the same bubble —
@@ -1499,7 +1870,7 @@ export default function AvatarApp(): React.ReactElement {
         setNextStepsBubbleId("next-steps-fixture");
         return;
       }
-      await decideActivityIntervalReview(id, action, feedback);
+      await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
       const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
       setActivityPrompt(null);
       setRecapEditMode(false);
@@ -1649,7 +2020,7 @@ export default function AvatarApp(): React.ReactElement {
       const note = input.trim();
       if (!note || decidingIntervalId) return;
       setInput("");
-      await decideActivityPrompt(activityPrompt.id, "amend", note);
+      await decideActivityPrompt(activityPrompt.id, "amend", note, activityPrompt.reviewVersion);
       return;
     }
     await sendUpdate();
@@ -2320,7 +2691,7 @@ export default function AvatarApp(): React.ReactElement {
                   className="avatar-bubble-confirm"
                   aria-label={`Confirm the recap for ${pendingRecap.label ?? "this interval"}`}
                   title="Sounds good"
-                  onClick={() => { void decideActivityPrompt(pendingRecap.id, "confirm"); stopRecapRead(); }}
+                  onClick={() => { void decideActivityPrompt(pendingRecap.id, "confirm", undefined, pendingRecap.reviewVersion); stopRecapRead(); }}
                 ><Check size={15} aria-hidden="true" /></button>
                 <button
                   type="button"

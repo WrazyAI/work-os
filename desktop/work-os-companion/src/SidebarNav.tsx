@@ -363,15 +363,15 @@ export default function SidebarNav({
           )}
         </div>
 
+        <div className="sidebar-new-chat-wrap">
+          <button type="button" data-sidebar-row data-sidebar-nav-option data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
+            <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
+            <span className="sidebar-row-copy">New chat</span>
+          </button>
+        </div>
+
         {!admin && (
           <>
-            <div className="sidebar-new-chat-wrap">
-              <button type="button" data-sidebar-row data-sidebar-nav-option data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
-                <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
-                <span className="sidebar-row-copy">New chat</span>
-              </button>
-            </div>
-
             <nav className="sidebar-navigation" aria-label="Work OS">
               <SidebarGlideGroup className="nav-group nav-core">
                 {primary.map(({ id, label, icon: Icon }) => (

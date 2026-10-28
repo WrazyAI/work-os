@@ -42,7 +42,7 @@ function harness(overrides: Partial<Parameters<typeof createRecapSpeechPlayer>[0
   const failures: string[] = [];
   const stale: string[] = [];
   const audios: Array<ReturnType<typeof fakeAudio>> = [];
-  const fetched: Array<{ intervalId: string; revision: number | null; voice: string }> = [];
+  const fetched: Array<{ intervalId: string; revision: number | null; reviewKey?: string | null; voice: string }> = [];
   let clip: RecapSpeechClip = {
     bytes: new ArrayBuffer(8),
     mimeType: "audio/wav",
@@ -287,5 +287,14 @@ describe("recap speech player", () => {
     await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
     expect(h.player.snapshot().status).toBe("idle");
     expect(h.player.snapshot().lines).toEqual([]);
+  });
+
+  it("keeps the employee personal recap flow unchanged", async () => {
+    const h = harness();
+    await h.player.toggle({ intervalId: "interval-1", revision: 4, voice: "Kore", enabled: true });
+    expect(h.fetched[0]).toEqual({ intervalId: "interval-1", revision: 4, reviewKey: null, voice: "Kore" });
+    expect(h.player.snapshot().reviewKey).toBe(null);
+    expect(h.player.snapshot().revision).toBe(4);
+    expect(h.player.snapshot().status).toBe("playing");
   });
 });

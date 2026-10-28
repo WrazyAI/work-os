@@ -7,6 +7,10 @@ const PREVIEW_EVENTS = new Set([
   "work-os://debug-current", "work-os://debug-scenario", "work-os://debug-request",
   "work-os://debug-show-page-guide", "work-os://debug-page-guide-result",
   "work-os://mascot-activity", "work-os://mascot-resolved", "work-os://mascot-request",
+  "work-os://otto-audio-request", "work-os://otto-audio-revoke", "work-os://otto-audio-stopped",
+  "work-os://otto-audio-grant", "work-os://otto-audio-deny", "work-os://otto-audio-release",
+  // Follow changes carry only scope, mode, opaque person ids, and revision.
+  "work-os://admin-otto-follow-changed",
 ]);
 const handlers = new Map<string, Set<(payload: unknown) => void>>();
 let channel: BroadcastChannel | null = null;

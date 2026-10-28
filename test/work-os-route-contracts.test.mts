@@ -69,6 +69,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const activityEnsure = await source("src/app/api/work-os/me/activity-intervals/ensure/route.ts");
   const activityDecision = await source("src/app/api/work-os/me/activity-intervals/[intervalId]/decision/route.ts");
   const activityEngine = await source("src/lib/work-os-activity-intervals.ts");
+  const reviewedRecaps = await source("src/lib/work-os-reviewed-recaps.ts");
   const promptDelivery = await source("src/app/api/work-os/me/prompt-delivery/route.ts");
   assert.match(activityIntervals, /listActivityIntervals/);
   assert.match(activityIntervals, /requirePerson: true/);
@@ -116,7 +117,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(nextStepsRoute, /listRecapNextSteps/, "the next-steps route reads the moment");
   assert.match(nextStepsRoute, /dismissRecapNextSteps/, "the next-steps route dismisses on request");
   assert.match(nextStepsRoute, /action must be dismiss/, "only an explicit dismissal is accepted");
-  assert.match(activityEngine, /next_steps_status: "pending"/, "a recap decision queues the next-step pass");
+  assert.match(reviewedRecaps, /next_steps_status='pending'/, "a recap decision queues the next-step pass");
+  assert.match(activityEngine, /decideReviewedRecap/, "the employee decision delegates to the reviewed-recap transaction");
   assert.match(activityDecision, /after\(/, "next-step generation is scheduled after the decision response");
   assert.match(activityDecision, /ensureRecapNextStepsForInterval/, "the decision kicks its own recap's generation");
   assert.match(activityEnsure, /after\(/, "the ensure route drains stale next-step passes after the response");
@@ -667,11 +669,14 @@ test("admin task routes only select columns that exist in the migration DDL", as
   assert.equal(detailSpecs.length, 1, "the admin task-detail GET selects work_tasks columns");
   assert.match(detailSpecs[0]!, /project:work_projects\(id,name\)/, "the detail select keeps the project embed");
   assertSelectColumnsExist(detailSpecs[0]!, "work_tasks", tables, "tasks/[taskId]");
-  // The list route's head-only workload counts select the same two tables.
+  // The list route's exact workload counts now share the read service's
+  // effective-due and attribution predicates; the raw SQL is guarded by the
+  // executable PGlite read suite rather than the Supabase select parser.
   const list = await source("src/app/api/work-os/tasks/route.ts");
-  assert.ok(selectSpecs(list, "work_tasks").length >= 1, "the admin task list counts work_tasks rows");
-  for (const spec of selectSpecs(list, "work_tasks")) assertSelectColumnsExist(spec, "work_tasks", tables, "tasks");
-  for (const spec of selectSpecs(list, "work_task_day_events")) assertSelectColumnsExist(spec, "work_task_day_events", tables, "tasks");
+  assert.match(list, /countAdminTaskRecord\(auth\.access/, "the admin task list uses the shared exact counts");
+  const reads = await source("src/lib/work-os-admin-otto-reads.ts");
+  assert.match(reads, /FROM work_tasks/, "the shared count reads work_tasks");
+  assert.match(reads, /FROM work_task_day_events/, "the shared count reads completed task events");
   // The list rows come from the shared lib query; it must keep the wildcard
   // select so every created/updated stamp reaches the companion's default
   // newest-created ordering, which falls back through updated and due when a

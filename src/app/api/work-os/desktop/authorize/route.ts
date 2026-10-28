@@ -16,11 +16,13 @@ export async function POST(req: Request) {
     }
     const organizationId = typeof body.organization_id === "string" ? body.organization_id : null;
     const auth = await requireWorkOsAccess({
-      requirePerson: true,
       feature: "desktop_companion",
       organizationId,
     });
     if (auth.response) return auth.response;
+    if (auth.access.role !== "admin" && !auth.access.personId) {
+      return NextResponse.json({ error: "Work OS person mapping required." }, { status: 409 });
+    }
     return NextResponse.json(await authorizeDesktop(auth.access, body));
   } catch (error) {
     return jsonError(error);

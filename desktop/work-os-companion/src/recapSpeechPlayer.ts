@@ -30,6 +30,9 @@ export interface RecapSpeechSnapshot {
   activeIndex: number;
   /** The revision the current clip speaks, or null. */
   revision: number | null;
+  /** The server-issued reviewed-recap key the clip speaks, or null for the
+   * employee path and while idle. Never a generation revision. */
+  reviewKey: string | null;
   /** The recap this read belongs to, or null. */
   intervalId: string | null;
   /** True once the wait has passed the usual generation window. */
@@ -49,33 +52,42 @@ export interface RecapAudio {
   readonly duration: number;
   addEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
   /** Reusable adapters must be able to drop a finished read's listeners. */
-  removeEventListener(type: "timeupdate" | "ended" | "error", handler: () => void): void;
+  removeEventListener?(type: "timeupdate" | "ended" | "error", handler: () => void): void;
 }
 
 export interface RecapSpeechPlayerDeps {
-  fetchClip: (input: { intervalId: string; revision: number | null; voice: string }) => Promise<{
+  fetchClip: (input: { intervalId: string; revision: number | null; reviewKey?: string | null; voice: string }) => Promise<{
     bytes: ArrayBuffer;
     mimeType: string;
     lines: RecapSpeechLine[];
     revision: number | null;
+    reviewKey?: string | null;
     stale: boolean;
   }>;
   createAudio: () => RecapAudio;
+  /** False when the cross-window lease this read was granted is no longer
+   * active, or the actor/mode/epoch changed while the clip was prepared.
+   * Checked immediately before the audio starts, never after. */
+  isPlaybackAllowed?: () => boolean;
   onSnapshot: (snapshot: RecapSpeechSnapshot) => void;
   /** A bounded, employee-facing reason; the caller shows it and stops. */
   onFailure: (message: string) => void;
   /** The card moved on since it was rendered, so refresh it before playing. */
   onStaleCard: (intervalId: string) => void;
+  /** A reviewed key changed while the clip was requested. Returning true means
+   * the caller has refreshed the visible recap and the player must stay idle;
+   * the new version is read only after another explicit Listen. */
+  onReviewChanged?: (error: unknown, input: { intervalId: string; reviewKey?: string | null }) => boolean;
 }
 
 export interface RecapSpeechPlayer {
   snapshot(): RecapSpeechSnapshot;
-  toggle(input: { intervalId: string | null; revision: number | null; voice: string; enabled: boolean }): Promise<void>;
+  toggle(input: { intervalId: string | null; revision: number | null; reviewKey?: string | null; voice: string; enabled: boolean }): Promise<void>;
   stop(): void;
   dispose(): void;
 }
 
-export const IDLE_RECAP_SPEECH: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null, slow: false, retryIntervalId: null };
+export const IDLE_RECAP_SPEECH: RecapSpeechSnapshot = { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, reviewKey: null, intervalId: null, slow: false, retryIntervalId: null };
 
 /** How long a read is expected to take before the employee is told it is
  * taking longer. The provider budget stays well beyond this (the route allows
@@ -106,11 +118,6 @@ export function browserRecapAudio(): RecapAudio {
   let offset = 0;
   let playing = false;
   let timer: ReturnType<typeof setInterval> | null = null;
-  /** A load and a play can both be awaiting the browser. These tokens make a
-   * superseded one return instead of committing a stale clip or starting a
-   * source after Stop. */
-  let loadGeneration = 0;
-  let playGeneration = 0;
   const listeners = new Map<string, Array<() => void>>();
   const emit = (type: string) => {
     for (const handler of listeners.get(type) ?? []) handler();
@@ -121,46 +128,15 @@ export function browserRecapAudio(): RecapAudio {
       timer = null;
     }
   };
-  const stopSource = () => {
-    playing = false;
-    stopTimer();
-    if (source) {
-      source.onended = null;
-      try {
-        source.stop();
-      } catch {
-        /* already stopped */
-      }
-      source = null;
-    }
-  };
   const elapsed = () => (playing ? offset + (context.currentTime - startedAt) : offset);
 
   return {
     async load(bytes) {
-      const attempt = (loadGeneration += 1);
-      playGeneration += 1;
-      // The adapter can be asked to load while the old clip still plays.
-      // Silence it (and stop its clock) before resetting the position.
-      stopSource();
-      // A reused context keeps the previous clip's clock. The next read is a
-      // different clip, so its position starts at zero even if the old one ran
-      // to its end (a longer new clip would otherwise begin mid-sentence).
-      offset = 0;
-      const decoded = await context.decodeAudioData(bytes.slice(0));
-      // A newer read started while this one decoded: its clip owns the context.
-      if (attempt !== loadGeneration) return;
-      buffer = decoded;
+      buffer = await context.decodeAudioData(bytes.slice(0));
     },
     async play() {
       if (!buffer) throw new Error("The recap audio could not be decoded.");
       if (playing) return;
-      const attempt = (playGeneration += 1);
-      // One context serves every read; a context the browser suspended while
-      // idle has to be resumed before the reused source starts.
-      await context.resume().catch(() => undefined);
-      // Stop, a new clip, or a close arrived while the context was resuming.
-      if (attempt !== playGeneration) return;
       if (offset >= buffer.duration) offset = 0;
       source = context.createBufferSource();
       source.buffer = buffer;
@@ -182,11 +158,20 @@ export function browserRecapAudio(): RecapAudio {
       }, 100);
     },
     pause() {
-      playGeneration += 1;
       if (!playing) return;
       const at = elapsed();
+      playing = false;
       offset = Math.min(buffer?.duration ?? 0, Math.max(0, at));
-      stopSource();
+      stopTimer();
+      if (source) {
+        source.onended = null;
+        try {
+          source.stop();
+        } catch {
+          /* already stopped */
+        }
+        source = null;
+      }
     },
     get currentTime() {
       return Math.min(buffer?.duration ?? 0, Math.max(0, elapsed()));
@@ -199,12 +184,6 @@ export function browserRecapAudio(): RecapAudio {
     },
     removeEventListener(type, handler) {
       listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== handler));
-    },
-    close() {
-      playGeneration += 1;
-      loadGeneration += 1;
-      stopSource();
-      void context.close().catch(() => undefined);
     },
   };
 }
@@ -263,9 +242,10 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     publish({ progress, activeIndex: activeLineIndex(progress, weights) });
   };
 
-  const start = async (input: { intervalId: string; revision: number | null; voice: string }) => {
+  const start = async (input: { intervalId: string; revision: number | null; reviewKey?: string | null; voice: string }) => {
     const mine = (token += 1);
-    publish({ status: "loading", lines: [], progress: 0, activeIndex: 0, revision: input.revision, intervalId: input.intervalId, slow: false, retryIntervalId: null });
+    const reviewKey = typeof input.reviewKey === "string" && input.reviewKey ? input.reviewKey : null;
+    publish({ status: "loading", lines: [], progress: 0, activeIndex: 0, revision: input.revision, reviewKey, intervalId: input.intervalId, slow: false, retryIntervalId: null });
     clearSlow();
     slowTimer = setTimeout(() => {
       if (mine === token && snapshot.status === "loading") publish({ slow: true });
@@ -288,10 +268,16 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     }
     let clip: Awaited<ReturnType<RecapSpeechPlayerDeps["fetchClip"]>>;
     try {
-      clip = await deps.fetchClip(input);
+      clip = await deps.fetchClip({ ...input, reviewKey });
     } catch (error) {
       if (mine !== token) return;
       release();
+      // A changed reviewed key is not a playback failure: the surface refreshes
+      // the recap and waits for another explicit Listen. Nothing starts here.
+      if (deps.onReviewChanged?.(error, { intervalId: input.intervalId, reviewKey })) {
+        publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+        return;
+      }
       publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
       deps.onFailure(error instanceof Error && error.message ? error.message : UNAVAILABLE);
       return;
@@ -299,6 +285,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     if (mine !== token) return;
     if (clip.stale) deps.onStaleCard(input.intervalId);
     weights = lineWeights(clip.lines);
+    const playedReviewKey = typeof clip.reviewKey === "string" && clip.reviewKey ? clip.reviewKey : reviewKey;
 
     try {
       await element.load(clip.bytes, clip.mimeType);
@@ -310,6 +297,11 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
       return;
     }
     if (mine !== token) return;
+    if (deps.isPlaybackAllowed && !deps.isPlaybackAllowed()) {
+      release();
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      return;
+    }
 
     const onEnded = () => {
       if (mine !== token) return;
@@ -319,7 +311,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
       // the words remain.
       weights = [];
       release();
-      publish({ status: "finished", progress: 1, activeIndex: Math.max(0, clip.lines.length - 1), lines: clip.lines, revision: clip.revision, intervalId: input.intervalId });
+      publish({ status: "finished", progress: 1, activeIndex: Math.max(0, clip.lines.length - 1), lines: clip.lines, revision: clip.revision, reviewKey: playedReviewKey, intervalId: input.intervalId });
     };
     const onError = () => {
       if (mine !== token) return;
@@ -331,12 +323,17 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
     element.addEventListener("ended", onEnded);
     element.addEventListener("error", onError);
     detach = () => {
-      element.removeEventListener("timeupdate", onTick);
-      element.removeEventListener("ended", onEnded);
-      element.removeEventListener("error", onError);
+      element.removeEventListener?.("timeupdate", onTick);
+      element.removeEventListener?.("ended", onEnded);
+      element.removeEventListener?.("error", onError);
     };
+    if (deps.isPlaybackAllowed && !deps.isPlaybackAllowed()) {
+      release();
+      publish({ ...IDLE_RECAP_SPEECH, intervalId: input.intervalId, retryIntervalId: input.intervalId });
+      return;
+    }
     clearSlow();
-    publish({ status: "playing", lines: clip.lines, revision: clip.revision, intervalId: input.intervalId, progress: 0, activeIndex: 0, slow: false });
+    publish({ status: "playing", lines: clip.lines, revision: clip.revision, reviewKey: playedReviewKey, intervalId: input.intervalId, progress: 0, activeIndex: 0, slow: false });
     try {
       await element.play();
     } catch {
@@ -364,7 +361,7 @@ export function createRecapSpeechPlayer(deps: RecapSpeechPlayerDeps): RecapSpeec
         return;
       }
       stop();
-      await start({ intervalId: input.intervalId, revision: input.revision, voice: input.voice });
+      await start({ intervalId: input.intervalId, revision: input.revision, reviewKey: input.reviewKey, voice: input.voice });
     },
     stop,
     dispose() {

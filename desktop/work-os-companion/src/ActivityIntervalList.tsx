@@ -12,7 +12,7 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
   date: string | null;
   enabled: boolean;
   timezone?: string | null;
-  onDecide: (id: string, action: "confirm" | "amend", feedback?: string) => Promise<void>;
+  onDecide: (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) => Promise<void>;
   decidingId: string | null;
   pollMs?: number;
   resolveSrc?: PreviewResolver;
@@ -105,11 +105,11 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
   const queryClient = useQueryClient();
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const decide = async (id: string, action: "confirm" | "amend", feedback?: string) => {
+  const decide = async (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) => {
     setDecidingId(id);
     setError(null);
     try {
-      await decideActivityIntervalReview(id, action, feedback);
+      await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
       await queryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(date ?? "none") });
     } catch (value) {
       setError(value instanceof Error ? value.message : "The recap decision could not be saved.");

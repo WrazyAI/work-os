@@ -44,6 +44,7 @@ import "./avatar.css";
 import "./accessibility.css";
 import "./chat/conversation.css";
 import "./chat/tool-surfaces.css";
+import "./adminOtto/adminOtto.css";
 
 installDiagnosticErrorHandlers();
 installBootTrace();

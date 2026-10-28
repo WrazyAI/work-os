@@ -57,6 +57,10 @@ Recheck both remotes before adding it; if taken, renumber this migration and its
 test references together. Never replay historical migrations on an established DB.
 Read the installed Next routing/server-handler guides when implementing routes.
 
+At release, current `main` had already taken `0063_work_agent_access.sql` and
+`0064_work_agent_day_event_cursor.sql`; this batch is therefore
+`0065_work_admin_otto.sql`, and test helpers/deploy commands use 0065.
+
 ### File map (responsibility, not a broad refactor)
 
 | File(s) | Responsibility |
@@ -64,7 +68,7 @@ Read the installed Next routing/server-handler guides when implementing routes.
 | `src/modules/work-os/admin-otto/contracts.ts` (new) | Browser-safe versioned wire types; server and companion import these types. |
 | `src/lib/work-os-admin-otto-access.ts` (new) | Authoritative admin companion access and request revalidation. |
 | `src/app/api/work-os/desktop/{authorize,session}/route.ts`, `src/lib/work-os-desktop-auth.ts` | Allow unmapped admins through existing secure PKCE/session flow without altering employee requirements. |
-| `supabase/migrations/0063_work_admin_otto.sql` (new) | Reviewed event/clock, subscription windows, inbox delivery and ephemeral conversation schema; scoped lifecycle triggers. |
+| `supabase/migrations/0065_work_admin_otto.sql` (new; renumbered from 0063 at release) | Reviewed event/clock, subscription windows, inbox delivery and ephemeral conversation schema; scoped lifecycle triggers. |
 | `src/lib/work-os-reviewed-recaps.ts` (new), existing activity-interval decision route/module | One atomic employee review and immutable reviewed script/version. |
 | `src/lib/work-os-admin-otto-preferences.ts` (new) | Initialize/default/follow modes, eligibility epochs and optimistic saves. |
 | `src/lib/work-os-admin-otto-inbox.ts` (new) | Bounded materialization, current-visibility projection, personal read/dismiss and lease-based delivery. |
@@ -145,7 +149,7 @@ No types contain tokens, provider payloads, SQL, storage paths or raw screenshot
 
 ### Task 2: Atomically publish correction-safe reviewed recap versions
 
-**Files:** Create migration `0063_work_admin_otto.sql` (review/clock schema first), `src/lib/work-os-reviewed-recaps.ts`; modify `src/lib/work-os-activity-intervals.ts` and employee decision route; tests `test/work-os-admin-otto-reviews.test.mts` and `test/work-os-admin-otto-db.test.mts`.
+**Files:** Create migration `0065_work_admin_otto.sql` (review/clock schema first), `src/lib/work-os-reviewed-recaps.ts`; modify `src/lib/work-os-activity-intervals.ts` and employee decision route; tests `test/work-os-admin-otto-reviews.test.mts` and `test/work-os-admin-otto-db.test.mts`.
 
 **Interfaces:** `decideReviewedRecap(access: WorkOsAccess, intervalId:string, input:{action:"confirm"|"amend";feedback?:string;expectedReviewVersion?:number}): Promise<ActivityIntervalRecord>`; `buildReviewedRecap(row: ActivityIntervalRecord, version:number, eventId:string, person:PersonRef): ReviewedRecap`; `loadReviewedRecap(access:WorkOsAccess, intervalId:string): Promise<ReviewedRecap|null>`. Existing `decideActivityInterval` delegates and keeps its return type; its HTTP body gains optional `expectedReviewVersion`.
 

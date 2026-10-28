@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { WorkOsConflictError } from "@/lib/work-os-api";
+import { decideReviewedRecap } from "@/lib/work-os-reviewed-recaps";
+import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, reviewVersionForRow } from "@/lib/work-os-activity-interval-projection";
+import { getPool } from "@/lib/db/pool";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { dailyPlanGoalText, getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
@@ -26,12 +28,16 @@ import {
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
 import { checkInCadenceOverride, checkInIntervalOption } from "@/modules/work-os/workday";
 
+// Existing callers import these projections from the engine; they now live in
+// the neutral module so the reviewed-recap ledger can reuse them without a
+// circular runtime dependency.
+export { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant };
+
 type Json = Record<string, unknown>;
 
 export const ACTIVITY_INTERVAL_PROMPT_VERSION = "work-os-activity-interval-v3";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const MAX_DETAIL_CHARS = 4_000;
-const MAX_FEEDBACK_CHARS = 4_000;
 
 function clampInt(value: unknown, fallback: number, min: number, max: number) {
   const parsed = Number(value);
@@ -945,6 +951,10 @@ export type ActivityIntervalView = {
   generationStatus: string;
   /** Bumped whenever the synthesis is rewritten. 1 for rows that predate it. */
   revision: number;
+  /** Immutable reviewed-recap version to echo as `expectedReviewVersion` on the
+   * next deliberate correction: 0 while the recap is inferred, otherwise the
+   * latest persisted review version. This is never the generation `revision`. */
+  reviewVersion: number;
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
@@ -962,69 +972,11 @@ export type ActivityIntervalView = {
   coverage: { framesRecorded: number | null; framesAnalyzed: number | null } | null;
 };
 
-/** The synthesis revision a row carries, normalised for clients: a positive
- * integer, 1 when the column is absent (every row written before revisions
- * existed) or unusable. */
-export function intervalRevision(row: { revision?: unknown }): number {
-  const value = Math.floor(Number(row?.revision));
-  return Number.isFinite(value) && value >= 1 ? value : 1;
-}
-
-/** The Postgres shim returns timestamptz columns as Date objects, but every
- * API payload must carry ISO instants so clients on any runtime parse them
- * identically. Invalid values stay as their original text rather than throwing. */
-export function isoInstant(value: unknown): string | null {
-  if (value == null) return null;
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null;
-  const text = String(value);
-  if (!text) return null;
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : text;
-}
-
-/** Compact structured recap fields, parsed defensively from the stored
- * synthesis so an older or malformed row can never break a card. The card
- * renders these as scannable bullets instead of one dense paragraph. */
-export function intervalStructure(row: { structured_summary?: unknown }): {
-  activities: string[];
-  workflow: string[];
-  uncertainties: string[];
-  recordedActivity: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
-} {
-  const source = row.structured_summary && typeof row.structured_summary === "object" && !Array.isArray(row.structured_summary)
-    ? row.structured_summary as Record<string, unknown>
-    : {};
-  const objectPhrases = (value: unknown, key: string, limit: number, maxChars: number) => Array.isArray(value)
-    ? value.flatMap((entry) => {
-        const raw = entry && typeof entry === "object" ? (entry as Record<string, unknown>)[key] : null;
-        const text = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";
-        return text ? [text.slice(0, maxChars)] : [];
-      }).slice(0, limit)
-    : [];
-  const stringPhrases = (value: unknown, limit: number, maxChars: number) => Array.isArray(value)
-    ? value.flatMap((entry) => {
-        const text = typeof entry === "string" ? entry.replace(/\s+/g, " ").trim() : "";
-        return text ? [text.slice(0, maxChars)] : [];
-      }).slice(0, limit)
-    : [];
-  const recordedActivity = Array.isArray(source.recordedActivity) ? source.recordedActivity : Array.isArray(source.recorded_activity) ? source.recorded_activity : [];
-  return {
-    activities: objectPhrases(source.activities, "description", 8, 200),
-    workflow: objectPhrases(source.workflow, "phase", 6, 80),
-    uncertainties: stringPhrases(source.uncertainties, 3, 140),
-    recordedActivity: recordedActivity.flatMap((entry) => {
-      const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
-      const description = typeof item?.description === "string" ? item.description.replace(/\s+/g, " ").trim().slice(0, 200) : "";
-      const relation = item?.relation === "triggered" ? "triggered" as const : item?.relation === "performed" ? "performed" as const : null;
-      const url = typeof item?.url === "string" && item.url.trim() ? item.url.trim().slice(0, 400) : null;
-      return description && relation ? [{ description, relation, url }] : [];
-    }).slice(0, 8),
-  };
-}
-
 /** Compact card shape for the prompt turn and tool responses; the evidence
- * list for the Tasks stream comes from listActivityIntervals. */
-export function activityIntervalCardView(row: ActivityIntervalRecord) {
+ * list for the Tasks stream comes from listActivityIntervals. The review
+ * version is required so a compact response can never advertise an optimistic
+ * decision without the coherent version of the words it shows. */
+export function activityIntervalCardView(row: ActivityIntervalRecord, reviewVersion: number) {
   const windowStart = isoInstant(row.window_start) ?? "";
   const windowEnd = isoInstant(row.window_end) ?? "";
   return {
@@ -1035,6 +987,7 @@ export function activityIntervalCardView(row: ActivityIntervalRecord) {
     promptKind: String(row.prompt_kind),
     generationStatus: String(row.generation_status),
     reviewStatus: String(row.review_status),
+    reviewVersion,
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
     ...intervalStructure(row),
@@ -1058,7 +1011,32 @@ function intervalCoverage(row: ActivityIntervalRecord): ActivityIntervalView["co
   return { framesRecorded, framesAnalyzed };
 }
 
-function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvidenceView[]): ActivityIntervalView {
+type ActivityIntervalProjectionRow = ActivityIntervalRecord;
+
+/** One statement returns the canonical row together with its immutable review
+ * identity: `max(work_recap_reviews.version)` and the interval text come from
+ * the same Postgres statement snapshot, so a decision committing concurrently
+ * can never pair old words with a newer version token. */
+async function loadIntervalProjections(
+  organizationId: string,
+  intervalIds: string[],
+  personId?: string | null,
+): Promise<Map<string, ActivityIntervalProjectionRow>> {
+  if (!intervalIds.length) return new Map();
+  const params: unknown[] = [organizationId, intervalIds];
+  const personScope = personId ? " AND i.person_id = $3::uuid" : "";
+  if (personId) params.push(personId);
+  const { rows } = await getPool().query<ActivityIntervalProjectionRow>(
+    `SELECT i.*,
+       (SELECT max(r.version)::int FROM work_recap_reviews r
+         WHERE r.organization_id = i.organization_id AND r.interval_id = i.id) AS review_version
+     FROM work_activity_intervals i
+     WHERE i.organization_id = $1 AND i.id = ANY($2::uuid[])${personScope}`,
+    params);
+  return new Map(rows.map((row) => [String(row.id), row]));
+}
+
+function intervalView(row: ActivityIntervalProjectionRow, evidence: ActivityIntervalEvidenceView[]): ActivityIntervalView {
   const windowStart = isoInstant(row.window_start) ?? "";
   const windowEnd = isoInstant(row.window_end) ?? "";
   return {
@@ -1072,6 +1050,7 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
     // renders one must be able to say which revision it rendered; a spoken read
     // keyed without it could say words the card no longer shows.
     revision: intervalRevision(row),
+    reviewVersion: reviewVersionForRow(row),
     reviewStatus: String(row.review_status) as ActivityIntervalView["reviewStatus"],
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
@@ -1090,27 +1069,18 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
 /** Full disclosure view for one interval: the recap plus its exact analyzed
  * evidence and retention state. The prompt turn uses it so the chat card can
  * show the true screenshot count and thumbnails instead of a compact
- * placeholder that always reads zero. */
+ * placeholder that always reads zero. The interval row is re-read in the same
+ * statement as its review version, so the words and the decision token always
+ * describe one reviewed state. */
 export async function activityIntervalFullView(row: ActivityIntervalRecord): Promise<ActivityIntervalView> {
-  const evidence = (await loadIntervalEvidence([String(row.id)])).get(String(row.id)) ?? [];
-  return intervalView(row, evidence);
-}
-
-/** The recap's own words, for a spoken read: the lead line the card shows
- * (final detail when the employee amended it, otherwise the model's) and the
- * structured activity lines. The card, the prompter and the voice all render
- * from this one source. */
-export function intervalSpeechSource(row: { final_detail?: unknown; ai_detail?: unknown; headline?: unknown; structured_summary?: unknown }): {
-  detail: string | null;
-  headline: string | null;
-  activities: string[];
-} {
-  const detail = row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null;
-  return {
-    detail,
-    headline: row.headline ? String(row.headline) : null,
-    activities: intervalStructure(row).activities,
-  };
+  const id = String(row.id);
+  const [projections, evidence] = await Promise.all([
+    loadIntervalProjections(String(row.organization_id), [id]),
+    loadIntervalEvidence([id]),
+  ]);
+  const projected = projections.get(id);
+  if (!projected) throw new Error("activity interval not found");
+  return intervalView(projected, evidence.get(id) ?? []);
 }
 
 /** One interval by id, scoped to the employee who owns it.
@@ -1174,8 +1144,18 @@ export async function listActivityIntervals(
   const last = records[records.length - 1];
   const nextCursor = hasMore && last ? activityIntervalCursor(last) : null;
   if (!records.length) return { date, intervals: [], nextCursor: null, total };
-  const evidenceByInterval = await loadIntervalEvidence(records.map((row) => String(row.id)));
-  return { date, intervals: records.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])), nextCursor, total };
+  const ids = records.map((row) => String(row.id));
+  const [evidenceByInterval, projections] = await Promise.all([
+    loadIntervalEvidence(ids),
+    loadIntervalProjections(access.organizationId, ids, access.personId),
+  ]);
+  // Render only the coherent row+version projection; a row that disappeared
+  // between the page query and this projection is simply omitted.
+  const intervals = records.flatMap((row) => {
+    const projected = projections.get(String(row.id));
+    return projected ? [intervalView(projected, evidenceByInterval.get(String(row.id)) ?? [])] : [];
+  });
+  return { date, intervals, nextCursor, total };
 }
 
 /** Stable keyset cursor for the recap stream: the last row's window end and id. */
@@ -1258,17 +1238,23 @@ export async function listAdminActivityIntervals(
   if (rows.error) throw new Error(`list admin activity intervals: ${rows.error.message}`);
   const intervals = (rows.data ?? []) as ActivityIntervalRecord[];
   if (!intervals.length) return [];
-  const [evidenceByInterval, people] = await Promise.all([
-    loadIntervalEvidence(intervals.map((row) => String(row.id))),
+  const ids = intervals.map((row) => String(row.id));
+  const [evidenceByInterval, people, projections] = await Promise.all([
+    loadIntervalEvidence(ids),
     db().from("work_people").select("id,display_name").eq("organization_id", access.organizationId),
+    loadIntervalProjections(access.organizationId, ids),
   ]);
   if (people.error) throw new Error(`load activity interval people: ${people.error.message}`);
   const nameById = new Map((people.data ?? []).map((person: any) => [String(person.id), String(person.display_name)]));
-  return intervals.map((row) => ({
-    ...intervalView(row, evidenceByInterval.get(String(row.id)) ?? []),
-    personId: String(row.person_id),
-    personName: nameById.get(String(row.person_id)) ?? null,
-  }));
+  return intervals.flatMap((row) => {
+    const projected = projections.get(String(row.id));
+    if (!projected) return [];
+    return [{
+      ...intervalView(projected, evidenceByInterval.get(String(row.id)) ?? []),
+      personId: String(projected.person_id),
+      personName: nameById.get(String(projected.person_id)) ?? null,
+    }];
+  });
 }
 
 /** Provenance prefix for every downstream consumer (EOD activity context and
@@ -1356,41 +1342,7 @@ export type ActivityIntervalDecision = "confirm" | "amend";
 export async function decideActivityInterval(
   access: WorkOsAccess,
   intervalId: string,
-  input: { action: ActivityIntervalDecision; feedback?: string },
+  input: { action: ActivityIntervalDecision; feedback?: string; expectedReviewVersion?: number },
 ): Promise<ActivityIntervalRecord> {
-  if (!access.personId) throw new Error("Work OS person mapping required.");
-  const { data: row, error } = await db().from("work_activity_intervals").select("*")
-    .eq("organization_id", access.organizationId).eq("id", intervalId).maybeSingle();
-  if (error) throw new Error(`load activity interval: ${error.message}`);
-  if (!row) throw new Error("activity interval not found");
-  if (String(row.person_id) !== access.personId) throw new Error("forbidden");
-  if (String(row.generation_status) !== "ready" || !row.ai_detail) {
-    throw new WorkOsConflictError("This activity recap is not ready to review yet.");
-  }
-  if (input.action === "confirm") {
-    const { data, error: updateError } = await db().from("work_activity_intervals").update({
-      review_status: "confirmed",
-      final_detail: row.ai_detail,
-      reviewed_at: new Date().toISOString(),
-      next_steps_status: "pending",
-      updated_at: new Date().toISOString(),
-    }).eq("id", intervalId).select("*").single();
-    if (updateError) throw new Error(`confirm activity interval: ${updateError.message}`);
-    await auditInterval(access, "activity_interval.confirmed", intervalId, {});
-    return data as ActivityIntervalRecord;
-  }
-  const feedback = cleanText(input.feedback, MAX_FEEDBACK_CHARS);
-  if (!feedback) throw new Error("feedback is required to amend an activity recap");
-  const finalDetail = `${row.ai_detail}\n\nEmployee addition: ${feedback}`.slice(0, MAX_DETAIL_CHARS + MAX_FEEDBACK_CHARS);
-  const { data, error: updateError } = await db().from("work_activity_intervals").update({
-    review_status: "amended",
-    employee_feedback: feedback,
-    final_detail: finalDetail,
-    reviewed_at: new Date().toISOString(),
-    next_steps_status: "pending",
-    updated_at: new Date().toISOString(),
-  }).eq("id", intervalId).select("*").single();
-  if (updateError) throw new Error(`amend activity interval: ${updateError.message}`);
-  await auditInterval(access, "activity_interval.amended", intervalId, { feedbackChars: feedback.length });
-  return data as ActivityIntervalRecord;
+  return decideReviewedRecap(access, intervalId, input);
 }

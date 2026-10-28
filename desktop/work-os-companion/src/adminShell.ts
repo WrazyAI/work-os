@@ -30,6 +30,24 @@ export type AdminShellOverlay = (typeof ADMIN_SHELL_OVERLAYS)[number];
 export const ADMIN_SHELL_NOTIFICATION_STATES = ["populated", "empty", "loading", "error"] as const;
 export type AdminShellNotificationState = (typeof ADMIN_SHELL_NOTIFICATION_STATES)[number];
 
+export const ADMIN_SHELL_OTTO_STATES = ["chat", "recaps", "single", "multiple", "empty"] as const;
+export type AdminShellOttoState = (typeof ADMIN_SHELL_OTTO_STATES)[number];
+
+/** The synthetic follow-settings routes the dev harness can open on the
+ * administration Settings page. `&settings-account=two` keeps a second admin
+ * account's fixture state and revision independent; neither creates a live
+ * account. */
+export const ADMIN_SHELL_SETTINGS_STATES = [
+  "all",
+  "selected-none",
+  "selected-inactive",
+  "directory-error",
+  "save-error",
+  "conflict",
+  "pagination",
+] as const;
+export type AdminShellSettingsState = (typeof ADMIN_SHELL_SETTINGS_STATES)[number];
+
 export function isAdminShellBoot(search: string, dev: boolean): boolean {
   return dev && new URLSearchParams(search).has(ADMIN_SHELL_PARAM);
 }
@@ -47,6 +65,30 @@ export function adminShellNotificationStateFor(search: string, dev: boolean): Ad
   if (!isAdminShellBoot(search, dev)) return null;
   const value = new URLSearchParams(search).get("notifications");
   return ADMIN_SHELL_NOTIFICATION_STATES.find((state) => state === value) ?? "populated";
+}
+
+/** The admin Otto surface this dev boot opens, if any. `chat` opens the normal
+ * read-only conversation; `recaps`, `single`, `multiple` and `empty` open the
+ * inbox fixture states Task 9 renders. Absent or unknown values keep it closed. */
+export function adminShellOttoStateFor(search: string, dev: boolean): AdminShellOttoState | null {
+  if (!isAdminShellBoot(search, dev)) return null;
+  const value = new URLSearchParams(search).get("otto");
+  return ADMIN_SHELL_OTTO_STATES.find((state) => state === value) ?? null;
+}
+
+/** The follow-settings fixture route; absent or unknown keeps All, which is
+ * also the server's default for a newly unmapped admin. */
+export function adminShellSettingsStateFor(search: string, dev: boolean): AdminShellSettingsState | null {
+  if (!isAdminShellBoot(search, dev)) return null;
+  const value = new URLSearchParams(search).get("settings");
+  return ADMIN_SHELL_SETTINGS_STATES.find((state) => state === value) ?? "all";
+}
+
+/** `two` selects an independent synthetic admin account for the follow
+ * fixture. Any other value keeps the first account. */
+export function adminShellSettingsAccountFor(search: string, dev: boolean): string | null {
+  if (!isAdminShellBoot(search, dev)) return null;
+  return new URLSearchParams(search).get("settings-account") === "two" ? "two" : "one";
 }
 
 /** The fabricated session the harness answers the session query with: role

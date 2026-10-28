@@ -145,16 +145,19 @@ async function remove(key: string) {
 let browserSessionCache: DesktopSession | null = null;
 async function browserSession(): Promise<DesktopSession | null> {
   if (!import.meta.env.DEV) return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("offline")) return null;
   if (browserSessionCache) return browserSessionCache;
-  const token = new URLSearchParams(window.location.search).get("token");
+  const token = params.get("token");
   if (!token) return null;
   const apiBase = defaultApiBase;
-  const response = await fetch(`${apiBase.replace(/\/$/, "")}/api/work-os/me/day?compact=true`, {
+  const response = await fetch(`${apiBase.replace(/\/$/, "")}/api/work-os/session`, {
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => null);
   if (!response || !response.ok) return null;
-  const access = (await response.json().catch(() => null)) as { access?: { organizationId?: string } } | null;
-  browserSessionCache = { token, expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(), organizationId: access?.access?.organizationId ?? "browser-test", apiBase };
+  const access = (await response.json().catch(() => null)) as { organizationId?: string } | null;
+  if (!access?.organizationId) return null;
+  browserSessionCache = { token, expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(), organizationId: access.organizationId, apiBase };
   return browserSessionCache;
 }
 

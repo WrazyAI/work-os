@@ -528,8 +528,17 @@ test("a capture cannot be started twice in one window", () => {
     const claimAt = source.indexOf("startingRef.current = true;");
     assert.ok(guardAt !== -1 && claimAt > guardAt, `${path}: the guard must precede the claim`);
     /* Every path that abandons a start releases it, or the microphone could
-       never be opened again. */
-    assert.ok(source.split("startingRef.current = false").length >= 7, "every failure path must release the guard");
+       never be opened again. The companion now centralizes media failures in
+       one `!result.ok` branch; the web surface still carries its own inline
+       branches. */
+    assert.ok(source.split("startingRef.current = false").length >= (path === "companion" ? 5 : 7), `${path}: every failure path must release the guard`);
+    if (path === "companion") {
+      assert.match(
+        source,
+        /if \(!result\.ok\) \{[\s\S]*?releaseMedia\(\);[\s\S]*?startingRef\.current = false;/,
+        "companion: the centralized capture failure must release the guard",
+      );
+    }
   }
   /* The capture names the surface it came from, for the debugger. */
   assert.match(companion, /diagnostics\.info\("voice\.capture", "Voice capture started", \{/);

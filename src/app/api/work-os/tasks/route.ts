@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { countAdminTaskRecord } from "@/lib/work-os-admin-otto-reads";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
@@ -25,35 +25,24 @@ export async function GET(req: Request) {
       includeCompleted: sp.get("includeCompleted") === "true",
       includeLedgerHistory: sp.get("today") !== "true" && !sp.get("from") && !sp.get("to"),
       order: "created_desc" as const,
+      organizationId: auth.access.organizationId,
     };
-    const personId = sp.get("personId");
+    const personId = sp.get("personId")?.trim() || null;
     const tasks = (personId
       ? await listPersonTasks(ownerId, personId, options)
       : await listTasks(ownerId, options)) ?? [];
-    // Exact workload counts for the lead visual. Counting the capped row list
-    // would under-report a large backlog, so these are head-only counts, and a
-    // person filter scopes them the same way the list is scoped.
-    const db = createAdminClient();
-    const openTasks = () => {
-      const base = db.from("work_tasks").select("id", { count: "exact", head: true })
-        .eq("organization_id", auth.access.organizationId).eq("completed", false).not("status", "in", "(archived,deleted)");
-      return personId ? base.contains("assignee_person_ids", [personId]) : base;
-    };
-    const completedEvents = db.from("work_task_day_events").select("id", { count: "exact", head: true })
-      .eq("organization_id", auth.access.organizationId).eq("event_type", "completed")
-      .gte("local_date", new Date(Date.now() - 6 * 24 * 60 * 60_000).toISOString().slice(0, 10));
-    const [open, overdue, completedWeek] = await Promise.all([
-      openTasks(),
-      openTasks().not("due_date", "is", null).lt("due_date", new Date().toISOString().slice(0, 10)),
-      personId ? completedEvents.eq("person_id", personId) : completedEvents,
-    ]);
-    for (const result of [open, overdue, completedWeek]) {
-      if (result.error) throw new Error(`count tasks: ${result.error.message}`);
-    }
+    // Exact workload counts share the row attribution and effective-due rule:
+    // a task with no recorded due date is due one day after it was created, and
+    // the same stated day drives the visible overdue status.
+    const requestedDate = sp.get("date");
+    const today = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : new Date().toISOString().slice(0, 10);
+    const summary = await countAdminTaskRecord(auth.access, { ownerId, personId, today });
     return NextResponse.json({
       tasks,
       nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null,
-      summary: { open: open.count ?? 0, overdue: overdue.count ?? 0, completedWeek: completedWeek.count ?? 0 },
+      summary,
     });
   } catch (err) {
     return jsonError(err);

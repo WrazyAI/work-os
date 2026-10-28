@@ -91,7 +91,15 @@ const PROVIDER_URL = "https://fal.run/google/gemini-3.8-flash-lite-tts";
 /* Synthesis is usually a few seconds, but a cold provider call has been seen
  * at close to half a minute. Give it room to finish: a completed clip is cached,
  * while a timeout throws the work away and retries from scratch. */
-const PROVIDER_TIMEOUT_MS = 60_000;
+export const RECAP_SYNTHESIS_TIMEOUT_MS = 60_000;
+/* The provider returns a URL for the clip; fetching that URL is a second
+ * network hop and must not hold the request open indefinitely. */
+export const RECAP_AUDIO_DOWNLOAD_TIMEOUT_MS = 15_000;
+
+function timedOut(error: unknown) {
+  const name = error instanceof Error ? error.name : "";
+  return name === "TimeoutError" || name === "AbortError";
+}
 
 export function recapSpeechConfigured(): boolean {
   return Boolean(process.env.FAL_API_KEY?.trim());
@@ -145,12 +153,11 @@ export async function synthesizeRecapSpeech(input: {
       method: "POST",
       headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: spoken, voice, style_instructions: RECAP_STYLE_INSTRUCTIONS }),
-      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      signal: AbortSignal.timeout(RECAP_SYNTHESIS_TIMEOUT_MS),
       cache: "no-store",
     });
   } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    return { ok: false, reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider_error" };
+    return { ok: false, reason: timedOut(error) ? "timeout" : "provider_error" };
   }
 
   const body = await response.json().catch(() => null) as
@@ -161,13 +168,16 @@ export async function synthesizeRecapSpeech(input: {
   if (typeof audioUrl !== "string" || !audioUrl) return { ok: false, reason: "malformed" };
 
   try {
-    const audio = await call(audioUrl, { cache: "no-store" });
+    const audio = await call(audioUrl, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(RECAP_AUDIO_DOWNLOAD_TIMEOUT_MS),
+    });
     if (!audio.ok) return { ok: false, reason: "provider_error" };
     const bytes = new Uint8Array(await audio.arrayBuffer());
     if (!bytes.byteLength) return { ok: false, reason: "malformed" };
     return { ok: true, audio: bytes, mimeType: audio.headers.get("content-type") ?? "audio/wav", voice };
-  } catch {
-    return { ok: false, reason: "provider_error" };
+  } catch (error) {
+    return { ok: false, reason: timedOut(error) ? "timeout" : "provider_error" };
   }
 }
 

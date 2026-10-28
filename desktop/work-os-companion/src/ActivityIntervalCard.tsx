@@ -145,7 +145,7 @@ interface ActivityIntervalCardProps {
   interval: ActivityIntervalModel;
   timezone?: string | null;
   currentDate?: string | null;
-  onDecide?: (id: string, action: "confirm" | "amend", feedback?: string) => Promise<void>;
+  onDecide?: (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) => Promise<void>;
   deciding?: boolean;
   defaultPanel?: "notes" | "evidence" | null;
   resolveSrc?: PreviewResolver;
@@ -245,10 +245,10 @@ export function ActivityIntervalCard({
   const submitFeedback = useCallback(async () => {
     const note = feedback.trim();
     if (!note || !onDecide || deciding) return;
-    await onDecide(interval.id, "amend", note);
+    await onDecide(interval.id, "amend", note, interval.reviewVersion);
     setAmending(false);
     setFeedback("");
-  }, [deciding, feedback, interval.id, onDecide]);
+  }, [deciding, feedback, interval.id, interval.reviewVersion, onDecide]);
 
   if (interval.generationStatus !== "ready") {
     return (
@@ -308,7 +308,7 @@ export function ActivityIntervalCard({
           <div className="chat-activity-decide">
             <p className="chat-activity-ask">{deciding ? "Saving…" : "Sounds good?"}</p>
             <div className="chat-activity-actions">
-              <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks good" title="Looks good" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
+              <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks good" title="Looks good" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm", undefined, interval.reviewVersion)}>
                 <Check size={16} aria-hidden="true" />
               </button>
               <button type="button" className="chat-activity-quiet is-icon" aria-label="Edit" title="Edit" disabled={deciding} onClick={onEdit}>
@@ -339,7 +339,7 @@ export function ActivityIntervalCard({
         ) : (
           <div className="chat-activity-actions">
             {deciding ? <span className="chat-activity-saving" role="status">Saving…</span> : null}
-            <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks right" title="Looks right" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
+            <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks right" title="Looks right" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm", undefined, interval.reviewVersion)}>
               <Check size={16} aria-hidden="true" />
             </button>
             <button type="button" className="chat-activity-quiet is-icon" aria-label="Add or correct" title="Add or correct" disabled={deciding} onClick={() => setAmending(true)}>

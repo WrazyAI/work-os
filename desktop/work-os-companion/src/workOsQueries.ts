@@ -314,14 +314,27 @@ export function ensureActivityIntervalReview(promptDueAt: string | null, signal?
   });
 }
 
+/** Request body for an employee recap decision. `expectedReviewVersion` comes
+ * from the interval's immutable review version (0 while inferred), never from
+ * the generation `revision`; it is omitted for older servers that do not expose
+ * one, keeping the legacy retry/conflict behavior. */
+export function activityIntervalDecisionBody(action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) {
+  return {
+    action,
+    ...(feedback ? { feedback } : {}),
+    ...(typeof expectedReviewVersion === "number" && Number.isSafeInteger(expectedReviewVersion) && expectedReviewVersion >= 0
+      ? { expectedReviewVersion } : {}),
+  };
+}
+
 /** Looks right (confirm) or add/correct context (amend) on the employee's own
  * recap. Nothing here creates a check-in or advances the prompt cadence. */
-export function decideActivityIntervalReview(intervalId: string, action: "confirm" | "amend", feedback?: string) {
+export function decideActivityIntervalReview(intervalId: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) {
   return apiRequest<{ interval: ActivityIntervalCard }>(`/api/work-os/me/activity-intervals/${encodeURIComponent(intervalId)}/decision`, {
     method: "POST",
     headers: { "Idempotency-Key": crypto.randomUUID() },
     signal: AbortSignal.timeout(30_000),
-    body: JSON.stringify({ action, ...(feedback ? { feedback } : {}) }),
+    body: JSON.stringify(activityIntervalDecisionBody(action, feedback, expectedReviewVersion)),
   });
 }
 

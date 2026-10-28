@@ -47,12 +47,39 @@ export interface BootInput {
   dayReady: boolean;
   /** The day read failed; the workspace surfaces the failure itself. */
   dayFailed: boolean;
+  /**
+   * The explicit admin Otto context bootstrap. When supplied for an admin
+   * workspace it replaces the personal onboarding/day gates: administration
+   * never requires an employee mapping. Omitted preserves the employee-first
+   * ordering for callers that do not use the admin context yet.
+   */
+  adminOtto?: {
+    status: "loading" | "ready" | "failed";
+    personId: string | null;
+    /** The boot plan routes this administrator to the console. A mapped admin
+     * who saved the employee workspace has this false and keeps the normal
+     * onboarding/day gates. */
+    active: boolean;
+  } | null;
 }
 
 export function bootSurface(input: BootInput): BootSurface {
   if (input.vault === "pending") return "vault_loading";
   if (input.vault === "failed") return "vault_failed";
   if (!input.signedIn) return "connect";
+
+  /*
+   * The administration branch owns its own bootstrap. It waits for the
+   * authoritative admin context instead of the employee onboarding record, so
+   * an unmapped administrator can reach the console without a fake person.
+   * A failed context still renders the shell: the context error belongs on the
+   * Otto surface, not in a blocking employee setup screen.
+   */
+  if (input.adminOtto && input.role === "admin" && !input.syncBypass) {
+    if (input.adminOtto.status === "loading") return "data_loading";
+    if (input.adminOtto.active) return "admin";
+  }
+
   if (!input.onboardingLoaded) return "data_loading";
 
   /*

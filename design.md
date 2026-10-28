@@ -2221,6 +2221,21 @@ header.
   for accounts with a personal workday; the device, display, guides, and
   diagnostics half always shows.
 
+**Recap follows.** The account's own settings include one shared two-column
+Recap follows group even when no personal workday is mapped. All active
+employees is the default and includes later hires; Selected saves exactly the
+ticked ids, and an explicitly empty selection means no recap alerts and never
+falls back to All. Saved inactive choices remain visible, named, checked, and
+disabled because delivery excludes them; the active count, not the retained id
+count, drives the no-alerts summary. The group saves only on Save with the
+loaded revision, keeps a failed draft and a revision conflict visible until an
+explicit successful reload, and disables choice controls while a save is in
+flight. A successful save re-reads the authoritative settings, invalidates the
+scoped inbox reads, and wakes the existing delivery/inbox feed in both windows
+through an ids-and-context-only signal; it never shares a settings object or
+narrows named on-demand queries. Following changes recap alerts, never record
+access.
+
 **EOD Review order and range.** The review queue reads newest submission
 first: a report's submission time is its clock, a row that was never submitted
 falls back to its report date so a draft keeps its day's place rather than

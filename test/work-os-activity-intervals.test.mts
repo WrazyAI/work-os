@@ -200,11 +200,12 @@ test("API payload timestamps always serialize as ISO instants", () => {
     review_status: "inferred",
     generated_at: new Date("2026-09-28T16:24:38.000Z"),
     reviewed_at: null,
-  });
+  }, 0);
   assert.equal(view.windowStart, "2026-09-28T14:05:40.000Z");
   assert.equal(view.windowEnd, "2026-09-28T15:19:29.000Z");
   assert.equal(view.generatedAt, "2026-09-28T16:24:38.000Z");
   assert.equal(view.reviewedAt, null);
+  assert.equal(view.reviewVersion, 0, "the compact projection carries the caller's coherent review version");
   assert.equal(view.label, "2:05–3:19 PM");
 });
 
@@ -363,8 +364,9 @@ test("structured recap fields parse defensively and reach the card view", () => 
         { description: "Bad relation", relation: "maybe", url: null },
       ],
     },
-  });
+  }, 0);
   assert.deepEqual(view.activities, ["Checked the recap card."]);
+  assert.equal(view.reviewVersion, 0);
   assert.deepEqual(view.workflow, ["review"]);
   assert.deepEqual(view.uncertainties, ["whether the change shipped"]);
   assert.deepEqual(view.recordedActivity, [

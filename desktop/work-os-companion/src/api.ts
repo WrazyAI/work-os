@@ -242,6 +242,71 @@ export async function apiRequestAudio(
   }, { path, method: "POST", statusHint: "audio" }, "sync");
 }
 
+/**
+ * Authenticated response for callers that must read headers or bytes (admin
+ * reviewed speech) instead of the JSON envelope `apiRequest` returns. It keeps
+ * the same session, bearer, organization and machine-cadence contract, and a
+ * 401 still drops the rejected device session.
+ */
+/** One deadline for a non-JSON admin request. External cancellation and the
+ * provider budget both abort the same fetch, and the timer is cleared on every
+ * exit so a long-lived window does not accumulate timers. */
+function rawDeadlineSignal(external: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException("The request timed out.", "TimeoutError"));
+  }, Math.max(1, timeoutMs));
+  const onAbort = () => {
+    clearTimeout(timer);
+    controller.abort(external?.reason);
+  };
+  if (external?.aborted) onAbort();
+  else external?.addEventListener("abort", onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      external?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+export async function apiRequestRaw(
+  path: string,
+  init: RequestInit = {},
+  options: { timeoutMs?: number } = {},
+): Promise<Response> {
+  if (syncBypassActive) throw new SyncBypassError();
+  const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
+  if (!session || isSessionExpired(session)) {
+    throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
+  }
+  const deadline = rawDeadlineSignal(init.signal ?? undefined, options.timeoutMs ?? 20_000);
+  let response: Response;
+  try {
+    response = await fetch(`${cleanBase(session.apiBase)}${path}`, {
+      ...init,
+      signal: deadline.signal,
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${session.token}`,
+        "X-Work-OS-Organization-Id": session.organizationId,
+        ...machineCadenceHeaders(),
+        ...(init.body && !(typeof FormData !== "undefined" && init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (error) {
+    if (deadline.signal.aborted && error instanceof Error && error.name === "AbortError") throw error;
+    const failure = classifyRequestFailure(error);
+    throw new ApiRequestError(failure.message, null, true);
+  } finally {
+    deadline.dispose();
+  }
+  if (response.status === 401) await dropRejectedSession(path);
+  return response;
+}
+
 /** Authenticated binary fetch for protected media such as screenshot previews. */
 export async function apiRequestBlob(path: string, label = "Media"): Promise<Blob> {
   return diagnostics.withSpan("api.requestBlob", async () => {

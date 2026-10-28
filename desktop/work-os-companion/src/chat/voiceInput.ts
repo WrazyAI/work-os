@@ -119,6 +119,75 @@ function classifyStartFailure(error: unknown): VoiceFailure {
   return "start";
 }
 
+export type VoiceCaptureStart =
+  | { ok: true; stream: MediaStream; recorder: MediaRecorder; mime: string }
+  | { ok: false; failure: VoiceFailure | "cancelled"; message?: string };
+
+/**
+ * Opens the microphone for one capture, after the owning surface has settled
+ * the one-audio-owner gate.
+ *
+ * `beforeCapture` runs before the microphone request: a surface that needs a
+ * cross-window recording lease returns its refusal message there, so a revoked
+ * or queued grant never opens a second microphone. Cancellation is checked
+ * after every await, and a stream that arrived too late is closed immediately.
+ * This is deliberately separate from React state so the media ordering can be
+ * exercised with fake devices.
+ */
+export async function startVoiceCapture(input: {
+  beforeCapture?: () => string | null | Promise<string | null>;
+  getUserMedia: () => Promise<MediaStream>;
+  createRecorder: (stream: MediaStream, options?: MediaRecorderOptions) => MediaRecorder;
+  isTypeSupported?: (type: string) => boolean;
+  isCancelled: () => boolean;
+  /** Called after the recorder exists but before `start`, so the caller can
+   * attach its data/stop/error handlers. */
+  onRecorder?: (recorder: MediaRecorder) => void;
+}): Promise<VoiceCaptureStart> {
+  if (input.isCancelled()) return { ok: false, failure: "cancelled" };
+  if (input.beforeCapture) {
+    let blocked: string | null = null;
+    try {
+      blocked = await input.beforeCapture();
+    } catch (failure) {
+      blocked = failure instanceof Error && failure.message
+        ? failure.message
+        : VOICE_FAILURE_COPY.start;
+    }
+    if (input.isCancelled()) return { ok: false, failure: "cancelled" };
+    if (blocked) return { ok: false, failure: "start", message: blocked };
+  }
+
+  let stream: MediaStream;
+  try {
+    stream = await input.getUserMedia();
+  } catch (failure) {
+    return { ok: false, failure: classifyStartFailure(failure) };
+  }
+  if (input.isCancelled()) {
+    stream.getTracks().forEach((track) => track.stop());
+    return { ok: false, failure: "cancelled" };
+  }
+
+  const mime = pickRecorderMime(input.isTypeSupported
+    ?? ((type) => typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(type)));
+  let recorder: MediaRecorder;
+  try {
+    recorder = input.createRecorder(stream, mime ? { mimeType: mime } : undefined);
+  } catch {
+    stream.getTracks().forEach((track) => track.stop());
+    return { ok: false, failure: "start" };
+  }
+  input.onRecorder?.(recorder);
+  try {
+    recorder.start(250);
+  } catch {
+    stream.getTracks().forEach((track) => track.stop());
+    return { ok: false, failure: "start" };
+  }
+  return { ok: true, stream, recorder, mime: recorder.mimeType || mime || "audio/webm" };
+}
+
 export function useVoiceInput(options: {
   /** Insert the transcript. The caller owns the draft and the send authority. */
   onTranscript: (text: string) => void;
@@ -127,10 +196,17 @@ export function useVoiceInput(options: {
   surface?: string;
   /** Called when a recording begins so the owning surface can open or focus. */
   onRecordingStart?: () => void;
+  /** Runs before the microphone opens. Return a message to refuse this capture
+   * (for example, another companion window owns audio); null means proceed. */
+  beforeCapture?: () => string | null | Promise<string | null>;
   enabled?: boolean;
   language?: string;
+  /** Optional transcript route. The administration chat uses the admin
+   * transcription adapter without a person mapping; the employee path keeps
+   * the shared `/api/work-os/voice/transcribe` request when this is absent. */
+  transcribe?: (clip: Blob, mime: string, language: string) => Promise<{ text?: string }>;
 }): VoiceInput {
-  const { onTranscript, onRecordingStart, enabled = true, language = "en", surface = "companion" } = options;
+  const { onTranscript, onRecordingStart, beforeCapture, enabled = true, language = "en", surface = "companion", transcribe } = options;
   const [state, setState] = useState<VoiceState>("idle");
   const [level, setLevel] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -211,13 +287,15 @@ export function useVoiceInput(options: {
     } catch (error) {
       diagnostics.error("voice.upload.blob_read_failed", error instanceof Error ? error.message : String(error), { surface, bytes: blob.size });
     }
-    const send = () => apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", {
-      method: "POST",
-      body: form,
-      /* Outlast the server's own 25s provider timeout: giving up first would
-         abandon a clip the route is still transcribing. */
-      signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
-    });
+    const send = () => transcribe
+      ? transcribe(blob, mime || blob.type, language)
+      : apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", {
+          method: "POST",
+          body: form,
+          /* Outlast the server's own 25s provider timeout: giving up first would
+             abandon a clip the route is still transcribing. */
+          signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
+        });
     /* Where did the request stop? The resource timing says whether the clip
        actually left this machine (encodedBodySize) and when the first byte of
        the answer arrived (responseStart): a request that never left reads
@@ -290,7 +368,7 @@ export function useVoiceInput(options: {
       /* A newer hold may already own the composer by now. */
       if (mountedRef.current && captureId === captureIdRef.current) setState("idle");
     }
-  }, [language, onTranscript]);
+  }, [language, onTranscript, transcribe]);
 
   const finish = useCallback((cancelled: boolean, captureId: number) => {
     if (finishingRef.current) return;
@@ -407,67 +485,46 @@ export function useVoiceInput(options: {
     setState("requesting");
 
     void (async () => {
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
+      const result = await startVoiceCapture({
+        beforeCapture,
+        getUserMedia: () => navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        });
-      } catch (failure) {
+        }),
+        createRecorder: (stream, recorderOptions) => new MediaRecorder(stream, recorderOptions),
+        isCancelled: () => cancelledRef.current || !mountedRef.current || captureId !== captureIdRef.current,
+        onRecorder: (recorder) => {
+          recorderRef.current = recorder;
+          chunksRef.current = [];
+          recorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
+          };
+          recorder.onstop = () => finish(cancelledRef.current, captureId);
+          recorder.onerror = () => {
+            releaseMedia();
+            startingRef.current = false;
+            if (!mountedRef.current) return;
+            if (captureId === captureIdRef.current) setState("idle");
+            setError(VOICE_FAILURE_COPY.start);
+          };
+        },
+      });
+      if (!result.ok) {
+        releaseMedia();
         if (!mountedRef.current) return;
         startingRef.current = false;
         if (captureId !== captureIdRef.current) return;
         setState("idle");
-        setError(VOICE_FAILURE_COPY[classifyStartFailure(failure)]);
+        if (result.failure !== "cancelled") {
+          setError(result.message ?? VOICE_FAILURE_COPY[result.failure]);
+        }
         return;
       }
-      /* A newer hold owns the microphone now: drop this request instead of
-         opening a second recorder. */
-      if (cancelledRef.current || !mountedRef.current || captureId !== captureIdRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        startingRef.current = false;
-        if (captureId === captureIdRef.current) setState("idle");
-        return;
-      }
-      streamRef.current = stream;
-
-      const mime = pickRecorderMime((type) => typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(type));
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      } catch (failure) {
-        releaseMedia();
-        startingRef.current = false;
-        setState("idle");
-        setError(VOICE_FAILURE_COPY.start);
-        return;
-      }
-      recorderRef.current = recorder;
-      mimeRef.current = recorder.mimeType || mime || "audio/webm";
-      chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => finish(cancelledRef.current, captureId);
-      recorder.onerror = () => {
-        releaseMedia();
-        startingRef.current = false;
-        if (!mountedRef.current) return;
-        if (captureId === captureIdRef.current) setState("idle");
-        setError(VOICE_FAILURE_COPY.start);
-      };
-
-      try {
-        recorder.start(250);
-      } catch (failure) {
-        releaseMedia();
-        startingRef.current = false;
-        setState("idle");
-        setError(VOICE_FAILURE_COPY.start);
-        return;
-      }
-
+      streamRef.current = result.stream;
+      mimeRef.current = result.mime;
+      const recorder = result.recorder;
       if (captureId !== captureIdRef.current) {
         try { recorder.stop(); } catch { /* the newer capture owns the microphone */ }
+        releaseMedia();
         return;
       }
       startedAtRef.current = Date.now();
@@ -479,7 +536,7 @@ export function useVoiceInput(options: {
         const context = new AudioContext();
         const analyser = context.createAnalyser();
         analyser.fftSize = 512;
-        const source = context.createMediaStreamSource(stream);
+        const source = context.createMediaStreamSource(result.stream);
         source.connect(analyser);
         audioRef.current = { context, source };
         const samples = new Uint8Array(analyser.fftSize);
@@ -511,7 +568,7 @@ export function useVoiceInput(options: {
         if (recorder.state !== "inactive") recorder.stop();
       }
     })();
-  }, [enabled, finish, onRecordingStart, releaseMedia, state, stop]);
+  }, [beforeCapture, enabled, finish, onRecordingStart, releaseMedia, state, stop]);
 
 
   /* Leaving the window must never leave the microphone open: stop and keep

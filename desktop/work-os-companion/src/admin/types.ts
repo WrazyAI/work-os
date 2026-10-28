@@ -14,6 +14,11 @@ export interface AdminSectionFocus {
   reportId?: string;
   taskId?: string;
   evidenceTab?: "evidence" | "recaps";
+  /** A reviewed recap opened from an administration record link. This is a
+   * real recap target, deliberately distinct from an EOD `reportId`. */
+  recapId?: string;
+  workdayId?: string;
+  updateId?: string;
 }
 
 export type WorkOsOrgRole = "employee" | "manager" | "admin";

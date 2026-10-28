@@ -9,10 +9,12 @@ export async function GET(req: Request) {
     const auth = await requireWorkOsAccess({
       authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
-      requirePerson: true,
       feature: "desktop_companion",
     });
     if (auth.response) return auth.response;
+    if (auth.access.role !== "admin" && !auth.access.personId) {
+      return NextResponse.json({ error: "Work OS person mapping required." }, { status: 409 });
+    }
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error, 401);

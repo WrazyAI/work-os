@@ -3,9 +3,9 @@ import {
   readVoiceUpload,
   transcribeAudio,
   voiceInputConfigured,
-  type TranscribeFailure,
 } from "@/lib/aiTranscribe";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { TRANSCRIBE_FAILURE_COPY as FAILURE_COPY } from "@/lib/work-os-voice-failure-copy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,18 +13,6 @@ export const dynamic = "force-dynamic";
 /** Voice input is gated per organization/employee like every other Work OS
  * capability; the record control only renders when this flag is on. */
 const VOICE_FEATURE_FLAG = "voice_input";
-
-/** Employee-facing copy for each failure. Never leaks provider payloads,
- * status codes, or the audio itself (design §9 error copy). */
-const FAILURE_COPY: Record<TranscribeFailure, { status: number; error: string }> = {
-  not_configured: { status: 503, error: "Voice input is not available in this workspace yet." },
-  empty_audio: { status: 422, error: "We didn't catch any speech. Try again and speak for at least a second." },
-  too_large: { status: 413, error: "That recording is too long. Keep it under two minutes." },
-  unsupported_audio: { status: 415, error: "That audio format can't be transcribed." },
-  timeout: { status: 504, error: "Transcription took too long. Try a shorter recording." },
-  provider_error: { status: 502, error: "Transcription is unavailable right now. Try again in a moment." },
-  malformed: { status: 502, error: "Transcription came back unreadable. Try again." },
-};
 
 // POST /api/work-os/voice/transcribe
 // Body: multipart/form-data with field `audio` (the MediaRecorder output).
