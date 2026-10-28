@@ -71,7 +71,8 @@ export async function requireAdminOttoAccess(
     .eq("active", true);
   if (error) throw new Error(`load Work OS membership: ${error.message}`);
   const selection = selectWorkOsMembership((data ?? []) as WorkOsMembershipCandidate[]);
-  if (selection.kind !== "selected") {
+  if (selection.kind === "none") return denied();
+  if (selection.kind === "required") {
     return {
       response: NextResponse.json({
         error: "Choose a workspace before opening administration.",

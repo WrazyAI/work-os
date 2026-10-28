@@ -133,6 +133,11 @@ const authorizeRoute = "src/app/api/work-os/desktop/authorize/route.ts";
 const request = (headers: Record<string, string> = {}, method = "POST", body?: unknown) => new Request("https://app.example.test/api/work-os/admin/otto/context", {
   method, headers: { authorization: "Bearer local-session", ...headers }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
 });
+const authorizeBody = () => ({
+  challenge: createHash("sha256").update("v".repeat(43)).digest("base64url"),
+  state: "s".repeat(16),
+  redirect_uri: "wrazy-workos://auth",
+});
 
 test("unmapped_admin_can_bootstrap_without_person_writes", async () => {
   for (const personId of [null, "person-1"]) {
@@ -180,7 +185,7 @@ test("employee_desktop_still_requires_person", async () => {
   for (const role of ["employee", "manager"]) {
     const f = fixture({ role });
     assert.equal((await f.load(sessionRoute).GET(request({}, "GET"))).status, 409);
-    assert.equal((await f.load(authorizeRoute).POST(request({ origin: "https://app.example.test" }))).status, 409);
+    assert.equal((await f.load(authorizeRoute).POST(request({ origin: "https://app.example.test" }, "POST", authorizeBody()))).status, 409);
     assert.equal((await f.load("src/app/api/work-os/me/day/route.ts").GET(request({}, "GET"))).status, 409);
     assert.deepEqual(f.writes, []);
     f.tables.work_org_members[0].person_id = "employee-1";
@@ -221,7 +226,7 @@ test("existing_companion_and_voice_flags_are_required_not_enabled", async () => 
   assert.deepEqual(disabled.writes, []);
   const noDesktop = fixture({ flags: { desktop_companion: false } });
   assert.equal((await noDesktop.load(sessionRoute).GET(request({}, "GET"))).status, 403);
-  assert.equal((await noDesktop.load(authorizeRoute).POST(request({ origin: "https://app.example.test" }))).status, 403);
+  assert.equal((await noDesktop.load(authorizeRoute).POST(request({ origin: "https://app.example.test" }, "POST", authorizeBody()))).status, 403);
   const noVoice = fixture({ flags: { voice_input: false } });
   assert.equal((await noVoice.load(accessModule).requireAdminOttoAccess(request(), "voice")).response.status, 403);
   const body = await (await noVoice.load(contextRoute).POST(request())).json();
@@ -361,8 +366,8 @@ test("cookie_context_uses_authoritative_membership_and_owner_selection", async (
   const helper = f.load(accessModule);
   const cookie = request({ authorization: "" });
   const first = await helper.requireAdminOttoAccess(cookie);
-  assert.equal(first.access.organizationId, "org-1");
-  assert.equal(first.access.organizationOwnerId, "owner-1");
+  assert.equal(first.response?.status, 409);
+  assert.equal((await first.response?.json())?.reason, "organization_required");
   const selected = await helper.requireAdminOttoAccess(request({ authorization: "", "x-work-os-organization-id": "org-2" }));
   assert.equal(selected.access.organizationId, "org-2");
   assert.equal(selected.access.organizationOwnerId, "owner-2");

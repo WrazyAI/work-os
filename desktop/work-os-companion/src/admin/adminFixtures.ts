@@ -312,7 +312,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
     } satisfies AdminOverview);
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
-    queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
+    queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
     queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
     // Insights needs its own honest empty record; without it the page shows a
@@ -454,7 +454,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       { team_id: "team-2", person_id: "p-3", is_manager: true },
     ],
   } satisfies OrganizationResponse);
-  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
+  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today };
   // The dense record exercises the task-date rules: created stamps in both the
   // provider and local shapes, one task with no created date (both cells keep
   // their dash), and two tasks with no recorded due date — one created
@@ -657,7 +657,7 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
   });
 
   // Tasks: rows without project, assignees, labels, or due dates; no summary.
-  queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }), {
+  queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), {
     tasks: [
       { id: "t-s1", name: "Retry handling for failed billing webhooks" },
       { id: "t-s2", title: "Design review for the admin surface", completed: false },

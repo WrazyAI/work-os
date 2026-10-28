@@ -461,7 +461,10 @@ export async function listAdminOttoTasks(access: WorkOsAccess, input: {
   const personIds = input.personIds === null ? null : await validateTaskPeople(access, input.personIds);
   const scope = scopeHash({
     kind: "tasks", organizationId: access.organizationId,
-    personIds: personIds === null ? null : [...personIds].sort(), overdueOnly: input.overdueOnly, today,
+    personIds: personIds === null ? null : [...personIds].sort(), overdueOnly: input.overdueOnly,
+    // A cursor for the normal backlog stays valid across midnight; only the
+    // overdue filter depends on which day the first page was read.
+    ...(input.overdueOnly ? { today } : {}),
   });
   const cursor = decodeCursor(input.cursor, "tasks", scope);
   if (personIds !== null && personIds.length === 0) return emptyPage(TASK_COVERAGE);

@@ -1066,6 +1066,10 @@ function loadTaskService(rows: Array<Record<string, any>>, people: Array<Record<
     "@/lib/work-os-plan-ghosts": {
       removePlanItemsForTombstonedTask: async () => undefined,
     },
+    "@/lib/work-os-api": {
+      WorkOsNotFoundError: class extends Error {},
+      WorkOsValidationError: class extends Error {},
+    },
     "@/lib/integrations/nifty": {
       assignNiftyTask: async () => undefined,
       archiveNiftyTask: async () => undefined,

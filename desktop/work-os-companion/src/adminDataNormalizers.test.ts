@@ -304,7 +304,7 @@ describe("administration response normalizers", () => {
 describe("preview fixture states", () => {
   const evidenceFilters = { personId: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", summary: "1", limit: "100" };
   const reportFilters = { status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() };
-  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
+  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: todayIso() };
 
   it("seeds every section for dense and sparse, and insights for empty", () => {
     const keys = [

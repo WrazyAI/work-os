@@ -118,6 +118,11 @@ export function browserRecapAudio(): RecapAudio {
   let offset = 0;
   let playing = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+  /** A load and a play can both be awaiting the browser. These tokens make a
+   * superseded one return instead of committing a stale clip or starting a
+   * source after Stop. */
+  let loadGeneration = 0;
+  let playGeneration = 0;
   const listeners = new Map<string, Array<() => void>>();
   const emit = (type: string) => {
     for (const handler of listeners.get(type) ?? []) handler();
@@ -128,15 +133,46 @@ export function browserRecapAudio(): RecapAudio {
       timer = null;
     }
   };
+  const stopSource = () => {
+    playing = false;
+    stopTimer();
+    if (source) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        /* already stopped */
+      }
+      source = null;
+    }
+  };
   const elapsed = () => (playing ? offset + (context.currentTime - startedAt) : offset);
 
   return {
     async load(bytes) {
-      buffer = await context.decodeAudioData(bytes.slice(0));
+      const attempt = (loadGeneration += 1);
+      playGeneration += 1;
+      // The adapter can be asked to load while the old clip still plays.
+      // Silence it (and stop its clock) before resetting the position.
+      stopSource();
+      // A reused context keeps the previous clip's clock. The next read is a
+      // different clip, so its position starts at zero even if the old one ran
+      // to its end (a longer new clip would otherwise begin mid-sentence).
+      offset = 0;
+      const decoded = await context.decodeAudioData(bytes.slice(0));
+      // A newer read started while this one decoded: its clip owns the context.
+      if (attempt !== loadGeneration) return;
+      buffer = decoded;
     },
     async play() {
       if (!buffer) throw new Error("The recap audio could not be decoded.");
       if (playing) return;
+      const attempt = (playGeneration += 1);
+      // One context serves every read; a context the browser suspended while
+      // idle has to be resumed before the reused source starts.
+      await context.resume().catch(() => undefined);
+      // Stop, a new clip, or a close arrived while the context was resuming.
+      if (attempt !== playGeneration) return;
       if (offset >= buffer.duration) offset = 0;
       source = context.createBufferSource();
       source.buffer = buffer;
@@ -158,20 +194,11 @@ export function browserRecapAudio(): RecapAudio {
       }, 100);
     },
     pause() {
+      playGeneration += 1;
       if (!playing) return;
       const at = elapsed();
-      playing = false;
       offset = Math.min(buffer?.duration ?? 0, Math.max(0, at));
-      stopTimer();
-      if (source) {
-        source.onended = null;
-        try {
-          source.stop();
-        } catch {
-          /* already stopped */
-        }
-        source = null;
-      }
+      stopSource();
     },
     get currentTime() {
       return Math.min(buffer?.duration ?? 0, Math.max(0, elapsed()));
@@ -184,6 +211,12 @@ export function browserRecapAudio(): RecapAudio {
     },
     removeEventListener(type, handler) {
       listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== handler));
+    },
+    close() {
+      playGeneration += 1;
+      loadGeneration += 1;
+      stopSource();
+      void context.close().catch(() => undefined);
     },
   };
 }
