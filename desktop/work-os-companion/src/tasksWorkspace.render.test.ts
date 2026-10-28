@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
 import { TasksWorkspace } from "./App";
 import { DEFAULT_TASK_SORT } from "./taskWorkspace";
 
@@ -554,5 +555,46 @@ describe("Tasks workspace cursor paging", () => {
     expect(markup).toContain("Showing 1 of 51");
     expect(markup).toContain(">Load more</button>");
     expect(markup).not.toContain("Load older tasks");
+  });
+
+  it("disables a row checkbox the payload's capabilities forbid", () => {
+    const assigned = { id: "task-1", title: "Repair provider sync", due_date: "2026-08-26", completed: false, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
+    const viewerRow = { ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId: "viewer" }, "2026-08-26") };
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-26",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null,
+      suggestion: null,
+      saveState: "saved",
+      taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
+      todayTasks: [],
+      taskHistory: [viewerRow],
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: false,
+      busy: false,
+      onTaskView: () => undefined,
+      onTaskSort: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onAssignTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    }));
+    const check = markup.match(/<button[^>]*aria-label="Complete Repair provider sync"[^>]*>/)?.[0] ?? "";
+    expect(check).toContain("task-check");
+    expect(check).toContain("disabled");
   });
 });

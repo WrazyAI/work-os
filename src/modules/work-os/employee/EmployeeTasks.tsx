@@ -63,6 +63,28 @@ function isOverdue(task: AnyRow, today: string | null | undefined) {
   return task.completed !== true && !!task.due_date && !!today && String(task.due_date) < today;
 }
 
+type RowCapabilities = Partial<{ canEdit: boolean; canArchive: boolean; canDelete: boolean; canComplete: boolean; canReopen: boolean; canMove: boolean }>;
+
+/** The row's server-computed capabilities. A payload without them predates the
+ *  capability seam; the list keeps its existing controls rather than guessing. */
+function rowCapabilities(task: AnyRow): RowCapabilities | null {
+  return task?.capabilities && typeof task.capabilities === "object" ? task.capabilities as RowCapabilities : null;
+}
+
+/** A management control is hidden only when the payload positively forbids it. */
+function rowActionAllowed(task: AnyRow, key: keyof RowCapabilities): boolean {
+  const capabilities = rowCapabilities(task);
+  return capabilities ? capabilities[key] === true : true;
+}
+
+/** Completion follows canComplete / canReopen, so an assignee never sees a
+ *  write the server refuses. */
+function rowCompletionAllowed(task: AnyRow): boolean {
+  const capabilities = rowCapabilities(task);
+  if (!capabilities) return true;
+  return task.completed === true ? capabilities.canReopen === true : capabilities.canComplete === true;
+}
+
 function TaskAssigneeTags({ task }: { task: AnyRow }) {
   const people = Array.isArray(task.assignees) ? task.assignees.filter((person: AnyRow) => typeof person?.displayName === "string") : [];
   if (!people.length) return null;
@@ -408,7 +430,7 @@ export default function EmployeeTasks() {
                       <button
                         type="button"
                         aria-label={completed ? `Reopen ${task.title}` : `Mark ${task.title} done`}
-                        disabled={historical || changeTask.isPending}
+                        disabled={historical || changeTask.isPending || !rowCompletionAllowed(task)}
                         onClick={() => changeTask.mutate({ task, body: { completed: !completed } })}
                         className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition hover:border-[var(--accent-deep)] disabled:opacity-45"
                         style={{ borderColor: completed ? "var(--accent-deep)" : "var(--border-hot)", background: completed ? "var(--accent-deep)" : "transparent", color: completed ? "var(--bg-card)" : "transparent" }}
@@ -463,9 +485,11 @@ export default function EmployeeTasks() {
                           </IconButton>
                           {menuTaskId === taskId ? (
                             <div className="absolute right-5 top-12 z-20 grid min-w-48 rounded-xl border p-1 text-[12px] shadow-xl" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }} role="menu">
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => changeTask.mutate({ task, body: { completed: !completed } })}>
-                                {completed ? <RotateCcw size={13} /> : <Check size={13} />}{completed ? "Reopen" : "Mark done"}
-                              </button>
+                              {rowCompletionAllowed(task) ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => changeTask.mutate({ task, body: { completed: !completed } })}>
+                                  {completed ? <RotateCcw size={13} /> : <Check size={13} />}{completed ? "Reopen" : "Mark done"}
+                                </button>
+                              ) : null}
                               {view === "open" && !completed ? (
                                 <>
                                   <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => surfaceTask.mutate({ task, disposition: "selected" })}>
@@ -481,15 +505,21 @@ export default function EmployeeTasks() {
                                   <ChevronRight size={13} /> Open original day
                                 </button>
                               ) : null}
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
-                                <Pencil size={13} /> Edit
-                              </button>
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this task? It will be hidden from active work.") && changeTask.mutate({ task, method: "DELETE", mode: "archive" })}>
-                                <Archive size={13} /> Archive (reversible)
-                              </button>
-                              <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this task from Work OS? This cannot be undone.") && changeTask.mutate({ task, method: "DELETE", mode: "delete" })}>
-                                <Trash2 size={13} /> Delete permanently
-                              </button>
+                              {rowActionAllowed(task, "canEdit") ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
+                                  <Pencil size={13} /> Edit
+                                </button>
+                              ) : null}
+                              {rowActionAllowed(task, "canArchive") ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this task? It will be hidden from active work.") && changeTask.mutate({ task, method: "DELETE", mode: "archive" })}>
+                                  <Archive size={13} /> Archive (reversible)
+                                </button>
+                              ) : null}
+                              {rowActionAllowed(task, "canDelete") ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this task from Work OS? This cannot be undone.") && changeTask.mutate({ task, method: "DELETE", mode: "delete" })}>
+                                  <Trash2 size={13} /> Delete permanently
+                                </button>
+                              ) : null}
                             </div>
                           ) : null}
                         </span>
@@ -501,12 +531,17 @@ export default function EmployeeTasks() {
                         {subtasks.map((subtask: AnyRow) => {
                           const subtaskId = String(subtask.provider_task_id || subtask.id);
                           const subtaskDone = subtask.completed === true;
+                          const subtaskCanEdit = rowActionAllowed(subtask, "canEdit");
+                          const subtaskCanMove = rowActionAllowed(subtask, "canMove");
+                          const subtaskCanArchive = rowActionAllowed(subtask, "canArchive");
+                          const subtaskCanDelete = rowActionAllowed(subtask, "canDelete");
+                          const subtaskManage = subtaskCanEdit || subtaskCanMove || subtaskCanArchive || subtaskCanDelete;
                           return (
                             <div key={subtask.id} className="relative flex items-center gap-2 py-1.5 text-[12px]">
                               <button
                                 type="button"
                                 aria-label={subtaskDone ? `Reopen ${subtask.title}` : `Mark ${subtask.title} done`}
-                                disabled={historical || changeTask.isPending}
+                                disabled={historical || changeTask.isPending || !rowCompletionAllowed(subtask)}
                                 onClick={() => changeTask.mutate({ task: subtask, body: { completed: !subtaskDone } })}
                                 className="grid size-4 shrink-0 place-items-center rounded-full border"
                                 style={{ borderColor: subtaskDone ? "var(--accent-deep)" : "var(--border-hot)", background: subtaskDone ? "var(--accent-deep)" : "transparent", color: subtaskDone ? "var(--bg-card)" : "transparent" }}
@@ -517,38 +552,48 @@ export default function EmployeeTasks() {
                               <span className={cx("min-w-0 flex-1 break-words", subtaskDone ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>{subtask.title}</span>
                               {!historical ? (
                                 <span data-task-menu-root>
-                                  <button type="button" aria-label={`Actions for ${subtask.title}`} className="rounded-md border p-1.5" style={{ borderColor: "var(--border)" }} onClick={() => setSubtaskMenuId(subtaskMenuId === subtaskId ? null : subtaskId)}>
+                                  {subtaskManage ? <button type="button" aria-label={`Actions for ${subtask.title}`} className="rounded-md border p-1.5" style={{ borderColor: "var(--border)" }} onClick={() => setSubtaskMenuId(subtaskMenuId === subtaskId ? null : subtaskId)}>
                                     <MoreHorizontal size={13} />
-                                  </button>
-                                  {subtaskMenuId === subtaskId ? (
+                                  </button> : null}
+                                  {subtaskManage && subtaskMenuId === subtaskId ? (
                                     <div className="absolute right-0 top-8 z-30 grid min-w-48 rounded-xl border p-1 shadow-xl" role="menu" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => changeTask.mutate({ task: subtask, body: { completed: !subtaskDone } })}>
-                                        {subtaskDone ? <RotateCcw size={13} /> : <Check size={13} />}{subtaskDone ? "Reopen" : "Mark done"}
-                                      </button>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task: subtask }); setSubtaskMenuId(null); }}>
-                                        <Pencil size={13} /> Edit
-                                      </button>
-                                      <label className="grid gap-1 border-t px-2.5 py-1.5 text-[10px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>
-                                        Move to parent
-                                        <select
-                                          aria-label={`Move ${subtask.title}`}
-                                          value=""
-                                          className="rounded-md border bg-transparent px-2 py-1 text-[11px] text-[var(--text-primary)]"
-                                          style={{ borderColor: "var(--border)" }}
-                                          onChange={(event) => event.target.value && changeTask.mutate({ task: subtask, body: { parent_task_id: event.target.value } })}
-                                        >
-                                          <option value="">Choose…</option>
-                                          {rawRows.filter((target) => target.id !== task.id && !target.completed).map((target) => (
-                                            <option key={target.id} value={target.provider_task_id || target.id}>{target.title}</option>
-                                          ))}
-                                        </select>
-                                      </label>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this subtask? It will be hidden from active work.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "archive" })}>
-                                        <Archive size={13} /> Archive (reversible)
-                                      </button>
-                                      <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this subtask from Work OS? This cannot be undone.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "delete" })}>
-                                        <Trash2 size={13} /> Delete permanently
-                                      </button>
+                                      {rowCompletionAllowed(subtask) ? (
+                                        <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => changeTask.mutate({ task: subtask, body: { completed: !subtaskDone } })}>
+                                          {subtaskDone ? <RotateCcw size={13} /> : <Check size={13} />}{subtaskDone ? "Reopen" : "Mark done"}
+                                        </button>
+                                      ) : null}
+                                      {subtaskCanEdit ? (
+                                        <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task: subtask }); setSubtaskMenuId(null); }}>
+                                          <Pencil size={13} /> Edit
+                                        </button>
+                                      ) : null}
+                                      {subtaskCanMove ? (
+                                        <label className="grid gap-1 border-t px-2.5 py-1.5 text-[10px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>
+                                          Move to parent
+                                          <select
+                                            aria-label={`Move ${subtask.title}`}
+                                            value=""
+                                            className="rounded-md border bg-transparent px-2 py-1 text-[11px] text-[var(--text-primary)]"
+                                            style={{ borderColor: "var(--border)" }}
+                                            onChange={(event) => event.target.value && changeTask.mutate({ task: subtask, body: { parent_task_id: event.target.value } })}
+                                          >
+                                            <option value="">Choose…</option>
+                                            {rawRows.filter((target) => target.id !== task.id && !target.completed).map((target) => (
+                                              <option key={target.id} value={target.provider_task_id || target.id}>{target.title}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                      ) : null}
+                                      {subtaskCanArchive ? (
+                                        <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => window.confirm("Archive this subtask? It will be hidden from active work.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "archive" })}>
+                                          <Archive size={13} /> Archive (reversible)
+                                        </button>
+                                      ) : null}
+                                      {subtaskCanDelete ? (
+                                        <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left" style={{ color: "var(--status-error)" }} onClick={() => window.confirm("Permanently delete this subtask from Work OS? This cannot be undone.") && changeTask.mutate({ task: subtask, method: "DELETE", mode: "delete" })}>
+                                          <Trash2 size={13} /> Delete permanently
+                                        </button>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                 </span>

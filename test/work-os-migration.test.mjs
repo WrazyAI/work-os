@@ -69,6 +69,7 @@ const migrations = [
     "supabase/migrations/0058_work_os_member_ui_state.sql",
     "supabase/migrations/0061_work_os_membership_determinism.sql",
     "supabase/migrations/0065_work_task_assignment_and_status.sql",
+    "supabase/migrations/0066_work_task_assigner_visibility.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -156,6 +157,11 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and pg_get_constraintdef(oid) like '%assigned_by_person_id%'
   `);
   assert.equal(assignmentForeignKey.rows.length, 1, "the assigner is a real person");
+  for (const fn of ["work_list_person_tasks_sorted", "work_list_person_task_page"]) {
+    const definition = await db.query(`select pg_get_functiondef('public.${fn}'::regproc) as def`);
+    assert.equal(definition.rows.length, 1, `${fn} exists`);
+    assert.match(String(definition.rows[0].def), /assigned_by_person_id = p_person_id/, `${fn} includes assigned work`);
+  }
 
   const policies = await db.query(`
     select count(*)::int as count from pg_policies where schemaname='public'
@@ -265,10 +271,12 @@ test("Work OS companion migration is complete and idempotent", async () => {
 
   // 0065's backfill keeps legacy control: a row with exactly one recorded
   // assignee records that person as its assigner, while a row with two
-  // assignees or none stays assigner-less (administrators manage it and its
-  // assignees keep only assignee permissions). Re-running the additive
-  // migration over these seeded legacy rows exercises the same statement the
-  // deploy applies, instead of asserting against an empty table.
+  // assignees, none, or an orphaned assignee id stays assigner-less
+  // (administrators manage it and its assignees keep only assignee
+  // permissions). The orphan must not abort the migration on the new foreign
+  // key. Re-running the additive migration over these seeded legacy rows
+  // exercises the same statement the deploy applies, instead of asserting
+  // against an empty table.
   const legacyUser = await db.query(`insert into auth.users(email) values ('legacy-b@test.invalid') returning id`);
   const legacyPerson = await db.query(`
     insert into work_people(user_id,organization_id,display_name,email,auth_user_id)
@@ -277,23 +285,25 @@ test("Work OS companion migration is complete and idempotent", async () => {
   await db.query(`
     insert into work_tasks(user_id,organization_id,provider_task_id,title,assignee_person_ids)
     values ($1,$2,'task-multi','Legacy multi',array[$3,$4]::uuid[]),
-           ($1,$2,'task-unassigned','Legacy unassigned','{}'::uuid[])
+           ($1,$2,'task-unassigned','Legacy unassigned','{}'::uuid[]),
+           ($1,$2,'task-orphan','Legacy orphan',array[gen_random_uuid()])
   `, [owner.id, orgB, personB, legacyPerson.rows[0].id]);
   await db.exec(await readFile("supabase/migrations/0065_work_task_assignment_and_status.sql", "utf8"));
   const backfilled = await db.query(`
     select provider_task_id, assigned_by_person_id, workflow_status from work_tasks
     where provider_task_id = any($1) order by provider_task_id
-  `, [["task-a", "task-b", "task-multi", "task-unassigned"]]);
+  `, [["task-a", "task-b", "task-multi", "task-orphan", "task-unassigned"]]);
   assert.deepEqual(backfilled.rows, [
     { provider_task_id: "task-a", assigned_by_person_id: personA, workflow_status: "pending" },
     { provider_task_id: "task-b", assigned_by_person_id: personB, workflow_status: "pending" },
     { provider_task_id: "task-multi", assigned_by_person_id: null, workflow_status: "pending" },
+    { provider_task_id: "task-orphan", assigned_by_person_id: null, workflow_status: "pending" },
     { provider_task_id: "task-unassigned", assigned_by_person_id: null, workflow_status: "pending" },
-  ], "only a single-assignee legacy row is backfilled to that assignee");
+  ], "only a single-assignee legacy row with a real person is backfilled to that assignee");
   await assert.rejects(() => db.query(`update work_tasks set workflow_status='done' where provider_task_id='task-a'`), /work_tasks_workflow_status_check/);
   await assert.rejects(() => db.query(`update work_tasks set assigned_by_person_id=gen_random_uuid() where provider_task_id='task-a'`), /work_tasks_assigned_by_person_id_fkey/);
   // Keep the seeded rows out of the RLS visibility assertions below.
-  await db.query(`delete from work_tasks where provider_task_id = any($1)`, [["task-multi", "task-unassigned"]]);
+  await db.query(`delete from work_tasks where provider_task_id = any($1)`, [["task-multi", "task-orphan", "task-unassigned"]]);
   await db.query(`delete from work_people where id=$1`, [legacyPerson.rows[0].id]);
   await db.query(`delete from auth.users where id=$1`, [legacyUser.rows[0].id]);
 

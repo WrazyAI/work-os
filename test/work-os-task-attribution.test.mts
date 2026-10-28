@@ -43,11 +43,21 @@ test("the unified predicate covers local assignment and provider metadata", () =
   assert.equal(isTaskAttributableToPerson({ raw: { created_by: "member-b" } }, null, "member-a"), false);
 });
 
+test("an assigner also sees the work they delegated", () => {
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a" }, "person-a", null), true);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a" }, "person-b", null), true);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a" }, "person-c", null), false);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: [], assigned_by_person_id: null }, "person-a", null), false);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a" }, null, null), false);
+});
+
 test("both task surfaces share the unified attribution predicate", () => {
   const tasksSource = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
   const workspaceSource = readFileSync(new URL("../src/lib/work-os-daily-workspace.ts", import.meta.url), "utf8");
   assert.match(tasksSource, /export function isTaskAttributableToPerson/);
   assert.match(tasksSource, /isTaskAttributableToPerson\(task, personId, niftyMemberId\)/);
+  assert.match(tasksSource, /assignedByPersonId: personId/);
+  assert.match(tasksSource, /eq\("assigned_by_person_id", opts\.assignedByPersonId\)/);
   assert.match(workspaceSource, /isTaskAttributableToPerson\(task, access\.personId, context\.niftyMemberId\)/);
   assert.doesNotMatch(workspaceSource, /isNiftyTaskAttributableToMember/);
   assert.match(tasksSource, /export async function listPersonOpenTasks/);

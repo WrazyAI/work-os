@@ -75,6 +75,9 @@ test("the agent API exposes creation options and task removal", async () => {
   assert.match(options, /"tasks:read"/);
   assert.match(options, /projects/);
   assert.match(options, /people/);
+  // Assignment through a token is self-only, so options never advertise a
+  // coworker the create/update guards would reject.
+  assert.match(options, /person\.id === auth\.agent\.access\.personId/);
   const task = await read("src/app/api/agent/v1/tasks/[taskId]/route.ts");
   assert.match(task, /export async function DELETE/);
   assert.match(task, /"tasks:write"/);
@@ -86,11 +89,14 @@ test("archived tasks stay reachable for removal but not for editing", async () =
   assert.match(source, /allowArchived/);
 });
 
-test("an omitted assignee list defaults to the token's person, an explicit one is honored", () => {
+test("agent creation assigns only the token's own person", () => {
   assert.deepEqual(agentCreateAssignees("self", undefined), ["self"]);
-  assert.deepEqual(agentCreateAssignees("self", ["other"]), ["other"]);
-  assert.deepEqual(agentCreateAssignees("self", ["other", "other", "self"]), ["other", "self"]);
+  assert.deepEqual(agentCreateAssignees("self", ["self"]), ["self"]);
+  assert.deepEqual(agentCreateAssignees("self", ["self", "self"]), ["self"]);
   assert.deepEqual(agentCreateAssignees("self", []), []);
+  for (const requested of [["other"], ["self", "other"]]) {
+    assert.throws(() => agentCreateAssignees("self", requested), /own person/);
+  }
   assert.throws(() => agentCreateAssignees("self", ["other", 7]), /assignee_person_ids/);
 });
 

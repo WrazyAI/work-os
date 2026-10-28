@@ -48,6 +48,9 @@ export default function TodayPreview() {
     },
     onArchiveTask: (task: TaskRow) => setTasks((current) => current.filter((row) => row.id !== task.id)),
     onDeleteTask: (task: TaskRow) => setTasks((current) => current.filter((row) => row.id !== task.id)),
+    // The live surfaces open the task drawer, where the scoped assignee control
+    // lives; the preview has no drawer, so it only exercises the menu item.
+    onAssignTask: () => undefined,
   };
   const taskRows = tasks.map((task) => ({ ...task, capabilities: taskCapabilities(task, { role: "employee", personId: "preview-person" }, currentDate) }));
   const pendingMode = params.get("pending");

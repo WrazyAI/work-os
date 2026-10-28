@@ -1,4 +1,7 @@
 import { createElement, type ReactNode } from "react";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
@@ -13,6 +16,7 @@ const TODAY = todayIso();
 const ADMIN = { role: "admin" as const, personId: "p-1" };
 const OPEN_FILTERS = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
 const EMPTY_FORM = { name: "", description: "", dueDate: "", priority: "", assignee: "" };
+const tasksPageSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "TasksPage.tsx"), "utf8");
 
 function renderWith(state: "dense" | "sparse", props: Parameters<typeof TasksPage>[0] = {}, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -110,6 +114,11 @@ describe("administration task row actions", () => {
     expect(markup).toContain("Design review for the admin surface");
     expect(markup).not.toContain("Actions for ");
   });
+
+  it("opens the detail drawer for Assign instead of the edit drawer", () => {
+    expect(tasksPageSource).toContain("onAssign={() => setSelectedId(id)}");
+    expect(tasksPageSource).not.toContain("onAssign={() => openEdit(task)}");
+  });
 });
 
 describe("administration task row menu", () => {
@@ -150,8 +159,38 @@ describe("administration task drawer actions", () => {
     expect(statusButtons(markup)).toHaveLength(0);
   });
 
-  it("manages a multi-assignee task as one checkbox set", () => {
-    const task = multiAssigneeRow();
+  it("excludes deactivated people from the assignment options", () => {
+    const markup = renderWith("dense", { initialTaskId: "t-1" });
+    const at = markup.indexOf("Assignee</h3>");
+    expect(at).toBeGreaterThan(-1);
+    const section = markup.slice(at);
+    expect(section).toContain("Amara Okafor");
+    // p-6 (Farid Haddad) is deactivated in the roster fixture.
+    expect(section).not.toContain("Farid Haddad");
+    expect(section).toContain("Deactivated people are not available for new assignments.");
+  });
+
+  it("pills a drawer subtask from its effective due date like a row", () => {
+    const task = {
+      id: "t-child-late",
+      title: "Parent on track",
+      completed: false,
+      due_date: isoDaysAgo(-3),
+      workflow_status: "pending",
+      assignee_person_ids: ["p-1"],
+      assigned_by_person_id: "p-1",
+    };
+    const row = { ...task, capabilities: taskCapabilities(task, ADMIN, TODAY) };
+    const child = { id: "s-late", title: "Old child", completed: false, due_date: null, created_at: `${isoDaysAgo(4)}T09:00:00.000Z` };
+    const markup = renderWith("dense", { initialTaskId: "t-child-late" }, (client) => {
+      client.setQueryData(adminKeys.taskDetails("t-child-late"), { task: row, subtasks: [child] });
+    });
+    const item = markup.match(/<li[^>]*>[\s\S]*?Old child[\s\S]*?<\/li>/)?.[0] ?? "";
+    expect(item).toContain("Old child");
+    expect(item).toContain("Overdue");
+  });
+
+  it("manages a multi-assignee task as one checkbox set", () => {    const task = multiAssigneeRow();
     const markup = renderWith("dense", { initialTaskId: "t-pair" }, (client) => seedSingleRow(client, task));
     const at = markup.indexOf("Assignee</h3>");
     expect(at).toBeGreaterThan(-1);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTaskByLocalOrProviderId } from "@/lib/work-os";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { employeeTaskToday } from "@/lib/work-os-employee-tasks";
 import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 import { removeWorkOsAdminTask, updateWorkOsAdminTask } from "@/lib/work-os-task-admin";
 
@@ -38,7 +39,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ taskId: 
       : await subtasksQuery.eq("parent_provider_task_id", providerTaskId);
     if (error) throw new Error(`load task subtasks: ${error.message}`);
     const actor = { role: auth.access.role, personId: auth.access.personId };
-    const today = new Date().toISOString().slice(0, 10);
+    // The row and its children read the actor's workday, not UTC.
+    const today = await employeeTaskToday(auth.access);
     return NextResponse.json({ task: withTaskCapabilities([{ ...task, project: project.data ?? null }], actor, today)[0], subtasks: withTaskCapabilities(subtasks ?? [], actor, today) });
   } catch (err) {
     return jsonError(err);

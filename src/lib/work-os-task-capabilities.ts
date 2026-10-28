@@ -7,5 +7,5 @@ export function withTaskCapabilities<T extends Record<string, any>>(tasks: T[], 
 }
 
 export async function employeeToday(access: WorkOsAccess): Promise<string> {
-  return employeeTaskToday(access, access.personId ?? "");
+  return employeeTaskToday(access);
 }

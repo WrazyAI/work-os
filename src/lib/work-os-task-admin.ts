@@ -1,8 +1,8 @@
 import { getTaskByLocalOrProviderId, updateTask } from "@/lib/work-os-tasks";
-import { archiveWorkOsEmployeeTask, completeWorkOsTask, deleteWorkOsEmployeeTask, getWorkOsTaskCreationOptions } from "@/lib/work-os-employee-tasks";
+import { archiveWorkOsEmployeeTask, completeWorkOsTask, deleteWorkOsEmployeeTask, employeeTaskToday, getWorkOsTaskCreationOptions } from "@/lib/work-os-employee-tasks";
 import { workOsOrganizationOwnerId, WorkOsConflictError, WorkOsForbiddenError, WorkOsNotFoundError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { audit, type Json } from "@/lib/work-os-internal";
-import { isWorkflowStatus, taskIsOverdue } from "@/lib/work-os-task-permissions";
+import { isCalendarDate, isWorkflowStatus, taskIsOverdue } from "@/lib/work-os-task-permissions";
 import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 
 export async function updateWorkOsAdminTask(access: WorkOsAccess, taskId: string, body: Json): Promise<Json> {
@@ -14,7 +14,9 @@ export async function updateWorkOsAdminTask(access: WorkOsAccess, taskId: string
   const ownerId = workOsOrganizationOwnerId(access);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
   if (!task || task.organization_id !== access.organizationId || task.status === "deleted" || task.status === "archived") throw new WorkOsNotFoundError();
-  const today = new Date().toISOString().slice(0, 10);
+  // The actor's own workday decides overdue, not UTC; an unmapped admin keeps
+  // the UTC default inside employeeTaskToday.
+  const today = await employeeTaskToday(access);
   let updated: Json;
   if ("completed" in body) {
     if (typeof body.completed !== "boolean") throw new WorkOsValidationError("completed must be a boolean");
@@ -28,7 +30,13 @@ export async function updateWorkOsAdminTask(access: WorkOsAccess, taskId: string
       patch.workflow_status = body.workflow_status;
     }
     for (const key of ["name", "description", "due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason", "task_group_id", "effort_unit", "estimated_effort_minutes", "labels", "story_points", "blocked"]) {
-      if (key in body) patch[key] = body[key];
+      if (!(key in body)) continue;
+      // Reject a malformed due date before the first write: an impossible date
+      // would silently disable the overdue lock.
+      if (key === "due_date" && body.due_date !== null && body.due_date !== undefined && body.due_date !== "" && !isCalendarDate(body.due_date)) {
+        throw new WorkOsValidationError("due_date must be a real calendar date (YYYY-MM-DD)");
+      }
+      patch[key] = body[key];
     }
     let assignmentChanged = false;
     if ("assignee_person_ids" in body) {
@@ -59,5 +67,5 @@ export async function removeWorkOsAdminTask(access: WorkOsAccess, taskId: string
   // The employee lifecycle helpers enforce organization scope, cascade children,
   // clean plan items and emit the canonical task.archived/task.deleted audit.
   const result = mode === "delete" ? await deleteWorkOsEmployeeTask(access, taskId) : await archiveWorkOsEmployeeTask(access, taskId);
-  return { ...result, task: withTaskCapabilities([result.task], { role: access.role, personId: access.personId }, new Date().toISOString().slice(0, 10))[0] };
+  return { ...result, task: withTaskCapabilities([result.task], { role: access.role, personId: access.personId }, await employeeTaskToday(access))[0] };
 }

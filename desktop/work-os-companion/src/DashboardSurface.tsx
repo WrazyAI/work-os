@@ -8,7 +8,7 @@ import { FadeArc } from "./LoadingUi";
 import { OverflowPanText } from "./OverflowPan";
 import { safeTaskText, subtaskProgress, taskState, type TaskRow } from "./taskWorkspace";
 import { EllipsisMenu, TaskActionMenuItems } from "./taskSurfaces";
-import { hasTaskMenu } from "./taskActions";
+import { hasTaskMenu, taskCheckboxEnabled } from "./taskActions";
 
 export type DashboardTaskView = "today" | "unfinished" | "completed";
 
@@ -16,6 +16,7 @@ export interface DashboardSurfaceActions {
   onEditTask?: (task: TaskRow) => void;
   onArchiveTask?: (task: TaskRow) => void;
   onDeleteTask?: (task: TaskRow) => void;
+  onAssignTask?: (task: TaskRow) => void;
   onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
   onOpenTasks: (view?: DashboardTaskView) => void;
   onOpenCarryover: () => void;
@@ -96,7 +97,7 @@ function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenT
   const progress = subtaskProgress(task);
   const due = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
   return <article className={`dashboard-task-row ${state}${pending ? " is-pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-task-id={id}>
-    <button type="button" className={`dashboard-task-check${task.completed || flight === "leaving" ? " is-complete" : ""}${flight === "completing" ? " is-completing" : ""}`} disabled={!!pending || !!flight} aria-busy={flight === "completing"} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} onClick={() => { if (!pending && !flight) onToggleTask(task, !task.completed); }}>
+    <button type="button" className={`dashboard-task-check${task.completed || flight === "leaving" ? " is-complete" : ""}${flight === "completing" ? " is-completing" : ""}`} disabled={!!pending || !!flight || !taskCheckboxEnabled(task)} aria-busy={flight === "completing"} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} onClick={() => { if (!pending && !flight) onToggleTask(task, !task.completed); }}>
       {pending === "syncing" || flight === "completing" ? <FadeArc size={13} /> : task.completed || flight === "leaving" ? <Check size={15} aria-hidden="true" /> : null}
     </button>
     <button type="button" className="dashboard-task-row-copy" disabled={!!pending || !!flight} onClick={() => onOpenTask(task)}>
@@ -107,7 +108,7 @@ function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenT
       {progress.total > 0 && <ProgressRing completed={progress.completed} total={progress.total} size={24} stroke={3} label="subtasks" />}
       {due && <span className={state === "overdue" ? "is-overdue" : ""}>{formatWorkOsDate(due)}</span>}
       {pending === "failed" && <span className="dashboard-pending-actions"><button type="button" title={task.pending_error || "Retry adding task"} aria-label={`Retry adding ${title}`} onClick={() => onRetryPendingTask?.(task)}><RefreshCw size={13} /></button><button type="button" aria-label={`Dismiss ${title}`} onClick={() => onDismissPendingTask?.(task)}><Check size={12} /></button></span>}
-      {!pending && hasTaskMenu(task, currentDate) && <div className={`dashboard-task-menu ${menuOpen ? "open" : ""}`}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy || !!flight} onToggle={() => setMenuOpen((value) => !value)} onClose={() => setMenuOpen(false)}><TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => actions.onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={() => actions.onEditTask?.(task)} onArchive={() => actions.onArchiveTask?.(task)} onDelete={() => actions.onDeleteTask?.(task)} onClose={() => setMenuOpen(false)} /></EllipsisMenu></div>}
+      {!pending && hasTaskMenu(task, currentDate) && <div className={`dashboard-task-menu ${menuOpen ? "open" : ""}`}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy || !!flight} onToggle={() => setMenuOpen((value) => !value)} onClose={() => setMenuOpen(false)}><TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => actions.onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={() => actions.onEditTask?.(task)} onAssign={() => actions.onAssignTask?.(task)} onArchive={() => actions.onArchiveTask?.(task)} onDelete={() => actions.onDeleteTask?.(task)} onClose={() => setMenuOpen(false)} /></EllipsisMenu></div>}
     </div>
   </article>;
 }

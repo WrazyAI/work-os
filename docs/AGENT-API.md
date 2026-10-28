@@ -51,26 +51,16 @@ Base URL: `https://app.wrazyos.com/api/agent/v1`
 The schema is the contract: `GET /openapi.yaml` or
 `docs/openapi/work-os-agent-v1.yaml`.
 
-`GET /options` returns the projects and people this token may attach to a task —
-the same sets the employee's own composer offers. Use it instead of guessing a
-`project_id` or `assignee_person_ids` value. Tasks default to the TASKS project.
+`GET /options` returns the projects available to the token and its own person,
+so you never have to guess a `project_id` or `assignee_person_ids` value. Tasks
+default to the TASKS project, and assignment is self-only.
 
-An omitted `assignee_person_ids` assigns the task to the token's own person. An
-explicit list is honored exactly, so a token can hand work to someone else; that
-is the same delegation the employee surface allows.
-
-Work is attributed by assignee, so a handoff has two consequences. Both are
-deliberate, and both need a client decision:
-
-- A top-level task with nobody from this token's person answers `404` to it. The
-  new assignee, or an administrator, can hand it back.
-- The change feed (`updated_since`) reports the work currently assigned to this
-  person. A handed-off task therefore leaves the feed without a tombstone, so an
-  incremental client should reconcile with a full list on a cadence, or treat a
-  `404` on read as removal. No assignment history exists to emit a tombstone.
-- A handed-off *subtask* stays reachable through its parent's owner, because a
-  subtask inherits access from its active parent. Hand a subtask off by moving it
-  under a parent the new owner already has, or by handing off the parent too.
+An omitted `assignee_person_ids` assigns the task to the token's own person.
+Assignment through a token is self-only: an explicit list may name only that
+same person, and an id for anyone else answers `400`. Send an empty list to
+create an unassigned task. Handing work to a coworker is an employee-surface
+action, never an agent one, so a token always keeps the work it filed in its own
+list and change feed.
 
 `DELETE /tasks/{taskId}?mode=archive|delete` removes a task. `archive` (the
 default) keeps it recoverable and `delete` tombstones it. Both are the employee

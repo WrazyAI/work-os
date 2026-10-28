@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
+import { completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
 
@@ -130,6 +130,42 @@ describe("task actions", () => {
     expect(taskStatusOptions(base, today)).toEqual([]);
     expect(hasTaskMenu(base, today)).toBe(false);
     expect(taskActionItems({ ...base, assignee_person_ids: [] }, today)).toEqual([]);
+  });
+  it("gates the row checkbox on the row's own capabilities", () => {
+    const assignee = row("worker");
+    expect(taskCheckboxEnabled(assignee)).toBe(true);
+    expect(taskCheckboxEnabled({ ...row("worker", { completed: true }) })).toBe(true);
+    expect(taskCheckboxEnabled(row("viewer"))).toBe(false);
+    // Cached payloads predate capabilities and keep the legacy checkbox.
+    expect(taskCheckboxEnabled(base)).toBe(true);
+    expect(taskCheckboxEnabled({ ...base, completed: true })).toBe(true);
+  });
+  it("flips completion capabilities without granting a manager completion", () => {
+    const assignee = row("worker");
+    const completed = completionTaskCapabilities(assignee.capabilities, true);
+    expect(completed.canComplete).toBe(false);
+    expect(completed.canReopen).toBe(true);
+    expect(completed.canChangeStatus).toBe(true);
+    expect(completed.overdue).toBe(false);
+    expect(completed.statusLocked).toBe(false);
+    const reopened = completionTaskCapabilities(completed, false);
+    expect(reopened.canComplete).toBe(true);
+    expect(reopened.canReopen).toBe(false);
+    // An overdue assignee can complete but may not change status; after the
+    // completion the reopened state still carries the overdue lock.
+    const overdue = row("worker", { due_date: "2026-10-26" });
+    expect(completionTaskCapabilities(overdue.capabilities, false).statusLocked).toBe(true);
+    // The assigner may manage but never completes; nothing flips.
+    const manager = row("owner");
+    expect(completionTaskCapabilities(manager.capabilities, true)).toEqual(manager.capabilities);
+  });
+  it("keeps the completion capability payload current in every cache patch", () => {
+    const start = appSource.indexOf("const taskAfterPatch =");
+    expect(start).toBeGreaterThan(-1);
+    const block = appSource.slice(start, appSource.indexOf("const patchTaskRow", start));
+    expect(block).toContain("completionTaskCapabilities(next.capabilities, next.completed === true)");
+    const scenario = appSource.slice(appSource.indexOf("function applyScenarioTaskCompletion("), appSource.indexOf("async function refreshTaskDetailsFor("));
+    expect((scenario.match(/completionTaskCapabilities\(/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
   it("seeds the due-date editor only from a calendar-date prefix", () => {
     expect(taskDueDateSeed("2026-10-30")).toBe("2026-10-30");

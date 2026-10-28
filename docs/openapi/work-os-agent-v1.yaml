@@ -43,7 +43,7 @@ paths:
   /options:
     get:
       summary: Projects and people this token may attach to a task
-      description: "The same sets the employee's own task composer offers, so an agent can choose a real project_id or assignee_person_ids value instead of guessing ids."
+      description: "The projects available to the token and its own person. Assignment is self-only, so no other assignee is offered. Tasks default to the TASKS project."
       operationId: getTaskOptions
       x-required-scope: tasks:read
       responses:
@@ -511,7 +511,7 @@ components:
         assignee_person_ids:
           type: array
           items: { type: string, format: uuid }
-          description: Defaults to the token's own person when omitted. An explicit list is honored exactly, so a token can hand work to another assignable member from /options. A task with nobody from this token's person answers 404 to it.
+          description: "Defaults to the token's own person when omitted. Assignment through a token is self-only: an explicit list may name only that same person, and any other id answers 400. An empty list creates an unassigned task."
     TaskUpdate:
       type: object
       minProperties: 1

@@ -2328,6 +2328,8 @@ no overdue state, so a task past its derived date does read Overdue.
 The effective due date drives both the Overdue pill and the status lock in this
 record: an open task past its effective date cannot change workflow status
 until the date is today or later, even when no due date was ever recorded. The
+workday that rule compares against is the acting administrator's shift-local
+date; only an administrator with no person mapping falls back to UTC. The
 edit form still seeds and writes the recorded date, so saving it never turns
 the derived default into a recorded one; a task with no recorded date opens
 the editor empty, and the date the operator types becomes the real due date.

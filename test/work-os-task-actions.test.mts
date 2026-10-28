@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { scopedAssignableTaskPeople } from "../src/lib/work-os-task-assignees";
-import { isWorkflowStatus, taskCapabilities } from "../src/lib/work-os-task-permissions";
+import { isCalendarDate, isWorkflowStatus, taskCapabilities } from "../src/lib/work-os-task-permissions";
 
 const employee = readFileSync("src/lib/work-os-employee-tasks.ts", "utf8");
 const local = readFileSync("src/lib/work-os-local-tasks.ts", "utf8");
@@ -101,7 +101,7 @@ function harness(name: string, task: Record<string, unknown> = row, optionsPeopl
   const writes: Array<Record<string, unknown>> = [];
   const events: string[] = [];
   const dependencies = {
-    taskCapabilities, isWorkflowStatus,
+    taskCapabilities, isWorkflowStatus, isCalendarDate,
     taskActor: (actor: any) => ({ role: actor.role, personId: actor.personId }),
     employeeTaskToday: async () => "2026-10-27",
     employeeTaskContext: async (_access: unknown, id: string) => {
@@ -177,12 +177,21 @@ test("agent updates enforce the owner's edit, assignment, and move capabilities 
   }
 });
 
-test("an agent reassignment records its owner as assigner and emits the assignment audit", async () => {
-  const h = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "employee" }, ["employee", "teammate"]);
-  await h.run(access, "task", { assignee_person_ids: ["teammate"] }, { tokenId: "token", tokenName: "Agent" });
-  assert.deepEqual(h.writes, [{ assignee_person_ids: ["teammate"], assigned_by_person_id: "employee" }]);
+test("an agent's self-reassignment records its owner as assigner", async () => {
+  const h = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "employee", assignee_person_ids: ["other"] }, ["employee"]);
+  await h.run(access, "task", { assignee_person_ids: ["employee"] }, { tokenId: "token", tokenName: "Agent" });
+  assert.deepEqual(h.writes, [{ assignee_person_ids: ["employee"], assigned_by_person_id: "employee" }]);
   assert.ok(h.events.includes("task.assigned"));
   assert.ok(h.events.includes("agent.task.updated"));
+});
+
+test("an agent cannot hand work to a coworker", async () => {
+  for (const assignee_person_ids of [["teammate"], ["employee", "teammate"]]) {
+    const h = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "employee" }, ["employee", "teammate"]);
+    await assert.rejects(h.run(access, "task", { assignee_person_ids }, { tokenId: "token", tokenName: "Agent" }), Validation);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.events, []);
+  }
 });
 
 test("the shared assignment validator enforces an explicit allowed set", () => {
@@ -267,6 +276,18 @@ test("editing supports partial dates/priority and scopes reassignment before wri
   assert.deepEqual(h.writes, [{ due_date: "2026-10-29", start_date: null, priority: "high", assignee_person_ids: [], assigned_by_person_id: "employee" }]);
   assert.deepEqual(h.events, ["task.updated", "task.assigned"]);
 });
+test("a malformed or impossible due date is refused before any write", async () => {
+  const h = harness("updateWorkOsEmployeeTask", { ...row, assigned_by_person_id: "employee" });
+  for (const due_date of ["soon", "2026-02-30", "2026-13-01", "2026-1-2"]) {
+    await assert.rejects(h.run(access, "task", { due_date }), Validation);
+  }
+  assert.deepEqual(h.writes, []);
+  // A real day and an explicit clear still persist.
+  await h.run(access, "task", { due_date: "2026-10-29" });
+  await h.run(access, "task", { due_date: null });
+  assert.deepEqual(h.writes, [{ due_date: "2026-10-29" }, { due_date: null }]);
+});
+
 test("replaying an identical assignment succeeds without rewriting its provenance", async () => {
   const h = harness("updateWorkOsEmployeeTask", { ...row, assigned_by_person_id: "employee" });
   await h.run(access, "task", { assignee_person_ids: ["employee"] });

@@ -6,11 +6,25 @@ import { TaskDetailsModal, TaskEditModal, TaskEditModalForm, toggleAssigneeIds }
 
 const noop = () => undefined;
 
+/** Every subtask carries its own capability payload from the server; these
+ *  fixtures compute them with the same pure helper the API uses. */
+const subtaskOwner = (subtask: Record<string, any>, overrides: Record<string, any> = {}, capabilities?: Record<string, any>) => {
+  const task = {
+    completed: false,
+    due_date: "2026-09-29",
+    assignee_person_ids: ["person-1"],
+    assigned_by_person_id: "person-1",
+    ...subtask,
+    ...overrides,
+  };
+  return { ...task, capabilities: capabilities ?? taskCapabilities(task, { role: "employee", personId: "person-1" }, "2026-09-29") };
+};
+
 const details = {
   task: { id: "task-1", provider: "local", title: "Ship the drawer", description: "Detail copy", completed: false },
   subtasks: [
-    { id: "sub-1", provider_task_id: "sub-1", title: "Wire the editor", description: "Open the modal", completed: false },
-    { id: "sub-2", provider_task_id: "sub-2", title: "Trim the copy", description: "", completed: true },
+    subtaskOwner({ id: "sub-1", provider_task_id: "sub-1", title: "Wire the editor", description: "Open the modal", completed: false }),
+    subtaskOwner({ id: "sub-2", provider_task_id: "sub-2", title: "Trim the copy", description: "", completed: true }),
   ],
   moveTargets: [{ id: "task-2", title: "Other task" }],
   subtaskSync: { tasks: 2, syncedAt: "2026-09-29T09:00:00Z", error: null },
@@ -61,6 +75,52 @@ describe("TaskDetailsModal subtask actions", () => {
     expect(markup).toContain("Delete permanently");
     expect(markup).toContain("Move to");
     expect(markup).toContain("Archive");
+  });
+
+  it("gates an assignee subtask to its completion control only", () => {
+    const assigneeDetails = {
+      ...details,
+      subtasks: [
+        subtaskOwner({ id: "sub-1", provider_task_id: "sub-1", title: "Wire the editor", completed: false }, { assigned_by_person_id: "person-2" }),
+        subtaskOwner({ id: "sub-2", provider_task_id: "sub-2", title: "Trim the copy", completed: true }, { assigned_by_person_id: "person-2" }),
+      ],
+    };
+    const markup = renderToStaticMarkup(createElement(TaskDetailsModal, { ...base, details: assigneeDetails, subtaskMenuId: "sub-1" }));
+    const openCheck = markup.match(/<button[^>]*aria-label="Complete Wire the editor"[^>]*>/)?.[0] ?? "";
+    const reopenCheck = markup.match(/<button[^>]*aria-label="Reopen Trim the copy"[^>]*>/)?.[0] ?? "";
+    expect(openCheck).toContain("task-detail-subtask-check");
+    expect(openCheck).not.toContain("disabled");
+    expect(reopenCheck).toContain("task-detail-subtask-check");
+    expect(reopenCheck).not.toContain("disabled");
+    // No title edit affordance and no overflow menu: every management action
+    // belongs to the assigner, not the assignee.
+    expect(markup).not.toContain("task-detail-subtask-title");
+    expect(markup).not.toContain('aria-label="Actions for Wire the editor"');
+    expect(markup).not.toContain("Move to");
+    expect(markup).not.toContain("Delete permanently");
+    expect(markup).not.toContain("Archive <small>reversible</small>");
+  });
+
+  it("gates each subtask menu item by its own capability", () => {
+    const editOnly = subtaskOwner(
+      { id: "sub-1", provider_task_id: "sub-1", title: "Wire the editor", completed: false },
+      {},
+      {
+        canEdit: true, canArchive: false, canDelete: false, canAssign: false,
+        canComplete: true, canReopen: false, canChangeStatus: true, canMove: false,
+        statusLocked: false, overdue: false,
+      },
+    );
+    const markup = renderToStaticMarkup(createElement(TaskDetailsModal, {
+      ...base,
+      details: { ...details, subtasks: [editOnly] },
+      subtaskMenuId: "sub-1",
+    }));
+    expect(markup).toContain("Mark subtask done");
+    expect(markup).toContain("Edit</button>");
+    expect(markup).not.toContain("Move to");
+    expect(markup).not.toContain("Delete permanently");
+    expect(markup).not.toContain("Archive <small>reversible</small>");
   });
 
   it("shows employee-attached completion evidence without claiming provider confirmation", () => {

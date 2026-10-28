@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  isCalendarDate,
   isWorkflowStatus,
   taskAssignerId,
   taskCapabilities,
@@ -51,15 +52,44 @@ test("assignees can change status and complete or reopen without managing assign
   }
 });
 
-test("self-owned and legacy tasks retain assignee management for open and completed rows", () => {
-  for (const task of [selfOwned, legacy, { ...legacy, assignee_person_ids: ["other", "employee"] }]) {
+test("self-owned tasks retain assignee management for open and completed rows", () => {
+  for (const completed of [false, true]) {
+    assert.deepEqual(taskCapabilities({ ...selfOwned, completed }, employee, today), {
+      canEdit: true, canArchive: true, canDelete: true, canAssign: true,
+      canComplete: !completed, canReopen: completed, canChangeStatus: true, canMove: true,
+      statusLocked: false, overdue: false,
+    });
+  }
+});
+
+test("tasks without an assigner are administrator-only for management", () => {
+  // The 0065 backfill gives legacy single-assignee rows their assigner, so a
+  // null assigner now means the record truly has none: its assignees keep
+  // completion and status, never edit/archive/delete/assign.
+  for (const task of [legacy, { ...legacy, assignee_person_ids: ["other", "employee"] }]) {
     for (const completed of [false, true]) {
       assert.deepEqual(taskCapabilities({ ...task, completed }, employee, today), {
-        canEdit: true, canArchive: true, canDelete: true, canAssign: true,
-        canComplete: !completed, canReopen: completed, canChangeStatus: true, canMove: true,
+        canEdit: false, canArchive: false, canDelete: false, canAssign: false,
+        canComplete: !completed, canReopen: completed, canChangeStatus: true, canMove: false,
         statusLocked: false, overdue: false,
       });
     }
+  }
+  // An unrelated person gains nothing from the same row.
+  for (const completed of [false, true]) {
+    assert.deepEqual(taskCapabilities({ ...legacy, completed }, { role: "manager", personId: "manager" }, today), {
+      canEdit: false, canArchive: false, canDelete: false, canAssign: false,
+      canComplete: false, canReopen: false, canChangeStatus: false, canMove: false,
+      statusLocked: false, overdue: false,
+    });
+  }
+  // The administrator override is still by role, even without a person mapping.
+  for (const completed of [false, true]) {
+    assert.deepEqual(taskCapabilities({ ...legacy, completed }, { role: "admin", personId: null }, today), {
+      canEdit: true, canArchive: true, canDelete: true, canAssign: true,
+      canComplete: !completed, canReopen: completed, canChangeStatus: true, canMove: true,
+      statusLocked: false, overdue: false,
+    });
   }
 });
 
@@ -135,13 +165,21 @@ test("workflow validation and assigner extraction accept only their documented v
   }
 });
 
+test("calendar validation accepts real days and rejects malformed or impossible ones", () => {
+  for (const value of ["2026-10-27", "2028-02-29", "2000-02-29"]) assert.equal(isCalendarDate(value), true, value);
+  for (const value of ["soon", "2026-02-30", "2026-13-01", "2026-00-01", "2026-04-31", "2026-02-29", "2100-02-29", "2026-1-2", "2026-10-27T00:00:00Z", "", null, undefined, 20261027, {}]) {
+    assert.equal(isCalendarDate(value), false, String(value));
+  }
+});
+
 test("migration adds constrained workflow status and indexed assignment provenance", () => {
   const sql = readFileSync(new URL("../supabase/migrations/0065_work_task_assignment_and_status.sql", import.meta.url), "utf8");
   assert.match(sql, /alter table public\.work_tasks/);
   assert.match(sql, /add column if not exists workflow_status text not null default 'pending'/);
   assert.match(sql, /check \(workflow_status in \('pending',\s*'in_progress'\)\)/);
   assert.match(sql, /add column if not exists assigned_by_person_id uuid references public\.work_people \(id\) on delete set null/);
-  assert.match(sql, /set assigned_by_person_id = assignee_person_ids\[1\]/);
-  assert.match(sql, /where assigned_by_person_id is null\s+and coalesce\(array_length\(assignee_person_ids, 1\), 0\) = 1/);
+  assert.match(sql, /set assigned_by_person_id = t\.assignee_person_ids\[1\]/);
+  assert.match(sql, /where t\.assigned_by_person_id is null\s+and coalesce\(array_length\(t\.assignee_person_ids, 1\), 0\) = 1/);
+  assert.match(sql, /exists \(\s*select 1 from public\.work_people p\s+where p\.id = t\.assignee_person_ids\[1\]/);
   assert.match(sql, /create index if not exists work_tasks_assigned_by_idx\s+on public\.work_tasks \(organization_id, assigned_by_person_id\)/);
 });

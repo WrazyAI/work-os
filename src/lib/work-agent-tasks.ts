@@ -130,9 +130,8 @@ const AGENT_TASK_CREATE_FIELDS = new Set([
 ]);
 
 /** The agent create contract: work in a real project (TASKS by default) and a
- * real board group. Assignees default to the token's own person; naming
- * someone else is validated against the same assignable set the employee
- * composer offers, so a token cannot file work onto a stranger. */
+ * real board group. Assignees default to the token's own person; assignment is
+ * self-only, so a token cannot file work onto a coworker. */
 export function validateAgentTaskCreate(body: Json): Json {
   const create: Json = {};
   for (const key of Object.keys(body ?? {})) {
@@ -148,16 +147,17 @@ export function validateAgentTaskCreate(body: Json): Json {
   return create;
 }
 
-/** With no assignees named, work belongs to the token's person. An explicit
- * list is honored exactly, including a handoff to someone else: the employee
- * surface can delegate work the same way, and a task the token cannot see is a
- * recoverable state (the new assignee or an administrator can hand it back). */
+/** With no assignees named, work belongs to the token's person. Assignment is
+ * self-only: an explicit list may name only that same person, and any other id
+ * is a caller mistake rather than a coworker handoff. */
 export function agentCreateAssignees(personId: string, requested: unknown): string[] {
   if (requested === undefined || requested === null) return [personId];
   if (!Array.isArray(requested)) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
   const ids = requested.filter((value): value is string => typeof value === "string" && !!value.trim());
   if (ids.length !== requested.length) throw new WorkOsValidationError("assignee_person_ids must be an array of person ids");
-  return [...new Set(ids)];
+  const unique = [...new Set(ids)];
+  if (unique.some((id) => id !== personId)) throw new WorkOsValidationError("An agent token can assign work only to its own person");
+  return unique;
 }
 
 export async function createAgentTask(agent: AgentAccess, body: Json, idempotencyKey: string) {

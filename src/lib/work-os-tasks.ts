@@ -58,6 +58,8 @@ export interface TaskListOptions {
   rawCreatedBy?: string | null;
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
+  /** Rows this person assigned, even when someone else is the assignee. */
+  assignedByPersonId?: string | null;
   /** Group overdue work first, ahead of the selected sort (design §6.4). */
   overdueFirst?: boolean;
   order?: TaskListOrder;
@@ -86,9 +88,12 @@ async function resolveActiveTaskPeople(organizationId: string, value: unknown) {
 /** One attribution rule for every task surface: the local person id, the
  * historical provider assignee mapping or creator/subscriber metadata. The
  * mapping id is trimmed and blank mappings never attribute, matching the
- * organization read SQL. */
+ * organization read SQL. The
+ * assigner also sees work they delegated, so their row menu can reach the
+ * management actions the capability matrix grants them. */
 export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
   if (personId && stringValues(task.assignee_person_ids).includes(String(personId))) return true;
+  if (personId && task.assigned_by_person_id === personId) return true;
   return isNiftyTaskAttributableToMember(task, niftyMemberId);
 }
 
@@ -122,6 +127,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
   if (opts.providerProjectId) query = query.eq("provider_project_id", opts.providerProjectId);
   if (opts.personId) query = query.contains("assignee_person_ids", [opts.personId]);
+  if (opts.assignedByPersonId) query = query.eq("assigned_by_person_id", opts.assignedByPersonId);
   if (opts.rawCreatedBy) query = query.eq("raw->>created_by", opts.rawCreatedBy);
   if (opts.rawSubscriber) query = query.contains("raw->subscribers", JSON.stringify([opts.rawSubscriber]));
   if (opts.providerAssignee) query = query.contains("assignee_provider_ids", [opts.providerAssignee]);
@@ -330,14 +336,15 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     metadataOptions.toDate = next.toISOString().slice(0, 10);
     if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
-  const [assigned, providerAssigned, createdBy, subscriber] = await Promise.all([
+  const [assigned, assignedBy, providerAssigned, createdBy, subscriber] = await Promise.all([
     listTasks(userId, { ...baseOptions, personId }),
+    listTasks(userId, { ...baseOptions, assignedByPersonId: personId }),
     niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
-  for (const task of assigned ?? []) rows.set(String(task.id), task);
+  for (const task of [...(assigned ?? []), ...(assignedBy ?? [])]) rows.set(String(task.id), task);
   for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }

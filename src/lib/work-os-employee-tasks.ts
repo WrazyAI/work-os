@@ -17,7 +17,7 @@ import { getStorageBackend } from "@/lib/db/storage";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
 import { syncPlanItemCompletion } from "@/lib/work-os-plan-items";
 import { scopedAssignableTaskPeople } from "@/lib/work-os-task-assignees";
-import { isWorkflowStatus, taskCapabilities, type TaskActor } from "@/lib/work-os-task-permissions";
+import { isCalendarDate, isWorkflowStatus, taskCapabilities, type TaskActor } from "@/lib/work-os-task-permissions";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
 import { effortMinutesPatch } from "@/lib/work-os-tasks";
 import { validateTaskGroupId } from "@/lib/work-agent-tasks";
@@ -73,7 +73,7 @@ function taskActor(access: WorkOsAccess): TaskActor {
   return { role: access.role, personId: access.personId };
 }
 
-export async function employeeTaskToday(access: WorkOsAccess, personId: string): Promise<string> {
+export async function employeeTaskToday(access: WorkOsAccess, personId: string | null = access.personId): Promise<string> {
   const now = new Date();
   // Administrators without a person mapping have no shift; use its UTC default.
   const { timezone } = personId ? await loadShiftData(access, personId, now) : { timezone: "UTC" };
@@ -197,7 +197,7 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
     employeeTaskContext(access, targetId),
   ]);
   if (!task.parent_task_id && !task.parent_provider_task_id) throw new WorkOsValidationError("Only subtasks can be moved");
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (!capabilities.canMove) throw new WorkOsForbiddenError();
   const moved = await moveTaskToParent(ownerId, String(task.provider_task_id ?? task.id), String(parent.provider_task_id ?? parent.id));
   const local = String(task.provider ?? "") === "local";
@@ -212,7 +212,7 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
 
 export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: string, body: Json) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (!capabilities.canEdit) throw new WorkOsForbiddenError();
   if ("workflow_status" in body) throw new WorkOsValidationError("Change workflow_status through the status action");
   const name = "name" in body ? text(body.name) : undefined;
@@ -233,6 +233,11 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
   for (const field of ["due_date", "start_date", "priority"] as const) {
     if (!(field in body)) continue;
     if (body[field] !== null && typeof body[field] !== "string") throw new WorkOsValidationError(`${field} must be a string or null`);
+    // A malformed due date would silently disable the overdue lock, so reject
+    // it before the first write. An empty string clears the date.
+    if (field === "due_date" && body[field] !== null && body[field] !== "" && !isCalendarDate(body[field])) {
+      throw new WorkOsValidationError("due_date must be a real calendar date (YYYY-MM-DD)");
+    }
     patch[field] = text(body[field]);
   }
   const previousAssignees = Array.isArray(task.assignee_person_ids) ? task.assignee_person_ids : [];
@@ -257,7 +262,7 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
 export async function updateWorkOsEmployeeTaskStatus(access: WorkOsAccess, taskId: string, status: unknown): Promise<{ task: Json; providerStatus: string }> {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   if (!isWorkflowStatus(status)) throw new WorkOsValidationError("workflow_status must be pending or in_progress");
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (task.completed === true) throw new WorkOsConflictError("Reopen the task before changing its status", "task_completed");
   if (capabilities.statusLocked) throw new WorkOsConflictError("Update the due date before changing this task's status", "due_date_passed");
   if (!capabilities.canChangeStatus) throw new WorkOsForbiddenError();
@@ -327,11 +332,17 @@ export function validateAgentAssignment(allowed: Iterable<string>, requested: un
 export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string, body: Json, actor: AgentActor) {
   const patch = validateAgentTaskUpdate(body);
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   const editsFields = Object.keys(patch).some((key) => key !== "assignee_person_ids" && key !== "parent_task_id");
   if (editsFields && !capabilities.canEdit) throw new WorkOsForbiddenError();
   if ("assignee_person_ids" in patch && !capabilities.canAssign) throw new WorkOsForbiddenError();
   if ("parent_task_id" in patch && !capabilities.canMove) throw new WorkOsForbiddenError();
+  // An agent token is person-scoped: assignment is self-only, so a coworker id
+  // is refused before the creation-options scope (or any write) is consulted.
+  if ("assignee_person_ids" in patch && Array.isArray(patch.assignee_person_ids)
+    && patch.assignee_person_ids.some((id) => typeof id === "string" && id !== access.personId)) {
+    throw new WorkOsValidationError("An agent token can assign work only to its own person");
+  }
   let assignmentChanged = false;
   // Every rejection happens before the first write, so a refused assignment can
   // never leave the subtask already moved under a new parent.
@@ -437,7 +448,7 @@ async function openSubtaskRows(input: { organizationId: string; task: Json }): P
 
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean, actor?: AgentActor) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (completed ? !capabilities.canComplete : !capabilities.canReopen) throw new WorkOsForbiddenError();
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(String(task.id), access.organizationId, ownerId))) {
     throw new WorkOsConflictError(
@@ -576,7 +587,7 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
 
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId, { allowArchived: true });
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (!capabilities.canArchive) throw new WorkOsForbiddenError();
   let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
@@ -595,7 +606,7 @@ export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: st
 
 export async function deleteWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId, { allowArchived: true });
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (!capabilities.canDelete) throw new WorkOsForbiddenError();
   let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
@@ -802,7 +813,7 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
   const ownerId = await organizationOwnerId(access.organizationId);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
   if (task.organization_id !== access.organizationId) throw new WorkOsNotFoundError();
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access, access.personId ?? ""));
+  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
   if (completed ? !capabilities.canComplete : !capabilities.canReopen) throw new WorkOsForbiddenError();
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(task.id as string, access.organizationId, ownerId))) {
     throw new WorkOsConflictError(

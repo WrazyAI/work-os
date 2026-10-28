@@ -60,6 +60,21 @@ describe("dashboard surfaces", () => {
     expect(menu("viewer")).toBe("");
   });
 
+  it("disables the completion check when the row's capabilities forbid it", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
+    const viewerRow = { ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId: "viewer" }, "2026-08-26") };
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [viewerRow], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [viewerRow], currentDate: "2026-08-26" }));
+    const check = markup.match(/<button[^>]*aria-label="Complete Make the first task visible"[^>]*>/)?.[0] ?? "";
+    expect(check).toContain("dashboard-task-check");
+    expect(check).toContain("disabled");
+    // A row without a capability payload keeps today's enabled checkbox.
+    const legacy = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model: buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now), tasks: [task], currentDate: "2026-08-26" }));
+    const legacyCheck = legacy.match(/<button[^>]*aria-label="Complete Make the first task visible"[^>]*>/)?.[0] ?? "";
+    expect(legacyCheck).not.toContain("disabled");
+  });
+
   it("wires the off-shift management actions and keeps their order", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };

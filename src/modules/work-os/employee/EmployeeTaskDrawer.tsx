@@ -77,6 +77,15 @@ export default function EmployeeTaskDrawer({
   });
 
   const error = save.error || remove.error;
+  // The server attaches the caller's task capabilities. A payload without them
+  // predates the seam and keeps the existing controls; a live payload hides
+  // every write the server would refuse.
+  const capabilities = task?.capabilities && typeof task.capabilities === "object"
+    ? task.capabilities as Partial<{ canEdit: boolean; canArchive: boolean; canDelete: boolean }>
+    : null;
+  const canEdit = !capabilities || capabilities.canEdit === true;
+  const canArchive = !capabilities || capabilities.canArchive === true;
+  const canDelete = !capabilities || capabilities.canDelete === true;
 
   return (
     <div className="fixed inset-0 z-50" role="presentation">
@@ -116,6 +125,7 @@ export default function EmployeeTaskDrawer({
                 ref={titleRef}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
+                disabled={!canEdit}
                 className={inputClass}
                 style={inputStyle}
                 placeholder="What needs to happen?"
@@ -125,6 +135,7 @@ export default function EmployeeTaskDrawer({
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
+                disabled={!canEdit}
                 rows={6}
                 className={`${inputClass} resize-y`}
                 style={inputStyle}
@@ -146,23 +157,23 @@ export default function EmployeeTaskDrawer({
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t px-5 py-4" style={{ borderColor: "var(--border)" }}>
           {mode === "edit" ? (
             <div className="flex flex-wrap gap-2">
-              <SecondaryButton
+              {canArchive ? <SecondaryButton
                 disabled={remove.isPending}
                 onClick={() => window.confirm("Archive this task? It will be hidden from active work.") && remove.mutate("archive")}
               >
                 <Archive size={13} /> Archive
-              </SecondaryButton>
-              <SecondaryButton
+              </SecondaryButton> : null}
+              {canDelete ? <SecondaryButton
                 disabled={remove.isPending}
                 style={{ color: "var(--status-error)" }}
                 onClick={() => window.confirm("Permanently delete this task from Work OS? This cannot be undone.") && remove.mutate("delete")}
               >
                 <Trash2 size={13} /> Delete
-              </SecondaryButton>
+              </SecondaryButton> : null}
             </div>
           ) : <span />}
           <div className="flex gap-2">
-            <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+            <SecondaryButton onClick={onClose}>{canEdit || mode === "create" ? "Cancel" : "Close"}</SecondaryButton>
             {mode === "create" ? (
               <PrimaryButton
                 disabled={!title.trim()}
@@ -173,11 +184,11 @@ export default function EmployeeTaskDrawer({
               >
                 Add task
               </PrimaryButton>
-            ) : (
+            ) : canEdit ? (
               <PrimaryButton disabled={!title.trim() || save.isPending} onClick={() => save.mutate()}>
                 {save.isPending ? "Saving…" : "Save changes"}
               </PrimaryButton>
-            )}
+            ) : null}
           </div>
         </footer>
       </aside>

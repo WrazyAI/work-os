@@ -260,13 +260,23 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
   onMenuToggle: () => void; onMoveToggle: () => void; onClose: () => void; onToggle: () => void; onEdit: () => void;
   onMove: (target: AnyTask) => void; onArchive: () => void; onDelete: () => void; moveTargets: AnyTask[];
 }) {
+  // Each child carries its own capability payload; parent access never grants
+  // a child action. The trigger exists only when at least one management action
+  // does, and every item is gated separately.
+  const capabilities = (subtask.capabilities ?? {}) as Partial<TaskCapabilities>;
+  const canEdit = capabilities.canEdit === true;
+  const canMove = capabilities.canMove === true;
+  const canArchive = capabilities.canArchive === true;
+  const canDelete = capabilities.canDelete === true;
+  const canToggle = subtask.completed === true ? capabilities.canReopen === true : capabilities.canComplete === true;
+  const canManage = canEdit || canMove || canArchive || canDelete;
   const { triggerRef, menuRef, style } = useAnchoredMenu(menuOpen);
   const move = useAnchoredMenu(moveOpen);
   const triggerRefs = useMemo(() => [triggerRef, move.triggerRef], [move.triggerRef, triggerRef]);
   const menuRefs = useMemo(() => [menuRef, move.menuRef], [menuRef, move.menuRef]);
   usePortalMenuInteraction({ open: menuOpen || moveOpen, triggerRefs, menuRefs, focusMenuRef: moveOpen ? move.menuRef : menuRef, onClose });
   return <div className="subtask-actions">
-    <button
+    {canManage && <button
       className="ellipsis-button"
       aria-label={`Actions for ${safeTaskText(subtask.title, "subtask")}`}
       aria-haspopup="menu"
@@ -274,15 +284,15 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
       disabled={busy}
       ref={(node) => { triggerRef.current = node; }}
       onClick={onMenuToggle}
-    ><MoreHorizontal size={17} /></button>
-    {menuOpen && renderViewportSurface(<div className="subtask-menu task-detail-menu anchored-menu" role="menu" style={style} ref={menuRef}>
-      <button role="menuitem" onClick={onToggle}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button>
-      <button role="menuitem" onClick={onEdit}><Pencil size={14} /> Edit</button>
-      <button role="menuitem" aria-haspopup="menu" aria-expanded={moveOpen} ref={(node) => { move.triggerRef.current = node; }} onClick={onMoveToggle}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>
-      <button role="menuitem" onClick={onArchive}><Archive size={14} /> Archive <small>reversible</small></button>
-      <button className="danger" role="menuitem" onClick={onDelete}><Trash2 size={14} /> Delete permanently</button>
+    ><MoreHorizontal size={17} /></button>}
+    {canManage && menuOpen && renderViewportSurface(<div className="subtask-menu task-detail-menu anchored-menu" role="menu" style={style} ref={menuRef}>
+      {canToggle && <button role="menuitem" onClick={onToggle}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button>}
+      {canEdit && <button role="menuitem" onClick={onEdit}><Pencil size={14} /> Edit</button>}
+      {canMove && <button role="menuitem" aria-haspopup="menu" aria-expanded={moveOpen} ref={(node) => { move.triggerRef.current = node; }} onClick={onMoveToggle}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>}
+      {canArchive && <button role="menuitem" onClick={onArchive}><Archive size={14} /> Archive <small>reversible</small></button>}
+      {canDelete && <button className="danger" role="menuitem" onClick={onDelete}><Trash2 size={14} /> Delete permanently</button>}
     </div>)}
-    {moveOpen && renderViewportSurface(<div className="move-target-menu task-detail-move-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
+    {canMove && moveOpen && renderViewportSurface(<div className="move-target-menu task-detail-move-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
       <span>Move to task</span>
       {(moveTargets || []).length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
     </div>)}
@@ -544,7 +554,10 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = displayTaskState(subtask, currentDate);
-              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy">{readOnly ? <strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong> : <button type="button" className="task-detail-subtask-title" disabled={busy} title="Edit subtask" aria-label={`Edit ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onEditTask(subtask)}>{safeTaskText(subtask.title, "Untitled subtask")}</button>}{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{taskStatusLabel(subtaskState)}</span>{!readOnly && <SubtaskActions
+              const subtaskCapabilities = (subtask.capabilities ?? {}) as Partial<TaskCapabilities>;
+              const subtaskCanEdit = !readOnly && subtaskCapabilities.canEdit === true;
+              const completionAllowed = subtask.completed === true ? subtaskCapabilities.canReopen === true : subtaskCapabilities.canComplete === true;
+              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy || !completionAllowed} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy">{subtaskCanEdit ? <button type="button" className="task-detail-subtask-title" disabled={busy} title="Edit subtask" aria-label={`Edit ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onEditTask(subtask)}>{safeTaskText(subtask.title, "Untitled subtask")}</button> : <strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong>}{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{taskStatusLabel(subtaskState)}</span>{!readOnly && <SubtaskActions
                 subtask={subtask} busy={busy}
                 menuOpen={subtaskMenuId === subtaskId} moveOpen={moveMenuId === subtaskId}
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}

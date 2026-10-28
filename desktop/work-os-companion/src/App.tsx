@@ -38,7 +38,7 @@ import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { hasTaskMenu, displayTaskState, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
+import { completionTaskCapabilities, hasTaskMenu, displayTaskState, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -1195,9 +1195,19 @@ export default function App() {
 
   /** Stable row identity shared by optimistic cache updates and provider-backed rows. */
   const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
+  /** Merge a partial patch into one row and keep its capability payload truthful
+   * when completion flips: a just-completed row offers Reopen immediately, and
+   * a just-reopened row offers Mark complete, without waiting for a refetch. */
+  const taskAfterPatch = (task: Record<string, any>, patch: Record<string, any>) => {
+    const next = { ...task, ...patch };
+    if (typeof patch.completed === "boolean" && next.capabilities && typeof next.capabilities === "object") {
+      next.capabilities = completionTaskCapabilities(next.capabilities, next.completed === true);
+    }
+    return next;
+  };
   /** Apply a partial task patch only to the matching provider-backed cache row. */
   const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
-    taskRowId(task) === rowId ? { ...task, ...patch } : task;
+    taskRowId(task) === rowId ? taskAfterPatch(task, patch) : task;
 
   /** Update every loaded sorted-history variant, then revalidate active ones so
    * completion filters and page boundaries stay authoritative after writes. */
@@ -1225,7 +1235,7 @@ export default function App() {
         ...page,
         tasks: page.tasks.flatMap((task) => {
           if (taskRowId(task) !== rowId) return [task];
-          const next = { ...task, ...patch };
+          const next = taskAfterPatch(task, patch);
           return completedOnly && next.completed !== true ? [] : [next];
         }),
       })),
@@ -3891,12 +3901,12 @@ export default function App() {
 
   function applyScenarioTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const taskId = String(task.provider_task_id || task.id);
-    setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row) ?? [] }));
+    setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed, ...(row.capabilities ? { capabilities: completionTaskCapabilities(row.capabilities, completed) } : {}) } : row) ?? [] }));
     if (refreshDetails && taskDetails) {
       setTaskDetails((current) => current ? {
         ...current,
-        task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed } : current.task,
-        subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row),
+        task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed, ...(current.task.capabilities ? { capabilities: completionTaskCapabilities(current.task.capabilities, completed) } : {}) } : current.task,
+        subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed, ...(row.capabilities ? { capabilities: completionTaskCapabilities(row.capabilities, completed) } : {}) } : row),
       } : current);
     }
     notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
@@ -5140,6 +5150,7 @@ export default function App() {
       {!worktivityPending && worktivityControlPhase && <WorktivityControlNotice state={{ status: "starting", phase: worktivityControlPhase }} />}
       {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <OffShiftDashboard
         onStatusTask={setTaskStatus}
+        onAssignTask={(task) => void openTaskDetails(task)}
         onEditTask={editTask}
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
@@ -5161,6 +5172,7 @@ export default function App() {
         onDismissPendingTask={dismissPendingTask}
       /> : <ActiveWorkdayDashboard
         onStatusTask={setTaskStatus}
+        onAssignTask={(task) => void openTaskDetails(task)}
         onEditTask={editTask}
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
@@ -5238,6 +5250,7 @@ export default function App() {
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
         onStatusTask={setTaskStatus}
+        onAssignTask={(task) => void openTaskDetails(task)}
         onPause={() => {
           if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" : "paused", paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
           void act("shift.pause_toggle", () => performWorktivityControl(paused ? "resume" : "pause"));
@@ -5306,6 +5319,7 @@ export default function App() {
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
         onStatusTask={setTaskStatus}
+        onAssignTask={(task) => void openTaskDetails(task)}
         onSurfaceTask={surfaceTask}
         onTaskCompletion={requestTaskCompletion}
         taskFlight={taskFlight}
@@ -5617,13 +5631,13 @@ function worktivityClockOutLabel(attendance: DayData["attendance"] | null | unde
   return attendance?.clockedInAt ? "Not observed" : "—";
 }
 
-function TaskLifecycleMenu({ task, currentDate = "", busy, initialOpen = false, onStatus, onComplete, onEdit, onArchive, onDelete }: {
-  task: TaskRow; currentDate?: string; busy: boolean; initialOpen?: boolean; onStatus?: (status: "pending" | "in_progress") => void; onComplete?: (completed: boolean) => void; onEdit: (task: TaskRow) => void; onArchive: (task: TaskRow) => void; onDelete: (task: TaskRow) => void;
+function TaskLifecycleMenu({ task, currentDate = "", busy, initialOpen = false, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete }: {
+  task: TaskRow; currentDate?: string; busy: boolean; initialOpen?: boolean; onStatus?: (status: "pending" | "in_progress") => void; onComplete?: (completed: boolean) => void; onEdit: (task: TaskRow) => void; onAssign?: (task: TaskRow) => void; onArchive: (task: TaskRow) => void; onDelete: (task: TaskRow) => void;
 }) {
   const [open, setOpen] = useState(initialOpen);
   if (!hasTaskMenu(task, currentDate)) return null;
   return <div className={`dashboard-task-menu ${open ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={open} label={`Actions for ${safeTaskText(task.title, "task")}`} disabled={busy} onToggle={() => setOpen((current) => !current)} onClose={() => setOpen(false)}>
-    <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatus?.(status)} onComplete={(completed) => onComplete?.(completed)} onEdit={() => onEdit(task)} onArchive={() => onArchive(task)} onDelete={() => onDelete(task)} onClose={() => setOpen(false)} />
+    <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatus?.(status)} onComplete={(completed) => onComplete?.(completed)} onEdit={() => onEdit(task)} onAssign={onAssign ? () => onAssign(task) : undefined} onArchive={() => onArchive(task)} onDelete={() => onDelete(task)} onClose={() => setOpen(false)} />
   </EllipsisMenu></div>;
 }
 
@@ -5637,13 +5651,13 @@ function PendingTaskControls({ status, error, onRetry, onDismiss }: { status: "s
   </span>;
 }
 
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut, kpiStrip = null, goalSaveState = "saved", onRetryGoalSave, onRetryPendingTask, onDismissPendingTask, taskFlight, onStatusTask }: {
+export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onAssignTask, onPause, onClockOut, kpiStrip = null, goalSaveState = "saved", onRetryGoalSave, onRetryPendingTask, onDismissPendingTask, taskFlight, onStatusTask }: {
   onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
   focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number;
   shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number;
   initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; initialTaskMenuId?: string | null; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
   onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; currentDate?: string; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
-  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void; kpiStrip?: ReactNode; goalSaveState?: "saved" | "saving" | "offline" | "conflict"; onRetryGoalSave?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void;
+  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onAssignTask?: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void; kpiStrip?: ReactNode; goalSaveState?: "saved" | "saving" | "offline" | "conflict"; onRetryGoalSave?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void;
   taskFlight?: ReadonlyMap<string, "completing" | "leaving">;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
@@ -5682,7 +5696,7 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
       {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
       <div className="active-task-list" ref={listRef}>
         {displayed.length ? <SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={`Sort ${tabLabel.toLowerCase()}`} className="day-task-sort" /> : null}
-        {displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null; const progress = subtaskProgress(task); const flight = taskFlight?.get(taskId) ?? null; return <article className={`${task.completed ? "completed" : ""}${pendingStatus ? " pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-list-key={taskId} key={taskId}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${task.title}` : task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} aria-busy={flight === "completing"} disabled={pendingStatus !== null} onClick={() => { if (!pendingStatus && !flight) onToggleTask(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={15} /> : null}</button><button className="active-task-copy" onClick={() => { if (!pendingStatus) onOpenTask(task); }}><strong>{task.title}</strong><small>{pendingStatus ? pendingStatus === "syncing" ? "Adding to your workspace…" : "Failed to add — retry or discard" : task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : null}{!pendingStatus && <TaskLifecycleMenu task={task} currentDate={today} busy={busy} initialOpen={initialTaskMenuId === taskId} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />}</article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
+        {displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null; const progress = subtaskProgress(task); const flight = taskFlight?.get(taskId) ?? null; return <article className={`${task.completed ? "completed" : ""}${pendingStatus ? " pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-list-key={taskId} key={taskId}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${task.title}` : task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} aria-busy={flight === "completing"} disabled={pendingStatus !== null || !taskCheckboxEnabled(task)} onClick={() => { if (!pendingStatus && !flight) onToggleTask(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={15} /> : null}</button><button className="active-task-copy" onClick={() => { if (!pendingStatus) onOpenTask(task); }}><strong>{task.title}</strong><small>{pendingStatus ? pendingStatus === "syncing" ? "Adding to your workspace…" : "Failed to add — retry or discard" : task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : null}{!pendingStatus && <TaskLifecycleMenu task={task} currentDate={today} busy={busy} initialOpen={initialTaskMenuId === taskId} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={onEditTask} onAssign={onAssignTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />}</article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
       <footer className="active-day-footer"><span>Changes save to your workday record.</span><button className="workspace-link-button" onClick={onManageTasks}><span>Open full Tasks workspace</span><ChevronRight size={14} aria-hidden="true" /></button></footer>
     </section>
     {kpiStrip}
@@ -6182,8 +6196,9 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
 }
 
 /** Render the employee Tasks workspace with shared day history and sorted paginated views. */
-export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onTaskSearch, onFilterFrom, onFilterTo, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask }: {
+export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onTaskSearch, onFilterFrom, onFilterTo, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
   onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
+  onAssignTask?: (task: TaskRow) => void;
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null; unfinishedHistory?: TaskRow[] | null;
@@ -6384,8 +6399,8 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       // Surface / defer / open-original-day are not capability-gated, so the
       // trigger stays for open rows and for completed rows with a real action.
       const hasMenu = hasTaskMenu(task, currentDate) || !task.completed || Boolean(attribution.date && attribution.date < currentDate);
-      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}${flight === "leaving" ? " is-leaving" : ""}`} role="button" data-pan-row="true" tabIndex={0} key={taskId} data-list-key={taskId} onClick={() => { if (!pendingStatus && !flight) onOpenTask(task, historical); }} onKeyDown={(event) => { if (pendingStatus || flight) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} aria-busy={flight === "completing"} disabled={historical || pendingStatus !== null} onClick={(event) => { event.stopPropagation(); if (!pendingStatus && !flight) onTaskCompletion(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={14} /> : null}</button><div className="task-row-body"><div className="task-row-line primary-line"><h3><OverflowPanText>{title}</OverflowPanText></h3>{onTodayPlan && taskView !== "today" && task.completed !== true && <span className="surfaced-tag">On today</span>}</div>{(showProject || metaParts.length > 0 || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{showProject ? <small className="task-meta-project">{projectName}</small> : null}{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{dueInline ? <small className={`task-meta-due${state === "overdue" ? " danger" : ""}`}>{dueInline}</small> : null}{description && !descriptionEchoesTitle ? <p className="task-row-desc"><OverflowPanText pan={false}>{description}</OverflowPanText></p> : null}</div>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{!pendingStatus && dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-state ${displayState}`}>{stateLabel}</span>}{!historical && !pendingStatus && hasMenu && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>
-        <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onTaskCompletion(task, completed)} onEdit={() => onEditTask(task)} onArchive={() => onArchiveTask(task)} onDelete={() => onDeleteTask(task)} onClose={() => setTaskMenuId(null)} />
+      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}${flight === "leaving" ? " is-leaving" : ""}`} role="button" data-pan-row="true" tabIndex={0} key={taskId} data-list-key={taskId} onClick={() => { if (!pendingStatus && !flight) onOpenTask(task, historical); }} onKeyDown={(event) => { if (pendingStatus || flight) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} aria-busy={flight === "completing"} disabled={historical || pendingStatus !== null || !taskCheckboxEnabled(task)} onClick={(event) => { event.stopPropagation(); if (!pendingStatus && !flight) onTaskCompletion(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={14} /> : null}</button><div className="task-row-body"><div className="task-row-line primary-line"><h3><OverflowPanText>{title}</OverflowPanText></h3>{onTodayPlan && taskView !== "today" && task.completed !== true && <span className="surfaced-tag">On today</span>}</div>{(showProject || metaParts.length > 0 || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{showProject ? <small className="task-meta-project">{projectName}</small> : null}{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{dueInline ? <small className={`task-meta-due${state === "overdue" ? " danger" : ""}`}>{dueInline}</small> : null}{description && !descriptionEchoesTitle ? <p className="task-row-desc"><OverflowPanText pan={false}>{description}</OverflowPanText></p> : null}</div>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{!pendingStatus && dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-state ${displayState}`}>{stateLabel}</span>}{!historical && !pendingStatus && hasMenu && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>
+        <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onTaskCompletion(task, completed)} onEdit={() => onEditTask(task)} onAssign={() => onAssignTask?.(task)} onArchive={() => onArchiveTask(task)} onDelete={() => onDeleteTask(task)} onClose={() => setTaskMenuId(null)} />
         {!task.completed && !onTodayPlan && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}</article>;
   };
 

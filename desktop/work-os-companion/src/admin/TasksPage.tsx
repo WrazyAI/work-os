@@ -490,7 +490,18 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     setConfirm({ task, mode });
   };
 
-  const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
+  const roster = people.data?.people ?? [];
+  // Assignment options exclude deactivated people. The full roster still
+  // resolves names for a task that already names an inactive assignee.
+  const rosterReportsActive = roster.some((person) => typeof person.active === "boolean");
+  const activePeople = rosterReportsActive ? roster.filter((person) => person.active !== false) : roster;
+  const personOptions = activePeople.map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
+  const rosterOptions = roster.map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
+  const inactiveRosterNote = !rosterReportsActive
+    ? "This roster does not report active status; every person is listed."
+    : roster.some((person) => person.active === false)
+      ? "Deactivated people are not available for new assignments."
+      : null;
   const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name ?? "Project") }));
   // TASKS is the one project that owns organization work. It stays out of the
   // form: the admin is choosing a person and a task, not a bucket.
@@ -588,7 +599,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
               </label>
             </AdminControlsGroup>
             <AdminControlsGroup>
-              <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+              <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={rosterOptions} />
               <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />
             </AdminControlsGroup>
           </AdminControls>
@@ -674,7 +685,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                                 }}
                                 onComplete={(completed) => complete.mutate({ id, completed })}
                                 onEdit={() => openEdit(task)}
-                                onAssign={() => openEdit(task)}
+                                onAssign={() => setSelectedId(id)}
                                 onArchive={() => requestRemoval(task, "archive")}
                                 onDelete={() => requestRemoval(task, "delete")}
                                 onClose={() => setMenuTaskId(null)}
@@ -750,7 +761,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                 {(people.data?.people ?? []).length ? (
                   <>
                     <div className="admin-check-list">
-                      {(people.data?.people ?? []).map((person) => (
+                      {activePeople.map((person) => (
                         <CheckField
                           key={String(person.id)}
                           label={String(person.display_name ?? "Unnamed")}
@@ -760,6 +771,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                         />
                       ))}
                     </div>
+                    {inactiveRosterNote ? <p className="admin-quiet">{inactiveRosterNote}</p> : null}
                     <div className="admin-inline-fields">
                       <AdminButton
                         variant="primary"
@@ -778,7 +790,8 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                 <h3><ListChecks size={14} aria-hidden /> Subtasks</h3>
                 <ul className="admin-rows">
                   {detail.data.subtasks.map((subtask) => {
-                    const subtaskState = displayTaskState(subtask, today);
+                    // The pill reads the same effective due date the rows do.
+                    const subtaskState = displayTaskState(adminTaskStatusRecord(subtask, today), today);
                     return (
                       <li key={String(subtask.id)}>
                         <span>{String(subtask.title ?? subtask.name ?? "Subtask")}</span>
@@ -817,7 +830,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
           <TextField label="Task" value={form.name} onChange={(next) => setForm((current) => ({ ...current, name: next }))} ariaLabel="Task name" placeholder="What needs doing" />
           <TextField label="Description" value={form.description} onChange={(next) => setForm((current) => ({ ...current, description: next }))} ariaLabel="Task description" />
           <div className="admin-inline-fields">
-            <SelectField label="Assignee" ariaLabel="Task assignee" value={form.assignee} onChange={(next) => setForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={personOptions} />
+            <SelectField label="Assignee" ariaLabel="Task assignee" value={form.assignee} onChange={(next) => setForm((current) => ({ ...current, assignee: next }))} placeholder="Unassigned" options={rosterOptions} />
             <TextField label="Due" type="date" value={form.dueDate} onChange={(next) => setForm((current) => ({ ...current, dueDate: next }))} ariaLabel="Task due date" />
           </div>
           {create.error ? <Notice tone="err">{(create.error as Error).message}</Notice> : null}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { isWorkflowStatus, taskCapabilities, taskIsOverdue } from "../src/lib/work-os-task-permissions";
+import { isCalendarDate, isWorkflowStatus, taskCapabilities, taskIsOverdue } from "../src/lib/work-os-task-permissions";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const capabilities = read("src/lib/work-os-task-capabilities.ts");
@@ -25,8 +25,25 @@ test("capability decoration copies rows without mutating input", () => {
   assert.deepEqual(result[0].capabilities, taskCapabilities(tasks[0], actor, "2026-10-27"));
   assert.equal("capabilities" in tasks[0], false);
 });
+test("web employee controls follow the server capability payload", () => {
+  const employees = read("src/modules/work-os/employee/EmployeeTasks.tsx");
+  const drawer = read("src/modules/work-os/employee/EmployeeTaskDrawer.tsx");
+  assert.match(employees, /rowCompletionAllowed\(task\)/);
+  assert.match(employees, /rowCompletionAllowed\(subtask\)/);
+  assert.match(employees, /rowActionAllowed\(task, "canEdit"\)/);
+  assert.match(employees, /rowActionAllowed\(task, "canArchive"\)/);
+  assert.match(employees, /rowActionAllowed\(task, "canDelete"\)/);
+  assert.match(drawer, /capabilities\.canEdit === true/);
+  assert.match(drawer, /capabilities\.canArchive === true/);
+  assert.match(drawer, /capabilities\.canDelete === true/);
+});
+
 test("employee date uses the canonical shift-local date seam", () => {
-  assert.match(capabilities, /employeeTaskToday\(access, access.personId \?\? ""\)/);
+  assert.match(capabilities, /employeeTaskToday\(access\)/);
+  const adminList = read("src/app/api/work-os/tasks/route.ts");
+  const adminDetail = read("src/app/api/work-os/tasks/[taskId]/route.ts");
+  const adminLibrary = read("src/lib/work-os-task-admin.ts");
+  for (const source of [adminList, adminDetail, adminLibrary]) assert.match(source, /employeeTaskToday\(/);
 });
 test("all employee lists, creations and details decorate task rows", () => {
   const list = read("src/app/api/work-os/me/tasks/route.ts");
@@ -63,7 +80,8 @@ function harness(task: Record<string, any> = row) {
   const writes: any[] = [];
   const events: string[] = [];
   const run = execute(admin, {
-    taskIsOverdue, isWorkflowStatus, withTaskCapabilities: seam.withTaskCapabilities,
+    taskIsOverdue, isWorkflowStatus, isCalendarDate, withTaskCapabilities: seam.withTaskCapabilities,
+    employeeTaskToday: async () => "2026-10-27",
     workOsOrganizationOwnerId: () => "owner",
     getTaskByLocalOrProviderId: async () => task,
     getWorkOsTaskCreationOptions: async () => ({ people: [{ id: "new" }, { id: "old" }] }),
@@ -109,6 +127,34 @@ test("admin reassignment records provenance and audits only actual changes", asy
   assert.deepEqual(unchanged.writes, [{ assignee_person_ids: ["old"] }]);
   assert.ok(!unchanged.events.includes("task.assigned"));
 });
+test("an unmapped admin assignment leaves no assigner and no assignee management", async () => {
+  // The assigner is the actor's person mapping. An admin without one must never
+  // inherit the stale assigner from the row it is changing.
+  const h = harness({ ...row, assigned_by_person_id: "old-assigner" });
+  const unmapped = { ...access, personId: null };
+  const result = await h.updateWorkOsAdminTask(unmapped, "task", { assignee_person_ids: ["new"] });
+  assert.deepEqual(h.writes, [{ assignee_person_ids: ["new"], assigned_by_person_id: null }]);
+  assert.equal(result.task.assigned_by_person_id, null);
+  // The new assignee keeps completion and status, but not edit/archive/delete.
+  const assignee = taskCapabilities({ ...row, assigned_by_person_id: null, assignee_person_ids: ["new"] }, { role: "employee", personId: "new" }, "2026-10-27");
+  assert.equal(assignee.canComplete, true);
+  assert.equal(assignee.canChangeStatus, true);
+  assert.equal(assignee.canEdit, false);
+  assert.equal(assignee.canArchive, false);
+  assert.equal(assignee.canDelete, false);
+  assert.equal(assignee.canAssign, false);
+});
+
+test("admin due-date validation rejects malformed and impossible dates before writing", async () => {
+  const h = harness();
+  for (const due_date of ["soon", "2026-02-30", "2026-13-01"]) {
+    await assert.rejects(h.updateWorkOsAdminTask(access, "task", { due_date }), Validation);
+  }
+  assert.deepEqual(h.writes, []);
+  await h.updateWorkOsAdminTask(access, "task", { due_date: "2026-10-29" });
+  assert.deepEqual(h.writes, [{ due_date: "2026-10-29" }]);
+});
+
 test("admin status and removal return decorated rows", async () => {
   const h = harness();
   const result = await h.updateWorkOsAdminTask(access, "task", { workflow_status: "in_progress" });

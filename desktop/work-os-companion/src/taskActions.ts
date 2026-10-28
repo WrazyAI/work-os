@@ -79,6 +79,31 @@ export function taskStatusOptions(task: TaskRow, today: string): Array<{ value: 
   });
 }
 
+/** Whether a row's completion checkbox is an allowed action. A cached payload
+ *  without capabilities keeps the legacy behavior; a live payload never offers
+ *  a write the server would refuse. */
+export function taskCheckboxEnabled(task: TaskRow): boolean {
+  const caps = capabilitiesFor(task);
+  if (!caps) return true;
+  return task.completed === true ? caps.canReopen : caps.canComplete;
+}
+
+/** The capability payload after a confirmed completion flip, so a just-
+ *  completed row offers Reopen without waiting for the next refetch. A manager
+ *  who may only edit keeps its management flags untouched; completing never
+ *  grants an action the actor did not already hold. */
+export function completionTaskCapabilities(capabilities: TaskCapabilities, completed: boolean): TaskCapabilities {
+  if (!capabilities.canComplete && !capabilities.canReopen) return capabilities;
+  return {
+    ...capabilities,
+    canComplete: !completed,
+    canReopen: completed,
+    canChangeStatus: completed ? capabilities.canChangeStatus || capabilities.canComplete : capabilities.canChangeStatus,
+    statusLocked: completed ? false : capabilities.statusLocked,
+    overdue: completed ? false : capabilities.overdue,
+  };
+}
+
 /** One predicate for "this row has a menu", shared by every trigger so a row
  *  can never open an empty popover. */
 export function hasTaskMenu(task: TaskRow, today: string): boolean {
