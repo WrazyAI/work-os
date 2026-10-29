@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isNiftyTaskAttributableToMember, isTaskAttributableToPerson } from "../src/lib/work-os";
+import { isNiftyTaskAttributableToMember, isTaskAssignedToPerson, isTaskAttributableToPerson } from "../src/lib/work-os";
 import { isEmployeeTaskAccessible } from "../src/lib/work-os-employee-tasks";
 import { readFileSync } from "node:fs";
 
@@ -51,15 +51,43 @@ test("an assigner also sees the work they delegated", () => {
   assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a" }, null, null), false);
 });
 
+test("the narrow predicate excludes the assigner while the broad one keeps the row visible", () => {
+  const delegated = { assignee_person_ids: ["person-e"], assigned_by_person_id: "person-p" };
+  // P assigned the work to E: the day belongs to E, not to P.
+  assert.equal(isTaskAssignedToPerson(delegated, "person-p", null), false);
+  assert.equal(isTaskAssignedToPerson(delegated, "person-e", null), true);
+  // P still sees the row and its management actions through the list predicate.
+  assert.equal(isTaskAttributableToPerson(delegated, "person-p", null), true);
+  assert.equal(isTaskAttributableToPerson(delegated, "person-e", null), true);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-e"], assigned_by_person_id: "person-p" }, "person-x", null), false);
+  // The provider creator/subscriber mapping still counts as ownership.
+  assert.equal(isTaskAssignedToPerson({ raw: { created_by: "member-a" } }, "person-a", "member-a"), true);
+});
+
+test("day attribution never admits the assigner's delegated events", () => {
+  const workspaceSource = readFileSync(new URL("../src/lib/work-os-daily-workspace.ts", import.meta.url), "utf8");
+  const dayBlock = workspaceSource.slice(
+    workspaceSource.indexOf("const attributable = allTasks.filter"),
+    workspaceSource.indexOf("const events ="),
+  );
+  // The day set and the event-id set both come from the narrow predicate; the
+  // broad predicate would credit P with E's completed/deferred events.
+  assert.match(dayBlock, /isTaskAssignedToPerson\(task, access\.personId, context\.niftyMemberId\)/);
+  assert.doesNotMatch(dayBlock, /isTaskAttributableToPerson/);
+  assert.match(workspaceSource, /const attributableIds = new Set\(attributable/);
+});
+
 test("both task surfaces share the unified attribution predicate", () => {
   const tasksSource = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
-  const workspaceSource = readFileSync(new URL("../src/lib/work-os-daily-workspace.ts", import.meta.url), "utf8");
   assert.match(tasksSource, /export function isTaskAttributableToPerson/);
+  assert.match(tasksSource, /export function isTaskAssignedToPerson/);
+  assert.match(tasksSource, /return isTaskAssignedToPerson\(task, personId, niftyMemberId\)/);
   assert.match(tasksSource, /isTaskAttributableToPerson\(task, personId, niftyMemberId\)/);
   assert.match(tasksSource, /assignedByPersonId: personId/);
   assert.match(tasksSource, /eq\("assigned_by_person_id", opts\.assignedByPersonId\)/);
-  assert.match(workspaceSource, /isTaskAttributableToPerson\(task, access\.personId, context\.niftyMemberId\)/);
+  const workspaceSource = readFileSync(new URL("../src/lib/work-os-daily-workspace.ts", import.meta.url), "utf8");
   assert.doesNotMatch(workspaceSource, /isNiftyTaskAttributableToMember/);
+  assert.doesNotMatch(workspaceSource, /isTaskAttributableToPerson/);
   assert.match(tasksSource, /export async function listPersonOpenTasks/);
 });
 

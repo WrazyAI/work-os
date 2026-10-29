@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
+import { COMPLETION_BLOCKED_LABEL, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
 
@@ -140,32 +140,59 @@ describe("task actions", () => {
     expect(taskCheckboxEnabled(base)).toBe(true);
     expect(taskCheckboxEnabled({ ...base, completed: true })).toBe(true);
   });
+  it("says why a capability-gated checkbox is inert", () => {
+    expect(taskCheckboxA11y(row("worker"), false, "Payroll")).toEqual({ "aria-label": "Complete Payroll" });
+    expect(taskCheckboxA11y(row("worker", { completed: true }), false, "Payroll")).toEqual({ "aria-label": "Reopen Payroll" });
+    expect(taskCheckboxA11y(row("worker"), true, "Payroll")).toEqual({ "aria-label": "Completing Payroll" });
+    expect(taskCheckboxA11y(row("viewer"), false, "Payroll")).toEqual({
+      "aria-label": COMPLETION_BLOCKED_LABEL,
+      title: COMPLETION_BLOCKED_LABEL,
+    });
+    expect(taskCheckboxA11y(row("viewer", { completed: true }), false, "Payroll")).toEqual({
+      "aria-label": COMPLETION_BLOCKED_LABEL,
+      title: COMPLETION_BLOCKED_LABEL,
+    });
+    // A cached row without capabilities keeps the plain action label.
+    expect(taskCheckboxA11y(base, false, "Payroll")).toEqual({ "aria-label": "Complete Payroll" });
+  });
   it("flips completion capabilities without granting a manager completion", () => {
     const assignee = row("worker");
-    const completed = completionTaskCapabilities(assignee.capabilities, true);
-    expect(completed.canComplete).toBe(false);
-    expect(completed.canReopen).toBe(true);
-    expect(completed.canChangeStatus).toBe(true);
-    expect(completed.overdue).toBe(false);
-    expect(completed.statusLocked).toBe(false);
-    const reopened = completionTaskCapabilities(completed, false);
-    expect(reopened.canComplete).toBe(true);
-    expect(reopened.canReopen).toBe(false);
+    const completed = completionTaskCapabilities(assignee, true, today);
+    expect(completed?.canComplete).toBe(false);
+    expect(completed?.canReopen).toBe(true);
+    expect(completed?.canChangeStatus).toBe(true);
+    expect(completed?.overdue).toBe(false);
+    expect(completed?.statusLocked).toBe(false);
+    const reopened = completionTaskCapabilities({ ...assignee, completed: true, capabilities: completed }, false, today);
+    expect(reopened?.canComplete).toBe(true);
+    expect(reopened?.canReopen).toBe(false);
     // An overdue assignee can complete but may not change status; after the
     // completion the reopened state still carries the overdue lock.
     const overdue = row("worker", { due_date: "2026-10-26" });
-    expect(completionTaskCapabilities(overdue.capabilities, false).statusLocked).toBe(true);
+    const completedOverdue = completionTaskCapabilities(overdue, true, today);
+    expect(completedOverdue?.statusLocked).toBe(false);
+    const reopenedOverdue = completionTaskCapabilities({ ...overdue, completed: true, capabilities: completedOverdue }, false, today);
+    expect(reopenedOverdue?.statusLocked).toBe(true);
+    expect(reopenedOverdue?.overdue).toBe(true);
+    expect(reopenedOverdue?.canChangeStatus).toBe(false);
     // The assigner may manage but never completes; nothing flips.
     const manager = row("owner");
-    expect(completionTaskCapabilities(manager.capabilities, true)).toEqual(manager.capabilities);
+    expect(completionTaskCapabilities(manager, true, today)).toEqual(manager.capabilities);
+    // A cached payload predates capabilities and stays without one.
+    expect(completionTaskCapabilities(base, true, today)).toBeNull();
   });
   it("keeps the completion capability payload current in every cache patch", () => {
     const start = appSource.indexOf("const taskAfterPatch =");
     expect(start).toBeGreaterThan(-1);
     const block = appSource.slice(start, appSource.indexOf("const patchTaskRow", start));
-    expect(block).toContain("completionTaskCapabilities(next.capabilities, next.completed === true)");
+    expect(block).toContain("completionTaskCapabilities(next, next.completed === true, taskCalendarDate)");
     const scenario = appSource.slice(appSource.indexOf("function applyScenarioTaskCompletion("), appSource.indexOf("async function refreshTaskDetailsFor("));
-    expect((scenario.match(/completionTaskCapabilities\(/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((scenario.match(/completionTaskCapabilities\([\s\S]*?taskCalendarDate\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+  it("only offers Assign in the workspace menu when the surface can handle it", () => {
+    const workspace = appSource.slice(appSource.indexOf("export function TasksWorkspace("));
+    expect(workspace).toContain("onAssign={onAssignTask ? () => onAssignTask(task) : undefined}");
+    expect(workspace).not.toContain("onAssign={() => onAssignTask?.(task)}");
   });
   it("seeds the due-date editor only from a calendar-date prefix", () => {
     expect(taskDueDateSeed("2026-10-30")).toBe("2026-10-30");

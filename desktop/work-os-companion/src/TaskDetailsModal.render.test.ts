@@ -123,6 +123,29 @@ describe("TaskDetailsModal subtask actions", () => {
     expect(markup).not.toContain("Archive <small>reversible</small>");
   });
 
+  it("says why a subtask checkbox the capabilities disable is inert", () => {
+    const viewerSubtask = subtaskOwner(
+      { id: "sub-1", provider_task_id: "sub-1", title: "Wire the editor", completed: false },
+      {},
+      {
+        canEdit: false, canArchive: false, canDelete: false, canAssign: false,
+        canComplete: false, canReopen: false, canChangeStatus: false, canMove: false,
+        statusLocked: false, overdue: false,
+      },
+    );
+    const markup = renderToStaticMarkup(createElement(TaskDetailsModal, {
+      ...base,
+      details: { ...details, subtasks: [viewerSubtask] },
+    }));
+    const check = markup.match(/<button[^>]*aria-label="Only this task[^>]*>/)?.[0] ?? "";
+    expect(check).toContain("task-detail-subtask-check");
+    expect(check).toContain("disabled");
+    expect(check).toContain('title="Only this task');
+    // An allowed subtask keeps the plain action label and no reason tooltip.
+    const allowed = renderToStaticMarkup(createElement(TaskDetailsModal, { ...base }));
+    const allowedCheck = allowed.match(/<button[^>]*aria-label="Complete Wire the editor"[^>]*>/)?.[0] ?? "";
+    expect(allowedCheck).not.toContain("title=");
+  });
   it("shows employee-attached completion evidence without claiming provider confirmation", () => {
     const markup = renderToStaticMarkup(createElement(TaskDetailsModal, {
       ...base,

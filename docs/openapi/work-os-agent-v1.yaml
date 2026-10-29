@@ -531,7 +531,7 @@ components:
         assignee_person_ids:
           type: array
           items: { type: string, format: uuid }
-          description: "Replaces the assignee list exactly. Removing this token's person hands the work over: the task then answers 404 to this token, and it leaves the updated_since feed without a tombstone."
+          description: "Replaces the assignee list exactly. Assignment through a token is self-only: the list may name only that same person, and any other id answers 400. An empty list unassigns the task; it then drops out of this token's assignee-scoped list but stays addressable by id, because this token's person becomes its assigner."
         parent_task_id:
           type: string
           format: uuid

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { countAdminTaskRecord } from "@/lib/work-os-admin-otto-reads";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
-import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId, WorkOsValidationError } from "@/lib/work-os-api";
 import { employeeTaskToday } from "@/lib/work-os-employee-tasks";
+import { isCalendarDate } from "@/lib/work-os-task-permissions";
 import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
 
 export const runtime = "nodejs";
@@ -39,10 +40,10 @@ export async function GET(req: Request) {
     const requestedDate = sp.get("date");
     const today = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
       ? requestedDate
-      : new Date().toISOString().slice(0, 10);
+      : await employeeTaskToday(auth.access);
     const summary = await countAdminTaskRecord(auth.access, { ownerId, personId, today });
     return NextResponse.json({
-      tasks: withTaskCapabilities(tasks, { role: auth.access.role, personId: auth.access.personId }, await employeeTaskToday(auth.access)),
+      tasks: withTaskCapabilities(tasks, { role: auth.access.role, personId: auth.access.personId }, today),
       nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null,
       summary,
     });
@@ -61,10 +62,16 @@ export async function POST(req: Request) {
       ? await getTaskByLocalOrProviderId(ownerId, body.parent_task_id.trim())
       : null;
     const requestedProjectId = typeof body.project_id === "string" && body.project_id.trim() ? body.project_id.trim() : null;
+    // The overdue lock reads this date, so a malformed value is refused before
+    // the row exists rather than stored and silently treated as "no due date".
+    const dueDate = typeof body.due_date === "string" && body.due_date.trim() ? body.due_date.trim() : null;
+    if (dueDate !== null && !isCalendarDate(dueDate)) {
+      throw new WorkOsValidationError("due_date must be a real calendar date (YYYY-MM-DD)");
+    }
     const task = await createLocalWorkOsTask(auth.access, {
       title: String(body.name ?? ""),
       description: typeof body.description === "string" ? body.description : null,
-      dueDate: typeof body.due_date === "string" ? body.due_date : null,
+      dueDate,
       startDate: typeof body.start_date === "string" ? body.start_date : null,
       priority: typeof body.priority === "string" ? body.priority : null,
       labels: Array.isArray(body.labels) ? body.labels.filter((value: unknown): value is string => typeof value === "string") : [],

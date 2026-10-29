@@ -1,7 +1,10 @@
-import { taskDisplayState, type TaskCapabilities, type TaskDisplayState } from "../../../src/lib/work-os-task-permissions";
+import { taskDisplayState, taskIsOverdue, type TaskCapabilities, type TaskDisplayState } from "../../../src/lib/work-os-task-permissions";
 import type { TaskRow } from "./taskWorkspace";
 
 export type TaskMenuAction = "pending" | "in_progress" | "complete" | "reopen" | "edit" | "assign" | "archive" | "delete";
+
+/** The reason a capability-gated checkbox is inert. */
+export const COMPLETION_BLOCKED_LABEL = "Only this task's assignee can change completion.";
 
 export function displayTaskState(task: TaskRow, today: string): TaskDisplayState {
   return taskDisplayState(task, today);
@@ -88,19 +91,36 @@ export function taskCheckboxEnabled(task: TaskRow): boolean {
   return task.completed === true ? caps.canReopen : caps.canComplete;
 }
 
+/** The accessible name (and reason) for a row's completion checkbox. A
+ *  checkbox disabled by capabilities says why, so a greyed check is not a dead
+ *  end; every other state keeps the action verb it performs. */
+export function taskCheckboxA11y(task: TaskRow, completing: boolean, title: string): { "aria-label": string; title?: string } {
+  const blocked = taskCheckboxEnabled(task) ? null : COMPLETION_BLOCKED_LABEL;
+  return {
+    "aria-label": blocked ?? (completing ? `Completing ${title}` : task.completed === true ? `Reopen ${title}` : `Complete ${title}`),
+    ...(blocked ? { title: blocked } : {}),
+  };
+}
+
 /** The capability payload after a confirmed completion flip, so a just-
  *  completed row offers Reopen without waiting for the next refetch. A manager
  *  who may only edit keeps its management flags untouched; completing never
- *  grants an action the actor did not already hold. */
-export function completionTaskCapabilities(capabilities: TaskCapabilities, completed: boolean): TaskCapabilities {
+ *  grants an action the actor did not already hold. The overdue lock is
+ *  recomputed from the row's due date, because the completed payload it was
+ *  restored from had already cleared it. */
+export function completionTaskCapabilities(task: TaskRow, completed: boolean, today: string): TaskCapabilities | null {
+  const capabilities = task.capabilities ?? null;
+  if (!capabilities) return null;
   if (!capabilities.canComplete && !capabilities.canReopen) return capabilities;
+  const overdue = completed ? false : taskIsOverdue({ ...task, completed: false }, today);
+  const statusLocked = !completed && overdue;
   return {
     ...capabilities,
     canComplete: !completed,
     canReopen: completed,
-    canChangeStatus: completed ? capabilities.canChangeStatus || capabilities.canComplete : capabilities.canChangeStatus,
-    statusLocked: completed ? false : capabilities.statusLocked,
-    overdue: completed ? false : capabilities.overdue,
+    canChangeStatus: statusLocked ? false : completed ? capabilities.canChangeStatus || capabilities.canComplete : capabilities.canChangeStatus,
+    statusLocked,
+    overdue,
   };
 }
 

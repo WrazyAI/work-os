@@ -371,3 +371,46 @@ test("PATCH refuses all mixed lifecycle shapes before dispatch while single shap
   }
   assert.deepEqual(calls, ["edit", "edit", "completion", "move", "status"]);
 });
+
+test("create refuses a malformed due date before the task exists", async () => {
+  const creations: Array<Record<string, unknown>> = [];
+  const h = harness("createWorkOsEmployeeTask", row, ["employee"], {
+    createLocalWorkOsTask: async (_actor: unknown, input: Record<string, unknown>) => { creations.push(input); return { id: "created" }; },
+    defaultWorkOsTaskProjectId: async () => null,
+  });
+  for (const due_date of ["soon", "2026-02-30", "2026-13-01", "2026-1-2"]) {
+    await assert.rejects(h.run(access, { name: "Task", due_date }), Validation);
+  }
+  assert.equal(creations.length, 0);
+  await h.run(access, { name: "Task", due_date: "2026-10-30" });
+  assert.equal(creations.at(-1)?.dueDate, "2026-10-30");
+  // An empty value still means "no due date" rather than an invalid string.
+  await h.run(access, { name: "Task", due_date: "" });
+  assert.equal(creations.at(-1)?.dueDate, null);
+});
+
+test("an inline subtask defaults to its creator while top-level work stays unassigned", async () => {
+  const creations: Array<Record<string, unknown>> = [];
+  const h = harness("createWorkOsEmployeeTask", row, ["employee"], {
+    createLocalWorkOsTask: async (_actor: unknown, input: Record<string, unknown>) => { creations.push(input); return { id: "created" }; },
+    defaultWorkOsTaskProjectId: async () => null,
+    assertTopLevelTaskParent: () => undefined,
+  });
+  // The inline composer posts no assignees; the creator owns the subtask, so the
+  // capability-gated checkbox stays usable for them.
+  await h.run(access, { name: "Subtask", parent_task_id: "parent" });
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);
+  assert.equal(creations.at(-1)?.assignedByPersonId, "employee");
+  // An explicit empty list on a subtask gets the same self default.
+  await h.run(access, { name: "Subtask", parent_task_id: "parent", assignee_person_ids: [] });
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);
+  // An explicit list still wins.
+  await h.run(access, { name: "Subtask", parent_task_id: "parent", assignee_person_ids: ["employee"] });
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);
+  // Top-level unassigned tasks keep their current behavior.
+  await h.run(access, { name: "Task" });
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, []);
+  // No person mapping means nothing to default to.
+  await h.run({ ...access, personId: null }, { name: "Subtask", parent_task_id: "parent" });
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, []);
+});

@@ -85,16 +85,22 @@ async function resolveActiveTaskPeople(organizationId: string, value: unknown) {
   return personIds.map((personId) => byId.get(personId)!);
 }
 
-/** One attribution rule for every task surface: the local person id, the
- * historical provider assignee mapping or creator/subscriber metadata. The
- * mapping id is trimmed and blank mappings never attribute, matching the
- * organization read SQL. The
- * assigner also sees work they delegated, so their row menu can reach the
- * management actions the capability matrix grants them. */
-export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
+/** Narrow ownership: this person holds the work. The historical provider
+ * mapping counts as holding it, but the assigner does not. Day attribution uses
+ * this rule so delegating work never credits the delegator with the assignee's
+ * completion or deferral events. */
+export function isTaskAssignedToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
   if (personId && stringValues(task.assignee_person_ids).includes(String(personId))) return true;
-  if (personId && task.assigned_by_person_id === personId) return true;
   return isNiftyTaskAttributableToMember(task, niftyMemberId);
+}
+
+/** Visibility and management attribution: the local person id, the historical
+ * provider assignee mapping or creator/subscriber metadata. The assigner also
+ * sees work they delegated, so their row menu can reach the management actions
+ * the capability matrix grants them. */
+export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
+  if (personId && task.assigned_by_person_id === personId) return true;
+  return isTaskAssignedToPerson(task, personId, niftyMemberId);
 }
 
 export function isNiftyTaskAttributableToMember(task: Record<string, any>, niftyMemberId: string | null | undefined) {

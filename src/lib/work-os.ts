@@ -22,6 +22,7 @@ export {
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,
   isNiftyTaskAttributableToMember,
+  isTaskAssignedToPerson,
   listPersonOpenTasks,
   listPersonTaskPage,
   listPersonTasks,

@@ -2,7 +2,7 @@ import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api"
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
-import { hydrateTaskAssignees, isTaskAttributableToPerson, type TaskListOrder } from "@/lib/work-os";
+import { hydrateTaskAssignees, isTaskAssignedToPerson, type TaskListOrder } from "@/lib/work-os";
 import { compareWorkspaceTaskCursor, compareWorkspaceTasks, createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import { recordWorkMemory } from "@/lib/work-memory";
@@ -364,7 +364,9 @@ export async function resolveDailyWorkspace(
 
   const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
   const attributable = allTasks.filter((task) =>
-    isTaskAttributableToPerson(task, access.personId, context.niftyMemberId)
+    // Narrow ownership: an assigner sees the row through the list predicates but
+    // is never credited with the assignee's day events.
+    isTaskAssignedToPerson(task, access.personId, context.niftyMemberId)
   );
   const attributableIds = new Set(attributable.map((task) => String(task.id)));
   const events = (eventsResult.data ?? []).filter((event: any) =>

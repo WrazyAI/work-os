@@ -629,16 +629,28 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json,
   if (!title) throw new Error("Task title is required");
   if (title.length > 240) throw new Error("Task title must be 240 characters or fewer");
   if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
+  // A malformed due date would silently disable the overdue lock, so it is
+  // rejected before the first write. An empty string still means "no date".
+  const requestedDueDate = text(body.due_date);
+  if (requestedDueDate !== null && !isCalendarDate(requestedDueDate)) {
+    throw new WorkOsValidationError("due_date must be a real calendar date (YYYY-MM-DD)");
+  }
 
-  const requestedPersonIds = Array.isArray(body.assignee_person_ids)
+  const suppliedPersonIds = Array.isArray(body.assignee_person_ids)
     ? [...new Set(body.assignee_person_ids.filter((value): value is string => typeof value === "string" && !!value.trim()))]
     : [];
   const options = await getWorkOsTaskCreationOptions(access);
   const allowedPeople = new Map(options.people.map((person) => [person.id, person]));
-  const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
   // New work belongs to TASKS; a subtask inherits its parent's project instead.
   const requestedProjectId = text(body.project_id);
   const parentId = text(body.parent_task_id);
+  // An inline subtask post sends no assignees. The creator then owns the
+  // subtask, so the completion checkbox the capability gate enforces stays
+  // usable for them. A top-level task keeps its unassigned contract.
+  const requestedPersonIds = suppliedPersonIds.length
+    ? suppliedPersonIds
+    : parentId && access.personId && allowedPeople.has(access.personId) ? [access.personId] : [];
+  const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
   let parent: Json | null = null;
   if (parentId) {
     parent = (await employeeTaskContext(access, parentId)).task;
@@ -650,7 +662,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json,
     description,
     assigneePersonIds: requestedPersonIds,
     assignedByPersonId: access.personId,
-    dueDate: text(body.due_date),
+    dueDate: requestedDueDate,
     startDate: text(body.start_date),
     priority: text(body.priority),
     labels: Array.isArray(body.labels) ? body.labels.filter((value): value is string => typeof value === "string") : [],

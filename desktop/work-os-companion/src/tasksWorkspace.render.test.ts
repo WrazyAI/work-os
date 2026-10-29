@@ -557,10 +557,9 @@ describe("Tasks workspace cursor paging", () => {
     expect(markup).not.toContain("Load older tasks");
   });
 
-  it("disables a row checkbox the payload's capabilities forbid", () => {
+  it("disables a row checkbox the payload's capabilities forbid and says why", () => {
     const assigned = { id: "task-1", title: "Repair provider sync", due_date: "2026-08-26", completed: false, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
-    const viewerRow = { ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId: "viewer" }, "2026-08-26") };
-    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+    const render = (personId: string) => renderToStaticMarkup(createElement(TasksWorkspace, {
       currentDate: "2026-08-26",
       historyDate: "2026-08-26",
       currentPlan: null,
@@ -573,7 +572,7 @@ describe("Tasks workspace cursor paging", () => {
       taskView: "all",
       taskSort: DEFAULT_TASK_SORT,
       todayTasks: [],
-      taskHistory: [viewerRow],
+      taskHistory: [{ ...assigned, capabilities: taskCapabilities(assigned, { role: "employee", personId }, "2026-08-26") }],
       carryOver: [],
       carryOverOpen: false,
       loadingMore: false,
@@ -593,8 +592,14 @@ describe("Tasks workspace cursor paging", () => {
       onCarryOverOpen: () => undefined,
       onLoadMore: () => undefined,
     }));
-    const check = markup.match(/<button[^>]*aria-label="Complete Repair provider sync"[^>]*>/)?.[0] ?? "";
-    expect(check).toContain("task-check");
-    expect(check).toContain("disabled");
+    const blocked = render("viewer").match(/<button[^>]*aria-label="Only this task[^>]*>/)?.[0] ?? "";
+    expect(blocked).toContain("task-check");
+    expect(blocked).toContain("disabled");
+    expect(blocked).toContain('title="Only this task');
+    // The assignee keeps the plain action label on an enabled checkbox.
+    const allowed = render("worker").match(/<button[^>]*aria-label="Complete Repair provider sync"[^>]*>/)?.[0] ?? "";
+    expect(allowed).toContain("task-check");
+    expect(allowed).not.toContain("disabled");
+    expect(allowed).not.toContain("title=");
   });
 });

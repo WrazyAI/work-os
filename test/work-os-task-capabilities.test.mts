@@ -24,6 +24,24 @@ test("capability decoration copies rows without mutating input", () => {
   assert.notEqual(result[0], tasks[0]);
   assert.deepEqual(result[0].capabilities, taskCapabilities(tasks[0], actor, "2026-10-27"));
   assert.equal("capabilities" in tasks[0], false);
+  // A row without embedded children gains no empty array.
+  assert.equal("subtasks" in result[0], false);
+});
+test("capability decoration reaches one level of embedded subtasks", () => {
+  const actor = { role: "employee" as const, personId: "worker" };
+  const parent = { id: "parent", completed: false, due_date: "2026-10-28", assignee_person_ids: ["manager"], assigned_by_person_id: "manager" };
+  const child = { id: "child", completed: false, due_date: "2026-10-28", assignee_person_ids: ["worker"], assigned_by_person_id: "manager" };
+  const [row] = seam.withTaskCapabilities([{ ...parent, subtasks: [child] }], actor, "2026-10-27");
+  // The parent is delegated work the worker cannot manage; the child is the
+  // worker's own, so a web list that renders `task.subtasks` gates each one.
+  assert.equal(row.capabilities.canEdit, false);
+  assert.equal(row.capabilities.canComplete, false);
+  assert.equal(row.subtasks.length, 1);
+  assert.deepEqual(row.subtasks[0].capabilities, taskCapabilities(child, actor, "2026-10-27"));
+  assert.equal(row.subtasks[0].capabilities.canComplete, true);
+  assert.equal(row.subtasks[0].capabilities.canEdit, false);
+  // The input row and child stay untouched.
+  assert.equal("capabilities" in child, false);
 });
 test("web employee controls follow the server capability payload", () => {
   const employees = read("src/modules/work-os/employee/EmployeeTasks.tsx");
@@ -189,4 +207,69 @@ test("employee PATCH executes every single-action dispatch with decorated respon
   assert.deepEqual(calls, ["completion", "status", "move", "edit"]);
   assert.equal((await send({ completed: true, name: "Changed" })).status, 400);
   assert.equal(calls.length, 4);
+});
+
+/** Execute the admin task route against stubbed handlers and a query chain that
+ * records the filters the summary actually sends. */
+function adminRouteHarness(overrides: Record<string, unknown> = {}) {
+  const comparisons: Array<[string, unknown]> = [];
+  const query: any = {
+    select: () => query,
+    eq: () => query,
+    not: () => query,
+    contains: () => query,
+    gte: () => query,
+    lt: (column: string, value: unknown) => { comparisons.push([column, value]); return query; },
+    then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null, count: 0 }),
+  };
+  const routes = execute(read("src/app/api/work-os/tasks/route.ts"), {
+    requireWorkOsAdmin: async () => ({ access }),
+    workOsOrganizationOwnerId: () => "owner",
+    listTasks: async () => [],
+    listPersonTasks: async () => [],
+    createAdminClient: () => ({ from: () => query }),
+    getTaskByLocalOrProviderId: async () => null,
+    createLocalWorkOsTask: async () => { throw new Error("not used"); },
+    defaultWorkOsTaskProjectId: async () => null,
+    NextResponse: Response,
+    jsonError: (error: Error) => Response.json({ error: error.message }, { status: error instanceof Validation ? 400 : 500 }),
+    employeeTaskToday: async () => "2026-10-27",
+    withTaskCapabilities: seam.withTaskCapabilities,
+    isCalendarDate,
+    WorkOsValidationError: Validation,
+    ...overrides,
+  });
+  return { routes, comparisons };
+}
+
+test("the admin summary counts overdue against the employee day the rows are decorated with", async () => {
+  const tasks = [{ id: "task", completed: false, due_date: "2026-10-26", assignee_person_ids: ["admin"], assigned_by_person_id: "admin" }];
+  const { routes, comparisons } = adminRouteHarness({ listTasks: async () => tasks });
+  const response = await routes.GET(new Request("http://localhost/tasks?limit=50"));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  // The row capabilities use 2026-10-27 (the employee's day), so the summary
+  // count must use that same day rather than the UTC date.
+  assert.deepEqual(comparisons, [["due_date", "2026-10-27"]]);
+  assert.equal(body.tasks[0].capabilities.overdue, true);
+  assert.equal(body.tasks[0].capabilities.statusLocked, true);
+  assert.deepEqual(body.summary, { open: 0, overdue: 0, completedWeek: 0 });
+});
+
+test("admin task creation refuses a malformed due date before the write", async () => {
+  const creations: Array<Record<string, any>> = [];
+  const { routes } = adminRouteHarness({
+    createLocalWorkOsTask: async (_access: unknown, input: Record<string, any>) => { creations.push(input); return { id: "created", ...input }; },
+  });
+  const post = (body: unknown) => routes.POST(new Request("http://localhost/tasks", { method: "POST", body: JSON.stringify(body) }));
+  for (const due_date of ["soon", "2026-02-30", "2026-13-01", "2026-1-2"]) {
+    assert.equal((await post({ name: "Task", due_date })).status, 400);
+  }
+  assert.equal(creations.length, 0);
+  const created = await post({ name: "Task", due_date: "2026-10-30" });
+  assert.equal(created.status, 201);
+  assert.equal(creations.at(-1)?.dueDate, "2026-10-30");
+  // Absent or empty stays "no due date" instead of becoming an invalid string.
+  assert.equal((await post({ name: "Task", due_date: "" })).status, 201);
+  assert.equal(creations.at(-1)?.dueDate, null);
 });

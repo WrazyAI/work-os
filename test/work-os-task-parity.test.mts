@@ -185,6 +185,17 @@ test("an agent update honors the exact assignee list it was given", async () => 
   assert.doesNotMatch(update, /access\.personId as string, \.\.\.assignees/);
 });
 
+test("the documented agent reassignment contract matches the self-only rule", async () => {
+  const spec = await read("docs/openapi/work-os-agent-v1.yaml");
+  const update = spec.slice(spec.indexOf("TaskUpdate:"), spec.indexOf("ProgressNote:"));
+  // The self-only rule rejects a coworker handoff, so the schema must not
+  // promise a hand-over or a 404 after the token's person is removed.
+  assert.match(update, /self-only/);
+  assert.match(update, /any other id answers 400/);
+  assert.doesNotMatch(update, /hands the work over/);
+  assert.doesNotMatch(update, /without a tombstone/);
+});
+
 test("a board group id is a bounded opaque string, not free-form junk", () => {
   assert.equal(validateAgentTaskCreate({ name: "x", task_group_id: "PDp!eGkwR5" }).task_group_id, "PDp!eGkwR5");
   assert.throws(() => validateAgentTaskCreate({ name: "x", task_group_id: "g".repeat(201) }), /task_group_id/);
