@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const scriptUrl = new URL("../scripts/work-os-ledger.mjs", import.meta.url);
-const { LEDGER_LABEL, parseArgs, readLedgerDocument, taskPayload } = await import(scriptUrl.href);
+const { LEDGER_LABEL, envFileCandidates, parseArgs, parseEnvToken, readLedgerDocument, taskPayload } = await import(scriptUrl.href);
 const scriptSource = readFileSync(scriptUrl, "utf8");
 
 test("the ledger parses positional ids and value flags", () => {
@@ -58,6 +58,24 @@ test("the ledger document accepts the retired logger's shape", () => {
   assert.equal(doc.parentId, "parent-9");
   assert.deepEqual(doc.labels, ["ops"]);
   assert.throws(() => readLedgerDocument({ tasks: [] }), /at least one task/);
+});
+
+test("the ledger reads either token name from a repo env file", () => {
+  assert.equal(parseEnvToken("OTHER=1\nWORK_OS_API_TOKEN=abc\nWORK_OS_AGENT_TOKEN=def\n"), "abc");
+  assert.equal(parseEnvToken('WORK_OS_AGENT_TOKEN="legacy-token"\n'), "legacy-token");
+  assert.equal(parseEnvToken("WORK_OS_API_TOKEN='quoted'\n"), "quoted");
+  assert.equal(parseEnvToken("WORK_OS_API_TOKEN=\n"), null);
+  assert.equal(parseEnvToken("UNRELATED=value\n"), null);
+});
+
+test("the ledger resolves the main checkout env from a worktree", () => {
+  const candidates = envFileCandidates(new URL("..", import.meta.url).pathname, {});
+  assert.ok(candidates.some((path) => path.endsWith("/.env.local")), "expected a repo .env.local candidate");
+  assert.ok(candidates.some((path) => path.endsWith("/.env")), "expected a repo .env candidate");
+  assert.equal(new Set(candidates).size, candidates.length, "env candidates should be de-duplicated");
+
+  const explicit = envFileCandidates(new URL("..", import.meta.url).pathname, { WORK_OS_LEDGER_ENV_FILE: "/tmp/ledger.env" });
+  assert.equal(explicit[0], "/tmp/ledger.env");
 });
 
 test("the ledger never prints or persists the token", () => {

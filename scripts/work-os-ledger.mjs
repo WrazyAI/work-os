@@ -32,20 +32,23 @@
  *     ]
  *   }
  *
- * Auth: WORK_OS_AGENT_TOKEN, or --token-file <path>, or WORK_OS_AGENT_TOKEN in
- * /home/dev/agent-os/.env.local or .env. Never print the token.
+ * Auth: WORK_OS_API_TOKEN (or the legacy WORK_OS_AGENT_TOKEN), or --token-file
+ * <path>. The token is read from the process environment, WORK_OS_LEDGER_ENV_FILE,
+ * the current repo's .env.local/.env (including the main checkout when run from a
+ * worktree), or the VPS Agent OS .env.local/.env. Never print the token.
  *
  * Base URL: WORK_OS_API_BASE, default https://app.wrazyos.com/api/agent/v1
  */
 
 import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { execFileSync } from "node:child_process";
+import { basename, dirname, resolve } from "node:path";
 
 export const DEFAULT_API_BASE = "https://app.wrazyos.com/api/agent/v1";
 export const LEDGER_LABEL = "agent-ledger";
-const ENV_FILES = ["/home/dev/agent-os/.env.local", "/home/dev/agent-os/.env"];
-const ENV_TOKEN_KEYS = ["WORK_OS_AGENT_TOKEN", "WORK_OS_API_TOKEN"];
+export const ENV_TOKEN_KEYS = ["WORK_OS_AGENT_TOKEN", "WORK_OS_API_TOKEN"];
+const VPS_ENV_FILES = ["/home/dev/agent-os/.env.local", "/home/dev/agent-os/.env"];
 
 /** Parse argv into the flags this tool understands. */
 export function parseArgs(argv) {
@@ -100,21 +103,57 @@ export function readLedgerDocument(raw) {
   };
 }
 
+/** The env files the ledger reads, in precedence order. Worktrees resolve the
+ * main checkout through git's common dir so a token in the canonical repo env
+ * is visible from every worktree. */
+export function envFileCandidates(cwd = process.cwd(), env = process.env) {
+  const paths = [];
+  const add = (path) => { if (path && !paths.includes(path)) paths.push(path); };
+  if (typeof env.WORK_OS_LEDGER_ENV_FILE === "string" && env.WORK_OS_LEDGER_ENV_FILE.trim()) {
+    add(resolve(env.WORK_OS_LEDGER_ENV_FILE.trim()));
+  }
+  try {
+    const commonDir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (commonDir) {
+      const root = dirname(commonDir);
+      add(resolve(root, ".env.local"));
+      add(resolve(root, ".env"));
+    }
+  } catch {
+    // Not a git checkout or git is unavailable; cwd and the VPS paths still apply.
+  }
+  add(resolve(cwd, ".env.local"));
+  add(resolve(cwd, ".env"));
+  for (const path of VPS_ENV_FILES) add(path);
+  return paths;
+}
+
+/** Extract the first non-empty token from an env file's contents. */
+export function parseEnvToken(raw, keys = ENV_TOKEN_KEYS) {
+  for (const line of String(raw).split("\n")) {
+    const match = line.match(/^([^=#]+)=(.*)$/);
+    if (!match) continue;
+    const key = match[1].trim();
+    if (!keys.includes(key)) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (value) return value;
+  }
+  return null;
+}
+
 function loadEnvToken() {
   for (const [key, value] of Object.entries(process.env)) {
     if (ENV_TOKEN_KEYS.includes(key) && typeof value === "string" && value.trim()) return value.trim();
   }
-  for (const path of ENV_FILES) {
+  for (const path of envFileCandidates()) {
     if (!existsSync(path)) continue;
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const match = line.match(/^([^=#]+)=(.*)$/);
-      if (!match) continue;
-      const key = match[1].trim();
-      if (!ENV_TOKEN_KEYS.includes(key)) continue;
-      let value = match[2].trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-      if (value) return value;
-    }
+    const token = parseEnvToken(readFileSync(path, "utf8"));
+    if (token) return token;
   }
   return null;
 }
@@ -127,7 +166,7 @@ function resolveToken(flags) {
     return value;
   }
   const token = loadEnvToken();
-  if (!token) throw new Error("Set WORK_OS_AGENT_TOKEN, pass --token-file, or put it in /home/dev/agent-os/.env.local");
+  if (!token) throw new Error("Set WORK_OS_API_TOKEN (or WORK_OS_AGENT_TOKEN), pass --token-file, or put it in the repo's gitignored .env/.env.local (or /home/dev/agent-os/.env.local on the VPS)");
   return token;
 }
 
@@ -318,6 +357,11 @@ Options:
   --token-file <path>     Read the bearer token from a file
   --api-base <url>        Override the API base
   --help                  Show this help
+
+Token lookup: WORK_OS_API_TOKEN or WORK_OS_AGENT_TOKEN in the process
+environment, WORK_OS_LEDGER_ENV_FILE, the current repo's .env.local/.env
+(worktrees resolve the main checkout), then /home/dev/agent-os/.env.local/.env.
+Never print or commit the token.
 
 The document may carry "project", "project_id", "labels", and
 "existing_parent_task_id" beside "tasks". Each task needs a name and may carry

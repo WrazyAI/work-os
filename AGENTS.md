@@ -70,8 +70,11 @@ changes rather than doing untracked work.
   from the employee's own work. Completing a parent also closes its open
   subtasks, and a completion is explicit: read `completed` back after every
   completion write.
-- Keep the ledger token on the VPS (`WORK_OS_AGENT_TOKEN` in
-  `/home/dev/agent-os/.env.local`); never print or paste it.
+- The ledger token is `WORK_OS_API_TOKEN` (the legacy `WORK_OS_AGENT_TOKEN`
+  alias still works). Keep it in the repo's gitignored `.env` or `.env.local`;
+  worktrees resolve the main checkout's env through git, `WORK_OS_LEDGER_ENV_FILE`
+  can point at another file, and the VPS keeps it at
+  `/home/dev/agent-os/.env.local`. Never print or paste it.
 - For explicitly requested duplicate cleanup, page tasks, retain one canonical
   task per outcome, archive duplicates rather than deleting them, and read back
   the canonical and archived states.
