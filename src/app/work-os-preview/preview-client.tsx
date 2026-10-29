@@ -453,6 +453,7 @@ function PreviewBody() {
         accountLabel: "David Yeboah",
         workspaces,
         organizationId: "org-1",
+        authorizedOrganizationId: status === "authorized" ? "org-1" : null,
         onOrganizationChange: () => undefined,
         requestValid: true,
         requestPresent: true,

@@ -127,6 +127,7 @@ test("the desktop connect screen has a visible approved state", async () => {
     accountLabel: "David Yeobah",
     workspaces: [{ organizationId: "b094c847-1332-4cab-9588-bdd7f8e99e7d", name: "David Yeobah Workspace", role: "employee", personId: "person-1" }],
     organizationId: "b094c847-1332-4cab-9588-bdd7f8e99e7d",
+    authorizedOrganizationId: "b094c847-1332-4cab-9588-bdd7f8e99e7d",
     onOrganizationChange: () => undefined,
     requestValid: true,
     requestPresent: true,
@@ -153,6 +154,65 @@ test("the desktop connect screen has a visible approved state", async () => {
   const failed = renderDesktopConnect(DesktopConnectView, { ...base, status: "error", callbackUrl: null, error: "Could not authorize this device." });
   assert.match(failed, /Could not authorize this device/);
   assert.match(failed, /Try again/);
+});
+
+test("workspace choice is locked while device authorization is pending", async () => {
+  const DesktopConnectView = await desktopConnectView();
+  const workspaces = [
+    { organizationId: "org-a", name: "North Team", role: "employee", personId: "person-a" },
+    { organizationId: "org-b", name: "South Team", role: "employee", personId: "person-b" },
+  ];
+  const html = renderDesktopConnect(DesktopConnectView, {
+    accountLabel: "David Yeboah",
+    workspaces,
+    organizationId: "org-a",
+    onOrganizationChange: () => undefined,
+    requestValid: true,
+    requestPresent: true,
+    status: "working",
+    error: "",
+    callbackUrl: null,
+    onApprove: () => undefined,
+    onOpenCompanion: () => undefined,
+    onStartOver: () => undefined,
+    onReturnToWorkOs: () => undefined,
+  });
+
+  assert.match(html, /<select[^>]*disabled=""/);
+});
+
+test("approved receipt keeps the workspace used for authorization", async () => {
+  const DesktopConnectView = await desktopConnectView();
+  const workspaces = [
+    { organizationId: "org-a", name: "North Team", role: "employee", personId: "person-a" },
+    { organizationId: "org-b", name: "South Team", role: "employee", personId: "person-b" },
+  ];
+  const html = renderDesktopConnect(DesktopConnectView, {
+    accountLabel: "David Yeboah",
+    workspaces,
+    organizationId: "org-b",
+    authorizedOrganizationId: "org-a",
+    onOrganizationChange: () => undefined,
+    requestValid: true,
+    requestPresent: true,
+    status: "authorized",
+    error: "",
+    callbackUrl: "wrazy-workos://auth?code=code&state=state",
+    onApprove: () => undefined,
+    onOpenCompanion: () => undefined,
+    onStartOver: () => undefined,
+    onReturnToWorkOs: () => undefined,
+  });
+
+  assert.match(html, /North Team/);
+  assert.doesNotMatch(html, /South Team/);
+});
+
+test("authorization passes its submitted workspace to the approved receipt", () => {
+  const connect = source("src/app/work-os/desktop/connect/DesktopConnect.tsx");
+  assert.match(connect, /setAuthorizedOrganizationId\(selected\.organizationId\)/);
+  assert.match(connect, /authorizedOrganizationId=\{authorizedOrganizationId\}/);
+  assert.match(connect, /organization_id:\s*selected\.organizationId/);
 });
 
 test("the desktop connect screen only opens the companion from a direct action", () => {

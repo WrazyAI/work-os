@@ -39,6 +39,7 @@ export type DesktopConnectViewProps = {
   accountLabel: string;
   workspaces: WorkOsWorkspaceChoice[];
   organizationId: string;
+  authorizedOrganizationId: string | null;
   onOrganizationChange: (value: string) => void;
   requestValid: boolean;
   requestPresent: boolean;
@@ -86,6 +87,7 @@ export function DesktopConnectView({
   accountLabel,
   workspaces,
   organizationId,
+  authorizedOrganizationId,
   onOrganizationChange,
   requestValid,
   requestPresent,
@@ -99,6 +101,7 @@ export function DesktopConnectView({
 }: DesktopConnectViewProps) {
   const selectable = workspaces.filter((workspace) => Boolean(workspace.personId));
   const selected = selectable.find((workspace) => workspace.organizationId === organizationId) ?? null;
+  const authorizedWorkspace = selectable.find((workspace) => workspace.organizationId === authorizedOrganizationId) ?? null;
   const approved = status === "authorized";
   const working = status === "working";
   const failed = status === "error";
@@ -124,14 +127,15 @@ export function DesktopConnectView({
     headingRef.current?.focus();
   }
 
-  const workspaceRow = selected ? (
+  const displayedWorkspace = approved ? authorizedWorkspace : selected;
+  const workspaceRow = displayedWorkspace ? (
     <div className="mt-6 flex items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--bg-primary)] px-3.5 py-3">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--bg-card)] text-[var(--text-secondary)]">
         <Building2 size={15} aria-hidden="true" />
       </span>
       <div className="min-w-0">
         <p className="text-[11px] font-medium text-[var(--text-secondary)]">Workspace</p>
-        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{selected.name}</p>
+        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{displayedWorkspace.name}</p>
       </div>
     </div>
   ) : null;
@@ -220,7 +224,8 @@ export function DesktopConnectView({
                       id="companion-workspace"
                       value={organizationId}
                       onChange={(event) => onOrganizationChange(event.target.value)}
-                      className="h-11 w-full rounded-[10px] border border-[var(--border-hot)] bg-[var(--bg-card)] px-3 text-sm text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                      disabled={working}
+                      className="h-11 w-full rounded-[10px] border border-[var(--border-hot)] bg-[var(--bg-card)] px-3 text-sm text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="" disabled>Choose a workspace</option>
                       {selectable.map((workspace) => (
@@ -396,6 +401,7 @@ export default function DesktopConnect({
   const [organizationId, setOrganizationId] = useState(
     selectable.length === 1 ? selectable[0].organizationId : "",
   );
+  const [authorizedOrganizationId, setAuthorizedOrganizationId] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectStatus>("idle");
   const [error, setError] = useState("");
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
@@ -405,6 +411,7 @@ export default function DesktopConnect({
 
   async function approve() {
     if (!requestValid || !selected || status === "working") return;
+    setAuthorizedOrganizationId(selected.organizationId);
     setStatus("working");
     setError("");
     try {
@@ -444,6 +451,7 @@ export default function DesktopConnect({
 
   function startOver() {
     setCallbackUrl(null);
+    setAuthorizedOrganizationId(null);
     setError("");
     setStatus("idle");
   }
@@ -457,6 +465,7 @@ export default function DesktopConnect({
       accountLabel={accountLabel}
       workspaces={workspaces}
       organizationId={organizationId}
+      authorizedOrganizationId={authorizedOrganizationId}
       onOrganizationChange={setOrganizationId}
       requestValid={requestValid}
       requestPresent={requestPresent}
