@@ -12,6 +12,53 @@ notices.
 These instructions apply to the whole repository. Keep them aligned with
 current code; historical commits and deployment snapshots are context.
 
+## Execution strategy: Superpowers, delegation, and long-running tasks
+
+**Default to one main agent executing the work.** Optimize for a correct,
+verified result with minimal elapsed time, repeated exploration, and token cost.
+Task duration or the number of plan steps alone is not a reason to delegate.
+
+- **Small, clear change:** investigate, edit, and run focused checks directly.
+  Avoid spawning agents merely to search files, write a plan, or run tests.
+- **Long or multi-step but tightly coupled change:** keep a short, ordered plan
+  and implement it inline with the main agent. When using Superpowers, prefer
+  `superpowers:executing-plans` over a fresh implementer per step. Keep working
+  through authorized steps; do not stop simply because a task takes many steps.
+- **Genuinely independent workstreams:** consider
+  `superpowers:subagent-driven-development` for substantial independent plan
+  tasks, or `superpowers:dispatching-parallel-agents` for distinct investigations.
+  Use these only when independence and expected quality/speed benefit justify
+  fresh contexts, coordination, integration, and review overhead.
+- **Independent scrutiny:** for risky architectural, security, authorization,
+  concurrency, or data-integrity changes, use an independent, bounded review of
+  the requirements, diff, and test evidence. Do not automatically dispatch a
+  reviewer for each small edit or repeat a completed CodeRabbit review.
+- **Delegation ceiling:** start with at most two concurrent workers and expand
+  only for demonstrably independent, substantial work. Never run simultaneous
+  implementers on overlapping files or shared mutable state; never allow
+  workers to recursively spawn more agents by default.
+
+Before dispatching, identify the exact outcome, file and interface boundaries,
+known architectural facts, acceptance tests, and a concise handoff. Pass verified
+context and pointers to relevant files, not the entire conversation or a vague
+instruction to rediscover the repository. Give independent reviewers the
+original requirements and evidence without preloading the implementer's verdict.
+The main agent owns integration, test results, and the final claim of completion.
+
+For work that spans many steps or context compactions, maintain one recoverable
+plan/checkpoint in the existing project tracking mechanism. Record completed
+steps, exact files and commits, verification results, decisions, blockers, and
+the next action. Resume from that evidence instead of restarting discovery or
+repeating completed work. Timebox uncertain exploration by an evidence-based
+stopping condition; escalate only real blockers or decisions that require user
+authorization. Never fabricate progress or skip a required gate to save tokens.
+
+These guidelines select *whether* a Superpowers execution skill is appropriate;
+once a skill is deliberately invoked, follow its required procedure. Explicit
+user instructions and this repository's worktree, ledger, safety, review,
+deployment, and release requirements remain in force. Avoid duplicate reviews
+and verification, but never weaken the checks required for the affected change.
+
 ## Task synchronization and worktree isolation
 
 Before each new task or agenda, sync with the latest `main` and resolve
