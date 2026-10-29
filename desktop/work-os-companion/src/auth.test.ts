@@ -70,6 +70,11 @@ describe("connect error surfacing", () => {
     expect(app).toContain("Reopen browser");
   });
 
+  it("clears the waiting state after saving the server address", () => {
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toMatch(/saveSettings\(\{ apiBase \}\); setAwaitingApproval\(false\);/);
+  });
+
   it("allows the main window to invoke open_work_os_auth", () => {
     const capability = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");
     const allow = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");

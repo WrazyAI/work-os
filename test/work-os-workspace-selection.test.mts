@@ -134,7 +134,7 @@ test("the desktop connect screen has a visible approved state", async () => {
     onApprove: () => undefined,
     onOpenCompanion: () => undefined,
     onStartOver: () => undefined,
-    onClose: () => undefined,
+    onReturnToWorkOs: () => undefined,
   };
   const idle = renderDesktopConnect(DesktopConnectView, { ...base, status: "idle", callbackUrl: null });
   assert.match(idle, /Authorize this device/);
@@ -145,6 +145,8 @@ test("the desktop connect screen has a visible approved state", async () => {
   const approved = renderDesktopConnect(DesktopConnectView, { ...base, status: "authorized", callbackUrl: "wrazy-workos://auth?code=code&state=state" });
   assert.match(approved, /Device authorized/);
   assert.match(approved, /Open Work OS/);
+  assert.match(approved, /Return to Work OS/);
+  assert.doesNotMatch(approved, /Close this tab/);
   assert.match(approved, /five minutes/);
   assert.doesNotMatch(approved, /Authorize device/);
 
@@ -158,6 +160,8 @@ test("the desktop connect screen only opens the companion from a direct action",
   const approve = connect.slice(connect.indexOf("async function approve"), connect.indexOf("function openCompanion"));
   assert.doesNotMatch(approve, /window\.location\.assign/);
   assert.match(connect, /function openCompanion[\s\S]*window\.location\.assign/);
+  assert.match(connect, /function returnToWorkOs[\s\S]*window\.location\.assign\("\/work-os"\)/);
+  assert.doesNotMatch(connect, /window\.close\(\)/);
 });
 
 test("both shells show the active workspace and a switch when one exists", () => {

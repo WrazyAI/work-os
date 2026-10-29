@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowUpRight,
   Building2,
   CalendarDays,
@@ -14,7 +15,6 @@ import {
   Loader2,
   Monitor,
   ShieldCheck,
-  X,
 } from "lucide-react";
 import type { WorkOsWorkspaceChoice } from "@/modules/work-os/workspace";
 
@@ -48,7 +48,7 @@ export type DesktopConnectViewProps = {
   onApprove: () => void;
   onOpenCompanion: () => void;
   onStartOver: () => void;
-  onClose: () => void;
+  onReturnToWorkOs: () => void;
 };
 
 function initials(label: string) {
@@ -95,7 +95,7 @@ export function DesktopConnectView({
   onApprove,
   onOpenCompanion,
   onStartOver,
-  onClose,
+  onReturnToWorkOs,
 }: DesktopConnectViewProps) {
   const selectable = workspaces.filter((workspace) => Boolean(workspace.personId));
   const selected = selectable.find((workspace) => workspace.organizationId === organizationId) ?? null;
@@ -257,8 +257,8 @@ export function DesktopConnectView({
             <div className="mt-7 flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end">
               {approved ? (
                 <>
-                  <button type="button" onClick={onClose} className={SECONDARY_BUTTON}>
-                    <X size={15} aria-hidden="true" /> Close this tab
+                  <button type="button" onClick={onReturnToWorkOs} className={SECONDARY_BUTTON}>
+                    <ArrowLeft size={15} aria-hidden="true" /> Return to Work OS
                   </button>
                   <button type="button" onClick={onOpenCompanion} disabled={!callbackUrl} className={PRIMARY_BUTTON}>
                     <ArrowUpRight size={16} aria-hidden="true" /> Open Work OS
@@ -266,8 +266,8 @@ export function DesktopConnectView({
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={onClose} className={SECONDARY_BUTTON}>
-                    <X size={15} aria-hidden="true" /> Cancel
+                  <button type="button" onClick={onReturnToWorkOs} className={SECONDARY_BUTTON}>
+                    <ArrowLeft size={15} aria-hidden="true" /> Return to Work OS
                   </button>
                   <button
                     type="button"
@@ -448,6 +448,10 @@ export default function DesktopConnect({
     setStatus("idle");
   }
 
+  function returnToWorkOs() {
+    window.location.assign("/work-os");
+  }
+
   return (
     <DesktopConnectView
       accountLabel={accountLabel}
@@ -462,7 +466,7 @@ export default function DesktopConnect({
       onApprove={() => void approve()}
       onOpenCompanion={openCompanion}
       onStartOver={startOver}
-      onClose={() => window.close()}
+      onReturnToWorkOs={returnToWorkOs}
     />
   );
 }

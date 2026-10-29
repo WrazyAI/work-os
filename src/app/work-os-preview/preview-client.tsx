@@ -462,7 +462,7 @@ function PreviewBody() {
         onApprove: () => undefined,
         onOpenCompanion: () => undefined,
         onStartOver: () => undefined,
-        onClose: () => undefined,
+        onReturnToWorkOs: () => undefined,
       };
       return <DesktopConnectView {...props} />;
     }
