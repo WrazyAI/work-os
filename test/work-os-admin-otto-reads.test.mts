@@ -47,18 +47,19 @@ async function seedTask(db: Db, input: {
   id?: string; title?: string; assignees?: string[]; providerAssignees?: string[]; raw?: Record<string, unknown>;
   due?: string | null; created?: string | null; updated?: string | null; completed?: boolean;
   status?: string; parentId?: string | null; providerParentId?: string | null; organizationId?: string;
+  assignedBy?: string | null;
 } = {}) {
   const id = input.id ?? randomUUID();
   const organizationId = input.organizationId ?? org;
   await db.query(`insert into work_tasks
     (id,user_id,organization_id,title,completed,status,assignee_person_ids,assignee_provider_ids,
-     due_date,parent_task_id,parent_provider_task_id,provider_created_at,created_at,updated_at,raw)
-    values ($1,$2,$3,$4,$5,$6,$7::uuid[],$8::text[],$9,$10,$11,$12,$12,$13,$14::jsonb)`,
+     due_date,parent_task_id,parent_provider_task_id,provider_created_at,created_at,updated_at,raw,assigned_by_person_id)
+    values ($1,$2,$3,$4,$5,$6,$7::uuid[],$8::text[],$9,$10,$11,$12,$12,$13,$14::jsonb,$15)`,
   [id, adminUser, organizationId, input.title ?? "Task", input.completed ?? false, input.status ?? "open",
     input.assignees ?? [], input.providerAssignees ?? [], input.due ?? null,
     input.parentId ?? null, input.providerParentId ?? null,
     input.created ?? "2026-10-20T09:00:00.000Z", input.updated ?? input.created ?? "2026-10-20T09:00:00.000Z",
-    JSON.stringify(input.raw ?? {})]);
+    JSON.stringify(input.raw ?? {}), input.assignedBy ?? null]);
   return id;
 }
 
@@ -1192,6 +1193,48 @@ test("two_org_same_owner_and_foreign_person_rows_counts_parity", async () => {
       (error: unknown) => error instanceof Error && error.name === "WorkOsValidationError",
       "Otto named reads remain active-only",
     );
+  } finally { await f.close(); }
+});
+
+test("delegated rows stay visible without counting as the assigner's own work", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personA, name: "Alex Rivera", nifty: "nifty-a" });
+    await seedPerson(f.db, { id: personB, name: "Blair Chen", nifty: "nifty-b" });
+    // A manager completed a report's task and also holds a task of their own.
+    const delegatedId = await seedTask(f.db, {
+      title: "Delegated report task", assignees: [personB], assignedBy: personA,
+      completed: true, updated: "2026-10-22T15:00:00.000Z",
+    });
+    const ownId = await seedTask(f.db, {
+      title: "Own task", assignees: [personA], assignedBy: personA, completed: true,
+      updated: "2026-10-22T16:00:00.000Z",
+    });
+    const rows = [
+      { id: delegatedId, user_id: adminUser, organization_id: org, title: "Delegated report task", completed: true, status: "open", assignee_person_ids: [personB], assigned_by_person_id: personA, raw: {}, created_at: "2026-10-20T09:00:00.000Z" },
+      { id: ownId, user_id: adminUser, organization_id: org, title: "Own task", completed: true, status: "open", assignee_person_ids: [personA], assigned_by_person_id: personA, raw: {}, created_at: "2026-10-20T09:00:00.000Z" },
+    ];
+    const people = [
+      { id: personA, user_id: adminUser, organization_id: org, display_name: "Alex Rivera", active: true, nifty_member_id: "nifty-a" },
+      { id: personB, user_id: adminUser, organization_id: org, display_name: "Blair Chen", active: true, nifty_member_id: "nifty-b" },
+    ];
+    const tasks = loadTaskService(rows, people);
+    const visible = await tasks.listPersonTasks(adminUser, personA, {
+      organizationId: org, order: "created_desc", includeLedgerHistory: true, includeCompleted: true,
+    });
+    assert.deepEqual(visible.map((task: { id: string }) => task.id).sort(), [delegatedId, ownId].sort(),
+      "the management list still reaches work the manager delegated");
+    assert.equal(visible.find((task: { id: string }) => task.id === delegatedId)?.attribution, "assigned_by",
+      "a delegated-only row is marked so personal summaries can exclude it");
+    assert.equal(visible.find((task: { id: string }) => task.id === ownId)?.attribution, undefined,
+      "a row the person also holds is not marked as delegated");
+
+    const personal = await tasks.listPersonTasks(adminUser, personA, {
+      organizationId: org, order: "created_desc", includeLedgerHistory: true, includeCompleted: true,
+      includeAssignedBy: false,
+    });
+    assert.deepEqual(personal.map((task: { id: string }) => task.id), [ownId],
+      "personal completion, plan and insight reads exclude delegated-only rows");
   } finally { await f.close(); }
 });
 

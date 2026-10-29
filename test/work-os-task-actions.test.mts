@@ -95,13 +95,30 @@ class Validation extends Error {}
 class Conflict extends Error {
   constructor(message: string, readonly reason?: string) { super(message); }
 }
-const access = { role: "employee", personId: "employee", organizationId: "org" };
+const access = { role: "employee", personId: "employee", organizationId: "org", ctx: { user: { id: "user" } } };
 const row = { id: "task", organization_id: "org", title: "Original", provider: "local", completed: false, assigned_by_person_id: "manager", assignee_person_ids: ["employee"], due_date: "2026-10-28" };
 function harness(name: string, task: Record<string, unknown> = row, optionsPeople = ["employee"], overrides: Record<string, unknown> = {}) {
   const writes: Array<Record<string, unknown>> = [];
   const events: string[] = [];
+  const blockerWrites: Array<Record<string, unknown>> = [];
   const dependencies = {
     taskCapabilities, isWorkflowStatus, isCalendarDate,
+    // The blocker branch is the only agent path that touches the database
+    // directly; every other test keeps it unused.
+    db: () => ({
+      from: (table: string) => {
+        const query: any = {
+          select: () => query,
+          eq: () => query,
+          insert: (values: Record<string, unknown>) => { blockerWrites.push({ table, values }); return query; },
+          update: (values: Record<string, unknown>) => { blockerWrites.push({ table, values }); return query; },
+          single: async () => ({ data: { id: "blocker" }, error: null }),
+          maybeSingle: async () => ({ data: null, error: null }),
+          then: (resolve: (value: unknown) => void) => resolve({ data: null, error: null }),
+        };
+        return query;
+      },
+    }),
     taskActor: (actor: any) => ({ role: actor.role, personId: actor.personId }),
     employeeTaskToday: async () => "2026-10-27",
     employeeTaskContext: async (_access: unknown, id: string) => {
@@ -130,7 +147,7 @@ function harness(name: string, task: Record<string, unknown> = row, optionsPeopl
   const javascript = ts.transpileModule(`${agentValidation}\n${declaration("validateAgentAssignment")}\n${declaration(name)}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: Record<string, any> = {};
   new Function("exports", ...Object.keys(dependencies), javascript)(exports, ...Object.values(dependencies));
-  return { run: exports[name], writes, events };
+  return { run: exports[name], writes, events, blockerWrites };
 }
 
 for (const [name, body] of [
@@ -175,6 +192,33 @@ test("agent updates enforce the owner's edit, assignment, and move capabilities 
     assert.deepEqual(h.writes, []);
     assert.deepEqual(h.events, []);
   }
+});
+
+test("agent blocker writes are assignee work, not a content edit", async () => {
+  // An assignee holds completion and status control but not edit control.
+  const assignee = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "manager", assignee_person_ids: ["employee"] });
+  await assignee.run(access, "task", { blocked: true, blocked_reason: "Waiting on provider credentials" }, { tokenId: "token", tokenName: "Agent" });
+  assert.deepEqual(assignee.blockerWrites.map((write) => write.table), ["work_task_blockers"]);
+  assert.deepEqual(assignee.writes, [{ blocked: true, blocked_reason: "Waiting on provider credentials" }],
+    "the blocker patch reaches the task row with the resolved reason");
+  assert.ok(assignee.events.includes("agent.task.updated"));
+
+  // Clearing a blocker is the same permission class.
+  const clear = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "manager", assignee_person_ids: ["employee"] });
+  await clear.run(access, "task", { blocked: false }, { tokenId: "token", tokenName: "Agent" });
+  assert.deepEqual(clear.writes, [{ blocked: false, blocked_reason: null }]);
+
+  // Someone who neither holds nor manages the task still cannot record a blocker.
+  const outsider = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "manager", assignee_person_ids: ["other"] });
+  await assert.rejects(outsider.run(access, "task", { blocked: true, blocked_reason: "Nope" }, { tokenId: "token", tokenName: "Agent" }), Forbidden);
+  assert.deepEqual(outsider.blockerWrites, []);
+  assert.deepEqual(outsider.writes, []);
+
+  // A blocker field cannot smuggle a content edit past the edit capability.
+  const smuggled = harness("updateWorkOsAgentTask", { ...row, assigned_by_person_id: "manager", assignee_person_ids: ["employee"] });
+  await assert.rejects(smuggled.run(access, "task", { blocked: true, name: "Changed" }, { tokenId: "token", tokenName: "Agent" }), Forbidden);
+  assert.deepEqual(smuggled.blockerWrites, []);
+  assert.deepEqual(smuggled.writes, []);
 });
 
 test("an agent's self-reassignment records its owner as assigner", async () => {
@@ -370,6 +414,17 @@ test("PATCH refuses all mixed lifecycle shapes before dispatch while single shap
     assert.equal((await send(body)).status, 200);
   }
   assert.deepEqual(calls, ["edit", "edit", "completion", "move", "status"]);
+});
+
+test("the PATCH harness injects the route's own access helper", () => {
+  // The route declares a local `async function access(req)` and PATCH awaits it;
+  // the harness above injects that local name. The whole-module harness in
+  // work-os-task-capabilities.test.mts stubs the module-level
+  // `requireWorkOsAccess`, so the two names differ by design.
+  assert.match(route, /async function access\(req: Request\)/);
+  const patch = route.slice(route.indexOf("export async function PATCH"));
+  assert.match(patch, /const auth = await access\(req\)/);
+  assert.doesNotMatch(patch, /requireWorkOsAccess/);
 });
 
 test("create refuses a malformed due date before the task exists", async () => {

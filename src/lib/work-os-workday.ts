@@ -208,7 +208,7 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
   const carryOver = await loadCarryOverItems(access, shiftDate);
   const ownerId = workOsOrganizationOwnerId(access);
   const currentTasks = await listPersonTasks(ownerId, access.personId as string, {
-    completed: "false", todayOnly: true, todayDate: shiftDate, limit: 100,
+    completed: "false", todayOnly: true, todayDate: shiftDate, limit: 100, includeAssignedBy: false,
   });
   const missingCarryIds = [...carryOver.keys()].filter((id) => !(currentTasks ?? []).some((task) => String(task.id) === id));
   let carryTasks: Json[] = [];
@@ -974,7 +974,7 @@ export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, i
   const plan = await ensureDailyPlanForDate(access, shiftDate, await activeSession(access));
   if (!plan || plan.status === "closed") throw new WorkOsValidationError("Today's task workspace is read-only.");
   const ownerId = workOsOrganizationOwnerId(access);
-  const attributableTasks = await listPersonTasks(ownerId, access.personId as string, { completed: "false", includeLedgerHistory: true, limit: 1000 });
+  const attributableTasks = await listPersonTasks(ownerId, access.personId as string, { completed: "false", includeLedgerHistory: true, limit: 1000, includeAssignedBy: false });
   const task = attributableTasks.find((item) => String(item.id) === taskId || String(item.provider_task_id) === taskId);
   if (!task) throw new WorkOsValidationError("The Nifty task is not attributable to this employee.");
   const existing = await db().from("work_daily_plan_items").select("id,disposition")

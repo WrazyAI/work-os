@@ -214,7 +214,7 @@ export function parseNextSteps(raw: unknown, input: NextStepInputs): NextStepSug
 export async function listNextStepCandidates(access: WorkOsAccess): Promise<NextStepInputs["openTasks"]> {
   const ownerId = await organizationOwnerId(access.organizationId);
   const personId = access.personId as string;
-  const rows = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 300, order: "recency" }) as Array<Record<string, unknown>>;
+  const rows = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 300, order: "recency", includeAssignedBy: false }) as Array<Record<string, unknown>>;
   const byId = new Map<string, Record<string, unknown>>();
   for (const row of rows) byId.set(String(row.id), row);
   const candidates: NextStepInputs["openTasks"] = [];

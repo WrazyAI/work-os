@@ -91,6 +91,36 @@ test("both task surfaces share the unified attribution predicate", () => {
   assert.match(tasksSource, /export async function listPersonOpenTasks/);
 });
 
+test("personal completion and planning reads exclude delegated rows", () => {
+  // Delegation is management visibility, not the delegator's own work. Every
+  // personal consumer opts out of the assigned-by rows so completion counts,
+  // daily plans, check-ins, and AI summaries stay truthful; the Tasks workspace
+  // keeps the default (includeAssignedBy true) for its management actions.
+  const personalConsumers = [
+    "src/lib/work-os-day-view.ts",
+    "src/lib/work-os-workday.ts",
+    "src/lib/work-os-checkins.ts",
+    "src/lib/work-os-planning-context.ts",
+    "src/lib/work-os-next-steps.ts",
+    "src/lib/work-os-goal-suggestion.ts",
+    "src/lib/work-os-employee-tasks.ts",
+    "src/lib/aiInterpret.ts",
+  ];
+  for (const file of personalConsumers) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    const calls = source.split("listPersonTasks(").slice(1);
+    assert.ok(calls.length > 0, `${file} reads personal tasks`);
+    for (const call of calls) {
+      assert.match(call.slice(0, 400), /includeAssignedBy: false/, `${file} keeps delegated work out of personal reads`);
+    }
+  }
+  const tasksSource = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
+  assert.match(tasksSource, /includeAssignedBy\?: boolean/);
+  assert.match(tasksSource, /attribution: "assigned_by"/);
+  assert.match(tasksSource, /opts\.includeAssignedBy === false\s*\?\s*Promise\.resolve\(\[\]\)/);
+  assert.match(tasksSource, /assignedByPersonId: personId/);
+});
+
 test("unassigned child tasks inherit access from their active parent", () => {
   const parent = { id: "parent", assignee_person_ids: ["person-a"], status: "open" };
   assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, parent, "person-a", null), true);

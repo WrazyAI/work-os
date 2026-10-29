@@ -195,7 +195,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
       return { checkIn: existing, proposals: existingProposals ?? [] };
     }
   }
-  const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
+  const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true, includeAssignedBy: false }) as Json[];
   if (confirmedExisting && !tasks.length) throw new Error("there are no existing tasks to confirm as the current plan");
   const planItems = await db().from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,objective,success_criteria,disposition,completion_state)")
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("shift_date", shiftDate).maybeSingle();

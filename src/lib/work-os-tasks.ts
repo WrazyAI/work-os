@@ -60,6 +60,11 @@ export interface TaskListOptions {
   providerAssignee?: string | null;
   /** Rows this person assigned, even when someone else is the assignee. */
   assignedByPersonId?: string | null;
+  /** Include work the person delegated to someone else. Management surfaces
+   * keep this on so their row menus can reach the actions they are granted;
+   * personal completion, plan, EOD, and insight reads turn it off so delegating
+   * work never credits the delegator with the assignee's completions. */
+  includeAssignedBy?: boolean;
   /** Group overdue work first, ahead of the selected sort (design §6.4). */
   overdueFirst?: boolean;
   order?: TaskListOrder;
@@ -301,7 +306,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   // that needs global Name / Due / Status ordering. Keep that work in one SQL
   // query so later pages do not reload the complete history through four
   // attribution scans.
-  if (workspaceOrder && opts.includeLedgerHistory === true && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && !opts.organizationId) {
+  if (workspaceOrder && opts.includeLedgerHistory === true && opts.includeAssignedBy !== false && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && !opts.organizationId) {
     const selected = await listPersonWorkspaceTaskPage(userId, personId, niftyMemberId, opts);
     const parentProviderIds = selected
       .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
@@ -344,13 +349,22 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   }
   const [assigned, assignedBy, providerAssigned, createdBy, subscriber] = await Promise.all([
     listTasks(userId, { ...baseOptions, personId }),
-    listTasks(userId, { ...baseOptions, assignedByPersonId: personId }),
+    opts.includeAssignedBy === false
+      ? Promise.resolve([])
+      : listTasks(userId, { ...baseOptions, assignedByPersonId: personId }),
     niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
-  for (const task of [...(assigned ?? []), ...(assignedBy ?? [])]) rows.set(String(task.id), task);
+  for (const task of assigned ?? []) rows.set(String(task.id), task);
+  // Delegated-only rows stay visible for management, but carry their provenance
+  // so a completion count never mistakes them for the assigner's own work.
+  for (const task of assignedBy ?? []) {
+    const id = String(task.id);
+    if (rows.has(id)) continue;
+    rows.set(id, { ...task, attribution: "assigned_by" });
+  }
   for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }

@@ -288,6 +288,28 @@ test("Work OS companion migration is complete and idempotent", async () => {
            ($1,$2,'task-unassigned','Legacy unassigned','{}'::uuid[]),
            ($1,$2,'task-orphan','Legacy orphan',array[gen_random_uuid()])
   `, [owner.id, orgB, personB, legacyPerson.rows[0].id]);
+  // Zero-assignee legacy local rows: the audit log is the only reliable creator
+  // record. Restore the creator as assigner (and the assignee of a subtask)
+  // only when the creator maps to a person in the same organization; inherit a
+  // local subtask's ownership from its parent when no creator is recorded.
+  // Provider rows and top-level rows with no recorded creator stay untouched.
+  const unassignedTask = await db.query(`select id from work_tasks where provider_task_id='task-unassigned'`);
+  const orphanAuditUser = await db.query(`insert into auth.users(email) values ('orphan-audit@test.invalid') returning id`);
+  await db.query(`
+    insert into work_tasks(user_id,organization_id,provider,provider_task_id,title,assignee_person_ids,parent_task_id)
+    values ($1,$2,'local','local-audit-top','Legacy audit top','{}'::uuid[],null),
+           ($1,$2,'local','local-audit-sub','Legacy audit subtask','{}'::uuid[],$3),
+           ($1,$2,'local','local-parent-sub','Legacy parent subtask','{}'::uuid[],$4),
+           ($1,$2,'local','local-orphan-audit','Legacy orphan audit','{}'::uuid[],null),
+           ($1,$2,'nifty','nifty-provider-sub','Legacy provider subtask','{}'::uuid[],$4)
+  `, [owner.id, orgB, unassignedTask.rows[0].id, taskB.id]);
+  await db.query(`
+    insert into work_audit_log(organization_id,actor_user_id,action,target_type,target_id)
+    values ($1,$2,'task.created','work_os_task','local-audit-top'),
+           ($1,$2,'task.subtask_created','work_os_task','local-audit-sub'),
+           ($1,$2,'task.created','work_os_task','nifty-provider-sub'),
+           ($1,$3,'task.created','work_os_task','local-orphan-audit')
+  `, [orgB, legacyUser.rows[0].id, orphanAuditUser.rows[0].id]);
   await db.exec(await readFile("supabase/migrations/0065_work_task_assignment_and_status.sql", "utf8"));
   const backfilled = await db.query(`
     select provider_task_id, assigned_by_person_id, workflow_status from work_tasks
@@ -300,12 +322,25 @@ test("Work OS companion migration is complete and idempotent", async () => {
     { provider_task_id: "task-orphan", assigned_by_person_id: null, workflow_status: "pending" },
     { provider_task_id: "task-unassigned", assigned_by_person_id: null, workflow_status: "pending" },
   ], "only a single-assignee legacy row with a real person is backfilled to that assignee");
+  const zeroAssignee = await db.query(`
+    select provider_task_id, assigned_by_person_id, assignee_person_ids from work_tasks
+    where provider_task_id = any($1) order by provider_task_id
+  `, [["local-audit-sub", "local-audit-top", "local-orphan-audit", "local-parent-sub", "nifty-provider-sub"]]);
+  assert.deepEqual(zeroAssignee.rows, [
+    { provider_task_id: "local-audit-sub", assigned_by_person_id: legacyPerson.rows[0].id, assignee_person_ids: [legacyPerson.rows[0].id] },
+    { provider_task_id: "local-audit-top", assigned_by_person_id: legacyPerson.rows[0].id, assignee_person_ids: [] },
+    { provider_task_id: "local-orphan-audit", assigned_by_person_id: null, assignee_person_ids: [] },
+    { provider_task_id: "local-parent-sub", assigned_by_person_id: personB, assignee_person_ids: [personB] },
+    { provider_task_id: "nifty-provider-sub", assigned_by_person_id: null, assignee_person_ids: [] },
+  ], "legacy local subtasks regain a reliable owner; unrecorded creators are never invented");
   await assert.rejects(() => db.query(`update work_tasks set workflow_status='done' where provider_task_id='task-a'`), /work_tasks_workflow_status_check/);
   await assert.rejects(() => db.query(`update work_tasks set assigned_by_person_id=gen_random_uuid() where provider_task_id='task-a'`), /work_tasks_assigned_by_person_id_fkey/);
   // Keep the seeded rows out of the RLS visibility assertions below.
-  await db.query(`delete from work_tasks where provider_task_id = any($1)`, [["task-multi", "task-orphan", "task-unassigned"]]);
+  await db.query(`delete from work_tasks where provider_task_id = any($1)`, [["task-multi", "task-orphan", "task-unassigned", "local-audit-top", "local-audit-sub", "local-parent-sub", "local-orphan-audit", "nifty-provider-sub"]]);
+  await db.query(`delete from work_audit_log where target_id = any($1)`, [["local-audit-top", "local-audit-sub", "local-orphan-audit", "nifty-provider-sub"]]);
   await db.query(`delete from work_people where id=$1`, [legacyPerson.rows[0].id]);
   await db.query(`delete from auth.users where id=$1`, [legacyUser.rows[0].id]);
+  await db.query(`delete from auth.users where id=$1`, [orphanAuditUser.rows[0].id]);
 
   const schedules = await db.query(`
     insert into work_schedules(organization_id,person_id,timezone,shift_start,shift_end,created_by)

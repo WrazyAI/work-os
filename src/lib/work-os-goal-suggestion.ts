@@ -100,7 +100,7 @@ export async function suggestWorkOsDayGoal(
     .find(Boolean);
   if (existing) return null;
 
-  const rows = await listPersonTasks(workOsOrganizationOwnerId(access), personId, { completed: "false", includeLedgerHistory: true, limit: 200 }) as Json[];
+  const rows = await listPersonTasks(workOsOrganizationOwnerId(access), personId, { completed: "false", includeLedgerHistory: true, limit: 200, includeAssignedBy: false }) as Json[];
   const open = suggestionTasks(rows);
   const priorOpen = open.filter((task) => task.due !== null && task.due < input.date).slice(0, 12);
   const createdToday = open.filter((task) => task.created === input.date).slice(0, 10);

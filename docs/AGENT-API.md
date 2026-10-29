@@ -202,6 +202,13 @@ const result = await client.callTool({ name: "list_tasks", arguments: {} });
 | `log_progress` | `progress:write` | Employee-authored progress note; never completion proof. |
 | `attach_evidence` | `evidence:write` | One base64 file, 8 MB max. `complete` defaults to `false`. |
 
+`update_task` separates content from status work. Content fields (`name`,
+`description`, dates, priority, labels, estimates, outcomes, `task_group_id`)
+require edit control, which the task's assigner and administrators hold.
+`blocked` and `blocked_reason` are status work: the task's assignee can record
+or clear a blocker without edit control, while a person who neither holds nor
+manages the task gets `403`.
+
 Write tools are idempotent. `create_task`, `log_progress`, and
 `attach_evidence` accept an optional `idempotency_key`; when omitted, the
 server derives a stable key from the tool and its arguments, so identical

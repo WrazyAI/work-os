@@ -333,8 +333,15 @@ export async function updateWorkOsAgentTask(access: WorkOsAccess, taskId: string
   const patch = validateAgentTaskUpdate(body);
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
-  const editsFields = Object.keys(patch).some((key) => key !== "assignee_person_ids" && key !== "parent_task_id");
+  // Blockers are status work, not content: an assignee who can complete or move
+  // the task's status records them without holding the assigner's edit control.
+  const nonContentKeys = new Set(["assignee_person_ids", "parent_task_id", "blocked", "blocked_reason"]);
+  const editsFields = Object.keys(patch).some((key) => !nonContentKeys.has(key));
   if (editsFields && !capabilities.canEdit) throw new WorkOsForbiddenError();
+  if (("blocked" in patch || "blocked_reason" in patch)
+    && !capabilities.canEdit && !capabilities.canChangeStatus && !capabilities.canComplete) {
+    throw new WorkOsForbiddenError();
+  }
   if ("assignee_person_ids" in patch && !capabilities.canAssign) throw new WorkOsForbiddenError();
   if ("parent_task_id" in patch && !capabilities.canMove) throw new WorkOsForbiddenError();
   // An agent token is person-scoped: assignment is self-only, so a coworker id
@@ -536,7 +543,7 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
     organizationOwnerId(access.organizationId),
   ]);
   const currentDate = localDateForTimezone(new Date(), timezone);
-  const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 500, order: "recency" }) as Json[];
+  const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 500, order: "recency", includeAssignedBy: false }) as Json[];
   const pending = tasks.filter((task) => task.completed !== true && !["archived", "deleted"].includes(String(task.status ?? "")));
   const selected = (view === "overdue"
     ? pending.filter((task) => {

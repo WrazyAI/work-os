@@ -62,7 +62,7 @@ export async function getWorkOsDay(
     authority: "work_os",
   };
   const [taskHistory, evidence, proposalsResult, reportResult, workspace] = await Promise.all([
-    options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 50 }),
+    options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 50, includeAssignedBy: false }),
     options.compact ? Promise.resolve([]) : listEvidence(ownerId, { personId, date: shiftDate }),
     options.compact ? Promise.resolve({ data: [], error: null }) : db().from("work_task_proposals").select("*").eq("organization_id", access.organizationId).eq("person_id", personId).in("status", ["pending", "needs_review", "failed", "stale"]).order("created_at", { ascending: false }),
     db().from("work_reports").select(options.compact ? "submitted_at" : "*").eq("organization_id", access.organizationId).eq("person_id", personId).eq("report_date", shiftDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),

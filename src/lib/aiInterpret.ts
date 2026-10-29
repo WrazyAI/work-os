@@ -544,6 +544,6 @@ export function orderInterpretationTasks(
 /** Loads the employee's tasks for task matching and id validation, ordered
  * for how people actually talk to the assistant (today first). */
 export async function loadInterpretationTasks(ownerId: string, personId: string) {
-  const rows = await listPersonTasks(ownerId, personId, { limit: 500, includeCompleted: true }) as unknown as Array<Record<string, unknown>>;
+  const rows = await listPersonTasks(ownerId, personId, { limit: 500, includeCompleted: true, includeAssignedBy: false }) as unknown as Array<Record<string, unknown>>;
   return orderInterpretationTasks(rows, new Date().toISOString().slice(0, 10));
 }

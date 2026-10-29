@@ -76,6 +76,7 @@ create table work_tasks (
   due_date date,
   start_date date,
   completed_at timestamptz,
+  assigned_by_person_id uuid,
   parent_task_id uuid,
   parent_provider_task_id text,
   provider_created_at timestamptz,

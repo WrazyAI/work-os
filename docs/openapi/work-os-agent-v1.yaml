@@ -539,7 +539,9 @@ components:
           type: string
           format: uuid
           description: Moves a subtask under another parent. Only subtasks can be moved.
-        blocked: { type: boolean }
+        blocked:
+          type: boolean
+          description: "Status work, not content: the task's assignee may record or clear a blocker without edit control. A person who neither holds nor manages the task answers 403."
         blocked_reason: { type: string }
     ProgressNote:
       type: object

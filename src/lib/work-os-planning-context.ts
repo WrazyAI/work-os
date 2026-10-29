@@ -47,7 +47,7 @@ function taskContext(rows: Json[]): PlanningTask[] {
 export async function buildPlanningContext(access: WorkOsAccess, date: string): Promise<PlanningContext> {
   const ownerId = workOsOrganizationOwnerId(access);
   const personId = access.personId as string;
-  const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 200 }) as Json[];
+  const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 200, includeAssignedBy: false }) as Json[];
   const githubFrom = new Date(`${date}T12:00:00Z`);
   githubFrom.setUTCDate(githubFrom.getUTCDate() - 14);
   const [previousPlanResult, blockerResult, updateResult, githubResult] = await Promise.all([
