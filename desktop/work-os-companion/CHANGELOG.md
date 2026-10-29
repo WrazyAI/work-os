@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.15 — 2026-10-29
+
 - Connecting a new PC now ends on a clear authorized screen instead of a blank browser tab.
 - While you approve the device in your browser, Work OS shows a waiting state with a button to reopen the browser.
 
