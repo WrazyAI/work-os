@@ -4,6 +4,8 @@ import test from "node:test";
 import { isNiftyTaskAttributableToMember, isTaskAssignedToPerson, isTaskAttributableToPerson } from "../src/lib/work-os";
 import { isEmployeeTaskAccessible } from "../src/lib/work-os-employee-tasks";
 import { readFileSync } from "node:fs";
+import vm from "node:vm";
+import ts from "typescript";
 
 test("Nifty ledger tasks are attributable through creator metadata", () => {
   assert.equal(isNiftyTaskAttributableToMember({ raw: { created_by: "member-a" } }, "member-a"), true);
@@ -126,4 +128,64 @@ test("unassigned child tasks inherit access from their active parent", () => {
   assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, parent, "person-a", null), true);
   assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, parent, "person-b", null), false);
   assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, { ...parent, status: "archived" }, "person-a", null), false);
+});
+
+/** Run the real personal backlog against a stubbed query builder so the
+ *  predicate and its counts are exercised, not just its source text. */
+function loadPersonOpenBacklog(rows: Record<string, any>[]) {
+  const source = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function listPersonOpenTasks(");
+  assert.ok(start >= 0, "listPersonOpenTasks not found");
+  const end = source.indexOf("/** A stored estimate is whole minutes.", start);
+  const body = source.slice(start, end).replace("export async function", "async function");
+  const javascript = ts.transpileModule(`${body}\nglobalThis.subject = listPersonOpenTasks;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const builder = (table: string) => {
+    const query: Record<string, any> = {
+      select: () => query,
+      eq: () => query,
+      not: () => query,
+      order: () => query,
+      range: (offset: number, limit: number) => ({ data: table === "work_tasks" ? rows.slice(offset, limit + 1) : [], error: null }),
+      maybeSingle: () => ({ data: table === "work_people" ? { nifty_member_id: null } : null, error: null }),
+    };
+    return query;
+  };
+  const context: Record<string, unknown> = {
+    db: () => ({ from: (table: string) => builder(table) }),
+    ensureNoError: (result: { data: unknown }) => result.data,
+    isTaskAssignedToPerson,
+    isTaskAttributableToPerson,
+  };
+  vm.runInNewContext(javascript, context);
+  return (context as {
+    subject: (userId: string, personId: string) => Promise<{ tasks: Array<{ id: string }>; counts: Record<string, number> }>;
+  }).subject;
+}
+
+test("the personal open backlog counts only work assigned to the person", async () => {
+  const rows = [
+    { id: "mine", assignee_person_ids: ["person-a"], assigned_by_person_id: "person-b", completed: false },
+    // Delegation is management visibility, not the delegator's own backlog.
+    { id: "delegated", assignee_person_ids: ["person-b"], assigned_by_person_id: "person-a", completed: false },
+    { id: "done", assignee_person_ids: ["person-a"], assigned_by_person_id: "person-b", completed: true },
+    { id: "unrelated", assignee_person_ids: ["person-c"], assigned_by_person_id: "person-b", completed: false },
+  ];
+  const backlog = await loadPersonOpenBacklog(rows)("owner", "person-a");
+  // Copy out of the vm realm so strict deep equality compares host objects.
+  assert.deepEqual([...backlog.tasks].map((task) => task.id), ["mine"]);
+  assert.deepEqual({ ...backlog.counts }, { total: 2, open: 1, completed: 1 });
+});
+
+test("the personal backlog excludes delegated rows while management lists keep them", () => {
+  const tasksSource = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
+  const start = tasksSource.indexOf("export async function listPersonOpenTasks(");
+  const block = tasksSource.slice(start, tasksSource.indexOf("/** A stored estimate is whole minutes.", start));
+  assert.match(block, /isTaskAssignedToPerson\(task, personId, niftyMemberId\)/);
+  assert.doesNotMatch(block, /isTaskAttributableToPerson/);
+  // The Tasks workspace and history keep the assigner's delegated rows so a
+  // manager can still reach the management actions the capability matrix grants.
+  assert.match(tasksSource, /assignedByPersonId: personId/);
+  assert.match(tasksSource, /attribution: "assigned_by"/);
 });

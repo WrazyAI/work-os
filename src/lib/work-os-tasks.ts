@@ -506,9 +506,11 @@ export async function listPersonTaskPage(
 
 /**
  * The complete open backlog for a person, independent of the paginated history
- * window: every attributable open parent plus exact parent counts. The
- * dashboard carry-over tabs and the Tasks Unfinished view both render from this
- * set so the two surfaces cannot disagree.
+ * window: every open parent they hold plus exact parent counts. The dashboard
+ * carry-over tabs and the Tasks Unfinished view both render from this set so the
+ * two surfaces cannot disagree. This is a personal surface, so it uses the
+ * narrow assignment predicate: work the person delegated stays visible in the
+ * management task lists, but never counts as their own open or overdue work.
  */
 export async function listPersonOpenTasks(userId: string, personId: string) {
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
@@ -534,7 +536,7 @@ export async function listPersonOpenTasks(userId: string, personId: string) {
     if (batch.length < pageSize) break;
   }
   const parents = rows.filter((task) =>
-    !task.parent_task_id && !task.parent_provider_task_id && isTaskAttributableToPerson(task, personId, niftyMemberId));
+    !task.parent_task_id && !task.parent_provider_task_id && isTaskAssignedToPerson(task, personId, niftyMemberId));
   const open = parents.filter((task) => task.completed !== true);
   return {
     tasks: open,

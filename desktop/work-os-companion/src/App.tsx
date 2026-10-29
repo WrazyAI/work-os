@@ -38,7 +38,7 @@ import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { completionTaskCapabilities, hasTaskMenu, displayTaskState, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
+import { completionTaskCapabilities, hasTaskMenu, displayTaskState, patchedTaskCapabilities, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -1196,15 +1196,18 @@ export default function App() {
   /** Stable row identity shared by optimistic cache updates and provider-backed rows. */
   const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
   /** The employee's current day, used to recompute the overdue lock when a cache
-   * patch flips completion without a server payload to read it from. */
+   * patch flips completion or moves a due date without a server payload to read
+   * it from. */
   const taskCalendarDate = visibleDay?.shiftDate || new Date().toISOString().slice(0, 10);
   /** Merge a partial patch into one row and keep its capability payload truthful
-   * when completion flips: a just-completed row offers Reopen immediately, and
-   * a just-reopened row offers Mark complete, without waiting for a refetch. */
+   * when a write moves the overdue lock: a just-completed row offers Reopen
+   * immediately, and a just-reopened or rescheduled row reflects the due date
+   * without waiting for a refetch. */
   const taskAfterPatch = (task: Record<string, any>, patch: Record<string, any>) => {
     const next = { ...task, ...patch };
-    if (typeof patch.completed === "boolean" && next.capabilities && typeof next.capabilities === "object") {
-      next.capabilities = completionTaskCapabilities(next, next.completed === true, taskCalendarDate);
+    const affectsCapabilities = typeof patch.completed === "boolean" || "due_date" in patch;
+    if (affectsCapabilities && next.capabilities && typeof next.capabilities === "object") {
+      next.capabilities = patchedTaskCapabilities(next, taskCalendarDate);
     }
     return next;
   };

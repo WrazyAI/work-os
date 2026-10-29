@@ -102,6 +102,33 @@ export function taskCheckboxA11y(task: TaskRow, completing: boolean, title: stri
   };
 }
 
+/** Rebuild the derived capability flags after a confirmed write. Both a
+ *  completion flip and a due-date edit move the overdue lock, so a cached
+ *  payload must be recomputed from the merged row instead of waiting for the
+ *  next refetch. Completion rights flip with `completed`; the overdue lock and
+ *  `canChangeStatus` follow the due date. */
+export function patchedTaskCapabilities(task: TaskRow, today: string): TaskCapabilities | null {
+  const capabilities = task.capabilities ?? null;
+  if (!capabilities) return null;
+  const completed = task.completed === true;
+  const overdue = taskIsOverdue({ ...task, completed }, today);
+  const statusLocked = !completed && overdue;
+  // `canChangeStatus` folds the lock into itself, so recover the actor's
+  // underlying permission from the flags that outlive it: an editor, completer,
+  // or reopener could change status once the due date moves.
+  const canRequestStatus = capabilities.canChangeStatus
+    || (capabilities.statusLocked && (capabilities.canEdit || capabilities.canComplete || capabilities.canReopen));
+  const canFinish = capabilities.canComplete || capabilities.canReopen;
+  return {
+    ...capabilities,
+    canComplete: !completed && canFinish,
+    canReopen: completed && canFinish,
+    canChangeStatus: !statusLocked && canRequestStatus,
+    statusLocked,
+    overdue,
+  };
+}
+
 /** The capability payload after a confirmed completion flip, so a just-
  *  completed row offers Reopen without waiting for the next refetch. A manager
  *  who may only edit keeps its management flags untouched; completing never
@@ -109,19 +136,7 @@ export function taskCheckboxA11y(task: TaskRow, completing: boolean, title: stri
  *  recomputed from the row's due date, because the completed payload it was
  *  restored from had already cleared it. */
 export function completionTaskCapabilities(task: TaskRow, completed: boolean, today: string): TaskCapabilities | null {
-  const capabilities = task.capabilities ?? null;
-  if (!capabilities) return null;
-  if (!capabilities.canComplete && !capabilities.canReopen) return capabilities;
-  const overdue = completed ? false : taskIsOverdue({ ...task, completed: false }, today);
-  const statusLocked = !completed && overdue;
-  return {
-    ...capabilities,
-    canComplete: !completed,
-    canReopen: completed,
-    canChangeStatus: statusLocked ? false : completed ? capabilities.canChangeStatus || capabilities.canComplete : capabilities.canChangeStatus,
-    statusLocked,
-    overdue,
-  };
+  return patchedTaskCapabilities({ ...task, completed }, today);
 }
 
 /** One predicate for "this row has a menu", shared by every trigger so a row

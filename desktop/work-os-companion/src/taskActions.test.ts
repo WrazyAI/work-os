@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { COMPLETION_BLOCKED_LABEL, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
+import { COMPLETION_BLOCKED_LABEL, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, patchedTaskCapabilities, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
 
@@ -181,11 +181,52 @@ describe("task actions", () => {
     // A cached payload predates capabilities and stays without one.
     expect(completionTaskCapabilities(base, true, today)).toBeNull();
   });
+  it("recomputes the overdue lock when a cache patch moves the due date", () => {
+    const overdueAssignee = row("worker", { due_date: "2026-10-26" });
+    expect(overdueAssignee.capabilities?.statusLocked).toBe(true);
+    // Moving the due date forward unlocks the status control again; the task is
+    // no longer overdue, so the row must not keep a stale lock.
+    expect(patchedTaskCapabilities({ ...overdueAssignee, due_date: "2026-10-28" }, today)).toMatchObject({
+      overdue: false,
+      statusLocked: false,
+      canChangeStatus: true,
+      canComplete: true,
+    });
+    // Moving it back into the past locks the row without touching completion.
+    expect(patchedTaskCapabilities({ ...overdueAssignee, due_date: "2026-10-26" }, today)).toMatchObject({
+      overdue: true,
+      statusLocked: true,
+      canChangeStatus: false,
+      canComplete: true,
+    });
+    // Clearing the due date clears the lock too.
+    expect(patchedTaskCapabilities({ ...overdueAssignee, due_date: null }, today)).toMatchObject({
+      overdue: false,
+      statusLocked: false,
+      canChangeStatus: true,
+    });
+    // An assigner regains status control when the date moves but never gains
+    // completion: management rights survive the lock, completion does not.
+    const overdueAssigner = row("owner", { due_date: "2026-10-26" });
+    expect(overdueAssigner.capabilities?.statusLocked).toBe(true);
+    expect(patchedTaskCapabilities({ ...overdueAssigner, due_date: "2026-10-28" }, today)).toMatchObject({
+      overdue: false,
+      statusLocked: false,
+      canChangeStatus: true,
+      canComplete: false,
+      canReopen: false,
+    });
+    // A cached row without capabilities stays without one.
+    expect(patchedTaskCapabilities({ ...base, due_date: "2026-10-26" }, today)).toBeNull();
+  });
   it("keeps the completion capability payload current in every cache patch", () => {
     const start = appSource.indexOf("const taskAfterPatch =");
     expect(start).toBeGreaterThan(-1);
     const block = appSource.slice(start, appSource.indexOf("const patchTaskRow", start));
-    expect(block).toContain("completionTaskCapabilities(next, next.completed === true, taskCalendarDate)");
+    expect(block).toContain("patchedTaskCapabilities(next, taskCalendarDate)");
+    // A due-date edit moves the overdue lock, so the same patch path must
+    // recompute the payload instead of leaving a stale statusLocked.
+    expect(block).toMatch(/typeof patch\.completed === "boolean" \|\| "due_date" in patch/);
     const scenario = appSource.slice(appSource.indexOf("function applyScenarioTaskCompletion("), appSource.indexOf("async function refreshTaskDetailsFor("));
     expect((scenario.match(/completionTaskCapabilities\([\s\S]*?taskCalendarDate\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
