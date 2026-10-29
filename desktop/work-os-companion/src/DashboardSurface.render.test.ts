@@ -71,11 +71,11 @@ describe("dashboard surfaces", () => {
     expect(markup).not.toContain("Today’s queue");
     expect(markup).toContain("Yesterday");
     expect(markup).toContain("Clock out");
-    // A confirmed session is already carried by the state line, the Worktivity
-    // chip, and the mirrored-time label, so the long mechanism sentence is not
-    // rendered again.
+    // A confirmed session is already carried by the state line and the
+    // Worktivity chip, so the long mechanism sentence and the mirrored-time
+    // label are not rendered again.
     expect(markup).not.toContain("Worktivity confirms you are working; Work OS mirrors this session.");
-    expect(markup).toContain("Mirrored Worktivity time");
+    expect(markup).not.toContain("Mirrored Worktivity time");
     // The axis names the scheduled window; the reader's own clock supplies now.
     expect(markup).not.toContain("<small>Now</small>");
     // The band footer only exists when it has a notice to carry.

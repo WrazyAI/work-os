@@ -354,6 +354,11 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".planning-session");
   });
 
+  it("keeps the task drawer open while a subtask completion refreshes", () => {
+    expect(taskSurfaces).toContain("onToggle={() => { onSubtaskMenu(null); onMoveMenu(null); onToggleSubtask(subtask); }}");
+    expect(taskSurfaces).not.toContain("onToggle={() => { onClose(); onToggleSubtask(subtask); }}");
+  });
+
   it("treats keyboard and readable secondary text as part of the polish", () => {
     expect(app).toContain("moveMenuFocus");
     expect(taskSurfaces).toContain("function moveMenuFocus");

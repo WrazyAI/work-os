@@ -518,6 +518,8 @@ export default function App() {
   const [taskAssigneeOptions, setTaskAssigneeOptions] = useState<TaskAssigneeOption[]>([]);
   const [taskOptionsLoading, setTaskOptionsLoading] = useState(false);
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
+  const taskDetailsRef = useRef<TaskDetails | null>(null);
+  taskDetailsRef.current = taskDetails;
   const [taskEvidenceRequest, setTaskEvidenceRequest] = useState<TaskEvidenceRequest | null>(null);
   const taskEvidenceRequestSeq = useRef(0);
   const [taskDetailsReadOnly, setTaskDetailsReadOnly] = useState(false);
@@ -3887,10 +3889,16 @@ export default function App() {
   }
 
   async function refreshTaskDetailsFor(taskId: string, force = false) {
-    if (!taskDetails) return;
-    const openId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
+    const current = taskDetailsRef.current;
+    if (!current) return;
+    const openId = String(current.task.provider_task_id || current.task.id);
     if (!force && openId !== taskId) return;
-    setTaskDetails(await loadTaskDetails(openId));
+    const details = await loadTaskDetails(openId);
+    // The drawer can close (or switch tasks) while the refresh is in flight.
+    // Never reopen or overwrite it from a stale completion response.
+    const stillOpen = taskDetailsRef.current;
+    if (!stillOpen || String(stillOpen.task.provider_task_id || stillOpen.task.id) !== openId) return;
+    setTaskDetails(details);
   }
 
   /** Confirmed completion: the row plays its short exit, then the caches drop

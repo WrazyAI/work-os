@@ -321,7 +321,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}
                 onMoveToggle={() => onMoveMenu(moveMenuId === subtaskId ? null : subtaskId)}
                 onClose={() => { onSubtaskMenu(null); onMoveMenu(null); }}
-                onToggle={() => { onClose(); onToggleSubtask(subtask); }}
+                onToggle={() => { onSubtaskMenu(null); onMoveMenu(null); onToggleSubtask(subtask); }}
                 onEdit={() => onEditTask(subtask)}
                 onMove={(target) => onMoveSubtask(subtask, target)}
                 onArchive={() => onArchiveSubtask(subtask)}

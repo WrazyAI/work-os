@@ -25,6 +25,9 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Completing a subtask keeps the task details open.
+- The workday view now shows the session time once.
+
 ## 0.5.13 — 2026-10-29
 
 - Answering a plan question now updates the draft before you confirm it.

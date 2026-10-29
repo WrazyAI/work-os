@@ -301,7 +301,6 @@ body {
 .band-reading.is-end { justify-items: end; text-align: right; }
 .band-reading small { color: var(--dash-muted); font-size: 10px; font-weight: 750; }
 .band-reading strong { color: var(--dash-ink); font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: -0.045em; line-height: 1.05; }
-.band-reading span { color: var(--dash-muted); font-size: 10px; white-space: nowrap; }
 .workday-band-instrument .dashboard-pulse-timeline { min-width: 0; }
 .workday-band-instrument .dashboard-pulse-labels strong { font-variant-numeric: tabular-nums; }
 
@@ -901,7 +900,7 @@ body {
 .task-detail-subtask-row {
   display: grid !important;
   grid-template-columns: 22px minmax(0, 1fr) auto auto !important;
-  align-items: start;
+  align-items: start !important;
   gap: 10px !important;
   min-width: 0;
   padding: 13px 0 !important;
@@ -920,7 +919,7 @@ body {
   color: #4f882f;
   cursor: pointer;
 }
-.task-detail-subtask-check:has(+ .task-detail-subtask-copy) { margin-top: 1px; }
+.task-detail-subtask-check:has(+ .task-detail-subtask-copy) { margin-top: -2px; }
 .task-detail-subtask-copy { display: grid; min-width: 0; gap: 4px; }
 .task-detail-subtask-copy strong { overflow: hidden; color: #50614f; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; }
 /* The title is the edit affordance: clicking it opens the same editor as the
@@ -947,8 +946,8 @@ body {
 .task-detail-subtask-row.completed .task-detail-subtask-check { border-color: #9dcc80; background: #e7f5dd; }
 .task-detail-subtask-row.completed .task-detail-subtask-copy strong,
 .task-detail-subtask-row.completed .task-detail-subtask-title { color: #879387; text-decoration: line-through; text-decoration-color: #afc0aa; }
-.task-detail-subtask-row > .task-state { margin-top: 1px; }
-.task-detail-subtask-row .subtask-actions { margin-top: -4px; }
+.task-detail-subtask-row > .task-state { margin-top: -3px; }
+.task-detail-subtask-row .subtask-actions { margin-top: -10px; }
 .task-detail-provenance { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .task-detail-footer {
   min-height: 76px;

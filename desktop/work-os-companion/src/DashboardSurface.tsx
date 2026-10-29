@@ -257,7 +257,6 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         <div className="band-reading">
           <small>Elapsed</small>
           <strong>{observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel}</strong>
-          <span>{observedOnly ? "Worktivity active time" : "Mirrored Worktivity time"}</span>
         </div>
         <PulseTimeline model={model} />
         <div className="band-reading is-end">
