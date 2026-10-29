@@ -47,7 +47,7 @@ import { basename, dirname, resolve } from "node:path";
 
 export const DEFAULT_API_BASE = "https://app.wrazyos.com/api/agent/v1";
 export const LEDGER_LABEL = "agent-ledger";
-export const ENV_TOKEN_KEYS = ["WORK_OS_AGENT_TOKEN", "WORK_OS_API_TOKEN"];
+export const ENV_TOKEN_KEYS = ["WORK_OS_API_TOKEN", "WORK_OS_AGENT_TOKEN"];
 const VPS_ENV_FILES = ["/home/dev/agent-os/.env.local", "/home/dev/agent-os/.env"];
 
 /** Parse argv into the flags this tool understands. */
@@ -132,23 +132,29 @@ export function envFileCandidates(cwd = process.cwd(), env = process.env) {
   return paths;
 }
 
-/** Extract the first non-empty token from an env file's contents. */
+/** Extract the token from an env file's contents, preferring the canonical key. */
 export function parseEnvToken(raw, keys = ENV_TOKEN_KEYS) {
+  const found = new Map();
   for (const line of String(raw).split("\n")) {
-    const match = line.match(/^([^=#]+)=(.*)$/);
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
     if (!match) continue;
-    const key = match[1].trim();
-    if (!keys.includes(key)) continue;
+    const key = match[1];
+    if (!keys.includes(key) || found.has(key)) continue;
     let value = match[2].trim();
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (value) found.set(key, value);
+  }
+  for (const key of keys) {
+    const value = found.get(key);
     if (value) return value;
   }
   return null;
 }
 
 function loadEnvToken() {
-  for (const [key, value] of Object.entries(process.env)) {
-    if (ENV_TOKEN_KEYS.includes(key) && typeof value === "string" && value.trim()) return value.trim();
+  for (const key of ENV_TOKEN_KEYS) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   for (const path of envFileCandidates()) {
     if (!existsSync(path)) continue;

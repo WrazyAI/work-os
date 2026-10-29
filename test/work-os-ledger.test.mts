@@ -62,16 +62,19 @@ test("the ledger document accepts the retired logger's shape", () => {
 
 test("the ledger reads either token name from a repo env file", () => {
   assert.equal(parseEnvToken("OTHER=1\nWORK_OS_API_TOKEN=abc\nWORK_OS_AGENT_TOKEN=def\n"), "abc");
+  assert.equal(parseEnvToken("WORK_OS_AGENT_TOKEN=legacy\nWORK_OS_API_TOKEN=canonical\n"), "canonical");
   assert.equal(parseEnvToken('WORK_OS_AGENT_TOKEN="legacy-token"\n'), "legacy-token");
   assert.equal(parseEnvToken("WORK_OS_API_TOKEN='quoted'\n"), "quoted");
+  assert.equal(parseEnvToken("export WORK_OS_API_TOKEN=exported\n"), "exported");
+  assert.equal(parseEnvToken("WORK_OS_API_TOKEN =\tspaced\n"), "spaced");
   assert.equal(parseEnvToken("WORK_OS_API_TOKEN=\n"), null);
   assert.equal(parseEnvToken("UNRELATED=value\n"), null);
 });
 
 test("the ledger resolves the main checkout env from a worktree", () => {
   const candidates = envFileCandidates(new URL("..", import.meta.url).pathname, {});
-  assert.ok(candidates.some((path) => path.endsWith("/.env.local")), "expected a repo .env.local candidate");
-  assert.ok(candidates.some((path) => path.endsWith("/.env")), "expected a repo .env candidate");
+  assert.ok(candidates.some((path: string) => path.endsWith("/.env.local")), "expected a repo .env.local candidate");
+  assert.ok(candidates.some((path: string) => path.endsWith("/.env")), "expected a repo .env candidate");
   assert.equal(new Set(candidates).size, candidates.length, "env candidates should be de-duplicated");
 
   const explicit = envFileCandidates(new URL("..", import.meta.url).pathname, { WORK_OS_LEDGER_ENV_FILE: "/tmp/ledger.env" });
