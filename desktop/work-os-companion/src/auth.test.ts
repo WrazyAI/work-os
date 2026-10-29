@@ -58,6 +58,18 @@ describe("connect error surfacing", () => {
     expect(app).toContain("Opening browser");
   });
 
+  it("reopens the request already in flight instead of replacing its state", () => {
+    const auth = readFileSync(resolve(root, "src/auth.ts"), "utf8");
+    expect(auth).toContain("export async function reopenPendingAuthentication");
+    expect(auth).toContain("pending ?? await secureState.pendingAuth()");
+    expect(auth).toContain("await challenge(current.verifier)");
+    expect(auth).toContain("current.state");
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("reopenPendingAuthentication");
+    expect(app).toContain("awaitingApproval");
+    expect(app).toContain("Reopen browser");
+  });
+
   it("allows the main window to invoke open_work_os_auth", () => {
     const capability = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");
     const allow = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");

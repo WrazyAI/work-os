@@ -90,6 +90,24 @@ export async function beginAuthentication(apiBaseOverride?: string) {
   }, {}, "frontend");
 }
 
+/**
+ * Open the browser again for the sign-in already in flight. Reusing the saved
+ * verifier and state matters: generating a second request would make the tab
+ * the employee already approved fail its state check, which reads as a broken
+ * connection. Returns false when no request is waiting, so the caller can start
+ * a fresh one.
+ */
+export async function reopenPendingAuthentication() {
+  const current = pending ?? await secureState.pendingAuth();
+  if (!current) return false;
+  pending = current;
+  const parsedBase = new URL(current.apiBase);
+  if (parsedBase.protocol !== "https:") throw new Error("Use the HTTPS WrazyOS URL.");
+  const url = buildDesktopConnectUrl(current.apiBase, await challenge(current.verifier), current.state);
+  await diagnostics.withSpan("ipc.open_work_os_auth", () => openDesktopConnectUrl(url), { host: parsedBase.host }, "ipc");
+  return true;
+}
+
 async function acceptCallback(raw: string) {
   pending ??= await secureState.pendingAuth();
   if (!pending) return null;

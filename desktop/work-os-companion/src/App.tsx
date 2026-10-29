@@ -17,11 +17,11 @@ import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnno
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, ExternalLink, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
 import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
+import { beginAuthentication, errorMessage, listenForAuthentication, reopenPendingAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
 import { startInstanceHeartbeat } from "./instanceHeartbeat";
@@ -502,6 +502,10 @@ export default function App() {
   const [adminSection, setAdminSection] = useState<AdminSection>("overview");
   const [adminFocus, setAdminFocus] = useState<AdminSectionFocus>({});
   const [connecting, setConnecting] = useState(false);
+  /** True after the browser is opened, until the deep-link callback lands or
+   *  the employee starts over. The connect screen keeps asking for the browser
+   *  approval instead of reverting to the idle first frame. */
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [taskComposerClosing, setTaskComposerClosing] = useState(false);
@@ -2105,7 +2109,7 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void listenForAuthentication((saved) => { setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { setAwaitingApproval(false); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
 
@@ -4162,12 +4166,20 @@ export default function App() {
     });
   }
 
-  async function connectWorkspace() {
+  async function connectWorkspace(reopen = false) {
     setConnecting(true); setError("");
     try {
-      await beginAuthentication(apiBase);
-      notifications.info("Sign in to WrazyOS if asked, then authorize this device.", "Browser opened");
+      const reused = reopen ? await reopenPendingAuthentication() : false;
+      if (!reused) await beginAuthentication(apiBase);
+      setAwaitingApproval(true);
+      notifications.info(
+        reused
+          ? "Finish approving this device in your browser. I’ll be here when you’re back."
+          : "Sign in to WrazyOS if asked, then authorize this device.",
+        "Browser opened",
+      );
     } catch (value) {
+      setAwaitingApproval(false);
       showError(value, "Could not open workspace sign-in.", "Sign-in could not open");
     } finally {
       setConnecting(false);
@@ -4881,7 +4893,7 @@ export default function App() {
       onDebug={() => void openDebugger()}
     />;
   }
-  const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} awaiting={awaitingApproval} onConnect={() => void connectWorkspace(awaitingApproval)} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   const renderOnboarding = () => visibleOnboarding ? <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding ?? undefined; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} /> : null;
 
   /*
@@ -5391,6 +5403,8 @@ type ConnectScreenProps = {
   apiBase: string;
   setApiBase: (value: string) => void;
   connecting: boolean;
+  /** The browser is open and the app is waiting for the deep-link callback. */
+  awaiting?: boolean;
   onConnect: () => void;
   onSave: () => Promise<void>;
   /** Why this device was signed out, when it was. */
@@ -5415,19 +5429,22 @@ function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced sett
  *  he carries the sequence in his own voice, and the stage carries the one
  *  action. The advanced server override stays a quiet disclosure in the
  *  bubble, beside the action it changes. */
-export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave, notice }: ConnectScreenProps) {
+export function ConnectScreen({ apiBase, setApiBase, connecting, awaiting = false, onConnect, onSave, notice }: ConnectScreenProps) {
   return <main className="guided-onboarding" data-stage="welcome">
     <OnboardingStage
       pose="waiting"
       eyebrow="Desktop companion"
       title="Connect your workspace."
-      line="I’m Otto. First, let me get you in — I’ll open your browser for a secure sign-in. Approve this device, and I’ll be right here when you’re back."
+      line={awaiting
+        ? "I’ve opened your browser. Approve this device there, and I’ll be waiting here when you’re back."
+        : "I’m Otto. First, let me get you in — I’ll open your browser for a secure sign-in. Approve this device, and I’ll be right here when you’re back."}
       replayKey="connect"
     >
       <div className="otto-bubble-actions">
-        <button className="primary" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button>
-        <span className="otto-bubble-note">About a minute.</span>
+        <button className="primary" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : awaiting ? <ExternalLink size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : awaiting ? "Reopen browser" : "Connect workspace"}</button>
+        {awaiting ? null : <span className="otto-bubble-note">About a minute.</span>}
       </div>
+      {awaiting && !connecting && <p className="otto-bubble-status" role="status">Waiting for approval in your browser. I’ll finish connecting here.</p>}
       {notice && <p className="otto-bubble-notice" role="status">{notice}</p>}
       <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
     </OnboardingStage>

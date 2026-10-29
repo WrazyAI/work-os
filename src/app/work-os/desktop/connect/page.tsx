@@ -12,12 +12,14 @@ export default async function DesktopConnectPage({
   if (!profile) redirect("/login");
   const params = await searchParams;
   const workspaces = await listWorkOsWorkspaces(profile.id);
+  const accountLabel = profile.displayName?.trim() || profile.email?.trim() || "your account";
   return (
     <DesktopConnect
       challenge={params.challenge || ""}
       state={params.state || ""}
       redirectUri={params.redirect_uri || ""}
       workspaces={workspaces}
+      accountLabel={accountLabel}
     />
   );
 }

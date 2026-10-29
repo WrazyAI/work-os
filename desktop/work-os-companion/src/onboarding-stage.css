@@ -185,6 +185,28 @@
   line-height: 1.5;
 }
 
+/* The browser round-trip has left this screen waiting, not idle. The dot is a
+   current-state cue; the sentence carries the same fact for screen readers. */
+.otto-bubble-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 11px 0 0;
+  color: #cfd3c6;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.otto-bubble-status:before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #a8f15b;
+  box-shadow: 0 0 0 3px rgba(168, 241, 91, 0.12);
+}
+
 /* Why the device was signed out: a bounded line under the action, carried in the
    stage's own primary text colour, so the connect screen explains itself instead
    of leaving the employee to guess. The notification surface keeps the error

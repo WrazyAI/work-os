@@ -4,6 +4,7 @@ import App from "./App";
 import AvatarApp from "./AvatarApp";
 import ErrorBoundary from "./ErrorBoundary";
 import OnboardingPreview from "./OnboardingPreview";
+import ConnectPreview from "./ConnectPreview";
 import AvatarPreview from "./AvatarPreview";
 import ChatPreview from "./ChatPreview";
 import EodPreview from "./EodPreview";
@@ -56,6 +57,7 @@ if (params.get("window") === "avatar") {
   document.body.classList.add("avatar-window");
 }
 const Root = params.get("window") === "avatar" ? AvatarApp
+  : import.meta.env.DEV && params.has("preview-connect") ? ConnectPreview
   : import.meta.env.DEV && params.has("preview-onboarding") ? OnboardingPreview
     : import.meta.env.DEV && params.has("preview-avatar") ? AvatarPreview
     : import.meta.env.DEV && params.has("preview-chat") ? ChatPreview

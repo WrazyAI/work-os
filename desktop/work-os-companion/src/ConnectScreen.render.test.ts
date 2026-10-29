@@ -42,6 +42,15 @@ describe("connect screen", () => {
     expect(markup).not.toContain("Connect workspace");
   });
 
+  it("keeps waiting after the browser opens, and reopens the same request", () => {
+    const markup = screen({ awaiting: true });
+    expect(markup).toContain("Approve this device there");
+    expect(markup).toContain("Waiting for approval in your browser.");
+    expect(markup).toContain("Reopen browser");
+    expect(markup).not.toContain("Connect workspace");
+    expect(markup).not.toContain("About a minute.");
+  });
+
   it("keeps the advanced server override reachable from the bubble", () => {
     const markup = screen();
     expect(markup).toContain("Advanced settings");

@@ -112,6 +112,54 @@ test("the desktop connect screen sends the chosen workspace with authorization",
   assert.match(route, /organizationId,/);
 });
 
+async function desktopConnectView() {
+  const module = await import("../src/app/work-os/desktop/connect/DesktopConnect");
+  return module.DesktopConnectView as unknown as (props: Record<string, unknown>) => unknown;
+}
+
+function renderDesktopConnect(view: unknown, props: Record<string, unknown>) {
+  return renderToStaticMarkup(createElement(view as never, props as never));
+}
+
+test("the desktop connect screen has a visible approved state", async () => {
+  const DesktopConnectView = await desktopConnectView();
+  const base = {
+    accountLabel: "David Yeobah",
+    workspaces: [{ organizationId: "b094c847-1332-4cab-9588-bdd7f8e99e7d", name: "David Yeobah Workspace", role: "employee", personId: "person-1" }],
+    organizationId: "b094c847-1332-4cab-9588-bdd7f8e99e7d",
+    onOrganizationChange: () => undefined,
+    requestValid: true,
+    requestPresent: true,
+    error: "",
+    onApprove: () => undefined,
+    onOpenCompanion: () => undefined,
+    onStartOver: () => undefined,
+    onClose: () => undefined,
+  };
+  const idle = renderDesktopConnect(DesktopConnectView, { ...base, status: "idle", callbackUrl: null });
+  assert.match(idle, /Authorize this device/);
+  assert.match(idle, /Signed in as/);
+  assert.match(idle, /Authorize device/);
+  assert.match(idle, /Waiting for approval/);
+
+  const approved = renderDesktopConnect(DesktopConnectView, { ...base, status: "authorized", callbackUrl: "wrazy-workos://auth?code=code&state=state" });
+  assert.match(approved, /Device authorized/);
+  assert.match(approved, /Open Work OS/);
+  assert.match(approved, /five minutes/);
+  assert.doesNotMatch(approved, /Authorize device/);
+
+  const failed = renderDesktopConnect(DesktopConnectView, { ...base, status: "error", callbackUrl: null, error: "Could not authorize this device." });
+  assert.match(failed, /Could not authorize this device/);
+  assert.match(failed, /Try again/);
+});
+
+test("the desktop connect screen only opens the companion from a direct action", () => {
+  const connect = source("src/app/work-os/desktop/connect/DesktopConnect.tsx");
+  const approve = connect.slice(connect.indexOf("async function approve"), connect.indexOf("function openCompanion"));
+  assert.doesNotMatch(approve, /window\.location\.assign/);
+  assert.match(connect, /function openCompanion[\s\S]*window\.location\.assign/);
+});
+
 test("both shells show the active workspace and a switch when one exists", () => {
   const admin = source("src/modules/work-os/admin/AdminShell.tsx");
   assert.match(admin, /sessionData\.organizationName/);

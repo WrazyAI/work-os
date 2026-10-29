@@ -16,7 +16,7 @@ import EmployeeSettings from "@/modules/work-os/employee/EmployeeSettings";
 import EmployeeWorkspaceShell, { EmployeeWorkspaceProvider } from "@/modules/work-os/employee/EmployeeWorkspaceShell";
 import WorkspaceChooser from "@/modules/work-os/WorkspaceChooser";
 import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
-import DesktopConnect from "@/app/work-os/desktop/connect/DesktopConnect";
+import DesktopConnect, { DesktopConnectView, type ConnectStatus } from "@/app/work-os/desktop/connect/DesktopConnect";
 import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
 import AdminPreview from "./admin-preview";
 
@@ -319,6 +319,12 @@ function installFetchStub() {
     // Static art the confirmation player fetches (animation + wasm) must reach
     // the server, not the fixture stub.
     if (/\.(?:lottie|wasm)(?:\?|$)/.test(url)) return passthroughFetch(input, init);
+    if (url.includes("/api/work-os/desktop/authorize")) {
+      if (new URLSearchParams(window.location.search).get("connect-result") === "error") {
+        return Promise.resolve(new Response(JSON.stringify({ error: "Preview fixture: the authorization request expired." }), { status: 500, headers: { "content-type": "application/json" } }));
+      }
+      return respond({ callbackUrl: "wrazy-workos://auth?code=preview-code&state=preview-state", expiresAt: new Date(Date.now() + 300_000).toISOString() });
+    }
     if (url.includes("/api/work-os/me/onboarding")) return respond(onboardingFixture);
     if (url.includes("/api/work-os/me/eod/outstanding")) return respond(outstandingFixture);
     if (url.includes("/api/work-os/me/eod/ai-draft")) return respond(aiDraftFixture);
@@ -435,15 +441,38 @@ function PreviewBody() {
     );
   }
   if (searchParams.has("desktop-connect")) {
+    const connectWorkspaces = [
+      { organizationId: "org-1", name: "David Yeboah Workspace", role: "admin" as const, personId: "p-1" },
+      { organizationId: "org-2", name: "WrazyAI Owner Workspace", role: "employee" as const, personId: "p-2" },
+    ];
+    const workspaces = searchParams.get("connect-workspaces") === "one" ? connectWorkspaces.slice(0, 1) : connectWorkspaces;
+    const connectState = searchParams.get("connect-state");
+    if (connectState) {
+      const status: ConnectStatus = connectState === "authorized" || connectState === "working" || connectState === "error" ? connectState : "idle";
+      const props = {
+        accountLabel: "David Yeboah",
+        workspaces,
+        organizationId: "org-1",
+        onOrganizationChange: () => undefined,
+        requestValid: true,
+        requestPresent: true,
+        status,
+        error: status === "error" ? "Could not authorize this device. The request expired before it reached Work OS." : "",
+        callbackUrl: status === "authorized" ? "wrazy-workos://auth?code=preview&state=preview" : null,
+        onApprove: () => undefined,
+        onOpenCompanion: () => undefined,
+        onStartOver: () => undefined,
+        onClose: () => undefined,
+      };
+      return <DesktopConnectView {...props} />;
+    }
     return (
       <DesktopConnect
         challenge={"a".repeat(43)}
         state={"b".repeat(16)}
         redirectUri="wrazy-workos://auth"
-        workspaces={[
-          { organizationId: "org-1", name: "David Yeboah Workspace", role: "admin", personId: "p-1" },
-          { organizationId: "org-2", name: "WrazyAI Owner Workspace", role: "employee", personId: "p-2" },
-        ]}
+        workspaces={workspaces}
+        accountLabel="David Yeboah"
       />
     );
   }
