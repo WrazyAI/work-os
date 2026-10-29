@@ -153,6 +153,7 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
     patch:
       summary: Update task content
+      description: The token's person can edit tasks they assigned, subject to assignment scope.
       operationId: updateTask
       x-required-scope: tasks:write
       parameters:
@@ -174,6 +175,7 @@ paths:
                   task: { $ref: "#/components/schemas/Task" }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -405,7 +407,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Forbidden:
-      description: The token is missing a required scope
+      description: The token is missing a required scope or its person lacks permission for the task action
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -455,6 +457,7 @@ components:
             - token_revoked
             - token_expired
             - insufficient_scope
+            - forbidden
             - not_found
             - validation_error
             - evidence_required

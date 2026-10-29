@@ -9,7 +9,7 @@ import {
   validateAgentScopes,
 } from "../src/lib/work-agent-tokens";
 import { hasAgentScope, parseAgentAuthorization, agentRouteError } from "../src/lib/work-agent-auth";
-import { WorkOsConflictError } from "../src/lib/work-os-api";
+import { WorkOsConflictError, WorkOsForbiddenError } from "../src/lib/work-os-api";
 
 test("a token secret is prefixed, opaque, and hashes deterministically", () => {
   const secret = newAgentTokenSecret();
@@ -53,6 +53,14 @@ test("cross-person task denials map to 404, not a server error", async () => {
   assert.equal(response.status, 404);
   const body = await response.json() as { code?: string };
   assert.equal(body.code, "not_found");
+});
+
+test("task action permission denials return a structured 403", async () => {
+  const response = agentRouteError(new WorkOsForbiddenError());
+  assert.equal(response.status, 403);
+  const body = await response.json() as { code?: string; request_id?: string };
+  assert.equal(body.code, "forbidden");
+  assert.ok(body.request_id);
 });
 
 test("an in-flight idempotency conflict asks the caller to retry", () => {

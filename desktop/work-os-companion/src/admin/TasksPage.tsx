@@ -33,7 +33,7 @@ import {
 import { OverflowPanText } from "../OverflowPan";
 import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } from "../taskActions";
 import { EllipsisMenu, TaskActionMenuItems, toggleAssigneeIds } from "../taskSurfaces";
-import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import { isCalendarDate, type TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
@@ -247,7 +247,7 @@ function taskTitle(task: AdminTaskRow | null | undefined, fallback = "Task") {
 /** The date editor's seed: only a real calendar-day prefix opens populated. */
 function taskDueDateSeed(value: unknown) {
   const day = trimmedText(value).slice(0, 10);
-  return STRICT_DATE.test(day) ? day : "";
+  return isCalendarDate(day) ? day : "";
 }
 
 /** The stored manual status, which is also the status option that is already
@@ -343,7 +343,6 @@ export function AdminTaskMenuItems({ task, today, busy, onStatus, onComplete, on
 export default function TasksPage({ initialTaskId }: { initialTaskId?: string }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
-  const today = todayIso();
   const [filter, setFilter] = useState<TaskFilter>("open");
   const [personId, setPersonId] = useState("");
   const [projectId, setProjectId] = useState("");

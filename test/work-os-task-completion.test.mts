@@ -215,6 +215,22 @@ const employeeContext = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+test("employee completion retries reconcile downstream state without widening access", async () => {
+  let writes = 0;
+  let reconciled = 0;
+  const completedTask = { ...root, completed: true };
+  const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "setWorkOsEmployeeTaskCompletion", "export async function listWorkOsEmployeeTaskSelection", employeeContext({
+    employeeTaskContext: async () => ({ ownerId: "owner", task: completedTask }),
+    completeTask: async () => { writes++; return completedTask; },
+    syncPlanItemCompletion: async () => { reconciled++; },
+  }));
+  const result = await subject({ organizationId: "org", personId: "person", role: "employee" }, "provider-root", true);
+  assert.equal(result.task.completed, true);
+  assert.ok(writes > 0);
+  assert.ok(reconciled > 0);
+  await assert.rejects(() => subject({ organizationId: "org", personId: "other", role: "employee" }, "provider-root", true));
+});
+
 test("the employee completion path closes the open subtasks before the task", async () => {
   const closed: string[] = [];
   const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "setWorkOsEmployeeTaskCompletion", "export async function listWorkOsEmployeeTaskSelection", employeeContext({

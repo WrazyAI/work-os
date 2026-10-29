@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { AppProfile } from "@/lib/supabase/auth";
-import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, type WorkOsOrgRole, WorkOsNotFoundError } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsForbiddenError, WorkOsValidationError, type WorkOsAccess, type WorkOsOrgRole, WorkOsNotFoundError } from "@/lib/work-os-api";
 import { hashAgentToken, type AgentScope } from "@/lib/work-agent-tokens";
 import { AgentRateLimitError } from "@/lib/work-agent-rate-limit";
 import { db, isWorkOsMigrationRequired } from "@/lib/work-os-internal";
@@ -67,6 +67,9 @@ export function agentRouteError(error: unknown) {
     return response;
   }
   if (isWorkOsNotFound(error)) return agentError("not_found", "Task not found", 404);
+  if (error instanceof WorkOsForbiddenError || (error instanceof Error && error.name === "WorkOsForbiddenError")) {
+    return agentError("forbidden", "You do not have permission to change this task", 403);
+  }
   if (error instanceof WorkOsValidationError || error instanceof CompletionEvidenceError) {
     return agentError("validation_error", error.message, 400);
   }

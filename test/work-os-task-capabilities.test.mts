@@ -227,6 +227,10 @@ function adminRouteHarness(overrides: Record<string, unknown> = {}) {
     workOsOrganizationOwnerId: () => "owner",
     listTasks: async () => [],
     listPersonTasks: async () => [],
+    countAdminTaskRecord: async (_access: unknown, options: { today: string }) => {
+      comparisons.push(["due_date", options.today]);
+      return { open: 0, overdue: 0, completedWeek: 0 };
+    },
     createAdminClient: () => ({ from: () => query }),
     getTaskByLocalOrProviderId: async () => null,
     createLocalWorkOsTask: async () => { throw new Error("not used"); },

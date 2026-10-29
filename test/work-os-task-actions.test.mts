@@ -45,7 +45,7 @@ for (const [name, capability, write] of [
 ]) {
   test(`${name} refuses unauthorized actions before writing`, () => {
     const source = functionSource(name);
-    assert.match(source, /taskCapabilities\(task,/);
+    assert.match(source, /taskCapabilities\((?:task,|\{ \.\.\.task, completed: !completed \},)/);
     assert.match(source, new RegExp(`\\.${capability}`));
     assert.match(source, /throw new WorkOsForbiddenError/);
     assert.ok(source.indexOf("throw new WorkOsForbiddenError") < source.indexOf(write));

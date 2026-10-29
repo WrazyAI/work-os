@@ -448,7 +448,9 @@ async function openSubtaskRows(input: { organizationId: string; task: Json }): P
 
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean, actor?: AgentActor) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
+  // Check the actor against the requested transition even on a retry: the
+  // state-dependent capability flags otherwise reject an already-applied write.
+  const capabilities = taskCapabilities({ ...task, completed: !completed }, taskActor(access), await employeeTaskToday(access));
   if (completed ? !capabilities.canComplete : !capabilities.canReopen) throw new WorkOsForbiddenError();
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(String(task.id), access.organizationId, ownerId))) {
     throw new WorkOsConflictError(
@@ -825,7 +827,7 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
   const ownerId = await organizationOwnerId(access.organizationId);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
   if (task.organization_id !== access.organizationId) throw new WorkOsNotFoundError();
-  const capabilities = taskCapabilities(task, taskActor(access), await employeeTaskToday(access));
+  const capabilities = taskCapabilities({ ...task, completed: !completed }, taskActor(access), await employeeTaskToday(access));
   if (completed ? !capabilities.canComplete : !capabilities.canReopen) throw new WorkOsForbiddenError();
   if (completed && taskRequiresCompletionEvidence(task) && !(await completionEvidence(task.id as string, access.organizationId, ownerId))) {
     throw new WorkOsConflictError(
