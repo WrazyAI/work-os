@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
-import { assertDesktopConnectUrl, buildDesktopConnectUrl, DESKTOP_REDIRECT_URI, errorMessage } from "./auth";
+import { describe, expect, it, vi } from "vitest";
+import { assertDesktopConnectUrl, buildDesktopConnectUrl, DESKTOP_REDIRECT_URI, discardPendingAuthentication, errorMessage } from "./auth";
+import { secureState } from "./vault";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -70,9 +71,30 @@ describe("connect error surfacing", () => {
     expect(app).toContain("Reopen browser");
   });
 
+  it("restores the waiting state from a saved authorization request", () => {
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("secureState.pendingAuth()");
+    expect(app).toMatch(/setAwaitingApproval\(Boolean\(pendingAuth\)\)/);
+  });
+
+  it("does not restore waiting after a callback resolves during browser reopen", () => {
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toMatch(/if \(!authResolutionHandledRef\.current\) setAwaitingApproval\(true\)/);
+  });
+
+  it("discards the pending request when the server address is saved", async () => {
+    const clearPendingAuth = vi.spyOn(secureState, "clearPendingAuth").mockResolvedValue();
+    await discardPendingAuthentication();
+    expect(clearPendingAuth).toHaveBeenCalledOnce();
+    clearPendingAuth.mockRestore();
+
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toMatch(/saveSettings\(\{ apiBase \}\);[^}]*await discardPendingAuthentication\(\); setAwaitingApproval\(false\)/);
+  });
+
   it("clears the waiting state after saving the server address", () => {
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toMatch(/saveSettings\(\{ apiBase \}\); setAwaitingApproval\(false\);/);
+    expect(app).toMatch(/saveSettings\(\{ apiBase \}\);[^}]*await discardPendingAuthentication\(\); setAwaitingApproval\(false\);/);
   });
 
   it("allows the main window to invoke open_work_os_auth", () => {

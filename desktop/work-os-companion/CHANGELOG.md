@@ -29,6 +29,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 - Connecting a new PC now ends on a clear authorized screen instead of a blank browser tab.
 - While you approve the device in your browser, Work OS shows a waiting state with a button to reopen the browser.
+- If you restart Work OS while connecting, it keeps the current browser request ready to reopen.
 
 ## 0.5.14 — 2026-10-29
 

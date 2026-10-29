@@ -21,7 +21,7 @@ import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, Ca
 import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
 import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import { beginAuthentication, errorMessage, listenForAuthentication, reopenPendingAuthentication } from "./auth";
+import { beginAuthentication, discardPendingAuthentication, errorMessage, listenForAuthentication, reopenPendingAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
 import { startInstanceHeartbeat } from "./instanceHeartbeat";
@@ -506,6 +506,7 @@ export default function App() {
    *  the employee starts over. The connect screen keeps asking for the browser
    *  approval instead of reverting to the idle first frame. */
   const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const authResolutionHandledRef = useRef(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [taskComposerClosing, setTaskComposerClosing] = useState(false);
@@ -2029,7 +2030,7 @@ export default function App() {
   // the previous attempt so a late answer cannot jump the screen the employee
   // is already looking at.
   const applyVaultState = useCallback(async () => {
-    const [stored, queue, settings, snapshot, enabled] = await Promise.all([secureState.sessionState(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]);
+    const [stored, queue, settings, snapshot, enabled, pendingAuth] = await Promise.all([secureState.sessionState(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false), secureState.pendingAuth()]);
     const current = stored.session;
     // An expired or unusable session is a signed-out state: the API layer
     // refuses it, so the workspace must not open on it. The employee is told
@@ -2040,6 +2041,7 @@ export default function App() {
       await secureState.clearSession().catch(() => undefined);
     }
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
+    if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
     const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
@@ -2109,7 +2111,7 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void listenForAuthentication((saved) => { setAwaitingApproval(false); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
 
@@ -4167,11 +4169,12 @@ export default function App() {
   }
 
   async function connectWorkspace(reopen = false) {
+    authResolutionHandledRef.current = false;
     setConnecting(true); setError("");
     try {
       const reused = reopen ? await reopenPendingAuthentication() : false;
       if (!reused) await beginAuthentication(apiBase);
-      setAwaitingApproval(true);
+      if (!authResolutionHandledRef.current) setAwaitingApproval(true);
       notifications.info(
         reused
           ? "Finish approving this device in your browser. I’ll be here when you’re back."
@@ -4893,7 +4896,7 @@ export default function App() {
       onDebug={() => void openDebugger()}
     />;
   }
-  const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} awaiting={awaitingApproval} onConnect={() => void connectWorkspace(awaitingApproval)} onSave={async () => { try { await secureState.saveSettings({ apiBase }); setAwaitingApproval(false); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} awaiting={awaitingApproval} onConnect={() => void connectWorkspace(awaitingApproval)} onSave={async () => { try { await secureState.saveSettings({ apiBase }); authResolutionHandledRef.current = true; await discardPendingAuthentication(); setAwaitingApproval(false); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   const renderOnboarding = () => visibleOnboarding ? <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding ?? undefined; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} /> : null;
 
   /*

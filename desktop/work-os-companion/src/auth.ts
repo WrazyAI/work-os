@@ -108,6 +108,11 @@ export async function reopenPendingAuthentication() {
   return true;
 }
 
+export async function discardPendingAuthentication() {
+  pending = null;
+  await secureState.clearPendingAuth();
+}
+
 async function acceptCallback(raw: string) {
   pending ??= await secureState.pendingAuth();
   if (!pending) return null;
