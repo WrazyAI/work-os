@@ -53,6 +53,39 @@ export interface PlanDraftEdit {
 
 export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
 
+/** Questions from the latest interpretation that still need an answer. */
+export function unansweredClarifications(
+  interpretation: PlanningInterpretation,
+  answers: Record<string, string>,
+): PlanClarification[] {
+  return interpretation.clarifications.filter((question) => !answers[question.id]?.trim());
+}
+
+/** Keeps only answers that address the latest interpretation's questions.
+ * The server rejects answers to stale question ids, so a re-interpretation
+ * that rephrases or replaces questions must not carry old ids forward. */
+export function applicableClarificationAnswers(
+  interpretation: PlanningInterpretation,
+  answers: Record<string, string>,
+): Record<string, string> {
+  const allowed = new Set(interpretation.clarifications.map((question) => question.id));
+  return Object.fromEntries(
+    Object.entries(answers).filter(([id, value]) => allowed.has(id) && !!value.trim()),
+  );
+}
+
+/** One place for the plan builder's confirmation gate: every question needs an
+ * answer, and those answers must be applied through a refine before confirming. */
+export function clarificationReviewState(
+  interpretation: PlanningInterpretation,
+  answers: Record<string, string>,
+) {
+  const unanswered = unansweredClarifications(interpretation, answers);
+  const applicableAnswers = applicableClarificationAnswers(interpretation, answers);
+  const hasUnappliedAnswers = Object.keys(applicableAnswers).length > 0;
+  return { unanswered, applicableAnswers, hasUnappliedAnswers, confirmBlocked: unanswered.length > 0 || hasUnappliedAnswers };
+}
+
 type ServerPlanItem = {
   id: string;
   task_id: string | null;

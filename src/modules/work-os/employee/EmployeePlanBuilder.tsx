@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronLeft, Pencil, Sparkles, Trash2, Wand2, X } from "lucide-react";
 import {
+  applicableClarificationAnswers,
   applyCommitmentEdits,
   buildPlanItemsFromInterpretation,
+  clarificationReviewState,
   interpretationFromResponse,
   type PlanningInterpretation,
 } from "./planning";
@@ -67,6 +69,11 @@ export default function EmployeePlanBuilder({
     objective: value.objective.trim(),
     successCriteria: value.criteria.split("\n").map((line) => line.trim()).filter(Boolean),
   }]))) : null;
+  const clarificationReview = effectiveInterpretation ? clarificationReviewState(effectiveInterpretation, answers) : null;
+  const unanswered = clarificationReview?.unanswered ?? [];
+  const applicableAnswers = clarificationReview?.applicableAnswers ?? {};
+  const hasUnappliedAnswers = clarificationReview?.hasUnappliedAnswers ?? false;
+  const confirmBlocked = clarificationReview?.confirmBlocked ?? false;
 
   const interpret = useMutation({
     mutationFn: () => {
@@ -102,10 +109,16 @@ export default function EmployeePlanBuilder({
           ? { summary: interpretation.summary, commitments: interpretation.commitments.map((commitment) => ({ clientId: commitment.clientId, title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria })) }
           : undefined,
         edits: Object.entries(edits).map(([clientId, value]) => ({ clientId, title: value.title.trim(), objective: value.objective.trim(), successCriteria: value.criteria.split("\n").map((line) => line.trim()).filter(Boolean) })),
+        ...(effectiveInterpretation ? {
+          clarifications: effectiveInterpretation.clarifications.map((question) => ({ id: question.id, question: question.question, ...(question.commitmentId ? { commitmentId: question.commitmentId } : {}) })),
+          clarificationAnswers: applicableAnswers,
+        } : {}),
       }),
     }),
     onSuccess: (result) => {
-      setInterpretation(interpretationFromResponse(result));
+      const next = interpretationFromResponse(result);
+      setInterpretation(next);
+      setAnswers((current) => next ? applicableClarificationAnswers(next, current) : {});
       setRefineInput("");
       setEditingId(null);
     },
@@ -134,9 +147,9 @@ export default function EmployeePlanBuilder({
               sourceContext: ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates"],
               clarifications: effectiveInterpretation.clarifications,
             },
-            clarification_answers: answers,
+            clarification_answers: applicableAnswers,
           } : {}),
-          items: effectiveInterpretation ? buildPlanItemsFromInterpretation(planItems, effectiveInterpretation, answers) : [],
+          items: effectiveInterpretation ? buildPlanItemsFromInterpretation(planItems, effectiveInterpretation, applicableAnswers) : [],
         }),
       });
     },
@@ -361,6 +374,11 @@ export default function EmployeePlanBuilder({
                       </label>
                     ))}
                   </div>
+                  {unanswered.length ? (
+                    <p className="mt-2 text-[11px]" style={{ color: "var(--status-warn)" }}>Answer the questions before confirming.</p>
+                  ) : hasUnappliedAnswers ? (
+                    <p className="mt-2 text-[11px]" style={{ color: "var(--status-warn)" }}>Refine the draft to apply your answers before confirming.</p>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -375,8 +393,8 @@ export default function EmployeePlanBuilder({
                     style={inputStyle}
                     aria-label="Refinement request"
                   />
-                  <SecondaryButton disabled={busy || !refineInput.trim()} onClick={() => refine.mutate()}>
-                    <Wand2 size={13} /> {refine.isPending ? "Refining…" : "Refine draft"}
+                  <SecondaryButton disabled={busy || (!refineInput.trim() && !hasUnappliedAnswers)} onClick={() => refine.mutate()}>
+                    <Wand2 size={13} /> {refine.isPending ? "Refining…" : !refineInput.trim() && hasUnappliedAnswers ? "Apply answers" : "Refine draft"}
                   </SecondaryButton>
                 </div>
               </div>
@@ -417,7 +435,7 @@ export default function EmployeePlanBuilder({
                 {interpret.isPending ? "Building…" : "Build my plan"}
               </PrimaryButton>
             ) : (
-              <PrimaryButton disabled={busy || !effectiveInterpretation} onClick={() => save.mutate(active)}>
+              <PrimaryButton disabled={busy || !effectiveInterpretation || confirmBlocked} onClick={() => save.mutate(active)}>
                 {save.isPending ? "Saving…" : active ? "Confirm plan" : "Save plan"}
               </PrimaryButton>
             )}

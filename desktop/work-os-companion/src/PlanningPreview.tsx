@@ -13,8 +13,8 @@ const draft: PlanningInterpretation = {
       clientId: "templates", title: "Refine LaunchLoom template designs", objective: "Make the most-used template patterns clearer, more consistent, and easier to reuse.", successCriteria: ["Review the current template structure", "Record the next design decisions"], sourceRefs: [{ provider: "employee", type: "intent", id: "raw_intent" }], confidence: 0.86,
     },
   ],
-  clarifications: [],
-  readiness: "ready",
+  clarifications: [{ id: "q1", commitmentId: "ease", question: "Which Work OS screen should the ease-of-use review focus on first?", reason: "ambiguous_scope" }],
+  readiness: "needs_one_clarification",
 };
 
 export default function PlanningPreview() {
@@ -31,7 +31,18 @@ export default function PlanningPreview() {
     onLoomPreview={async () => { if (loomSlow) await new Promise((resolve) => setTimeout(resolve, 1200)); return { title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-08", verdict: "same_day", usableForDay: true, metadataAvailable: true }; }}
     onClose={() => setOpen(false)}
     onInterpret={async () => { if (slow) await new Promise((resolve) => setTimeout(resolve, 2600)); return draft; }}
-    onRefine={async (input, current) => ({ ...current, buildId: "preview-refined-build", rawIntent: input })}
+    onRefine={async (input, current, _annotations, _edits, clarificationAnswers) => {
+      const remaining = current.clarifications.filter((question) => !clarificationAnswers[question.id]?.trim());
+      const answered = current.clarifications.flatMap((question) => clarificationAnswers[question.id]?.trim() ? [clarificationAnswers[question.id].trim()] : []);
+      return {
+        ...current,
+        buildId: "preview-refined-build",
+        rawIntent: input,
+        summary: answered.length ? `${current.summary} First focus: ${answered.join("; ")}.` : current.summary,
+        clarifications: remaining,
+        readiness: remaining.length === 0 ? "ready" : "needs_one_clarification",
+      };
+    }}
     onConfirm={async () => "confirmed"}
   /></main>;
 }

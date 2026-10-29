@@ -15,6 +15,9 @@ OS is the source of truth; nothing here touches Nifty.
 Tokens are self-minted: every active member creates tokens for themselves, and
 nobody can mint a token that acts as another person.
 
+The API and `scripts/work-os-ledger.mjs` read the secret as
+`WORK_OS_API_TOKEN`; `WORK_OS_AGENT_TOKEN` remains a supported legacy alias.
+
 ## Scopes
 
 | Scope | Grants |
@@ -190,7 +193,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 const transport = new StreamableHTTPClientTransport(
   new URL("https://app.wrazyos.com/api/mcp"),
-  { requestInit: { headers: { Authorization: `Bearer ${process.env.WORK_OS_AGENT_TOKEN}` } } },
+  { requestInit: { headers: { Authorization: `Bearer ${process.env.WORK_OS_API_TOKEN}` } } },
 );
 const client = new Client({ name: "my-agent", version: "1.0.0" });
 await client.connect(transport);

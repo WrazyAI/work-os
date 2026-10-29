@@ -3599,16 +3599,20 @@ export default function App() {
     return { ...result.interpretation, buildId: result.build_id };
   }
 
-  async function refinePlanning(input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]): Promise<PlanningInterpretation> {
+  async function refinePlanning(input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[], clarificationAnswers: Record<string, string>): Promise<PlanningInterpretation> {
     if (!visibleDay) throw new Error("Your workday is still loading.");
     if (debugScenario.enabled && debugScenario.planningState === "ai_unavailable") throw new Error("Planning assistance is unavailable in this scenario.");
     if (syncBypassRef.current) {
       // Offline fixture stub: apply the employee edits locally so the refine loop
       // (annotate → refine → review → confirm) is fully exercisable without a backend.
+      const remaining = draft.clarifications.filter((question) => !clarificationAnswers[question.id]?.trim());
+      const readiness: PlanningInterpretation["readiness"] = remaining.length === 0 ? "ready" : remaining.length === 1 ? "needs_one_clarification" : "needs_multiple_clarifications";
       return {
         ...draft,
         buildId: "debug-ai-build",
         rawIntent: input,
+        clarifications: remaining,
+        readiness,
         commitments: draft.commitments.map((commitment) => {
           const edit = edits.find((entry) => entry.clientId === commitment.clientId);
           return edit ? { ...commitment, title: edit.title ?? commitment.title, objective: edit.objective ?? commitment.objective, successCriteria: edit.successCriteria ?? commitment.successCriteria } : commitment;
@@ -3624,6 +3628,11 @@ export default function App() {
         draft: { summary: draft.summary, commitments: draft.commitments.map((commitment) => ({ clientId: commitment.clientId, title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria })) },
         annotations: annotations.map((annotation) => ({ target: annotation.target, quote: annotation.quote, comment: annotation.comment })),
         edits,
+        clarifications: draft.clarifications.map((question) => ({ id: question.id, question: question.question, ...(question.commitmentId ? { commitmentId: question.commitmentId } : {}) })),
+        clarificationAnswers: Object.fromEntries(draft.clarifications.flatMap((question) => {
+          const answer = clarificationAnswers[question.id]?.trim();
+          return answer ? [[question.id, answer]] : [];
+        })),
       }),
     });
     return { ...result.interpretation, buildId: result.build_id };

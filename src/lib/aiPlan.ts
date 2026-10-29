@@ -33,6 +33,8 @@ export type PlanInterpretationResult =
 
 export type PlanDraftAnnotation = { target: string; quote: string; comment: string };
 export type PlanDraftEdit = { clientId: string; title?: string; objective?: string; successCriteria?: string[] };
+export type PlanDraftClarification = { id: string; question: string; commitmentId?: string };
+export type PlanClarificationAnswer = { id: string; question: string; answer: string; commitmentId?: string };
 export type PlanRefineDraft = {
   summary: string;
   commitments: Array<{ clientId: string; title: string; objective: string; successCriteria: string[] }>;
@@ -100,6 +102,18 @@ export function parsePlanInterpretation(raw: unknown, rawIntent: string, context
   });
   const readiness = clarifications.length === 0 ? "ready" : clarifications.length === 1 ? "needs_one_clarification" : "needs_multiple_clarifications";
   return { rawIntent, summary, commitments, clarifications, readiness };
+}
+
+const readinessFor = (count: number): CandidateDailyPlan["readiness"] => count === 0 ? "ready" : count === 1 ? "needs_one_clarification" : "needs_multiple_clarifications";
+
+/** Removes questions the employee answered and recomputes readiness. */
+export function resolveAnsweredClarifications(
+  interpretation: CandidateDailyPlan,
+  answers: PlanClarificationAnswer[],
+): CandidateDailyPlan {
+  const answered = new Set(answers.map((entry) => entry.id));
+  const clarifications = interpretation.clarifications.filter((entry) => !answered.has(entry.id));
+  return { ...interpretation, clarifications, readiness: readinessFor(clarifications.length) };
 }
 
 export interface PlanMemoryContext {
@@ -228,12 +242,14 @@ export function buildPlanRefinePrompt(
   edits: PlanDraftEdit[],
   context: PlanningContext,
   memory?: PlanMemoryContext,
+  clarificationAnswers: PlanClarificationAnswer[] = [],
 ) {
   return JSON.stringify({
     employeeInput: rawIntent,
     currentDraft: draft,
     annotationFeedback: annotations,
     employeeEdits: edits,
+    ...(clarificationAnswers.length ? { clarificationAnswers } : {}),
     ...(memory?.todayBlock ? { todayContext: memory.todayBlock } : {}),
     ...(memory?.memoryBlock ? { memoryContext: memory.memoryBlock } : {}),
     context,
@@ -243,6 +259,10 @@ export function buildPlanRefinePrompt(
       "Keep `summary` as the day's focus in one or two plain sentences; never add provenance, recording, link, task-ID, linking, or analysis notes.",
       "Only link a task using an id from the supplied context. Do not invent task, PR, deadline, blocker, or provider references.",
       "A commitment describes success for today, not a permanent rewrite of a task.",
+      ...(clarificationAnswers.length ? [
+        "clarificationAnswers are the employee's answers to the current draft's questions. Revise the affected commitments so their title, objective, and success criteria reflect each answer.",
+        "Do not repeat a question whose id appears in clarificationAnswers; remove it from the output. If an answer is insufficient, ask a new question with a new id.",
+      ] : []),
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
       "Ask only when missing information prevents a useful daily commitment. Use plain language.",
       ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
@@ -256,7 +276,7 @@ export function buildPlanRefinePrompt(
 }
 
 export async function refinePlanDraft(
-  input: { rawIntent: unknown; draft: unknown; annotations?: unknown; edits?: unknown },
+  input: { rawIntent: unknown; draft: unknown; annotations?: unknown; edits?: unknown; clarifications?: unknown; clarificationAnswers?: unknown },
   context: PlanningContext,
   memory?: PlanMemoryContext,
 ): Promise<PlanInterpretationResult> {
@@ -304,7 +324,31 @@ export async function refinePlanDraft(
     if (!title && !objective && !successCriteria?.length) return [];
     return [{ clientId, ...(title ? { title } : {}), ...(objective ? { objective } : {}), ...(successCriteria?.length ? { successCriteria } : {}) }];
   });
-  if (!annotations.length && !edits.length) return { ok: false, reason: "ai_malformed", detail: "at least one annotation or edit is required for refinement" };
+  const clarifications = (Array.isArray(input.clarifications) ? input.clarifications : []).slice(0, MAX_CLARIFICATIONS).flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const row = entry as Record<string, unknown>;
+    const id = text(row.id, 120);
+    const question = text(row.question, 300);
+    if (!id || !question) return [];
+    const commitmentId = text(row.commitmentId, 120);
+    return [{ id, question, ...(commitmentId ? { commitmentId } : {}) }];
+  });
+  const clarificationAnswers: PlanClarificationAnswer[] = [];
+  if (input.clarificationAnswers !== undefined) {
+    if (!input.clarificationAnswers || typeof input.clarificationAnswers !== "object" || Array.isArray(input.clarificationAnswers)) {
+      return { ok: false, reason: "ai_malformed", detail: "clarificationAnswers must be an object" };
+    }
+    const entries = Object.entries(input.clarificationAnswers as Record<string, unknown>);
+    if (entries.length > MAX_CLARIFICATIONS) return { ok: false, reason: "ai_malformed", detail: "clarificationAnswers can include at most two answers" };
+    const byId = new Map(clarifications.map((question) => [question.id, question]));
+    for (const [id, rawAnswer] of entries) {
+      const answer = text(rawAnswer, 1_000);
+      const question = byId.get(id);
+      if (!answer || !question) return { ok: false, reason: "ai_malformed", detail: "clarificationAnswers must address the current questions" };
+      clarificationAnswers.push({ id, question: question.question, answer, ...(question.commitmentId ? { commitmentId: question.commitmentId } : {}) });
+    }
+  }
+  if (!annotations.length && !edits.length && !clarificationAnswers.length) return { ok: false, reason: "ai_malformed", detail: "at least one annotation, edit, or clarification answer is required for refinement" };
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "AI planning is not configured on this server" };
   try {
@@ -316,7 +360,7 @@ export async function refinePlanDraft(
         max_tokens: AI_TOKEN_BUDGETS.plan,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
-          { role: "user", content: buildPlanRefinePrompt(rawIntent, { summary, commitments: draftCommitments }, annotations, edits, context, memory) },
+          { role: "user", content: buildPlanRefinePrompt(rawIntent, { summary, commitments: draftCommitments }, annotations, edits, context, memory, clarificationAnswers) },
         ],
         response_format: { type: "json_object" },
       })),
@@ -327,9 +371,14 @@ export async function refinePlanDraft(
     recordAiUsage("plan_refine", PLAN_MODEL, payload);
     const content = payload.choices?.[0]?.message?.content ?? "";
     const parsed = parsePlanInterpretation(JSON.parse(content), rawIntent, context);
-    return parsed
-      ? { ok: true, interpretation: parsed, model: PLAN_MODEL, promptVersion: "work-os-plan-refine-v1", contextVersion: "planning-context-v1" }
-      : { ok: false, reason: "ai_malformed", detail: "response failed validation" };
+    if (!parsed) return { ok: false, reason: "ai_malformed", detail: "response failed validation" };
+    return {
+      ok: true,
+      interpretation: resolveAnsweredClarifications(parsed, clarificationAnswers),
+      model: PLAN_MODEL,
+      promptVersion: "work-os-plan-refine-v2",
+      contextVersion: "planning-context-v1",
+    };
   } catch (error) {
     return { ok: false, reason: error instanceof SyntaxError ? "ai_malformed" : "ai_unavailable", detail: error instanceof Error ? error.message : "planning provider failed" };
   }

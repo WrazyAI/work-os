@@ -255,7 +255,7 @@ export function PlanningSession({
   busy: boolean;
   onClose: () => void;
   onInterpret: (input: string, loom?: { url?: string; transcript?: string }) => Promise<PlanningInterpretation>;
-  onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
+  onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[], clarificationAnswers: Record<string, string>) => Promise<PlanningInterpretation>;
   onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
   /** Goal text handed off from the dock Focus panel. Takes precedence over the
    * saved plan when the modal opens, so Apply lands on the same intent. */
@@ -347,11 +347,13 @@ export function PlanningSession({
   const planningInput = builtIntent || effectiveInput;
   const pendingValid = pendingSelection !== null && isAnnotationCommentValid(pendingComment);
   const unansweredClarifications = Boolean(interpretation?.clarifications.some((question) => !clarificationAnswers[question.id]?.trim()));
+  const answeredClarifications = interpretation?.clarifications.filter((question) => clarificationAnswers[question.id]?.trim()) ?? [];
+  const hasClarificationAnswers = answeredClarifications.length > 0;
   const editedCommitments = interpretation ? diffEditedCommitments(interpretation.commitments, edited) : [];
   const invalidEdits = (editedSummary !== null && !editedSummary.trim()) || Object.values(edited).some((fields) => !fields.title.trim() || !fields.objective.trim());
   const hasDocumentEdits = editedCommitments.length > 0 || (editedSummary !== null && editedSummary.trim() !== interpretation?.summary);
   const hasUnfinishedEditorWork = feedbackMode && (hasDocumentEdits || pendingSelection !== null || !!pendingComment.trim());
-  const refineReady = hasDraft && !invalidEdits && (annotations.length > 0 || hasDocumentEdits || pendingValid);
+  const refineReady = hasDraft && !invalidEdits && (annotations.length > 0 || hasDocumentEdits || pendingValid || hasClarificationAnswers);
   // Escape hatch: when AI is down and the user is off-shift, a raw planning note
   // can still be saved. Every other path requires an AI-built draft first.
   const fallbackSave = state === "ai_unavailable" && !active && !hasDraft;
@@ -365,11 +367,14 @@ export function PlanningSession({
         ? "Finish your edits or refine before confirming."
         : unansweredClarifications
           ? "Answer the clarification questions to confirm."
-          : null;
+          : hasClarificationAnswers
+            ? "Refine the plan with your answers before confirming."
+            : null;
   const confirmDisabled = working || !planningInput || confirmBlockedReason !== null;
 
   const resetDraftState = () => {
     setInterpretation(null);
+    setClarificationAnswers({});
     setAnnotations([]);
     setFeedbackMode(false);
     setFeedbackDirty(false);
@@ -464,6 +469,10 @@ export function PlanningSession({
     if (!interpretation || !planningInput || working || !refineReady) return;
     const settled = flushPendingAnnotation(annotations);
     const edits = editedCommitments;
+    const answersForDraft = Object.fromEntries(interpretation.clarifications.flatMap((question) => {
+      const answer = clarificationAnswers[question.id]?.trim();
+      return answer ? [[question.id, answer]] : [];
+    }));
     const draftForServer: PlanningInterpretation = {
       ...interpretation,
       summary: editedSummary?.trim() ? editedSummary.trim() : interpretation.summary,
@@ -479,7 +488,7 @@ export function PlanningSession({
     setView("review");
     setError("");
     try {
-      const result = await onRefine(planningInput, draftForServer, settled, edits);
+      const result = await onRefine(planningInput, draftForServer, settled, edits, answersForDraft);
       setInterpretation(result);
       setBuiltIntent(planningInput);
       setAnnotations([]);
@@ -501,8 +510,12 @@ export function PlanningSession({
       summary: editedSummary?.trim() ? editedSummary.trim() : interpretation.summary,
       commitments: applyEditsToCommitments(interpretation.commitments, edited),
     } : null;
+    const answersForSave = interpretation ? Object.fromEntries(interpretation.clarifications.flatMap((question) => {
+      const answer = clarificationAnswers[question.id]?.trim();
+      return answer ? [[question.id, answer]] : [];
+    })) : {};
     try {
-      const result = await onConfirm(planningInput, effective, clarificationAnswers);
+      const result = await onConfirm(planningInput, effective, answersForSave);
       if (result === "confirmed") { setState("confirmed"); return; }
       if (result === "conflict") { setState("conflict"); return; }
       if (result === "rebuild") {
@@ -730,7 +743,7 @@ export function PlanningSession({
           {confirmBlockedReason && planningInput && !(hasDraft && view === "compose") && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
           <button className="secondary" onClick={onClose} disabled={busy || state === "saving"}>Close</button>
           {annotations.length > 0 && <span className="planning-annotation-pill">{annotations.length} Annotation{annotations.length === 1 ? "" : "s"}<button type="button" aria-label="Clear all annotations" title="Clear all annotations" onClick={() => { setAnnotations([]); setPendingSelection(null); setPendingComment(""); }}><X size={12} /></button></span>}
-          <button className="secondary planning-refine-button" onClick={() => void refine()} disabled={!hasDraft || working || !refineReady} title={!hasDraft ? "Build your plan first" : !refineReady ? "Add feedback or edits to refine" : "Refine the draft with your feedback"}>Refine plan{annotations.length > 0 && <span className="planning-refine-count" aria-label={`${annotations.length} annotations`}>{annotations.length}</span>}</button>
+          <button className="secondary planning-refine-button" onClick={() => void refine()} disabled={!hasDraft || working || !refineReady} title={!hasDraft ? "Build your plan first" : !refineReady ? "Add feedback, edits, or answers to refine" : "Refine the draft with your feedback"}>Refine plan{annotations.length > 0 && <span className="planning-refine-count" aria-label={`${annotations.length} annotations`}>{annotations.length}</span>}</button>
           {(() => {
             const primary = planningPrimaryAction(view, hasDraft, fallbackSave);
             if (primary === "build") return <button className="primary" onClick={() => void build()} disabled={!canBuild || working || loomReading}>{loomReading ? "Reading Loom…" : input.trim() || !hasLoomSource ? "Build my plan" : "Build from Loom"}</button>;

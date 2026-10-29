@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Answering a plan question now updates the draft before you confirm it.
+
 ## 0.5.12 — 2026-10-28
 
 - Asking Otto what it knows about a teammate now returns their recent record.

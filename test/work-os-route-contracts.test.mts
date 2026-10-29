@@ -147,6 +147,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(planInterpret, /build_id: buildId/);
   assert.match(planRefine, /issueDailyPlanBuild/);
   assert.match(planRefine, /build_id: buildId/);
+  assert.match(planRefine, /clarificationAnswers: body\.clarificationAnswers/);
   assert.match(plan, /updateDailyTaskSurface|updateDailyPlanOutcome/);
   assert.match(insights, /getPersonalInsights/);
   assert.match(insights, /requirePerson: true/);

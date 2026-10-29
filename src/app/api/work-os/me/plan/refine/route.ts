@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       feature: "employee_companion",
     });
     if (auth.response) return auth.response;
-    const body = await req.json() as { input?: unknown; date?: unknown; draft?: unknown; annotations?: unknown; edits?: unknown };
+    const body = await req.json() as { input?: unknown; date?: unknown; draft?: unknown; annotations?: unknown; edits?: unknown; clarifications?: unknown; clarificationAnswers?: unknown };
     if (typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
       return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
     }
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       ]);
       memory = { todayBlock, memoryBlock };
     }
-    const result = await refinePlanDraft({ rawIntent: body.input, draft: body.draft, annotations: body.annotations, edits: body.edits }, context, memory);
+    const result = await refinePlanDraft({ rawIntent: body.input, draft: body.draft, annotations: body.annotations, edits: body.edits, clarifications: body.clarifications, clarificationAnswers: body.clarificationAnswers }, context, memory);
     if (!result.ok) {
       const status = result.reason === "ai_unconfigured" ? 501 : result.reason === "ai_malformed" ? 400 : 503;
       return NextResponse.json({ error: result.detail, reason: result.reason }, { status });

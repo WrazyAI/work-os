@@ -329,7 +329,25 @@ function installFetchStub() {
     if (url.includes("/api/work-os/me/activity-intervals/")) return respond({ interval: intervalsFixture.intervals[0] });
     if (url.includes("/api/work-os/me/activity-intervals")) return respond(intervalsFixture);
     if (url.includes("/api/work-os/me/plan/interpret")) return respond(interpretationFixture);
-    if (url.includes("/api/work-os/me/plan/refine")) return respond(interpretationFixture);
+    if (url.includes("/api/work-os/me/plan/refine")) {
+      let answers: Record<string, string> = {};
+      try {
+        answers = (JSON.parse(String(init?.body ?? "{}")) as { clarificationAnswers?: Record<string, string> }).clarificationAnswers ?? {};
+      } catch {
+        answers = {};
+      }
+      const applied = Object.values(answers).map((answer) => answer.trim()).filter(Boolean);
+      const remaining = interpretationFixture.interpretation.clarifications.filter((question) => !answers[question.id]?.trim());
+      return respond({
+        ...interpretationFixture,
+        interpretation: {
+          ...interpretationFixture.interpretation,
+          summary: applied.length ? `${interpretationFixture.interpretation.summary} First focus: ${applied.join("; ")}.` : interpretationFixture.interpretation.summary,
+          clarifications: remaining,
+          readiness: remaining.length === 0 ? "ready" : remaining.length === 1 ? "needs_one_clarification" : "needs_multiple_clarifications",
+        },
+      });
+    }
     if (url.includes("/api/work-os/me/plan")) return respond(todayFixture().plan);
     if (url.includes("/api/work-os/me/day?date=2026-09-03")) return respond(rejectedFixture("2026-09-03"));
     if (url.includes("/api/work-os/me/day?date=2026-09-10")) return respond(historyFixture("2026-09-10", "Finish the settlement reconciliation."));

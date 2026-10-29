@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
-import { applyCommitmentEdits, buildPlanItemsFromInterpretation, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
+import { applicableClarificationAnswers, applyCommitmentEdits, buildPlanItemsFromInterpretation, clarificationReviewState, unansweredClarifications, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
 import { consistencyChips, flowBreakdown, insightRangeSummary, insightSeries, periodDeltas } from "../src/modules/work-os/employee/insights";
 import { assistantDraftFallbackNotice, assistantDraftNotice, extractBottleneckSection, restoreBottleneckSection, stripBottleneckSection } from "../src/modules/work-os/employee/eod";
 import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "../src/modules/work-os/employee/recaps";
@@ -99,6 +99,30 @@ test("answered clarifications resolve before save", () => {
   const items = buildPlanItemsFromInterpretation([], interpretation, { q1: "The operations lead" });
   const outcome = items.find((item) => item.title_snapshot === "Write the handoff note");
   assert.equal(outcome?.clarification_state, "resolved");
+});
+
+test("clarification answers stay bound to the current questions", () => {
+  assert.deepEqual(unansweredClarifications(interpretation, {}).map((question) => question.id), ["q1"]);
+  assert.deepEqual(unansweredClarifications(interpretation, { q1: "The operations lead" }), []);
+  assert.deepEqual(applicableClarificationAnswers(interpretation, {
+    q1: "The operations lead",
+    stale: "Should not survive",
+    empty: "   ",
+  }), { q1: "The operations lead" });
+});
+
+test("the plan builder requires answers to be refined before confirming", () => {
+  const unanswered = clarificationReviewState(interpretation, {});
+  assert.equal(unanswered.confirmBlocked, true);
+  assert.deepEqual(unanswered.unanswered.map((question) => question.id), ["q1"]);
+
+  const answered = clarificationReviewState(interpretation, { q1: "The operations lead" });
+  assert.equal(answered.confirmBlocked, true);
+  assert.equal(answered.hasUnappliedAnswers, true);
+
+  const applied = clarificationReviewState({ ...interpretation, clarifications: [], readiness: "ready" }, { q1: "The operations lead" });
+  assert.equal(applied.confirmBlocked, false);
+  assert.equal(applied.hasUnappliedAnswers, false);
 });
 
 test("inline edits apply to titles, objectives, and criteria", () => {
