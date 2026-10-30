@@ -4210,7 +4210,7 @@ export default function App() {
     }
     const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
     void act("task.subtask_create", async () => {
-      await apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: subtaskTitle.trim(), description: subtaskDescription.trim() || undefined, parent_task_id: parentId, assignee_person_ids: [] }) });
+      await apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: subtaskTitle.trim(), description: subtaskDescription.trim() || undefined, parent_task_id: parentId, assignee_person_ids: visibleDay?.access?.personId ? [visibleDay.access.personId] : [] }) });
       setSubtaskTitle(""); setSubtaskDescription(""); setTaskDetails(await loadTaskDetails(parentId));
     });
   }

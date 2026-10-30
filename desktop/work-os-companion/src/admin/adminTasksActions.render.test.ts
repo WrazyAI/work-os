@@ -170,6 +170,16 @@ describe("administration task drawer actions", () => {
     expect(section).toContain("Deactivated people are not available for new assignments.");
   });
 
+  it("lets an administrator remove an unavailable existing assignee", () => {
+    const task = adminRow({ id: "t-unavailable", assignee_person_ids: ["p-6"] });
+    const markup = renderWith("dense", { initialTaskId: "t-unavailable" }, (client) => seedSingleRow(client, task));
+    const label = markup.match(/<label class="admin-check">[^]*?Farid Haddad \(unavailable\)<\/label>/)?.[0] ?? "";
+    expect(label).toContain('type="checkbox"');
+    expect(label).toContain("checked");
+    expect(label).not.toContain("disabled");
+    expect(markup).toContain("Remove unavailable assignees before saving changes.");
+  });
+
   it("pills a drawer subtask from its effective due date like a row", () => {
     const task = {
       id: "t-child-late",

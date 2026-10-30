@@ -538,6 +538,8 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const drawerAssigneeDraft = assigneeDraft && drawerTask && assigneeDraft.taskId === String(drawerTask.id)
     ? assigneeDraft.ids
     : drawerAssigneeIds;
+  const activePersonIds = new Set(activePeople.map((person) => String(person.id)));
+  const unavailableAssigneeIds = drawerAssigneeDraft.filter((id) => !activePersonIds.has(id));
   const drawerAssigneeChanged = drawerAssigneeDraft.length !== drawerAssigneeIds.length
     || drawerAssigneeDraft.some((id) => !drawerAssigneeIds.includes(id));
   const toggleDrawerAssignee = (personId: string) => {
@@ -769,12 +771,17 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                           onChange={() => toggleDrawerAssignee(String(person.id))}
                         />
                       ))}
+                      {unavailableAssigneeIds.map((id) => {
+                        const person = roster.find((entry) => String(entry.id) === id);
+                        return <CheckField key={id} label={`${String(person?.display_name ?? "Unavailable assignee")} (unavailable)`} checked disabled={assigneeChange.isPending} onChange={() => toggleDrawerAssignee(id)} />;
+                      })}
                     </div>
+                    {unavailableAssigneeIds.length ? <p className="admin-quiet">Remove unavailable assignees before saving changes.</p> : null}
                     {inactiveRosterNote ? <p className="admin-quiet">{inactiveRosterNote}</p> : null}
                     <div className="admin-inline-fields">
                       <AdminButton
                         variant="primary"
-                        disabled={!drawerAssigneeChanged || assigneeChange.isPending}
+                        disabled={!drawerAssigneeChanged || assigneeChange.isPending || unavailableAssigneeIds.length > 0}
                         onClick={() => assigneeChange.mutate({ id: String(drawerTask.id), personIds: drawerAssigneeDraft })}
                       >
                         {assigneeChange.isPending ? "Assigning…" : "Assign"}

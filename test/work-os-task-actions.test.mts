@@ -456,9 +456,9 @@ test("an inline subtask defaults to its creator while top-level work stays unass
   await h.run(access, { name: "Subtask", parent_task_id: "parent" });
   assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);
   assert.equal(creations.at(-1)?.assignedByPersonId, "employee");
-  // An explicit empty list on a subtask gets the same self default.
+  // An explicit empty list remains unassigned for agent callers.
   await h.run(access, { name: "Subtask", parent_task_id: "parent", assignee_person_ids: [] });
-  assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);
+  assert.deepEqual(creations.at(-1)?.assigneePersonIds, []);
   // An explicit list still wins.
   await h.run(access, { name: "Subtask", parent_task_id: "parent", assignee_person_ids: ["employee"] });
   assert.deepEqual(creations.at(-1)?.assigneePersonIds, ["employee"]);

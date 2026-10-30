@@ -656,7 +656,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json,
   // An inline subtask post sends no assignees. The creator then owns the
   // subtask, so the completion checkbox the capability gate enforces stays
   // usable for them. A top-level task keeps its unassigned contract.
-  const requestedPersonIds = suppliedPersonIds.length
+  const requestedPersonIds = Array.isArray(body.assignee_person_ids)
     ? suppliedPersonIds
     : parentId && access.personId && allowedPeople.has(access.personId) ? [access.personId] : [];
   const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));

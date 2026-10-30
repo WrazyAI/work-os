@@ -505,6 +505,11 @@ export default function EmployeeTasks() {
                                   <ChevronRight size={13} /> Open original day
                                 </button>
                               ) : null}
+                              {!rowActionAllowed(task, "canEdit") ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
+                                  View details
+                                </button>
+                              ) : null}
                               {rowActionAllowed(task, "canEdit") ? (
                                 <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
                                   <Pencil size={13} /> Edit

@@ -33,6 +33,7 @@ export default function EmployeeTaskDrawer({
   const [title, setTitle] = useState(mode === "edit" ? String(task?.title ?? "") : "");
   const [description, setDescription] = useState(mode === "edit" ? String(task?.description ?? "") : "");
   const titleRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   /* Keep the latest onClose in a ref so the mount-only focus/Escape effect
      never re-runs (and never steals focus) when the parent re-renders. */
@@ -41,7 +42,10 @@ export default function EmployeeTaskDrawer({
 
   useEffect(() => {
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => titleRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      if (titleRef.current && !titleRef.current.disabled) titleRef.current.focus();
+      else closeRef.current?.focus();
+    });
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); onCloseRef.current(); }
     };
@@ -108,9 +112,9 @@ export default function EmployeeTaskDrawer({
             <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">{mode === "create" ? "Add task" : "Task details"}</h2>
             {mode === "edit" ? <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{String(task?.provider ?? "local") === "local" ? "Work OS task" : "Imported task"}{task?.project?.name ? ` · ${task.project.name}` : ""}</p> : null}
           </div>
-          <SecondaryButton onClick={onClose} aria-label="Close" className="!p-2">
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close" className="rounded-lg border p-2" style={{ borderColor: "var(--border)" }}>
             <X size={15} />
-          </SecondaryButton>
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">

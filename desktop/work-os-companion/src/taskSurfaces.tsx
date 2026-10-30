@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
@@ -379,7 +379,7 @@ export function TaskDetailActions({ task, currentDate, currentPersonId = null, a
   const [selected, setSelected] = useState<string[]>(() => currentAssigneeIds(task));
   const statusNoteId = useId();
   const assigneeNoteId = useId();
-  const close = () => setMenu(null);
+  const close = useCallback(() => setMenu(null), []);
   const state = displayTaskState(task, currentDate);
   const statusOptions = taskStatusOptions(task, currentDate);
   const statusNote = statusOptions.find((option) => option.note)?.note;
