@@ -133,7 +133,9 @@ as $$
       and (p_project_id is null or t.project_id::text = p_project_id)
       and (
         t.assignee_person_ids @> array[p_person_id]
-      or t.assigned_by_person_id = p_person_id
+        -- Unfinished is the personal backlog; delegated rows remain visible
+        -- in the all/history management views rather than inflating it.
+        or (p_completed is distinct from false and t.assigned_by_person_id = p_person_id)
         or (
           p_nifty_member_id is not null
           and (

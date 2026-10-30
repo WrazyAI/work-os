@@ -7,6 +7,12 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
+test("personal unfinished page excludes solely delegated rows", () => {
+  const sql = readFileSync("supabase/migrations/0067_work_task_assigner_visibility.sql", "utf8");
+  const page = sql.slice(sql.indexOf("create or replace function public.work_list_person_task_page"));
+  assert.match(page, /or \(p_completed is distinct from false and t\.assigned_by_person_id = p_person_id\)/);
+});
+
 test("Nifty ledger tasks are attributable through creator metadata", () => {
   assert.equal(isNiftyTaskAttributableToMember({ raw: { created_by: "member-a" } }, "member-a"), true);
   assert.equal(isNiftyTaskAttributableToMember({ raw: { created_by: "member-b" } }, "member-a"), false);
