@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -79,9 +79,9 @@ function ActionNotice({ children }: { children: ReactNode }) {
 /**
  * The rendered authorization state, split from the request so the approved
  * and failed states can be reviewed without a live backend. The approved
- * state never opens the companion by itself: the external-protocol launch
- * needs a direct press, which is why the page keeps a visible button instead
- * of navigating from the fetch callback.
+ * state keeps a visible button because a browser may refuse an
+ * external-protocol launch that lacks a fresh press; the container attempts
+ * that handoff once on approval so the employee usually never needs it.
  */
 export function DesktopConnectView({
   accountLabel,
@@ -405,6 +405,7 @@ export default function DesktopConnect({
   const [status, setStatus] = useState<ConnectStatus>("idle");
   const [error, setError] = useState("");
   const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
+  const companionHandoffAttempted = useRef(false);
   const requestValid = challenge.length >= 43 && state.length >= 16 && redirectUri === "wrazy-workos://auth";
   const requestPresent = Boolean(challenge || state || redirectUri);
   const selected = selectable.find((workspace) => workspace.organizationId === organizationId) ?? null;
@@ -444,14 +445,25 @@ export default function DesktopConnect({
     }
   }
 
-  function openCompanion() {
+  const openCompanion = useCallback(() => {
     if (!callbackUrl) return;
     window.location.assign(callbackUrl);
-  }
+  }, [callbackUrl]);
+
+  // The employee just approved, so try the companion handoff immediately
+  // instead of making them press again. Keep the visible action as the
+  // fallback: a browser may refuse a custom-protocol launch without a fresh
+  // press. One attempt per approval keeps a refused launch from looping.
+  useEffect(() => {
+    if (status !== "authorized" || !callbackUrl || companionHandoffAttempted.current) return;
+    companionHandoffAttempted.current = true;
+    openCompanion();
+  }, [callbackUrl, openCompanion, status]);
 
   function startOver() {
     setCallbackUrl(null);
     setAuthorizedOrganizationId(null);
+    companionHandoffAttempted.current = false;
     setError("");
     setStatus("idle");
   }

@@ -215,13 +215,19 @@ test("authorization passes its submitted workspace to the approved receipt", () 
   assert.match(connect, /organization_id:\s*selected\.organizationId/);
 });
 
-test("the desktop connect screen only opens the companion from a direct action", () => {
+test("the approved screen attempts the companion handoff automatically, once", () => {
   const connect = source("src/app/work-os/desktop/connect/DesktopConnect.tsx");
-  const approve = connect.slice(connect.indexOf("async function approve"), connect.indexOf("function openCompanion"));
+  const approve = connect.slice(connect.indexOf("async function approve"), connect.indexOf("const openCompanion"));
   assert.doesNotMatch(approve, /window\.location\.assign/);
-  assert.match(connect, /function openCompanion[\s\S]*window\.location\.assign/);
+  assert.match(connect, /const companionHandoffAttempted = useRef\(false\)/);
+  assert.match(connect, /useEffect\(\(\) => \{[\s\S]{0,240}companionHandoffAttempted\.current = true;[\s\S]{0,80}openCompanion\(\);/);
+  assert.match(connect, /startOver[\s\S]{0,200}companionHandoffAttempted\.current = false;/);
+  const openCompanionStart = connect.indexOf("const openCompanion");
+  const openCompanion = connect.slice(openCompanionStart, connect.indexOf("useEffect(", openCompanionStart));
+  assert.match(openCompanion, /window\.location\.assign\(callbackUrl\)/);
   assert.match(connect, /function returnToWorkOs[\s\S]*window\.location\.assign\("\/work-os"\)/);
   assert.doesNotMatch(connect, /window\.close\(\)/);
+  assert.match(connect, /onClick=\{onOpenCompanion\}/);
 });
 
 test("both shells show the active workspace and a switch when one exists", () => {

@@ -410,13 +410,14 @@ explicit and visible, never an implicit oldest or most-privileged membership:
   it authorizes the device; the resulting device session is bound to that
   workspace. A workspace without a mapped workday is not offered as a companion
   choice, and the screen says so.
-- The browser round-trip keeps its handoff explicit. After approval the web
-  screen shows the authorized device and one `Open Work OS` action, because an
-  external-protocol launch needs the employee's own press; it never navigates
-  away from the fetch callback, where the success state would be lost. The
-  companion keeps a visible waiting state with a `Reopen browser` action until
-  the callback lands, and the page names the signed-in account and the chosen
-  workspace before the decision.
+- The browser round-trip hands off automatically. After approval the web screen
+  keeps the authorized device on screen and attempts the companion handoff once
+  as soon as the callback is issued, so the employee does not have to press
+  again. Because a browser may refuse an external-protocol launch without a
+  fresh press, the same `Open Work OS` action stays visible as the fallback.
+  The companion keeps a visible waiting state with a `Reopen browser` action
+  until the callback lands, and the page names the signed-in account and the
+  chosen workspace before the decision.
 
 ## 5. Dashboard blueprint
 
