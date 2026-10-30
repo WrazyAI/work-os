@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Planning from a Loom transcript now waits for the full analysis instead of timing out.
+
 ## 0.5.15 — 2026-10-29
 
 - Connecting a new PC now ends on a clear authorized screen instead of a blank browser tab.

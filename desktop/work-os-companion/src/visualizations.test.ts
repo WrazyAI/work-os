@@ -359,6 +359,12 @@ describe("operational visualizations", () => {
     expect(taskSurfaces).not.toContain("onToggle={() => { onClose(); onToggleSubtask(subtask); }}");
   });
 
+  it("keeps planning deadlines above the server model budgets", () => {
+    expect(app).toContain("signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS)");
+    expect(app).toContain("signal: AbortSignal.timeout(PLAN_REFINE_TIMEOUT_MS)");
+    expect(avatarApp.match(/AbortSignal\.timeout\(PLAN_INTERPRET_TIMEOUT_MS\)/g)?.length).toBe(2);
+  });
+
   it("treats keyboard and readable secondary text as part of the polish", () => {
     expect(app).toContain("moveMenuFocus");
     expect(taskSurfaces).toContain("function moveMenuFocus");

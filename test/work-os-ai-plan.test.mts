@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPlanRefinePrompt, buildPlanningPrompt, LOOM_ONLY_PLAN_INTENT, parsePlanInterpretation, resolvePlanIntent } from "../src/lib/aiPlan";
+import { AI_TIMEOUTS } from "../src/lib/work-os-ai-model";
+import { PLAN_INTERPRET_TIMEOUT_MS, PLAN_REFINE_TIMEOUT_MS } from "../src/modules/work-os/plan-timeouts";
+
+test("client planning deadlines outlast the server's sequential model budgets", () => {
+  assert.ok(PLAN_INTERPRET_TIMEOUT_MS >= AI_TIMEOUTS.loom + AI_TIMEOUTS.plan, "plan interpretation must outlast the Loom analysis plus plan generation");
+  assert.ok(PLAN_REFINE_TIMEOUT_MS >= AI_TIMEOUTS.plan, "plan refinement must outlast plan generation");
+});
 
 const context = {
   date: "2026-09-04",

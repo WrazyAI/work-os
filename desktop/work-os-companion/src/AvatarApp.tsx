@@ -24,6 +24,7 @@ import { OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, adm
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
 import { createAvatarContextController, type AvatarSessionIdentity } from "./adminOtto/avatarContext";
 import type { OttoScope } from "../../../src/modules/work-os/admin-otto/contracts";
+import { PLAN_INTERPRET_TIMEOUT_MS } from "../../../src/modules/work-os/plan-timeouts";
 import { personalBootstrapAccess, type PersonalBootstrapRole } from "./adminOtto/personalBootstrap";
 import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
 import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from "./adminOtto/delivery";
@@ -2323,6 +2324,7 @@ export default function AvatarApp(): React.ReactElement {
       ).slice(-8).map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text }));
       const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
         method: "POST",
+        signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS),
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
       const interpretation = { ...result.interpretation, buildId: result.build_id };
@@ -2366,6 +2368,7 @@ export default function AvatarApp(): React.ReactElement {
       );
       const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
         method: "POST",
+        signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS),
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
       const next = { ...result.interpretation, buildId: result.build_id };

@@ -21,6 +21,7 @@ import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, Ca
 import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
 import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import { PLAN_INTERPRET_TIMEOUT_MS, PLAN_REFINE_TIMEOUT_MS } from "../../../src/modules/work-os/plan-timeouts";
 import { beginAuthentication, discardPendingAuthentication, errorMessage, listenForAuthentication, reopenPendingAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
@@ -3601,7 +3602,7 @@ export default function App() {
     }
     const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
       method: "POST",
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS),
       body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })), ...(loom ? { loom } : {}) }),
     });
     return { ...result.interpretation, buildId: result.build_id };
@@ -3629,7 +3630,7 @@ export default function App() {
     }
     const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/refine", {
       method: "POST",
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(PLAN_REFINE_TIMEOUT_MS),
       body: JSON.stringify({
         input,
         date: visibleDay.shiftDate,
