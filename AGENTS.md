@@ -222,11 +222,18 @@ release. Web deployments do not use this threshold. Read
   asset verification and publication guards. This policy/tooling change itself
   is not a companion update and must not trigger a version bump.
 
+- The companion release line moves one patch from the latest **published**
+  companion version. If `package.json` already holds an unpublished candidate
+  from a cancelled or failed attempt, preserve and retry that candidate once
+  eligible instead of skipping another patch.
 - Companion releases must synchronize `package.json`, `tauri.conf.json`, and
   `Cargo.toml`, and move the release section out of `## Unreleased` in
-  `CHANGELOG.md` using the ship date. CI fails without it; the GitHub release
-  notes and What's New modal are built from that section. Write entries for the
-  employee who just installed the update.
+  `CHANGELOG.md` using the ship date. Use the same canonical SemVer in the
+  changelog heading; the release tag and the app's display pad the patch
+  segment to two digits (`work-os-companion-internal-v0.5.02`, shown as
+  0.5.02). CI fails without it; the GitHub release notes and What's New modal
+  are built from that section. Write entries for the employee who just
+  installed the update.
 
 ## Other surfaces
 
