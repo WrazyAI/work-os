@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.17 — 2026-10-30
+
 - Reviewing Otto's proposed memories now shows when a decision is saving and lets you discard a proposal.
 - Tasks now have a quick actions menu in your task list and task details.
 - You can mark a task In progress, and tasks past their due date stay Overdue until the date changes.
