@@ -173,7 +173,7 @@ test("calendar validation accepts real days and rejects malformed or impossible 
 });
 
 test("migration adds constrained workflow status and indexed assignment provenance", () => {
-  const sql = readFileSync(new URL("../supabase/migrations/0065_work_task_assignment_and_status.sql", import.meta.url), "utf8");
+  const sql = readFileSync(new URL("../supabase/migrations/0066_work_task_assignment_and_status.sql", import.meta.url), "utf8");
   assert.match(sql, /alter table public\.work_tasks/);
   assert.match(sql, /add column if not exists workflow_status text not null default 'pending'/);
   assert.match(sql, /check \(workflow_status in \('pending',\s*'in_progress'\)\)/);

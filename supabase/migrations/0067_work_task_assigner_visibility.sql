@@ -1,4 +1,4 @@
--- 0066: an assigner sees the work they delegated. The capability matrix lets
+-- 0067: an assigner sees the work they delegated. The capability matrix lets
 -- an assigner manage a task, so the attribution rule must also return it in
 -- their lists: both server-paginated task functions add `assigned_by_person_id`
 -- to the assignee/provider predicate. Function bodies are otherwise unchanged.

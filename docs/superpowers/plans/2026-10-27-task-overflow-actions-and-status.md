@@ -41,7 +41,7 @@
 ### Task 1: Status and assignment model with the pure permission core
 
 **Files:**
-- Create: `supabase/migrations/0065_work_task_assignment_and_status.sql`
+- Create: `supabase/migrations/0066_work_task_assignment_and_status.sql`
 - Create: `src/lib/work-os-task-permissions.ts`
 - Create: `test/work-os-task-permissions.test.mts`
 
@@ -86,7 +86,7 @@ Expected: FAIL — module not found / migration missing.
 
 - [ ] **Step 3: Write the migration**
 
-`0065_work_task_assignment_and_status.sql`:
+`0066_work_task_assignment_and_status.sql`:
 
 ```sql
 alter table public.work_tasks
@@ -122,7 +122,7 @@ Expected: PASS, all subtests.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/migrations/0065_work_task_assignment_and_status.sql src/lib/work-os-task-permissions.ts test/work-os-task-permissions.test.mts
+git add supabase/migrations/0066_work_task_assignment_and_status.sql src/lib/work-os-task-permissions.ts test/work-os-task-permissions.test.mts
 git commit -m "feat(work-os): add task assignment provenance and workflow status"
 ```
 
@@ -586,7 +586,7 @@ Capture screenshots and note any gap. TestSprite: if the companion project canno
 
 - [ ] **Step 5: Apply the migration to a disposable target first**
 
-Resolve the migration target with `npm run db:apply -- supabase/migrations/0065_work_task_assignment_and_status.sql` only after confirming the printed host is the intended database. Verify the columns and the backfill count with a read-only query. Do not replay historical migrations.
+Resolve the migration target with `npm run db:apply -- supabase/migrations/0066_work_task_assignment_and_status.sql` only after confirming the printed host is the intended database. Verify the columns and the backfill count with a read-only query. Do not replay historical migrations.
 
 - [ ] **Step 6: Commit**
 

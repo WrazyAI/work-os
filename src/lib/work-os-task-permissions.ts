@@ -58,7 +58,7 @@ export function taskCapabilities(task: Record<string, any>, actor: TaskActor, to
     && task.assignee_person_ids.includes(actor.personId);
   const assignerId = taskAssignerId(task);
   // A null assigner means the record has no assigner at all, so only an
-  // administrator may manage it. The 0065 single-assignee backfill already
+  // administrator may manage it. The 0066 single-assignee backfill already
   // gave legacy single-assignee rows their assigner; the old runtime fallback
   // let an unmapped admin's assignment hand management to an assignee.
   const isAssigner = actor.personId !== null && assignerId !== null && assignerId === actor.personId;

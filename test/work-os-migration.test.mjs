@@ -68,8 +68,8 @@ const migrations = [
     "neon/migrations/0041_work_activity_intervals.sql",
     "supabase/migrations/0058_work_os_member_ui_state.sql",
     "supabase/migrations/0061_work_os_membership_determinism.sql",
-    "supabase/migrations/0065_work_task_assignment_and_status.sql",
-    "supabase/migrations/0066_work_task_assigner_visibility.sql",
+    "supabase/migrations/0066_work_task_assignment_and_status.sql",
+    "supabase/migrations/0067_work_task_assigner_visibility.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -310,7 +310,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
            ($1,$2,'task.created','work_os_task','nifty-provider-sub'),
            ($1,$3,'task.created','work_os_task','local-orphan-audit')
   `, [orgB, legacyUser.rows[0].id, orphanAuditUser.rows[0].id]);
-  await db.exec(await readFile("supabase/migrations/0065_work_task_assignment_and_status.sql", "utf8"));
+  await db.exec(await readFile("supabase/migrations/0066_work_task_assignment_and_status.sql", "utf8"));
   const backfilled = await db.query(`
     select provider_task_id, assigned_by_person_id, workflow_status from work_tasks
     where provider_task_id = any($1) order by provider_task_id
