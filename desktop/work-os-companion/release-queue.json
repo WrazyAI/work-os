@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "updates": [
+    {
+      "id": "memory-proposal-review-decisions",
+      "type": "fix",
+      "summary": "Reviewing proposed memories shows saving progress and lets you discard a proposal.",
+      "verification": "8187594c, d4685d10: memory review decision and modal regression checks; recorded in Unreleased changelog."
+    },
+    {
+      "id": "task-quick-actions-menu",
+      "type": "feature",
+      "summary": "Tasks have a quick actions menu in your task list and task details.",
+      "verification": "5f7c36e8: completed task-action review and verification; recorded in Unreleased changelog."
+    },
+    {
+      "id": "task-progress-overdue-unlock",
+      "type": "feature",
+      "summary": "Mark tasks In progress; overdue tasks require a new due date before their status changes.",
+      "verification": "47fadeb3, 354e5478: due-date unlock and task-status review fixes; recorded in Unreleased changelog."
+    },
+    {
+      "id": "administrator-task-assignment",
+      "type": "feature",
+      "summary": "Administrators can assign tasks and manage them from the organization task record.",
+      "verification": "cd736e84, 5f7c36e8: assignment scope and task-action review fixes; recorded in Unreleased changelog."
+    }
+  ],
+  "emergency": null
+}

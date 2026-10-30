@@ -193,6 +193,35 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
   asset checks, rollback on failure). Never build over a running server's
   active `.next` tree. Verify the deployed commit, assets, and a representative
   live flow afterward.
+### Companion release cadence (mandatory)
+
+Companion installer/updater releases require **five distinct, completed and
+verified employee-facing features or fixes** since the last published companion
+release. Web deployments do not use this threshold. Read
+`docs/companion-release-policy.md` before preparing a companion release.
+
+- After completing a companion outcome, append one stable-ID record to
+  `desktop/work-os-companion/release-queue.json` with a short summary and actual
+  verification reference, and add its plain-language `## Unreleased` note.
+  Count outcomes, not commits, agent runs, refactors, or changelog bullets;
+  do not split one outcome into multiple records to reach five.
+- Run `npm run companion:release:status`. Updates one through four are merged
+  without changing app versions, creating release tags, or dispatching packaging.
+  The agent landing the fifth update prepares the next patch and releases the
+  whole pending batch. Rebase first so concurrent agents share the same count.
+- The queue is append-only, including unpublished records. Never remove,
+  rewrite, rename, or reset entries. The latest **published** internal release
+  snapshot marks consumed outcomes; drafts, bare tags and failed builds do not.
+- Below five, the only exception is an emergency fix that restores a broken app
+  or unblocks essential functionality. Commit an `emergency` record naming the
+  candidate version, pending fix ID, broken behavior and restored behavior. A
+  routine improvement, deadline or desire to ship is not an emergency. Clear
+  that record when preparing the next version; never reuse the exception.
+- All release entry points go through the free Linux gate before paid packaging;
+  manual dispatch or a tag is not an override. Preserve signing, packaged startup,
+  asset verification and publication guards. This policy/tooling change itself
+  is not a companion update and must not trigger a version bump.
+
 - Companion releases must synchronize `package.json`, `tauri.conf.json`, and
   `Cargo.toml`, and move the release section out of `## Unreleased` in
   `CHANGELOG.md` using the ship date. CI fails without it; the GitHub release

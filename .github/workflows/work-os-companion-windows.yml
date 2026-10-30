@@ -39,8 +39,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    name: Require five completed companion updates before paid builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      eligible: ${{ steps.gate.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Validate the published baseline and cumulative release queue
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: node scripts/work-os-companion-release-gate.mjs check
+
   unsigned-windows-release:
     name: Build unsigned Windows packages with signed updater artifacts
+    needs: release-gate
+    # Failed-job reruns reuse successful job outputs. Retry via a fresh dispatch
+    # so the live published baseline is checked before allocating paid runners.
+    if: github.run_attempt == 1 && needs.release-gate.outputs.eligible == 'true'
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
@@ -340,6 +365,7 @@ jobs:
   unsigned-macos-release:
     name: Build internal universal macOS packages
     needs: unsigned-windows-release
+    if: github.run_attempt == 1
     runs-on: macos-14
     timeout-minutes: 60
     environment: windows-production-release
@@ -429,6 +455,7 @@ jobs:
   finalize-release:
     name: Verify combined assets and publish internal release
     needs: [unsigned-windows-release, unsigned-macos-release]
+    if: github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -442,6 +469,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -457,6 +485,11 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --dir "$verify"
           cd "$verify"
           sha256sum --check SHA256SUMS.txt
+      - name: Recheck the release queue immediately before publication
+        if: needs.unsigned-windows-release.outputs.publish == 'true'
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: node scripts/work-os-companion-release-gate.mjs verify
       - name: Publish explicitly unsigned internal prerelease
         if: needs.unsigned-windows-release.outputs.publish == 'true'
         run: gh release edit "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --draft=false --prerelease
