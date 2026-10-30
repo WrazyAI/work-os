@@ -36,6 +36,10 @@ During implementation another agent started the pre-policy 0.5.17 build at
 `eb1784f50b3453ca39e499b3b2ae867af159547b`. Its four outcomes are archived in
 `release-baselines/0.5.17.json`: they remain pending until that exact source is
 published, then count as consumed. This does not authorize another early release.
+That old-pipeline run was subsequently cancelled: its four outcomes are still
+pending. Do not restart it below five. Preserve the reserved 0.5.17 metadata;
+when the fifth outcome lands, use a fresh dispatch if the version is already
+reserved rather than skipping to 0.5.18 or making a cosmetic bump to trigger CI.
 
 ## Updates one through four
 
@@ -54,7 +58,9 @@ a release tag or manually run packaging. Web changes may deploy normally.
    **never clear the queue**, even after release.
 5. Run the usual verification, merge the version bump into main, and monitor
    the single automatic release pipeline. No separate tag push/manual dispatch
-   is needed: those would only enqueue redundant preflights.
+   is normally needed: those would only enqueue redundant preflights. If an
+   unpublished version is already reserved after a cancelled/failed attempt,
+   keep that version and start one fresh dispatch once the batch is eligible.
 6. Verify publication and the installer/updater flow, not just workflow exit.
 
 If more than five outcomes accumulate before the release snapshot, release all
