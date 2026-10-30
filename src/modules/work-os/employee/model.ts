@@ -11,7 +11,7 @@ export type AnyRow = Record<string, any>;
 export interface EmployeeDayResponse {
   at: string;
   shiftDate: string;
-  access?: { featureFlags?: Record<string, boolean>; capabilities?: { voice_input?: boolean } };
+  access?: { personId?: string | null; featureFlags?: Record<string, boolean>; capabilities?: { voice_input?: boolean } };
   shift: {
     startsAt: string;
     endsAt: string;

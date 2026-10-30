@@ -182,11 +182,14 @@ export default function EmployeeTasks() {
   // Optimistic add: the row stays visible as syncing until the server
   // confirms it, and a failed add keeps the text with Retry / Discard.
   const createTask = useMutation({
-    mutationFn: ({ pending }: { pending: PendingTask }) => fetchJson("/api/work-os/me/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": pending.idempotencyKey },
-      body: JSON.stringify({ name: pending.title, description: pending.description || undefined }),
-    }),
+    mutationFn: ({ pending }: { pending: PendingTask }) => {
+      if (!day.data?.access?.personId) throw new Error("Your workday is still loading. Try again when it is ready.");
+      return fetchJson("/api/work-os/me/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": pending.idempotencyKey },
+        body: JSON.stringify({ name: pending.title, description: pending.description || undefined, assignee_person_ids: [day.data.access.personId] }),
+      });
+    },
     onSuccess: (_data, { pending }) => {
       setPendingTasks((current) => current.filter((item) => item.id !== pending.id));
       void refresh();
