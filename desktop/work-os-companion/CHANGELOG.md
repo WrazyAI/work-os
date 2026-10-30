@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.16 — 2026-10-30
+
 - Planning from a Loom transcript now waits for the full analysis instead of timing out.
 
 ## 0.5.15 — 2026-10-29
