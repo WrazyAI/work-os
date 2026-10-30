@@ -32,6 +32,10 @@ verification references are an agent responsibility, not proof inferred by CI.
 
 The initial queue preserves the four existing Unreleased employee outcomes
 since published 0.5.16. Release-cadence tooling does not add a fifth outcome.
+During implementation another agent started the pre-policy 0.5.17 build at
+`eb1784f50b3453ca39e499b3b2ae867af159547b`. Its four outcomes are archived in
+`release-baselines/0.5.17.json`: they remain pending until that exact source is
+published, then count as consumed. This does not authorize another early release.
 
 ## Updates one through four
 
@@ -100,7 +104,9 @@ consumed like any other; clear the emergency record before the next bump.
   release publication must not bypass this workflow; repository administrators
   still control permissions and can change workflows or release objects.
 - Missing or malformed post-policy snapshots fail closed. Only the known
-  pre-policy 0.5.16 baseline has an empty historical queue.
+  pre-policy 0.5.16 baseline has an empty historical queue; the already-running
+  pre-policy 0.5.17 build has one source-pinned historical snapshot. No API/read
+  error can create a new baseline.
 
 ## Verification commands
 

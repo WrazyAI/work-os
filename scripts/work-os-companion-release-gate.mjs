@@ -191,6 +191,17 @@ function publishedSnapshot(repository, release) {
   // empty state, or a provider outage could make consumed updates count twice.
   if (release.version === INITIAL_VERSION) return { schemaVersion: 1, updates: [], emergency: null };
   if (compare(release.version, INITIAL_VERSION) < 0) throw new Error("Published release is older than the policy baseline");
+  // This exact pre-policy build was already running when the gate was added.
+  // Its tag cannot contain a queue yet. Pin both catalog target and resolved
+  // commit; publication, never the running build/draft, consumes its snapshot.
+  if (release.version === "0.5.17") {
+    const legacy = JSON.parse(readFileSync(new URL("../desktop/work-os-companion/release-baselines/0.5.17.json", import.meta.url), "utf8"));
+    if (release.target_commitish === legacy.sourceCommit) {
+      const tag = JSON.parse(command("gh", ["api", `repos/${repository}/commits/${encodeURIComponent(release.tag_name)}`]));
+      if (tag.sha !== legacy.sourceCommit) throw new Error("Pre-policy release tag no longer matches its recorded source commit");
+      return validateQueue(legacy.queue);
+    }
+  }
   const response = JSON.parse(command("gh", ["api", `repos/${repository}/contents/${QUEUE_PATH}?ref=${encodeURIComponent(release.tag_name)}`]));
   if (response.encoding !== "base64" || typeof response.content !== "string") throw new Error("Published release queue snapshot is missing");
   return validateQueue(JSON.parse(Buffer.from(response.content, "base64").toString("utf8")));

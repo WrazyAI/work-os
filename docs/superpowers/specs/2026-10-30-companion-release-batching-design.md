@@ -14,6 +14,10 @@ ordinary CI, and the scheduled macOS validation workflow remain unchanged.
   release tag, using the complete GitHub release catalog. Drafts, bare tags and
   failed builds consume nothing. For the pre-policy 0.5.16 baseline, consumed
   updates are empty. Never fall back to an empty queue on a provider/read error.
+  Reconciliation: another agent started pre-policy 0.5.17 at
+  `eb1784f50b3453ca39e499b3b2ae867af159547b` during implementation. Archive its
+  four-outcome snapshot and consume it only after that exact commit publishes;
+  validate both catalog target and resolved tag before using the exception.
 - An emergency below five requires a pending fix ID, the candidate version,
   the broken essential behavior and how the fix restores it, committed in the
   queue. No free-form dispatch flag bypasses the policy. Agents may use this

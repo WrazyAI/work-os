@@ -168,6 +168,8 @@ if (args[1].includes('/releases?')) {
 } else if (args[1].includes('/contents/')) {
   if (!data.snapshot) { console.error('snapshot missing'); process.exit(4); }
   console.log(JSON.stringify({encoding:'base64',content:Buffer.from(JSON.stringify(data.snapshot)).toString('base64')}));
+} else if (args[1].includes('/commits/')) {
+  console.log(JSON.stringify({sha:data.tagCommit}));
 } else process.exit(5);
 `, { mode: 0o755 });
   const published = (v = "0.5.16", draft = false) => ({ tag_name: `work-os-companion-internal-v${v}`, draft, published_at: draft ? null : "2026-10-30T00:00:00Z" });
@@ -285,6 +287,24 @@ test("CLI counts only published snapshots across pages, not a newer draft", (t) 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).pendingCount, 1);
   assert.match(result.output, /eligible=false\n/);
+});
+
+test("the already in-flight pre-policy 0.5.17 batch is consumed only after its pinned source publishes", (t) => {
+  const fixture = repository(t, 0, "0.5.17");
+  const initial = JSON.parse(readFileSync(new URL("../desktop/work-os-companion/release-baselines/0.5.17.json", import.meta.url), "utf8")).queue;
+  fixture.write(queuePath, initial);
+  fixture.commit();
+  const before = fixture.run("status");
+  assert.equal(before.status, 0, before.stderr);
+  assert.equal(JSON.parse(before.stdout).pendingCount, 4);
+  const source = "eb1784f50b3453ca39e499b3b2ae867af159547b";
+  fixture.setProvider({ pages: [[{ ...fixture.published("0.5.17"), target_commitish: source }]], tagCommit: source });
+  const after = fixture.run("status");
+  assert.equal(after.status, 0, after.stderr);
+  assert.equal(JSON.parse(after.stdout).pendingCount, 0);
+  assert.equal(JSON.parse(after.stdout).eligible, false);
+  fixture.setProvider({ pages: [[{ ...fixture.published("0.5.17"), target_commitish: source }]], tagCommit: "different-commit" });
+  assert.notEqual(fixture.run("status").status, 0, "a recreated/moved tag cannot claim the legacy snapshot");
 });
 
 test("CLI rejects source commits outside main and unpublished queue entries removed from history", (t) => {
