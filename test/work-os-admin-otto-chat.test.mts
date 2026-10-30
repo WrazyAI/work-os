@@ -1634,10 +1634,12 @@ test("model_backed_reports_exclude_task_events_and_keep_true_totals", async () =
       reply: "",
       intent: readIntent("reports", { kind: "names", names: ["David"] }, { relativeDay: "yesterday" }),
     });
-    const result = await chatWith(async () => null, { text: "What did David report yesterday?" }, { interpret });
+    const result = await chatWith(async () => null, { text: "What did David report about the organization yesterday?" }, { interpret });
     const page = expectKind(result.result, "records").page;
     assert.equal(page.total, 2, "one authored update and one EOD report; no task event");
     assert.ok(page.items.every((item) => item.source === "update" || item.source === "submitted_eod"));
+    assert.deepEqual(resultWindows(result.result).map((window) => window.personId), [personC],
+      "the word organization does not widen a named request to the whole team");
     assert.match(result.reply, /report/i);
   } finally { await f.close(); }
 });

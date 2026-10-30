@@ -1854,5 +1854,7 @@ function pluralPronounFollowUp(text: string): boolean {
 }
 
 function explicitTeam(text: string): boolean {
-  return /\b(team|everyone|everybody|all employees|whole team|whole company|organization)\b/i.test(text);
+  // "Organization" alone is usually the subject of a record question, not the
+  // requested target. Require an explicit whole-team phrase.
+  return /\b(team|everyone|everybody|all employees|whole team|whole company|whole organization)\b/i.test(text);
 }
