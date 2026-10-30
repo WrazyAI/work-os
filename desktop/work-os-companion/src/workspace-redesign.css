@@ -7056,6 +7056,26 @@ button:not(:disabled):active {
   background: #f7faf1;
 }
 
+.memory-card-exiting {
+  animation: memory-card-exit 200ms cubic-bezier(.2,.8,.2,1) forwards;
+  pointer-events: none;
+}
+
+.memory-spinner { animation: memory-spin 800ms linear infinite; }
+.memory-review-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@keyframes memory-card-exit { to { opacity: 0; transform: translateY(-8px); } }
+@keyframes memory-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .memory-card-exiting, .memory-spinner { animation: none; }
+}
+
 .memory-copy {
   min-width: 0;
   display: grid;
@@ -7105,6 +7125,8 @@ button:not(:disabled):active {
   background: #29421e;
   color: #f2f7ec;
 }
+
+.memory-keep[aria-busy="true"] { opacity: 1; }
 
 .memory-keep:hover:not(:disabled) {
   background: #33512a;

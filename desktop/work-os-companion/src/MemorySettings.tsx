@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Check, LoaderCircle, Trash2, X } from "lucide-react";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { useModalScrollLock } from "./modalScrollLock";
@@ -70,30 +70,95 @@ export function MemorySummary({ facts, loading, error, onOpen, onRetry }: {
 export function MemoryReviewSection({ facts, busy, onReview }: {
   facts: MemoryFact[];
   busy: boolean;
-  onReview: (id: string, status: "confirmed" | "rejected") => void;
+  onReview: (id: string, status: "confirmed" | "rejected") => Promise<boolean>;
 }) {
+  const [decision, setDecision] = useState<{ fact: MemoryFact; status: "confirmed" | "rejected"; phase: "saving" | "exiting" } | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const positions = useRef(new Map<string, DOMRect>());
+  const rowAnimations = useRef(new Map<string, Animation>());
+  const initialized = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreFailedFocus = useRef<{ id: string; status: "confirmed" | "rejected" } | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    for (const animation of rowAnimations.current.values()) animation.cancel();
+  }, []);
   const candidates = [...facts].filter((fact) => fact.review_status === "candidate").sort(newestFirst);
+  const visible = decision && !candidates.some((fact) => fact.id === decision.fact.id)
+    ? [...candidates, decision.fact].sort(newestFirst) : candidates;
+  useLayoutEffect(() => {
+    if (!busy && !decision && restoreFailedFocus.current) {
+      const target = restoreFailedFocus.current;
+      restoreFailedFocus.current = null;
+      if (document.activeElement === document.body) {
+        const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? []).find((node) => node.dataset.memoryId === target.id);
+        row?.querySelector<HTMLButtonElement>(target.status === "confirmed" ? ".memory-keep" : ".memory-reject")?.focus();
+      }
+    }
+    const nodes = listRef.current?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? [];
+    const next = new Map<string, DOMRect>();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (const node of nodes) {
+      const id = node.dataset.memoryId!;
+      rowAnimations.current.get(id)?.cancel();
+      rowAnimations.current.delete(id);
+      const rect = node.getBoundingClientRect();
+      next.set(id, rect);
+      const previous = positions.current.get(id);
+      if (!reduced && previous && typeof node.animate === "function") {
+        const x = previous.left - rect.left, y = previous.top - rect.top;
+        if (x || y) rowAnimations.current.set(id, node.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: "translate(0, 0)" }], { duration: 200, easing: "cubic-bezier(.2,.8,.2,1)" }));
+      } else if (!reduced && !previous && initialized.current && typeof node.animate === "function") {
+        rowAnimations.current.set(id, node.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 200, easing: "cubic-bezier(.2,.8,.2,1)" }));
+      }
+    }
+    for (const [id, animation] of rowAnimations.current) {
+      if (!next.has(id)) { animation.cancel(); rowAnimations.current.delete(id); }
+    }
+    positions.current = next;
+    initialized.current = true;
+  });
+  const review = async (fact: MemoryFact, status: "confirmed" | "rejected") => {
+    if (busy || decision) return;
+    setDecision({ fact, status, phase: "saving" });
+    setAnnouncement(status === "confirmed" ? "Saving fact…" : "Discarding fact…");
+    try {
+      const result = await onReview(fact.id, status);
+      if (result !== true) { restoreFailedFocus.current = { id: fact.id, status }; setAnnouncement(""); setDecision(null); return; }
+      setDecision({ fact, status, phase: "exiting" });
+      setAnnouncement(status === "confirmed" ? "Fact kept." : "Fact discarded.");
+      if (listRef.current?.contains(document.activeElement) || document.activeElement === document.body) document.getElementById("memory-tab-review")?.focus();
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      timer.current = setTimeout(() => setDecision(null), reduced ? 0 : 200);
+    } catch {
+      restoreFailedFocus.current = { id: fact.id, status };
+      setAnnouncement("");
+      setDecision(null);
+    }
+  };
   return <section className="memory-section review" aria-labelledby="memory-review-title">
     <header className="memory-section-head">
       <h4 id="memory-review-title">Waiting for your review</h4>
       <span className="memory-count" aria-label={`${candidates.length} waiting for review`}>{candidates.length}</span>
     </header>
-    {candidates.length ? (
-      <div className="memory-cards">
-        {candidates.map((fact) => (
-          <article className="memory-card" key={fact.id}>
+    {visible.length ? (
+      <div className="memory-cards" ref={listRef}>
+        {visible.map((fact) => (
+          <article className={`memory-card${decision?.fact.id === fact.id && decision.phase === "exiting" ? " memory-card-exiting" : ""}`} data-memory-id={fact.id} key={fact.id}>
             <div className="memory-copy">
               <strong>{fact.content}</strong>
               <small>Proposed {memoryDateLabel(fact)}</small>
             </div>
             <div className="memory-actions">
-              <button type="button" className="memory-keep" disabled={busy} onClick={() => onReview(fact.id, "confirmed")}><Check size={14} aria-hidden="true" /> Keep</button>
-              <button type="button" className="memory-reject" disabled={busy} onClick={() => onReview(fact.id, "rejected")}><X size={14} aria-hidden="true" /> Not true</button>
+              <button type="button" className="memory-keep" aria-busy={decision?.fact.id === fact.id && decision.status === "confirmed" && decision.phase === "saving"} disabled={busy || !!decision} onClick={() => void review(fact, "confirmed")}>{decision?.fact.id === fact.id && decision.status === "confirmed" && decision.phase === "saving" ? <><LoaderCircle size={14} className="memory-spinner" aria-hidden="true" /> Saving…</> : <><Check size={14} aria-hidden="true" /> {decision?.fact.id === fact.id && decision.status === "confirmed" && decision.phase === "exiting" ? "Kept" : "Keep"}</>}</button>
+              <button type="button" className="memory-reject" disabled={busy || !!decision} onClick={() => void review(fact, "rejected")}><X size={14} aria-hidden="true" /> {decision?.fact.id === fact.id && decision.status === "rejected" ? (decision.phase === "saving" ? "Discarding…" : "Discarded") : "Discard"}</button>
             </div>
           </article>
         ))}
       </div>
     ) : <p className="memory-empty">Nothing is waiting for your review. {MASCOT.name} asks before remembering anything new.</p>}
+    <span className="memory-review-status" role="status">{announcement}</span>
   </section>;
 }
 
@@ -165,14 +230,14 @@ export function MemoryActivitySection({ recent, busy, onForget }: {
 /**
  * The facts modal. Two peer tabs — what needs a decision, and what has been
  * kept (with the dated activity beneath it) — so the settings summary can stay
- * compact while every fact keeps its Keep / Not true / Forget behavior.
+ * compact while every fact keeps its Keep / Discard / Forget behavior.
  */
 export function MemoryModal({ facts, recent, busy, error, onReview, onForget, onClose }: {
   facts: MemoryFact[];
   recent: MemoryRecent[];
   busy: boolean;
   error: string | null;
-  onReview: (id: string, status: "confirmed" | "rejected") => void;
+  onReview: (id: string, status: "confirmed" | "rejected") => Promise<boolean>;
   onForget: (id: string) => void;
   onClose: () => void;
 }) {
@@ -267,4 +332,3 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
     </div>,
   );
 }
-

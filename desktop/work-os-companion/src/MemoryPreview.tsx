@@ -35,6 +35,9 @@ export default function MemoryPreview() {
   const [recent, setRecent] = useState(RECENT);
   const [variant, setVariant] = useState<"populated" | "empty">("populated");
   const [open, setOpen] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const params = new URLSearchParams(window.location.search);
   const empty = variant === "empty";
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 17</p><h1>Settings</h1></div></header>
     <main className="page">
@@ -71,9 +74,27 @@ export default function MemoryPreview() {
     {open && <MemoryModal
       facts={empty ? [] : facts}
       recent={empty ? [] : recent}
-      busy={false}
-      error={null}
-      onReview={(id, status) => setFacts((current) => current.map((fact) => fact.id === id ? { ...fact, review_status: status } : fact))}
+      busy={busy}
+      error={error}
+      onReview={async (id, status) => {
+        setBusy(true);
+        setError(null);
+        const delay = Math.min(5000, Math.max(0, Number(params.get("memory-delay")) || 0));
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        if (params.has("memory-fail")) {
+          setError("That fact could not be updated. Try again.");
+          setBusy(false);
+          return false;
+        }
+        setFacts((current) => {
+          const updated = current.map((fact) => fact.id === id ? { ...fact, review_status: status } : fact);
+          return params.has("memory-arrival") && !updated.some((fact) => fact.id === "new-proposal")
+            ? [{ id: "new-proposal", content: "New proposed fact.", review_status: "candidate", fact_key: "new", local_date: "2026-09-18", occurred_at: "2026-09-18T09:00:00.000Z" }, ...updated]
+            : updated;
+        });
+        setBusy(false);
+        return true;
+      }}
       onForget={(id) => {
         setFacts((current) => current.filter((fact) => fact.id !== id));
         setRecent((current) => current.filter((entry) => entry.id !== id));

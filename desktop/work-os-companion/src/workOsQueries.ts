@@ -16,7 +16,7 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
@@ -392,7 +392,7 @@ export function useMemoryQuery(options: { enabled: boolean; pollMs?: number }) {
 /** Keep (confirm) or reject a proposed fact. Nothing is remembered without a
  * keep, and a rejection prevents the same fact from being re-proposed. */
 export function reviewMemoryFact(id: string, status: "confirmed" | "rejected") {
-  return apiRequest(`/api/work-os/me/memory/${encodeURIComponent(id)}`, {
+  return apiRequest<{ fact: Pick<MemoryFact, "id" | "review_status"> }>(`/api/work-os/me/memory/${encodeURIComponent(id)}`, {
     method: "PATCH",
     signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({ status }),

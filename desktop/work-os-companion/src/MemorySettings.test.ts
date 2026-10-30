@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryActivitySection, MemoryFactsSection, MemoryModal, MemoryReviewSection, MemorySummary, type MemoryFact, type MemoryRecent } from "./MemorySettings";
 
 const noop = () => undefined;
+const reviewNoop = async () => true;
 
 const candidate: MemoryFact = {
   id: "f1",
@@ -81,7 +82,7 @@ describe("MemorySummary", () => {
 describe("MemoryModal", () => {
   it("opens on the review tab with peer tab semantics and the keep decision", () => {
     const html = renderToStaticMarkup(
-      createElement(MemoryModal, { facts: [candidate, confirmed], recent: [recent], busy: false, error: null, onReview: noop, onForget: noop, onClose: noop }),
+      createElement(MemoryModal, { facts: [candidate, confirmed], recent: [recent], busy: false, error: null, onReview: reviewNoop, onForget: noop, onClose: noop }),
     );
     expect(html).toContain('role="dialog"');
     expect(html).toContain('role="tablist"');
@@ -91,12 +92,13 @@ describe("MemoryModal", () => {
     expect(html).toContain("Remembered");
     expect(html).toContain("Waiting for your review");
     expect(html).toContain("Keep");
-    expect(html).toContain("Not true");
+    expect(html).toContain("Discard");
+    expect(html).not.toContain("Not true");
   });
 
   it("keeps errors visible inside the dialog", () => {
     const html = renderToStaticMarkup(
-      createElement(MemoryModal, { facts: [], recent: [], busy: false, error: "That fact could not be updated.", onReview: noop, onForget: noop, onClose: noop }),
+      createElement(MemoryModal, { facts: [], recent: [], busy: false, error: "That fact could not be updated.", onReview: reviewNoop, onForget: noop, onClose: noop }),
     );
     expect(html).toContain('class="memory-modal-body"');
     expect(html).toContain('role="alert"');
@@ -108,7 +110,7 @@ describe("Memory sections", () => {
     const oldest: MemoryFact = { ...candidate, id: "old", content: "Oldest proposal.", occurred_at: "2026-09-01T09:00:00.000Z" };
     const newest: MemoryFact = { ...candidate, id: "new", content: "Newest proposal.", occurred_at: "2026-09-20T09:00:00.000Z" };
     const html = renderToStaticMarkup(
-      createElement(MemoryReviewSection, { facts: [oldest, candidate, newest], busy: false, onReview: noop }),
+      createElement(MemoryReviewSection, { facts: [oldest, candidate, newest], busy: false, onReview: reviewNoop }),
     );
     expect(html).toContain('class="memory-section review"');
     expect(html).toContain("Prefers deep work before noon.");
@@ -142,7 +144,7 @@ describe("Memory sections", () => {
   });
 
   it("renders empty states for every class", () => {
-    const review = renderToStaticMarkup(createElement(MemoryReviewSection, { facts: [], busy: false, onReview: noop }));
+    const review = renderToStaticMarkup(createElement(MemoryReviewSection, { facts: [], busy: false, onReview: reviewNoop }));
     expect(review).toContain("Nothing is waiting for your review.");
     const facts = renderToStaticMarkup(createElement(MemoryFactsSection, { facts: [], busy: false, onForget: noop }));
     expect(facts).toContain("No kept facts yet");

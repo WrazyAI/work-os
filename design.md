@@ -1061,7 +1061,10 @@ owns the facts. It carries the same title and model statement, one close
 control, and two peer tabs:
 
 - **Needs review** — proposed facts newest first, each a bordered card with
-  `Keep` and `Not true`, and an honest empty state.
+  `Keep` and `Discard`, and an honest empty state. The chosen action stays
+  pending until the server confirms it; a confirmed row exits and the remaining
+  rows move into place. Reduced motion removes the movement, and errors leave
+  the proposal available to retry.
 - **Remembered** — kept facts as flat rows on hairlines, each with the verified
   glyph, `Kept <month day>`, and `Forget`; beneath a divider, the Recent
   activity feed with its kind label, summary, calendar day, `Forget`, the

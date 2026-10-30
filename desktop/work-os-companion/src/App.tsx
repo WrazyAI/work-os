@@ -43,7 +43,7 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
-import type { RecapNextStepItem } from "./types";
+import type { MemoryView, RecapNextStepItem } from "./types";
 import type { RecapNextStepState } from "./RecapNextStepsCard";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
@@ -2362,10 +2362,17 @@ export default function App() {
     setMemoryBusy(true);
     setMemoryError(null);
     try {
-      await reviewMemoryFact(id, status);
+      const result = await reviewMemoryFact(id, status);
+      if (result.fact?.id !== id || result.fact.review_status !== status) throw new Error("The memory decision was not confirmed. Please retry.");
+      queryClient.setQueryData<MemoryView>(workOsKeys.memory(), (current) => current ? {
+        ...current,
+        facts: current.facts.map((fact) => fact.id === id ? { ...fact, ...result.fact } : fact),
+      } : current);
       await queryClient.invalidateQueries({ queryKey: workOsKeys.memory() });
+      return true;
     } catch (value) {
       setMemoryError(errorMessage(value, "That fact could not be updated."));
+      return false;
     } finally {
       setMemoryBusy(false);
     }
@@ -4858,7 +4865,7 @@ export default function App() {
       recent={memoryQuery.data?.recent ?? []}
       busy={memoryBusy}
       error={memoryError}
-      onReview={(id, status) => void reviewMemory(id, status)}
+      onReview={reviewMemory}
       onForget={(id) => void forgetMemory(id)}
       onClose={() => { setMemoryOpen(false); setMemoryError(null); }}
     />}
