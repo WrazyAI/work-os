@@ -48,7 +48,7 @@ function safeError(error: unknown) {
 
 function outageMessage(reason: AdminOttoIntentUnavailableError["reason"]): string {
   if (reason === "ai_unconfigured") return "Admin Otto is not configured on this server.";
-  if (reason === "ai_malformed") return "Admin Otto could not understand that request. Retry with a clearer read request.";
+  if (reason === "ai_malformed") return "Admin Otto couldn't produce a valid answer. Retry that request.";
   return "Admin Otto is temporarily unavailable. Retry.";
 }
 

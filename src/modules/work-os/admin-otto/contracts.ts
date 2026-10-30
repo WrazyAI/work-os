@@ -1,7 +1,12 @@
 /** Shared wire contracts only. Safe for companion type-only imports. */
 export type OttoScope = { userId: string; organizationId: string; mode: "admin" | "employee" };
 export type PersonRef = { id: string; displayName: string; active: boolean; timezone: string };
-export type Target = { kind: "team" } | { kind: "names"; names: string[] } | { kind: "ids"; ids: string[] };
+export type Target = { kind: "team" }
+  | { kind: "names"; names: string[] }
+  | { kind: "ids"; ids: string[] }
+  /** The people the server already resolved for this conversation. Used only
+   * for a pronoun or follow-up, never for a new name. */
+  | { kind: "context" };
 export type Resolution = { kind: "resolved"; people: PersonRef[] }
   | { kind: "missing"; name: string }
   | { kind: "ambiguous"; name: string; choices: PersonRef[] };
@@ -31,9 +36,11 @@ export type TaskCard = {
 export type LocalWindow = { personId: string; timezone: string; from: string; through: string };
 export type WorkRecord = { id: string; personId: string; source: "update" | "submitted_eod" | "task" | "reviewed_recap" | "workday";
   occurredAt: string | null; localDate: string; text: string; recordUrl: string };
-export type ReadIntent = { action: "unfinished" | "records" | "recaps" | "read_recap" | "workday";
+export type AdminRecordAction = "records" | "reports" | "eods";
+export type ReadIntent = { action: "unfinished" | AdminRecordAction | "recaps" | "read_recap" | "workday";
   target: Target; date: string | null; from: string | null; through: string | null;
-  relativeDay: "today" | "yesterday" | null; overdueOnly: boolean; latest: boolean };
+  relativeDay: "today" | "yesterday" | "this_week" | "last_week" | null;
+  overdueOnly: boolean; latest: boolean };
 export type AdminRead = { kind: "tasks"; page: Page<TaskCard>; people: PersonRef[] }
   | { kind: "records"; page: Page<WorkRecord>; windows: LocalWindow[] }
   | { kind: "recaps"; page: Page<ReviewedRecap> }

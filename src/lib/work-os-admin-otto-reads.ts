@@ -614,18 +614,19 @@ export async function countAdminTaskRecord(access: WorkOsAccess, input: {
   };
 }
 
-/** Seven local days by default, today/yesterday per person, explicit ranges
- * bounded at 31 local days. */
+/** Seven local days by default, today/yesterday or this/last week per person,
+ * explicit ranges bounded at 31 local days. */
 export function adminRecordWindows(people: PersonRef[], input: {
   from?: string | null;
   through?: string | null;
-  relativeDay?: "today" | "yesterday" | null;
+  relativeDay?: "today" | "yesterday" | "this_week" | "last_week" | null;
 }, now = new Date()): LocalWindow[] {
   if (!Array.isArray(people) || people.length < 1) throw new WorkOsValidationError("at least one person is required");
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new WorkOsValidationError("now must be a valid instant");
   const relative = input.relativeDay ?? null;
-  if (relative !== null && relative !== "today" && relative !== "yesterday") {
-    throw new WorkOsValidationError("relativeDay must be today or yesterday");
+  if (relative !== null && relative !== "today" && relative !== "yesterday"
+    && relative !== "this_week" && relative !== "last_week") {
+    throw new WorkOsValidationError("relativeDay must be today, yesterday, this_week or last_week");
   }
   const explicitFrom = input.from ? calendarDate(input.from, "from") : null;
   const explicitThrough = input.through ? calendarDate(input.through, "through") : null;
@@ -646,6 +647,14 @@ export function adminRecordWindows(people: PersonRef[], input: {
   return people.map((person) => {
     const timezone = safeTimezone(person.timezone);
     const today = localDateForTimezone(now, timezone);
+    if (relative === "this_week" || relative === "last_week") {
+      // Work weeks are Monday through Sunday in the employee's local calendar.
+      const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+      const monday = addAdminTaskDays(today, weekday === 0 ? -6 : 1 - weekday)!;
+      const from = relative === "this_week" ? monday : addAdminTaskDays(monday, -7)!;
+      const through = relative === "this_week" ? today : addAdminTaskDays(monday, -1)!;
+      return { personId: person.id, timezone, from, through };
+    }
     const through = relative === "yesterday" ? addAdminTaskDays(today, -1)! : today;
     const from = relative ? through : addAdminTaskDays(today, -(DEFAULT_RECORD_DAYS - 1))!;
     return { personId: person.id, timezone, from, through };

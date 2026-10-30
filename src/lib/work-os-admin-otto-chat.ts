@@ -10,17 +10,19 @@ import {
   resolveAdminOttoPeople,
 } from "@/lib/work-os-admin-otto-reads";
 import {
-  parseAdminOttoIntent,
+  AdminOttoIntentUnavailableError,
+  parseAdminOttoInterpretation,
   requireAdminOttoIntent,
+  type AdminOttoConversationTurn,
   type AdminOttoIntentContext,
+  type AdminOttoInterpretation,
 } from "@/lib/work-os-admin-otto-intent";
 import {
-  adminOttoConversationReply,
   adminOttoMessageRef,
-  matchAdminOttoConversation,
   readAdminOttoMessageRef,
   type AdminOttoMessageRef,
 } from "@/lib/work-os-admin-otto-conversation";
+import { summarizeAdminOttoRead } from "@/lib/work-os-admin-otto-summary";
 import type {
   AdminRead,
   ChatRequest,
@@ -36,18 +38,30 @@ import type {
 } from "@/modules/work-os/admin-otto/contracts";
 
 /**
- * Admin Otto's read-only conversational runner. A deterministic preflight
- * answers greetings, thanks, capability/self-identity questions and clean
- * single-person identity questions before any model call; qualified overviews
- * fall through to the bounded intent parser. This module owns the
- * actor/organization context, resolves names against the active authorized
- * roster, executes the typed Task 5 readers, and writes only thread/turn
- * bookkeeping. It has no mutation, proposal, private employee-chat, memory,
- * draft, URL, SQL or host-execution path.
+ * Admin Otto's read-only conversational runner. Every ordinary turn is sent to
+ * the same OpenRouter-backed interpret model and configuration as the employee
+ * assistant; the model answers conversationally and may select one typed read.
+ * This module owns the actor/organization context, resolves names against the
+ * active authorized roster, executes the typed Task 5 readers, and writes only
+ * thread/turn bookkeeping. There is no mutation, proposal, private
+ * employee-chat, memory, draft, URL, SQL or host-execution path.
  */
 
 export type AdminOttoChatDeps = {
+  /** Model-backed interpretation. Production uses the default below; tests may
+   * inject a deterministic answer. */
+  interpret?: (text: string, context: AdminOttoIntentContext) => Promise<AdminOttoInterpretation>;
+  /** Legacy/test-only intent-only parser. It never replaces the model in
+   * production but keeps the typed contract for existing callers. */
   parseIntent?: (text: string, context: AdminOttoIntentContext) => Promise<ReadIntent | null>;
+  /** Model-backed final reply for a completed read. Returns null to fall back
+   * to the grounded server summary. */
+  summarizeRead?: (
+    text: string,
+    read: Exclude<AdminRead, { kind: "resolution" }>,
+    people: PersonRef[],
+    conversation: AdminOttoIntentContext["conversation"],
+  ) => Promise<string | null>;
   /** Re-run the authoritative read authorization after the long read and
    * before the thread/turn write. The route supplies a read-capability check;
    * `revalidateAdminOttoAccess` is deliberately voice-gated and is not used. */
@@ -532,6 +546,14 @@ async function resolveTargetRequest(
     }
     return { people: resolution.people, ambiguous: [], missing: [] };
   }
+  if (target.kind === "context") {
+    const people = dedupePeople(initialPeople);
+    return {
+      people,
+      ambiguous: [],
+      missing: people.length ? [] : ["the employees you are referring to"],
+    };
+  }
   const people = dedupePeople(initialPeople);
   const ambiguous: AmbiguousGroup[] = [];
   const missing: string[] = [];
@@ -620,6 +642,12 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
       return { reply: `Workday record for ${label} in ${scope}: ${plural(read.page.total, "row")}.` };
     }
     const shown = read.page.items.length < read.page.total ? ` Showing ${read.page.items.length} of ${read.page.total}.` : "";
+    if (intent.action === "eods") {
+      return { reply: `${label}: ${plural(read.page.total, "EOD report")} in ${scope}.${shown}` };
+    }
+    if (intent.action === "reports") {
+      return { reply: `${label}: ${plural(read.page.total, "report")} in ${scope}.${shown}` };
+    }
     return { reply: `${label}: ${plural(read.page.total, "record")} in ${scope}.${shown}` };
   }
   if (read.kind === "recaps") {
@@ -643,6 +671,15 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
   return {
     reply: `${name}: latest reviewed recap (${recap.reviewStatus}) for ${windowDay}${reviewDay ? `, reviewed ${reviewDay}` : ""}.`,
   };
+}
+
+/** The record projection a typed action is allowed to read. The reader applies
+ * the source filter inside its authorized query; no unlisted source is exposed. */
+function recordSources(intent: ReadIntent): WorkRecord["source"][] | undefined {
+  if (intent.action === "workday") return ["workday"];
+  if (intent.action === "eods") return ["submitted_eod"];
+  if (intent.action === "reports") return ["update", "submitted_eod"];
+  return undefined;
 }
 
 function computeWindows(intent: ReadIntent, people: PersonRef[], now: Date): LocalWindow[] {
@@ -798,9 +835,10 @@ async function executeRead(
       ...reply,
     };
   }
+  const sources = recordSources(intent);
   const page = await listAdminOttoRecords(access, {
     windows,
-    ...(intent.action === "workday" ? { sources: ["workday" as const] } : {}),
+    ...(sources ? { sources } : {}),
   });
   const read: AdminRead = { kind: "records", page, windows };
   const reply = replyFor(read, intent, people);
@@ -809,73 +847,6 @@ async function executeRead(
     refs: readRefs(intent, people, windows, missing, read),
     ...reply,
   };
-}
-
-function identityReply(
-  person: PersonRef,
-  page: Page<WorkRecord>,
-  windows: LocalWindow[],
-  turnNumber: number,
-): string {
-  const name = person.displayName.replace(/\s+/g, " ").trim();
-  const scope = windowSummary(windows);
-  if (!page.total) {
-    return turnNumber % 2 === 0
-      ? `${name} is active in your organization, and I found no records in ${scope}. A missing record does not mean no work was done.`
-      : `${name} is an active employee. No recent records were found in ${scope}; that does not mean no work was done.`;
-  }
-  const shown = page.items.length < page.total ? ` Showing ${page.items.length} of ${page.total}.` : "";
-  return turnNumber % 2 === 0
-    ? `${name} is active in your organization. I found ${plural(page.total, "record")} in ${scope}.${shown}`
-    : `${name} is an active employee. Recent records: ${plural(page.total, "record")} in ${scope}.${shown}`;
-}
-
-/** Identity questions are a read of the authorized directory plus the existing
- * recent-records read. Ambiguous and missing names reuse the normal resolution
- * card and choice flow; nothing is guessed and no id is written into the reply. */
-async function executeIdentityQuestion(
-  access: WorkOsAccess,
-  name: string,
-  now: Date,
-  turnNumber: number,
-): Promise<ExecutedRead> {
-  const baseIntent: ReadIntent = {
-    action: "records",
-    target: { kind: "names", names: [name] },
-    date: null,
-    from: null,
-    through: null,
-    relativeDay: null,
-    overdueOnly: false,
-    latest: false,
-  };
-  const resolution = await resolveAdminOttoPeople(access, baseIntent.target);
-  if (resolution.kind === "resolved" && resolution.people.length === 1) {
-    const person = resolution.people[0];
-    const intent: ReadIntent = { ...baseIntent, target: { kind: "ids", ids: [person.id] } };
-    const windows = adminRecordWindows([person], {}, now);
-    const executed = await executeRead(access, intent, [person], now, windows, []);
-    if (executed.read?.kind === "records") {
-      return { ...executed, reply: identityReply(person, executed.read.page, windows, turnNumber) };
-    }
-    return executed;
-  }
-  const state: PendingTargetState = resolution.kind === "ambiguous"
-    ? {
-        v: 1,
-        intent: baseIntent,
-        resolved: [],
-        ambiguous: [{ name: resolution.name, choices: resolution.choices }],
-        missing: [],
-      }
-    : {
-        v: 1,
-        intent: baseIntent,
-        resolved: [],
-        ambiguous: [],
-        missing: [resolution.kind === "missing" ? resolution.name : name],
-      };
-  return resolutionExecuted(baseIntent, state);
 }
 
 function normalizePersonSnapshots(value: unknown): Array<{ id: string; displayName: string }> | null {
@@ -1220,7 +1191,13 @@ function replyForContinuation(read: AdminRead, intent: ReadIntent | null): strin
     return `Loaded the next ${plural(read.page.items.length, kind)}.`;
   }
   if (read.kind === "records") {
-    const kind = intent?.action === "workday" ? "workday row" : "record";
+    const kind = intent?.action === "workday"
+      ? "workday row"
+      : intent?.action === "eods"
+        ? "EOD report"
+        : intent?.action === "reports"
+          ? "report"
+          : "record";
     return `Loaded the next ${plural(read.page.items.length, kind)}.`;
   }
   if (read.kind === "recaps") return `Loaded the next ${plural(read.page.items.length, "reviewed recap")}.`;
@@ -1373,10 +1350,11 @@ async function continueRead(
   }
   if (!payload.w) throw new WorkOsValidationError("continuation is invalid");
   if (payload.k === "records") {
+    const sources = recordSources(intent);
     const page = await listAdminOttoRecords(access, {
       windows: payload.w,
       cursor: payload.c,
-      ...(intent.action === "workday" ? { sources: ["workday" as const] } : {}),
+      ...(sources ? { sources } : {}),
     });
     const read: AdminRead = { kind: "records", page, windows: payload.w };
     return { read: withContinuation(read, refs, access, thread.id, payload.cv, payload.ti), threadId: thread.id, turnId: payload.ti, contextVersion: payload.cv, refs };
@@ -1621,57 +1599,77 @@ export async function executeAdminOttoChat(
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
 
-  // Ordinary conversation is answered deterministically before any model call.
-  // Identity questions read only the authorized directory and the existing
-  // recent-records projection; greetings/thanks/capability/self questions
-  // persist a bounded message ref with no result card and no error code. A
-  // qualified overview that is not a clean identity name returns null from the
-  // matcher and stays with the normal typed parser.
-  const conversation = matchAdminOttoConversation(request.text);
-  if (conversation) {
-    const turnNumber = thread ? Number(thread.context_version) : 0;
-    let executed: ExecutedRead;
-    if (conversation.kind === "identity") {
-      executed = await executeIdentityQuestion(access, conversation.name, now, turnNumber);
-      await recheckAfterRead(access, deps);
-    } else {
-      const reply = adminOttoConversationReply(conversation, turnNumber);
-      executed = { read: null, refs: adminOttoMessageRef(reply), reply };
-    }
-    return persistExecution(access, thread, request, executed, deps, now, newId);
-  }
-
-  // A pending unresolved target stays unresolved on a pronoun follow-up. The
-  // server never widens "their" to the roster while a choice is outstanding.
-  if (thread && pending && pronounFollowUp(request.text) && !explicitTeam(request.text)) {
+  // A plural follow-up cannot widen a pending choice. This runs before the
+  // model only for unambiguous plural pronouns; singular possessives such as
+  // "David ... his EOD" still reach the model and stay scoped to David.
+  if (thread && pending?.ambiguous.length && pluralPronounFollowUp(request.text) && !explicitTeam(request.text)) {
     const executed = resolutionExecuted(pending.intent, pending);
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
 
-  const context = thread ? await parserContext(access, thread) : { people: [], lastIntent: null };
-  const parsed = deps.parseIntent
-    ? await deps.parseIntent(request.text, context)
-    : await parseAdminOttoIntent(request.text, context);
-  if (!parsed) {
-    const executed: ExecutedRead = {
-      read: null,
-      refs: { v: 1, kind: "unsupported" },
-      reply: UNSUPPORTED_REPLY,
-      errorCode: "unsupported",
-    };
-    return persistExecution(access, thread, request, executed, deps, now, newId);
+  const turns = thread ? await loadTurns(access, thread.id) : [];
+  const context: AdminOttoIntentContext = thread
+    ? await parserContext(access, thread, turns)
+    : { people: [], lastIntent: null, conversation: [] };
+
+  // Every ordinary turn is model-backed. The same OpenRouter model/config as
+  // the employee assistant answers conversationally and may select one typed
+  // read; there is no canned greeting/capability/unsupported path here.
+  const interpretation: AdminOttoInterpretation = deps.interpret
+    ? await deps.interpret(request.text, context)
+    : deps.parseIntent
+      ? { reply: "", intent: await deps.parseIntent(request.text, context) }
+      : await parseAdminOttoInterpretation(request.text, context);
+
+  if (!interpretation.intent) {
+    if (interpretation.reply) {
+      const executed: ExecutedRead = {
+        read: null,
+        refs: adminOttoMessageRef(interpretation.reply),
+        reply: interpretation.reply,
+      };
+      await recheckAfterRead(access, deps);
+      return persistExecution(access, thread, request, executed, deps, now, newId);
+    }
+    if (deps.parseIntent) {
+      const executed: ExecutedRead = {
+        read: null,
+        refs: { v: 1, kind: "unsupported" },
+        reply: UNSUPPORTED_REPLY,
+        errorCode: "unsupported",
+      };
+      return persistExecution(access, thread, request, executed, deps, now, newId);
+    }
+    throw new AdminOttoIntentUnavailableError("ai_malformed", "Admin Otto returned neither a reply nor a read intent");
   }
+
   // Even an injected parser is held to the typed contract before any read.
-  const parsedIntent = requireAdminOttoIntent(parsed);
+  const parsedIntent = requireAdminOttoIntent(interpretation.intent);
   const teamExplicit = explicitTeam(request.text);
-  const pronoun = pronounFollowUp(request.text);
+  // The model's `context` target is the primary pronoun signal. The regex is
+  // only a fallback for a parser that named nobody the administrator actually
+  // wrote; a named request such as "What did David finish in his EOD?" must
+  // stay scoped to David, never add the previously resolved person.
+  const authorizedNames = parsedIntent.target.kind === "names"
+    ? parsedIntent.target.names.filter((name) => nameAuthorizedByText(name, request.text))
+    : [];
+  const followUp = parsedIntent.target.kind === "context"
+    || (!authorizedNames.length && pronounFollowUp(request.text))
+    || (authorizedNames.length > 0 && pluralPronounFollowUp(request.text));
   let intent = parsedIntent;
   let resolution: TargetResolution;
+
+  // A pending unresolved target stays unresolved on a true pronoun follow-up.
+  // The server never widens "their" to the roster while a choice is outstanding.
+  if (thread && pending?.ambiguous.length && followUp && !teamExplicit) {
+    const executed = resolutionExecuted(pending.intent, pending);
+    return persistExecution(access, thread, request, executed, deps, now, newId);
+  }
 
   if (teamExplicit) {
     intent = { ...parsedIntent, target: { kind: "team" } };
     resolution = await resolveTargetRequest(access, intent.target);
-  } else if (pronoun) {
+  } else if (followUp) {
     let base: PersonRef[] = [];
     let baseTeam = false;
     const resolvedIds = (thread?.resolved_person_ids ?? []).filter((id) => UUID.test(id));
@@ -1680,7 +1678,7 @@ export async function executeAdminOttoChat(
       if (current.kind !== "resolved") {
         const executed = resolutionExecuted(parsedIntent, {
           v: 1, intent: parsedIntent, resolved: [], ambiguous: [], missing: ["a previously resolved employee"],
-        }, "I can't reapply \"their\" because a previously resolved employee is no longer active. Name the employees again.");
+        }, "I can't reapply that follow-up because a previously resolved employee is no longer active. Name the employees again.");
         return persistExecution(access, thread, request, executed, deps, now, newId);
       }
       base = current.people;
@@ -1702,7 +1700,7 @@ export async function executeAdminOttoChat(
     if (!base.length && !baseTeam) {
       const executed = resolutionExecuted(parsedIntent, {
         v: 1, intent: parsedIntent, resolved: [], ambiguous: [], missing: ["the employees you are referring to"],
-      }, "I don't have a previous employee set to apply \"their\" to. Name the employees.");
+      }, "I don't have a previous employee set to apply that follow-up to. Name the employees.");
       return persistExecution(access, thread, request, executed, deps, now, newId);
     }
     const newNames = parsedIntent.target.kind === "names"
@@ -1719,13 +1717,14 @@ export async function executeAdminOttoChat(
       resolution = { people: base, ambiguous: [], missing: [] };
     }
   } else if (parsedIntent.target.kind === "ids") {
+    // A model-supplied id is usable only when it is already part of this
+    // conversation's resolved directory. It can never widen scope; an explicit
+    // id pasted by the administrator is still resolved against the roster.
     const allowed = allowedModelIds(context, thread, pending);
-    const explicitIds = new Set((request.text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [])
-      .map((id) => id.toLowerCase()));
-    if (parsedIntent.target.ids.some((id) => !allowed.has(id) || !explicitIds.has(id))) {
+    if (parsedIntent.target.ids.some((id) => !allowed.has(id))) {
       const executed = resolutionExecuted(parsedIntent, {
         v: 1, intent: parsedIntent, resolved: [], ambiguous: [], missing: ["a requested employee id"],
-      }, "That employee id is not part of the resolved directory for this conversation. Name the employee instead.");
+      }, "That employee is not part of this conversation's resolved directory. Name the employee instead.");
       return persistExecution(access, thread, request, executed, deps, now, newId);
     }
     resolution = await resolveTargetRequest(access, parsedIntent.target);
@@ -1742,7 +1741,18 @@ export async function executeAdminOttoChat(
     resolution = await resolveTargetRequest(access, parsedIntent.target);
   }
 
-  const executed = await executeTargetResolution(access, intent, resolution, now);
+  let executed = await executeTargetResolution(access, intent, resolution, now);
+  const missing = executed.refs.kind === "read" ? executed.refs.missing : [];
+  const legacyIntentOnly = !deps.interpret && !!deps.parseIntent;
+  if (!legacyIntentOnly && executed.read && executed.read.kind !== "resolution" && !missing.length) {
+    const summarize = deps.summarizeRead
+      ? deps.summarizeRead(request.text, executed.read, resolution.people, context.conversation)
+      : deps.interpret
+        ? Promise.resolve(null)
+        : summarizeAdminOttoRead(request.text, executed.read, resolution.people, context.conversation, { now });
+    const summarized = await summarize.catch(() => null);
+    if (summarized) executed = { ...executed, reply: summarized };
+  }
   await recheckAfterRead(access, deps);
   return persistExecution(access, thread, request, executed, deps, now, newId);
 }
@@ -1805,12 +1815,21 @@ export async function loadAdminOttoThread(
   };
 }
 
-async function parserContext(access: WorkOsAccess, thread: ThreadRow): Promise<AdminOttoIntentContext> {
+async function parserContext(
+  access: WorkOsAccess,
+  thread: ThreadRow,
+  turns: TurnRow[],
+): Promise<AdminOttoIntentContext> {
   const lastIntent = threadIntent(thread.last_intent);
+  const conversation: AdminOttoConversationTurn[] = turns
+    .slice(-8)
+    .map((turn) => ({ role: turn.role, content: turn.text }));
   const ids = (thread.resolved_person_ids ?? []).filter((id) => UUID.test(id)).slice(0, MAX_PEOPLE);
   if (ids.length) {
     const resolution = await resolveAdminOttoPeople(access, { kind: "ids", ids });
-    if (resolution.kind === "resolved") return { people: resolution.people.slice(0, MAX_PEOPLE), lastIntent };
+    if (resolution.kind === "resolved") {
+      return { people: resolution.people.slice(0, MAX_PEOPLE), lastIntent, conversation };
+    }
   }
   const pending = pendingTargetState(thread.pending_resolution);
   if (pending) {
@@ -1818,13 +1837,20 @@ async function parserContext(access: WorkOsAccess, thread: ThreadRow): Promise<A
       ...pending.resolved,
       ...pending.ambiguous.flatMap((group) => group.choices),
     ]).slice(0, MAX_PEOPLE);
-    return { people, lastIntent };
+    return { people, lastIntent, conversation };
   }
-  return { people: [], lastIntent };
+  return { people: [], lastIntent, conversation };
 }
 
 function pronounFollowUp(text: string): boolean {
-  return /\b(their|them|those|these|the same|both of them)\b/i.test(text);
+  return /\b(?:his|her|him|hers|their|theirs|them|those|these|the same|both of them|that person|this person)\b/i.test(text);
+}
+
+/** Plural pronouns can add the previous set to a newly named person ("their
+ * and Maria's tasks"). Singular possessives normally point at the person named
+ * in the same sentence ("David ... his EOD"), so they do not widen the scope. */
+function pluralPronounFollowUp(text: string): boolean {
+  return /\b(?:their|theirs|them|those|these|the same|both of them)\b/i.test(text);
 }
 
 function explicitTeam(text: string): boolean {

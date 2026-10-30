@@ -22,7 +22,6 @@ process.env.DATABASE_URL ??= "postgres://pglite-test/work-os";
 const NOW = new Date("2026-10-23T12:00:00.000Z");
 const chat = () => import("../src/lib/work-os-admin-otto-chat");
 const intentModule = () => import("../src/lib/work-os-admin-otto-intent");
-const conversationModule = () => import("../src/lib/work-os-admin-otto-conversation");
 
 type Db = Pick<PGlite, "query">;
 
@@ -60,6 +59,15 @@ async function seedCheckIn(db: Db, personId: string, input: { text: string; at: 
     (id,organization_id,person_id,kind,input_text,substantive,occurred_at,created_at)
     values ($1,$2,$3,'catch_up',$4,true,$5,$5)`,
   [randomUUID(), org, personId, input.text, input.at]);
+}
+
+async function seedEod(db: Db, personId: string, input: {
+  reportDate: string; submittedAt: string; text: string;
+}) {
+  await db.query(`insert into work_reports
+    (id,organization_id,person_id,report_date,kind,status,title,markdown,submitted_markdown,submitted_at)
+    values ($1,$2,$3,$4,'eod','pending_review','EOD','',$5,$6)`,
+  [randomUUID(), org, personId, input.reportDate, input.text, input.submittedAt]);
 }
 
 async function seedSession(db: Db, personId: string, input: {
@@ -138,7 +146,11 @@ async function turnCount(db: Db) {
   return Number((await rows<{ n: number | string }>(db, "select count(*)::int as n from work_admin_otto_turns"))[0]?.n ?? 0);
 }
 
-type IntentContext = { people: PersonRef[]; lastIntent: ReadIntent | null };
+type IntentContext = {
+  people: PersonRef[];
+  lastIntent: ReadIntent | null;
+  conversation?: Array<{ role: "user" | "assistant"; content: string }>;
+};
 
 function expectKind<T extends AdminRead["kind"]>(read: AdminRead | null, kind: T): Extract<AdminRead, { kind: T }> {
   if (!read || read.kind !== kind) assert.fail(`expected ${kind} result, got ${read?.kind ?? "null"}`);
@@ -987,6 +999,7 @@ test("context_version_rejects_stale_window_reply", async () => {
 test("parse_intent_strict_schema_and_untrusted_text", async () => {
   const mod = await intentModule();
   const valid = {
+    reply: "",
     action: "unfinished",
     target: { kind: "names", names: ["Alex"], ids: null },
     date: null,
@@ -1038,6 +1051,52 @@ test("parse_intent_strict_schema_and_untrusted_text", async () => {
     }), { status: 200 });
   };
 
+  const conversational = await mod.parseAdminOttoInterpretation(
+    "Are you sure this is real-time?",
+    {
+      people: [],
+      lastIntent: null,
+      conversation: [
+        { role: "user", content: "what can you do?" },
+        { role: "assistant", content: "I can read tasks and records." },
+      ],
+    },
+    {
+      fetch: respond({ ...valid, action: null, target: { kind: "team", names: null, ids: null }, reply: "The reads are live, but I do not monitor continuously." }),
+      env: { OPENROUTER_API_KEY: "test-key" },
+      now: NOW,
+    },
+  );
+  assert.deepEqual(conversational, {
+    reply: "The reads are live, but I do not monitor continuously.",
+    intent: null,
+  });
+
+  const weekOfEods = await mod.parseAdminOttoInterpretation(
+    "Show me any of his eods for this week",
+    { people: [], lastIntent: null },
+    {
+      fetch: respond({
+        ...valid,
+        action: "eods",
+        target: { kind: "context", names: null, ids: null },
+        relativeDay: "this_week",
+      }),
+      env: { OPENROUTER_API_KEY: "test-key" },
+      now: NOW,
+    },
+  );
+  assert.deepEqual(weekOfEods.intent, {
+    action: "eods",
+    target: { kind: "context" },
+    date: null,
+    from: null,
+    through: null,
+    relativeDay: "this_week",
+    overdueOnly: false,
+    latest: false,
+  });
+
   await assert.rejects(
     mod.parseAdminOttoIntent("Delete Alex's task.", { people: [], lastIntent: null }, {
       fetch: respond({ ...valid, action: "delete_task" }), env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
@@ -1076,7 +1135,8 @@ test("parse_intent_strict_schema_and_untrusted_text", async () => {
     "an impossible calendar date is malformed, never normalized",
   );
   const unsupported = await mod.parseAdminOttoIntent("Send Alex a message.", { people: [], lastIntent: null }, {
-    fetch: respond({ ...valid, action: null }), env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
+    fetch: respond({ ...valid, action: null, reply: "I can't send messages, but I can read records." }),
+    env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
   });
   assert.equal(unsupported, null, "an unsupported request yields no fabricated action");
   await assert.rejects(
@@ -1087,9 +1147,10 @@ test("parse_intent_strict_schema_and_untrusted_text", async () => {
   );
 });
 
-test("parse_intent_person_overview_falls_back_after_null_only", async () => {
+test("parse_intent_null_action_never_fabricates_a_read", async () => {
   const mod = await intentModule();
-  const nullIntent = {
+  const nullResponse = {
+    reply: "I can only read existing records. I can't send messages or delete tasks.",
     action: null,
     target: { kind: "team", names: null, ids: null },
     date: null,
@@ -1103,51 +1164,27 @@ test("parse_intent_person_overview_falls_back_after_null_only", async () => {
     void input;
     void init;
     return new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(content) } }],
+      choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }],
     }), { status: 200 });
   };
-  const ask = (text: string, fetch = respond(nullIntent)) => mod.parseAdminOttoIntent(text, { people: [], lastIntent: null }, {
-    fetch, env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
-  });
-  const records = (target: unknown) => ({
-    action: "records",
-    target,
-    date: null,
-    from: null,
-    through: null,
-    relativeDay: null,
-    overdueOnly: false,
-    latest: false,
-  });
-
-  const expected = records({ kind: "names", names: ["David"] });
   for (const text of [
     "What do you know about David?",
     "Tell me about David",
-    "What can you tell me about David?",
+    "Send Alex a message.",
+    "Delete Alex's task.",
   ]) {
-    const parsed = await ask(text);
-    assert.deepEqual(parsed, expected, text);
-    assert.deepEqual(mod.requireAdminOttoIntent(parsed), expected, `${text} rehydrates through the shared schema`);
+    const parsed = await mod.parseAdminOttoIntent(text, { people: [], lastIntent: null }, {
+      fetch: respond(nullResponse), env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
+    });
+    assert.equal(parsed, null, `${text} never becomes a fabricated read`);
   }
-
-  for (const text of ["Tell me about the team", "What do you know about everyone?", "What can you tell me about all employees?"]) {
-    assert.deepEqual(await ask(text), records({ kind: "team" }), text);
-  }
-
-  for (const text of ["Send Alex a message.", "Delete Alex's task."]) {
-    assert.equal(await ask(text), null, text);
-  }
-  assert.equal(await ask(`Tell me about ${"A".repeat(121)}`), null, "names are bounded at 120 characters");
-  assert.equal(await ask("Tell me about David\nSend Alex a message."), null, "a newline is never a name");
-  assert.equal(await ask(`What do you know about ${personA}?`), null, "an id is not a person name");
-
-  const providerRecords = records({ kind: "names", names: ["Alex"] });
-  assert.deepEqual(
-    await ask("What do you know about David?", respond(providerRecords)),
-    providerRecords,
-    "the fallback only runs after the provider returns action:null",
+  const conversational = await mod.parseAdminOttoInterpretation(
+    "What do you know about David?",
+    { people: [], lastIntent: null },
+    { fetch: respond(nullResponse), env: { OPENROUTER_API_KEY: "test-key" }, now: NOW },
   );
+  assert.equal(conversational.intent, null);
+  assert.match(conversational.reply, /can only read/i);
 });
 
 test("model_outage_retains_draft_and_adds_no_turns", async () => {
@@ -1499,394 +1536,287 @@ test("concurrent_cas_overlap_rejects_one_stale_writer", async () => {
   } finally { await f.close(); }
 });
 
-test("conversation_matcher_rejects_qualified_names_and_handles_self_identity", async () => {
-  const mod = await conversationModule();
-  for (const text of [
-    "do you know who David is?",
-    "who is David?",
-    "tell me about David",
-    "What do you know about David?",
-    "Do you know anything about David?",
-    "Do you know something about David?",
-    "Do you know about David?",
-    "Tell me about David, please",
-    "Tell me about David for me",
-    "Tell me more about David",
-    "Tell me anything about David",
-  ]) {
-    assert.deepEqual(mod.matchAdminOttoConversation(text), { kind: "identity", name: "David" }, text);
-  }
-  for (const text of [
-    "Tell me about David today",
-    "What do you know about David lately?",
-    "What do you know about David recently?",
-    "Tell me about David now",
-    "Tell me about me",
-    "Tell me about us",
-    "Do you know anything about yourself?",
-  ]) {
-    assert.equal(mod.matchAdminOttoConversation(text), null, `${text} delegates instead of inventing a person`);
-  }
-  for (const text of ["Tell me about yourself", "Tell me about you", "Tell me more about yourself", "who are you?", "what are you?"]) {
-    assert.deepEqual(mod.matchAdminOttoConversation(text), { kind: "self" }, text);
-  }
-  assert.deepEqual(mod.matchAdminOttoConversation("Hi there, Otto"), { kind: "greeting" });
-  assert.deepEqual(mod.matchAdminOttoConversation("Thanks a lot, Otto"), { kind: "thanks" });
-});
-
-test("conversation_preflight_handles_greetings_thanks_and_capability_without_model", async () => {
+test("model_backed_conversation_persists_natural_replies_without_canned_text", async () => {
   const f = await fixture();
   try {
     await seedPerson(f.db, { id: personA, name: "Alex Rivera" });
-    let parses = 0;
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      parses += 1;
-      return null;
+    const requests: Array<{ text: string; context: IntentContext }> = [];
+    const interpret = async (text: string, context: IntentContext) => {
+      requests.push({ text, context });
+      if (/real-time/i.test(text)) {
+        return {
+          reply: "The reads are live: each request queries the current Work OS records. I do not monitor continuously, so a fast answer is not a background feed.",
+          intent: null,
+        };
+      }
+      return {
+        reply: "Hi — I can look up open tasks, work updates and EOD reports, reviewed recaps, and workdays. Ask about a person or the team.",
+        intent: null,
+      };
     };
-    const assertNatural = (result: Awaited<ReturnType<typeof chatWith>>, text: string) => {
-      assert.equal(result.result, null, `${text} has no result card`);
-      assert.equal(result.errorCode, undefined, `${text} has no error code`);
-      assert.ok(result.reply.trim().length > 0, `${text} has a reply`);
-      assert.ok(result.reply.length <= 2_000, `${text} reply is bounded`);
-    };
+    const greeting = await chatWith(async () => null, { text: "Hi" }, { interpret });
+    assert.equal(greeting.result, null);
+    assert.equal(greeting.errorCode, undefined);
+    assert.match(greeting.reply, /Hi — I can look up/);
 
-    const greeting = await chatWith(parseIntent, { text: "Hi" });
-    assertNatural(greeting, "Hi");
-    assert.match(greeting.reply, /unfinished|tasks|records|recaps|workday/i);
-    const capability = await chatWith(parseIntent, {
+    const realTime = await chatWith(async () => null, {
       conversationId: greeting.conversationId,
-      text: "Sure, what else can you do?",
-    });
-    assertNatural(capability, "Sure, what else can you do?");
-    assert.notEqual(capability.reply, greeting.reply, "the capability follow-up is not a verbatim repeat");
-    assert.match(capability.reply, /limits|read-only|31 days|can't edit/i);
+      text: "Are you sure this response is real-time? feels really fast",
+    }, { interpret });
+    assert.equal(realTime.result, null);
+    assert.equal(realTime.errorCode, undefined, "meta questions never become an unsupported error");
+    assert.match(realTime.reply, /live|current Work OS records/i);
+    assert.equal(requests.length, 2);
+    assert.ok(requests[1].context.conversation?.some((turn) => /Hi/.test(turn.content)),
+      "the second model call receives the recent conversation");
 
-    const thanks = await chatWith(parseIntent, { text: "thanks" });
-    assertNatural(thanks, "thanks");
-    const thanksAgain = await chatWith(parseIntent, {
-      conversationId: thanks.conversationId,
-      text: "thank you",
-    });
-    assertNatural(thanksAgain, "thank you");
-    assert.notEqual(thanksAgain.reply, thanks.reply);
-    assertNatural(await chatWith(parseIntent, { text: "Thanks a lot, Otto" }), "Thanks a lot, Otto");
-
-    const capabilityTexts = new Set<string>();
-    const capabilityConversation = await chatWith(parseIntent, { text: "what can you do" });
-    capabilityTexts.add(capabilityConversation.reply);
-    for (const text of ["how does this work", "help"]) {
-      const result = await chatWith(parseIntent, { conversationId: capabilityConversation.conversationId, text });
-      assertNatural(result, text);
-      assert.match(result.reply, /tasks|records|recaps|workday/i);
-      capabilityTexts.add(result.reply);
-    }
-    assert.equal(capabilityTexts.size, 3, "successive capability answers rotate their wording");
-
-    for (const text of ["Hello", "Hey", "Good morning", "Good afternoon", "Hi there, Otto"]) {
-      assertNatural(await chatWith(parseIntent, { text }), text);
-    }
-    assert.equal(parses, 0, "ordinary conversation never calls the model");
-    assert.equal(await turnCount(f.db), 26, "each conversational turn is still persisted as two bounded turns");
+    const service = await chat();
+    const view = await service.loadAdminOttoThread(adminAccess, greeting.conversationId, { now: () => NOW });
+    assert.equal(view.turns.length, 4);
+    assert.equal(view.turns[1].text, greeting.reply);
+    assert.equal(view.turns[3].text, realTime.reply);
+    assert.equal(view.resultStatus, "ready");
+    assert.ok(!view.turns.some((turn) => /can only read existing Work OS records/i.test(turn.text)),
+      "no canned capability or unsupported reply is persisted");
   } finally { await f.close(); }
 });
 
-test("conversation_identity_phrases_resolve_directory_and_recent_records", async () => {
+test("model_backed_pronoun_eod_read_uses_the_previous_person_and_this_week", async () => {
   const f = await fixture();
   try {
-    await seedPerson(f.db, { id: personA, name: "Alex Rivera" });
-    await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedCheckIn(f.db, personC, { text: "Submitted the audit report", at: "2026-10-22T15:00:00.000Z" });
-    let parses = 0;
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      parses += 1;
-      return null;
+    await seedPerson(f.db, { id: personC, name: "David Okafor", timezone: "Atlantic/Reykjavik" });
+    await seedCheckIn(f.db, personC, { text: "Progress update, not an EOD", at: "2026-10-21T12:00:00.000Z" });
+    await seedEod(f.db, personC, { reportDate: "2026-10-21", submittedAt: "2026-10-21T18:00:00.000Z", text: "Finished the audit." });
+    await seedEod(f.db, personC, { reportDate: "2026-10-14", submittedAt: "2026-10-14T18:00:00.000Z", text: "Prior week EOD." });
+    const calls: string[] = [];
+    const interpret = async (text: string, context: IntentContext) => {
+      calls.push(text);
+      if (calls.length === 1) {
+        return { reply: "", intent: readIntent("records", { kind: "names", names: ["David"] }) };
+      }
+      assert.ok(context.people.some((person) => person.displayName === "David Okafor"),
+        "the follow-up receives the previously resolved person");
+      return {
+        reply: "",
+        intent: readIntent("eods", { kind: "context" }, { relativeDay: "this_week" }),
+      };
     };
-    for (const text of [
-      "do you know who David is?",
-      "who is David?",
-      "who's David?",
-      "tell me about David",
-      "What do you know about David?",
-      "What can you tell me about David?",
-      "Do you know anything about David?",
-      "Do you know something about David?",
-      "Tell me about David, please",
-    ]) {
-      const result = await chatWith(parseIntent, { text });
-      assert.equal(result.errorCode, undefined, text);
-      const records = expectKind(result.result, "records");
-      assert.equal(records.page.total, 1, text);
-      assert.match(result.reply, /David Okafor/, text);
-      assert.match(result.reply, /active/i, text);
-      assert.match(result.reply, /1 record/, text);
-      assert.doesNotMatch(result.reply, new RegExp(personC), `${text} never writes a person id into the reply`);
-      assert.doesNotMatch(result.reply, /Submitted the audit report/, `${text} summarizes the read instead of quoting private text`);
-    }
-    assert.equal(parses, 0, "identity questions are deterministic, not model-classified");
+    const first = await chatWith(async () => null, { text: "Tell me about David" }, { interpret });
+    assert.equal(expectKind(first.result, "records").page.total, 2);
 
-    const noRecords = await chatWith(parseIntent, { text: "who is Alex?" });
-    const empty = expectKind(noRecords.result, "records");
-    assert.equal(empty.page.total, 0);
-    assert.match(noRecords.reply, /Alex Rivera/);
-    assert.match(noRecords.reply, /active/i);
-    assert.match(noRecords.reply, /no records|no recent records/i);
-    assert.doesNotMatch(noRecords.reply, /task|report|update was/i, "no work is invented for an empty window");
-
-    // A broad team overview still uses the normal typed read path.
-    const teamLog: Array<{ text: string; context: IntentContext }> = [];
-    const team = await chatWith(parser(teamLog, {
-      "Tell me about the team": readIntent("records", { kind: "team" }),
-    }), { text: "Tell me about the team" });
-    assert.equal(expectKind(team.result, "records").page.total, 1);
-    assert.equal(teamLog.length, 1, "the team overview is not mistaken for a person identity question");
+    const eods = await chatWith(async () => null, {
+      conversationId: first.conversationId,
+      text: "Show me any of his eods for this week",
+    }, { interpret });
+    assert.equal(eods.errorCode, undefined);
+    const page = expectKind(eods.result, "records").page;
+    assert.equal(page.total, 1, "only the submitted EOD in this week is returned");
+    assert.equal(page.items[0].source, "submitted_eod");
+    assert.deepEqual(resultWindows(eods.result).map((window) => [window.from, window.through]),
+      [["2026-10-19", "2026-10-23"]], "this week is Monday through today in the employee's timezone");
+    assert.match(eods.reply, /EOD report/i);
+    assert.doesNotMatch(eods.reply, /141 records/);
   } finally { await f.close(); }
 });
 
-test("conversation_self_identity_returns_read_only_capability_without_model", async () => {
+test("model_backed_reports_exclude_task_events_and_keep_true_totals", async () => {
   const f = await fixture();
   try {
-    let parses = 0;
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      parses += 1;
-      return null;
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedCheckIn(f.db, personC, { text: "Wrote the migration", at: "2026-10-22T10:00:00.000Z" });
+    await seedEod(f.db, personC, { reportDate: "2026-10-22", submittedAt: "2026-10-22T18:00:00.000Z", text: "Submitted EOD text." });
+    const taskId = await seedTask(f.db, { title: "Noise task", assignees: [personC] });
+    await f.db.query(`insert into work_task_day_events
+      (id,organization_id,person_id,task_id,event_type,local_date,exact_at,observed_at,task_snapshot,created_at,idempotency_key)
+      values ($1,$2,$3,$4,'completed','2026-10-22',$5,$5,'{"title":"Noise task"}',$5,$6)`,
+    [randomUUID(), org, personC, taskId, "2026-10-22T12:00:00.000Z", randomUUID()]);
+    const interpret = async () => ({
+      reply: "",
+      intent: readIntent("reports", { kind: "names", names: ["David"] }, { relativeDay: "yesterday" }),
+    });
+    const result = await chatWith(async () => null, { text: "What did David report yesterday?" }, { interpret });
+    const page = expectKind(result.result, "records").page;
+    assert.equal(page.total, 2, "one authored update and one EOD report; no task event");
+    assert.ok(page.items.every((item) => item.source === "update" || item.source === "submitted_eod"));
+    assert.match(result.reply, /report/i);
+  } finally { await f.close(); }
+});
+
+test("model_backed_summary_reply_uses_the_real_read_and_replays_verbatim", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedEod(f.db, personC, { reportDate: "2026-10-22", submittedAt: "2026-10-22T18:00:00.000Z", text: "Finished the audit." });
+    const interpret = async () => ({
+      reply: "",
+      intent: readIntent("eods", { kind: "names", names: ["David"] }, { relativeDay: "yesterday" }),
+    });
+    let summarizedTotal = -1;
+    const summarizeRead = async (
+      _text: string,
+      read: Exclude<AdminRead, { kind: "resolution" }>,
+      people: PersonRef[],
+    ) => {
+      assert.equal(read.kind, "records");
+      if (read.kind !== "records") assert.fail("expected records");
+      summarizedTotal = read.page.total;
+      assert.equal(people[0]?.displayName, "David Okafor");
+      return "David filed one EOD report yesterday about finishing the audit.";
     };
-    const first = await chatWith(parseIntent, { text: "tell me about yourself" });
-    assert.equal(first.result, null);
-    assert.equal(first.errorCode, undefined);
-    assert.match(first.reply, /read-only|records|tasks/i);
-    const second = await chatWith(parseIntent, {
-      conversationId: first.conversationId,
-      text: "who are you?",
-    });
-    assert.equal(second.result, null);
-    assert.equal(second.errorCode, undefined);
-    assert.match(second.reply, /read-only|records|tasks/i);
-    assert.notEqual(second.reply, first.reply);
-    const third = await chatWith(parseIntent, {
-      conversationId: first.conversationId,
-      text: "what are you?",
-    });
-    assert.equal(third.result, null);
-    assert.equal(third.errorCode, undefined);
-    assert.match(third.reply, /read-only|records|tasks/i);
-    assert.notEqual(third.reply, second.reply);
-    assert.equal(parses, 0, "self-identity is answered without the model");
-    assert.equal(await turnCount(f.db), 6);
-  } finally { await f.close(); }
-});
-
-test("conversation_qualified_overviews_delegate_to_the_typed_path", async () => {
-  const f = await fixture();
-  try {
-    await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedCheckIn(f.db, personC, { text: "Today update", at: "2026-10-23T09:00:00.000Z" });
-    const log: Array<{ text: string; context: IntentContext }> = [];
-    const parseIntent = parser(log, {
-      "Tell me about David today":
-        readIntent("records", { kind: "names", names: ["David"] }, { relativeDay: "today" }),
-      "What do you know about David lately?":
-        readIntent("records", { kind: "names", names: ["David"] }),
-    });
-    const today = await chatWith(parseIntent, { text: "Tell me about David today" });
-    assert.equal(today.errorCode, undefined);
-    assert.equal(resultPage(today.result).total, 1);
-    assert.deepEqual(resultWindows(today.result).map((window) => [window.from, window.through]), [["2026-10-23", "2026-10-23"]]);
-    assert.equal(log.length, 1, "a time-qualified overview is delegated, not resolved as a name");
-    assert.equal(log[0].text, "Tell me about David today");
-
-    const lately = await chatWith(parseIntent, { text: "What do you know about David lately?" });
-    assert.equal(lately.errorCode, undefined);
-    assert.equal(expectKind(lately.result, "records").page.total, 1);
-    assert.equal(log.length, 2);
-
-    const delegated = await chatWith(async () => null, { text: "Tell me about David today" });
-    assert.equal(delegated.result, null);
-    assert.equal(delegated.errorCode, "unsupported", "an unparsed qualified overview is never a false missing person");
-  } finally { await f.close(); }
-});
-
-test("conversation_identity_replays_by_request_id", async () => {
-  const f = await fixture();
-  try {
-    await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedCheckIn(f.db, personC, { text: "Submitted the audit report", at: "2026-10-22T15:00:00.000Z" });
     const requestId = randomUUID();
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      assert.fail("identity preflight must not call the model");
-    };
-    const first = await chatWith(parseIntent, { requestId, text: "who is David?" });
-    assert.equal(expectKind(first.result, "records").page.total, 1);
-    const replay = await chatWith(parseIntent, {
+    const first = await chatWith(async () => null, { requestId, text: "What did David report yesterday?" }, {
+      interpret, summarizeRead,
+    });
+    assert.equal(summarizedTotal, 1);
+    assert.equal(first.reply, "David filed one EOD report yesterday about finishing the audit.");
+    assert.equal(expectKind(first.result, "records").page.items[0].source, "submitted_eod");
+
+    const replay = await chatWith(async () => null, {
       conversationId: first.conversationId,
       requestId,
-      text: "who is David?",
-    });
-    assert.equal(replay.turnId, first.turnId);
-    assert.equal(replay.reply, first.reply);
-    assert.equal(expectKind(replay.result, "records").page.total, 1);
-    assert.equal(await turnCount(f.db), 2, "an identity retry replays without adding turns");
+      text: "What did David report yesterday?",
+    }, { interpret, summarizeRead });
+    assert.equal(replay.reply, first.reply, "replay returns the saved model summary without another model call");
   } finally { await f.close(); }
 });
 
-test("conversation_identity_rehydrates_stale_after_a_new_record", async () => {
+test("default_chat_path_calls_the_model_parser_and_grounded_summary", async () => {
   const f = await fixture();
   try {
     await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedCheckIn(f.db, personC, { text: "First update", at: "2026-10-22T15:00:00.000Z" });
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      assert.fail("identity preflight must not call the model");
-    };
-    const identity = await chatWith(parseIntent, { text: "who is David?" });
-    assert.equal(resultPage(identity.result).total, 1);
-
-    await seedCheckIn(f.db, personC, { text: "Second update", at: "2026-10-23T09:00:00.000Z" });
-    const service = await chat();
-    const view = await service.loadAdminOttoThread(adminAccess, identity.conversationId, { now: () => NOW });
-    assert.equal(view.resultStatus, "stale");
-    assert.equal(view.result, null);
-    assert.equal(view.turns[view.turns.length - 1].text, identity.reply);
+    await seedEod(f.db, personC, { reportDate: "2026-10-22", submittedAt: "2026-10-22T18:00:00.000Z", text: "Finished the audit." });
+    const originalKey = process.env.OPENROUTER_API_KEY;
+    const originalFetch = globalThis.fetch;
+    process.env.OPENROUTER_API_KEY = "test-key";
+    const surfaces: string[] = [];
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+      const name = body?.response_format?.json_schema?.name;
+      surfaces.push(name);
+      if (name === "work_os_admin_otto_response") {
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({
+            reply: "",
+            action: "eods",
+            target: { kind: "names", names: ["David"], ids: null },
+            date: null,
+            from: null,
+            through: null,
+            relativeDay: "yesterday",
+            overdueOnly: false,
+            latest: false,
+          }) } }],
+        }), { status: 200 });
+      }
+      if (name === "work_os_admin_otto_reply") {
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({
+            reply: "David submitted one EOD report yesterday about finishing the audit.",
+          }) } }],
+        }), { status: 200 });
+      }
+      return new Response("unexpected", { status: 500 });
+    }) as typeof fetch;
+    try {
+      const service = await chat();
+      const result = await service.executeAdminOttoChat(adminAccess, {
+        conversationId: null,
+        requestId: randomUUID(),
+        text: "Show me what David reported yesterday (EOD)",
+      }, { now: () => NOW });
+      assert.deepEqual(surfaces, ["work_os_admin_otto_response", "work_os_admin_otto_reply"]);
+      assert.equal(result.reply, "David submitted one EOD report yesterday about finishing the audit.");
+      assert.equal(expectKind(result.result, "records").page.total, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = originalKey;
+    }
   } finally { await f.close(); }
 });
 
-test("conversation_message_turn_preserves_a_pending_identity_choice", async () => {
+test("named_request_with_a_possessive_does_not_mix_in_the_previous_person", async () => {
   const f = await fixture();
   try {
-    await seedPerson(f.db, { id: personB, name: "Sam Lee" });
-    await seedPerson(f.db, { id: personC, name: "Sam Lee" });
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      assert.fail("conversation, identity, and choice turns must not call the model");
-    };
-    const ambiguous = await chatWith(parseIntent, { text: "who is Sam?" });
-    assert.equal(ambiguous.errorCode, "ambiguous");
-    const hi = await chatWith(parseIntent, {
-      conversationId: ambiguous.conversationId,
-      text: "Hi",
-    });
-    assert.equal(hi.result, null);
-    assert.equal(hi.errorCode, undefined);
-
-    const thread = await rows<{ pending_resolution: unknown; last_intent: unknown }>(f.db,
-      "select pending_resolution, last_intent from work_admin_otto_threads where id = $1",
-      [ambiguous.conversationId]);
-    assert.ok(thread[0]?.pending_resolution, "a message turn preserves the pending choice");
-    assert.ok(thread[0]?.last_intent, "a message turn preserves the last read intent");
-
-    const chosen = await chatWith(parseIntent, {
-      conversationId: ambiguous.conversationId,
-      text: "Sam Lee",
-      choicePersonId: personB,
-    });
-    assert.equal(chosen.errorCode, undefined);
-    assert.equal(expectKind(chosen.result, "records").windows[0].personId, personB);
-  } finally { await f.close(); }
-});
-
-test("conversation_identity_ambiguous_missing_inactive_and_cross_org_never_guess", async () => {
-  const f = await fixture();
-  try {
-    const davidKim = "20000000-0000-4000-8000-000000000081";
-    const inactiveIan = "20000000-0000-4000-8000-000000000082";
     await seedPerson(f.db, { id: personA, name: "Alex Rivera" });
-    await seedPerson(f.db, { id: personB, name: "David Okafor" });
-    await seedPerson(f.db, { id: davidKim, name: "David Kim" });
-    await seedPerson(f.db, { id: inactiveIan, name: "Ian Inactive", active: false });
-    await seedPerson(f.db, { id: otherPerson, name: "David Cross", organizationId: otherOrg });
-    await f.db.query(`insert into work_check_ins
-      (id,organization_id,person_id,kind,input_text,substantive,occurred_at,created_at)
-      values ($1,$2,$3,'catch_up','CROSS ORG SECRET',true,$4,$4)`,
-    [randomUUID(), otherOrg, otherPerson, "2026-10-22T15:00:00.000Z"]);
-    const parseIntent = async (): Promise<ReadIntent | null> => null;
+    await seedPerson(f.db, { id: personC, name: "David Okafor" });
+    await seedTask(f.db, { title: "Alex open item", assignees: [personA] });
+    await seedEod(f.db, personC, { reportDate: "2026-10-23", submittedAt: "2026-10-23T09:00:00.000Z", text: "David's EOD." });
+    const calls: string[] = [];
+    const interpret = async (text: string) => {
+      calls.push(text);
+      if (calls.length === 1) {
+        return { reply: "", intent: readIntent("unfinished", { kind: "names", names: ["Alex"] }) };
+      }
+      return {
+        reply: "",
+        intent: readIntent("eods", { kind: "names", names: ["David"] }, { relativeDay: "today" }),
+      };
+    };
+    const first = await chatWith(async () => null, { text: "Show Alex's open tasks" }, { interpret });
+    assert.equal(expectKind(first.result, "tasks").page.total, 1);
 
-    const ambiguous = await chatWith(parseIntent, { text: "who is David?" });
-    assert.equal(ambiguous.errorCode, "ambiguous");
-    const resolution = expectResolution(ambiguous.result);
-    assert.equal(resolution.kind, "ambiguous");
-    if (resolution.kind !== "ambiguous") assert.fail("expected an ambiguous identity resolution");
-    assert.deepEqual(resolution.choices.map((person) => person.id).sort(), [personB, davidKim].sort());
-    assert.match(ambiguous.reply, /David Okafor/);
-    assert.match(ambiguous.reply, /David Kim/);
-    assert.match(ambiguous.reply, /Choose one employee/i);
-    assert.doesNotMatch(ambiguous.reply, new RegExp(personB), "choices carry ids on the card, never in the reply text");
-
-    const chosen = await chatWith(parseIntent, {
-      conversationId: ambiguous.conversationId,
-      text: "David Kim",
-      choicePersonId: davidKim,
-    });
-    assert.equal(chosen.errorCode, undefined);
-    const chosenRecords = expectKind(chosen.result, "records");
-    assert.equal(chosenRecords.windows[0].personId, davidKim, "the chosen person becomes the identity read target");
-
-    const missing = await chatWith(parseIntent, { text: "who is Zephyr?" });
-    assert.equal(missing.errorCode, "missing");
-    assert.equal(expectResolution(missing.result).kind, "missing");
-    assert.match(missing.reply, /No active employee named Zephyr/);
-
-    const inactive = await chatWith(parseIntent, { text: "who is Ian?" });
-    assert.equal(inactive.errorCode, "missing");
-    assert.equal(expectResolution(inactive.result).kind, "missing");
-    assert.doesNotMatch(inactive.reply, /Ian Inactive/);
-
-    const crossOrg = await chatWith(parseIntent, { text: "who is David Cross?" });
-    assert.equal(crossOrg.errorCode, "missing");
-    assert.equal(expectResolution(crossOrg.result).kind, "missing");
-    assert.doesNotMatch(crossOrg.reply, /CROSS ORG SECRET/);
+    const second = await chatWith(async () => null, {
+      conversationId: first.conversationId,
+      text: "What did David finish in his EOD today?",
+    }, { interpret });
+    assert.equal(second.errorCode, undefined, "a named request never becomes a follow-up refusal");
+    const page = expectKind(second.result, "records").page;
+    assert.equal(page.total, 1);
+    assert.ok(resultWindows(second.result).every((window) => window.personId === personC),
+      "the read stays scoped to David, not Alex from the previous turn");
+    assert.ok(resultWindows(second.result).every((window) => window.personId !== personA));
   } finally { await f.close(); }
 });
 
-test("conversation_reply_persists_and_rehydrates_without_unsupported_reply", async () => {
+test("model_backed_refusal_never_mutates_and_has_no_unsupported_error", async () => {
   const f = await fixture();
   try {
-    await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedCheckIn(f.db, personC, { text: "Submitted the audit report", at: "2026-10-22T15:00:00.000Z" });
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      assert.fail("a conversational turn must never call the model");
-    };
-    const firstRequest = randomUUID();
-    const first = await chatWith(parseIntent, { requestId: firstRequest, text: "Hi" });
-    const secondRequest = randomUUID();
-    const second = await chatWith(parseIntent, {
-      conversationId: first.conversationId,
-      requestId: secondRequest,
-      text: "Sure, what else can you do?",
+    await seedPerson(f.db, { id: personA, name: "Alex Rivera" });
+    await seedTask(f.db, { title: "Alex open", assignees: [personA] });
+    const before = await rows<{ n: number | string }>(f.db, "select count(*)::int as n from work_tasks");
+    const interpret = async () => ({
+      reply: "I can't delete or change tasks here. I can show you Alex's open tasks or records instead.",
+      intent: null,
     });
-    assert.notEqual(first.reply, second.reply);
-
-    const stored = await rows<{ text: string; source_refs: unknown }>(f.db,
-      `select text, source_refs from work_admin_otto_turns
-       where request_id = $1 and role = 'assistant'`, [firstRequest]);
-    assert.equal(stored.length, 1);
-    assert.equal(stored[0].text, first.reply);
-    const refs = (typeof stored[0].source_refs === "string"
-      ? JSON.parse(stored[0].source_refs)
-      : stored[0].source_refs) as Record<string, unknown>;
-    assert.deepEqual(refs, { v: 1, kind: "message", text: first.reply });
-
-    const replay = await chatWith(parseIntent, {
-      conversationId: first.conversationId,
-      requestId: firstRequest,
-      text: "Hi",
-    });
-    assert.equal(replay.turnId, first.turnId);
-    assert.equal(replay.reply, first.reply);
-    assert.equal(replay.result, null);
-    assert.equal(replay.errorCode, undefined);
-
-    const service = await chat();
-    const view = await service.loadAdminOttoThread(adminAccess, first.conversationId, { now: () => NOW });
-    assert.equal(view.turns.length, 4);
-    assert.equal(view.turns[1].text, first.reply);
-    assert.equal(view.turns[3].text, second.reply);
-    assert.equal(view.result, null);
-    assert.equal(view.resultStatus, "ready", "message refs rehydrate as a conversational reply, not unavailable");
-    assert.ok(!view.turns.some((turn) => /can only read existing Work OS records/i.test(turn.text)));
-
-    const identity = await chatWith(parseIntent, { text: "do you know who David is?" });
-    const identityView = await service.loadAdminOttoThread(adminAccess, identity.conversationId, { now: () => NOW });
-    assert.equal(identityView.resultStatus, "ready");
-    assert.equal(expectKind(identityView.result, "records").page.total, 1);
-    assert.equal(identityView.turns[identityView.turns.length - 1].text, identity.reply);
+    const result = await chatWith(async () => null, { text: "Delete Alex's task." }, { interpret });
+    assert.equal(result.result, null);
+    assert.equal(result.errorCode, undefined, "a natural refusal is not a parse error");
+    assert.match(result.reply, /can't delete|can't change/i);
+    assert.deepEqual(await rows(f.db, "select count(*)::int as n from work_tasks"), before);
   } finally { await f.close(); }
+});
+
+test("model_backed_summary_receives_only_a_bounded_safe_projection", async () => {
+  const mod = await import("../src/lib/work-os-admin-otto-summary");
+  const read = {
+    kind: "records" as const,
+    page: {
+      items: [{
+        id: "work_record_id_that_is_not_for_the_model",
+        personId: personC,
+        source: "submitted_eod" as const,
+        occurredAt: "2026-10-22T18:00:00.000Z",
+        localDate: "2026-10-22",
+        text: "Finished the audit.",
+        recordUrl: "/work-os/admin/review?report=secret",
+      }],
+      nextCursor: null,
+      total: 1,
+      asOf: NOW.toISOString(),
+      coverage: ["Submitted EOD reports only."],
+    },
+    windows: [{ personId: personC, timezone: "UTC", from: "2026-10-22", through: "2026-10-22" }],
+  };
+  const prompt = mod.buildAdminOttoSummaryPrompt("Show David's EODs", read,
+    [{ id: personC, displayName: "David Okafor", active: true, timezone: "UTC" }], [], NOW);
+  assert.match(prompt, /Finished the audit/);
+  assert.match(prompt, /David Okafor/);
+  assert.doesNotMatch(prompt, /work_record_id_that_is_not_for_the_model/);
+  assert.doesNotMatch(prompt, /\/work-os\/admin/);
+  const projection = mod.projectAdminOttoRead(read);
+  assert.equal(projection.total, 1);
+  assert.doesNotMatch(JSON.stringify(projection), /recordUrl|personId|"id"/);
 });
 
 test("conversation_stored_message_refs_reject_unknown_versions_kinds_and_oversized_text", async () => {
@@ -1918,37 +1848,14 @@ test("conversation_stored_message_refs_reject_unknown_versions_kinds_and_oversiz
   } finally { await f.close(); }
 });
 
-test("conversation_preserves_the_read_only_boundary_and_mutation_rejection", async () => {
-  const f = await fixture();
-  try {
-    await seedPerson(f.db, { id: personA, name: "Alex Rivera" });
-    await seedPerson(f.db, { id: personC, name: "David Okafor" });
-    await seedTask(f.db, { title: "Alex open", assignees: [personA] });
-    const before = {
-      tasks: await rows<{ n: number | string }>(f.db, "select count(*)::int as n from work_tasks"),
-      checkIns: await rows<{ n: number | string }>(f.db, "select count(*)::int as n from work_check_ins"),
-      people: await rows<{ n: number | string }>(f.db, "select count(*)::int as n from work_people"),
-    };
-    let parses = 0;
-    const parseIntent = async (): Promise<ReadIntent | null> => {
-      parses += 1;
-      return null;
-    };
-    for (const text of [
-      "Delete Alex's task.",
-      "Hi, delete every task.",
-      "tell me about David and delete his tasks.",
-    ]) {
-      const result = await chatWith(parseIntent, { text });
-      assert.equal(result.errorCode, "unsupported", text);
-      assert.equal(result.result, null, text);
-      assert.match(result.reply, /can only read existing Work OS records/i, text);
-    }
-    assert.equal(parses, 3, "extra instructions are never swallowed by the conversational preflight");
-    assert.deepEqual(await rows(f.db, "select count(*)::int as n from work_tasks"), before.tasks);
-    assert.deepEqual(await rows(f.db, "select count(*)::int as n from work_check_ins"), before.checkIns);
-    assert.deepEqual(await rows(f.db, "select count(*)::int as n from work_people"), before.people);
-  } finally { await f.close(); }
+test("admin_chat_source_has_no_deterministic_conversational_reply_tables", async () => {
+  const source = [
+    readFileSync(new URL("../src/lib/work-os-admin-otto-chat.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../src/lib/work-os-admin-otto-conversation.ts", import.meta.url), "utf8"),
+  ].join("\n");
+  assert.doesNotMatch(source, /matchAdminOttoConversation|adminOttoConversationReply/);
+  assert.doesNotMatch(source, /GREETING_REPLIES|CAPABILITY_REPLIES|SELF_REPLIES/);
+  assert.match(source, /parseAdminOttoInterpretation|interpret\?:/);
 });
 
 const disposableUrl = process.env.WORK_OS_TEST_POSTGRES_URL;
