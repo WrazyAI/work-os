@@ -9,341 +9,198 @@ notices.
 
 # Work OS agent instructions
 
-These instructions apply to the whole repository. Keep them aligned with
-current code; historical commits and deployment snapshots are context.
+Work OS is the Next.js 16 web app plus the Tauri desktop companion in this
+repository. Agent OS is a separate repository/checkout that supplies the
+deployed platform shell and local runner. Reconcile the two by content, never
+by git merge or bulk tree copies.
 
-## Execution strategy: Superpowers, delegation, and long-running tasks
+## Before editing
 
-**Default to one main agent executing the work.** Optimize for a correct,
-verified result with minimal elapsed time, repeated exploration, and token cost.
-Task duration or the number of plan steps alone is not a reason to delegate.
+1. `git fetch origin` and branch a dedicated worktree from the latest `main`:
 
-- **Small, clear change:** investigate, edit, and run focused checks directly.
-  Avoid spawning agents merely to search files, write a plan, or run tests.
-- **Long or multi-step but tightly coupled change:** keep a short, ordered plan
-  and implement it inline with the main agent. When using Superpowers, prefer
-  `superpowers:executing-plans` over a fresh implementer per step. Keep working
-  through authorized steps; do not stop simply because a task takes many steps.
-- **Genuinely independent workstreams:** consider
-  `superpowers:subagent-driven-development` for substantial independent plan
-  tasks, or `superpowers:dispatching-parallel-agents` for distinct investigations.
-  Use these only when independence and expected quality/speed benefit justify
-  fresh contexts, coordination, integration, and review overhead.
-- **Independent scrutiny:** for risky architectural, security, authorization,
-  concurrency, or data-integrity changes, use an independent, bounded review of
-  the requirements, diff, and test evidence. Do not automatically dispatch a
-  reviewer for each small edit or repeat a completed CodeRabbit review.
-- **Delegation ceiling:** start with at most two concurrent workers and expand
-  only for demonstrably independent, substantial work. Never run simultaneous
-  implementers on overlapping files or shared mutable state; never allow
-  workers to recursively spawn more agents by default.
+   ```bash
+   git worktree add /home/maigreeks/projects/.worktrees/<task-slug> \
+     -b codex/<task-slug> origin/main
+   ```
 
-Before dispatching, identify the exact outcome, file and interface boundaries,
-known architectural facts, acceptance tests, and a concise handoff. Pass verified
-context and pointers to relevant files, not the entire conversation or a vague
-instruction to rediscover the repository. Give independent reviewers the
-original requirements and evidence without preloading the implementer's verdict.
-The main agent owns integration, test results, and the final claim of completion.
+   Link dependencies from an existing worktree; do not run `npm install` while
+   a dev/prod server is running (it corrupts the Turbopack cache).
 
-For work that spans many steps or context compactions, maintain one recoverable
-plan/checkpoint in the existing project tracking mechanism. Record completed
-steps, exact files and commits, verification results, decisions, blockers, and
-the next action. Resume from that evidence instead of restarting discovery or
-repeating completed work. Timebox uncertain exploration by an evidence-based
-stopping condition; escalate only real blockers or decisions that require user
-authorization. Never fabricate progress or skip a required gate to save tokens.
+2. Create or reuse a ledger task before user-requested investigation,
+   implementation, deployment, integration, or external action. Use
+   `scripts/work-os-ledger.mjs`; if access fails, report the exact blocker
+   instead of doing untracked work. **TASKS** is the progress ledger. **EOD
+   Report** is a project, not a task: each report is a task named
+   `<Full Name><MM/DD/YYYY>`, and drafting never authorizes submission.
+3. Read `design.md` completely before touching any UI. It is the canonical
+   companion and web blueprint.
+4. Read `desktop/work-os-companion/CHANGELOG.md` and skim recent `main` commits
+   when reconciling work another agent may have landed.
 
-These guidelines select *whether* a Superpowers execution skill is appropriate;
-once a skill is deliberately invoked, follow its required procedure. Explicit
-user instructions and this repository's worktree, ledger, safety, review,
-deployment, and release requirements remain in force. Avoid duplicate reviews
-and verification, but never weaken the checks required for the affected change.
+## Commands
 
-## Task synchronization and worktree isolation
-
-Before each new task or agenda, sync with the latest `main` and resolve
-conflicts before editing. Every agent must make its changes in a dedicated git
-worktree branched from the latest `main`. Never edit a shared checkout
-(`/home/maigreeks/projects/work-os`, `/home/maigreeks/projects/agent-os-main`,
-or another agent's worktree) — parallel agents editing one checkout is what
-swept files into unrelated commits and raced builds. Shared checkouts are for
-merges, convergence, and deploys only, and must never hold uncommitted work.
+Use the native WSL Node toolchain, never Windows `node.exe` / `npm.cmd` or a
+PATH that resolves into `/mnt/c`:
 
 ```bash
-git fetch origin
-git worktree add /home/maigreeks/projects/.worktrees/<task-slug> -b codex/<task-slug> origin/main
+export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
 ```
 
-Link dependencies from an existing worktree instead of installing
-(`npm install` while a server runs corrupts the Turbopack cache):
+| Task | Command |
+|---|---|
+| Typecheck | `npm run work-os:typecheck` |
+| Full Work OS suite | `npm run work-os:test` (about 13 minutes; 11 opt-in PG tests skip by default) |
+| Focused test | `node --import tsx --test test/<file>.test.mts` |
+| One named test | `node --import tsx --test --test-name-pattern "<phrase>" test/<file>.test.mts` |
+| Lint changed files | `npx eslint <files>` |
+| Production build | `npm run build` |
+| Work OS migration | `npm run db:apply:work-os` |
+| One explicit migration | `npm run db:apply -- <migration.sql>` |
 
-```bash
-ln -s /home/maigreeks/projects/.worktrees/<existing>/node_modules \
-      /home/maigreeks/projects/.worktrees/<task-slug>/node_modules
-```
+- The 11 PostgreSQL tests run only with
+  `WORK_OS_TEST_POSTGRES_URL=<disposable-url>` and
+  `WORK_OS_TEST_POSTGRES_DISPOSABLE=1`.
+- `npm run work-os:test` runs the migration test plus the Work OS, desktop,
+  Agent OS surface, and route-contract suites. A focused pass is not a
+  substitute for it before a merge.
+- TestSprite is installed at
+  `/home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite`; invoke it with
+  that toolchain on PATH. Auth is already configured: never re-run
+  `testsprite setup`. Projects: **Work OS Companion**
+  `e8fa6d35-586c-47a7-a69c-13e6b8552a0b` (frontend) and **Work OS Web API**
+  `e35f94fb-0e9d-42f5-8eba-a5a5e13683b7` (backend). Stored frontend plans use
+  `e2e-verify@wrazyos.com`; if its sign-in fails, rotate it with
+  `tsx scripts/rotate-e2e-fixture.mts --password-file <secret> --apply` and
+  refresh the project credential.
+- CodeRabbit: one pass per completed task batch, not per commit. Run
+  `/home/zahemen/.local/bin/coderabbit review --agent --base-commit <base>`,
+  fix every still-valid finding, and re-run only when a fix materially changes
+  the reviewed surface.
 
-Do all edits, tests, and commits in the worktree. Rebase on the latest `main`
-immediately before pushing; push verified work into `main`
-(`git push origin HEAD:main`) and converge shared files into the other
-repository per the cross-repo rules below. Deploy only after the merge. Remove
-the worktree once its work is merged, or keep it only while follow-up work is
-actively in flight; do not carry unmerged completed work into unrelated
-follow-up work.
+## Package boundaries
 
-Read the changelog when reconciling: a rebase or merge can bring in work other
-agents landed first. Read `desktop/work-os-companion/CHANGELOG.md` (or the
-latest GitHub release notes) and skim `git log origin/main` for anything the
-entries do not cover; reconcile unfamiliar files with that context instead of
-guessing. Add a changelog entry when a change is release-facing.
+- `src/app/` — Next.js routes and pages. `src/lib/` — server logic.
+  `src/modules/work-os/` — shared wire types (type-only imports are safe for
+  the companion). `src/proxy.ts` — request proxy.
+- `desktop/work-os-companion/` — Tauri app, React UI, Rust commands, ACL
+  permissions. Version metadata lives in `package.json`, `tauri.conf.json`, and
+  `Cargo.toml`.
+- `supabase/migrations/` — database migrations; `test/` — `node:test` suites;
+  `scripts/` — operations and deploy helpers.
+- Agent OS-unique paths (`cron/`, `local-seo/`, `config/hermes/`, notebooks,
+  legacy agent routes) are not Work OS surfaces. Leave them alone.
 
-## Mandatory work ledger
+## AI surfaces
 
-Create or reuse a ledger task before user-requested investigation,
-implementation, deployment, integration, or external action. Read existing
-tasks first and reuse equivalent active work; use the canonical ledger tool
-(`scripts/work-os-ledger.mjs`, mirrored at
-`/home/dev/agent-os/scripts/work-os-ledger.mjs`) for creation. It writes to the
-work record through the Work OS Agent API, so the ledger and the work share one
-source of truth. If access fails, report the exact blocker and stop before
-changes rather than doing untracked work.
+- `src/lib/work-os-ai-model.ts` is the single source for model choice,
+  OpenRouter provider routing, reasoning effort, token budgets, timeouts, and
+  usage logging. Use `aiRequestBody(model, body)`; do not build a second
+  OpenRouter client or hardcode a different model.
+- Employee chat: `src/lib/aiInterpret.ts` returns strict JSON with `reply`,
+  `claims`, and `operations`; the route is
+  `src/app/api/work-os/me/interpret/route.ts`. Questions answer in `reply` and
+  never authorize a mutation.
+- Admin Otto: `src/lib/work-os-admin-otto-intent.ts` returns `{ reply,
+  intent }`; `src/lib/work-os-admin-otto-chat.ts` executes the typed read under
+  admin authorization; `src/lib/work-os-admin-otto-summary.ts` writes the
+  grounded reply from the real result. Admin chat is read-only: no mutations,
+  messaging, approvals, impersonation, or employee decision controls.
+- Do not reintroduce deterministic greeting/capability reply tables in admin
+  chat. The model answers conversation; the server owns name resolution, typed
+  reads, source filters, and grounded summaries.
+- Admin EOD/report questions must use the `eods` / `reports` source filters, not
+  the broad `records` projection. Pronoun/follow-up reads use the server's
+  `context` target, never model-invented person ids.
 
-- The progress project is **TASKS**. Keep descriptions short (one to three
-  sentences) and subtask names to five to eight words; put implementation
-  detail in subtasks, not bullet-pointed descriptions.
-- Keep incomplete work open with a concise blocker; complete each task and
-  known subtask only after its outcome and verification are done, and mark them
-  as you go rather than batching at the end.
-- Every ledger task carries the `agent-ledger` label, so it stays separable
-  from the employee's own work. Completing a parent also closes its open
-  subtasks, and a completion is explicit: read `completed` back after every
-  completion write.
-- The ledger token is `WORK_OS_API_TOKEN` (the legacy `WORK_OS_AGENT_TOKEN`
-  alias still works). Keep it in the repo's gitignored `.env` or `.env.local`;
-  worktrees resolve the main checkout's env through git, `WORK_OS_LEDGER_ENV_FILE`
-  can point at another file, and the VPS keeps it at
-  `/home/dev/agent-os/.env.local`. Never print or paste it.
-- For explicitly requested duplicate cleanup, page tasks, retain one canonical
-  task per outcome, archive duplicates rather than deleting them, and read back
-  the canonical and archived states.
-- EOD reports belong in the **EOD Report** project (pass
-  `--project-name "EOD Report"`) as a task named `<Full Name><MM/DD/YYYY>`;
-  EOD Report is not itself a task. Put the
-  report in the description: shift start and end time, number of tasks
-  completed and in progress, a short outcome-focused shift summary, and a
-  blocker line only when something remains open. Drafting and submitting are
-  separate: a draft is a read-only response and never authorizes creating or
-  updating the EOD task.
+## Data and auth
 
-Every handoff must state actual verification, remaining work, and the exact
-external dependency when a provider, credential, permission, or deployment is
-missing. A subprocess exit alone does not prove the user-visible flow.
+- Auth is Better Auth over Neon Postgres (`src/lib/auth.ts`). Files under
+  `src/lib/supabase/` are compatibility helpers; their names do not prove
+  Supabase Auth, Storage, Realtime, or service-role behavior is active.
+- Object storage uses the R2/local adapter in `src/lib/db/storage.ts`. Keep
+  Node storage imports lazy/bundle-safe.
+- The proxy's session-cookie presence check is local and cheap; protected routes
+  must verify authoritative sessions and scope reads/writes to the authorized
+  user and organization. Cookie presence is not authorization.
+- Preserve bearer, updater-download, desktop CORS, and public-route contracts.
+  Large upload routes authenticate themselves and stay out of proxy body
+  buffering.
+- Before any database write, verify the resolved host. The migration resolver
+  prefers `MIGRATION_DATABASE_URL`, then `DATABASE_URL_UNPOOLED`, then
+  `DATABASE_URL`. On an established database apply only the new additive
+  migration; never replay the historical set.
 
-## Product design
+## Product invariants
 
-Before designing, implementing, reviewing, or modifying any Work OS interface,
-read `design.md` completely. It governs companion and web surfaces, including
-employee, manager, administrator, onboarding, review, evidence, and settings.
-Use the current desktop Today, Tasks, shared composer, details, and menus as
-visual authority; do not copy older patterns that conflict with the blueprint.
-
-Follow the applicable component contracts, semantic tokens, responsive and
-operational state matrices, accessibility, truthful provenance, task-first
-hierarchy, and progressive disclosure. Validate desktop and narrow layouts,
-loading, empty, dense, error, keyboard/focus, overlay collisions, and reduced
-motion. Inspect rendered screenshots and exercise controls before completion.
-Report tested states and remaining gaps. Document intentional deviations;
-update `design.md` when adding a reusable pattern and its full contract.
-
-## Current architecture and invariants
-
-Work OS contains the Next.js web surface and Tauri desktop companion.
-`docs/NEON-MIGRATION-PLAN.md` describes the migration context; current code is
-in `src/lib/auth.ts`, `src/lib/db/`, and `src/lib/supabase/` compatibility
-helpers. Auth is Better Auth over Neon Postgres. Legacy `supabase` names do not
-prove Supabase Auth, Storage, Realtime, or service-role behavior is still
-active. Object storage uses the R2/local adapter in `src/lib/db/storage.ts`.
-
-The deployed operations app lives in the separate Agent OS checkout. Its local
-execution engine requires host binaries and credentials; do not move
-host-dependent routes or execution to serverless hosting without redesign.
-Verify target services and runtime state before operational claims.
-
-- Keep the proxy's session-cookie presence check local and inexpensive.
-  Protected routes must verify authoritative sessions and scope reads/writes
-  to the authorized user and organization; cookie presence is not authorization.
-- Preserve existing bearer, updater-download, desktop CORS, and public-route
-  contracts. Large upload routes authenticate themselves and stay excluded
-  from proxy body buffering; do not casually re-add them to the matcher.
+- Activity inference must not create `work_check_ins` rows or advance
+  `last_substantive_update_at`. Read the cadence/interval code before changing
+  defaults. The active check-in cadence defaults to 60 minutes
+  (`WORK_OS_CHECK_IN_INTERVAL_MINUTES`, 5–240); the first follow-up defaults to
+  75 minutes. Per-person overrides live in `config/work-os.local.json`.
+- Interval recaps are one evidence-bounded recap per due check-in. Confirm or
+  amend queues one bounded next-step generation pass; proposals are never
+  auto-applied. Keep `performed` (employee's own work) distinct from
+  `triggered` (consequence of their work) in GitHub evidence.
 - The mascot's identity/art lives in
-  `desktop/work-os-companion/src/mascot.ts`. Use the shared `MascotMark`
-  renderer and configured chat crop; never hardcode agent identity or art.
-- Tauri commands need ACL grants for every invoking window. Keep
-  window-specific commands in appropriate modules and preserve companion
-  ACL/mascot guard tests. Keep desktop build commands portable for Windows CI;
-  do not hardcode workstation Node paths into Tauri/Vite build configuration.
-- Keep fonts self-hosted and avoid render-blocking external resources. Keep
-  storage Node imports lazy/bundle-safe. Preserve provider provenance,
-  idempotent mutations, and truthful approval/completion states.
-- Task actions are capability-gated by `src/lib/work-os-task-permissions.ts`,
-  which derives edit, archive, delete, assign, complete, reopen, and
-  workflow-status flags from the actor's role, the recorded assigner, and the
-  due date; API routes enforce those same flags. Assignment scope is self for
-  employees, their managed teams for supervisors, and anyone in the organization
-  for administrators, and out-of-scope ids are rejected even when a client sends
-  them. Overdue is derived, never stored: the effective due date must be today
-  or later before an overdue task's workflow status can change, so the due date
-  is the unlock and no status write may fake or clear overdue.
+  `desktop/work-os-companion/src/mascot.ts`. Render it through the shared
+  `MascotMark` and configured chat crop; never hardcode agent identity or art.
+- Every Tauri command needs an ACL grant for each invoking window. Keep
+  window-specific commands in window-specific modules; companion ACL and mascot
+  guard tests must stay green.
+- Keep fonts self-hosted and avoid render-blocking external resources.
+- Never `npm install` while a server is running. If the Turbopack cache is
+  corrupted, remove `.next` and rebuild/restart.
 
-AI activity inference must not create `work_check_ins` rows or advance
-`last_substantive_update_at`. Read check-in and activity-interval code before
-changing cadence or bounds; configuration defaults belong with that code.
+## Verification
 
-### Activity Interval Reviews and next steps
+- Run the focused tests for the touched files, then `work-os:typecheck`, then
+  the full `work-os:test` before merging or deploying.
+- UI changes require rendered desktop and narrow checks, loading/empty/dense/
+  error/keyboard/focus/reduced-motion states where applicable, plus TestSprite
+  when a reusable fixture exists or is needed anyway. A successful build or
+  static assertion is not visual acceptance.
+- Treat a backend harness "pass" as lint unless it executed the code; run the
+  same test directly or drive the API/DB. Live probes are the primary evidence
+  for provider, runner, and state-machine behavior: read-only first, then the
+  smallest write that proves the path.
+- Review effort belongs on security, tenant isolation, data correctness and
+  attribution, and state transitions. Report tool latency separately from
+  engineering time.
+- The floating companion has a token-free DEV fixture:
+  `?window=avatar&avatar-fixture=recorded-completion`. Use it for avatar
+  surface checks; keep the live `?window=avatar&token=` path for end-to-end.
 
-The active check-in cadence defaults to sixty minutes
-(`WORK_OS_CHECK_IN_INTERVAL_MINUTES`, 5-240); the first progress check-in lands
-`WORK_OS_FIRST_FOLLOW_UP_MINUTES` (default 75, range 5-240) after plan
-confirmation or clock-in, and once it is due an unconfirmed plan no longer
-blocks the cadence. Activity Interval Reviews build one evidence-bounded recap
-per due check-in from Worktivity frames; bounds are
-`WORK_OS_ACTIVITY_INTERVALS_ENABLED` (default on),
-`WORK_OS_ACTIVITY_INTERVAL_MAX_MINUTES` (120),
-`WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES` (12),
-`WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES` (5), and
-`WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY` (10; a valid non-hourly cadence
-override triples the cap up to 72). Per-person cadence overrides live in
-`config/work-os.local.json` (matched by email or person id;
-`WORK_OS_LOCAL_CONFIG_PATH` can point elsewhere): a person entry overrides the
-deployment environment, and everyone else falls back to the environment and
-then the 60-minute default. AI inference never creates a
-`work_check_ins` row and never advances `last_substantive_update_at`.
+## Deployment and convergence
 
-Confirming or amending a recap queues one bounded next-step generation pass
-(`src/lib/work-os-next-steps.ts`) through the existing proposal pipeline:
-`complete_task` for open tasks/subtasks the approved evidence shows finished,
-and `create_task`/`add_subtask` for concrete untracked deliverables. Suggestions
-must cite the recap activities they are based on, clear the confidence floor,
-and target the exact open-task list the model saw; nothing is ever auto-applied,
-and generation never blocks the recap decision or writes check-ins or cadence.
+- Work OS is authoritative for its product design, companion, Work OS routes
+  and libraries (`src/app/api/work-os/**`, `src/lib/work-os-*`), tests, and
+  release workflow. Agent OS is authoritative for its deployed platform shell
+  and operational surfaces.
+- Shared paths are `src/`, `desktop/`, `supabase/`, `test/`, `scripts/`, and
+  root configs. Before changing one, compare the other remote by content
+  (`git fetch agentos && git diff agentos/main origin/main -- <path>`), port
+  behavior per file, and preserve structural refactors and repo-unique files.
+  Never force matching history, use `rsync --delete`, `git read-tree`, or
+  `git clean` across the repositories.
+- Do not replace Agent OS's `src/app/layout.tsx`, `next.config.ts`,
+  `src/proxy.ts`, `scripts/redeploy.sh`, platform components, or platform
+  routes with Work OS variants. Work OS's standalone layout and
+  `next.config.mjs` belong here.
+- Work OS server changes deploy through the Agent OS checkout on the VPS.
+  Read the host and SSH key path from the private Agent OS repo
+  (`git fetch agentos && git show agentos/main:docs/vps-access.md`); never
+  commit them here. Use `npm run redeploy` (atomic staging build, swap, restart,
+  asset checks, rollback on failure). Never build over a running server's
+  active `.next` tree. Verify the deployed commit, assets, and a representative
+  live flow afterward.
+- Companion releases must synchronize `package.json`, `tauri.conf.json`, and
+  `Cargo.toml`, and move the release section out of `## Unreleased` in
+  `CHANGELOG.md` using the ship date. CI fails without it; the GitHub release
+  notes and What's New modal are built from that section. Write entries for the
+  employee who just installed the update.
 
-When `github_evidence` is enabled and the employee has verified GitHub
-accounts, interval recaps and EOD drafts also receive attributed GitHub
-activity. Keep the two relationships exact: `performed` is the employee's own
-account's work; `triggered` is a consequence of their work (CI runs linked by
-same-window pushed commits, deployments they created, reviews or closures on
-their pull requests) and must never be described as their own action. Recorded
-activity may be stated exactly as recorded but is never task completion,
-never attendance, and never a substitute for screenshot evidence; the model's
-structured `recorded_activity` output is validated against the recorded list.
+## Other surfaces
 
-## Verification and review cadence
-
-Use the native WSL Node toolchain for builds/tests/packaging, never Windows
-Node/npm through `/mnt/c`. Resolve the installed toolchain before use and ensure
-child scripts use the same PATH; workstation-specific version paths are not
-portable build configuration.
-
-Run relevant tests and `npm run work-os:typecheck` / `npm run work-os:test` for
-affected Work OS behavior. One CodeRabbit pass per completed task batch, not per
-commit: run `coderabbit review --agent --base-commit <batch base>` once the
-batch is complete, fix every still-valid finding, and rerun only when a fix
-materially changes the reviewed surface. Spend review passes on security,
-tenant isolation, data correctness and attribution, and state transitions;
-avoid per-commit reviews.
-
-UI-affecting changes require TestSprite when a reusable fixture exists or is
-needed anyway, plus rendered/browser checks. The backend harness validates code
-without executing it — treat a backend "pass" as lint and execute the same test
-directly (or drive the API/DB) before reporting a verdict. Live probes are the
-primary evidence for provider, runner, and state-machine behavior: read-only
-queries first, then the smallest write that proves the path. The floating
-companion has a token-free DEV fixture at
-`?window=avatar&avatar-fixture=recorded-completion` for avatar-surface checks;
-the live `?window=avatar&token=` path stays the end-to-end option. Report tool
-latency separately from engineering time.
-
-### TestSprite CLI
-
-The CLI is installed at
-`/home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite`; invoke it with that
-toolchain on PATH. Auth is already configured — never re-run `testsprite setup`;
-if `auth status` itself fails, stop and tell the operator.
-
-Work OS projects: **Work OS Companion** `e8fa6d35-586c-47a7-a69c-13e6b8552a0b`
-(frontend, → https://app.wrazyos.com) and **Work OS Web API**
-`e35f94fb-0e9d-42f5-8eba-a5a5e13683b7` (backend, →
-https://srv1726015.tailbf7608.ts.net). Frontend runs use the project's
-configured environment URL; use `--local <port>` for a localhost-only frontend.
-Existing frontend plans log in with the `e2e-verify@wrazyos.com` fixture; when
-that sign-in fails, rotate it with
-`tsx scripts/rotate-e2e-fixture.mts --password-file <secret> --apply` and
-refresh the frontend project credential so stored scripts resolve. Keep the
-fixture on that email because stored scripts hardcode it.
-`tsx scripts/e2e-cleanup.mts <user-id> [--dry-run]` removes a disposable e2e
-user. Backend tests need a project credential and at least one literal
-`assert` in the Python.
-
-## Releases and deployment
-
-Companion releases must synchronize version metadata in
-`desktop/work-os-companion/package.json`,
-`desktop/work-os-companion/src-tauri/tauri.conf.json`, and
-`desktop/work-os-companion/src-tauri/Cargo.toml`. Move released entries from
-`## Unreleased` into `## <version> — <YYYY-MM-DD>` in
-`desktop/work-os-companion/CHANGELOG.md`, using the day the build ships; the
-What's New history shows that date beside the version. CI fails without it and
-the GitHub release notes are built from that section. Write every entry for
-the employee who just installed the update — one short, plain bullet per
-change — because first launch after an update shows it in the changelog modal.
-Keep installer/updater verification and signing requirements intact.
-
-The companion release line moves one patch from the version recorded in
-`desktop/work-os-companion/package.json`. Keep that version in `package.json`,
-`src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`, and use the same
-canonical SemVer in the changelog heading; the release tag and the app's display
-pad the patch segment to two digits (`work-os-companion-internal-v0.5.02`,
-shown as 0.5.02).
-
-Work OS changes deploy through the deployed Agent OS checkout on the VPS
-(`/home/dev/agent-os`). This repository is public, so the host address and the
-SSH key path are kept out of it; read them from the private Agent OS repo
-(`git fetch agentos && git show agentos/main:docs/vps-access.md`). Use the
-atomic redeploy path there (`npm run redeploy`): it builds a staging tree, swaps
-it, restarts the web service, checks live assets, and rolls back on failure.
-Never build over a running server's active `.next` tree, and verify the
-deployed identity, assets, and a representative live flow afterward.
-
-Database changes run against Neon. Apply an explicit additive migration with
-`npm run db:apply:work-os` (Work OS) or `npm run db:apply -- <migration.sql>`;
-on an established database never replay the historical set. Verify the resolved
-host before any write — the resolver prefers `MIGRATION_DATABASE_URL`, then
-`DATABASE_URL_UNPOOLED`, then `DATABASE_URL`. Never expose credentials or treat
-migration completion as proof that live behavior is correct.
-
-## Work OS and Agent OS convergence
-
-The repositories have independent histories and must be reconciled by content,
-not by git merge. Work OS is authoritative for its product design, companion,
-Work OS routes/libraries (`src/app/api/work-os/**`, `src/lib/work-os-*`), tests,
-and release workflow. Agent OS is authoritative for its deployed platform shell
-and operational surfaces. Do not assume either whole tree is ahead. Shared
-paths are `src/`, `desktop/`, `supabase/`, `test/`, `scripts/`, and the root
-configs; `cron/`, `local-seo/`, `config/hermes/`, the notebooks, and legacy
-agent routes are Agent OS-unique and must be left alone.
-
-Before changing shared paths, compare the other remote's content
-(`git fetch agentos && git diff agentos/main origin/main -- <path>`), port
-behavior per file, preserve structural refactors and repo-unique files, review
-diffs, and verify both sides before claiming convergence. Never force matching
-history, use bulk tree copies, `rsync --delete`, `git read-tree`, `git clean`,
-or any cleanup that deletes the other repo's unique work. Preserve surface
-guard tests (`test/work-os-surface.test.mts` here; `test/agent-os-surface.test.mts`
-there).
-
-Never replace Agent OS's `src/app/layout.tsx`, `next.config.ts`, `src/proxy.ts`,
-`scripts/redeploy.sh`, platform components, or platform routes with Work OS
-variants. Work OS's standalone layout and `next.config.mjs` belong to this repo.
-`scripts/converge-to-agentos.mts` handles blob-identical files in an isolated
-worktree; new or diverged files require explicit review, and the helper pushes
-to Agent OS, so run it only within authorized cross-repo integration. Record
-both commit identities and live verification when convergence is complete.
+- `daily-log/` is a generated work-evidence viewer. Regenerate and deploy with
+  `bash scripts/deploy-daily-log.sh`; each completed top-level task lands on its
+  assignee's local day, and subtasks are omitted.
