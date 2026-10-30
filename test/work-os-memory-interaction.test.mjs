@@ -8,6 +8,22 @@ import { chromium } from "playwright";
 const base = process.env.MEMORY_PREVIEW_URL || "http://127.0.0.1:5179";
 const browser = await chromium.launch({ headless: true });
 after(() => browser.close());
+test("memory modal keeps its dimensions when switching tabs", async () => {
+  for (const viewport of [{ width: 1024, height: 768 }, { width: 390, height: 600 }]) {
+    const page = await browser.newPage({ viewport, reducedMotion: "reduce" });
+    try {
+      await page.goto(`${base}/?preview-memory`);
+      const modal = page.getByRole("dialog", { name: "What Otto remembers" });
+      const before = await modal.boundingBox();
+      await page.getByRole("tab", { name: /Remembered/ }).click();
+      const after = await modal.boundingBox();
+      assert.ok(before && after);
+      assert.equal(after.width, before.width);
+      assert.equal(after.height, before.height);
+      assert.ok(after.y >= 0 && after.y + after.height <= viewport.height);
+    } finally { await page.close(); }
+  }
+});
 async function screenshot(page, name) {
   if (!process.env.MEMORY_SCREENSHOT_DIR) return;
   await mkdir(process.env.MEMORY_SCREENSHOT_DIR, { recursive: true });

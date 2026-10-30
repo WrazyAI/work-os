@@ -6924,7 +6924,7 @@ button:not(:disabled):active {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   width: min(720px, 100%);
-  max-height: min(680px, calc(100vh - 48px));
+  height: min(680px, calc(100dvh - 48px));
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
@@ -7266,7 +7266,7 @@ button:not(:disabled):active {
   }
 
   .memory-modal-panel {
-    max-height: calc(100dvh - 24px);
+    height: min(680px, calc(100dvh - 24px));
     border-radius: 16px;
   }
 
