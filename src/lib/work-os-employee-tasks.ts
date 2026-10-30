@@ -859,6 +859,7 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
         completed: true,
         completedAt: text((updated as Json).completed_at) ?? null,
       });
+      await audit(access, "task.completed", String(candidate.provider ?? "") === "local" ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {});
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
     reopen: async (candidate) => {
@@ -869,6 +870,7 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
         completed: false,
         completedAt: null,
       });
+      await audit(access, "task.reopened", String(candidate.provider ?? "") === "local" ? "work_os_task" : "nifty_task", String(candidate.provider_task_id ?? candidate.id), {});
       if (String(candidate.id) === String(task.id)) updatedTask = updated as Json;
     },
   });

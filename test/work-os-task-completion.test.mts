@@ -284,6 +284,7 @@ test("reopening a task through the employee path leaves its subtasks alone", asy
 
 test("the administration completion path closes the open subtasks before the task", async () => {
   const closed: string[] = [];
+  const audited: string[] = [];
   const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "completeWorkOsTask", "", {
     ...permissionContext,
     getTaskByLocalOrProviderId: async () => root,
@@ -303,12 +304,26 @@ test("the administration completion path closes the open subtasks before the tas
       return { ...root, completed_at: "2026-10-22T10:00:00Z" };
     },
     syncPlanItemCompletion: async () => undefined,
+    audit: async (_access: unknown, action: string, type: string, id: string) => { audited.push(`${action}:${type}:${id}`); },
     text: (value: unknown) => (typeof value === "string" ? value.trim() : ""),
   });
 
   await subject({ organizationId: "org", personId: null, role: "admin" }, "provider-root");
 
   assert.deepEqual(closed, ["provider-child:true", "provider-root:true"]);
+  assert.deepEqual(audited, ["task.completed:nifty_task:provider-child", "task.completed:nifty_task:provider-root"]);
+});
+
+test("administration reopen audits the changed local task", async () => {
+  const audited: string[] = [];
+  const subject = loadFunction("src/lib/work-os-employee-tasks.ts", "completeWorkOsTask", "", employeeContext({
+    getTaskByLocalOrProviderId: async () => ({ ...root, provider: "local", completed: true }),
+    completeTask: async () => ({ ...root, completed: false }),
+    syncPlanItemCompletion: async () => undefined,
+    audit: async (_access: unknown, action: string, type: string, id: string) => { audited.push(`${action}:${type}:${id}`); },
+  }));
+  await subject({ organizationId: "org", personId: null, role: "admin" }, "provider-root", false);
+  assert.deepEqual(audited, ["task.reopened:work_os_task:provider-root"]);
 });
 
 for (const name of ["setWorkOsEmployeeTaskCompletion", "completeWorkOsTask"]) {
