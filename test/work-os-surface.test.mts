@@ -54,14 +54,17 @@ test("work-os keeps its own next config", () => {
 
 test("password reset is public and wired for every role", () => {
   const login = readFileSync(path.join(root, "src/app/login/page.tsx"), "utf8");
+  const loginStyles = readFileSync(path.join(root, "src/app/login/login.module.css"), "utf8");
   const forgot = readFileSync(path.join(root, "src/app/forgot-password/page.tsx"), "utf8");
   const reset = readFileSync(path.join(root, "src/app/reset-password/page.tsx"), "utf8");
   const auth = readFileSync(path.join(root, "src/lib/auth.ts"), "utf8");
   const proxy = readFileSync(path.join(root, "src/proxy.ts"), "utf8");
 
-  assert.match(login, />WrazyOS<\/h1>/, "the auth screen must say WrazyOS");
+  assert.match(login, /aria-label="Sign in to WrazyOS"/, "the auth form must identify WrazyOS");
+  assert.match(login, /<h1 id="login-title">Welcome back\.<\/h1>/, "the auth screen must retain its semantic sign-in heading");
   assert.doesNotMatch(login, />Work OS<\/h1>/, "the old Work OS title must be gone");
-  assert.match(login, /<h1 style=\{\{ fontSize: 20, margin: 0, color: "#e8e9ec" \}\}>WrazyOS<\/h1>/, "the title must carry its own color (the global heading token is light-theme dark)");
+  assert.match(login, /import styles from "\.\/login\.module\.css"/, "the auth screen must own its scoped visual treatment");
+  assert.match(loginStyles, /\.formContent h1\s*\{[^}]*color:\s*var\(--login-ink\)/, "the title must own its readable color rather than inherit a global heading token");
   assert.match(login, /\/forgot-password/, "the auth screen must offer the reset flow");
   assert.match(forgot, /\/api\/auth\/request-password-reset/, "the forgot page requests the reset email");
   assert.match(reset, /\/api\/auth\/reset-password/, "the reset page submits the new password");
