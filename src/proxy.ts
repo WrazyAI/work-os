@@ -48,6 +48,10 @@ function isPublic(pathname: string): boolean {
   // "/" is the public landing page — page.tsx renders LandingPage for
   // anonymous visitors and Overview for signed-in users.
   if (pathname === "/") return true;
+  // Public landing destinations and its explicitly published film must work
+  // without a session. Keep this exact so no adjacent private route is opened.
+  if (pathname === "/privacy" || pathname === "/terms") return true;
+  if (pathname === "/landing/task-workflow.mp4" || pathname === "/landing/task-workflow.vtt") return true;
   // Dev-only fixture surface for rendered QA; NODE_ENV is inlined at build
   // time, so this branch cannot exist in a production bundle.
   if (process.env.NODE_ENV !== "production" && pathname === "/work-os-preview") return true;
