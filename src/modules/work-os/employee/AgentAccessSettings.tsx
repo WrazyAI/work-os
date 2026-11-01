@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { BookOpenText, Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { fetchJson, formatDateTimeShort } from "./model";
 import {
   EmptyState,
@@ -97,11 +98,20 @@ export default function AgentAccessSettings() {
   const error = tokens.error || create.error || revoke.error;
 
   return (
-    <Panel>
+    <Panel id="agent-access">
       <PanelHeader
         icon={<KeyRound size={16} />}
         title="Agent access"
         meta="Scoped tokens let external agents read your tasks, log progress, and attach evidence. Secrets are shown once."
+        actions={
+          <Link
+            href="/work-os/api"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold transition hover:border-[var(--border-hot)]"
+            style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-primary)" }}
+          >
+            <BookOpenText size={13} aria-hidden /> API guide
+          </Link>
+        }
       />
       <div className="grid gap-4 px-5 py-5">
         {error ? <Notice tone="err">{(error as Error).message}</Notice> : null}

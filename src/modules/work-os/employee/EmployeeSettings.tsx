@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Bell, HardDriveDownload, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, BookOpenText, HardDriveDownload, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "../timezones";
 import EmployeeMemory from "./EmployeeMemory";
 import AgentAccessSettings from "./AgentAccessSettings";
@@ -237,6 +237,23 @@ export default function EmployeeSettings() {
         )}
 
         <EmployeeMemory enabled={access.featureFlags.work_memory === true} />
+
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <BookOpenText size={15} className="mt-0.5 shrink-0" style={{ color: "var(--text-tertiary)" }} aria-hidden />
+            <div>
+              <p className="text-[12px] font-semibold text-[var(--text-primary)]">Building an external agent?</p>
+              <p className="mt-0.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">The Agent API guide covers authentication, endpoints, limits, and recovery.</p>
+            </div>
+          </div>
+          <Link
+            href="/work-os/api"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold transition hover:border-[var(--border-hot)]"
+            style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-primary)" }}
+          >
+            Open API guide
+          </Link>
+        </div>
 
         <AgentAccessSettings />
 

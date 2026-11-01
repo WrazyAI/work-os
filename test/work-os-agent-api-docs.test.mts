@@ -1,0 +1,120 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import yaml from "js-yaml";
+import {
+  AGENT_API_CURL_SAMPLE,
+  AGENT_API_ENDPOINTS,
+  AGENT_API_ERRORS,
+  AGENT_API_EVIDENCE_MAX_BYTES,
+  AGENT_API_EVIDENCE_TYPE_LABELS,
+  AGENT_API_MCP_TOOLS,
+  AGENT_API_RATE_LIMIT_REQUESTS,
+  AGENT_API_RATE_LIMIT_WRITES,
+  AGENT_API_SCOPES,
+  AGENT_API_TYPESCRIPT_SAMPLE,
+} from "../src/modules/work-os/agent-api-docs.ts";
+import { COMPLETION_EVIDENCE_ALLOWED_TYPES, COMPLETION_EVIDENCE_MAX_BYTES } from "../src/modules/work-os/completion-evidence.ts";
+import { AGENT_RATE_LIMIT_MAX_REQUESTS, AGENT_RATE_LIMIT_MAX_WRITES } from "../src/lib/work-agent-rate-limit.ts";
+
+const root = new URL("../", import.meta.url);
+const read = (file: string) => readFile(new URL(file, root), "utf8");
+const HTTP_METHODS = new Set(["get", "post", "patch", "delete"]);
+
+type SpecOperation = {
+  "x-required-scope"?: string;
+  security?: unknown[];
+};
+
+async function openapi() {
+  return yaml.load(await read("docs/openapi/work-os-agent-v1.yaml")) as {
+    paths: Record<string, Record<string, SpecOperation>>;
+    components: {
+      schemas: {
+        Scope: { enum: string[] };
+        Error: { properties: { code: { enum: string[] } } };
+      };
+    };
+  };
+}
+
+function specEndpoints(spec: Awaited<ReturnType<typeof openapi>>) {
+  return Object.entries(spec.paths).flatMap(([path, operations]) => (
+    Object.entries(operations)
+      .filter(([method]) => HTTP_METHODS.has(method))
+      .map(([method, operation]) => ({
+        method: method.toUpperCase(),
+        path,
+        requiredScope: operation["x-required-scope"] ?? "public",
+      }))
+  )).sort((left, right) => `${left.method} ${left.path}`.localeCompare(`${right.method} ${right.path}`));
+}
+
+test("the documented endpoint set exactly matches the OpenAPI contract", async () => {
+  const documented = specEndpoints(await openapi());
+  const page = AGENT_API_ENDPOINTS.map(({ method, path, requiredScope }) => ({ method, path, requiredScope }))
+    .sort((left, right) => `${left.method} ${left.path}`.localeCompare(`${right.method} ${right.path}`));
+  assert.deepEqual(page, documented);
+});
+
+test("the page's scope vocabulary matches the OpenAPI scope enum", async () => {
+  const spec = await openapi();
+  assert.deepEqual(AGENT_API_SCOPES.map((scope) => scope.id).sort(), [...spec.components.schemas.Scope.enum].sort());
+});
+
+test("the page carries every OpenAPI error code and no invented code", async () => {
+  const spec = await openapi();
+  assert.deepEqual(AGENT_API_ERRORS.map((error) => error.code).sort(), [...spec.components.schemas.Error.properties.code.enum].sort());
+});
+
+test("batch documents the route's per-operation scope behavior", () => {
+  const batch = AGENT_API_ENDPOINTS.find((endpoint) => endpoint.method === "POST" && endpoint.path === "/batch");
+  assert.ok(batch);
+  assert.equal(batch.scopeLabel, "Per operation");
+  assert.match(batch.note ?? "", /progress:write/);
+});
+
+test("limits and evidence guidance follow the shared runtime constants", () => {
+  assert.equal(AGENT_API_RATE_LIMIT_REQUESTS, AGENT_RATE_LIMIT_MAX_REQUESTS);
+  assert.equal(AGENT_API_RATE_LIMIT_WRITES, AGENT_RATE_LIMIT_MAX_WRITES);
+  assert.equal(AGENT_API_EVIDENCE_MAX_BYTES, COMPLETION_EVIDENCE_MAX_BYTES);
+  assert.equal(AGENT_API_EVIDENCE_TYPE_LABELS.length, COMPLETION_EVIDENCE_ALLOWED_TYPES.length);
+  assert.equal(new Set(AGENT_API_EVIDENCE_TYPE_LABELS).size, AGENT_API_EVIDENCE_TYPE_LABELS.length);
+});
+
+test("MCP lists the seven live tool names once", () => {
+  const names = AGENT_API_MCP_TOOLS.map((tool) => tool.name);
+  assert.deepEqual(names, ["list_tasks", "get_task", "create_task", "update_task", "complete_task", "log_progress", "attach_evidence"]);
+  assert.equal(new Set(names).size, 7);
+});
+
+test("the copyable first-call examples use the documented base and bearer header", () => {
+  assert.match(AGENT_API_CURL_SAMPLE, /https:\/\/app\.wrazyos\.com\/api\/agent\/v1\/me/);
+  assert.match(AGENT_API_CURL_SAMPLE, /Authorization: Bearer \$WORK_OS_API_TOKEN/);
+  assert.match(AGENT_API_TYPESCRIPT_SAMPLE, /https:\/\/app\.wrazyos\.com\/api\/agent\/v1/);
+  assert.match(AGENT_API_TYPESCRIPT_SAMPLE, /Authorization: `Bearer \$\{token\}`/);
+  assert.match(AGENT_API_TYPESCRIPT_SAMPLE, /async function main\(\)/);
+  assert.match(AGENT_API_TYPESCRIPT_SAMPLE, /void main\(\);/);
+});
+
+test("the rendered guide consumes the contract-backed documentation model", async () => {
+  const component = await read("src/modules/work-os/employee/ApiDocs.tsx");
+  assert.match(component, /AGENT_API_ENDPOINTS\.filter/);
+  assert.match(component, /<EndpointRow/);
+  assert.match(component, /AGENT_API_SCOPES\.map/);
+  assert.match(component, /AGENT_API_ERRORS\.map/);
+  assert.match(component, /AGENT_API_MCP_TOOLS\.map/);
+  const route = await read("src/app/work-os/(employee)/api/page.tsx");
+  assert.match(route, /ApiDocs/);
+  assert.match(route, /title: "Agent API"/);
+});
+
+test("Settings and the token panel both lead to the guide", async () => {
+  const settings = await read("src/modules/work-os/employee/EmployeeSettings.tsx");
+  const tokenPanel = await read("src/modules/work-os/employee/AgentAccessSettings.tsx");
+  assert.match(settings, /href="\/work-os\/api"/);
+  assert.match(settings, /Open API guide/);
+  assert.match(tokenPanel, /href="\/work-os\/api"/);
+  assert.match(tokenPanel, /API guide/);
+  assert.match(tokenPanel, /id="agent-access"/);
+});
