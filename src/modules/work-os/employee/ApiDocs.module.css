@@ -248,7 +248,7 @@
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
 }
-.steps h3 { font-size: 12.5px; }
+.steps h3 { font-size: 13px; letter-spacing: 0; line-height: 1.5; }
 .steps p { margin-top: 4px; font-size: 12.5px; }
 .inlineAction { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 20px; }
 .inlineAction > span { color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
