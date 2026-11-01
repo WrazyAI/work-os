@@ -38,7 +38,17 @@ export default function LoginPage() {
         setError(body?.message ?? "Invalid email or password.");
         return;
       }
-      window.location.href = "/work-os";
+      const requested = new URLSearchParams(window.location.search).get("redirect");
+      let destination = "/work-os";
+      if (requested && requested.startsWith("/") && !requested.startsWith("//") && !requested.includes("\\")) {
+        try {
+          const target = new URL(requested, window.location.origin);
+          if (target.origin === window.location.origin) destination = `${target.pathname}${target.search}${target.hash}`;
+        } catch {
+          // Keep the workspace home for an invalid destination.
+        }
+      }
+      window.location.href = destination;
       navigating = true;
     } catch {
       setError("Network error. Please try again.");

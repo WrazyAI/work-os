@@ -179,3 +179,21 @@ test("successful authentication stays locked while the workspace navigation is p
     assert.equal(disabled, true, "successful navigation must not reopen sign-in submission");
   } finally { await browser.close(); }
 });
+
+test("login follows a safe post-authentication redirect", { skip: !url }, async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.route("**/api/auth/sign-in/email", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await page.route("**/work-os/agent-access", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<h1>Agent access</h1>" }));
+    await page.goto(`${url}?redirect=%2Fwork-os%2Fagent-access`);
+    await page.getByRole("button", { name: "Show password", exact: true }).click();
+    await page.getByRole("button", { name: "Hide password", exact: true }).waitFor({ timeout: 15000 });
+    await page.getByRole("button", { name: "Hide password", exact: true }).click();
+    await page.getByLabel("Email", { exact: true }).fill("invalid@example.test");
+    await page.getByLabel("Password", { exact: true }).fill("not-a-real-password");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.waitForURL("**/work-os/agent-access");
+    assert.equal(new URL(page.url()).pathname, "/work-os/agent-access");
+  } finally { await browser.close(); }
+});

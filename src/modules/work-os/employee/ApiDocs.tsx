@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useState, type ReactNode } from "react";
-import Link from "next/link";
 import {
   AlertTriangle,
   Bot,
@@ -29,6 +28,7 @@ import {
   AGENT_API_TYPESCRIPT_SAMPLE,
   type AgentApiEndpoint,
 } from "@/modules/work-os/agent-api-docs";
+import { highlightCode, type CodeLanguage } from "@/modules/work-os/code-highlight";
 import { Masthead, Panel, StatusPill } from "./ui";
 import styles from "./ApiDocs.module.css";
 
@@ -64,14 +64,15 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-function CodeBlock({ label, code }: { label: string; code: string }) {
+function CodeBlock({ label, code, language }: { label: string; code: string; language: CodeLanguage }) {
+  const highlighted = highlightCode(code, language);
   return (
     <div className={styles.codeBlock}>
       <div className={styles.codeHeader}>
         <span>{label}</span>
         <CopyButton text={code} label={label} />
       </div>
-      <pre tabIndex={0} aria-label={`${label} example`}><code>{code}</code></pre>
+      <pre tabIndex={0} aria-label={`${label} example`}><code dangerouslySetInnerHTML={{ __html: highlighted }} /></pre>
     </div>
   );
 }
@@ -183,7 +184,7 @@ export default function ApiDocs() {
                 </li>
               </ol>
               <div className={styles.inlineAction}>
-                <Link href="/work-os/settings#agent-access" className={styles.primaryLink}><KeyRound size={14} aria-hidden /> Open Agent access</Link>
+                <a href="/work-os/agent-access" className={styles.primaryLink}><KeyRound size={14} aria-hidden /> Open Agent access</a>
                 <span>The panel is under Settings, beside your profile and workday.</span>
               </div>
             </section>
@@ -193,8 +194,8 @@ export default function ApiDocs() {
                 Call <code>/me</code> before anything else. It proves the token and shows the exact workspace and person scope.
               </SectionHeading>
               <div className={styles.codeStack}>
-                <CodeBlock label="curl" code={AGENT_API_CURL_SAMPLE} />
-                <CodeBlock label="TypeScript" code={AGENT_API_TYPESCRIPT_SAMPLE} />
+                <CodeBlock label="curl" language="bash" code={AGENT_API_CURL_SAMPLE} />
+                <CodeBlock label="TypeScript" language="typescript" code={AGENT_API_TYPESCRIPT_SAMPLE} />
               </div>
               <p className={styles.helper}>Run the TypeScript example with <code>npx tsx me.ts</code> after setting <code>WORK_OS_API_TOKEN</code>. The curl example uses <code>--fail-with-body</code>, so a rejected token exits nonzero and still prints the API error.</p>
             </section>
@@ -260,6 +261,7 @@ export default function ApiDocs() {
               </div>
               <CodeBlock
                 label="Attach evidence"
+                language="bash"
                 code={`curl --fail-with-body -X POST \\
   -H "Authorization: Bearer $WORK_OS_API_TOKEN" \\
   -H "Idempotency-Key: evidence-1" \\
@@ -286,10 +288,7 @@ export default function ApiDocs() {
               <SectionHeading id="errors-title" title="Errors">
                 Every failed REST request returns an error, a stable code, and a request id. Use the code for recovery; include the request id when reporting a 5xx.
               </SectionHeading>
-              <div className={styles.errorEnvelope}>
-                <span>Error envelope</span>
-                <code>{`{ "error": "Task not found", "code": "not_found", "request_id": "…" }`}</code>
-              </div>
+              <CodeBlock label="Error envelope" language="json" code={`{ "error": "Task not found", "code": "not_found", "request_id": "…" }`} />
               <table className={styles.errorTable}>
                 <caption className={styles.srOnly}>Agent API error codes, HTTP status, and recovery action</caption>
                 <thead><tr><th scope="col">Code</th><th scope="col">Status</th><th scope="col">What to do</th></tr></thead>
