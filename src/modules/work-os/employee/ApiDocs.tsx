@@ -12,12 +12,14 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
+  AGENT_API_AGENT_PROMPT,
   AGENT_API_BASE_URL,
   AGENT_API_CURL_SAMPLE,
   AGENT_API_ENDPOINTS,
   AGENT_API_ERRORS,
   AGENT_API_EVIDENCE_MAX_BYTES,
   AGENT_API_EVIDENCE_TYPE_LABELS,
+  AGENT_API_LLMS_URL,
   AGENT_API_MCP_TOOLS,
   AGENT_API_MCP_URL,
   AGENT_API_OPENAPI_URL,
@@ -200,6 +202,20 @@ export default function ApiDocs() {
               <p className={styles.helper}>Run the TypeScript example with <code>npx tsx me.ts</code> after setting <code>WORK_OS_API_TOKEN</code>. The curl example uses <code>--fail-with-body</code>, so a rejected token exits nonzero and still prints the API error.</p>
             </section>
 
+            <section id="agent-setup" className={styles.section} aria-labelledby="agent-setup-title">
+              <SectionHeading id="agent-setup-title" title="Want your agent to set it up for you?">
+                Give your coding agent one instruction. It can read the token setup, endpoint map, scope boundaries, retry rules, evidence gate, and error meanings without guessing.
+              </SectionHeading>
+              <div className={styles.agentPrompt}>
+                <div className={styles.agentPromptCopy}>
+                  <span>Prompt for your agent</span>
+                  <p>Read the agent instructions at <a href={AGENT_API_LLMS_URL} target="_blank" rel="noreferrer">{AGENT_API_LLMS_URL}</a></p>
+                </div>
+                <CopyButton text={AGENT_API_AGENT_PROMPT} label="agent setup prompt" />
+              </div>
+              <p className={styles.helper}>The instructions are public and agent-readable at <a href={AGENT_API_LLMS_URL} target="_blank" rel="noreferrer">llms.txt</a>. Token creation remains in Settings.</p>
+            </section>
+
             <section id="endpoints" className={styles.section} aria-labelledby="endpoints-title">
               <SectionHeading id="endpoints-title" title="Endpoints">
                 Paths are relative to the API base. Every write requires <code>Idempotency-Key</code>; reads do not.
@@ -330,7 +346,7 @@ export default function ApiDocs() {
           <p>On this page</p>
           {AGENT_API_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`}>{section.label}</a>)}
           <span className={styles.tocRule} />
-          <a href={AGENT_API_OPENAPI_URL} target="_blank" rel="noreferrer">OpenAPI schema <ExternalLink size={12} aria-hidden /></a>
+          <a href={AGENT_API_LLMS_URL} target="_blank" rel="noreferrer">Agent instructions <Bot size={12} aria-hidden /></a>
         </nav>
       </div>
     </div>

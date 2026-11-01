@@ -8,6 +8,9 @@
 
 export const AGENT_API_BASE_URL = "https://app.wrazyos.com/api/agent/v1";
 export const AGENT_API_OPENAPI_URL = `${AGENT_API_BASE_URL}/openapi.yaml`;
+export const AGENT_API_GUIDE_URL = "https://app.wrazyos.com/docs/agent-api";
+export const AGENT_API_LLMS_URL = `${AGENT_API_GUIDE_URL}/llms.txt`;
+export const AGENT_API_AGENT_PROMPT = `Read the agent instructions at ${AGENT_API_LLMS_URL}`;
 export const AGENT_API_MCP_URL = "https://app.wrazyos.com/api/mcp";
 export const AGENT_API_TOKEN_PREFIX = "wos_agent_";
 
@@ -253,6 +256,7 @@ export const AGENT_API_MCP_TOOLS = [
 export const AGENT_API_SECTIONS = [
   { id: "get-token", label: "Get a token" },
   { id: "first-call", label: "First call" },
+  { id: "agent-setup", label: "Agent setup" },
   { id: "endpoints", label: "Endpoints" },
   { id: "scopes", label: "Scopes" },
   { id: "limits", label: "Limits and evidence" },

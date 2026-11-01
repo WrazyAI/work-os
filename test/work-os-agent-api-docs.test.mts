@@ -3,11 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import yaml from "js-yaml";
 import {
+  AGENT_API_AGENT_PROMPT,
+  AGENT_API_BASE_URL,
   AGENT_API_CURL_SAMPLE,
   AGENT_API_ENDPOINTS,
   AGENT_API_ERRORS,
   AGENT_API_EVIDENCE_MAX_BYTES,
   AGENT_API_EVIDENCE_TYPE_LABELS,
+  AGENT_API_LLMS_URL,
   AGENT_API_MCP_TOOLS,
   AGENT_API_RATE_LIMIT_REQUESTS,
   AGENT_API_RATE_LIMIT_WRITES,
@@ -17,6 +20,7 @@ import {
 import { COMPLETION_EVIDENCE_ALLOWED_TYPES, COMPLETION_EVIDENCE_MAX_BYTES } from "../src/modules/work-os/completion-evidence.ts";
 import { AGENT_RATE_LIMIT_MAX_REQUESTS, AGENT_RATE_LIMIT_MAX_WRITES } from "../src/lib/work-agent-rate-limit.ts";
 import { highlightCode } from "../src/modules/work-os/code-highlight.ts";
+import { buildAgentInstructions } from "../src/modules/work-os/agent-api-llms.ts";
 
 const root = new URL("../", import.meta.url);
 const read = (file: string) => readFile(new URL(file, root), "utf8");
@@ -107,10 +111,15 @@ test("the rendered guide consumes the contract-backed documentation model", asyn
   assert.match(component, /AGENT_API_ERRORS\.map/);
   assert.match(component, /AGENT_API_MCP_TOOLS\.map/);
   assert.match(component, /href="\/work-os\/agent-access"/);
+  assert.match(component, /id="agent-setup"/);
+  assert.match(component, /Want your agent to set it up for you\?/);
+  assert.match(component, /href=\{AGENT_API_LLMS_URL\}/);
   const route = await read("src/app/docs/agent-api/page.tsx");
   assert.match(route, /data-work-os-workspace/);
   assert.match(route, /ApiDocs/);
   assert.match(route, /title: "Agent API"/);
+  assert.match(route, /auth\.api\.getSession/);
+  assert.match(route, /signedIn \? "Dashboard" : "Sign in"/);
   assert.match(route, /\/docs\/agent-api/);
 });
 
@@ -159,4 +168,27 @@ test("the guide is public and exempt from host chrome", async () => {
   if (tour) assert.match(tour, /pathname === "\/docs"|pathname\.startsWith\("\/docs\/"\)/);
   const activity = await optional("src/lib/activityCenter.ts");
   if (activity) assert.match(activity, /\/docs/);
+});
+
+test("the agent instructions carry the full public contract", () => {
+  const text = buildAgentInstructions();
+  assert.ok(text.startsWith("# Work OS Agent API v1"));
+  assert.ok(text.includes(AGENT_API_BASE_URL));
+  assert.ok(text.includes(AGENT_API_AGENT_PROMPT));
+  for (const endpoint of AGENT_API_ENDPOINTS) {
+    assert.ok(text.includes(`\`${endpoint.path}\``), `missing ${endpoint.path}`);
+    assert.ok(text.includes(endpoint.method), `missing ${endpoint.method} ${endpoint.path}`);
+  }
+  for (const scope of AGENT_API_SCOPES) assert.ok(text.includes(`\`${scope.id}\``));
+  for (const error of AGENT_API_ERRORS) assert.ok(text.includes(`\`${error.code}\``));
+  for (const tool of AGENT_API_MCP_TOOLS) assert.ok(text.includes(`\`${tool.name}\``));
+  assert.ok(text.includes("Idempotency-Key"));
+  assert.ok(text.includes("evidence_required"));
+});
+
+test("the llms.txt route serves the instructions as public text", async () => {
+  const route = await read("src/app/docs/agent-api/llms.txt/route.ts");
+  assert.match(route, /buildAgentInstructions/);
+  assert.match(route, /text\/plain; charset=utf-8/);
+  assert.match(route, /public, max-age=300/);
 });

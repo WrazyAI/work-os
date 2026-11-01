@@ -258,6 +258,33 @@
 }
 .steps h3 { font-size: 13px; letter-spacing: 0; line-height: 1.5; }
 .steps p { margin-top: 5px; font-size: 13px; }
+.agentPrompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  padding: 13px 12px 13px 16px;
+}
+.agentPromptCopy { min-width: 0; }
+.agentPromptCopy > span {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.agentPromptCopy p { margin-top: 5px; color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.agentPromptCopy a { color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-hot); text-underline-offset: 3px; }
+.agentPromptCopy a:hover { color: var(--accent-deep); }
+.agentPrompt .copyButton { min-height: 36px; border: 1px solid var(--border); background: var(--bg-card); padding-inline: 10px; }
+.agentPrompt .copyButton:hover { border-color: var(--border-hot); background: var(--bg-card); }
+.helper a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; }
 .inlineAction { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 20px; }
 .inlineAction > span { color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
 .primaryLink {
@@ -610,6 +637,8 @@
   .accessConnector > span { padding: 3px; }
   .section { padding: 28px 20px 34px; }
   .sectionHeading h2 { font-size: 19px; }
+  .agentPrompt { align-items: flex-start; }
+  .agentPrompt .copyButton { min-height: 40px; }
   .scopeRow { grid-template-columns: 1fr; gap: 5px; }
   .scopeRow > code { margin-bottom: 1px; }
   .errorTable thead th:nth-child(1) { width: 140px; }
