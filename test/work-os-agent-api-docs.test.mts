@@ -125,6 +125,8 @@ test("Settings and the token panel both lead to the guide", async () => {
 test("the guide is public and exempt from host chrome", async () => {
   const proxy = await read("src/proxy.ts");
   assert.match(proxy, /"\/docs"/);
+  const dashboard = await optional("src/lib/dashboard-access.ts");
+  if (dashboard) assert.match(dashboard, /"\/docs"/);
   const shell = await optional("src/components/Shell.tsx");
   if (shell) assert.match(shell, /"\/docs"/);
   const tour = await optional("src/components/GlobalTour.tsx");
