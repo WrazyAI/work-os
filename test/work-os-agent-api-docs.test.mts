@@ -19,6 +19,7 @@ import { AGENT_RATE_LIMIT_MAX_REQUESTS, AGENT_RATE_LIMIT_MAX_WRITES } from "../s
 
 const root = new URL("../", import.meta.url);
 const read = (file: string) => readFile(new URL(file, root), "utf8");
+const optional = (file: string) => read(file).catch(() => null);
 const HTTP_METHODS = new Set(["get", "post", "patch", "delete"]);
 
 type SpecOperation = {
@@ -104,17 +105,30 @@ test("the rendered guide consumes the contract-backed documentation model", asyn
   assert.match(component, /AGENT_API_SCOPES\.map/);
   assert.match(component, /AGENT_API_ERRORS\.map/);
   assert.match(component, /AGENT_API_MCP_TOOLS\.map/);
-  const route = await read("src/app/work-os/(employee)/api/page.tsx");
+  const route = await read("src/app/docs/agent-api/page.tsx");
+  assert.match(route, /data-work-os-workspace/);
   assert.match(route, /ApiDocs/);
   assert.match(route, /title: "Agent API"/);
+  assert.match(route, /\/docs\/agent-api/);
 });
 
 test("Settings and the token panel both lead to the guide", async () => {
   const settings = await read("src/modules/work-os/employee/EmployeeSettings.tsx");
   const tokenPanel = await read("src/modules/work-os/employee/AgentAccessSettings.tsx");
-  assert.match(settings, /href="\/work-os\/api"/);
+  assert.match(settings, /href="\/docs\/agent-api"/);
   assert.match(settings, /Open API guide/);
-  assert.match(tokenPanel, /href="\/work-os\/api"/);
+  assert.match(tokenPanel, /href="\/docs\/agent-api"/);
   assert.match(tokenPanel, /API guide/);
   assert.match(tokenPanel, /id="agent-access"/);
+});
+
+test("the guide is public and exempt from host chrome", async () => {
+  const proxy = await read("src/proxy.ts");
+  assert.match(proxy, /"\/docs"/);
+  const shell = await optional("src/components/Shell.tsx");
+  if (shell) assert.match(shell, /"\/docs"/);
+  const tour = await optional("src/components/GlobalTour.tsx");
+  if (tour) assert.match(tour, /pathname === "\/docs"|pathname\.startsWith\("\/docs\/"\)/);
+  const activity = await optional("src/lib/activityCenter.ts");
+  if (activity) assert.match(activity, /\/docs/);
 });

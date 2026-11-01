@@ -247,7 +247,7 @@ export default function EmployeeSettings() {
             </div>
           </div>
           <Link
-            href="/work-os/api"
+            href="/docs/agent-api"
             className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold transition hover:border-[var(--border-hot)]"
             style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-primary)" }}
           >

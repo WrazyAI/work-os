@@ -11,6 +11,7 @@ const PUBLIC_PREFIXES = [
   "/forgot-password",
   "/reset-password",
   "/auth",
+  "/docs",
   "/api/auth",
   "/api/work-os/desktop/token",
   "/api/work-os/integrations/github/webhook",
