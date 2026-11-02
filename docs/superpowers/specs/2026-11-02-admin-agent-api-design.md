@@ -1,8 +1,9 @@
 # Admin agent API and MCP: design
 
-Date: 2026-11-02. Status: proposed; implementation not started.
+Date: 2026-11-02. Status: approved by the user on 2026-11-02; implementation planned.
 Baseline: Work OS `origin/main` at `017d9379`.
 Ledger: `451d4159-e201-4d22-b347-a4f1b7bd9a9f` — Build the admin-scoped agent API and MCP.
+Plan: `docs/superpowers/plans/2026-11-02-admin-agent-api.md` (API and MCP; Otto is a follow-up plan).
 
 ## Intent
 
@@ -160,8 +161,9 @@ Settings.
    organization. Reject a missing or inactive membership with `unauthorized`.
 5. Re-read the membership role on every request. A demoted admin loses access
    on the next call; the role is never trusted from the token row.
-6. Require the organization feature flag `admin_agent_api`. Return
-   `feature_disabled` when it is off.
+6. Require the organization feature flags `admin_agent_api` and
+   `employee_companion`. Return `feature_disabled` when either is off; the
+   reused admin readers already enforce the companion flag.
 7. Build `WorkOsAccess` with `role: "admin"`, `personId: token.person_id` (may
    be null), and the token's scopes.
 
@@ -176,8 +178,10 @@ including scopes. It never returns the secret.
 ## REST surface
 
 Base path: `/api/agent/admin/v1`. This stays inside the existing public
-`/api/agent` prefix in `src/proxy.ts`, so the proxy needs no change and the
-employee contract is untouched.
+`/api/agent` prefix in `src/proxy.ts`, so the proxy auth check needs no change
+and the employee contract is untouched. The admin MCP route is added to the
+proxy matcher exclusion, like `/api/mcp`, so a 12 MB evidence body is not
+buffered and truncated at the proxy boundary.
 
 | Method | Path | Scope | Behavior |
 | --- | --- | --- | --- |
