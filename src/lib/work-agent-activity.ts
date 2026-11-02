@@ -123,9 +123,11 @@ export function mergeAgentActivity(
 export async function listActivityForAccess(
   access: WorkOsAccess,
   taskId: string,
-  params: { cursor?: string | null; limit?: number } = {},
+  params: { cursor?: string | null; limit?: number; allowArchived?: boolean } = {},
 ) {
-  const details = await getWorkOsEmployeeTaskDetails(access, taskId);
+  const details = await getWorkOsEmployeeTaskDetails(access, taskId, {
+    allowArchived: params.allowArchived === true,
+  });
   const localTaskId = String((details.task as Json).id);
   const organizationId = access.organizationId;
   const decoded = decodeActivityCursor(params.cursor);

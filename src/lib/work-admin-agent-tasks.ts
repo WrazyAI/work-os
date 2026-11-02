@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
 import { listActivityForAccess, type AgentActivityItem } from "@/lib/work-agent-activity";
 import { validCursorTimestamp } from "@/lib/work-agent-tasks";
-import { getWorkOsEmployeeTaskDetails } from "@/lib/work-os-employee-tasks";
+import { getWorkOsEmployeeTaskDetails, employeeTaskToday } from "@/lib/work-os-employee-tasks";
 import { WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { isCalendarDate } from "@/lib/work-os-task-permissions";
 import type { Json } from "@/lib/work-os-internal";
@@ -41,9 +41,9 @@ function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/** A cursor that was minted against a different filter set is stale by
- * definition; spending it would silently skip rows. The route maps this to the
- * documented 422 `invalid_cursor` code. */
+/** A cursor that no longer describes a spendable position — malformed,
+ * minted against different filters, or spent on the opposite order — is a 422
+ * `invalid_cursor`, never a silent restart of pagination. */
 export class AdminAgentInvalidCursorError extends WorkOsValidationError {
   readonly code = "invalid_cursor";
   readonly status = 422;
@@ -65,18 +65,25 @@ function pageLimit(value: number): number {
 }
 
 /** The filter set a cursor is allowed to continue. Limit is deliberately
- * excluded: changing a page size does not change which rows match. */
-export function adminAgentTaskFilterFingerprint(filters: AdminAgentTaskFilters): string {
+ * excluded: changing a page size does not change which rows match. `today`
+ * only participates when the overdue filter is active, so an ordinary backlog
+ * cursor survives midnight. */
+export function adminAgentTaskFilterFingerprint(
+  filters: AdminAgentTaskFilters,
+  today: string | null = null,
+): string {
   const normalized = {
     personIds: filters.personIds === null ? null : [...new Set(filters.personIds)].sort(),
     query: filters.query?.trim() || null,
     completed: filters.completed ?? null,
+    overdue: filters.overdue ?? null,
     status: filters.status ?? "active",
     projectId: filters.projectId ?? null,
     dueFrom: filters.dueFrom ?? null,
     dueTo: filters.dueTo ?? null,
     updatedSince: filters.updatedSince ?? null,
     order: filters.updatedSince ? "asc" : "desc",
+    ...(filters.overdue == null ? {} : { today }),
   };
   return createHash("sha256").update(JSON.stringify(normalized)).digest("base64url").slice(0, 22);
 }
@@ -88,6 +95,7 @@ export function encodeAdminAgentTaskCursor(cursor: AdminAgentTaskCursor): string
 export function decodeAdminAgentTaskCursor(
   value: string | null | undefined,
   filters: AdminAgentTaskFilters,
+  today: string | null = null,
 ): AdminAgentTaskCursor | null {
   if (value == null || value === "") return null;
   let parsed: Record<string, unknown>;
@@ -101,9 +109,9 @@ export function decodeAdminAgentTaskCursor(
     if (typeof parsed.id !== "string" || !isUuid(parsed.id)) throw new Error("invalid cursor");
     if (typeof parsed.filters !== "string" || !parsed.filters) throw new Error("invalid cursor");
   } catch {
-    throw new WorkOsValidationError("Task cursor is invalid");
+    throw new AdminAgentInvalidCursorError("Task cursor is invalid");
   }
-  if (parsed.filters !== adminAgentTaskFilterFingerprint(filters)) {
+  if (parsed.filters !== adminAgentTaskFilterFingerprint(filters, today)) {
     throw new AdminAgentInvalidCursorError();
   }
   return {
@@ -152,6 +160,11 @@ export function parseAdminAgentTaskFilters(params: URLSearchParams): AdminAgentT
   const personParam = params.get("person_ids");
   if (personParam !== null) {
     const ids = personParam.split(",").map((value) => value.trim()).filter(Boolean);
+    // Bound the raw list before dedupe: a caller repeating one id twenty-one
+    // times is still asking for more than the contract allows.
+    if (ids.length > ADMIN_AGENT_TASK_PERSON_MAX) {
+      throw new WorkOsValidationError("person_ids accepts at most 20 person ids");
+    }
     personIds = [...new Set(ids)];
   }
 
@@ -168,6 +181,16 @@ export function parseAdminAgentTaskFilters(params: URLSearchParams): AdminAgentT
       throw new WorkOsValidationError("completed must be true or false");
     }
     completed = normalized === "true";
+  }
+
+  const rawOverdue = params.get("overdue");
+  let overdue: boolean | null = null;
+  if (rawOverdue !== null && rawOverdue.trim() !== "") {
+    const normalized = rawOverdue.trim().toLowerCase();
+    if (normalized !== "true" && normalized !== "false") {
+      throw new WorkOsValidationError("overdue must be true or false");
+    }
+    overdue = normalized === "true";
   }
 
   const rawStatus = params.get("status");
@@ -187,6 +210,7 @@ export function parseAdminAgentTaskFilters(params: URLSearchParams): AdminAgentT
     personIds,
     query,
     completed,
+    overdue,
     status: status as AdminAgentTaskFilters["status"],
     projectId: params.get("project_id")?.trim() || null,
     dueFrom: params.get("due_from")?.trim() || null,
@@ -222,11 +246,24 @@ const TASK_SELECT = `
   to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_at`;
 
 /** `active` is an exclusion, not a stored status: archived and tombstoned rows
- * are out unless the caller asks for that exact status. */
+ * are out unless the caller asks for that exact status. Overdue uses the
+ * administration definition shared with the dashboard: an incomplete task
+ * whose effective due date — the recorded due date, otherwise created + 1 day —
+ * is before the admin's local today. */
 const TASK_FILTERS = `
   t.organization_id = $1
   and ($2::uuid[] is null or t.assignee_person_ids && $2::uuid[])
-  and ($3::text is null or t.title ilike '%' || $3 || '%' or coalesce(t.description, '') ilike '%' || $3 || '%')
+  and (
+    $3::text is null
+    or t.title ilike '%' || $3 || '%'
+    or coalesce(t.description, '') ilike '%' || $3 || '%'
+    or exists (
+      select 1 from work_projects p
+      where p.organization_id = t.organization_id
+        and p.id = t.project_id
+        and p.name ilike '%' || $3 || '%'
+    )
+  )
   and ($4::boolean is null or t.completed = $4)
   and (
     ($5::text = 'active' and coalesce(t.status, '') not in ('archived', 'deleted'))
@@ -235,24 +272,44 @@ const TASK_FILTERS = `
   and ($6::uuid is null or t.project_id = $6)
   and ($7::date is null or t.due_date >= $7::date)
   and ($8::date is null or t.due_date <= $8::date)
-  and ($9::timestamptz is null or t.updated_at >= $9::timestamptz)`;
+  and ($9::timestamptz is null or t.updated_at >= $9::timestamptz)
+  and (
+    $10::boolean is null
+    or (
+      t.completed = false
+      and coalesce(
+        t.due_date,
+        (coalesce(t.provider_created_at, t.created_at) at time zone 'UTC')::date + 1
+      ) < $11::date
+    ) = $10::boolean
+  )`;
 
 export async function listAdminAgentTasks(
   access: WorkOsAccess,
   filters: AdminAgentTaskFilters,
+  options: { today?: string } = {},
 ): Promise<AdminAgentTaskPage> {
   const validated = validateAdminAgentTaskFilters(filters);
+  const limit = pageLimit(validated.limit);
+  const ascending = Boolean(validated.updatedSince);
+  // Overdue is measured against the admin's local day, exactly like the
+  // dashboard. The route passes its already-resolved day so the list and the
+  // capability decoration cannot disagree across a midnight boundary.
+  let today: string | null = null;
+  if (validated.overdue !== null) {
+    today = options.today ?? await employeeTaskToday(access);
+    if (!isCalendarDate(today)) throw new WorkOsValidationError("today must be a calendar date");
+  }
+  // The cursor is validated before the empty-person short-circuit so a stale or
+  // malformed cursor never looks like an empty result.
+  const cursor = decodeAdminAgentTaskCursor(validated.cursor, validated, today);
+  if (cursor && cursor.order !== (ascending ? "asc" : "desc")) {
+    throw new AdminAgentInvalidCursorError();
+  }
   // An explicit empty person list matches nobody. Short-circuiting here keeps
   // the answer obviously intentional instead of relying on an empty overlap.
   if (validated.personIds !== null && validated.personIds.length === 0) {
     return { tasks: [], nextCursor: null, total: 0 };
-  }
-
-  const limit = pageLimit(validated.limit);
-  const ascending = Boolean(validated.updatedSince);
-  const cursor = decodeAdminAgentTaskCursor(validated.cursor, validated);
-  if (cursor && cursor.order !== (ascending ? "asc" : "desc")) {
-    throw new AdminAgentInvalidCursorError();
   }
 
   const search = validated.query ? escapeLike(validated.query.trim()) : null;
@@ -267,6 +324,8 @@ export async function listAdminAgentTasks(
     validated.dueFrom,
     validated.dueTo,
     validated.updatedSince,
+    validated.overdue,
+    today,
   ];
   const pool = getPool();
 
@@ -280,17 +339,17 @@ export async function listAdminAgentTasks(
     ? await pool.query<TaskRow>(
       `select ${TASK_SELECT} from work_tasks t
        where ${TASK_FILTERS}
-         and ($10::timestamptz is null or (t.updated_at, t.id) > ($10::timestamptz, $11::uuid))
+         and ($12::timestamptz is null or (t.updated_at, t.id) > ($12::timestamptz, $13::uuid))
        order by t.updated_at asc, t.id asc
-       limit $12`,
+       limit $14`,
       pageParameters,
     )
     : await pool.query<TaskRow>(
       `select ${TASK_SELECT} from work_tasks t
        where ${TASK_FILTERS}
-         and ($10::timestamptz is null or (t.updated_at, t.id) < ($10::timestamptz, $11::uuid))
+         and ($12::timestamptz is null or (t.updated_at, t.id) < ($12::timestamptz, $13::uuid))
        order by t.updated_at desc, t.id desc
-       limit $12`,
+       limit $14`,
       pageParameters,
     );
 
@@ -301,7 +360,7 @@ export async function listAdminAgentTasks(
       order: ascending ? "asc" : "desc",
       updatedAt: String(last.cursor_at),
       id: String(last.id),
-      filters: adminAgentTaskFilterFingerprint(validated),
+      filters: adminAgentTaskFilterFingerprint(validated, today),
     })
     : null;
 
@@ -312,8 +371,10 @@ export async function listAdminAgentTasks(
   };
 }
 
+/** Admin detail keeps archived work readable (the list can ask for it), while
+ * tombstones stay unreachable for every caller. */
 export async function getAdminAgentTask(access: WorkOsAccess, taskId: string) {
-  const details = await getWorkOsEmployeeTaskDetails(access, taskId);
+  const details = await getWorkOsEmployeeTaskDetails(access, taskId, { allowArchived: true });
   return {
     task: details.task,
     subtasks: details.subtasks,
@@ -326,5 +387,7 @@ export function getAdminAgentTaskActivity(
   taskId: string,
   params: { cursor?: string | null; limit?: number } = {},
 ): Promise<{ items: AgentActivityItem[]; nextCursor: string | null }> {
-  return listActivityForAccess(access, taskId, params);
+  // Archived work stays readable through its timeline, matching detail; the
+  // tombstone refusal lives in the shared employee reader.
+  return listActivityForAccess(access, taskId, { ...params, allowArchived: true });
 }

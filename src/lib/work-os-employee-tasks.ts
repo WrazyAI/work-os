@@ -132,8 +132,12 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 const TASK_DETAIL_PROVIDER_REFRESH_MS = 5_000;
 const TASK_DETAIL_MIRROR_FRESH_MS = 2 * 60_000;
 
-export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
-  const { ownerId, task, niftyMemberId } = await employeeTaskContext(access, taskId);
+export async function getWorkOsEmployeeTaskDetails(
+  access: WorkOsAccess,
+  taskId: string,
+  options: { allowArchived?: boolean } = {},
+) {
+  const { ownerId, task, niftyMemberId } = await employeeTaskContext(access, taskId, options);
   // The record itself is the authority: work is native, so opening a task is a
   // single database read with no provider round-trip to wait on.
   const currentTask = task;

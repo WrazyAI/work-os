@@ -34,6 +34,9 @@ export type AdminAgentProject = {
 };
 export type AdminAgentTaskFilters = {
   personIds: string[] | null; query: string | null; completed: boolean | null;
+  /** Overdue uses the effective due date (recorded due date, otherwise
+   * created + 1 day) against the admin's local today. */
+  overdue: boolean | null;
   status: "active" | "archived" | "deleted" | null;
   projectId: string | null; dueFrom: string | null; dueTo: string | null;
   updatedSince: string | null; limit: number; cursor: string | null;

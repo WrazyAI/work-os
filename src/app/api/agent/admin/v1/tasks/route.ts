@@ -17,14 +17,17 @@ export async function GET(req: Request) {
     if (auth.response) return auth.response;
     assertAgentRateLimit(auth.agent.tokenId, false);
     const filters = parseAdminAgentTaskFilters(new URL(req.url).searchParams);
-    const page = await listAdminAgentTasks(auth.agent.access, filters);
+    // Resolve the admin's local day once: the overdue filter and the capability
+    // decoration must agree on the same calendar day.
+    const today = await employeeTaskToday(auth.agent.access);
+    const page = await listAdminAgentTasks(auth.agent.access, filters, { today });
     // Capabilities are computed for the admin's own person so an unmapped admin
     // still sees the flags their role grants, and a person-mapped admin sees
     // the same assignment flags the dashboard shows.
     const tasks = withTaskCapabilities(
       page.tasks as Array<Record<string, any>>,
       { role: "admin", personId: auth.agent.access.personId },
-      await employeeTaskToday(auth.agent.access),
+      today,
     );
     return NextResponse.json({
       tasks,

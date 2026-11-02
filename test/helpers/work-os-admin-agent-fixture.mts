@@ -43,6 +43,13 @@ export const taskUnassigned = "a0000000-0000-4000-8000-000000000008";
 export const taskDocumentation = "a0000000-0000-4000-8000-000000000009";
 export const otherTask = "a0000000-0000-4000-8000-000000000010";
 export const taskShared = "a0000000-0000-4000-8000-000000000011";
+export const taskOverdue = "a0000000-0000-4000-8000-000000000012";
+export const taskDueToday = "a0000000-0000-4000-8000-000000000013";
+export const taskOverdueDone = "a0000000-0000-4000-8000-000000000014";
+export const taskSubtask = "a0000000-0000-4000-8000-000000000015";
+export const checkoutEvidence = "b0000000-0000-4000-8000-000000000001";
+export const checkoutEvent = "c0000000-0000-4000-8000-000000000001";
+export const checkoutBlocker = "d0000000-0000-4000-8000-000000000001";
 
 const access = (
   organizationId: string,
@@ -179,7 +186,7 @@ create table work_tasks (
   provider text not null default 'nifty',
   provider_task_id text not null default '',
   provider_project_id text,
-  project_id uuid,
+  project_id uuid references work_projects (id) on delete set null,
   title text not null,
   description text,
   status text not null default 'open',
@@ -434,13 +441,40 @@ export async function seedTasks(db: Pick<PGlite, "query">) {
     ($8,$10,$11,'nifty','pt-unassigned',$12,'Unassigned backlog','Nobody owns this yet','open','pending',false,'{}'::uuid[],'2026-11-21','2026-10-29T10:00:00Z'),
     ($9,$10,$11,'nifty','pt-docs',$14,'Earlier documentation pass','Docs refresh','open','pending',false,$13::uuid[],null,'2026-10-20T10:00:00Z'),
     ($16,$17,$18,'nifty','pt-other',$19,'Other org secret','Must never leak','open','pending',false,$20::uuid[],'2026-11-15','2026-11-02T10:00:00Z'),
-    ($21,$10,$11,'nifty','pt-shared',$12,'Shared launch checklist','Both owners track this','open','pending',false,$22::uuid[],'2026-11-25','2026-11-01T10:00:00Z')`,
+    ($21,$10,$11,'nifty','pt-shared',$12,'Shared launch checklist','Both owners track this','open','pending',false,$22::uuid[],'2026-11-25','2026-11-01T10:00:00Z'),
+    ($23,$10,$11,'nifty','pt-overdue',$12,'Overdue renewal','Past the effective due date','open','pending',false,$24::uuid[],'2026-11-01','2026-10-25T10:00:00Z'),
+    ($25,$10,$11,'nifty','pt-due-today',$12,'Due today follow-up','Still due on the reference day','open','pending',false,$24::uuid[],'2026-11-02','2026-10-25T09:00:00Z'),
+    ($26,$10,$11,'nifty','pt-overdue-done',$12,'Completed renewal','Closed but historically past due','completed','pending',true,$24::uuid[],'2026-10-01','2026-10-25T08:00:00Z'),
+    ($27,$10,$11,'nifty','pt-checkout-sub',$12,'Checkout copy review','Subtask of the checkout fix','open','pending',false,'{}'::uuid[],'2026-11-14','2026-11-01T09:00:00Z')`,
   [
     taskCheckout, taskCheckoutReview, taskCheckoutDone, taskPercent, taskUnderscore,
     taskArchived, taskDeleted, taskUnassigned, taskDocumentation,
     adminUser, org, projectApp, [personA], projectWebsite, [personB], otherTask,
     otherAdminUser, otherOrg, otherProject, [otherPerson], taskShared, [personA, personB],
+    taskOverdue, [personC], taskDueToday, taskOverdueDone, taskSubtask,
   ]);
+  await db.query(
+    `update work_tasks set parent_task_id = $1 where id = $2`,
+    [taskCheckout, taskSubtask],
+  );
+  // Completion evidence the admin detail returns, plus the activity sources
+  // (day event and blocker) the merged timeline reads.
+  await db.query(`insert into work_evidence
+    (id, organization_id, person_id, task_id, evidence_date, source, title, summary, metrics, created_at) values
+    ($1,$2,$3,$4,'2026-11-02','manual','Checkout receipt','Attached at completion',
+      '{"employeeAttached":true,"evidenceClass":"output_evidence","contentType":"image/png","sizeBytes":2048,"fileName":"receipt.png"}'::jsonb,
+      '2026-11-02T10:30:00Z')`,
+  [checkoutEvidence, org, personA, taskCheckout]);
+  await db.query(`insert into work_task_day_events
+    (id, organization_id, person_id, task_id, provider, provider_task_id, local_date,
+     event_type, provenance, exact_at, observed_at, task_snapshot, idempotency_key) values
+    ($1,$2,$3,$4,'nifty','pt-checkout','2026-11-02','status_changed','employee_explicit',
+      '2026-11-02T11:00:00Z','2026-11-02T11:00:00Z','{"title":"Fix checkout"}'::jsonb,'seed-checkout-status')`,
+  [checkoutEvent, org, personA, taskCheckout]);
+  await db.query(`insert into work_task_blockers
+    (id, organization_id, task_id, person_id, description, status, created_at) values
+    ($1,$2,$3,$4,'Waiting on design sign-off','active','2026-11-02T12:00:00Z')`,
+  [checkoutBlocker, org, taskCheckout, personA]);
 }
 
 export async function fixture() {

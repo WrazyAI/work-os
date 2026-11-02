@@ -1,29 +1,37 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
+import { GET as activityGET } from "../src/app/api/agent/admin/v1/tasks/[taskId]/activity/route";
+import { GET as detailGET } from "../src/app/api/agent/admin/v1/tasks/[taskId]/route";
 import { GET as tasksGET } from "../src/app/api/agent/admin/v1/tasks/route";
+import { createDbClient } from "../src/lib/db/query";
 import { adminAgentRouteError } from "../src/lib/work-admin-agent-auth";
 import { hashAgentToken } from "../src/lib/work-agent-tokens";
 import {
+  AdminAgentInvalidCursorError,
   listAdminAgentTasks,
   parseAdminAgentTaskFilters,
 } from "../src/lib/work-admin-agent-tasks";
 import {
-  adminAccess, adminUser, fixture, org, otherOrg, otherOrgAccess, otherPerson,
-  otherTask, personA, personB, projectApp, taskArchived, taskCheckout,
+  adminAccess, adminUser, checkoutBlocker, checkoutEvent, checkoutEvidence,
+  fixture, org, otherAdminUser, otherOrg, otherOrgAccess, otherPerson, otherTask,
+  personA, personB, personC, projectApp, taskArchived, taskCheckout,
   taskCheckoutDone, taskCheckoutReview, taskDeleted, taskDocumentation,
-  taskPercent, taskShared, taskUnderscore,
+  taskDueToday, taskOverdue, taskOverdueDone, taskPercent, taskShared,
+  taskSubtask, taskUnderscore,
 } from "./helpers/work-os-admin-agent-fixture.mts";
 
-/** The list runs over the real PGlite pool. Detail and activity go through the
- * Supabase data client, so those two are covered by wiring/source assertions at
- * the bottom of this file. The fixture is read-only here, so one instance
- * serves every test. */
+/** The list runs over the real PGlite pool. Detail, activity, and the route
+ * tests also run for real: the fixture installs the same query shim the app
+ * uses, so the employee readers execute their actual SQL against PGlite. The
+ * fixture is read-only here, so one instance serves every test. */
+
+const TODAY = "2026-11-02";
 
 const defaults = {
   personIds: [personA, personB] as string[] | null,
   query: null as string | null,
   completed: null as boolean | null,
+  overdue: null as boolean | null,
   status: "active" as "active" | "archived" | "deleted" | null,
   projectId: null as string | null,
   dueFrom: null as string | null,
@@ -33,21 +41,27 @@ const defaults = {
   cursor: null as string | null,
 };
 
-const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
-
 const READ_TOKEN = "90000000-0000-4000-8000-000000000011";
 const PEOPLE_TOKEN = "90000000-0000-4000-8000-000000000012";
+const OTHER_TOKEN = "90000000-0000-4000-8000-000000000013";
 const READ_SECRET = "wos_admin_tasks_route_read";
 const PEOPLE_SECRET = "wos_admin_tasks_route_people";
+const OTHER_SECRET = "wos_admin_tasks_route_other";
 
 let f: Awaited<ReturnType<typeof fixture>>;
 
-async function insertToken(id: string, secret: string, scopes: string[]) {
+async function insertToken(
+  id: string,
+  secret: string,
+  scopes: string[],
+  organizationId = org,
+  userId = adminUser,
+) {
   await f.db.query(
     `insert into work_agent_tokens
       (id, organization_id, person_id, user_id, kind, name, token_hash, token_prefix, scopes, expires_at)
      values ($1,$2,null,$3,'admin','tasks route token',$4,$5,$6::text[], now() + interval '1 day')`,
-    [id, org, adminUser, hashAgentToken(secret), secret.slice(0, 12), scopes],
+    [id, organizationId, userId, hashAgentToken(secret), secret.slice(0, 12), scopes],
   );
 }
 
@@ -56,11 +70,22 @@ const request = (pathname: string, secret?: string) =>
     headers: secret ? { authorization: `Bearer ${secret}` } : {},
   });
 
+const detailRoute = (taskId: string, secret: string) =>
+  detailGET(request(`/api/agent/admin/v1/tasks/${taskId}`, secret), {
+    params: Promise.resolve({ taskId }),
+  });
+
+const activityRoute = (taskId: string, secret: string, query = "") =>
+  activityGET(request(`/api/agent/admin/v1/tasks/${taskId}/activity${query}`, secret), {
+    params: Promise.resolve({ taskId }),
+  });
+
 before(async () => {
   f = await fixture();
+  await f.seedDirectory();
   await f.seedTasks();
   // The admin resolver reads the profile and organization metadata the fixture
-  // does not model by default; the route test exercises it for real.
+  // does not model by default; the route tests exercise it for real.
   await f.db.exec(`
     alter table work_organizations add column name text not null default 'Workspace';
     alter table work_organizations add column legacy_owner_id uuid;
@@ -75,20 +100,28 @@ before(async () => {
     );
   `);
   await f.db.query(
-    "insert into profiles (id, email, display_name, role) values ($1, 'admin@example.com', 'Admin', 'member')",
-    [adminUser],
+    `insert into profiles (id, email, display_name, role) values
+      ($1, 'admin@example.com', 'Admin', 'member'),
+      ($2, 'other-admin@example.com', 'Other Admin', 'member')`,
+    [adminUser, otherAdminUser],
   );
   await f.db.query(
     `update work_organizations
-     set feature_flags = '{"employee_companion":true,"admin_agent_api":true}'::jsonb
-     where id = $1`,
-    [org],
+     set feature_flags = '{"employee_companion":true,"admin_agent_api":true}'::jsonb,
+       legacy_owner_id = case when id = $1 then $2::uuid else $3::uuid end,
+       created_by = case when id = $1 then $2::uuid else $3::uuid end
+     where id in ($1, $4)`,
+    [org, adminUser, otherAdminUser, otherOrg],
   );
   await insertToken(READ_TOKEN, READ_SECRET, ["tasks:read"]);
   await insertToken(PEOPLE_TOKEN, PEOPLE_SECRET, ["people:read"]);
+  await insertToken(OTHER_TOKEN, OTHER_SECRET, ["tasks:read"], otherOrg, otherAdminUser);
+  // Same query shim the deployed app uses, executing on the fixture pool.
+  (globalThis as unknown as { __workOsDbClient?: unknown }).__workOsDbClient = createDbClient();
 });
 
 after(async () => {
+  delete (globalThis as unknown as { __workOsDbClient?: unknown }).__workOsDbClient;
   await f.close();
 });
 
@@ -122,24 +155,107 @@ test("the tasks route returns the documented envelope with capabilities", async 
   assert.equal(typeof body.tasks[0].capabilities.overdue, "boolean");
 });
 
-test("the tasks route answers invalid_cursor when the filters change", async () => {
+test("the tasks route answers invalid_cursor for a malformed or stale cursor", async () => {
+  const malformed = await tasksGET(request(
+    "/api/agent/admin/v1/tasks?cursor=not-a-cursor",
+    READ_SECRET,
+  ));
+  assert.equal(malformed.status, 422);
+  assert.equal((await malformed.json() as { code: string }).code, "invalid_cursor");
+
+  // An explicit empty person list still validates the cursor first.
+  const emptyWithCursor = await tasksGET(request(
+    "/api/agent/admin/v1/tasks?person_ids=&cursor=not-a-cursor",
+    READ_SECRET,
+  ));
+  assert.equal(emptyWithCursor.status, 422);
+  assert.equal((await emptyWithCursor.json() as { code: string }).code, "invalid_cursor");
+
   const first = await tasksGET(request("/api/agent/admin/v1/tasks?limit=1", READ_SECRET));
   const { cursor } = await first.json() as { cursor: { next: string } };
   assert.ok(cursor.next);
-
-  const response = await tasksGET(request(
+  const stale = await tasksGET(request(
     `/api/agent/admin/v1/tasks?limit=1&q=checkout&cursor=${cursor.next}`,
     READ_SECRET,
   ));
-  assert.equal(response.status, 422);
-  assert.equal((await response.json() as { code: string }).code, "invalid_cursor");
+  assert.equal(stale.status, 422);
+  assert.equal((await stale.json() as { code: string }).code, "invalid_cursor");
+});
+
+test("the tasks route rejects a non-boolean overdue value", async () => {
+  const response = await tasksGET(request("/api/agent/admin/v1/tasks?overdue=maybe", READ_SECRET));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json() as { code: string }).code, "validation_error");
+});
+
+test("detail returns another person's task with subtasks and completion evidence", async () => {
+  const response = await detailRoute(taskCheckout, READ_SECRET);
+  assert.equal(response.status, 200);
+  const body = await response.json() as {
+    task: { id: string; title: string };
+    subtasks: Array<{ id: string; title: string }>;
+    completionEvidence: Array<{ id: string; title: string }>;
+  };
+  assert.deepEqual(Object.keys(body).sort(), ["completionEvidence", "subtasks", "task"]);
+  assert.equal(body.task.id, taskCheckout);
+  assert.equal(body.task.title, "Fix checkout");
+  assert.deepEqual(body.subtasks.map((task) => task.id), [taskSubtask]);
+  assert.deepEqual(body.completionEvidence.map((evidence) => evidence.id), [checkoutEvidence]);
+});
+
+test("detail answers 404 across organizations and for a tombstone", async () => {
+  const crossOrg = await detailRoute(taskCheckout, OTHER_SECRET);
+  assert.equal(crossOrg.status, 404);
+  assert.equal((await crossOrg.json() as { code: string }).code, "not_found");
+
+  const deleted = await detailRoute(taskDeleted, READ_SECRET);
+  assert.equal(deleted.status, 404);
+  assert.equal((await deleted.json() as { code: string }).code, "not_found");
+});
+
+test("admin detail keeps archived work readable", async () => {
+  const response = await detailRoute(taskArchived, READ_SECRET);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { task: { id: string; status: string } };
+  assert.equal(body.task.id, taskArchived);
+  assert.equal(body.task.status, "archived");
+});
+
+test("activity returns the merged timeline for an in-organization task", async () => {
+  const response = await activityRoute(taskCheckout, READ_SECRET);
+  assert.equal(response.status, 200);
+  const body = await response.json() as {
+    items: Array<{ id: string; kind: string; actor: string; at: string }>;
+    cursor: { next: string | null };
+  };
+  assert.deepEqual(body.items.map((item) => item.kind), [
+    "blocker.opened", "task.status_changed", "evidence.completion",
+  ]);
+  assert.equal(body.items[0].id, `blocker:${checkoutBlocker}`);
+  assert.equal(body.items[1].id, `task_event:${checkoutEvent}`);
+  assert.equal(body.items[2].id, `evidence:${checkoutEvidence}`);
+  assert.deepEqual(body.items.map((item) => item.actor), ["employee", "employee", "employee"]);
+  assert.equal(body.cursor.next, null);
+
+  const crossOrg = await activityRoute(taskCheckout, OTHER_SECRET);
+  assert.equal(crossOrg.status, 404);
+  const deleted = await activityRoute(taskDeleted, READ_SECRET);
+  assert.equal(deleted.status, 404);
+  assert.equal((await deleted.json() as { code: string }).code, "not_found");
+});
+
+test("activity keeps an archived task's timeline readable", async () => {
+  const response = await activityRoute(taskArchived, READ_SECRET);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { items: unknown[] };
+  assert.deepEqual(body.items, []);
 });
 
 test("person_ids, text, completion, project, and due filters compose", async () => {
   const page = await listAdminAgentTasks(adminAccess, {
     personIds: [personA, personB], query: "checkout", completed: false,
     status: "active", projectId: null, dueFrom: "2026-11-01", dueTo: "2026-11-30",
-    updatedSince: null, limit: 50, cursor: null,
+    updatedSince: null, limit: 50, cursor: null, overdue: null,
   });
   assert.deepEqual(page.tasks.map((t) => t.title), ["Fix checkout"]);
   assert.equal(page.total, 1);
@@ -166,7 +282,7 @@ test("each filter narrows the cross-person list on its own", async () => {
   assert.deepEqual(byCompletion.tasks.map((t) => t.id), [taskCheckoutDone]);
 });
 
-test("the text search ignores case and escapes LIKE wildcards", async () => {
+test("the text search ignores case, escapes LIKE wildcards, and matches project names", async () => {
   const upper = await listAdminAgentTasks(adminAccess, { ...defaults, query: "CHECKOUT" });
   assert.deepEqual(upper.tasks.map((t) => t.id), [taskCheckoutReview, taskCheckout, taskCheckoutDone]);
 
@@ -178,6 +294,59 @@ test("the text search ignores case and escapes LIKE wildcards", async () => {
 
   const description = await listAdminAgentTasks(adminAccess, { ...defaults, query: "next release" });
   assert.deepEqual(description.tasks.map((t) => t.id), [taskPercent]);
+
+  // No task title or description says "Website"; the project name is the match.
+  const project = await listAdminAgentTasks(adminAccess, { ...defaults, query: "website" });
+  assert.deepEqual(project.tasks.map((t) => t.id), [
+    taskCheckoutReview, taskPercent, taskDocumentation,
+  ]);
+  for (const task of project.tasks) {
+    assert.doesNotMatch(String(task.title).toLowerCase(), /website/);
+    assert.doesNotMatch(String(task.description ?? "").toLowerCase(), /website/);
+  }
+  // The join stays organization-scoped: another tenant's project never matches.
+  const other = await listAdminAgentTasks(otherOrgAccess, {
+    ...defaults, personIds: null, query: "website",
+  });
+  assert.deepEqual(other.tasks, []);
+});
+
+test("overdue uses the effective due date against the admin's local today", async () => {
+  const overdueOnly = await listAdminAgentTasks(
+    adminAccess, { ...defaults, personIds: [personC], overdue: true }, { today: TODAY },
+  );
+  assert.deepEqual(overdueOnly.tasks.map((t) => t.id), [taskOverdue]);
+
+  const notOverdue = await listAdminAgentTasks(
+    adminAccess, { ...defaults, personIds: [personC], overdue: false }, { today: TODAY },
+  );
+  // The due-today task is not overdue yet; a completed past-due task never is.
+  assert.deepEqual(notOverdue.tasks.map((t) => t.id), [taskDueToday, taskOverdueDone]);
+
+  const omitted = await listAdminAgentTasks(
+    adminAccess, { ...defaults, personIds: [personC] }, { today: TODAY },
+  );
+  assert.deepEqual(omitted.tasks.map((t) => t.id), [taskOverdue, taskDueToday, taskOverdueDone]);
+
+  // Moving the reference day moves the boundary: due today is not overdue.
+  const beforeDue = await listAdminAgentTasks(
+    adminAccess, { ...defaults, personIds: [personC], overdue: true }, { today: "2026-11-01" },
+  );
+  assert.deepEqual(beforeDue.tasks, []);
+
+  // The overdue cursor is bound to the day it was minted for.
+  const first = await listAdminAgentTasks(
+    adminAccess, { ...defaults, personIds: [personC], overdue: false, limit: 1 }, { today: TODAY },
+  );
+  assert.ok(first.nextCursor);
+  await assert.rejects(
+    () => listAdminAgentTasks(
+      adminAccess,
+      { ...defaults, personIds: [personC], overdue: false, limit: 1, cursor: first.nextCursor },
+      { today: "2026-11-03" },
+    ),
+    (error: Error) => error.name === "AdminAgentInvalidCursorError",
+  );
 });
 
 test("status defaults to active and can name the archive or the tombstone", async () => {
@@ -260,10 +429,14 @@ test("updated_since replays changed rows in ascending order", async () => {
   assert.deepEqual(second.tasks.map((t) => t.id), [taskPercent, taskCheckoutDone]);
 });
 
-test("a malformed cursor is a validation error", async () => {
+test("a malformed cursor is an invalid cursor, even with an empty person list", async () => {
   await assert.rejects(
     () => listAdminAgentTasks(adminAccess, { ...defaults, cursor: "not-a-cursor" }),
-    (error: Error) => error.name === "WorkOsValidationError",
+    (error: Error) => error.name === "AdminAgentInvalidCursorError",
+  );
+  await assert.rejects(
+    () => listAdminAgentTasks(adminAccess, { ...defaults, personIds: [], cursor: "not-a-cursor" }),
+    (error: Error) => error.name === "AdminAgentInvalidCursorError",
   );
 });
 
@@ -273,21 +446,17 @@ test("changing the filters invalidates the cursor with invalid_cursor", async ()
 
   await assert.rejects(
     () => listAdminAgentTasks(adminAccess, { ...defaults, limit: 1, cursor: first.nextCursor, query: "checkout" }),
-    (error: Error) => error.name === "AdminAgentInvalidCursorError",
+    AdminAgentInvalidCursorError,
   );
   // A descending cursor cannot be spent on the ascending change feed.
   await assert.rejects(
     () => listAdminAgentTasks(adminAccess, {
       ...defaults, limit: 1, cursor: first.nextCursor, updatedSince: "2026-11-01T00:00:00Z",
     }),
-    (error: Error) => error.name === "AdminAgentInvalidCursorError",
+    AdminAgentInvalidCursorError,
   );
 
-  const response = adminAgentRouteError(new (class extends Error {
-    name = "AdminAgentInvalidCursorError";
-    code = "invalid_cursor";
-    status = 422;
-  })("Task cursor does not match these filters"));
+  const response = adminAgentRouteError(new AdminAgentInvalidCursorError());
   assert.equal(response.status, 422);
   assert.equal((await response.json() as { code: string }).code, "invalid_cursor");
 });
@@ -303,24 +472,28 @@ test("the list rejects bad filters before querying", async () => {
     () => listAdminAgentTasks(adminAccess, { ...defaults, personIds: ["not-a-uuid"] }),
     (error: Error) => error.name === "WorkOsValidationError",
   );
+  await assert.rejects(
+    () => listAdminAgentTasks(adminAccess, { ...defaults, overdue: true }, { today: "soon" }),
+    (error: Error) => error.name === "WorkOsValidationError",
+  );
 });
 
 test("query parameters default to active tasks and reject bad input", () => {
   const parsed = parseAdminAgentTaskFilters(new URLSearchParams(""));
   assert.deepEqual(parsed, {
-    personIds: null, query: null, completed: null, status: "active",
+    personIds: null, query: null, completed: null, overdue: null, status: "active",
     projectId: null, dueFrom: null, dueTo: null, updatedSince: null,
     limit: 50, cursor: null,
   });
 
   const named = parseAdminAgentTaskFilters(new URLSearchParams(
-    `person_ids=${personA},${personB}&q=checkout&completed=false&status=archived`
+    `person_ids=${personA},${personB}&q=checkout&completed=false&overdue=true&status=archived`
     + `&project_id=${projectApp}&due_from=2026-11-01&due_to=2026-11-30`
     + "&updated_since=2026-11-01T00:00:00Z&limit=5&cursor=abc",
   ));
   assert.deepEqual(named, {
-    personIds: [personA, personB], query: "checkout", completed: false, status: "archived",
-    projectId: projectApp, dueFrom: "2026-11-01", dueTo: "2026-11-30",
+    personIds: [personA, personB], query: "checkout", completed: false, overdue: true,
+    status: "archived", projectId: projectApp, dueFrom: "2026-11-01", dueTo: "2026-11-30",
     updatedSince: "2026-11-01T00:00:00Z", limit: 5, cursor: "abc",
   });
 
@@ -330,11 +503,16 @@ test("query parameters default to active tasks and reject bad input", () => {
   assert.equal(parseAdminAgentTaskFilters(new URLSearchParams("q=%20%20")).query, null);
   assert.equal(parseAdminAgentTaskFilters(new URLSearchParams("limit=5000")).limit, 200);
   assert.equal(parseAdminAgentTaskFilters(new URLSearchParams("status=")).status, "active");
+  assert.equal(parseAdminAgentTaskFilters(new URLSearchParams("overdue=")).overdue, null);
+  assert.equal(parseAdminAgentTaskFilters(new URLSearchParams("overdue=false")).overdue, false);
 
   for (const bad of [
     "person_ids=not-a-uuid",
     `person_ids=${Array.from({ length: 21 }, (_, index) => `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`).join(",")}`,
+    // Repeating one id still exceeds the raw contract bound before dedupe.
+    `person_ids=${Array.from({ length: 21 }, () => personA).join(",")}`,
     "completed=maybe",
+    "overdue=maybe",
     "status=open",
     "project_id=nope",
     "due_from=soon",
@@ -348,34 +526,4 @@ test("query parameters default to active tasks and reject bad input", () => {
       bad,
     );
   }
-});
-
-test("detail and activity reuse the employee readers", async () => {
-  const tasks = await read("src/lib/work-admin-agent-tasks.ts");
-  assert.match(tasks, /export async function getAdminAgentTask\([\s\S]*?getWorkOsEmployeeTaskDetails\(access, taskId\)/);
-  assert.match(tasks, /task: details\.task,[\s\S]*?subtasks: details\.subtasks,[\s\S]*?completionEvidence: details\.completionEvidence/);
-  assert.match(tasks, /getAdminAgentTaskActivity[\s\S]*?listActivityForAccess\(access, taskId/);
-
-  const activity = await read("src/lib/work-agent-activity.ts");
-  assert.match(activity, /export async function listActivityForAccess\(\s*access: WorkOsAccess/);
-  assert.match(activity, /export async function listAgentActivity\([\s\S]*?listActivityForAccess\(agent\.access, taskId/);
-
-  const detailRoute = await read("src/app/api/agent/admin/v1/tasks/[taskId]/route.ts");
-  assert.match(detailRoute, /requireAdminAgentAccess\(req, "tasks:read"\)/);
-  assert.match(detailRoute, /getAdminAgentTask\(auth\.agent\.access, taskId\)/);
-  assert.match(detailRoute, /adminAgentRouteError/);
-
-  const activityRoute = await read("src/app/api/agent/admin/v1/tasks/[taskId]/activity/route.ts");
-  assert.match(activityRoute, /requireAdminAgentAccess\(req, "tasks:read"\)/);
-  assert.match(activityRoute, /getAdminAgentTaskActivity\(auth\.agent\.access, taskId/);
-
-  const listRoute = await read("src/app/api/agent/admin/v1/tasks/route.ts");
-  assert.match(listRoute, /parseAdminAgentTaskFilters\(new URL\(req\.url\)\.searchParams\)/);
-  assert.match(listRoute, /withTaskCapabilities\([\s\S]*?\{ role: "admin", personId: auth\.agent\.access\.personId \}[\s\S]*?employeeTaskToday\(auth\.agent\.access\)/);
-  assert.match(listRoute, /assertAgentRateLimit\(auth\.agent\.tokenId, false\)/);
-});
-
-test("the fixture keeps the task and organization identities stable", () => {
-  assert.notEqual(org, otherOrg);
-  assert.notEqual(taskCheckout, taskCheckoutReview);
 });
