@@ -472,5 +472,8 @@ test("an inline subtask defaults to its creator while top-level work stays unass
 
 test("web quick-create assigns the task to its creator", () => {
   const source = readFileSync("src/modules/work-os/employee/EmployeeTasks.tsx", "utf8");
-  assert.match(source, /assignee_person_ids:\s*\[day\.data\.access\.personId\]/);
+  const drawer = readFileSync("src/modules/work-os/employee/EmployeeTaskDrawer.tsx", "utf8");
+  assert.match(source, /defaultAssigneeId=\{day\.data\?\.access\?\.personId\}/);
+  assert.match(source, /assignee_person_ids:\s*pending\.draft\.assigneePersonIds/);
+  assert.match(drawer, /assigneePersonIds:\s*defaultAssigneeId\s*\?\s*\[defaultAssigneeId\]\s*:\s*\[\]/);
 });
