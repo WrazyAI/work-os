@@ -289,11 +289,13 @@ export function SyncChip({
   syncing,
   onSync,
   className,
+  compact = false,
 }: {
   sync?: { fresh?: boolean; syncing?: boolean; syncedAt?: string | null; error?: string };
   syncing?: boolean;
   onSync?: () => void;
   className?: string;
+  compact?: boolean;
 }) {
   const degraded = !!sync?.error;
   const busy = syncing || sync?.syncing === true;
@@ -306,6 +308,24 @@ export function SyncChip({
         ? `Record updated ${formatDateTimeShort(sync.syncedAt)}`
         : "Refresh today's record and attendance.";
   const color = degraded ? "var(--status-warn)" : "var(--text-secondary)";
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onSync}
+        disabled={busy || !onSync}
+        title={detail}
+        aria-label={detail}
+        className={cx(
+          "grid size-10 place-items-center rounded-[8px] transition hover:bg-[var(--bg-secondary)] disabled:cursor-default disabled:opacity-70 md:size-8",
+          className,
+        )}
+        style={{ color }}
+      >
+        <RefreshCw size={14} className={busy ? "animate-spin" : undefined} />
+      </button>
+    );
+  }
   return (
     <button
       type="button"

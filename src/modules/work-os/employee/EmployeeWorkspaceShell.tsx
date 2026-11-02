@@ -41,20 +41,17 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
       <div data-work-os-workspace="" className="min-h-[calc(100vh-6rem)] bg-[var(--bg-primary)]">
         <div className="mx-auto w-full max-w-[1240px] px-6 py-8 md:px-10 md:py-10">
           {access.role === "admin" || access.canSwitchWorkspaces ? (
-            <div
-              className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5"
-              style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-            >
-              <span className="flex min-w-0 items-center gap-2 text-[11px] font-semibold text-[var(--text-tertiary)]">
-                <Building2 size={13} aria-hidden />
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Building2 size={12} aria-hidden />
                 <span className="truncate">{access.organizationName}</span>
                 {access.role === "admin" ? <span className="shrink-0">· Your employee workspace</span> : null}
               </span>
-              <span className="flex flex-wrap items-center gap-2">
+              <span className="flex flex-wrap items-center gap-3">
                 {access.canSwitchWorkspaces ? (
                   <Link
                     href="/work-os/select-workspace"
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    className="font-medium text-[var(--text-tertiary)] transition hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                   >
                     Switch workspace
                   </Link>
@@ -64,11 +61,11 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
                     mode="admin"
                     next="/work-os/admin"
                     formClassName="inline-flex"
-                    buttonClassName="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                    buttonClassName="inline-flex items-center gap-1.5 font-medium text-[var(--text-tertiary)] transition hover:text-[var(--text-primary)]"
                     title="Open the administration workspace"
                     ariaLabel="Switch to Administration"
                   >
-                    <ArrowLeftRight size={13} aria-hidden /> Switch to Administration
+                    <ArrowLeftRight size={12} aria-hidden /> Switch to Administration
                   </WorkOsViewModeForm>
                 ) : null}
               </span>

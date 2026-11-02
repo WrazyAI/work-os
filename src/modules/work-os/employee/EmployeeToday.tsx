@@ -1,51 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  CalendarClock,
-  Check,
-  Clock3,
-  FileCheck2,
-  ListTodo,
-  MessageSquareText,
-  RotateCcw,
-  Sparkles,
-  Video,
-} from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ListTodo, Pencil, Sparkles, Video } from "lucide-react";
 import { CheckInComposer, useCheckInVoice } from "../CheckInComposer";
 import { lateReasonRequired } from "@/lib/work-os-late-start";
+import { taskIsOverdue } from "@/lib/work-os-task-permissions";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import EmployeePlanBuilder from "./EmployeePlanBuilder";
 import EmployeeActivityRecaps from "./EmployeeActivityRecaps";
 import { planStatusLabel } from "./planning";
 import { useNow } from "./useNow";
 import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "./shiftPulse";
-import { fetchJson, formatTime, longDateLabel, operationLabel, requestId, type AnyRow } from "./model";
-import {
-  EmptyState,
-  Masthead,
-  Metric,
-  Notice,
-  Panel,
-  PanelHeader,
-  PrimaryButton,
-  QuietButton,
-  SecondaryButton,
-  Skeleton,
-  StateMark,
-  SyncChip,
-  inputClass,
-  inputStyle,
-} from "./ui";
+import { calendarDateLabel, fetchJson, formatTime, longDateLabel, operationLabel, requestId, type AnyRow, type EmployeeInsightsResponse } from "./model";
+import { Notice, PrimaryButton, SecondaryButton, Skeleton, SyncChip } from "./ui";
+import styles from "./EmployeeToday.module.css";
 
 function goalProvenanceLabel(provenance: string | null | undefined, hasGoal: boolean) {
   if (provenance === "suggested") return "suggested by Otto";
   if (provenance === "ai_draft") return "drafted with Otto";
   if (provenance === "accepted_suggestion") return "accepted suggestion";
   return hasGoal ? "written by you" : "optional";
+}
+
+function weekdayInitial(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const parsed = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, { timeZone: "UTC", weekday: "narrow" }).format(parsed);
+}
+
+function dueLabel(task: AnyRow, shiftDate?: string) {
+  const due = String(task.due_date ?? "").slice(0, 10);
+  if (!due) return "No date";
+  if (shiftDate && due === shiftDate) return "Today";
+  return calendarDateLabel(due);
+}
+
+function isOverdue(task: AnyRow, shiftDate?: string) {
+  return Boolean(shiftDate && taskIsOverdue(task, shiftDate));
 }
 
 export default function EmployeeToday() {
@@ -60,8 +54,16 @@ export default function EmployeeToday() {
   const [goalLoomNote, setGoalLoomNote] = useState<string | null>(null);
   const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
   const [planSeed, setPlanSeed] = useState<string | undefined>(undefined);
+  const [editingFocus, setEditingFocus] = useState(false);
+  const [listTab, setListTab] = useState<"today" | "carry">("today");
 
   const outstanding = useOutstandingEods();
+  const insights = useQuery<EmployeeInsightsResponse>({
+    queryKey: ["work-os", "employee-insights", "7d", day.data?.shiftDate],
+    queryFn: () => fetchJson(`/api/work-os/me/insights?range=7d&through=${encodeURIComponent(day.data?.shiftDate ?? "")}`),
+    enabled: Boolean(day.data?.shiftDate),
+    staleTime: 60_000,
+  });
   const onboarding = useQuery<AnyRow>({
     queryKey: ["work-os", "employee-onboarding"],
     queryFn: () => fetchJson("/api/work-os/me/onboarding"),
@@ -106,6 +108,7 @@ export default function EmployeeToday() {
       }),
     }),
     onSuccess: (_data, options) => {
+      setEditingFocus(false);
       void refresh();
       if (options?.openBuilder) {
         setPlanSeed(goal.trim());
@@ -193,53 +196,101 @@ export default function EmployeeToday() {
   const goalChanged = goal !== (day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "");
   const error = onboarding.error || day.error || checkIn.error || saveGoal.error || sessionAction.error || changeTask.error || surfaceTask.error || goalLoom.error;
 
+  const savedGoal = day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "";
+  const showFocusEditor = editingFocus || !goal.trim();
+  const attendanceObserved = attendance?.source === "worktivity";
+  const attendanceLabel = attendanceObserved ? operationLabel(String(attendance?.state || "unknown")) : "Not observed";
+  const attendanceTone = attendanceObserved
+    ? attendance?.state === "active" ? "ok" : attendance?.state === "paused" ? "warn" : "neutral"
+    : "neutral";
+  const nextCheckIn = day.data?.prompt.nextPromptAt ? formatTime(day.data.prompt.nextPromptAt, timezone) : null;
+  const carryGroups = workspace?.carryOverGroups ?? [];
+
+  const weekDays = insights.data?.days ?? [];
+  const weekValues = weekDays.map((entry) => Number(entry.tasksCompleted ?? 0));
+  const weekTotal = weekValues.reduce((sum, value) => sum + value, 0);
+  const weekMax = Math.max(4, Math.ceil(Math.max(1, ...weekValues) / 2) * 2);
+  const chartX = (index: number) => 42 + (index * 280) / Math.max(1, weekDays.length - 1);
+  const chartY = (value: number) => 122 - (value / weekMax) * 92;
+  const weekPoints = weekDays.map((entry, index) => ({
+    x: chartX(index),
+    y: chartY(Number(entry.tasksCompleted ?? 0)),
+    date: entry.date,
+  }));
+  const weekLine = weekPoints.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+  const weekArea = weekPoints.length
+    ? `${weekLine} L${weekPoints[weekPoints.length - 1].x.toFixed(1)} 122 L${weekPoints[0].x.toFixed(1)} 122 Z`
+    : "";
+  const weekLabel = weekDays
+    .map((entry) => `${calendarDateLabel(entry.date)} ${Number(entry.tasksCompleted ?? 0)} tasks completed`)
+    .join(", ");
+  const consistency = insights.data?.consistency;
+  const onTime = weekDays.reduce((sum, entry) => sum + Number(entry.outcomesOnTime ?? 0), 0);
+  const late = weekDays.reduce((sum, entry) => sum + Number(entry.outcomesLate ?? 0), 0);
+  const onTimePercent = onTime + late > 0 ? Math.round((onTime / (onTime + late)) * 100) : null;
+  const updatePercent = consistency && consistency.dayCount > 0
+    ? Math.round((consistency.daysWithUpdate / consistency.dayCount) * 100)
+    : null;
+  const completionPercent = consistency && consistency.dayCount > 0
+    ? Math.round((consistency.daysWithCompletion / consistency.dayCount) * 100)
+    : null;
+
   if (day.isLoading && !day.data) {
     return (
       <div aria-busy="true">
-        <Masthead eyebrow="Work OS" title="Today" meta="Loading your workday…" />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="grid gap-5">
-            <Panel className="p-5"><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-20 w-full" /><Skeleton className="mt-3 h-9 w-32" /></Panel>
-            <Panel className="p-5"><Skeleton className="h-4 w-48" /><Skeleton className="mt-3 h-24 w-full" /></Panel>
-          </div>
-          <Panel className="p-5"><Skeleton className="h-4 w-28" /><Skeleton className="mt-3 h-14 w-full" /><Skeleton className="mt-2 h-14 w-full" /></Panel>
+        <header className={styles.masthead}>
+          <p className={styles.metaRow}><span>Loading your workday</span></p>
+          <div className={styles.titleRow}><h1>Today</h1></div>
+        </header>
+        <section className={styles.command}>
+          <div style={{ height: 208 }} />
+        </section>
+        <div className={styles.grid}>
+          <section className={styles.panel} style={{ minHeight: 320 }} />
+          <aside className={styles.side}>
+            <div><Skeleton className="h-4 w-24" /><Skeleton className="mt-4 h-32 w-full" /></div>
+            <div><Skeleton className="h-4 w-28" /><Skeleton className="mt-4 h-16 w-full" /></div>
+          </aside>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <Masthead
-        eyebrow={longDateLabel(day.data?.shiftDate)}
-        title="Today"
-        meta={shift ? `${formatTime(shift.startsAt, timezone)} – ${formatTime(shift.endsAt, timezone)} · ${timezone}` : "No schedule is configured for today."}
-        actions={
-          <>
+    <div className={styles.page}>
+      <header className={`${styles.masthead} ${styles.reveal}`} style={{ "--delay": "0ms" } as CSSProperties}>
+        <div className={styles.metaRow}>
+          <span>{longDateLabel(day.data?.shiftDate)}</span>
+        </div>
+        <div className={styles.titleRow}>
+          <h1>Today</h1>
+          <p className={styles.schedule}>
+            {shift ? `${formatTime(shift.startsAt, timezone)} – ${formatTime(shift.endsAt, timezone)} · ${timezone}` : "No schedule is configured for today."}
+          </p>
+          <div className={styles.utilities}>
             {outstandingCount > 0 ? (
-              <Link href="/work-os/review" className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-                <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: "var(--status-warn)" }} /> {outstandingCount} outstanding EOD{outstandingCount === 1 ? "" : "s"}
+              <Link href="/work-os/review" className={styles.attention}>
+                <span aria-hidden className={styles.attentionDot} />
+                {outstandingCount} outstanding EOD{outstandingCount === 1 ? "" : "s"}
               </Link>
             ) : null}
-            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
-          </>
-        }
-      />
+            <SyncChip compact sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
+          </div>
+        </div>
+      </header>
 
-      {error ? <Notice tone="err" className="mb-5">{(error as Error).message}</Notice> : null}
+      {error ? <Notice tone="err" className="mb-4">{(error as Error).message}</Notice> : null}
 
       {lateReasonMissing ? (
-        <div className="mb-5 rounded-2xl border px-5 py-4" style={{ borderColor: "color-mix(in srgb, var(--status-warn) 50%, var(--border))", background: "color-mix(in srgb, var(--status-warn) 7%, var(--bg-card))" }} role="status" aria-live="polite">
-          <p className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]"><AlertTriangle size={15} style={{ color: "var(--status-warn)" }} /> Late start — add a reason</p>
-          <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">Your workday began 30+ minutes after your scheduled start. Record the reason to clear the reminder and Otto’s red signal.</p>
-          <div className="mt-3 flex flex-wrap items-start gap-2">
+        <div className={`${styles.notice} ${styles.noticeWarn}`} role="status" aria-live="polite">
+          <span><strong>Late start — add a reason.</strong> Your workday began 30+ minutes after your scheduled start. Record the reason to clear the reminder.</span>
+          <div className={styles.lateForm}>
             <textarea
               value={lateReasonDraft}
               onChange={(event) => setLateReasonDraft(event.target.value)}
               rows={2}
               maxLength={1000}
-              className={`${inputClass} min-w-[240px] flex-1 resize-y`}
-              style={inputStyle}
+              className={styles.lateInput}
               placeholder="Reason for the late start"
               aria-label="Reason for the late start"
             />
@@ -254,150 +305,139 @@ export default function EmployeeToday() {
       ) : null}
 
       {onboardingRequired ? (
-        <Notice tone="warn" className="mb-5">
-          <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>Finish your Work OS setup — profile, working hours, and required consent.</span>
-            <Link href="/work-os/settings" className="font-semibold underline underline-offset-2" style={{ color: "var(--text-primary)" }}>Open Settings</Link>
-          </span>
-        </Notice>
+        <div className={styles.notice}>
+          <span>Finish your Work OS setup — profile, working hours, and required consent.</span>
+          <Link href="/work-os/settings" className={styles.noticeLink}>Open Settings</Link>
+        </div>
       ) : null}
 
       {day.data?.prompt.kind === "plan" && day.data?.plan?.status !== "confirmed" ? (
-        <Notice tone="info" className="mb-5">
-          <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>{day.data.prompt.reason || "Start the day by building your plan."}</span>
-            <button
-              type="button"
-              className="font-semibold underline underline-offset-2"
-              style={{ color: "var(--text-primary)" }}
-              onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }}
-            >
-              Build my plan
-            </button>
-          </span>
-        </Notice>
+        <div className={styles.notice}>
+          <span>{day.data.prompt.reason || "Start the day by building your plan."}</span>
+          <button
+            type="button"
+            className={styles.noticeLink}
+            onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }}
+          >
+            Build my plan
+          </button>
+        </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid content-start gap-5">
-          <Panel>
-            <PanelHeader
-              icon={<CalendarClock size={16} />}
-              title="Workday status"
-              meta={
-                attendance?.source === "worktivity"
-                  ? `Worktivity ${attendance?.stale ? "observation is stale" : "is the attendance source"} — sampled activity only.`
-                  : "Worktivity has not observed attendance yet."
-              }
-              actions={
-                <StateMark tone={attendance?.source === "worktivity" ? (attendance?.state === "active" ? "ok" : attendance?.state === "paused" ? "warn" : "neutral") : "neutral"}>
-                  {attendance?.source === "worktivity" ? operationLabel(String(attendance.state || "unknown")) : "Not observed"}
-                </StateMark>
-              }
-            />
-            {pulse.schedulePhase !== "unavailable" || pulse.observedElapsedLabel !== "00:00" ? (
-              <div className="border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[24px] font-bold leading-none tabular-nums text-[var(--text-primary)]">{pulse.elapsedLabel}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">elapsed today</span>
-                  </div>
-                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-                    {pulse.breakSeconds > 0 ? <span>Break {pulse.breakLabel}</span> : null}
-                    {pulse.observedElapsedLabel !== "00:00" ? <span>Worktivity observed {pulse.observedElapsedLabel}</span> : null}
-                    {upcomingLabel ? <span>{upcomingLabel}</span> : null}
-                    {remainingLabel ? <span>{remainingLabel}</span> : null}
-                  </div>
-                </div>
-                <div
-                  className="mt-3 h-1.5 overflow-hidden rounded-full"
-                  style={{ background: "var(--bg-tertiary)" }}
-                  role="progressbar"
-                  aria-label="Scheduled shift progress"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(pulse.progressPercent)}
-                >
-                  <div className="h-full rounded-full" style={{ width: `${pulse.progressPercent}%`, background: "var(--accent-deep)" }} />
-                </div>
-                <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">Scheduled-window progress only — not a productivity measure.</p>
-              </div>
-            ) : null}
-            <div className="grid gap-3 px-5 py-4 text-[12px] leading-5">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span className="text-[var(--text-secondary)]">
-                  {attendance?.observedAt ? <>Last observed {formatTime(attendance.observedAt, timezone)}{attendance.clockedOutAtInferred ? " · clock-out boundary inferred from this observation" : ""}</> : "No observation yet."}
-                </span>
-              </div>
-              <p className="text-[var(--text-secondary)]">
-                {workSession ? `Work OS session: ${operationLabel(String(workSession.state))}.` : "No Work OS session is currently mirrored."}
-              </p>
-              <p className="text-[var(--text-tertiary)]">
-                Clock in, pause, resume, and clock out from the Windows Work OS Companion; it opens Worktivity if needed and waits for Worktivity to confirm each change. This page is status-only.
-              </p>
-              {attendance?.message ? <p className="text-[var(--text-tertiary)]">{attendance.message}</p> : null}
-              {watchExpectation ? (
-                <p className="font-semibold" style={{ color: "var(--accent-deep)" }} role="status">
-                  {watchExpectation === "clock-in"
-                    ? "Checking your activity… Work OS will clock you in as soon as Worktivity sees you working."
-                    : "Checking your activity… Work OS will close the day when Worktivity observes your clock-out."}
-                </p>
-              ) : null}
+      <section className={`${styles.command} ${styles.reveal}`} style={{ "--delay": "80ms" } as CSSProperties} aria-labelledby="today-state">
+        <div className={styles.stateRow}>
+          <div>
+            <div className={styles.stateLine}>
+              <span
+                aria-hidden
+                className={`${styles.stateDot} ${attendanceTone === "ok" ? styles.dotOk : attendanceTone === "warn" ? styles.dotWarn : styles.dotNeutral}`}
+              />
+              <h2 id="today-state">{attendanceLabel}</h2>
             </div>
-          </Panel>
+            <p className={styles.stateDetail}>
+              {attendance?.observedAt
+                ? `Last observed ${formatTime(attendance.observedAt, timezone)}${attendance.clockedOutAtInferred ? ", clock-out boundary inferred" : ""}. `
+                : "No Worktivity observation yet. "}
+              Attendance stays in the Windows Companion; this page reports it.
+            </p>
+            {workSession ? <p className={styles.stateDetail}>Work OS session: {operationLabel(String(workSession.state))}.</p> : null}
+            {attendance?.message ? <p className={styles.stateDetail}>{attendance.message}</p> : null}
+            {watchExpectation ? (
+              <p className={styles.watch} role="status">
+                {watchExpectation === "clock-in"
+                  ? "Checking your activity… Work OS will clock you in as soon as Worktivity sees you working."
+                  : "Checking your activity… Work OS will close the day when Worktivity observes your clock-out."}
+              </p>
+            ) : null}
+          </div>
 
-          <Panel>
-            <PanelHeader
-              icon={<ListTodo size={16} />}
-              title="Today’s focus"
-              meta={`Goal · ${goalProvenanceLabel(workspace?.goal.provenance, !!goal.trim())} · ${planStatusLabel(day.data?.plan)}`}
-              actions={
-                <>
-                  <SecondaryButton onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }} disabled={!day.data}>
-                    <Sparkles size={13} /> Plan your day
-                  </SecondaryButton>
-                  <PrimaryButton
-                    disabled={!goalChanged || saveGoal.isPending}
-                    onClick={() => {
-                      const firstGoal = !(workspace?.goal.text ?? day.data?.plan?.freeform_intent ?? "").trim();
-                      saveGoal.mutate({ openBuilder: firstGoal && goal.trim().length > 0 });
-                    }}
-                  >
-                    {saveGoal.isPending ? "Saving…" : "Save focus"}
-                  </PrimaryButton>
-                </>
-              }
-            />
-            <div className="px-5 py-4">
+          {shift ? (
+            <div className={styles.window}>
+              <div className={styles.windowValues}>
+                <span className={styles.windowElapsed}><strong>{pulse.elapsedLabel}</strong><span>elapsed</span></span>
+                <span className={styles.windowLeft}>{upcomingLabel ?? remainingLabel ?? `${Math.round(pulse.progressPercent)}% of the window`}</span>
+              </div>
+              <div
+                className={styles.track}
+                role="progressbar"
+                aria-label="Scheduled shift progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(pulse.progressPercent)}
+              >
+                <span className={styles.trackFill} style={{ width: `${pulse.progressPercent}%` }} />
+                <span className={styles.trackMarker} style={{ left: `${pulse.progressPercent}%` }} />
+              </div>
+              <div className={styles.axis}>
+                <span>{formatTime(shift.startsAt, timezone)}</span>
+                <span>{formatTime(shift.endsAt, timezone)}</span>
+              </div>
+              <p className={styles.instrumentNote}>
+                Scheduled-window progress only — not a productivity measure.
+                {pulse.breakSeconds > 0 ? ` Break ${pulse.breakLabel}.` : ""}
+              </p>
+            </div>
+          ) : (
+            <p className={styles.stateDetail}>No schedule is configured for today.</p>
+          )}
+        </div>
+
+        <div className={styles.counts}>
+          <Link className={styles.count} href="/work-os/tasks">
+            <span className={styles.countLabel}>Completed</span>
+            <span className={styles.countValue}>
+              {workspace?.completed ?? 0}<span className={styles.countDenom}>/{workspace?.total ?? 0}</span>
+            </span>
+            <span className={styles.countSub}>outcomes today</span>
+          </Link>
+          <Link className={styles.count} href="/work-os/tasks">
+            <span className={styles.countLabel}>Open today</span>
+            <span className={styles.countValue}>{openTasks.length}</span>
+            <span className={styles.countSub}>attributed to today</span>
+          </Link>
+          <Link className={`${styles.count} ${workspace?.overdueCount ? styles.countAttention : ""}`} href="/work-os/tasks">
+            <span className={styles.countLabel}>Overdue</span>
+            <span className={styles.countValue}>{workspace?.overdueCount ?? 0}</span>
+            <span className={styles.countSub}>open work past due</span>
+          </Link>
+          <Link className={styles.count} href="/work-os/tasks">
+            <span className={styles.countLabel}>Carry-over</span>
+            <span className={styles.countValue}>{carryOverCount}</span>
+            <span className={styles.countSub}>older open work</span>
+          </Link>
+        </div>
+
+        <div className={styles.focusRow}>
+          {showFocusEditor ? (
+            <div className={styles.focusEditor}>
+              <span className={styles.countLabel}>Today&rsquo;s focus</span>
               <textarea
                 value={goal}
                 onChange={(event) => setGoal(event.target.value)}
-                rows={3}
+                rows={2}
                 maxLength={4000}
                 placeholder="What will you do today?"
-                className={`${inputClass} resize-y`}
-                style={inputStyle}
+                className={styles.focusField}
                 aria-label="What will you do today?"
               />
-              <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Goal setting is independent of attendance. Building a plan drafts reviewable commitments — nothing is filed until you confirm it.</p>
+              <p className={styles.focusHelper}>Goal setting is independent of attendance. Building a plan drafts reviewable commitments — nothing is filed until you confirm it.</p>
 
               {day.data?.access?.featureFlags?.loom_updates === true ? (
-                <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium text-[var(--text-secondary)]">Recorded a Loom for today?</span>
-                    <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setGoalLoomOpen((value) => !value); setGoalLoomNote(null); }}>
+                <div className={styles.loomWrap}>
+                  <div className={styles.loomRow}>
+                    <span className={styles.loomLabel}>Recorded a Loom for today?</span>
+                    <button type="button" className={styles.loomToggle} onClick={() => { setGoalLoomOpen((value) => !value); setGoalLoomNote(null); }}>
                       {goalLoomOpen ? "Close" : "Analyze a Loom"}
                     </button>
                   </div>
                   {goalLoomOpen ? (
-                    <>
-                      <div className="mt-2 flex flex-wrap items-start gap-2">
+                    <div className={styles.loomPanel}>
+                      <div className="flex flex-wrap items-start gap-2">
                         <input
                           value={goalLoomUrl}
                           onChange={(event) => { setGoalLoomUrl(event.target.value); setGoalLoomNote(null); goalLoom.reset(); }}
                           placeholder="https://www.loom.com/share/…"
-                          className={`${inputClass} min-w-[220px] flex-1`}
-                          style={inputStyle}
+                          className={`${styles.loomInput} min-w-[220px] flex-1`}
                           aria-label="Loom share link"
                         />
                         <SecondaryButton
@@ -408,7 +448,7 @@ export default function EmployeeToday() {
                           <Video size={13} /> {goalLoom.isPending ? "Analyzing…" : "Analyze"}
                         </SecondaryButton>
                       </div>
-                      <details className="mt-2">
+                      <details>
                         <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-tertiary)]">Paste transcript (optional)</summary>
                         <textarea
                           value={goalLoomTranscript}
@@ -416,173 +456,340 @@ export default function EmployeeToday() {
                           rows={3}
                           maxLength={50000}
                           placeholder="Only if Loom has no transcript: open Transcript in Loom, Copy, and paste it here."
-                          className={`${inputClass} mt-2 resize-y`}
-                          style={inputStyle}
+                          className={`${styles.loomTranscript} mt-2`}
                           aria-label="Loom transcript"
                         />
                       </details>
-                      {goalLoomNote ? <p className="mt-2 text-[11px] leading-5 text-[var(--text-secondary)]">{goalLoomNote}</p> : null}
-                      <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Analysis only fills the goal text for you to review and save. It files nothing and stores no video.</p>
-                    </>
+                      {goalLoomNote ? <p className={styles.loomNote}>{goalLoomNote}</p> : null}
+                      <p className={styles.loomNoteQuiet}>Analysis only fills the goal text for you to review and save. It files nothing and stores no video.</p>
+                    </div>
                   ) : null}
                 </div>
               ) : null}
             </div>
-          </Panel>
-
-          <Panel>
-            <PanelHeader
-              icon={<MessageSquareText size={16} />}
-              title={day.data?.prompt.kind === "catch_up" ? "Shift check-in" : day.data?.prompt.kind === "eod" ? "End-of-day update" : "What are you working on?"}
-              meta={day.data?.prompt.reason || "Add an update whenever your plan changes."}
-              actions={day.data?.prompt.required ? <StateMark tone="warn">Required</StateMark> : null}
-            />
-            <div className="px-5 py-4">
-              <CheckInComposer
-                value={input}
-                onChange={setInput}
-                onSend={() => checkIn.mutate({ input_text: input })}
-                onSnooze={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
-                busy={checkIn.isPending}
-                voiceEnabled={voiceAvailable}
-                voice={checkInVoice}
-              />
+          ) : (
+            <div className={styles.focusCopy}>
+              <span className={styles.countLabel}>Today&rsquo;s focus</span>
+              <p className={styles.focusText}>{goal}</p>
+              <span className={styles.provenance}>
+                {goalProvenanceLabel(workspace?.goal.provenance, true)} · {planStatusLabel(day.data?.plan)}
+                {nextCheckIn ? ` · Next check-in ${nextCheckIn}` : ""}
+              </span>
             </div>
-          </Panel>
+          )}
 
-          <EmployeeActivityRecaps
-            date={day.data?.shiftDate ?? ""}
-            timezone={day.data?.shift?.timezone}
-            prompt={day.data?.prompt}
-            voiceAvailable={voiceAvailable}
-          />
-
-          <Panel>
-            <PanelHeader
-              icon={<Check size={16} />}
-              title="First moves"
-              meta={`${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} attributed to today.`}
-              actions={
-                <Link href="/work-os/tasks" className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }}>
-                  Open Tasks
-                </Link>
-              }
-            />
-            {firstMoves.length ? (
-              <ul>
-                {firstMoves.map((task) => (
-                  <li key={task.id} className="flex items-start gap-3 border-b px-5 py-3.5 last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                    <button
-                      type="button"
-                      aria-label={`Mark ${task.title} done`}
-                      onClick={() => changeTask.mutate({ task, body: { completed: true } })}
-                      disabled={changeTask.isPending}
-                      className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition hover:border-[var(--accent-deep)]"
-                      style={{ borderColor: "var(--border-hot)", color: "transparent" }}
-                    >
-                      <Check size={12} strokeWidth={3} />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">{task.title}</p>
-                      <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--text-tertiary)]">
-                        {task.project?.name ? <span>{task.project.name}</span> : null}
-                        {task.due_date ? <span>Due {task.due_date}</span> : null}
-                        {task.priority ? <span>{operationLabel(String(task.priority))}</span> : null}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+          <div className={`${styles.focusActions} ${showFocusEditor ? styles.focusActionsStack : ""}`}>
+            {showFocusEditor ? (
+              <>
+                <PrimaryButton
+                  disabled={!goal.trim() || !goalChanged || saveGoal.isPending}
+                  onClick={() => {
+                    const firstGoal = !savedGoal.trim();
+                    saveGoal.mutate({ openBuilder: firstGoal && goal.trim().length > 0 });
+                  }}
+                >
+                  {saveGoal.isPending ? "Saving…" : "Save focus"}
+                </PrimaryButton>
+                {editingFocus ? (
+                  <SecondaryButton onClick={() => { setGoal(savedGoal); setEditingFocus(false); }}>Cancel</SecondaryButton>
+                ) : null}
+                <SecondaryButton onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }} disabled={!day.data}>
+                  <Sparkles size={13} /> Plan your day
+                </SecondaryButton>
+              </>
             ) : (
-              <EmptyState
-                icon={<ListTodo size={20} />}
-                title="No open tasks for today"
-                message="Tasks you add or plan will show up here as your first moves."
-              />
+              <>
+                <PrimaryButton onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }} disabled={!day.data}>
+                  <Sparkles size={13} /> Plan your day
+                </PrimaryButton>
+                <button
+                  type="button"
+                  className={styles.iconAction}
+                  aria-label="Edit today's focus"
+                  onClick={() => setEditingFocus(true)}
+                >
+                  <Pencil size={14} />
+                </button>
+              </>
             )}
-          </Panel>
-
-          {carryOverCount > 0 ? (
-            <Panel>
-              <PanelHeader
-                icon={<RotateCcw size={16} />}
-                title="Carry-over"
-                meta={`${carryOverCount} older open task${carryOverCount === 1 ? "" : "s"} not attributed to today. Surface one to bring it into today’s plan, or defer it explicitly.`}
-              />
-              <div>
-                {(workspace?.carryOverGroups ?? []).map((group) => (
-                  <div key={group.key} className="border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                    <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">
-                      {group.label} · {group.tasks?.length ?? 0}
-                    </p>
-                    <ul className="mt-1.5 grid gap-1.5">
-                      {(group.tasks ?? []).map((task: AnyRow) => (
-                        <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--text-primary)]">{task.title || "Untitled task"}</span>
-                          {task.due_date ? <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">Due {task.due_date}</span> : null}
-                          <span className="flex shrink-0 gap-1.5">
-                            <SecondaryButton
-                              className="!px-2 !py-1 !text-[11px]"
-                              disabled={surfaceTask.isPending}
-                              onClick={() => surfaceTask.mutate({ task, disposition: "selected" })}
-                            >
-                              Add to today
-                            </SecondaryButton>
-                            <QuietButton
-                              className="!px-2 !py-1 !text-[11px]"
-                              disabled={surfaceTask.isPending}
-                              onClick={() => surfaceTask.mutate({ task, disposition: "deferred" })}
-                            >
-                              Defer
-                            </QuietButton>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          ) : null}
+          </div>
         </div>
+      </section>
 
-        <aside className="grid content-start gap-5">
-          <Panel>
-            <PanelHeader icon={<Clock3 size={16} />} title="Day pulse" />
-            <div className="grid grid-cols-2 gap-3 px-5 py-4">
-              <Metric label="Completed" value={workspace ? `${workspace.completed}/${workspace.total}` : "—"} detail="attributed today" />
-              <Metric label="Overdue" value={workspace?.overdueCount ?? 0} tone={workspace?.overdueCount ? "warn" : "neutral"} detail="open work past due" />
-              <Metric label="Carryover" value={carryOverCount} detail="older open work" />
-              <Metric
-                label="Check-in"
-                value={day.data?.prompt.nextPromptAt ? formatTime(day.data.prompt.nextPromptAt, timezone) : "—"}
-                detail={day.data?.prompt.nextPromptAt ? (day.data?.prompt.required ? "response required" : "quiet notification") : "none scheduled"}
-              />
+      <div className={styles.grid}>
+        <section className={`${styles.panel} ${styles.reveal}`} style={{ "--delay": "150ms" } as CSSProperties} aria-labelledby="today-work">
+          <header className={styles.panelHead}>
+            <h2 className={styles.panelTitle} id="today-work">Today&rsquo;s work</h2>
+            <div className={styles.tabs} role="group" aria-label="Today's task views">
+              <button
+                type="button"
+                aria-pressed={listTab === "today"}
+                className={`${styles.tab} ${listTab === "today" ? styles.tabActive : ""}`}
+                onClick={() => setListTab("today")}
+              >
+                Today<span className={styles.tabCount}>{openTasks.length}</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={listTab === "carry"}
+                className={`${styles.tab} ${listTab === "carry" ? styles.tabActive : ""}`}
+                onClick={() => setListTab("carry")}
+              >
+                Carry-over<span className={styles.tabCount}>{carryOverCount}</span>
+              </button>
             </div>
-          </Panel>
+          </header>
+
+          {listTab === "today" ? (
+            firstMoves.length ? (
+              <>
+                <div className={styles.thead} aria-hidden="true">
+                  <span />
+                  <span>Task</span>
+                  <span>Due</span>
+                  <span>Status</span>
+                </div>
+                <ul className={styles.rows}>
+                  {firstMoves.map((task) => {
+                    const overdue = isOverdue(task, day.data?.shiftDate);
+                    return (
+                      <li key={task.id} className={styles.row}>
+                        <button
+                          type="button"
+                          aria-label={`Mark ${task.title} done`}
+                          onClick={() => changeTask.mutate({ task, body: { completed: true } })}
+                          disabled={changeTask.isPending}
+                          className={styles.check}
+                        >
+                          <Check size={11} strokeWidth={3} />
+                        </button>
+                        <div className={styles.task}>
+                          <span className={styles.taskTitle}>{task.title}</span>
+                          <span className={styles.taskMeta}>
+                            {task.project?.name ? <span className={styles.project}>{task.project.name}</span> : null}
+                            {task.project?.name && task.priority ? <span className={styles.metaDot} /> : null}
+                            {task.priority ? <span>{operationLabel(String(task.priority))} priority</span> : null}
+                          </span>
+                        </div>
+                        <span className={styles.rowMetaLine}>
+                          <span>Due {dueLabel(task, day.data?.shiftDate)}</span>
+                          <span className={styles.metaDot} />
+                          <span>{overdue ? "Overdue" : "Open"}</span>
+                        </span>
+                        <span className={styles.due}>{dueLabel(task, day.data?.shiftDate)}</span>
+                        <span className={styles.statusCell}>
+                          <span className={`${styles.pill} ${overdue ? styles.pillOverdue : styles.pillOpen}`}>
+                            {overdue ? "Overdue" : "Open"}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : (
+              <div className={styles.empty}>
+                <span className={styles.emptyIcon}><ListTodo size={17} /></span>
+                <strong>No tasks are attributed to today</strong>
+                <p>Add a task or plan your day to get started.</p>
+              </div>
+            )
+          ) : carryGroups.length ? (
+            <ul className={styles.rows}>
+              {carryGroups.map((group) => (
+                <li key={group.key} className={styles.carryGroup}>
+                  <p className={styles.carryLabel}>{group.label} · {group.tasks?.length ?? 0}</p>
+                  <ul className={styles.rows}>
+                    {(group.tasks ?? []).map((task: AnyRow) => (
+                      <li key={task.id} className={styles.carryRow}>
+                        <div className={styles.task}>
+                          <span className={styles.taskTitle}>{task.title || "Untitled task"}</span>
+                          <span className={styles.taskMeta}>
+                            {task.due_date ? <span>Due {dueLabel(task, day.data?.shiftDate)}</span> : <span>No due date</span>}
+                          </span>
+                        </div>
+                        <div className={styles.carryActions}>
+                          <button
+                            type="button"
+                            className={styles.rowAction}
+                            disabled={surfaceTask.isPending}
+                            onClick={() => surfaceTask.mutate({ task, disposition: "selected" })}
+                          >
+                            Add to today
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.rowAction}
+                            disabled={surfaceTask.isPending}
+                            onClick={() => surfaceTask.mutate({ task, disposition: "deferred" })}
+                          >
+                            Defer
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className={styles.empty}>
+              <span className={styles.emptyIcon}><ListTodo size={17} /></span>
+              <strong>No older open work</strong>
+              <p>Everything attributed to earlier days is closed or deferred.</p>
+            </div>
+          )}
+
+          <footer className={styles.panelFoot}>
+            <span>
+              {listTab === "today"
+                ? `Showing ${firstMoves.length} of ${openTasks.length}`
+                : `${carryOverCount} older task${carryOverCount === 1 ? "" : "s"}`}
+            </span>
+            <Link href="/work-os/tasks" className={styles.panelFootLink}>Open Tasks</Link>
+          </footer>
+        </section>
+
+        <aside className={styles.side}>
+          <section className={`${styles.instrument} ${styles.reveal}`} style={{ "--delay": "220ms" } as CSSProperties} aria-labelledby="week-title">
+            <div className={styles.instrumentHead}>
+              <h2 id="week-title">This week</h2>
+              <span className={styles.total}><strong>{weekTotal}</strong> completed</span>
+            </div>
+            {weekDays.length ? (
+              <>
+                <svg
+                  className={styles.chart}
+                  viewBox="0 0 340 168"
+                  role="img"
+                  aria-label={`Tasks completed each day: ${weekLabel}.`}
+                >
+                  <line className={styles.gridLine} x1="34" y1={chartY(weekMax)} x2="330" y2={chartY(weekMax)} />
+                  <line className={styles.gridLine} x1="34" y1={chartY(weekMax / 2)} x2="330" y2={chartY(weekMax / 2)} />
+                  <line className={styles.gridLine} x1="34" y1={chartY(0)} x2="330" y2={chartY(0)} />
+                  <text className={styles.axisLabel} x="6" y={chartY(weekMax) + 3}>{weekMax}</text>
+                  <text className={styles.axisLabel} x="6" y={chartY(weekMax / 2) + 3}>{weekMax / 2}</text>
+                  <text className={styles.axisLabel} x="6" y={chartY(0) + 3}>0</text>
+                  {weekPoints.length > 1 ? <path className={styles.area} d={weekArea} /> : null}
+                  {weekPoints.length > 1 ? <path className={styles.line} pathLength={1} d={weekLine} /> : null}
+                  {weekPoints.map((point, index) => (
+                    <circle
+                      key={`${point.date}-dot`}
+                      className={index === weekPoints.length - 1 ? styles.chartDotToday : styles.chartDot}
+                      cx={point.x}
+                      cy={point.y}
+                      r={index === weekPoints.length - 1 ? 4.2 : 3.4}
+                    />
+                  ))}
+                  {weekDays.map((entry, index) => (
+                    <text
+                      key={`${entry.date}-label`}
+                      className={index === weekDays.length - 1 ? `${styles.dayLabel} ${styles.dayLabelToday}` : styles.dayLabel}
+                      x={weekPoints[index]?.x ?? 0}
+                      y="146"
+                      textAnchor="middle"
+                    >
+                      {index === weekDays.length - 1 ? "Today" : weekdayInitial(entry.date)}
+                    </text>
+                  ))}
+                </svg>
+                <p className={styles.chartNote}>Tasks completed, not a productivity score. Today is the filled mark.</p>
+              </>
+            ) : (
+              <div className={styles.chartEmpty}>
+                {insights.isLoading ? "Loading this week's record…" : insights.isError ? "This week's record is unavailable right now." : "No recorded days in this range."}
+              </div>
+            )}
+          </section>
+
+          {onTimePercent !== null || updatePercent !== null ? (
+            <section className={`${styles.instrument} ${styles.reveal}`} style={{ "--delay": "280ms" } as CSSProperties} aria-labelledby="reliability-title">
+              <div className={styles.instrumentHead}>
+                <h2 id="reliability-title">Plan reliability</h2>
+                <span className={styles.total}>{consistency?.dayCount ?? weekDays.length} days</span>
+              </div>
+              <div className={styles.reliability}>
+                {onTimePercent !== null ? (
+                  <div className={styles.relRow}>
+                    <div className={styles.relTop}>
+                      <span className={styles.relLabel}>On-time outcomes</span>
+                      <span className={styles.relValue}>{onTime} of {onTime + late} · {onTimePercent}%</span>
+                    </div>
+                    <div className={styles.relTrack}><div className={styles.relFill} style={{ width: `${onTimePercent}%` }} /></div>
+                  </div>
+                ) : null}
+                {updatePercent !== null ? (
+                  <div className={styles.relRow}>
+                    <div className={styles.relTop}>
+                      <span className={styles.relLabel}>Days with an update</span>
+                      <span className={styles.relValue}>{consistency?.daysWithUpdate ?? 0} of {consistency?.dayCount ?? 0}</span>
+                    </div>
+                    <div className={styles.relTrack}><div className={styles.relFill} style={{ width: `${updatePercent}%` }} /></div>
+                  </div>
+                ) : null}
+                {completionPercent !== null ? (
+                  <div className={styles.relRow}>
+                    <div className={styles.relTop}>
+                      <span className={styles.relLabel}>Days with a completed task</span>
+                      <span className={styles.relValue}>{consistency?.daysWithCompletion ?? 0} of {consistency?.dayCount ?? 0}</span>
+                    </div>
+                    <div className={styles.relTrack}><div className={`${styles.relFill} ${styles.relFillQuiet}`} style={{ width: `${completionPercent}%` }} /></div>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
 
           {eodDue || outstandingCount > 0 ? (
-            <Panel>
-              <PanelHeader
-                icon={<FileCheck2 size={16} />}
-                title="End-of-day report"
-                meta={eodDue ? "Today’s report is ready to draft or review." : `${outstandingCount} past day${outstandingCount === 1 ? "" : "s"} ${outstandingCount === 1 ? "needs" : "need"} a submitted report.`}
-                actions={
-                  <Link href="/work-os/review" className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }}>
-                    Open Review
-                  </Link>
-                }
-              />
-              <div className="px-5 py-4">
-                <p className="text-[12px] leading-5 text-[var(--text-secondary)]">
-                  {day.data?.report ? `Report status: ${operationLabel(String(day.data.report.status || "draft"))}.` : "Nothing is filed until you submit it in Review."}
-                </p>
-              </div>
-            </Panel>
+            <section className={`${styles.eod} ${styles.reveal}`} style={{ "--delay": "330ms" } as CSSProperties} aria-labelledby="eod-title">
+              <h2 id="eod-title">End of day</h2>
+              <p>
+                {eodDue
+                  ? "Today's report is ready to draft or review."
+                  : `${outstandingCount} past day${outstandingCount === 1 ? "" : "s"} ${outstandingCount === 1 ? "needs" : "need"} a submitted report.`}
+              </p>
+              <Link href="/work-os/review" className={styles.eodLink}>Open Review <ArrowRight size={13} /></Link>
+            </section>
           ) : null}
 
+          <section className={styles.checkinBlock} aria-labelledby="checkin-title">
+            <h2 id="checkin-title">Check-in</h2>
+            <p>
+              {nextCheckIn ? (
+                <>Next check-in <span className={styles.checkinWhen}>{nextCheckIn}</span>{day.data?.prompt.required ? ", required" : ", quiet notification"}.</>
+              ) : (
+                "No check-in is scheduled for today."
+              )}
+            </p>
+          </section>
         </aside>
       </div>
+
+      <section className={styles.composer} aria-labelledby="composer-title">
+        <div className={styles.composerHead}>
+          <h2 id="composer-title">
+            {day.data?.prompt.kind === "catch_up" ? "Shift check-in" : day.data?.prompt.kind === "eod" ? "End-of-day update" : "What are you working on?"}
+          </h2>
+          <p>{day.data?.prompt.reason || "Add an update whenever your plan changes."}</p>
+          {day.data?.prompt.required ? <span className={styles.requiredMark}>Required</span> : null}
+        </div>
+        <CheckInComposer
+          value={input}
+          onChange={setInput}
+          onSend={() => checkIn.mutate({ input_text: input })}
+          onSnooze={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
+          busy={checkIn.isPending}
+          voiceEnabled={voiceAvailable}
+          voice={checkInVoice}
+        />
+      </section>
+
+      <EmployeeActivityRecaps
+        date={day.data?.shiftDate ?? ""}
+        timezone={day.data?.shift?.timezone}
+        prompt={day.data?.prompt}
+        voiceAvailable={voiceAvailable}
+      />
 
       {planBuilderOpen && day.data ? (
         <EmployeePlanBuilder
@@ -591,9 +798,6 @@ export default function EmployeeToday() {
           seed={planSeed}
           onClose={() => setPlanBuilderOpen(false)}
           onSaved={() => {
-            // The builder owns the moment: it shows the checked confirmation
-            // and closes itself when the employee dismisses it, so no second
-            // receipt banner competes with the dialog.
             void refresh();
           }}
         />
