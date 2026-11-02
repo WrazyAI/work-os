@@ -90,10 +90,10 @@ export async function requireAgentAccess(
   if (!secret) return { response: agentError("unauthorized", "A valid agent token is required", 401) };
 
   const supabase = db();
-  // The employee surface only ever resolves employee tokens. An admin token has
-  // no person binding, so without this filter a null-person admin token could
-  // line up with a membership row and be served employee access. A token of the
-  // wrong kind is simply unknown here: 401, never 403.
+  // The employee surface only resolves employee tokens. A person-mapped admin
+  // token could otherwise carry its overlapping scopes into /api/agent/v1 and
+  // /api/mcp and be served full employee access; the kind filter keeps a
+  // wrong-kind token simply unknown here — 401, never 403.
   const { data: token, error: tokenError } = await supabase.from("work_agent_tokens")
     .select("id,organization_id,person_id,user_id,name,token_prefix,scopes,expires_at,last_used_at,revoked_at")
     .eq("token_hash", hashAgentToken(secret))

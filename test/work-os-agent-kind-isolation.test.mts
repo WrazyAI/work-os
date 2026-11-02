@@ -11,7 +11,12 @@ test("the employee resolver only accepts employee tokens", async () => {
 
 test("the admin MCP route is excluded from proxy body buffering", async () => {
   const proxy = await read("src/proxy.ts");
-  assert.match(proxy, /api\/agent\/admin\/mcp/);
+  // Slice the matcher block, not the whole file: a comment alone must not
+  // satisfy this test. The close anchor is the indented `],` line so character
+  // classes inside the matcher string (e.g. `[^/]+`) cannot end the slice.
+  const matcher = proxy.match(/matcher: \[([\s\S]+?)\n  \],/)?.[1] ?? "";
+  assert.ok(matcher, "the proxy matcher block is missing");
+  assert.match(matcher, /api\/mcp\|api\/agent\/admin\/mcp/);
 });
 
 test("the employee MCP still exposes exactly seven tools", async () => {
