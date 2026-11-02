@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Open the focus band on Tasks to read the full goal for the selected day.
+
 ## 0.5.18 — 2026-11-02
 
 - Open your workday summary for a roomier view of your schedule, tasks, and focus.

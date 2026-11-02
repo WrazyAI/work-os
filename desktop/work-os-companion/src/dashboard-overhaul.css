@@ -435,6 +435,37 @@ body {
 .formatted-date-picker { color: var(--dash-ink); }
 
 .task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--dash-line); border-radius: 14px; background: rgba(255, 255, 252, 0.88); box-shadow: none; }
+.task-agenda-strip { position: relative; cursor: pointer; }
+.task-focus-details-trigger { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.task-focus-details-trigger:focus-visible { position: static; width: auto; height: auto; min-height: 40px; clip-path: none; padding: 0 10px; border: 1px solid var(--dash-line); border-radius: 8px; background: var(--dash-card-solid); color: var(--dash-ink); outline: 2px solid #4a7d22; }
+.task-focus-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(86vh, 800px); padding: 0; overflow: auto; border: 1px solid var(--dash-line); border-radius: 18px; background: var(--dash-card-solid); color: var(--dash-ink); box-shadow: 0 24px 80px rgba(15,25,17,.25); }
+.task-focus-dialog::backdrop { background: rgba(20,29,22,.52); }
+.task-focus-dialog > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 28px 30px 20px; }
+.task-focus-dialog > header small, .task-focus-dialog-body > span, .task-focus-dialog-body > small { color: var(--dash-muted); font-size: 11px; }
+.task-focus-dialog h2 { margin: 6px 0 0; font-size: 25px; letter-spacing: -.035em; }
+.task-focus-dialog > header button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--dash-line); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
+.task-focus-dialog-body { margin: 0 30px; padding: 0 0 20px; }
+.task-focus-date-separator { margin: 0 6px; color: var(--dash-line-strong); }
+.task-focus-statement { padding: 22px 24px; border: 1px solid #dde6d7; border-radius: 14px; background: #f3f7ef; }
+.task-focus-statement-heading { display: flex; align-items: center; gap: 10px; color: #4b6142; font-size: 11px; font-weight: 700; }
+.task-focus-target { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #e0efd5; color: #4d832d; }
+.task-focus-statement p { margin: 16px 0 13px; color: #263526; font-size: 20px; font-weight: 700; letter-spacing: -.025em; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
+.task-focus-statement small { color: #60715b; font-size: 11px; }
+.task-focus-plan { padding: 25px 0 0; }
+.task-focus-plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.task-focus-plan-heading h3 { margin: 0; font-size: 15px; }
+.task-focus-plan-heading p { margin: 4px 0 0; color: var(--dash-muted); font-size: 11px; }
+.task-focus-plan-heading > span { display: grid; place-items: center; min-width: 27px; height: 27px; border-radius: 50%; background: #edf2e9; color: #52634d; font-size: 11px; font-weight: 700; }
+.task-focus-plan ul { list-style: none; margin: 15px 0 0; padding: 0; border-top: 1px solid var(--dash-line); }
+.task-focus-plan li { display: flex; align-items: center; gap: 10px; min-height: 45px; padding: 9px 0; border-bottom: 1px solid var(--dash-line); font-size: 12px; font-weight: 650; }
+.task-focus-plan li > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-focus-plan li > small { color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.task-focus-plan-mark { display: grid; place-items: center; flex: none; width: 25px; height: 25px; border-radius: 8px; background: #f1f4ed; color: #8a9882; }
+.task-focus-plan-mark.is-done { background: #e7f4df; color: #4a7d22; }
+.task-focus-plan-empty { margin: 15px 0 0; padding: 14px 0; border-top: 1px solid var(--dash-line); color: var(--dash-muted); font-size: 12px; }
+.task-focus-dialog footer { padding: 0 30px 28px; }
+.task-focus-dialog footer button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--dash-ink); color: var(--dash-card-solid); font-weight: 700; cursor: pointer; }
+.task-focus-dialog button:focus-visible { outline: 2px solid #4a7d22; outline-offset: 3px; }
 .agenda-strip-focus { min-width: 0; }
 .agenda-strip-text { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .agenda-strip-meta { color: var(--dash-muted); font-size: 10px; }

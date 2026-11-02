@@ -304,7 +304,8 @@ describe("operational visualizations", () => {
   });
 
   it("keeps focus contextual and task lifecycle actions consistent", () => {
-    expect(app).toContain('className={`panel task-agenda-strip');
+    expect(app).toContain('<TaskFocusDetails');
+    expect(app).toContain('<TaskFocusDetails');
     expect(app).toContain('className={`task-list-tab ${taskView === id ? "active" : ""}`}');
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("function DashboardTaskCard");

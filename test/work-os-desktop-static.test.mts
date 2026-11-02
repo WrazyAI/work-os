@@ -150,7 +150,8 @@ assert.match(app, /OverflowPanText/);
 // and the chat task titles; the pan distance is measured from the overflow.
 assert.match(read("src/OverflowPan.tsx"), /overflow-pan-line/);
 assert.match(read("src/OverflowPan.tsx"), /scrollWidth - el\.clientWidth/);
-assert.match(app, /task-agenda-strip/);
+assert.match(app, /<TaskFocusDetails/);
+assert.match(read("src/TaskFocusDetails.tsx"), /task-agenda-strip/);
 assert.match(app, /formatWorkOsDate\(task\.due_date\)/);
 assert.match(app, /Suggested from your tasks/);
 assert.match(app, /What is the goal for today\?/);

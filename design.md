@@ -588,6 +588,14 @@ label. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
 
+The focus strip opens a centered, labelled dialog containing the selected day's
+full focus and its provenance, followed by selected plan items and their
+recorded plan states when a plan exists. The strip's existing review and retry buttons
+retain their own actions; a focusable details trigger supports keyboard access.
+Current-day focus offers Edit focus, while historical focus is read-only. Escape,
+the close control, and a backdrop press dismiss the dialog and restore focus;
+long text wraps and scrolls within the viewport.
+
 At wide widths, the title column absorbs available space. Progress, due date,
 status, and menu columns remain intrinsic and aligned. At narrow widths, the
 due/status columns fold into a labeled line in the row body (Overdue · date,
