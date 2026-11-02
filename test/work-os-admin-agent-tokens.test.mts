@@ -183,6 +183,17 @@ function adminAccess(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The same account seen through the employee token model; the admin user owns
+ * both kinds, so only the kind filter can separate them. */
+function employeeAccess(overrides: Record<string, unknown> = {}) {
+  return adminAccess({
+    role: "employee",
+    personId: "person-1",
+    featureFlags: {},
+    ...overrides,
+  });
+}
+
 test("creating an admin token needs the admin role and the admin agent feature", async () => {
   const fixture = tokenFixture();
   const create = fixture.module.createAdminAgentToken;
@@ -274,4 +285,73 @@ test("admin token list and revoke scope to the admin kind and the owning user", 
     tokenCalls.every((call: Call) => !call.filters.some((filter) => filter.startsWith("person_id="))),
     "admin tokens never filter on person_id",
   );
+});
+
+test("employee token management cannot list or revoke a person-mapped admin token", async () => {
+  const fixture = tokenFixture();
+  fixture.rows.push(
+    // Same organization, same owning user, same person: only `kind` separates
+    // the admin token from the employee token.
+    { id: "admin-token", kind: "admin", organization_id: "org-1", user_id: "admin-user", person_id: "person-1", revoked_at: null },
+    { id: "employee-token", kind: "employee", organization_id: "org-1", user_id: "admin-user", person_id: "person-1", revoked_at: null },
+  );
+
+  const listed = await fixture.module.listAgentTokens(employeeAccess());
+  assert.deepEqual(listed.map((row: Record<string, unknown>) => row.id), ["employee-token"],
+    "a person-mapped admin token never appears in the employee list");
+
+  assert.equal(await fixture.module.revokeAgentToken(employeeAccess(), "admin-token"), false,
+    "the employee path cannot revoke an admin token");
+  assert.equal(fixture.rows[0].revoked_at, null, "the admin token stays active");
+  assert.equal(fixture.audits.length, 0, "a failed employee revoke writes no audit row");
+
+  const adminListed = await fixture.module.listAdminAgentTokens(adminAccess());
+  assert.deepEqual(adminListed.map((row: Record<string, unknown>) => row.id), ["admin-token"],
+    "the admin list still owns the person-mapped admin token");
+  assert.equal(await fixture.module.revokeAdminAgentToken(adminAccess(), "admin-token"), true,
+    "the admin path revokes it");
+  assert.equal(fixture.rows[0].revoked_at !== null, true);
+  assert.deepEqual(fixture.audits, [{
+    action: "agent_token.revoked",
+    targetType: "agent_token",
+    targetId: "admin-token",
+    metadata: { kind: "admin" },
+  }], "only the admin revoke is audited, with the admin kind");
+
+  const employeeCalls = fixture.calls.filter((call: Call) => call.filters.includes("kind=employee"));
+  assert.equal(employeeCalls.length, 2, "the employee list and revoke both filter the kind");
+  for (const call of employeeCalls) {
+    assert.equal(call.table, "work_agent_tokens");
+    assert.ok(call.filters.includes("person_id=person-1"));
+  }
+});
+
+test("admin list and revoke refuse a manager and a disabled feature without side effects", async () => {
+  const fixture = tokenFixture();
+  fixture.rows.push(
+    { id: "admin-token", kind: "admin", organization_id: "org-1", user_id: "admin-user", person_id: null, revoked_at: null },
+  );
+  const { listAdminAgentTokens, revokeAdminAgentToken } = fixture.module;
+  const refusals = [
+    adminAccess({ role: "manager", personId: "person-1" }),
+    adminAccess({ featureFlags: { admin_agent_api: false } }),
+    adminAccess({ featureFlags: {} }),
+  ];
+
+  for (const access of refusals) {
+    await assert.rejects(
+      () => listAdminAgentTokens(access),
+      (error: Error) => error.name === "WorkOsForbiddenError",
+      "listing admin tokens needs an admin in an enabled organization",
+    );
+    await assert.rejects(
+      () => revokeAdminAgentToken(access, "admin-token"),
+      (error: Error) => error.name === "WorkOsForbiddenError",
+      "revoking an admin token needs an admin in an enabled organization",
+    );
+  }
+
+  assert.equal(fixture.rows[0].revoked_at, null, "a refused revoke never stamps revoked_at");
+  assert.equal(fixture.audits.length, 0, "a refused caller writes no audit row");
+  assert.equal(fixture.calls.length, 0, "a refused caller never reaches the data layer");
 });

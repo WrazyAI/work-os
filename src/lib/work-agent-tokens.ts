@@ -4,8 +4,10 @@ import { WorkOsForbiddenError, WorkOsValidationError } from "@/lib/work-os-api";
 import { audit, db, type Json } from "@/lib/work-os-internal";
 
 /** Scoped, self-minted credentials for external agents. A token is bound to
- * one organization, one person, and one user; the raw secret is shown once and
- * only its SHA-256 hex digest is stored. */
+ * one organization and one user; the raw secret is shown once and only its
+ * SHA-256 hex digest is stored. Employee tokens also require a person binding,
+ * while admin tokens may omit it because they read across the organization.
+ * The kind column keeps the two models from listing or revoking each other. */
 
 export const AGENT_TOKEN_PREFIX = "wos_agent_";
 export const AGENT_TOKEN_SCOPES = ["tasks:read", "tasks:write", "progress:write", "evidence:write"] as const;
@@ -91,6 +93,7 @@ export async function listAgentTokens(access: WorkOsAccess) {
     .select(AGENT_TOKEN_COLUMNS)
     .eq("organization_id", access.organizationId)
     .eq("user_id", access.ctx.user.id)
+    .eq("kind", "employee")
     .eq("person_id", access.personId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`list agent tokens: ${error.message}`);
@@ -104,6 +107,7 @@ export async function revokeAgentToken(access: WorkOsAccess, tokenId: string): P
     .eq("id", tokenId)
     .eq("organization_id", access.organizationId)
     .eq("user_id", access.ctx.user.id)
+    .eq("kind", "employee")
     .eq("person_id", access.personId)
     .is("revoked_at", null)
     .select("id")
