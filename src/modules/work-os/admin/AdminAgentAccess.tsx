@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { adminFetch } from "./api";
@@ -49,6 +49,12 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function isExpired(value?: string | null) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return !Number.isNaN(time) && time <= Date.now();
+}
+
 /** Admin-scoped agent credentials. Admin tokens read across the organization,
  * so they are minted and revoked here in the administration console; the raw
  * secret is held in component state only and cleared when the notice closes. */
@@ -60,6 +66,19 @@ export default function AdminAgentAccess() {
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
+  const rowActionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const restoreRevokeFocusTo = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (confirmRevoke) {
+      rowActionRefs.current[confirmRevoke]?.querySelector("button")?.focus();
+      return;
+    }
+    const tokenId = restoreRevokeFocusTo.current;
+    if (!tokenId) return;
+    restoreRevokeFocusTo.current = null;
+    rowActionRefs.current[tokenId]?.querySelector("button")?.focus();
+  }, [confirmRevoke]);
 
   const tokens = useQuery<{ tokens: AdminAgentTokenRow[] }>({
     queryKey: ["work-os", "admin", "admin-agent-tokens"],
@@ -103,8 +122,13 @@ export default function AdminAgentAccess() {
     }
   };
 
+  const cancelRevoke = () => {
+    restoreRevokeFocusTo.current = confirmRevoke;
+    setConfirmRevoke(null);
+  };
+
   const rows = tokens.data?.tokens ?? [];
-  const error = tokens.error || create.error || revoke.error;
+  const error = create.error || revoke.error;
 
   return (
     <AdminCard>
@@ -127,7 +151,7 @@ export default function AdminAgentAccess() {
                 <Button onClick={() => void copySecret()}>
                   {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />} {copied ? "Copied" : "Copy"}
                 </Button>
-                <Button variant="ghost" onClick={() => { setSecret(null); setCopied(false); }}>Done</Button>
+                <Button variant="ghost" onClick={() => { setSecret(null); setCopied(false); create.reset(); }}>Done</Button>
               </div>
               <p className="text-[11.5px] leading-5">Secrets start with <span className="font-mono">wos_admin_</span>; treat the value like a password.</p>
             </div>
@@ -172,6 +196,17 @@ export default function AdminAgentAccess() {
 
         {tokens.isLoading && !tokens.data ? (
           <div aria-busy="true" className="grid gap-2"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
+        ) : tokens.isError ? (
+          <Notice
+            tone="err"
+            action={
+              <Button size="sm" onClick={() => void tokens.refetch()} disabled={tokens.isFetching}>
+                {tokens.isFetching ? "Retrying…" : "Retry"}
+              </Button>
+            }
+          >
+            Admin tokens could not be loaded. {(tokens.error as Error).message}
+          </Notice>
         ) : rows.length ? (
           <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {rows.map((token) => (
@@ -183,17 +218,28 @@ export default function AdminAgentAccess() {
                   </p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {token.scopes.map((scope) => <StatusPill key={scope} tone="info">{scope}</StatusPill>)}
-                    {token.revoked_at ? <StatusPill tone="err">Revoked</StatusPill> : null}
+                    {token.revoked_at ? (
+                      <StatusPill tone="err">Revoked</StatusPill>
+                    ) : isExpired(token.expires_at) ? (
+                      <StatusPill tone="warn">Expired</StatusPill>
+                    ) : null}
                   </div>
                 </div>
-                {token.revoked_at ? null : confirmRevoke === token.id ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-[var(--text-secondary)]">Revoke {token.name}?</span>
-                    <Button size="sm" variant="danger" disabled={revoke.isPending} onClick={() => revoke.mutate(token.id)}>Confirm</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmRevoke(null)}>Cancel</Button>
+                {token.revoked_at ? null : (
+                  <div
+                    ref={(node) => { rowActionRefs.current[token.id] = node; }}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    {confirmRevoke === token.id ? (
+                      <>
+                        <span className="text-[11px] text-[var(--text-secondary)]">Revoke {token.name}?</span>
+                        <Button size="sm" variant="danger" disabled={revoke.isPending} onClick={() => revoke.mutate(token.id)}>Confirm</Button>
+                        <Button size="sm" variant="ghost" onClick={cancelRevoke}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" onClick={() => setConfirmRevoke(token.id)}><Trash2 size={13} aria-hidden /> Revoke</Button>
+                    )}
                   </div>
-                ) : (
-                  <Button size="sm" onClick={() => setConfirmRevoke(token.id)}><Trash2 size={13} aria-hidden /> Revoke</Button>
                 )}
               </li>
             ))}

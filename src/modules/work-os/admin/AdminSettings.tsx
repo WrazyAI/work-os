@@ -168,13 +168,15 @@ export default function AdminSettingsPage() {
       </AdminCard>
 
       {/* Admin agent access */}
-      {organizationFlags.admin_agent_api === true ? (
-        <AdminAgentAccess />
-      ) : (
-        <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
-          Admin agent access is off. Enable <span className="font-semibold text-[var(--text-secondary)]">Admin agent API</span> above to mint admin-scoped tokens.
-        </p>
-      )}
+      {!organization.isLoading ? (
+        organizationFlags.admin_agent_api === true ? (
+          <AdminAgentAccess />
+        ) : (
+          <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+            Admin agent access is off. Enable <span className="font-semibold text-[var(--text-secondary)]">Admin agent API</span> above to mint admin-scoped tokens.
+          </p>
+        )
+      ) : null}
 
       {/* Memberships */}
       <AdminCard>
