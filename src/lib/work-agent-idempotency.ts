@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { WorkOsConflictError, WorkOsValidationError } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { db, type Json } from "@/lib/work-os-internal";
-import type { AgentAccess } from "@/lib/work-agent-auth";
 
 /** The response cache behind `Idempotency-Key`. The data client has no
  * multi-statement transaction, so retry safety comes from this cache plus the
@@ -50,6 +49,11 @@ export function agentRequestHash(method: string, path: string, body: unknown): s
 
 export type AgentIdempotencyResult = { status: number; body: unknown; replayed: boolean };
 
+/** The cache is keyed by token, but it only needs the organization behind that
+ * token. Employee and admin access both satisfy this shape, so both kinds share
+ * one idempotency table without the cache importing either resolver. */
+export type AgentIdempotencyIdentity = { access: WorkOsAccess; tokenId: string };
+
 /** 5xx responses are transient: caching them would trap a same-key retry on a
  * stale failure, while every mutation is already idempotent by its own key. */
 export function cacheAgentResponse(status: number): boolean {
@@ -57,7 +61,7 @@ export function cacheAgentResponse(status: number): boolean {
 }
 
 export async function withAgentIdempotency(input: {
-  agent: AgentAccess;
+  agent: AgentIdempotencyIdentity;
   key: string | null | undefined;
   requestHash: string;
   handler: () => Promise<{ status: number; body: unknown }>;
