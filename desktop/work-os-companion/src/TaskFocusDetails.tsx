@@ -26,7 +26,7 @@ export function TaskFocusDetails({ text, provenance, date, historical, plan, onE
       const bounds = event.currentTarget.getBoundingClientRect();
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dismiss();
     }}>
-      <header><div><small>{date} <span className="task-focus-date-separator">/</span> {historical ? "Workday" : "My day"}</small><h2 id="task-focus-dialog-title">{historical ? "Workday focus" : "Today’s focus"}</h2></div><button type="button" aria-label="Close focus details" autoFocus onClick={dismiss}><X size={18} /></button></header>
+      <header><div><small>{date} <span className="task-focus-date-separator">/</span> {historical ? "Workday" : "My day"}</small><h2 id="task-focus-dialog-title">{historical ? "Workday focus" : "Today’s focus"}</h2></div><button type="button" aria-label="Close focus details" title="Close focus details" autoFocus onClick={dismiss}><X size={18} /></button></header>
       <div className="task-focus-dialog-body">
         <section className="task-focus-statement"><div className="task-focus-statement-heading"><span className="task-focus-target"><Target size={18} aria-hidden="true" /></span><span>The focus</span></div><p>{text}</p><small>{provenance}</small></section>
         <section className="task-focus-plan" aria-label="Selected plan items"><div className="task-focus-plan-heading"><div><h3>On the plan</h3><p>{plan ? "Items selected for this workday" : "No plan recorded for this day"}</p></div>{planItems.length > 0 && <span>{planItems.length}</span>}</div>
