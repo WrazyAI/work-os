@@ -156,7 +156,7 @@ create table if not exists work_admin_action_previews (
   target_id text,
   request jsonb not null,
   preview jsonb not null,
-  state_fingerprint jsonb not null default '{}'::jsonb,
+  state_fingerprint jsonb not null,
   result_status smallint,
   result_body jsonb,
   idempotency_key text,
@@ -168,6 +168,9 @@ create index if not exists work_admin_action_previews_token_idx
   on work_admin_action_previews(token_id, expires_at);
 create index if not exists work_admin_action_previews_user_idx
   on work_admin_action_previews(user_id, expires_at);
+create unique index if not exists work_admin_action_previews_idempotency_uidx
+  on work_admin_action_previews(token_id, idempotency_key)
+  where idempotency_key is not null;
 
 alter table work_admin_action_previews enable row level security;
 revoke all on work_admin_action_previews from public;
@@ -186,7 +189,8 @@ export const ADMIN_PREVIEW_ACTIONS = [
 ] as const;
 export type AdminPreviewAction = (typeof ADMIN_PREVIEW_ACTIONS)[number];
 
-export type AdminPreviewChange = { field: string; from: Json; to: Json };
+export type AdminPreviewValue = string | number | boolean | null | AdminPreviewValue[] | { [key: string]: AdminPreviewValue };
+export type AdminPreviewChange = { field: string; from: AdminPreviewValue; to: AdminPreviewValue };
 export type AdminPreview = {
   id: string;
   action: AdminPreviewAction;
@@ -592,7 +596,7 @@ create table work_agent_tokens (
 );
 ```
 
-Add any of these tables the copied block lacks: `work_admin_action_previews`, `work_report_versions`, `work_evidence`, `work_projects`, `work_teams`, `work_team_members`, `work_role_profiles`, `work_task_day_events`. Export `fixture()` that creates a `PGlite`, executes the prerequisite block, executes `0069_work_admin_agent_access.sql`, and assigns `globalThis.__workOsPgPool`. Export constants `org`, `otherOrg`, `adminUser`, `personA`, `personB`, `personC`, `otherPerson`, plus `adminAccess` (`role: "admin"`, `personId: null`, flags `{ employee_companion: true, admin_agent_api: true }`), `mappedAdminAccess` (`personId: personA`), and `otherOrgAccess`.
+Add any of these tables the copied block lacks: `work_report_versions`, `work_evidence`, `work_projects`, `work_teams`, `work_team_members`, `work_role_profiles`, `work_task_day_events`. Do **not** create `work_admin_action_previews` in the prerequisite block; `0069_work_admin_agent_access.sql` creates it. Export `fixture()` that creates a `PGlite`, executes the prerequisite block, executes `0069_work_admin_agent_access.sql`, and assigns `globalThis.__workOsPgPool`. Export constants `org`, `otherOrg`, `adminUser`, `personA`, `personB`, `personC`, `otherPerson`, plus `adminAccess` (`role: "admin"`, `personId: null`, flags `{ employee_companion: true, admin_agent_api: true }`), `mappedAdminAccess` (`personId: personA`), and `otherOrgAccess`.
 
 - [ ] **Step 2: Write the failing directory tests**
 
@@ -968,7 +972,10 @@ export async function applyAdminAction(
   actor: { tokenId: string; tokenName: string },
 ): Promise<{ status: number; body: Json }>;
 export const defaultAdminAgentActionServices: AdminAgentActionServices;
+export function validateAdminTaskCreate(payload: Json): Json;
 ```
+
+`validateAdminTaskCreate` accepts the employee create fields (`name`, `description`, `due_date`, `start_date`, `priority`, `labels`, `story_points`, `expected_outcome`, `definition_of_done`, `estimated_effort_minutes`, `effort_unit`, `task_group_id`, `parent_task_id`, `project_id`, `assignee_person_ids`) and validates `assignee_person_ids` against active organization members, without the employee self-only restriction. It rejects unknown fields and a blank title.
 
 Define `fakeServices(task, extras?)` in the test file with the same seven methods; every method records its call and returns the supplied task/report. The helper is test-only and not exported from production code.
 
@@ -1005,7 +1012,7 @@ Expected: FAIL.
 
 For each action, resolve the target with `services.getTask`, validate the payload, and compute `changes` + `state`:
 
-- `task.create`: `summary: "Create <title> for <names>"`; state `{}`; changes list name, owners, project, due date.
+- `task.create`: validate with `validateAdminTaskCreate`; `summary: "Create <title> for <names>"`; state `{}`; changes list name, owners, project, due date.
 - `task.update`: state from the task; changes for each supplied field with `from`/`to`.
 - `task.assign`: state includes the resolved final assignee list; changes `assignees` from current to final; warnings when removing everyone or assigning an inactive person.
 - `task.move`: state includes `parentId`; changes `parent`; warning when the task is not a subtask or the new parent is in another project.
