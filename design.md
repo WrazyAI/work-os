@@ -492,6 +492,19 @@ ring's vertical space belongs to the work. The four counts have one owner — th
 band — rather than a flow legend and a facts row that disagreed about which
 numbers the day is made of.
 
+The workday band opens a detailed workday dialog when its non-control area is
+pressed; its clock and task buttons keep their own actions. A visible, keyboard
+reachable details button opens the same dialog. The dialog separates provider
+status, scheduled window, task counts, and focus without inventing attendance
+or task facts. It traps focus, closes on Escape, backdrop, or close, and restores
+focus to the details button. Opening and closing use a brief 200ms/160ms reveal;
+reduced motion skips both. On narrow screens the dialog stays within the
+viewport and scrolls internally.
+Hovering or keyboard-focusing the compact scheduled-window progress line reveals
+its start and end times; the expanded dialog's line instead reveals the current
+local time. These are time indicators, never productivity measures. Their
+information is accessible without hover and the reveal respects reduced motion.
+
 ### 5.3 Observed-only and degraded states
 
 The macOS Companion keeps attendance visible but uses the Worktivity Mac app

@@ -23,6 +23,13 @@ function baseActions() {
 }
 
 describe("dashboard surfaces", () => {
+  it("offers a keyboard-accessible workday details entry", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [task], currentDate: "2026-08-26" }));
+    expect(markup).toContain('aria-label="Open workday details"');
+    expect(markup).toContain('aria-haspopup="dialog"');
+  });
   it("offers off-shift task actions without changing the row controls", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const assigned = { ...task, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
@@ -146,7 +153,7 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Clock in");
     expect(markup).toContain("Clock in with Worktivity from the Windows Companion");
     expect(markup).toContain("Updated August 26, 12:06 PM");
-    expect(markup).not.toContain("Scheduled window");
+    expect(markup).toContain('aria-label="Scheduled window: 3:00 PM to 8:00 PM"');
     expect(markup).not.toContain("dashboard-readiness");
     expect(markup).not.toContain("dashboard-metric");
     // One owner per count, and the queue states what it is previewing.
@@ -165,7 +172,9 @@ describe("dashboard surfaces", () => {
     const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [{ id: "carry-1", title: "Resolve carryover", due_date: "2026-08-25", completed: false }], otherTasks: [], currentDate: "2026-08-26", canPause: true, canClockOut: true, taskFlight: new Map([["task-1", "completing" as const]]), onPause: noop, onClockOut: noop, onAddTask: noop }));
 
     expect(markup).toContain("workday-band");
-    expect(markup).toContain("4:46");
+    expect(markup).toContain("4h 46m");
+    expect(markup).toContain('aria-label="Scheduled window: 9:00 AM to 5:00 PM"');
+    expect(markup).toContain('class="dashboard-pulse-time"');
     expect(markup).toContain("3h 14m");
     // The tabs are the panel's title; there is no second heading restating the
     // selected view.
@@ -196,7 +205,7 @@ describe("dashboard surfaces", () => {
     const observedAttendance = { ...activeAttendance, clockedInAt: "2026-08-26T10:00:00Z" };
     const observedModel = buildWorkdayDashboardModel({ active: true, observedOnly: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: observedAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, observedAttendance), tasks: [task], carryover: [], focus: "Make the first task visible", focusSource: "Observed context", niftySync: { fresh: true, syncedAt: "2026-08-26T13:40:00Z" } }, now);
     const observedMarkup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model: observedModel, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", observedOnly: true, canPause: false, canClockOut: false, onAddTask: noop }));
-    expect(observedMarkup).toContain("03:46");
+    expect(observedMarkup).toContain("3h 46m");
     // Un-mirrored observation is the one case where the mechanism sentence
     // still earns its place, because it says what has not happened yet.
     expect(observedMarkup).toContain("Worktivity confirms active attendance; Work OS has not mirrored its session yet.");

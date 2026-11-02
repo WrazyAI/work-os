@@ -831,7 +831,7 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toContain(".day-focus-strip {");
     expect(dashboardStyles).not.toContain(".active-progress-orb");
     expect(dashboardStyles).not.toContain(".active-summary-facts");
-    expect(dashboardSurface).toContain('<section className="workday-band">');
+    expect(dashboardSurface).toContain('<section className="workday-band"');
     expect(dashboardSurface).toContain('className="day-focus-strip"');
     expect(dashboardSurface).not.toContain("Workday at a glance");
     expect(dashboardSurface).not.toContain("Keep the queue moving.");

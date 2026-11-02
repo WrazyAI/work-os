@@ -1,5 +1,6 @@
-import { useRef, useState, type KeyboardEvent } from "react";
-import { Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Pencil, Plus, RefreshCw, Target } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Pencil, Plus, RefreshCw, Target, X } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
 import { dashboardRemainingLabel, type WorkdayDashboardModel } from "./dashboardModel";
 import { MascotPet } from "./MascotPet";
@@ -59,6 +60,15 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
 
 function syncClass(tone: WorkdayDashboardModel["sync"]["tone"]) {
   return `dashboard-status-${tone}`;
+}
+
+/** Keep elapsed and remaining readings in the same duration vocabulary. */
+function elapsedDuration(label: string) {
+  const match = /^(\d+):([0-5]\d)$/.exec(label);
+  if (!match) return label;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
 /** One count in the workday band. A zero has nowhere useful to go, so it is a
@@ -132,18 +142,84 @@ function DashboardTaskQueue({ tasks, currentDate, emptyTitle, emptyBody, busy, t
     : <div className="dashboard-empty-state"><span className="dashboard-empty-icon"><CheckCircle2 size={18} /></span><strong>{emptyTitle}</strong><p>{emptyBody}</p></div>;
 }
 
-function PulseTimeline({ model, showPosition = true }: { model: WorkdayDashboardModel; showPosition?: boolean }) {
+function PulseTimeline({ model, showPosition = true, expanded = false }: { model: WorkdayDashboardModel; showPosition?: boolean; expanded?: boolean }) {
   const progress = Math.max(0, Math.min(100, model.pulse.progressPercent));
+  const localTime = Number.isFinite(model.asOf) ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(model.asOf)) : "Unavailable";
+  const start = formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined);
+  const end = formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined);
   // The axis names the scheduled window only: the reader's own clock already
   // tells them the time, so the marker carries the present without restating it.
   // Before the window opens there is no position to mark.
   return <div className="dashboard-pulse-timeline">
-    <div className="dashboard-pulse-line"><i style={{ width: `${progress}%` }} />{showPosition && <b style={{ left: `clamp(8px, ${progress}%, calc(100% - 8px))` }} />}</div>
-    <div className="dashboard-pulse-labels">
-      <span><small>Start</small><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span>
-      <span><small>End</small><strong>{formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span>
+    <div className="dashboard-pulse-line" tabIndex={0} role="img" aria-label={expanded ? `Current local time: ${localTime}` : `Scheduled window: ${start} to ${end}`}>
+      <i style={{ width: `${progress}%` }} />{showPosition && <b style={{ left: `clamp(8px, ${progress}%, calc(100% - 8px))` }} />}
+      <span className="dashboard-pulse-time" aria-hidden="true" style={{ left: `clamp(75px, ${progress}%, calc(100% - 75px))` }}>{expanded ? <><small>Local time</small><strong>{localTime}</strong></> : <><small>Scheduled window</small><strong>{start} – {end}</strong></>}</span>
     </div>
+    {expanded && <div className="dashboard-pulse-labels"><span><small>Start</small><strong>{start}</strong></span><span><small>End</small><strong>{end}</strong></span></div>}
   </div>;
+}
+
+function WorkdayBand({ model, currentDate, observedOnly = false, children }: { model: WorkdayDashboardModel; currentDate: string; observedOnly?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const dismiss = () => {
+    if (closeTimer.current) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setOpen(false);
+      trigger.current?.focus();
+      return;
+    }
+    setClosing(true);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      setOpen(false);
+      setClosing(false);
+      trigger.current?.focus();
+    }, 160);
+  };
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+  useEffect(() => {
+    if (!open) return;
+    close.current?.focus();
+    function handleKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); dismiss(); }
+      if (event.key === "Tab" && dialog.current) {
+        const controls = Array.from(dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'));
+        if (!controls.length) return;
+        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls[controls.length - 1].focus(); }
+        else if (!event.shiftKey && document.activeElement === controls[controls.length - 1]) { event.preventDefault(); controls[0].focus(); }
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [open]);
+  const active = model.state === "active" || model.state === "paused" || model.state === "observed";
+  return <>
+    <section className="workday-band" onClick={(event) => { if (!(event.target as Element).closest("button, a, input, select, textarea")) setOpen(true); }}>
+      {children}
+      <button ref={trigger} type="button" className="workday-details-trigger" aria-label="Open workday details" aria-haspopup="dialog" onClick={() => setOpen(true)}>Workday details <ChevronRight size={14} aria-hidden="true" /></button>
+    </section>
+    {open && createPortal(<div className={`workday-details-backdrop${closing ? " is-closing" : ""}`} onMouseDown={(event) => { if (event.target === event.currentTarget) dismiss(); }}>
+      <div ref={dialog} className="workday-details-dialog" role="dialog" aria-modal="true" aria-labelledby="workday-details-title">
+        <header className="workday-details-header"><div><p>{formatWorkOsDate(currentDate)}</p><h2 id="workday-details-title">Your workday</h2></div><button ref={close} type="button" aria-label="Close workday details" onClick={dismiss}><X size={18} aria-hidden="true" /></button></header>
+        <div className="workday-details-body">
+          <div className="workday-details-status"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" /><strong>{model.stateLabel}</strong>{model.attendance?.source === "worktivity" && !model.attendance.stale && (model.state === "active" || model.state === "paused" || model.state === "observed") && <span>Worktivity</span>}</div>
+          {model.stateTone !== "signal" && <p className="workday-details-explanation">{model.stateDetail}</p>}
+          <section className="workday-details-window" aria-label="Scheduled work window">
+            <div className="workday-details-window-heading"><div><span>Scheduled window</span><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)} <i>to</i> {formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></div>{model.schedule.phase !== "unavailable" && <span className="workday-details-percent">{Math.round(Math.max(0, Math.min(100, model.pulse.progressPercent)))}% of window</span>}</div>
+            <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} expanded />
+            <div className="workday-details-readings"><div><span>{active ? "Elapsed" : "Schedule"}</span><strong>{active ? elapsedDuration(observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel) : !model.schedule.startsAt ? "Not set" : model.schedule.phase === "complete" ? "Ended" : model.schedule.phase === "upcoming" ? "Upcoming" : "Ready"}</strong></div><div><span>{model.schedule.phase === "upcoming" ? "Starts in" : "Remaining"}</span><strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong></div></div>
+          </section>
+          <section className="workday-details-work"><div><h3>Work on your plate</h3></div><dl><div><dt>Completed</dt><dd>{model.metrics.completed}</dd></div><div><dt>Open today</dt><dd>{model.metrics.open}</dd></div><div><dt>Overdue</dt><dd>{model.metrics.overdue}</dd></div><div><dt>Carried over</dt><dd>{model.metrics.carryover}</dd></div></dl></section>
+          <div className="workday-details-focus"><span>Today’s focus</span><p>{model.focus.text}</p><small>{model.focus.source}</small></div>
+        </div>
+      </div>
+    </div>, document.body)}
+  </>;
 }
 
 export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
@@ -163,7 +239,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
       : "Shape the agenda now, then clock in with Worktivity from the Windows Companion when you are ready.";
   const degraded = model.stateTone === "warning" || model.stateTone === "danger";
   return <main className="dashboard-shell off-shift-dashboard">
-    <section className="workday-band">
+    <WorkdayBand model={model} currentDate={currentDate}>
       <div className="workday-band-status">
         <MascotPet className="dashboard-otto-band" workday="off-shift" />
         <div className="workday-band-state">
@@ -192,7 +268,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
         {model.activityWatch === "clock-in" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.</small>}
         {goalSaveState !== "saved" && <small className="dashboard-save-warning"><RefreshCw size={12} aria-hidden="true" /> Focus changes are {goalSaveState === "saving" ? "saving" : "waiting to retry"}.</small>}
       </footer>}
-    </section>
+    </WorkdayBand>
 
     <section className="day-focus-strip" aria-label="Today’s focus">
       <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
@@ -251,7 +327,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
   // earns a place when the provider state is not confirmed.
   const confirmed = model.stateTone === "signal";
   return <main className="dashboard-shell active-dashboard">
-    <section className="workday-band">
+    <WorkdayBand model={model} currentDate={currentDate} observedOnly={observedOnly}>
       <div className="workday-band-status">
         <MascotPet className="dashboard-otto-band" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} />
         <div className="workday-band-state">
@@ -267,7 +343,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
       <div className="workday-band-instrument">
         <div className="band-reading">
           <small>Elapsed</small>
-          <strong>{observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel}</strong>
+          <strong>{elapsedDuration(observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel)}</strong>
         </div>
         <PulseTimeline model={model} />
         <div className="band-reading is-end">
@@ -285,7 +361,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         {model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}
         {goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} aria-hidden="true" /> Retry focus save</button>}
       </footer>}
-    </section>
+    </WorkdayBand>
 
     <section className="day-focus-strip" aria-label="Today’s focus">
       <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>

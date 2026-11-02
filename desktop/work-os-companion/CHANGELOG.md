@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Open your workday summary for a roomier view of your schedule, tasks, and focus.
+
 ## 0.5.17 — 2026-10-30
 
 - Reviewing Otto's proposed memories now shows when a decision is saving and lets you discard a proposal.
