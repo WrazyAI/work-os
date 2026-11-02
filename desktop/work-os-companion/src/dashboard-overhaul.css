@@ -330,7 +330,7 @@ body {
 .workday-details-work { padding: 26px 0 22px; border-bottom: 1px solid var(--dash-line); }
 .workday-details-work h3 { margin: 0; font-size: 16px; }
 .workday-details-work p { margin: 4px 0 16px; color: var(--dash-muted); font-size: 11px; }
-.workday-details-work dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; }
+.workday-details-work dl { display: flex; flex-wrap: wrap; gap: 16px 36px; margin: 16px 0 0; }
 .workday-details-work dl div { display: flex; flex-direction: column-reverse; gap: 4px; }
 .workday-details-work dt { color: var(--dash-muted); font-size: 11px; }
 .workday-details-work dd { margin: 0; font-size: 23px; font-weight: 750; font-variant-numeric: tabular-nums; }
