@@ -33,12 +33,17 @@ test("search filters by name, active state, team, and role", async () => {
   }
 });
 
-test("the text search also matches email and is case-insensitive", async () => {
+test("the text search matches email, ignores case, and escapes LIKE wildcards", async () => {
   const f = await fixture();
   try {
     await f.seedDirectory();
     const page = await listAdminAgentPeople(adminAccess, { ...filters, query: "GRACE@" });
     assert.deepEqual(page.people.map((p) => p.id), [personB]);
+    // A bare wildcard is a literal character, not "match everyone".
+    const percent = await listAdminAgentPeople(adminAccess, { ...filters, query: "%" });
+    assert.deepEqual(percent.people, []);
+    const underscore = await listAdminAgentPeople(adminAccess, { ...filters, query: "_" });
+    assert.deepEqual(underscore.people, []);
   } finally {
     await f.close();
   }

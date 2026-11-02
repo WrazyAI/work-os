@@ -1,28 +1,16 @@
 import { getPool } from "@/lib/db/pool";
 import { WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
-import type { AdminAgentPerson } from "@/modules/work-os/admin-agent/contracts";
+import type {
+  AdminAgentPerson,
+  AdminAgentPersonDetail,
+  AdminAgentProject,
+} from "@/modules/work-os/admin-agent/contracts";
 
 /** Organization-wide directory reads for admin tokens. Every query is scoped
  * by the token's organization, never by the token's person: an admin token may
  * have no person, and a person-mapped admin token still reads the directory. */
 
-export type { AdminAgentPerson };
-
-export type AdminAgentPersonDetail = AdminAgentPerson & {
-  /** The onboarding timezone doubles as the schedule timezone until a
-   * separate schedule reader is added. */
-  schedule: { timezone: string | null } | null;
-  manager: { id: string; displayName: string } | null;
-  teams: Array<{ id: string; name: string; isManager: boolean; active: boolean }>;
-};
-
-export type AdminAgentProject = {
-  id: string;
-  name: string;
-  provider: string;
-  providerProjectId: string;
-  archived: boolean;
-};
+export type { AdminAgentPerson, AdminAgentPersonDetail, AdminAgentProject };
 
 export type AdminAgentPeopleFilters = {
   query: string | null;
@@ -165,7 +153,10 @@ const PEOPLE_FILTERS = `
     or lower(p.display_name) like '%' || lower($3) || '%'
     or lower(coalesce(p.email, '')) like '%' || lower($3) || '%')
   and ($4::uuid is null or exists (
-    select 1 from work_team_members tm where tm.team_id = $4 and tm.person_id = p.id
+    select 1
+    from work_team_members tm
+    join work_teams t on t.id = tm.team_id and t.organization_id = $1
+    where tm.team_id = $4 and tm.person_id = p.id
   ))
   and ($5::text is null or rp.name = $5)`;
 
@@ -177,7 +168,9 @@ export async function listAdminAgentPeople(
   const pool = getPool();
   const limit = pageLimit(filters.limit);
   const cursor = decodeAdminAgentPeopleCursor(filters.cursor);
-  const search = filters.query ? `%${escapeLike(filters.query.trim())}%` : null;
+  // The SQL adds the wildcards; the escaped term is passed as-is so a literal
+  // `%` or `_` stays literal.
+  const search = filters.query ? escapeLike(filters.query.trim()) : null;
   const parameters = [access.organizationId, filters.active, search, filters.teamId, filters.role];
 
   const count = await pool.query<{ total: number | string }>(

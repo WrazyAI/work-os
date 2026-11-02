@@ -114,6 +114,22 @@ create table work_employee_onboarding (
   timezone text,
   primary key (organization_id, person_id)
 );
+create table work_schedules (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references work_organizations(id) on delete cascade,
+  person_id uuid not null references work_people(id) on delete cascade,
+  timezone text not null,
+  shift_start time not null,
+  shift_end time not null,
+  break_windows jsonb not null default '[]'::jsonb,
+  days_of_week smallint[] not null default '{1,2,3,4,5}',
+  effective_from date not null default current_date,
+  effective_to date,
+  active boolean not null default true,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 create table work_teams (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references work_organizations(id) on delete cascade,
@@ -166,9 +182,25 @@ create table work_tasks (
   parent_provider_task_id text,
   provider_created_at timestamptz,
   provider_updated_at timestamptz,
+  agent_token_id uuid,
+  agent_idempotency_key text,
   raw jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+create table work_task_blockers (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references work_organizations(id) on delete cascade,
+  task_id uuid not null references work_tasks(id) on delete cascade,
+  person_id uuid references work_people(id) on delete set null,
+  description text not null,
+  status text not null default 'active' check (status in ('active','resolved')),
+  created_by uuid,
+  resolved_by uuid,
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  updated_at timestamptz not null default now(),
+  agent_token_id uuid
 );
 create table work_check_ins (
   id uuid primary key,
