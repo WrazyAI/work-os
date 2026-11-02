@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Archive,
@@ -13,18 +13,17 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RefreshCw,
   RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
 import { useEmployeeDay } from "./useEmployeeDay";
-import EmployeeTaskDrawer from "./EmployeeTaskDrawer";
-import { fetchJson, requestId, operationLabel, type AnyRow } from "./model";
+import EmployeeTaskDrawer, { type TaskDraft, type TaskOptions } from "./EmployeeTaskDrawer";
+import styles from "./EmployeeTasks.module.css";
+import { calendarDateLabel, fetchJson, longDateLabel, operationLabel, requestId, type AnyRow } from "./model";
 import {
   EmptyState,
   IconButton,
-  Masthead,
   Notice,
   Panel,
   PrimaryButton,
@@ -40,7 +39,7 @@ import {
 
 type TaskView = "day" | "open" | "completed" | "all";
 
-type PendingTask = { id: string; title: string; description: string; status: "syncing" | "failed"; error?: string; idempotencyKey: string };
+type PendingTask = { id: string; title: string; description: string; draft: TaskDraft; status: "syncing" | "failed"; error?: string; idempotencyKey: string };
 
 const VIEWS: Array<{ id: TaskView; label: string }> = [
   { id: "day", label: "My day" },
@@ -100,7 +99,7 @@ function TaskAssigneeTags({ task }: { task: AnyRow }) {
 }
 
 export default function EmployeeTasks() {
-  const { day, refresh, refreshAttendance, sync, syncing } = useEmployeeDay();
+  const { day, refresh, sync, syncing } = useEmployeeDay();
   const [view, setView] = useState<TaskView>("day");
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
@@ -113,6 +112,11 @@ export default function EmployeeTasks() {
   const [subtaskMenuId, setSubtaskMenuId] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; task: AnyRow } | null>(null);
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
+  const taskOptions = useQuery<TaskOptions>({
+    queryKey: ["work-os", "task-options"],
+    queryFn: () => fetchJson("/api/work-os/me/task-options"),
+    staleTime: 300_000,
+  });
 
   useEffect(() => {
     if (day.data?.shiftDate) setDate((current) => current || day.data!.shiftDate);
@@ -187,11 +191,23 @@ export default function EmployeeTasks() {
       return fetchJson("/api/work-os/me/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": pending.idempotencyKey },
-        body: JSON.stringify({ name: pending.title, description: pending.description || undefined, assignee_person_ids: [day.data.access.personId] }),
+        body: JSON.stringify({
+          name: pending.draft.name,
+          description: pending.draft.description || undefined,
+          assignee_person_ids: pending.draft.assigneePersonIds,
+          project_id: pending.draft.projectId || undefined,
+          due_date: pending.draft.dueDate || undefined,
+          priority: pending.draft.priority || undefined,
+          expected_outcome: pending.draft.expectedOutcome || undefined,
+          definition_of_done: pending.draft.definitionOfDone || undefined,
+        }),
       });
     },
     onSuccess: (_data, { pending }) => {
       setPendingTasks((current) => current.filter((item) => item.id !== pending.id));
+      // Work dated for another day belongs to the backlog, not today's list;
+      // move the view with the new task so it never appears to vanish.
+      if (pending.draft.dueDate && pending.draft.dueDate !== today) setView("open");
       void refresh();
     },
     onError: (error, { pending }) => {
@@ -199,8 +215,15 @@ export default function EmployeeTasks() {
     },
   });
 
-  const submitCreate = (title: string, description: string) => {
-    const pending: PendingTask = { id: `pending-${globalThis.crypto.randomUUID()}`, title, description, status: "syncing", idempotencyKey: requestId() };
+  const submitCreate = (draft: TaskDraft) => {
+    const pending: PendingTask = {
+      id: `pending-${globalThis.crypto.randomUUID()}`,
+      title: draft.name,
+      description: draft.description,
+      draft,
+      status: "syncing",
+      idempotencyKey: requestId(),
+    };
     setPendingTasks((current) => [pending, ...current]);
     createTask.mutate({ pending });
   };
@@ -272,12 +295,16 @@ export default function EmployeeTasks() {
 
   return (
     <div>
-      <Masthead
-        eyebrow="Work OS"
-        title="Tasks"
-        meta={view === "day" ? (historical ? `Historical workspace — read-only.` : "Today’s workspace and its open work.") : "Everything attributed to you."}
-        actions={
-          <>
+      <header className={styles.masthead}>
+        <div className={styles.metaRow}>
+          <span>{longDateLabel(date)}</span>
+        </div>
+        <div className={styles.titleRow}>
+          <h1>Tasks</h1>
+          <p className={styles.titleMeta}>
+            {view === "day" ? (historical ? "Historical workspace — read-only." : "Today’s workspace and its open work.") : "Everything attributed to you."}
+          </p>
+          <div className={styles.utilities}>
             {view === "day" ? (
               <>
                 <input
@@ -286,30 +313,26 @@ export default function EmployeeTasks() {
                   max={today ?? undefined}
                   onChange={(event) => setDate(event.target.value)}
                   aria-label="Task date"
-                  className={`${inlineInputClass} w-auto`}
-                  style={inputStyle}
+                  className={styles.dateField}
                 />
                 {historical ? (
                   <SecondaryButton onClick={() => setDate(today ?? "")}>Back to today</SecondaryButton>
                 ) : null}
               </>
             ) : null}
-            <IconButton label="Refresh tasks" onClick={() => { void refreshAttendance().then(refresh); }} disabled={scoped.isFetching || history.isFetching}>
-              <RefreshCw size={15} className={scoped.isFetching || history.isFetching ? "animate-spin" : undefined} />
-            </IconButton>
-            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
+            <SyncChip compact sync={day.data?.niftySync} syncing={syncing || scoped.isFetching || history.isFetching} onSync={() => sync.mutate()} />
             <PrimaryButton disabled={historical} onClick={() => setDrawer({ mode: "create" })}>
               <Plus size={14} /> Add task
             </PrimaryButton>
-          </>
-        }
-      />
+          </div>
+        </div>
+      </header>
 
       {error ? <Notice tone="err" className="mb-5">{(error as Error).message}</Notice> : null}
 
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
-          <nav aria-label="Task views" className="flex flex-wrap gap-1">
+          <nav aria-label="Task views" className={styles.viewTabs}>
             {VIEWS.map((item) => {
               const active = view === item.id;
               const count = tabCounts[item.id];
@@ -319,13 +342,10 @@ export default function EmployeeTasks() {
                   type="button"
                   onClick={() => { setView(item.id); setSort(null); setSearch(""); setServerSearch(""); setFromDate(""); setToDate(""); setMenuTaskId(null); }}
                   aria-current={active ? "true" : undefined}
-                  className={cx(
-                    "rounded-[10px] px-3 py-1.5 text-[12px] font-semibold transition",
-                    active ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
-                  )}
+                  className={`${styles.viewTab} ${active ? styles.viewTabActive : ""}`}
                 >
                   {item.label}
-                  {typeof count === "number" ? <span className="ml-1.5 tabular-nums text-[11px] opacity-70">{count}</span> : null}
+                  {typeof count === "number" ? <span className={styles.viewCount}>{count}</span> : null}
                 </button>
               );
             })}
@@ -429,16 +449,24 @@ export default function EmployeeTasks() {
                 const expanded = expandedTaskId === taskId;
                 return (
                   <li key={task.id} className="relative border-b last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="flex items-start gap-3 px-5 py-3.5">
+                    <div
+                      className="flex items-start gap-3 px-5 py-3.5 transition hover:bg-[var(--bg-secondary)]"
+                      style={{ cursor: "pointer" }}
+                      onClick={(event) => {
+                        const target = event.target instanceof Element ? event.target : null;
+                        if (target?.closest("button, a, input, textarea, select, [data-task-menu-root]")) return;
+                        setDrawer({ mode: "edit", task });
+                      }}
+                    >
                       <button
                         type="button"
                         aria-label={completed ? `Reopen ${task.title}` : `Mark ${task.title} done`}
                         disabled={historical || changeTask.isPending || !rowCompletionAllowed(task)}
-                        onClick={() => changeTask.mutate({ task, body: { completed: !completed } })}
-                        className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition hover:border-[var(--accent-deep)] disabled:opacity-45"
+                        onClick={(event) => { event.stopPropagation(); changeTask.mutate({ task, body: { completed: !completed } }); }}
+                        className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-[5px] border transition hover:border-[var(--accent-deep)] disabled:opacity-45"
                         style={{ borderColor: completed ? "var(--accent-deep)" : "var(--border-hot)", background: completed ? "var(--accent-deep)" : "transparent", color: completed ? "var(--bg-card)" : "transparent" }}
                       >
-                        <Check size={12} strokeWidth={3} />
+                        <Check size={11} strokeWidth={3} />
                       </button>
 
                       <div className="min-w-0 flex-1">
@@ -453,7 +481,13 @@ export default function EmployeeTasks() {
                               {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                             </button>
                           ) : null}
-                          <p className={cx("min-w-0 break-words text-[13px] font-medium", completed ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>{task.title}</p>
+                          <button
+                            type="button"
+                            onClick={() => setDrawer({ mode: "edit", task })}
+                            className={cx("min-w-0 break-words text-left text-[13px] font-medium hover:underline hover:underline-offset-[3px]", completed ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}
+                          >
+                            {task.title}
+                          </button>
                           <TaskAssigneeTags task={task} />
                         </div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
@@ -472,7 +506,7 @@ export default function EmployeeTasks() {
                         <span className="hidden w-20 shrink-0 md:block" aria-hidden="true" />
                       )}
                       <span className="hidden w-28 shrink-0 pt-0.5 text-[11px] tabular-nums text-[var(--text-secondary)] md:block">
-                        {task.due_date ? String(task.due_date) : "No date"}
+                        {task.due_date ? (String(task.due_date).slice(0, 10) === today ? "Today" : calendarDateLabel(String(task.due_date).slice(0, 10))) : "No date"}
                       </span>
                       <span className="shrink-0 pt-0.5">
                         <StatusPill tone={completed ? "done" : overdue ? "overdue" : "open"}>{completed ? "Done" : overdue ? "Overdue" : "Open"}</StatusPill>
@@ -551,7 +585,7 @@ export default function EmployeeTasks() {
                                 aria-label={subtaskDone ? `Reopen ${subtask.title}` : `Mark ${subtask.title} done`}
                                 disabled={historical || changeTask.isPending || !rowCompletionAllowed(subtask)}
                                 onClick={() => changeTask.mutate({ task: subtask, body: { completed: !subtaskDone } })}
-                                className="grid size-4 shrink-0 place-items-center rounded-full border"
+                                className="grid size-[15px] shrink-0 place-items-center rounded-[4px] border"
                                 style={{ borderColor: subtaskDone ? "var(--accent-deep)" : "var(--border-hot)", background: subtaskDone ? "var(--accent-deep)" : "transparent", color: subtaskDone ? "var(--bg-card)" : "transparent" }}
                               >
                                 <Check size={10} strokeWidth={3} />
@@ -637,7 +671,10 @@ export default function EmployeeTasks() {
         <EmployeeTaskDrawer
           mode={drawer.mode}
           task={drawer.mode === "edit" ? drawer.task : null}
-          isWorkOsTask={drawer.mode === "edit" ? String(drawer.task.provider ?? "") === "local" : false}
+          today={today ?? undefined}
+          options={taskOptions.data}
+          optionsLoading={taskOptions.isLoading}
+          defaultAssigneeId={day.data?.access?.personId}
           onClose={() => setDrawer(null)}
           onSaved={() => void refresh()}
           onCreate={submitCreate}

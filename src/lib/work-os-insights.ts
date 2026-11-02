@@ -295,7 +295,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["task freshness", taskFreshnessResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
     if (result.error) throw new Error(`load Work OS insight ${label}: ${result.error.message}`);
   }
-  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
+  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[], access.organizationId) as Json[];
   const attributable = allTasks.filter((task) =>
     (Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId))
     || isNiftyTaskAttributableToMember(task, context.niftyMemberId)

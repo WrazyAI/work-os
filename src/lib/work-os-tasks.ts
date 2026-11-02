@@ -158,8 +158,12 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
 export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[], organizationId?: string | null) {
   const personIds = [...new Set(tasks.flatMap((task) => stringValues(task.assignee_person_ids)))];
   if (!personIds.length) return attachTaskAssigneeIdentities(tasks, []);
-  let query = db().from("work_people").select("id,display_name,email").eq("user_id", userId).in("id", personIds);
+  // Organization-scoped callers identify the person by id inside their own
+  // tenant; the row's owning auth user is not always the organization owner
+  // (a mapped administrator is the common case).
+  let query = db().from("work_people").select("id,display_name,email").in("id", personIds);
   if (organizationId) query = query.eq("organization_id", organizationId);
+  else query = query.eq("user_id", userId);
   const people = await ensureNoError(query, "load task assignee identities");
   return attachTaskAssigneeIdentities(tasks, people ?? []);
 }
@@ -434,8 +438,11 @@ export async function listPersonTaskPage(
     throw new Error("Task cursor must be valid and match the current filters");
   }
   const person = await ensureNoError(
+    // The person id is the tenant-local primary key; a mapped administrator's
+    // people row is not owned by the organization owner's auth user, so a
+    // user_id filter here rejects a valid member and breaks the backlog views.
     db().from("work_people").select("nifty_member_id")
-      .eq("organization_id", organizationId).eq("user_id", userId).eq("id", personId).maybeSingle(),
+      .eq("organization_id", organizationId).eq("id", personId).maybeSingle(),
     "load task person mapping",
   );
   if (!person) throw new Error("Task person must belong to the authorized organization");

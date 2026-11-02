@@ -387,7 +387,7 @@ export async function resolveDailyWorkspace(
     if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
   }
 
-  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
+  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[], access.organizationId) as Json[];
   const attributable = allTasks.filter((task) =>
     // Narrow ownership: an assigner sees the row through the list predicates but
     // is never credited with the assignee's day events.

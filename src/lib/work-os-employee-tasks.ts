@@ -185,7 +185,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     provider_task_id: candidate.provider_task_id,
     title: candidate.title,
   }));
-  const hydrated = await hydrateTaskAssignees(ownerId, [currentTask, ...(subtasks ?? [])] as Json[]);
+  const hydrated = await hydrateTaskAssignees(ownerId, [currentTask, ...(subtasks ?? [])] as Json[], access.organizationId);
   return { task: hydrated[0], subtasks: hydrated.slice(1), moveTargets, completionEvidence };
 }
 
@@ -230,7 +230,7 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
     ...(name ? { name } : {}),
     ...(description !== undefined ? { description } : {}),
   };
-  for (const field of ["due_date", "start_date", "priority"] as const) {
+  for (const field of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done"] as const) {
     if (!(field in body)) continue;
     if (body[field] !== null && typeof body[field] !== "string") throw new WorkOsValidationError(`${field} must be a string or null`);
     // A malformed due date would silently disable the overdue lock, so reject
