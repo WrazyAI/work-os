@@ -231,9 +231,9 @@ release. Web deployments do not use this threshold. Read
   `CHANGELOG.md` using the ship date. Use the same canonical SemVer in the
   changelog heading; the release tag and the app's display pad the patch
   segment to two digits (`work-os-companion-internal-v0.5.02`, shown as
-  0.5.02). CI fails without it; the GitHub release notes and What's New modal
-  are built from that section. Write entries for the employee who just
-  installed the update.
+  0.5.02). CI fails without the dated changelog section; the GitHub release
+  notes and What's New modal are built from that section. Write entries for the
+  employee who just installed the update.
 
 ## Other surfaces
 
