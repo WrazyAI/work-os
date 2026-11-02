@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 export const QUEUE_PATH = "desktop/work-os-companion/release-queue.json";
 export const INITIAL_VERSION = "0.5.16";
 const THRESHOLD = 5;
+const PRE_POLICY_BASELINES = new Map([
+  ["0.5.17", "0.5.17.json"],
+  ["0.5.18", "0.5.18.json"],
+]);
 
 function parts(version) {
   if (typeof version !== "string" || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
@@ -187,15 +191,16 @@ function checkCandidateTag(version) {
 }
 
 function publishedSnapshot(repository, release) {
-  // This is the one pre-policy release. No other read failure can initialize
-  // empty state, or a provider outage could make consumed updates count twice.
+  // 0.5.16 is the only pre-policy release with an empty historical queue.
+  // 0.5.17 was cancelled, and 0.5.18 published the initial four outcomes before
+  // this gate existed. Their tags cannot contain a queue, so each source-pinned
+  // baseline supplies the snapshot instead of a provider read that would fail
+  // closed. No other read failure can initialize empty state.
   if (release.version === INITIAL_VERSION) return { schemaVersion: 1, updates: [], emergency: null };
   if (compare(release.version, INITIAL_VERSION) < 0) throw new Error("Published release is older than the policy baseline");
-  // This exact pre-policy build was already running when the gate was added.
-  // Its tag cannot contain a queue yet. Pin both catalog target and resolved
-  // commit; publication, never the running build/draft, consumes its snapshot.
-  if (release.version === "0.5.17") {
-    const legacy = JSON.parse(readFileSync(new URL("../desktop/work-os-companion/release-baselines/0.5.17.json", import.meta.url), "utf8"));
+  const baseline = PRE_POLICY_BASELINES.get(release.version);
+  if (baseline) {
+    const legacy = JSON.parse(readFileSync(new URL(`../desktop/work-os-companion/release-baselines/${baseline}`, import.meta.url), "utf8"));
     if (release.target_commitish === legacy.sourceCommit) {
       const tag = JSON.parse(command("gh", ["api", `repos/${repository}/commits/${encodeURIComponent(release.tag_name)}`]));
       if (tag.sha !== legacy.sourceCommit) throw new Error("Pre-policy release tag no longer matches its recorded source commit");

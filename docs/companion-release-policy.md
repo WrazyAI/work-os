@@ -30,16 +30,16 @@ maintenance do not count unless they deliver a distinct employee-facing outcome.
 Never add placeholders for unimplemented or unverified work. The queue's
 verification references are an agent responsibility, not proof inferred by CI.
 
-The initial queue preserves the four existing Unreleased employee outcomes
+The initial queue preserved the four employee outcomes that were Unreleased
 since published 0.5.16. Release-cadence tooling does not add a fifth outcome.
-During implementation another agent started the pre-policy 0.5.17 build at
-`eb1784f50b3453ca39e499b3b2ae867af159547b`. Its four outcomes are archived in
-`release-baselines/0.5.17.json`: they remain pending until that exact source is
-published, then count as consumed. This does not authorize another early release.
-That old-pipeline run was subsequently cancelled: its four outcomes are still
-pending. Do not restart it below five. Preserve the reserved 0.5.17 metadata;
-when the fifth outcome lands, use a fresh dispatch if the version is already
-reserved rather than skipping to 0.5.18 or making a cosmetic bump to trigger CI.
+The pre-policy 0.5.17 build at
+`eb1784f50b3453ca39e499b3b2ae867af159547b` was cancelled without publishing;
+`release-baselines/0.5.17.json` preserves that cancelled snapshot and consumes
+nothing. The four outcomes then shipped in 0.5.18 at
+`a545e518e4cd33a9151c5d45fe9b53c5fd610b55`. Its published snapshot is archived
+in `release-baselines/0.5.18.json` and counts those outcomes as consumed,
+leaving zero pending. Do not restart 0.5.17; the next companion release is the
+next patch after 0.5.18 once five new outcomes are queued.
 
 ## Updates one through four
 
@@ -59,8 +59,9 @@ a release tag or manually run packaging. Web changes may deploy normally.
 5. Run the usual verification, merge the version bump into main, and monitor
    the single automatic release pipeline. No separate tag push/manual dispatch
    is normally needed: those would only enqueue redundant preflights. If an
-   unpublished version is already reserved after a cancelled/failed attempt,
-   keep that version and start one fresh dispatch once the batch is eligible.
+   unpublished version is already reserved after a cancelled/failed attempt
+   and no later version has published, keep that version and start one fresh
+   dispatch once the batch is eligible.
 6. Verify publication and the installer/updater flow, not just workflow exit.
 
 If more than five outcomes accumulate before the release snapshot, release all
@@ -110,9 +111,9 @@ consumed like any other; clear the emergency record before the next bump.
   release publication must not bypass this workflow; repository administrators
   still control permissions and can change workflows or release objects.
 - Missing or malformed post-policy snapshots fail closed. Only the known
-  pre-policy 0.5.16 baseline has an empty historical queue; the already-running
-  pre-policy 0.5.17 build has one source-pinned historical snapshot. No API/read
-  error can create a new baseline.
+  pre-policy 0.5.16 baseline has an empty historical queue; the cancelled
+  0.5.17 build and the published 0.5.18 release each have a source-pinned
+  historical snapshot. No API/read error can create a new baseline.
 
 ## Verification commands
 

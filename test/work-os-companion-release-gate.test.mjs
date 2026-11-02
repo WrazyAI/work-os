@@ -307,6 +307,24 @@ test("the already in-flight pre-policy 0.5.17 batch is consumed only after its p
   assert.notEqual(fixture.run("status").status, 0, "a recreated/moved tag cannot claim the legacy snapshot");
 });
 
+test("the published pre-policy 0.5.18 snapshot consumes the initial four outcomes", (t) => {
+  const fixture = repository(t, 0, "0.5.18");
+  const initial = JSON.parse(readFileSync(new URL("../desktop/work-os-companion/release-baselines/0.5.18.json", import.meta.url), "utf8")).queue;
+  fixture.write(queuePath, initial);
+  fixture.commit();
+  const source = "a545e518e4cd33a9151c5d45fe9b53c5fd610b55";
+  fixture.setProvider({ pages: [[{ ...fixture.published("0.5.18"), target_commitish: source }]], tagCommit: source });
+  const result = fixture.run("status");
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.version, "0.5.18");
+  assert.equal(output.publishedVersion, "0.5.18");
+  assert.equal(output.pendingCount, 0);
+  assert.equal(output.eligible, false);
+  fixture.setProvider({ pages: [[{ ...fixture.published("0.5.18"), target_commitish: source }]], tagCommit: "different-commit" });
+  assert.notEqual(fixture.run("status").status, 0, "a recreated/moved tag cannot claim the legacy snapshot");
+});
+
 test("CLI rejects source commits outside main and unpublished queue entries removed from history", (t) => {
   const outside = repository(t);
   outside.git("checkout", "-b", "unmerged");

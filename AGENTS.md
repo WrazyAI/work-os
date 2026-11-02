@@ -193,6 +193,7 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
   asset checks, rollback on failure). Never build over a running server's
   active `.next` tree. Verify the deployed commit, assets, and a representative
   live flow afterward.
+
 ### Companion release cadence (mandatory)
 
 Companion installer/updater releases require **five distinct, completed and
@@ -221,7 +222,6 @@ release. Web deployments do not use this threshold. Read
   manual dispatch or a tag is not an override. Preserve signing, packaged startup,
   asset verification and publication guards. This policy/tooling change itself
   is not a companion update and must not trigger a version bump.
-
 - The companion release line moves one patch from the latest **published**
   companion version. If `package.json` already holds an unpublished candidate
   from a cancelled or failed attempt, preserve and retry that candidate once
