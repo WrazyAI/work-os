@@ -3,6 +3,10 @@
 -- original one-session-per-day index, but some environments still carry it
 -- because that drop never reached them. The leftover index rejects the second
 -- interval, leaving attendance unmirrored and the check-in cadence stopped.
+--
+-- work_sessions holds one row per work interval, so this exclusive lock is
+-- momentary. The migration runner wraps each file in a transaction, which
+-- rules out CONCURRENTLY here.
 drop index if exists work_sessions_person_day_uidx;
 
 create index if not exists work_sessions_person_day_history_idx
