@@ -186,6 +186,31 @@ export async function employeeContext(access: WorkOsAccess, at = new Date()) {
   return { niftyMemberId: data.nifty_member_id as string | null, timezone, currentDate: localDateForTimezone(at, timezone) };
 }
 
+const OPEN_WORK_SESSION_STATES = new Set(["clocked_in", "active", "paused", "eod_due"]);
+
+/** The session that represents one workspace day when several work intervals
+ * share the date. An unresolved correction outranks a later interval, then the
+ * live interval, then the most recently started interval. */
+export function selectWorkspaceSession(sessions: Json[]): Json | null {
+  if (!sessions.length) return null;
+  const correction = sessions.find((session) => session.correction_status === "needs_correction");
+  if (correction) return correction;
+  const open = sessions.find((session) => OPEN_WORK_SESSION_STATES.has(String(session.state)));
+  if (open) return open;
+  const startedAt = (session: Json) => {
+    const parsed = Date.parse(String(session.clocked_in_at ?? session.created_at ?? ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return [...sessions].sort((left, right) => {
+    const leftAt = startedAt(left);
+    const rightAt = startedAt(right);
+    if (leftAt !== null && rightAt !== null) return rightAt - leftAt;
+    if (leftAt !== null) return -1;
+    if (rightAt !== null) return 1;
+    return 0;
+  })[0] ?? null;
+}
+
 /**
  * Pure per-day projection shared by `resolveDailyWorkspace` (single day) and
  * personal insights (many days). Both callers preload the same queries; this
@@ -354,9 +379,9 @@ export async function resolveDailyWorkspace(
     db().from("work_daily_plans").select("id,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
       .eq("shift_date", date).maybeSingle(),
-    db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,correction_status,correction_reason")
+    db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,created_at,correction_status,correction_reason")
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
-      .eq("shift_date", date).maybeSingle(),
+      .eq("shift_date", date),
   ]);
   for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["goal", planResult], ["session", sessionResult]] as const) {
     if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
@@ -379,7 +404,7 @@ export async function resolveDailyWorkspace(
     attributable,
     events,
     plan: (planResult.data as Json | null) ?? null,
-    session: (sessionResult.data as Json | null) ?? null,
+    session: selectWorkspaceSession((sessionResult.data ?? []) as Json[]),
   });
 
   const order = (options.order ?? "due_desc") as WorkspaceTaskOrder;

@@ -70,6 +70,7 @@ const migrations = [
     "supabase/migrations/0061_work_os_membership_determinism.sql",
     "supabase/migrations/0066_work_task_assignment_and_status.sql",
     "supabase/migrations/0067_work_task_assigner_visibility.sql",
+    "supabase/migrations/0068_work_sessions_day_index_reconcile.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -375,6 +376,13 @@ test("Work OS companion migration is complete and idempotent", async () => {
     values ($1,$2,$3,'2026-08-10','clocked_out','UTC','2026-08-10T09:00:00Z','2026-08-10T17:00:00Z','2026-08-10T18:00:00Z','2026-08-10T19:00:00Z','clock-restarted') returning id
   `, [orgA, personA, scheduleA]);
   assert.ok(restartedSession.rows[0].id, "a second closed interval on the same local day is retained");
+  // A day can contain more than one interval. The old one-session-per-day
+  // index must stay gone: when it survived in a deployed database, resuming
+  // work after a same-day schedule change could not be mirrored at all.
+  const daySessionIndex = await db.query(`select indexname from pg_indexes where schemaname='public' and indexname='work_sessions_person_day_uidx'`);
+  assert.equal(daySessionIndex.rows.length, 0, "one session per day is not enforced");
+  const daySessionHistoryIndex = await db.query(`select indexname from pg_indexes where schemaname='public' and indexname='work_sessions_person_day_history_idx'`);
+  assert.equal(daySessionHistoryIndex.rows.length, 1, "the per-day history lookup is indexed");
   await assert.rejects(() => db.query(`
     insert into work_sessions(organization_id,person_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at)
     values ($1,$2,'2026-08-11','clocked_in','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z')

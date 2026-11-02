@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { activityEvidenceRollup, deterministicInsightBrief, effectiveBreakObservation, formatDuration, insightConsistency, insightDateWindow, outcomeTiming, planAdherenceRollup, previousInsightWindow, updateKindRollup } from "../src/lib/work-os-insights";
-import { projectWorkspaceDay } from "../src/lib/work-os-daily-workspace";
+import { projectWorkspaceDay, selectWorkspaceSession } from "../src/lib/work-os-daily-workspace";
 import { buildInsightSynthesisPrompt } from "../src/lib/aiInsights";
 
 test("personal insight ranges are inclusive and deterministic", () => {
@@ -157,6 +157,17 @@ test("the expanded brief grounds blockers, on-time outcomes, rhythm, and deltas"
   assert.match(all, /Task outcomes were up from 1 in the equal earlier period/i);
   assert.match(all, /Review the blockers raised this period/i);
   assert.doesNotMatch(JSON.stringify(brief), /productivity score/i);
+});
+
+test("a workspace day with several intervals selects the right session", () => {
+  const earlier = { id: "earlier", state: "clocked_out", correction_status: "valid", clocked_in_at: "2026-11-02T14:00:00Z" };
+  const live = { id: "live", state: "active", correction_status: "valid", clocked_in_at: "2026-11-02T15:04:00Z" };
+  const correction = { id: "correction", state: "clocked_out", correction_status: "needs_correction", clocked_in_at: "2026-11-02T13:00:00Z" };
+  assert.equal(selectWorkspaceSession([]), null);
+  assert.equal(selectWorkspaceSession([earlier])?.id, "earlier");
+  assert.equal(selectWorkspaceSession([earlier, live])?.id, "live");
+  assert.equal(selectWorkspaceSession([earlier, correction, live])?.id, "correction");
+  assert.equal(selectWorkspaceSession([{ ...earlier, id: "late", clocked_in_at: "2026-11-02T16:00:00Z" }, earlier])?.id, "late");
 });
 
 test("projectWorkspaceDay keeps attribution and commitment semantics stable", () => {
