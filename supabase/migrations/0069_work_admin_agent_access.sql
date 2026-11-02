@@ -32,7 +32,7 @@ create table if not exists work_admin_action_previews (
   target_id text,
   request jsonb not null,
   preview jsonb not null,
-  state_fingerprint jsonb not null default '{}'::jsonb,
+  state_fingerprint jsonb not null,
   result_status smallint,
   result_body jsonb,
   idempotency_key text,
@@ -44,6 +44,19 @@ create index if not exists work_admin_action_previews_token_idx
   on work_admin_action_previews(token_id, expires_at);
 create index if not exists work_admin_action_previews_user_idx
   on work_admin_action_previews(user_id, expires_at);
+create unique index if not exists work_admin_action_previews_idempotency_uidx
+  on work_admin_action_previews(token_id, idempotency_key)
+  where idempotency_key is not null;
 
 alter table work_admin_action_previews enable row level security;
 revoke all on work_admin_action_previews from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on work_admin_action_previews from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on work_admin_action_previews from authenticated;
+  end if;
+end;
+$$;

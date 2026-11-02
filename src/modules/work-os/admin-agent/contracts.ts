@@ -6,7 +6,8 @@ export const ADMIN_PREVIEW_ACTIONS = [
 ] as const;
 export type AdminPreviewAction = (typeof ADMIN_PREVIEW_ACTIONS)[number];
 
-export type AdminPreviewChange = { field: string; from: Json; to: Json };
+export type AdminPreviewValue = string | number | boolean | null | AdminPreviewValue[] | { [key: string]: AdminPreviewValue };
+export type AdminPreviewChange = { field: string; from: AdminPreviewValue; to: AdminPreviewValue };
 export type AdminPreview = {
   id: string;
   action: AdminPreviewAction;

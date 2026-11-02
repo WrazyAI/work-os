@@ -23,11 +23,7 @@ test("the preview table stores the request, state, result, and expiry", async ()
   assert.match(body, /enable row level security/);
 });
 
-test("the migration is additive and repeatable", async () => {
-  const body = await sql();
-  assert.match(body, /create table if not exists work_admin_action_previews/);
-  assert.doesNotMatch(body, /drop table|truncate|delete from/i);
-
+async function migrated() {
   const db = new PGlite();
   await db.exec(`
     create table work_organizations (id uuid primary key);
@@ -42,6 +38,15 @@ test("the migration is additive and repeatable", async () => {
   `);
   await db.exec(await sql());
   await db.exec(await sql());
+  return db;
+}
+
+test("the migration is additive and repeatable", async () => {
+  const body = await sql();
+  assert.match(body, /create table if not exists work_admin_action_previews/);
+  assert.doesNotMatch(body, /drop table|truncate|delete from/i);
+
+  const db = await migrated();
   const columns = await db.query<{ column_name: string; is_nullable: string }>(
     `select column_name, is_nullable from information_schema.columns where table_name = 'work_agent_tokens' and column_name in ('kind','person_id') order by column_name`,
   );
@@ -49,5 +54,22 @@ test("the migration is additive and repeatable", async () => {
     { column_name: "kind", is_nullable: "NO" },
     { column_name: "person_id", is_nullable: "YES" },
   ]);
+  await db.close();
+});
+
+test("only the admin kind may omit a person", async () => {
+  const db = await migrated();
+  const org = "00000000-0000-0000-0000-0000000000aa";
+  const person = "00000000-0000-0000-0000-0000000000bb";
+  const user = "00000000-0000-0000-0000-0000000000cc";
+  await db.exec(`insert into work_organizations (id) values ('${org}')`);
+  const insert = (kind: string, personId: string | null) =>
+    db.exec(
+      `insert into work_agent_tokens (organization_id, person_id, user_id, name, token_hash, token_prefix, expires_at, kind) values ('${org}', ${personId ? `'${personId}'` : "null"}, '${user}', '${kind}-token', 'hash-${kind}', 'p', now(), '${kind}')`,
+    );
+
+  await assert.rejects(insert("employee", null), /work_agent_tokens_person_kind_check/);
+  await assert.doesNotReject(insert("admin", null));
+  await assert.rejects(insert("superuser", person), /work_agent_tokens_kind_check/);
   await db.close();
 });
