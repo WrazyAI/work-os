@@ -81,6 +81,13 @@ function previewErrorResponse(error: unknown): NextResponse | null {
   return adminAgentError(resolvedCode, error.message, resolvedStatus);
 }
 
+/** A keyset cursor minted against a different filter set is a 422 with its own
+ * code, not the generic validation error the mapper would otherwise return. */
+function invalidCursorResponse(error: unknown): NextResponse | null {
+  if (!isNamed(error, "AdminAgentInvalidCursorError")) return null;
+  return adminAgentError("invalid_cursor", error.message, 422);
+}
+
 /** One error mapper for every admin route: the same `{ error, code,
  * request_id }` contract as the employee surface. */
 export function adminAgentRouteError(error: unknown): NextResponse {
@@ -94,6 +101,8 @@ export function adminAgentRouteError(error: unknown): NextResponse {
   }
   const preview = previewErrorResponse(error);
   if (preview) return preview;
+  const invalidCursor = invalidCursorResponse(error);
+  if (invalidCursor) return invalidCursor;
   if (isWorkOsConflict(error)) {
     const response = adminAgentError(error.reason ?? "conflict", error.message, 409);
     if (error.reason === "idempotency_in_flight") response.headers.set("Retry-After", "1");

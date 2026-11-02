@@ -32,6 +32,18 @@ export const projectApp = "80000000-0000-4000-8000-000000000002";
 export const projectArchived = "80000000-0000-4000-8000-000000000003";
 export const otherProject = "80000000-0000-4000-8000-000000000004";
 
+export const taskCheckout = "a0000000-0000-4000-8000-000000000001";
+export const taskCheckoutReview = "a0000000-0000-4000-8000-000000000002";
+export const taskCheckoutDone = "a0000000-0000-4000-8000-000000000003";
+export const taskPercent = "a0000000-0000-4000-8000-000000000004";
+export const taskUnderscore = "a0000000-0000-4000-8000-000000000005";
+export const taskArchived = "a0000000-0000-4000-8000-000000000006";
+export const taskDeleted = "a0000000-0000-4000-8000-000000000007";
+export const taskUnassigned = "a0000000-0000-4000-8000-000000000008";
+export const taskDocumentation = "a0000000-0000-4000-8000-000000000009";
+export const otherTask = "a0000000-0000-4000-8000-000000000010";
+export const taskShared = "a0000000-0000-4000-8000-000000000011";
+
 const access = (
   organizationId: string,
   membershipId: string,
@@ -171,6 +183,7 @@ create table work_tasks (
   title text not null,
   description text,
   status text not null default 'open',
+  workflow_status text not null default 'pending',
   completed boolean not null default false,
   assignee_provider_ids text[] not null default '{}'::text[],
   assignee_person_ids uuid[] not null default '{}'::uuid[],
@@ -404,6 +417,32 @@ export async function seedDirectory(db: Pick<PGlite, "query">) {
   [projectWebsite, projectApp, projectArchived, otherProject, adminUser, org, otherAdminUser, otherOrg]);
 }
 
+/** Task seed: active, completed, archived, deleted, unassigned, shared, and
+ * other-organization rows so the list filters, cursor, and tenant boundary all
+ * have real rows to answer against. Timestamps are fixed so ordering is clear. */
+export async function seedTasks(db: Pick<PGlite, "query">) {
+  await db.query(`insert into work_tasks
+    (id, user_id, organization_id, provider, provider_task_id, project_id, title, description,
+     status, workflow_status, completed, assignee_person_ids, due_date, updated_at) values
+    ($1,$10,$11,'nifty','pt-checkout',$12,'Fix checkout','Checkout button drops the cart','open','in_progress',false,$13::uuid[],'2026-11-15','2026-11-02T10:00:00.123456Z'),
+    ($2,$10,$11,'nifty','pt-checkout-review',$14,'Review checkout copy','Second pass on checkout copy','open','pending',false,$15::uuid[],'2026-12-05','2026-11-02T10:00:00.123789Z'),
+    ($3,$10,$11,'nifty','pt-checkout-done',$12,'Checkout follow-up','Closed after checkout shipped','completed','pending',true,$15::uuid[],'2026-11-10','2026-11-02T08:00:00Z'),
+    ($4,$10,$11,'nifty','pt-percent',$14,'Ship 100% coverage','Coverage gate for the next release','open','pending',false,$13::uuid[],'2026-11-18','2026-11-01T12:00:00Z'),
+    ($5,$10,$11,'nifty','pt-underscore',null,'Under_score cleanup','Rename under_score fields','open','pending',false,$13::uuid[],'2026-11-19','2026-11-01T11:00:00Z'),
+    ($6,$10,$11,'nifty','pt-archived',$12,'Old checkout archive','Finished last quarter','archived','pending',false,$13::uuid[],'2026-11-16','2026-10-30T10:00:00Z'),
+    ($7,$10,$11,'nifty','pt-deleted',$12,'Deleted checkout','Removed by an admin','deleted','pending',false,$13::uuid[],'2026-11-17','2026-10-30T09:00:00Z'),
+    ($8,$10,$11,'nifty','pt-unassigned',$12,'Unassigned backlog','Nobody owns this yet','open','pending',false,'{}'::uuid[],'2026-11-21','2026-10-29T10:00:00Z'),
+    ($9,$10,$11,'nifty','pt-docs',$14,'Earlier documentation pass','Docs refresh','open','pending',false,$13::uuid[],null,'2026-10-20T10:00:00Z'),
+    ($16,$17,$18,'nifty','pt-other',$19,'Other org secret','Must never leak','open','pending',false,$20::uuid[],'2026-11-15','2026-11-02T10:00:00Z'),
+    ($21,$10,$11,'nifty','pt-shared',$12,'Shared launch checklist','Both owners track this','open','pending',false,$22::uuid[],'2026-11-25','2026-11-01T10:00:00Z')`,
+  [
+    taskCheckout, taskCheckoutReview, taskCheckoutDone, taskPercent, taskUnderscore,
+    taskArchived, taskDeleted, taskUnassigned, taskDocumentation,
+    adminUser, org, projectApp, [personA], projectWebsite, [personB], otherTask,
+    otherAdminUser, otherOrg, otherProject, [otherPerson], taskShared, [personA, personB],
+  ]);
+}
+
 export async function fixture() {
   const db = new PGlite();
   await db.exec(prerequisites);
@@ -415,6 +454,7 @@ export async function fixture() {
   return {
     db,
     seedDirectory: () => seedDirectory(db),
+    seedTasks: () => seedTasks(db),
     close: async () => {
       globalThis.__workOsPgPool = undefined;
       await db.close();
