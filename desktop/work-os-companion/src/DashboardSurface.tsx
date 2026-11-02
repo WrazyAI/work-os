@@ -10,6 +10,7 @@ import { OverflowPanText } from "./OverflowPan";
 import { safeTaskText, subtaskProgress, taskState, type TaskRow } from "./taskWorkspace";
 import { EllipsisMenu, TaskActionMenuItems } from "./taskSurfaces";
 import { hasTaskMenu, taskCheckboxEnabled } from "./taskActions";
+import worktivityMark from "./worktivity-mark.png";
 
 export type DashboardTaskView = "today" | "unfinished" | "completed";
 
@@ -207,7 +208,7 @@ function WorkdayBand({ model, currentDate, observedOnly = false, children }: { m
       <div ref={dialog} className="workday-details-dialog" role="dialog" aria-modal="true" aria-labelledby="workday-details-title">
         <header className="workday-details-header"><div><p>{formatWorkOsDate(currentDate)}</p><h2 id="workday-details-title">Your workday</h2></div><button ref={close} type="button" aria-label="Close workday details" onClick={dismiss}><X size={18} aria-hidden="true" /></button></header>
         <div className="workday-details-body">
-          <div className="workday-details-status"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" /><strong>{model.stateLabel}</strong>{model.attendance?.source === "worktivity" && !model.attendance.stale && (model.state === "active" || model.state === "paused" || model.state === "observed") && <span>Worktivity</span>}</div>
+          <div className="workday-details-status"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" /><strong>{model.stateLabel}</strong>{model.attendance?.source === "worktivity" && !model.attendance.stale && (model.state === "active" || model.state === "paused" || model.state === "observed") && <span className="workday-provider"><img src={worktivityMark} alt="" /> From Worktivity</span>}</div>
           {model.stateTone !== "signal" && <p className="workday-details-explanation">{model.stateDetail}</p>}
           <section className="workday-details-window" aria-label="Scheduled work window">
             <div className="workday-details-window-heading"><div><span>Scheduled window</span><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)} <i>to</i> {formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></div>{model.schedule.phase !== "unavailable" && <span className="workday-details-percent">{Math.round(Math.max(0, Math.min(100, model.pulse.progressPercent)))}% of window</span>}</div>

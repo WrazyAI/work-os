@@ -493,8 +493,8 @@ band — rather than a flow legend and a facts row that disagreed about which
 numbers the day is made of.
 
 The workday band opens a detailed workday dialog when its non-control area is
-pressed; its clock and task buttons keep their own actions. A visible, keyboard
-reachable details button opens the same dialog. The dialog separates provider
+pressed; its clock and task buttons keep their own actions. A keyboard-reachable
+details button appears on focus and opens the same dialog. The dialog separates provider
 status, scheduled window, task counts, and focus without inventing attendance
 or task facts. It traps focus, closes on Escape, backdrop, or close, and restores
 focus to the details button. Opening and closing use a brief 200ms/160ms reveal;

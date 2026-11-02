@@ -295,7 +295,8 @@ body {
   background: var(--dash-card-solid);
   cursor: pointer;
 }
-.workday-details-trigger { position: absolute; right: 24px; bottom: 4px; display: inline-flex; align-items: center; gap: 1px; padding: 2px; border: 0; background: transparent; color: var(--dash-muted); font-family: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
+.workday-details-trigger { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.workday-details-trigger:focus-visible { right: 24px; bottom: 4px; width: auto; height: auto; min-height: 40px; clip-path: none; display: inline-flex; align-items: center; gap: 1px; padding: 4px 8px; border: 0; border-radius: 8px; background: var(--dash-card-solid); color: var(--dash-ink); font-family: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
 .workday-band:has(.workday-band-footer) .workday-details-trigger { bottom: auto; top: 4px; }
 .workday-details-trigger:focus-visible, .workday-details-header button:focus-visible { outline: 2px solid #4a7d22; outline-offset: 3px; }
 .workday-details-backdrop { position: fixed; inset: 0; z-index: 1400; display: grid; place-items: center; padding: 24px; background: rgba(20, 29, 22, .52); animation: workday-backdrop-in 200ms ease-out both; }
@@ -315,6 +316,8 @@ body {
 .workday-details-status { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; font-size: 13px; }
 .workday-details-status:has(+ .workday-details-explanation) { margin-bottom: 0; }
 .workday-details-status > span:last-child { margin-left: auto; color: var(--dash-muted); font-size: 11px; }
+.workday-details-status .workday-provider { display: inline-flex; align-items: center; gap: 7px; }
+.workday-provider img { display: block; width: 19px; height: 19px; border-radius: 5px; }
 .workday-details-explanation { margin: 8px 0 22px; color: var(--dash-muted); font-size: 12px; line-height: 1.5; }
 .workday-details-window { padding: 22px; border: 1px solid var(--dash-line); border-radius: 15px; background: var(--dash-card-solid); }
 .workday-details-window-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
