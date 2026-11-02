@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, Layers3, Plus, Settings, ShieldCheck, Users } from "lucide-react";
+import AdminAgentAccess from "./AdminAgentAccess";
 import { adminFetch, adminKeys, type SystemStatusResponse } from "./api";
 import {
   AdminCard,
@@ -24,6 +25,7 @@ type AnyRow = Record<string, any>;
 
 const FEATURES: Array<{ key: string; label: string; detail: string; comingSoon?: boolean }> = [
   { key: "employee_companion", label: "Employee companion", detail: "Check-ins, plans, and the employee workday record." },
+  { key: "admin_agent_api", label: "Admin agent API", detail: "Token-scoped admin reads, task actions, EOD review, and MCP." },
   { key: "desktop_companion", label: "Windows companion", detail: "The installed desktop app with Worktivity attendance control." },
   { key: "screenshot_summaries", label: "Screenshot summaries", detail: "Sampled, encrypted activity context with 30-day retention." },
   { key: "github_evidence", label: "GitHub evidence", detail: "Attributed commits and pull requests as output evidence." },
@@ -164,6 +166,15 @@ export default function AdminSettingsPage() {
           ))}
         </ul>
       </AdminCard>
+
+      {/* Admin agent access */}
+      {organizationFlags.admin_agent_api === true ? (
+        <AdminAgentAccess />
+      ) : (
+        <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+          Admin agent access is off. Enable <span className="font-semibold text-[var(--text-secondary)]">Admin agent API</span> above to mint admin-scoped tokens.
+        </p>
+      )}
 
       {/* Memberships */}
       <AdminCard>
