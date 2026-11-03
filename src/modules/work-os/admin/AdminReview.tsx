@@ -10,7 +10,6 @@ import {
   ChevronDown,
   FileCheck2,
   FilePlus2,
-  Filter,
   ShieldCheck,
   X,
 } from "lucide-react";

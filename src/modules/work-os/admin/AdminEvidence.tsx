@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Cable, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
@@ -173,10 +172,9 @@ export default function AdminEvidencePage() {
     let remaining = visibleCount;
     for (const [date, rows] of grouped) {
       if (remaining <= 0) break;
-      const slice = rows.slice(0, Math.max(0, remaining));
-      if (!slice.length) continue;
-      result.push([date, slice, rows.length] as const);
+      const slice = rows.slice(0, remaining);
       remaining -= slice.length;
+      if (slice.length) result.push([date, slice, rows.length] as const);
     }
     return result;
   }, [grouped, visibleCount]);
@@ -187,7 +185,7 @@ export default function AdminEvidencePage() {
   const actors = githubActors.data?.actors ?? [];
   // Provider bots are automation, not people: mapping one to a teammate would
   // attribute machine work to a person, so they never enter the person queue.
-  const isAutomation = (login?: string | null) => !!login && (login.endsWith("[bot]") || /^(dependabot|coderabbitai|github-actions|renovate)/i.test(login));
+  const isAutomation = (login?: string | null) => !!login && (login.endsWith("[bot]") || /^(dependabot|coderabbitai|github-actions|renovate)$/i.test(login));
   const humanActors = actors.filter((actor) => !isAutomation(actor.login));
   const botActors = actors.filter((actor) => isAutomation(actor.login));
   const botEvents = botActors.reduce((sum, actor) => sum + actor.events, 0);
@@ -275,7 +273,9 @@ export default function AdminEvidencePage() {
             <SectionHeading
               icon={GitBranch}
               title="Unmapped accounts"
-              detail={`${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} waiting for a person. Mapping an account also attributes its earlier events.`}
+              detail={humanActors.length
+                ? `${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} waiting for a person. Mapping an account also attributes its earlier events.`
+                : "Only automation accounts are unmapped, so nothing is waiting for a person."}
             />
             {humanActors.length ? (
               <ul className="grid">

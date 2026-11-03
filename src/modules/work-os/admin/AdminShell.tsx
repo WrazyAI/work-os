@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Building2, RefreshCw } from "lucide-react";
 import WorkOsViewModeForm from "../WorkOsViewModeForm";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
-import { Button, Notice, Skeleton, cx } from "./ui";
+import { Button, Notice, Skeleton } from "./ui";
 
 export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
 

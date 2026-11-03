@@ -18,11 +18,11 @@ import {
 const SCOPE_OPTIONS = [
   { id: "people:read", label: "Read people" },
   { id: "tasks:read", label: "Read tasks" },
-  { id: "tasks:write", label: "Create and update tasks" },
   { id: "eods:read", label: "Read EOD reports" },
-  { id: "eods:review", label: "Review EOD reports" },
   { id: "records:read", label: "Read work records" },
   { id: "insights:read", label: "Read organization insights" },
+  { id: "tasks:write", label: "Create and update tasks" },
+  { id: "eods:review", label: "Review EOD reports" },
 ] as const;
 
 const DEFAULT_SCOPES = ["people:read", "tasks:read", "eods:read", "records:read", "insights:read"];

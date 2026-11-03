@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, Check, ChevronDown, ChevronUp, ExternalLink, ListChecks, Plus, Search } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys } from "./api";
@@ -129,6 +129,7 @@ export default function AdminTasksPage() {
   const completedParam = filter === "open" ? "false" : filter === "completed" ? "true" : "";
   const tasks = useQuery<{ tasks: AnyRow[]; nextOffset: number | null; summary?: { open: number; overdue: number; overdueRecorded?: number; completedWeek: number } }>({
     queryKey: adminKeys.tasks({ filter, personId, projectId, pageSize: String(pageSize) }),
+    placeholderData: keepPreviousData,
     queryFn: () => {
       const params = new URLSearchParams({ limit: String(pageSize) });
       if (completedParam) params.set("completed", completedParam);

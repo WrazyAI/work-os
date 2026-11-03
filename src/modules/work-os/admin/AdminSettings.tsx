@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers3, Plus, Search, ShieldCheck } from "lucide-react";
+import { Layers3, Plus, Search } from "lucide-react";
 import AdminAgentAccess from "./AdminAgentAccess";
 import { adminFetch, adminKeys, type SystemStatusResponse } from "./api";
 import {
