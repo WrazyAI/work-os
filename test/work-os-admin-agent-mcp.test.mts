@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   ADMIN_AGENT_MCP_TOOL_NAMES,
   adminPreviewIdempotencyKey,
+  adminProgressIdempotencyKey,
   createAdminAgentMcpServer,
   createAdminAgentMcpServices,
   type AdminAgentMcpIdempotency,
@@ -21,6 +22,7 @@ import {
   type CreateAdminPreviewInput,
 } from "../src/lib/work-admin-action-previews";
 import type { AdminAgentScope } from "../src/lib/work-agent-tokens";
+import { AGENT_IDEMPOTENCY_TTL_MS } from "../src/lib/work-agent-idempotency";
 import { AGENT_MCP_TOOL_NAMES } from "../src/lib/work-agent-mcp";
 import { AGENT_RATE_LIMIT_MAX_WRITES } from "../src/lib/work-agent-rate-limit";
 import type { Json } from "../src/lib/work-os-internal";
@@ -645,7 +647,7 @@ test("log_progress is a direct additive write with tasks:write", async () => {
   assert.equal(result.isError, undefined);
   assert.equal(calls.progress.length, 1);
   assert.deepEqual(calls.progress[0].body, { summary: "Shipped the first slice" });
-  assert.match(calls.progress[0].key, /^mcp:log_progress:[0-9a-f]{64}$/);
+  assert.match(calls.progress[0].key, /^mcp:log_progress:[0-9a-f]{64}:\d+$/);
   await authorized.close();
 
   const readOnly = await connect(services, ["tasks:read"]);
@@ -657,6 +659,51 @@ test("log_progress is a direct additive write with tasks:write", async () => {
   assert.equal(bodyOf(denied).code, "insufficient_scope");
   assert.equal(calls.progress.length, 1, "no second write after the refusal");
   await readOnly.close();
+});
+
+test("a default log_progress key is bucketed by the idempotency TTL", async () => {
+  const { calls, services } = fakeServices();
+  const { client, keys, close } = await connect(services, ["tasks:write"]);
+  const realNow = Date.now;
+  const base = Date.UTC(2026, 10, 2, 12, 0, 0);
+  const argumentsFor = { task_id: "t1", summary: "Same note" };
+  try {
+    Date.now = () => base;
+    const first = await client.callTool({ name: "log_progress", arguments: argumentsFor });
+    const retried = await client.callTool({ name: "log_progress", arguments: argumentsFor });
+    assert.equal(first.isError, undefined);
+    assert.equal(retried.isError, undefined);
+    assert.equal(keys[0], keys[1], "a retry inside the window reuses the derived key");
+
+    // The derived key is stable inside one 24-hour window and moves with it.
+    assert.equal(
+      adminProgressIdempotencyKey(argumentsFor, base),
+      adminProgressIdempotencyKey(argumentsFor, base + 1),
+    );
+    assert.notEqual(
+      adminProgressIdempotencyKey(argumentsFor, base),
+      adminProgressIdempotencyKey(argumentsFor, base + AGENT_IDEMPOTENCY_TTL_MS),
+    );
+
+    // A later window is a new durable write, so the same note on the same task
+    // creates a new row instead of replaying the first one forever.
+    Date.now = () => base + AGENT_IDEMPOTENCY_TTL_MS;
+    const later = await client.callTool({ name: "log_progress", arguments: argumentsFor });
+    assert.equal(later.isError, undefined);
+    assert.equal(calls.progress.length, 3);
+    assert.notEqual(keys[2], keys[0]);
+
+    // An explicit caller key is forwarded unchanged; only the default is bucketed.
+    const explicit = await client.callTool({
+      name: "log_progress",
+      arguments: { ...argumentsFor, idempotency_key: "manual-note-key" },
+    });
+    assert.equal(explicit.isError, undefined);
+    assert.equal(keys[3], "manual-note-key");
+  } finally {
+    Date.now = realNow;
+    await close();
+  }
 });
 
 test("every read tool enforces its own scope", async () => {

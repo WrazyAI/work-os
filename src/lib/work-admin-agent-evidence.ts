@@ -207,6 +207,14 @@ async function evidenceByKey(access: WorkOsAccess, idempotencyKey: string): Prom
   return (data ?? null) as Json | null;
 }
 
+/** The durable evidence key is token-scoped. `work_evidence` is unique per
+ * (organization, idempotency_key), so two admin tokens that happen to reuse the
+ * same caller key must neither replay nor conflict with each other; the
+ * caller's key still bounds that token's own retries. */
+function durableEvidenceKey(tokenId: string, key: string): string {
+  return `admin:${tokenId}:${key}`;
+}
+
 function requireIdempotencyKey(value: string | null | undefined): string {
   const key = text(value);
   if (!key) throw new WorkOsValidationError("Idempotency-Key is required");
@@ -268,7 +276,7 @@ export async function addAdminAgentProgress(
   const { summary, title } = validateAdminProgressInput(body);
   const task = await loadTask(access, taskId);
   const localTaskId = String(task.id);
-  const key = requireIdempotencyKey(idempotencyKey);
+  const key = durableEvidenceKey(actor.tokenId, requireIdempotencyKey(idempotencyKey));
   const requestHash = sha256(JSON.stringify({ summary, title }));
   const existing = await evidenceByKey(access, key);
   if (existing) {
@@ -323,7 +331,7 @@ export async function attachAdminAgentEvidence(
     note: input.note,
   });
   assertCompletionEvidenceBytes(input.bytes, validated.contentType);
-  const key = requireIdempotencyKey(input.idempotencyKey);
+  const key = durableEvidenceKey(actor.tokenId, requireIdempotencyKey(input.idempotencyKey));
   const requestHash = sha256(JSON.stringify({
     contentType: validated.contentType,
     fileName: validated.fileName,

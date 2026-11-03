@@ -152,10 +152,10 @@ async function evidenceRow(id: string) {
   return rows[0]!;
 }
 
-async function evidenceCount(key: string) {
+async function evidenceCount(key: string, tokenId: string = actor.tokenId) {
   const { rows } = await f.db.query<{ total: number }>(
     "select count(*)::int as total from work_evidence where idempotency_key = $1",
-    [key],
+    [`admin:${tokenId}:${key}`],
   );
   return rows[0]!.total;
 }
@@ -383,7 +383,7 @@ test("attaching evidence writes a task-scoped row and one task-path object", asy
     adminUserId: adminUser,
     adminTokenId: "token-1",
   });
-  assert.equal(row.idempotency_key, "attach-1");
+  assert.equal(row.idempotency_key, "admin:token-1:attach-1");
   assert.deepEqual(fake.uploads.map((upload) => upload.path), [
     `organizations/${org}/tasks/${taskCheckout}/evidence/${id}.png`,
   ]);
@@ -446,6 +446,35 @@ test("the same evidence key with different content answers idempotency_conflict"
   );
   assert.equal(fake.uploads.length, 1);
   assert.equal(await evidenceCount("attach-content"), 1);
+});
+
+test("the durable evidence key is scoped to the admin token", async () => {
+  const fake = useFakeStorage();
+  const otherActor = { tokenId: "token-2", tokenName: "Second automation" };
+
+  // The same token keeps its own idempotent replay.
+  const first = await attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("attach-token-scope"), actor);
+  const retried = await attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("attach-token-scope"), actor);
+  assert.equal(retried.evidence.id, first.evidence.id, "the same token still replays its own key");
+  assert.equal(fake.uploads.length, 1);
+
+  // A second token reusing the same caller key neither replays nor conflicts.
+  const second = await attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("attach-token-scope"), otherActor);
+  assert.notEqual(second.evidence.id, first.evidence.id, "another token's identical key is a new row");
+  assert.equal(fake.uploads.length, 2);
+  assert.equal(await evidenceCount("attach-token-scope", "token-1"), 1);
+  assert.equal(await evidenceCount("attach-token-scope", "token-2"), 1);
+  assert.equal((await evidenceRow(String(first.evidence.id))).idempotency_key, "admin:token-1:attach-token-scope");
+  assert.equal((await evidenceRow(String(second.evidence.id))).idempotency_key, "admin:token-2:attach-token-scope");
+
+  // Progress notes follow the same contract.
+  const note = await addAdminAgentProgress(adminAccess, taskCheckout, { summary: "Same note" }, "progress-token-scope", actor);
+  const noteRetry = await addAdminAgentProgress(adminAccess, taskCheckout, { summary: "Same note" }, "progress-token-scope", actor);
+  assert.equal(noteRetry.id, note.id);
+  const otherNote = await addAdminAgentProgress(adminAccess, taskCheckout, { summary: "Same note" }, "progress-token-scope", otherActor);
+  assert.notEqual(otherNote.id, note.id);
+  assert.equal(await evidenceCount("progress-token-scope", "token-1"), 1);
+  assert.equal(await evidenceCount("progress-token-scope", "token-2"), 1);
 });
 
 test("a key reused for another task is a conflict, not a silent overwrite", async () => {

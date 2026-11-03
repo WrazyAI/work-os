@@ -934,9 +934,8 @@ components:
         user_id: { type: string, format: uuid }
         role: { type: string, enum: [admin] }
         person_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
           description: The token's optional person mapping; null for an unmapped admin token.
         token: { $ref: "#/components/schemas/AgentToken" }
     AgentToken:
@@ -993,23 +992,24 @@ components:
       type: object
       required: [next]
       properties:
-        next: { type: string, nullable: true }
+        next: { type: [string, "null"] }
     Person:
       type: object
       required: [id, displayName, email, active]
       properties:
         id: { type: string, format: uuid }
         displayName: { type: string }
-        email: { type: string, nullable: true }
+        email: { type: [string, "null"] }
         active: { type: boolean }
-        timezone: { type: string, nullable: true }
+        timezone: { type: [string, "null"] }
         roleProfile:
-          type: object
-          nullable: true
-          required: [id, name]
-          properties:
-            id: { type: string, format: uuid }
-            name: { type: string }
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
     PersonDetail:
       allOf:
         - $ref: "#/components/schemas/Person"
@@ -1017,17 +1017,19 @@ components:
           required: [schedule, manager, teams]
           properties:
             schedule:
-              type: object
-              nullable: true
-              properties:
-                timezone: { type: string, nullable: true }
+              oneOf:
+                - type: object
+                  properties:
+                    timezone: { type: [string, "null"] }
+                - type: "null"
             manager:
-              type: object
-              nullable: true
-              required: [id, displayName]
-              properties:
-                id: { type: string, format: uuid }
-                displayName: { type: string }
+              oneOf:
+                - type: object
+                  required: [id, displayName]
+                  properties:
+                    id: { type: string, format: uuid }
+                    displayName: { type: string }
+                - type: "null"
             teams:
               type: array
               items:
@@ -1052,23 +1054,23 @@ components:
       required: [id, title, status, completed, assignee_person_ids, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
-        project_id: { type: string, format: uuid, nullable: true }
-        parent_task_id: { type: string, format: uuid, nullable: true }
-        parent_provider_task_id: { type: string, nullable: true }
+        project_id: { type: [string, "null"], format: uuid }
+        parent_task_id: { type: [string, "null"], format: uuid }
+        parent_provider_task_id: { type: [string, "null"] }
         title: { type: string }
-        description: { type: string, nullable: true }
+        description: { type: [string, "null"] }
         status:
           type: string
           description: The stored task status; archived and deleted rows are excluded from active reads.
         workflow_status: { type: string }
         completed: { type: boolean }
-        completed_at: { type: string, format: date-time, nullable: true }
-        due_date: { type: string, format: date, nullable: true }
-        start_date: { type: string, format: date, nullable: true }
+        completed_at: { type: [string, "null"], format: date-time }
+        due_date: { type: [string, "null"], format: date }
+        start_date: { type: [string, "null"], format: date }
         assignee_person_ids:
           type: array
           items: { type: string, format: uuid }
-        assigned_by_person_id: { type: string, format: uuid, nullable: true }
+        assigned_by_person_id: { type: [string, "null"], format: uuid }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         capabilities:
@@ -1168,12 +1170,12 @@ components:
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
-        note: { type: string, nullable: true }
+        note: { type: [string, "null"] }
         fileName: { type: string }
         contentType: { type: string }
         sizeBytes: { type: integer }
         createdAt: { type: string, format: date-time }
-        taskId: { type: string, format: uuid, nullable: true }
+        taskId: { type: [string, "null"], format: uuid }
         url: { type: string }
     EvidenceUpload:
       type: object
@@ -1196,7 +1198,7 @@ components:
         id: { type: string, format: uuid }
         title: { type: string }
         summary: { type: string }
-        taskId: { type: string, format: uuid, nullable: true }
+        taskId: { type: [string, "null"], format: uuid }
         source: { type: string }
         origin: { type: string }
         createdAt: { type: string, format: date-time }
@@ -1209,7 +1211,7 @@ components:
         at: { type: string, format: date-time }
         actor: { type: string, enum: [agent, employee, system] }
         summary: { type: string }
-        url: { type: string, nullable: true }
+        url: { type: [string, "null"] }
     EodSummary:
       type: object
       required: [id, person, reportDate, status, title, excerpt, createdAt, updatedAt]
@@ -1225,8 +1227,8 @@ components:
         status: { type: string, enum: [pending_review, approved, rejected] }
         title: { type: string }
         excerpt: { type: string }
-        submittedAt: { type: string, format: date-time, nullable: true }
-        reviewedAt: { type: string, format: date-time, nullable: true }
+        submittedAt: { type: [string, "null"], format: date-time }
+        reviewedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     EodDetail:
@@ -1235,9 +1237,9 @@ components:
         - type: object
           properties:
             markdown: { type: string }
-            submittedMarkdown: { type: string, nullable: true }
-            managerNotes: { type: string, nullable: true }
-            reviewedBy: { type: string, nullable: true }
+            submittedMarkdown: { type: [string, "null"] }
+            managerNotes: { type: [string, "null"] }
+            reviewedBy: { type: [string, "null"] }
             metrics: { type: object, additionalProperties: true }
             missingEvidence:
               type: array
@@ -1246,7 +1248,7 @@ components:
                 type: object
                 required: [title, reason]
                 properties:
-                  taskId: { type: string, nullable: true }
+                  taskId: { type: [string, "null"] }
                   title: { type: string }
                   reason: { type: string }
     EodVersion:
@@ -1279,7 +1281,7 @@ components:
         id: { type: string }
         personId: { type: string, format: uuid }
         source: { type: string, enum: [update, submitted_eod, task, reviewed_recap, workday] }
-        occurredAt: { type: string, format: date-time, nullable: true }
+        occurredAt: { type: [string, "null"], format: date-time }
         localDate: { type: string, format: date }
         text: { type: string }
         recordUrl: { type: string }

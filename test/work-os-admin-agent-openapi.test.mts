@@ -158,9 +158,32 @@ test("GET /me documents identity without the token secret", async () => {
     ["expires_at", "id", "name", "prefix", "scopes"],
     "the token metadata must never name a secret field",
   );
-  assert.equal(schema.properties.person_id.type, "string");
-  assert.equal(schema.properties.person_id.nullable, true, "the token's person mapping is optional");
+  assert.deepEqual(schema.properties.person_id.type, ["string", "null"]);
+  assert.equal(schema.properties.person_id.format, "uuid", "the token's person mapping is an optional uuid");
   assert.equal(schema.properties.role.enum.includes("admin"), true);
+});
+
+test("the document uses JSON Schema 2020-12 null unions, not OpenAPI 3.0 nullable", async () => {
+  // The document declares OpenAPI 3.1, where `nullable` is not a schema
+  // keyword: a tool that ignores it would document a non-null type.
+  const spec = await openapi();
+  const visit = (node: unknown, path: string) => {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, `${path}/${index}`));
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    assert.equal(record.nullable, undefined, `${path} must not use nullable`);
+    for (const [key, value] of Object.entries(record)) visit(value, `${path}/${key}`);
+  };
+  visit(spec.components.schemas, "#/components/schemas");
+  const person = spec.components.schemas.Person.properties;
+  assert.deepEqual(person.email.type, ["string", "null"]);
+  assert.ok(person.roleProfile.oneOf.some((branch: Record<string, unknown>) => branch.type === "null"));
+  const task = spec.components.schemas.Task.properties;
+  assert.deepEqual(task.completed_at.type, ["string", "null"]);
+  assert.equal(task.completed_at.format, "date-time", "the union keeps the scalar format");
 });
 
 test("every consequential write documents a 202 preview and only confirm executes", async () => {
@@ -230,7 +253,7 @@ test("EOD detail documents missingEvidence as the producer's array", async () =>
   const missing = spec.components.schemas.EodDetail.allOf[1].properties.missingEvidence;
   assert.equal(missing.type, "array");
   assert.deepEqual([...missing.items.required].sort(), ["reason", "title"]);
-  assert.equal(missing.items.properties.taskId.type, "string");
+  assert.deepEqual(missing.items.properties.taskId.type, ["string", "null"]);
 });
 
 test("every conflict reason the admin writers raise is in the error enum", async () => {

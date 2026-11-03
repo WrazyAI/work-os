@@ -94,7 +94,11 @@ function previewErrorResponse(error: unknown): NextResponse | null {
     request_id: randomUUID(),
   };
   if (currentState !== undefined) body.current_state = currentState;
-  return NextResponse.json(body, { status: resolvedStatus });
+  const response = NextResponse.json(body, { status: resolvedStatus });
+  // A confirm that is still applying is a transient 409: tell the caller when
+  // to retry, exactly as the idempotency-in-flight conflict does.
+  if (resolvedCode === "preview_in_flight") response.headers.set("Retry-After", "1");
+  return response;
 }
 
 /** A keyset cursor minted against a different filter set is a 422 with its own

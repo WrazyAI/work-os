@@ -81,6 +81,18 @@ test("a preview error keeps its own code and status without an import", async ()
   assert.equal((await response.json() as { code: string }).code, "preview_expired");
 });
 
+test("a preview whose confirm is in flight carries a retry-after", async () => {
+  const inFlight = Object.assign(new Error("This preview is being applied; retry shortly"), {
+    name: "WorkAdminPreviewError",
+    code: "preview_in_flight",
+    status: 409,
+  });
+  const response = adminAgentRouteError(inFlight);
+  assert.equal(response.status, 409);
+  assert.equal(response.headers.get("Retry-After"), "1");
+  assert.equal((await response.json() as { code: string }).code, "preview_in_flight");
+});
+
 test("an unknown failure is a 500 without leaking the message", async () => {
   const response = adminAgentRouteError(new Error("connection reset by peer"));
   assert.equal(response.status, 500);

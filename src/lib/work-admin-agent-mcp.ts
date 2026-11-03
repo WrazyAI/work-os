@@ -48,7 +48,7 @@ import {
   parseAdminAgentInsightRange,
 } from "@/lib/work-admin-agent-insights";
 import { addAdminAgentProgress, attachAdminAgentEvidence } from "@/lib/work-admin-agent-evidence";
-import { agentRequestHash, withAgentIdempotency } from "@/lib/work-agent-idempotency";
+import { AGENT_IDEMPOTENCY_TTL_MS, agentRequestHash, withAgentIdempotency } from "@/lib/work-agent-idempotency";
 import { AgentRateLimitError, assertAgentRateLimit } from "@/lib/work-agent-rate-limit";
 import type { AdminAgentScope } from "@/lib/work-agent-tokens";
 import { decodeEvidenceBase64, mcpToolError, mcpToolResult } from "@/lib/work-agent-mcp";
@@ -127,6 +127,16 @@ export function adminConfirmIdempotencyKey(previewId: string): string {
 
 export function adminMcpIdempotencyKey(tool: string, input: unknown): string {
   return `mcp:${tool}:${agentRequestHash("MCP", tool, input)}`;
+}
+
+/** `log_progress` writes a durable evidence row keyed by this value, so an
+ * unbucketed default would replay the first note forever and the same note on
+ * the same task could never be logged again. Bucketing by the response-cache
+ * TTL keeps a retry inside the window a replay while a later window is a new
+ * note. An explicit caller key is never bucketed. */
+export function adminProgressIdempotencyKey(input: unknown, now: number = Date.now()): string {
+  const bucket = Math.floor(now / AGENT_IDEMPOTENCY_TTL_MS);
+  return `${adminMcpIdempotencyKey("log_progress", input)}:${bucket}`;
 }
 
 /** A confirm's required scope depends on the action stored in its preview, so
@@ -689,7 +699,7 @@ export function createAdminAgentMcpServer(
     }),
   }, async (args) => runTool(agent, "tasks:write", true, async () => {
     const { task_id, idempotency_key, ...body } = args;
-    const key = idempotency_key ?? adminMcpIdempotencyKey("log_progress", { task_id, ...body });
+    const key = idempotency_key ?? adminProgressIdempotencyKey({ task_id, ...body });
     const outcome = await idempotency({
       agent,
       key,
