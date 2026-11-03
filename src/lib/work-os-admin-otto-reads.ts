@@ -56,6 +56,13 @@ const LATEST_RECAP_COVERAGE = [
   "The latest reviewed recap per employee across all retained reviewed history, not only the 30-day arrival inbox.",
 ];
 
+/** The same coverage line the Otto record page states, for the admin API's
+ * empty page: an empty result must still say what it would have contained. */
+export const ADMIN_RECORD_COVERAGE = RECORD_COVERAGE;
+/** Per-person local windows cap one record request; a larger roster splits into
+ * more than one request. */
+export const ADMIN_OTTO_MAX_WINDOWS = MAX_WINDOWS;
+
 function requireAdmin(access: WorkOsAccess) {
   if (access.role !== "admin" || access.featureFlags.employee_companion !== true) {
     throw new WorkOsConflictError("Admin Otto access is not active for this membership.", "otto_access_revoked");
@@ -763,6 +770,22 @@ function normalizeRecordSources(value: WorkRecord["source"][] | undefined): Work
   return sources;
 }
 
+/** `%`, `_`, and `\` are LIKE metacharacters; escaping them keeps a search for
+ * a literal underscore or percent from acting as a wildcard. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+/** The administrative text search is a case-insensitive substring over the
+ * projected record text, bounded at 200 characters. */
+function normalizeRecordQuery(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const text = value.trim();
+  if (!text) return null;
+  if (text.length > 200) throw new WorkOsValidationError("q must be 200 characters or fewer");
+  return escapeLike(text);
+}
+
 /** One reviewed-record text for persisted and lazy recap paths: the immutable
  * original words plus the labelled employee correction when the version was
  * amended. The correction is stored in `employeeFeedback`, never folded into
@@ -778,13 +801,18 @@ function reviewedRecapRecordText(recap: ReviewedRecap) {
  * recaps and workday snapshots inside each person's stated local windows. */
 export async function listAdminOttoRecords(access: WorkOsAccess, input: {
   windows: LocalWindow[]; cursor?: string; sources?: WorkRecord["source"][];
+  /** Case-insensitive substring over the projected record text. */
+  query?: string | null;
 }): Promise<Page<WorkRecord>> {
   requireAdmin(access);
   const windows = await validateWindows(access, input.windows);
   const sources = normalizeRecordSources(input.sources);
+  const query = normalizeRecordQuery(input.query);
   const scope = scopeHash({
     kind: "records", organizationId: access.organizationId, windows,
     ...(sources ? { sources } : {}),
+    // A page of one search must never continue into another search's rows.
+    ...(query ? { query } : {}),
   });
   const cursor = decodeCursor(input.cursor, "records", scope);
   const afterOccurred = typeof cursor?.o === "string" ? cursor.o : null;
@@ -900,20 +928,25 @@ export async function listAdminOttoRecords(access: WorkOsAccess, input: {
     ? [...RECORD_COVERAGE, `Sources: ${sources.join(", ")}.`]
     : RECORD_COVERAGE;
   const count = await getPool().query<{ total: number | string }>(`${records}
-    SELECT count(*)::int AS total FROM projected
-    WHERE $6::text[] IS NULL OR source = ANY($6::text[])`,
-  [access.organizationId, personIds, timezones, fromDates, throughDates, sources]);
+    SELECT count(*)::int AS total FROM projected r
+    WHERE ($6::text IS NULL OR r.text ILIKE '%' || $6 || '%')
+      AND ($7::text[] IS NULL OR r.source = ANY($7::text[]))`,
+  [access.organizationId, personIds, timezones, fromDates, throughDates, query, sources]);
   const total = Number(count.rows[0]?.total ?? 0);
   if (!total) return emptyPage<WorkRecord>(coverage);
+  // The text predicate reads the projection itself, so a search never reaches
+  // an unprojected column: recaps, EODs and updates are matched on exactly the
+  // words the record page shows.
   const { rows } = await getPool().query<RecordRow>(`${records}
     SELECT * FROM projected r
-    WHERE ($6::text[] IS NULL OR r.source = ANY($6::text[]))
-      AND ($7::timestamptz IS NULL
-        OR r.occurred_key < $7::timestamptz
-        OR (r.occurred_key = $7::timestamptz AND r.record_id > $8::text))
+    WHERE ($7::text[] IS NULL OR r.source = ANY($7::text[]))
+      AND ($6::text IS NULL OR r.text ILIKE '%' || $6 || '%')
+      AND ($8::timestamptz IS NULL
+        OR r.occurred_key < $8::timestamptz
+        OR (r.occurred_key = $8::timestamptz AND r.record_id > $9::text))
     ORDER BY r.occurred_key DESC, r.record_id ASC
-    LIMIT $9`,
-  [access.organizationId, personIds, timezones, fromDates, throughDates, sources, afterOccurred, afterId, limit + 1]);
+    LIMIT $10`,
+  [access.organizationId, personIds, timezones, fromDates, throughDates, query, sources, afterOccurred, afterId, limit + 1]);
   const hasMore = rows.length > limit;
   const visible = hasMore ? rows.slice(0, limit) : rows;
   const items: WorkRecord[] = [];

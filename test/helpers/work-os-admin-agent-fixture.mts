@@ -51,6 +51,21 @@ export const checkoutEvidence = "b0000000-0000-4000-8000-000000000001";
 export const checkoutEvent = "c0000000-0000-4000-8000-000000000001";
 export const checkoutBlocker = "d0000000-0000-4000-8000-000000000001";
 
+export const updateCheckout = "e0000000-0000-4000-8000-000000000001";
+export const updatePricing = "e0000000-0000-4000-8000-000000000002";
+export const updatePercent = "e0000000-0000-4000-8000-000000000003";
+export const updateUnderscore = "e0000000-0000-4000-8000-000000000004";
+export const updateUnderX = "e0000000-0000-4000-8000-000000000005";
+export const updateHundreds = "e0000000-0000-4000-8000-000000000006";
+export const otherUpdate = "e0000000-0000-4000-8000-000000000007";
+export const eodCheckout = "f0000000-0000-4000-8000-000000000001";
+export const eodDraft = "f0000000-0000-4000-8000-000000000002";
+export const otherEod = "f0000000-0000-4000-8000-000000000003";
+export const recapInterval = "e1000000-0000-4000-8000-000000000001";
+export const recapReview = "e2000000-0000-4000-8000-000000000001";
+export const reviewEvent = "e2000000-0000-4000-8000-000000000002";
+export const workdaySession = "e3000000-0000-4000-8000-000000000001";
+
 const access = (
   organizationId: string,
   membershipId: string,
@@ -311,6 +326,19 @@ create table work_task_day_events (
   created_at timestamptz not null default now(),
   unique (organization_id, idempotency_key)
 );
+-- Read-path mirror of the reviewed-recap snapshot store: the records
+-- projection unions it with the reviewed intervals, so the table must exist for
+-- that query to parse. It carries no triggers here because this fixture never
+-- writes a review decision.
+create table work_recap_reviews (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  interval_id uuid not null,
+  person_id uuid not null references work_people(id),
+  version int not null default 1,
+  reviewed_at timestamptz,
+  payload jsonb
+);
 create table work_activity_intervals (
   id uuid primary key,
   organization_id uuid not null references work_organizations(id),
@@ -477,6 +505,73 @@ export async function seedTasks(db: Pick<PGlite, "query">) {
   [checkoutBlocker, org, taskCheckout, personA]);
 }
 
+/** Records seed: authored updates (with literal `%` and `_` search text), a
+ * submitted EOD, an unsubmitted draft, a reviewed recap, a workday session, and
+ * other-organization rows. Timestamps are fixed so the occurred_at ordering and
+ * the local-date windows are unambiguous under a UTC test window. */
+export async function seedRecords(db: Pick<PGlite, "query">) {
+  await db.query(`insert into work_check_ins
+    (id, organization_id, person_id, kind, input_text, occurred_at) values
+    ($1,$7,$8,'catch_up','Fixed the checkout redirect regression','2026-11-02T09:00:00Z'),
+    ($2,$7,$9,'catch_up','Reviewed pricing copy for the launch','2026-11-02T08:00:00Z'),
+    ($3,$7,$8,'catch_up','Coverage at 100% for the parser','2026-11-01T10:00:00Z'),
+    ($4,$7,$9,'catch_up','Renamed under_score fields','2026-11-01T09:00:00Z'),
+    ($5,$7,$9,'catch_up','Renamed underXscore fields','2026-11-01T08:00:00Z'),
+    ($6,$7,$9,'catch_up','Reviewed 500 items','2026-11-01T07:00:00Z')`,
+  [updateCheckout, updatePricing, updatePercent, updateUnderscore, updateUnderX, updateHundreds,
+    org, personA, personB]);
+  await db.query(`insert into work_check_ins
+    (id, organization_id, person_id, kind, input_text, occurred_at) values
+    ($1,$2,$3,'catch_up','Checkout in the other organization','2026-11-02T11:00:00Z')`,
+  [otherUpdate, otherOrg, otherPerson]);
+  await db.query(`insert into work_reports
+    (id, organization_id, person_id, report_date, kind, status, title, markdown,
+     submitted_markdown, submitted_at) values
+    ($1,$3,$4,'2026-11-02','eod','pending_review','Checkout ship log','',
+      'Shipped the checkout flow to staging','2026-11-02T10:00:00Z'),
+    ($2,$3,$5,'2026-11-02','eod','draft','Draft notes','Draft checkout notes',null,null)`,
+  [eodCheckout, eodDraft, org, personA, personB]);
+  await db.query(`insert into work_reports
+    (id, organization_id, person_id, report_date, kind, status, title, markdown,
+     submitted_markdown, submitted_at) values
+    ($1,$2,$3,'2026-11-02','eod','pending_review','Other org log','',
+      'Checkout report for the other org','2026-11-02T12:00:00Z')`,
+  [otherEod, otherOrg, otherPerson]);
+  await db.query(`insert into work_activity_intervals
+    (id, organization_id, person_id, generation_status, review_status, headline,
+     final_detail, window_start, window_end, timezone, generated_at, reviewed_at)
+    values ($1,$2,$3,'ready','confirmed','Checkout review window',
+      'Reviewed the checkout flow','2026-11-02T05:00:00Z','2026-11-02T06:00:00Z','UTC',
+      '2026-11-02T06:00:00Z','2026-11-02T06:00:00Z')`,
+  [recapInterval, org, personA]);
+  await db.query(`insert into work_recap_reviews
+    (id, organization_id, interval_id, person_id, version, reviewed_at, payload) values
+    ($1,$2,$3,$4,1,'2026-11-02T06:00:00Z',$5::jsonb)`,
+  [recapReview, org, recapInterval, personA, JSON.stringify({
+    intervalId: recapInterval,
+    eventId: reviewEvent,
+    person: { id: personA, displayName: "Ada Lovelace", active: true, timezone: "UTC" },
+    reviewVersion: 1,
+    reviewKey: "review-key",
+    sourceRevision: 1,
+    scriptHash: "script-hash",
+    reviewStatus: "confirmed",
+    reviewedAt: "2026-11-02T06:00:00.000Z",
+    windowStart: "2026-11-02T05:00:00.000Z",
+    windowEnd: "2026-11-02T06:00:00.000Z",
+    timezone: "UTC",
+    original: { headline: "Checkout review window", detail: "Reviewed the checkout flow", activities: [] },
+    employeeFeedback: null,
+    speechLines: [],
+    coverage: ["AI-inferred activity, employee reviewed; not task completion or attendance."],
+  })]);
+  await db.query(`insert into work_sessions
+    (id, organization_id, person_id, shift_date, state, timezone,
+     clocked_in_at, clocked_out_at) values
+    ($1,$2,$3,'2026-11-02','completed','UTC','2026-11-02T09:00:00Z','2026-11-02T17:00:00Z')`,
+  [workdaySession, org, personA]);
+}
+
 export async function fixture() {
   const db = new PGlite();
   await db.exec(prerequisites);
@@ -489,6 +584,7 @@ export async function fixture() {
     db,
     seedDirectory: () => seedDirectory(db),
     seedTasks: () => seedTasks(db),
+    seedRecords: () => seedRecords(db),
     close: async () => {
       globalThis.__workOsPgPool = undefined;
       await db.close();
