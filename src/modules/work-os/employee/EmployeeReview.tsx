@@ -3,13 +3,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, FileCheck2, Send, Sparkles, Video, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, FileCheck2, Pencil, RotateCcw, Send, Video, Wand2, X } from "lucide-react";
+import EodReportDocument from "./EodReportDocument";
 import EmployeeEodEvidence from "./EmployeeEodEvidence";
 import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { useNow } from "./useNow";
 import { HttpError, fetchJson, calendarDateLabel, longDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
-import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
+import { prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
 import {
   EOD_SHIFT_OPEN_LINK_LABEL,
   EOD_SHIFT_OPEN_PREFIX,
@@ -61,7 +62,8 @@ export default function EmployeeReview() {
   // The confirmation names the day that was submitted; changing the day must
   // never leave it looking like that report was just filed.
   useEffect(() => { setEodConfirmation(false); }, [selectedDate]);
-  const [draftSource, setDraftSource] = useState<"ai" | "deterministic" | null>(null);
+  const [draftSource, setDraftSource] = useState<"deterministic" | "refined" | "loom" | null>(null);
+  const [editingReport, setEditingReport] = useState(false);
   const [eodNotice, setEodNotice] = useState<{ tone: "info" | "warn" | "err"; text: string } | null>(null);
   const [refineOpen, setRefineOpen] = useState(false);
   const [refineInput, setRefineInput] = useState("");
@@ -107,7 +109,7 @@ export default function EmployeeReview() {
   // never pass the guard against the date the editor has already left.
   useLayoutEffect(() => { activeReportDateRef.current = eodDay?.shiftDate ?? ""; }, [eodDay?.shiftDate]);
 
-  type AssistantDraftMode = "draft" | "redraft" | "refine" | "loom";
+  type AssistantDraftMode = "refine" | "loom";
   const assistantDraft = useMutation({
     mutationFn: (variables: { mode: AssistantDraftMode; date: string; draft?: string; bottleneck?: string; feedback?: string; loom?: { url: string; transcript?: string } }) =>
       fetchJson<AssistantEodDraftResponse>("/api/work-os/me/eod/ai-draft", {
@@ -124,11 +126,14 @@ export default function EmployeeReview() {
       // A response for a day the editor has left is dropped, not applied.
       if (variables.date !== activeReportDateRef.current) return;
       if (result.markdown) setReportMarkdown(variables.mode === "refine" ? restoreBottleneckSection(result.markdown, variables.bottleneck ?? "") : result.markdown);
-      setDraftSource("ai");
-      if (variables.mode === "refine") setEodNotice({ tone: "info", text: "The draft was refined from your feedback." });
-      else if (variables.mode === "loom") setEodNotice({ tone: "info", text: "Draft rebuilt from your Loom recording. Review every line." });
-      else if (result.clockedOut) setEodNotice({ tone: "info", text: "You were clocked out automatically and the assistant drafted your EOD. Review every line." });
-      else setEodNotice({ tone: "info", text: assistantDraftNotice(result) });
+      setDraftSource(variables.mode === "refine" ? "refined" : "loom");
+      setEditingReport(false);
+      setEodNotice({
+        tone: "info",
+        text: variables.mode === "refine"
+          ? "The draft was refined from your feedback."
+          : "Draft rebuilt from your Loom recording. Review every line.",
+      });
       void refresh();
     },
     onError: (error, variables) => {
@@ -140,16 +145,13 @@ export default function EmployeeReview() {
         setRefusal({ date: variables.date, at: eodDay?.at ?? null });
         return;
       }
-      const message = error instanceof Error ? error.message : "The assistant draft failed.";
-      if (variables.mode === "refine") {
-        setEodNotice({ tone: gated ? "warn" : "err", text: `Your feedback was not applied. Your draft is unchanged.${gated ? ` ${message}` : ""}` });
-        return;
-      }
-      if (variables.mode === "draft") {
-        setEodNotice({ tone: gated ? "warn" : "info", text: assistantDraftFallbackNotice(gated, message) });
-        return;
-      }
-      setEodNotice({ tone: gated ? "warn" : "err", text: `${message} Your draft is unchanged.` });
+      const message = error instanceof Error ? error.message : "That change could not be applied.";
+      setEodNotice({
+        tone: gated ? "warn" : "err",
+        text: variables.mode === "refine"
+          ? `Your feedback was not applied. Your draft is unchanged.${gated ? ` ${message}` : ""}`
+          : `${message} Your draft is unchanged.`,
+      });
     },
   });
 
@@ -157,49 +159,51 @@ export default function EmployeeReview() {
      day the employee has since opened. */
   const attemptedRef = useRef<{ date: string; at: string | null }>({ date: "", at: null });
 
+  /** Creates or refreshes the stored draft. The server builds the document
+   * deterministically from the recorded day; nothing is submitted here. */
+  const buildDraft = async (date: string) => {
+    attemptedRef.current = { date, at: eodDay?.at ?? null };
+    // Analyze one bounded batch of waiting frames first so the draft reads the
+    // freshest record (the companion runs its own rounds).
+    if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
+    const created = await fetchJson<{ report: AnyRow }>("/api/work-os/reports/eod", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify({ date }),
+    });
+    // The created record lands in the editor only while that day is active.
+    if (date === activeReportDateRef.current) {
+      setDraftSource("deterministic");
+      setReportMarkdown(String(created.report?.markdown ?? ""));
+      setEditingReport(false);
+      setEodNotice({ tone: "info", text: "Report built from your recorded day. Review every line." });
+    }
+    return { created, date };
+  };
+  const onDraftError = (error: unknown) => {
+    // A shift that is still open refuses the draft; the prompt replaces it.
+    if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
+      setRefusal(attemptedRef.current);
+    }
+  };
+
   const draftEod = useMutation({
     mutationFn: async () => {
       if (!eodDay?.shiftDate) throw new Error("Load the day before drafting its EOD");
-      const date = eodDay.shiftDate;
-      attemptedRef.current = { date, at: eodDay.at ?? null };
-      // Analyze one bounded batch of waiting frames first so the assistant
-      // draft reads the freshest record (the companion runs its own rounds).
-      if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
-      const created = await fetchJson<{ report: AnyRow }>("/api/work-os/reports/eod", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-        body: JSON.stringify({ date }),
-      });
-      // The created record lands in the editor only while that day is active.
-      if (date === activeReportDateRef.current) {
-        setEodNotice(null);
-        setDraftSource("deterministic");
-        setReportMarkdown(String(created.report?.markdown ?? ""));
-      }
-      return { created, date };
+      return buildDraft(eodDay.shiftDate);
     },
-    onError: (error) => {
-      // A shift that is still open refuses the draft; the prompt replaces it.
-      if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
-        setRefusal(attemptedRef.current);
-      }
-    },
-    onSuccess: (result) => {
-      void refresh();
-      if (result.date !== activeReportDateRef.current) return;
-      // The assistant draft is the default: the standard record stays as the
-      // fallback when the assistant is unavailable or the day is gated.
-      assistantDraft.mutate({ mode: "draft", date: result.date });
-    },
+    onError: onDraftError,
+    onSuccess: () => void refresh(),
   });
 
   const redraftEod = useMutation({
     mutationFn: async () => {
       const date = eodDay?.shiftDate ?? "";
-      if (!date) throw new Error("Load the day before redrafting its EOD");
-      if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
-      return assistantDraft.mutateAsync({ mode: "redraft", date });
+      if (!date) throw new Error("Load the day before rebuilding its EOD");
+      return buildDraft(date);
     },
+    onError: onDraftError,
+    onSuccess: () => void refresh(),
   });
 
   const appliedReportRef = useRef<string | null>(null);
@@ -208,6 +212,7 @@ export default function EmployeeReview() {
   useEffect(() => {
     appliedReportRef.current = null;
     setDraftSource(null);
+    setEditingReport(false);
     setEodNotice(null);
   }, [selectedDate]);
 
@@ -225,6 +230,7 @@ export default function EmployeeReview() {
     appliedReportRef.current = key;
     if (assistantDraft.isPending) return;
     setReportMarkdown(eodReport.markdown ?? "");
+    setEditingReport(false);
   }, [eodReport?.id, eodReport?.status, eodReport?.markdown, assistantDraft.isPending]);
 
   const submitEod = useMutation({
@@ -331,19 +337,25 @@ export default function EmployeeReview() {
             </div>
           ) : null}
           {shiftBlocked && !editorLocked ? <div className={styles.notice}>{shiftOpenPrompt(EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX.webRebuild)}</div> : null}
-          <textarea
-            value={reportMarkdown}
-            onChange={(event) => setReportMarkdown(event.target.value)}
-            rows={16}
-            className={styles.editor}
-            disabled={editorLocked}
-            aria-label="EOD report draft"
-          />
+          <div className={styles.reportBar}>
+            <div className={styles.reportViews} role="group" aria-label="Report view">
+              <button type="button" aria-pressed={!editingReport} className={!editingReport ? styles.reportViewActive : undefined} onClick={() => setEditingReport(false)}>
+                <Eye size={13} /> Review
+              </button>
+              <button type="button" aria-pressed={editingReport} className={editingReport ? styles.reportViewActive : undefined} onClick={() => setEditingReport(true)} disabled={editorLocked}>
+                <Pencil size={13} /> Edit source
+              </button>
+            </div>
+            <span className={styles.reportSource}>
+              {draftSource === "refined" ? "Refined with Otto" : draftSource === "loom" ? "Rebuilt from your Loom" : draftSource === "deterministic" ? "Drafted from your record" : ""}
+            </span>
+          </div>
+          <EodReportDocument markdown={reportMarkdown} editing={editingReport} locked={editorLocked} onChange={setReportMarkdown} />
 
           {!editorLocked ? (
             <div className={styles.disclosure}>
               <div className={styles.disclosureHead}>
-                <span className={styles.disclosureLabel}>Ask the assistant to adjust this draft</span>
+                <span className={styles.disclosureLabel}>Ask Otto to adjust this draft</span>
                 <button type="button" className={styles.disclosureToggle} onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
                   {refineOpen ? "Close" : "Refine draft"}
                 </button>
@@ -418,12 +430,11 @@ export default function EmployeeReview() {
                 : status === "approved" ? "Approved."
                   : status === "rejected" ? "Changes were requested. Update the report and resubmit it."
                     : "Nothing is filed until you submit."}
-              {draftSource ? ` · ${draftSource === "ai" ? "Assistant draft" : "Standard draft"}` : ""}
             </p>
             <div className={styles.editorActions}>
               {!editorLocked && !shiftBlocked ? (
                 <button type="button" className={styles.secondaryButton} disabled={redraftEod.isPending} onClick={() => redraftEod.mutate()}>
-                  <Sparkles size={13} /> {redraftEod.isPending ? "Redrafting…" : "Redraft with assistant"}
+                  <RotateCcw size={13} /> {redraftEod.isPending ? "Rebuilding…" : "Rebuild from record"}
                 </button>
               ) : null}
               <button
@@ -443,7 +454,7 @@ export default function EmployeeReview() {
       return (
         <div className={styles.record}>
           {shiftOpenPrompt(EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX.web)}
-          <p className={styles.recordNote}>Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+          <p className={styles.recordNote}>Drafting builds the report from your recorded day. It does not submit anything, and activity context is never a productivity claim.</p>
         </div>
       );
     }
@@ -475,7 +486,7 @@ export default function EmployeeReview() {
           >
             <FileCheck2 size={14} /> {draftEod.isPending || assistantDraft.isPending ? "Drafting…" : historical ? `Draft EOD for ${calendarDateLabel(selectedDate)}` : "Draft EOD"}
           </button>
-          <p className={styles.recordNote}>Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+          <p className={styles.recordNote}>Drafting builds the report from your recorded day. It does not submit anything, and activity context is never a productivity claim.</p>
         </div>
       </div>
     );
@@ -489,7 +500,7 @@ export default function EmployeeReview() {
       <header className={`${styles.masthead} ${styles.reveal}`} style={{ "--delay": "0ms" } as CSSProperties}>
         <div className={styles.metaRow}><span>{selectedDate ? longDateLabel(selectedDate) : "Loading your review"}</span></div>
         <div className={styles.titleRow}>
-          <h1>Review</h1>
+          <h1>EOD review</h1>
           <p className={styles.titleMeta}>
             {historical ? `Drafting for ${calendarDateLabel(selectedDate)} · historical records are read-only outside the report.` : "Your end-of-day report, proposed changes, and recorded evidence."}
           </p>
@@ -517,12 +528,11 @@ export default function EmployeeReview() {
           <section className={`${styles.surface} ${styles.reveal}`} id="employee-eod-editor" style={{ "--delay": "80ms" } as CSSProperties} aria-labelledby="review-eod-title">
             <div className={styles.surfaceHead}>
               <div>
-                <span className={styles.eyebrow}>End of day</span>
                 <h2 className={styles.surfaceTitle} id="review-eod-title">
                   {historical ? `Report for ${calendarDateLabel(selectedDate)}` : "Today's report"}
                 </h2>
                 <p className={styles.surfaceMeta}>
-                  {historical ? "The recorded day stays read-only outside the report." : "One report per workday. The record is drafted from your day; nothing is filed until you submit it."}
+                  {historical ? "The recorded day stays read-only outside the report." : "Drafted from your recorded day."}
                 </p>
               </div>
               <span className={`${styles.status} ${statusClass}`}>{statusLabel}</span>

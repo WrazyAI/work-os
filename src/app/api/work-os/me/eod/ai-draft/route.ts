@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
+import { gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
+import { draftWorkOsEod, renderDailyWorkspaceEod, type EodLoomContext } from "@/lib/work-os-eod";
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
@@ -25,8 +26,8 @@ export async function POST(req: Request) {
     const auth = await requireWorkOsAccess({
       organizationId: req.headers.get("x-work-os-organization-id"),
       authorization: req.headers.get("authorization"),
-cadenceMinutes: req.headers.get("x-work-os-cadence-minutes"),
-firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
+      cadenceMinutes: req.headers.get("x-work-os-cadence-minutes"),
+      firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
       requirePerson: true,
       feature: "employee_companion",
     });
@@ -48,14 +49,20 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
         return NextResponse.json({ error: gate.message, reason: EOD_SHIFT_OPEN_REASON }, { status: 409 });
       }
     }
-    const personResult = await createAdminClient().from("work_people").select("display_name")
-      .eq("organization_id", auth.access.organizationId).eq("id", personId).maybeSingle();
-    if (personResult.error) throw new Error(`load person for EOD draft: ${personResult.error.message}`);
-    const grounding = await gatherEodGrounding(auth.access.organizationId, personId, date, String(personResult.data?.display_name ?? "The employee"));
+
     // An attached Loom is draft context only: it never files an update or an
     // evidence row, and a recording from another day is refused outright.
     const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
-    let loom: { verdict: string; createdAt: string | null; createdLocalDate: string | null; title: string | null; durationSeconds: number | null; url: string; summary: string | null; suggestedTasks: number } | null = null;
+    let loom: {
+      verdict: string;
+      createdAt: string | null;
+      createdLocalDate: string | null;
+      title: string | null;
+      durationSeconds: number | null;
+      url: string;
+      summary: string | null;
+      suggestedTasks: number;
+    } | null = null;
     if (loomInput && loomMetadataEnabled(auth.access.featureFlags)) {
       const { timezone } = await loadShiftData(auth.access, personId, new Date());
       const feed = await analyzeLoomForAgent({
@@ -63,7 +70,7 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
         transcript: typeof loomInput.transcript === "string" ? loomInput.transcript : null,
         targetDate: date,
         timezone,
-        existingTaskTitles: grounding.completed,
+        existingTaskTitles: [],
       });
       if (!feed.bundle) return NextResponse.json({ error: "The Loom link is not a valid Loom share link.", reason: "loom_invalid" }, { status: 400 });
       if (feed.blocked) {
@@ -82,15 +89,8 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
         summary: feed.analysis?.summary ?? null,
         suggestedTasks: feed.analysis?.suggestedTasks.length ?? 0,
       };
-      grounding.media = [{
-        at: new Date().toISOString(),
-        title: feed.bundle.metadata?.title ?? "Loom recording",
-        url: feed.bundle.reference.url,
-        durationSeconds: feed.bundle.metadata?.durationSeconds ?? null,
-        digest: feed.analysis?.summary ?? null,
-        transcriptChars: feed.bundle.transcript.chars,
-      }];
     }
+
     const annotations = sanitizeEodAnnotations(body.annotations);
     const feedback = typeof body.feedback === "string" ? body.feedback : "";
     const hasRefinement = typeof body.draft === "string" || typeof body.feedback === "string" || annotations.length > 0;
@@ -104,49 +104,50 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
       if (feedback.trim().length < 3 && annotations.length === 0) {
         return NextResponse.json({ error: "feedback or annotations are required for refinement" }, { status: 400 });
       }
-    }
-    if (memoryEnabled(auth.access.featureFlags)) {
-      const scope = { organizationId: auth.access.organizationId, personId, localDate: date };
-      const [todayBlock, memoryBlock] = await Promise.all([
-        buildTodaySnapshot(scope),
-        buildMemoryPromptBlock(scope, feedback || "end of day summary of completed and carried work", { limit: 8 }),
-      ]);
-      grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
-    }
-    let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
-    let screenshotSyncUnavailable = false;
-    try {
-      screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
-    } catch {
-      screenshotSyncUnavailable = true;
-    }
-    // Employee-reviewed interval recaps are the stronger activity context;
-    // hourly rollups only fill hours an interval does not already cover.
-    const intervalLines = await listActivityIntervalActivityLines(auth.access.organizationId, personId, date).catch(() => []);
-    const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
-    const observedHours = screenshots.hours.filter((hour) => !coveredHours.has(hour.hourStart));
-    // Attributed GitHub activity is provider-recorded fact; it joins the
-    // observed context so the draft can quantify what actually shipped.
-    let githubLines: string[] = [];
-    if (auth.access.featureFlags.github_evidence === true) {
-      try {
-        const timezone = await personTimezone(auth.access.organizationId, personId);
-        const window = await eodActivityWindowFor(auth.access.organizationId, personId, date);
-        const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, timezone);
-        const activity = await listGithubActivity({
-          organizationId: auth.access.organizationId,
-          personId,
-          windowStart: bounds.startIso,
-          windowEnd: bounds.endIso,
-        });
-        githubLines = githubObservedLines(activity);
-      } catch {
-        githubLines = [];
+      const personResult = await createAdminClient().from("work_people").select("display_name")
+        .eq("organization_id", auth.access.organizationId).eq("id", personId).maybeSingle();
+      if (personResult.error) throw new Error(`load person for EOD draft: ${personResult.error.message}`);
+      const grounding = await gatherEodGrounding(auth.access.organizationId, personId, date, String(personResult.data?.display_name ?? "The employee"));
+      if (memoryEnabled(auth.access.featureFlags)) {
+        const scope = { organizationId: auth.access.organizationId, personId, localDate: date };
+        const [todayBlock, memoryBlock] = await Promise.all([
+          buildTodaySnapshot(scope),
+          buildMemoryPromptBlock(scope, feedback || "end of day summary of completed and carried work", { limit: 8 }),
+        ]);
+        grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
       }
-    }
-    const groundingWithObserved = {
-      ...grounding,
-      observed: [
+      let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
+      let screenshotSyncUnavailable = false;
+      try {
+        screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
+      } catch {
+        screenshotSyncUnavailable = true;
+      }
+      // Employee-reviewed interval recaps are the stronger activity context;
+      // hourly rollups only fill hours an interval does not already cover.
+      const intervalLines = await listActivityIntervalActivityLines(auth.access.organizationId, personId, date).catch(() => []);
+      const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
+      const observedHours = screenshots.hours.filter((hour) => !coveredHours.has(hour.hourStart));
+      // Attributed GitHub activity is provider-recorded fact; it joins the
+      // observed context so the draft can quantify what actually shipped.
+      let githubLines: string[] = [];
+      if (auth.access.featureFlags.github_evidence === true) {
+        try {
+          const timezone = await personTimezone(auth.access.organizationId, personId);
+          const window = await eodActivityWindowFor(auth.access.organizationId, personId, date);
+          const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, timezone);
+          const activity = await listGithubActivity({
+            organizationId: auth.access.organizationId,
+            personId,
+            windowStart: bounds.startIso,
+            windowEnd: bounds.endIso,
+          });
+          githubLines = githubObservedLines(activity);
+        } catch {
+          githubLines = [];
+        }
+      }
+      grounding.observed = [
         ...intervalLines.map((line) => ({
           at: null,
           text: `${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${line.detail}`,
@@ -154,16 +155,53 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
         })),
         ...githubLines.map((text) => ({ at: null, text, app: "GitHub" })),
         ...observedHours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
-      ],
-    };
-    const result = hasRefinement
-      ? await refineEodNarrative(groundingWithObserved, body.draft as string, feedback, annotations)
-      : await draftEodNarrative(groundingWithObserved);
-    if (!result.ok) {
-      const status = result.reason === "ai_unconfigured" ? 501 : 503;
-      return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
+      ];
+      const result = await refineEodNarrative(grounding, body.draft as string, feedback, annotations);
+      if (!result.ok) {
+        const status = result.reason === "ai_unconfigured" ? 501 : 503;
+        return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
+      }
+      return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable, loom });
     }
-    return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable, loom });
+
+    // The initial draft is deterministic. A Loom reshapes the same document;
+    // it never asks a model to decide what the day contained.
+    let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
+    let screenshotSyncUnavailable = false;
+    try {
+      screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
+    } catch {
+      screenshotSyncUnavailable = true;
+    }
+    const loomContext: EodLoomContext | null = loom
+      ? {
+          title: loom.title ?? "Loom recording",
+          url: loom.url,
+          durationSeconds: loom.durationSeconds,
+          digest: loom.summary,
+        }
+      : null;
+    const existing = await createAdminClient().from("work_reports")
+      .select("markdown")
+      .eq("organization_id", auth.access.organizationId)
+      .eq("person_id", personId)
+      .eq("kind", "eod")
+      .eq("report_date", date)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing.error) throw new Error(`load EOD draft: ${existing.error.message}`);
+    const existingMarkdown = String(existing.data?.markdown ?? "");
+    // An older client may still ask for a "draft" from the AI route. It gets
+    // the deterministic document, and a legacy markdown draft is rebuilt once
+    // so the page always opens on the current brief/full-record contract.
+    const currentContract = existingMarkdown.includes("## Full record");
+    const markdown = loomContext
+      ? (await renderDailyWorkspaceEod(auth.access, personId, date, { loom: loomContext })).markdown
+      : existingMarkdown && currentContract
+        ? existingMarkdown
+        : String((await draftWorkOsEod(auth.access, personId, { date })).markdown ?? "");
+    return NextResponse.json({ markdown, model: "work-os-eod", screenshots, screenshotSyncUnavailable, loom });
   } catch (error) {
     return jsonError(error);
   }

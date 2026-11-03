@@ -4,7 +4,32 @@ import { NotificationsBell } from "./NotificationsBell";
 import { EodComposer } from "./taskSurfaces";
 import type { OutstandingEodDay } from "./types";
 
-const DRAFT = "## Summary\nFinished the settlement reconciliation and documented the handoff.\n\n## Completed\n- Reconcile September 10 payments\n\n## Carried forward\n- Two approvals still pending";
+const DRAFT = [
+  "# EOD Report: Preview Employee — September 10, 2026",
+  "",
+  "Goal: Finish the settlement reconciliation and document the handoff",
+  "Goal source: Employee",
+  "Session: 9:00 AM – 5:30 PM",
+  "",
+  "## Summary",
+  "Completed 4 work tasks today, including the settlement reconciliation and the handoff note.",
+  "",
+  "## Completed today",
+  "- Reconcile September 10 payments — Payments · 3:30 PM",
+  "- Document the handoff — Payments · 4:10 PM",
+  "",
+  "## Next",
+  "- Two approvals still pending.",
+  "",
+  "## Evidence",
+  "- 4 work deliverables · 2 recorded recaps.",
+  "",
+  "## Full record",
+  "",
+  "### Work completed (4)",
+  "- Reconcile September 10 payments — Payments · 3:30 PM",
+  "- Document the handoff — Payments · 4:10 PM",
+].join("\n");
 
 const NORMAL: OutstandingEodDay[] = [
   { date: "2026-09-10", status: "draft_unsubmitted", reportId: "r-10", observedMinutes: 290, completedTasks: 10, hasPlan: true },

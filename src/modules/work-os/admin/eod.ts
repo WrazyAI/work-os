@@ -1,71 +1,18 @@
-/* Structured rendering for the generated EOD report markdown. The draft shape
- * is produced by src/lib/work-os-eod.ts: a title, meta lines, `##` sections
- * with bullet facts, and a closing activity-context disclaimer. Parsing is
- * deterministic and falls back to the raw text when the shape is unknown. */
+/* Structured rendering for the deterministic EOD report. The document shape is
+ * produced by src/lib/work-os-eod-report.ts and parsed once in the shared
+ * employee document module, so administration and the employee surface read
+ * the same sections. */
 
-export interface EodMetaLine {
-  label: string;
-  value: string;
-}
+import { parseEodMarkdown, type EodDocument } from "@/modules/work-os/eod-document";
 
-export interface EodSectionLine {
-  text: string;
-  kind: "bullet" | "note";
-}
-
-export interface EodSection {
-  heading: string;
-  lines: EodSectionLine[];
-}
-
-export interface EodDocument {
-  title: string | null;
-  meta: EodMetaLine[];
-  sections: EodSection[];
-  closing: string | null;
-}
-
-const META_PATTERN = /^(Role profile|Goal|Goal source|Session quality):\s*(.*)$/;
-const CLOSING_PREFIX = "Activity context is descriptive";
-
-export function parseEodMarkdown(markdown: string): EodDocument {
-  const document: EodDocument = { title: null, meta: [], sections: [], closing: null };
-  const lines = String(markdown ?? "").split(/\r?\n/);
-  let current: EodSection | null = null;
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith("# ")) {
-      document.title = line.slice(2).trim();
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      current = { heading: line.slice(3).trim(), lines: [] };
-      document.sections.push(current);
-      continue;
-    }
-    if (line.startsWith(CLOSING_PREFIX)) {
-      document.closing = line;
-      continue;
-    }
-    const metaMatch = META_PATTERN.exec(line);
-    if (metaMatch && !current) {
-      document.meta.push({ label: metaMatch[1], value: metaMatch[2] || "—" });
-      continue;
-    }
-    if (!current) continue;
-    const text = line.startsWith("- ") ? line.slice(2).trim() : line;
-    const emptyNote = /^(No |Nothing |None\.?$)/.test(text);
-    current.lines.push({ text, kind: emptyNote ? "note" : "bullet" });
-  }
-  return document;
-}
+export type { EodDocument, EodMetaLine, EodSection, EodSectionLine } from "@/modules/work-os/eod-document";
+export { parseEodMarkdown };
 
 /** One-line snippet for queue rows: the first completed fact, else the first
  * fact anywhere in the report. */
 export function eodSnippet(markdown: string, limit = 110): string | null {
-  const document = parseEodMarkdown(markdown);
-  const preferred = document.sections.find((section) => /completed work/i.test(section.heading));
+  const document: EodDocument = parseEodMarkdown(markdown);
+  const preferred = document.sections.find((section) => section.key === "completed");
   const fact = preferred?.lines.find((line) => line.kind === "bullet")
     ?? document.sections.flatMap((section) => section.lines).find((line) => line.kind === "bullet");
   if (!fact) return null;
@@ -77,11 +24,11 @@ export function eodSnippet(markdown: string, limit = 110): string | null {
 export function eodMetricFacts(metrics: Record<string, unknown> | null | undefined): Array<{ label: string; value: number }> {
   const source = metrics ?? {};
   const keys: Array<[string, string]> = [
+    ["deliverables", "Deliverables"],
     ["completed", "Completed"],
-    ["progressed", "Progressed"],
-    ["deferred", "Deferred"],
-    ["carried", "Carried"],
-    ["unplanned", "Unplanned"],
+    ["progressed", "Recaps"],
+    ["deferred", "Carried / deferred"],
+    ["unplanned", "Evidence"],
   ];
   return keys
     .map(([key, label]) => ({ label, value: Number(source[key] ?? 0) || 0 }))

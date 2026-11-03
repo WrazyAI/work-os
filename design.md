@@ -1575,6 +1575,41 @@ submit the report without clocking out first.
   that is already with a manager. A deletion is written to the audit log; the
   report's versions go with it.
 
+### 8.16.1 The EOD document: a brief, then the full record
+
+The draft is deterministic. The same recorded facts always produce the same
+document; no model decides what the day contained. AI remains available only
+for the employee's own `Refine draft` request and for reading an attached Loom.
+
+- **The brief** is the first reading depth: `Summary`, `Completed today` (at
+  most eight ranked work deliverables), `In progress` (at most three confirmed
+  or amended recap headlines), `Blocked`, `Next`, `Plan check` only when the
+  stored plan disagrees with the task record, and `Evidence` with the day's
+  counts. Empty optional sections are omitted.
+- **The full record** is the second depth: every work completion, explicit
+  carry or defer, routine run, other task (personal, test, administrative),
+  activity recap with its provenance and full detail, hourly rollup, output
+  evidence, and Loom recording. It is a disclosure, never a second page.
+- **Ranking** is deterministic: plan-linked outcomes and tasks first, then
+  output evidence, project context, exact and in-shift completions. Repeated
+  titles collapse to one row with `×N`; the appendix keeps the count.
+- **Completion times** appear only for exact provider or employee instants.
+  A provider-observed sync time never becomes a work time.
+- **Personal, test, and administrative tasks** stay out of the brief and are
+  listed under `Other tasks` in the full record. A task's project or a
+  conservative title fallback classifies it; the report never guesses silently.
+- **Activity context** contributes confirmed or amended recap headlines to `In
+  progress` unless a completed task already carries that work. Inferred recaps,
+  full detail, and hourly rollups stay in the full record. Activity context is
+  never completion, and the closing disclaimer says so.
+- **GitHub** is reported as unique pull requests and exact commit, workflow,
+  and deployment counts, labelled provider-recorded. It never becomes task
+  completion.
+- **The server owns the document.** Both the web workspace and the companion
+  render the same markdown through the shared parser; the employee may edit the
+  source, but the submitted report keeps the same headings and the same
+  brief/appendix split.
+
 ### 8.17 Settings groups: one label column, one content column
 
 Every group on the Settings page is a two-column pair: a narrow label column

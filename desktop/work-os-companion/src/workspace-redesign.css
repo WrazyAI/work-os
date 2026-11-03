@@ -6160,9 +6160,8 @@ button:not(:disabled):active {
 
 .eod-report-head > span {
   color: #666a61;
-  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 650 10.5px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0;
 }
 
 .eod-view-toggle {
@@ -6239,6 +6238,222 @@ button:not(:disabled):active {
   font: 600 0.88em/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
+/* The report document: one ledger, two reading depths. */
+.eod-document {
+  display: grid;
+  gap: 0;
+  color: var(--ink);
+}
+
+.eod-doc-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.eod-doc-meta-grid > div { min-width: 0; }
+.eod-doc-meta-grid > div.is-wide { grid-column: 1 / -1; }
+.eod-doc-meta-grid dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .02em;
+}
+.eod-doc-meta-grid dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 10.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.eod-doc-summary {
+  max-width: 68ch;
+  margin: 0;
+  padding: 14px 0 16px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 480;
+  letter-spacing: -.01em;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.eod-doc-sections { border-top: 1px solid var(--line); }
+
+.eod-doc-section {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.eod-doc-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.eod-doc-label h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.5;
+}
+.eod-doc-label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.eod-doc-body { min-width: 0; }
+.eod-doc-rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.eod-doc-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+}
+.eod-doc-row + .eod-doc-row { border-top: 1px solid rgba(217, 222, 213, .55); }
+.eod-doc-main { display: grid; gap: 1px; min-width: 0; }
+.eod-doc-title {
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: -.004em;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.eod-doc-project {
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.eod-doc-meta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-top: 1px;
+}
+.eod-doc-time {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.eod-doc-outside {
+  color: #8a5a12;
+  font-size: 9px;
+  font-weight: 560;
+  white-space: nowrap;
+}
+.eod-doc-count {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.eod-doc-evidence {
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 450;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.eod-doc-note {
+  padding: 1px 0 6px;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.eod-doc-title a,
+.eod-doc-project a,
+.eod-doc-summary a,
+.eod-doc-closing a {
+  color: #42503e;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.eod-doc-closing {
+  max-width: 72ch;
+  margin: 0;
+  padding: 10px 0 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+
+.eod-doc-appendix {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.eod-doc-appendix > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+.eod-doc-appendix > summary::-webkit-details-marker { display: none; }
+.eod-doc-appendix > summary::before {
+  content: "+";
+  width: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.eod-doc-appendix[open] > summary::before { content: "−"; }
+.eod-doc-appendix > summary > span:first-child { margin-right: auto; }
+.eod-doc-appendix > summary > span:last-child {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+}
+.eod-doc-appendix-body {
+  padding: 2px 0 4px 12px;
+  border-top: 1px solid var(--line);
+}
+.eod-doc-empty {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .eod-doc-section { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 0; }
+  .eod-doc-label { justify-content: flex-start; gap: 8px; }
+  .eod-doc-meta-grid { gap: 8px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eod-doc-appendix > summary::before { transition: none; }
+}
+
 .eod-raw {
   width: 100%;
   border: 1px solid var(--line);
@@ -6263,9 +6478,8 @@ button:not(:disabled):active {
 
 .eod-refine > span {
   color: #666a61;
-  font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 650 10.5px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0;
 }
 
 .eod-refine > small {

@@ -4,26 +4,32 @@ import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { addDaysIso } from "@/lib/work-os-dates";
 import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { recordWorkMemory } from "@/lib/work-memory";
-import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
+import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
 import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { eodDraftShiftGate } from "@/lib/work-os-eod-shift-gate";
 import { EOD_SHIFT_OPEN_REASON } from "@/lib/work-os-shift-gate";
-import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
+import { listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
-  collapseAutomation,
-  factLine,
   formatLocalTime,
   formatReportDate,
   groupActivityFrames,
-  humanizeGoalSource,
   isAutomationTitle,
   outsideWindowLabel,
-  progressedFacts,
-  unplannedFacts,
 } from "@/lib/work-os-eod-facts";
+import {
+  buildEodReportMarkdown,
+  type EodEvidenceFact,
+  type EodGithubFacts,
+  type EodMediaFact,
+  type EodPlanItem,
+  type EodRecap,
+  type EodReportFacts,
+  type EodTaskFact,
+} from "@/lib/work-os-eod-report";
+import { listGithubActivity } from "@/lib/work-os-github-activity";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -120,8 +126,23 @@ export function capFactLines(lines: string[], limit = EOD_SECTION_LIMIT): string
   return [...visible, `- …and ${lines.length - visible.length} more (see the full record)`];
 }
 
-async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
-  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult, timezoneResult, planResult] = await Promise.all([
+export interface EodLoomContext {
+  title: string;
+  url: string;
+  durationSeconds: number | null;
+  digest: string | null;
+}
+
+/** The deterministic EOD document. The report is a manager brief plus a
+ * complete appendix; no model decides what the day contained. */
+export async function buildDailyWorkspaceEodContent(
+  access: WorkOsAccess,
+  personId: string,
+  reportDate: string,
+  ownerId: string,
+  options: { loom?: EodLoomContext | null } = {},
+) {
+  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult, timezoneResult, planResult, sessionResult] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
     db().from("work_people").select("display_name,role_profile:work_role_profiles(name)")
       .eq("organization_id", access.organizationId).eq("id", personId).single(),
@@ -134,160 +155,204 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
       .eq("person_id", personId).maybeSingle(),
     db().from("work_daily_plans").select("id").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("shift_date", reportDate).maybeSingle(),
+    db().from("work_sessions").select("clocked_in_at,clocked_out_at").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).eq("shift_date", reportDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
   if (checkInsResult.error) throw new Error(`load EOD updates: ${checkInsResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
   if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD plan: ${planResult.error.message}`);
+  if (sessionResult.error) throw new Error(`load EOD session: ${sessionResult.error.message}`);
+
   const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
-  // The gallery depends on the timezone, so it cannot share the batch above.
-  const gallery = await listEodScreenshots(access.organizationId, personId, reportDate, timezone);
+  const displayName = String(personResult.data?.display_name ?? "The employee");
   const planId = planResult.data?.id ? String(planResult.data.id) : null;
-  const planItems = planId
-    ? await db().from("work_daily_plan_items").select("task_id").eq("plan_id", planId)
+
+  // The plan's full item list is read for matching only; the report renders
+  // outcome mismatches, never the candidate list itself.
+  const planRows = planId
+    ? await db().from("work_daily_plan_items")
+      .select("id,task_id,item_kind,title_snapshot,disposition,completion_state,blocker,rank")
+      .eq("plan_id", planId)
     : { data: [], error: null };
-  if (planItems.error) throw new Error(`load EOD plan items: ${planItems.error.message}`);
-  const planTaskIds = new Set(((planItems.data ?? []) as Json[])
-    .map((item) => String(item.task_id ?? ""))
-    .filter((id) => id && id !== "null"));
+  if (planRows.error) throw new Error(`load EOD plan items: ${planRows.error.message}`);
+  const planItems: EodPlanItem[] = ((planRows.data ?? []) as Json[]).map((item) => ({
+    id: String(item.id ?? ""),
+    taskId: item.task_id ? String(item.task_id) : null,
+    kind: String(item.item_kind ?? "nifty_task"),
+    title: String(item.title_snapshot ?? ""),
+    disposition: String(item.disposition ?? "selected"),
+    completionState: String(item.completion_state ?? "open"),
+    blocker: typeof item.blocker === "string" && item.blocker.trim() ? item.blocker.trim() : null,
+  }));
 
   const evidence = (evidenceRows ?? []) as Json[];
-  // Task facts stay date-scoped; the workday window only labels the ones that
-  // finished outside the shift, so overnight output is never hidden.
-  const window = await eodActivityWindowFor(access.organizationId, personId, reportDate);
   const updates = (checkInsResult.data ?? []) as Json[];
   const events = (eventsResult.data ?? []) as Json[];
   const dayWork = selectDayEodWork({ events, tasks: workspace.tasks });
+  const window = await eodActivityWindowFor(access.organizationId, personId, reportDate);
 
-  // Routine runs are automation, not deliverables: they collapse into one
-  // line, and they never appear as carried or unplanned work.
-  const completedHuman = dayWork.completed.filter((item) => !isAutomationTitle(item.title));
-  const automation = collapseAutomation(dayWork.completed.filter((item) => withinEodActivityWindow(item.at, window)));
-  // Automation events keep their window classification through the collapse:
-  // a routine that ran outside the workday never hides inside an unmarked line.
-  const automationOutside = collapseAutomation(dayWork.completed.filter((item) => !withinEodActivityWindow(item.at, window)));
-  const deferred = dayWork.deferred.filter((item) => !isAutomationTitle(item.title));
-  const carried = dayWork.carried.filter((item) => !isAutomationTitle(item.title));
-  const unplanned = unplannedFacts(events, planTaskIds, timezone);
-  const progressed = progressedFacts(updates, timezone);
-  const outputEvidence = evidence.filter((item) => item.source !== "worktivity");
+  const taskById = new Map<string, Json>();
+  for (const task of workspace.tasks) taskById.set(String(task.id ?? ""), task);
+  const projectOf = (taskId: string): string | null => {
+    const project = taskById.get(taskId)?.project as { name?: unknown } | Array<{ name?: unknown }> | null | undefined;
+    const name = Array.isArray(project) ? project[0]?.name : project?.name;
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  };
+  const exactProvenance = new Set(["nifty_exact", "migration_exact", "employee_explicit"]);
+  const factOf = (item: EodSectionItem): EodTaskFact => ({
+    id: item.id,
+    title: item.title,
+    project: projectOf(item.id),
+    at: item.at,
+    exact: exactProvenance.has(String(item.provenance ?? "")),
+    outsideLabel: item.at && window && !withinEodActivityWindow(item.at, window) ? outsideWindowLabel(window) || null : null,
+  });
+
+  const completedFacts = dayWork.completed.filter((item) => !isAutomationTitle(item.title)).map(factOf);
+  const carriedFacts = [...dayWork.carried, ...dayWork.deferred].filter((item) => !isAutomationTitle(item.title)).map(factOf);
+  const automation = dayWork.completed.filter((item) => isAutomationTitle(item.title)).map((item) => ({
+    title: item.title,
+    outside: Boolean(item.at && window && !withinEodActivityWindow(item.at, window)),
+  }));
+
+  const blockers = [...new Set(updates
+    .filter((update) => String(update.update_kind ?? "") === "blocked")
+    .map((update) => clipText(String(update.input_text ?? ""), 240))
+    .filter(Boolean))];
+
+  const gallery = await listEodScreenshots(access.organizationId, personId, reportDate, timezone);
   const activityHours = await ensureHourlyScreenshotSummaries({
     organizationId: access.organizationId,
     personId,
     date: reportDate,
     timezone,
   });
-  // Employee-reviewed intervals are richer than the one-line rollups; where an
-  // interval covers an hour, its provenance-labeled recap replaces that hour's
-  // line so the same time window is never described twice.
   const intervalLines = await listActivityIntervalActivityLines(access.organizationId, personId, reportDate).catch(() => []);
   const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
   const uncoveredHours = activityHours.filter((hour) => !coveredHours.has(hour.hourStart));
-  const activityEntries = [
-    ...intervalLines.map((line) => ({
-      at: Date.parse(line.startIso),
-      line: `- ${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${clipText(line.detail, 320)}`,
-    })),
-    ...uncoveredHours.map((hour) => {
-      let at = Number.NaN;
-      try {
-        at = Date.parse(zonedDateTimeToUtc(reportDate, `${String(hour.hourStart).padStart(2, "0")}:00`, timezone).toISOString());
-      } catch {
-        at = Number.NaN;
-      }
-      return { at, line: `- ${hour.label} — ${clipText(hour.summary, 240)}` };
-    }),
-  ].sort((left, right) => (Number.isFinite(left.at) ? left.at : Number.MAX_SAFE_INTEGER) - (Number.isFinite(right.at) ? right.at : Number.MAX_SAFE_INTEGER));
-  const activityContextLines = activityEntries.map((entry) => entry.line);
-  // Fallback grouping only when no interval or hourly rollup exists (for
-  // example the AI provider is unavailable and no cache was written yet).
-  const activityGroups = activityContextLines.length ? [] : groupActivityFrames(gallery.viewable);
-  const activityCounts = [
-    `${gallery.processed} analyzed`,
-    gallery.excludedSensitive > 0 ? `${gallery.excludedSensitive} flagged as sensitive (images deleted)` : "",
-    gallery.excludedPolicy > 0 ? `${gallery.excludedPolicy} excluded by your exclusions` : "",
-    gallery.unavailable > 0 ? `${gallery.unavailable} unavailable` : "",
-    gallery.pending > 0 ? `${gallery.pending} still analyzing` : "",
-  ].filter(Boolean).join(" · ");
+  const recaps: EodRecap[] = intervalLines.map((line) => ({
+    label: line.label,
+    headline: line.headline,
+    detail: line.detail,
+    provenance: String(line.provenance ?? "inferred"),
+    startIso: line.startIso,
+    endIso: line.endIso,
+  }));
+  const fallbackGroups = uncoveredHours.length ? [] : groupActivityFrames(gallery.viewable);
+  const hourly = uncoveredHours.length
+    ? uncoveredHours.map((hour) => ({ label: hour.label, summary: hour.summary }))
+    : fallbackGroups.map((group) => {
+      const first = formatLocalTime(group.firstAt, timezone);
+      const last = formatLocalTime(group.lastAt, timezone);
+      const range = first && last ? (first === last ? first : `${first}–${last}`) : "time not recorded";
+      return { label: `${group.app} · ${range}`, summary: `${group.count} frame${group.count === 1 ? "" : "s"}: ${group.highlights.join("; ")}` };
+    });
 
-  const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
+  let github: EodGithubFacts | null = null;
+  if (access.featureFlags.github_evidence === true) {
+    try {
+      const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(reportDate, timezone);
+      const activity = await listGithubActivity({
+        organizationId: access.organizationId,
+        personId,
+        windowStart: bounds.startIso,
+        windowEnd: bounds.endIso,
+      });
+      const performed = activity.counts.performed;
+      const triggered = activity.counts.triggered;
+      const pullRequests = [...new Set(activity.items
+        .filter((item) => item.relation === "performed" && item.kind === "pull_request")
+        .map((item) => {
+          const match = item.description.match(/#(\d+)/) ?? item.url?.match(/\/pull\/(\d+)/);
+          return match ? `${item.repository ?? "pull request"}#${match[1]}` : item.url ?? item.description;
+        }))];
+      github = {
+        performed: { push: performed.push, pullRequest: performed.pull_request, review: performed.review, issue: performed.issue },
+        triggered: { workflowRun: triggered.workflow_run, deployment: triggered.deployment, pullRequest: triggered.pull_request, review: triggered.review, issue: triggered.issue },
+        commits: activity.counts.commitsPushed,
+        pullRequests,
+      };
+    } catch {
+      github = null;
+    }
+  }
+
+  const media: EodMediaFact[] = [];
+  const mediaUrls = new Set<string>();
+  for (const item of evidence) {
+    if (String(item.source ?? "") !== "loom") continue;
+    const url = typeof item.url === "string" ? item.url : "";
+    if (!url || mediaUrls.has(url)) continue;
+    mediaUrls.add(url);
+    media.push({
+      title: String(item.title ?? "Loom recording"),
+      url,
+      durationSeconds: null,
+      digest: typeof item.summary === "string" && item.summary.trim() ? item.summary.trim() : null,
+    });
+  }
+  if (options.loom?.url && !mediaUrls.has(options.loom.url)) {
+    mediaUrls.add(options.loom.url);
+    media.push(options.loom);
+  }
+
+  const outputEvidence: EodEvidenceFact[] = evidence
+    .filter((item) => String(item.source ?? "") !== "worktivity" && String(item.source ?? "") !== "loom")
+    .map((item) => ({
+      title: String(item.title ?? "Recorded item"),
+      summary: String(item.summary ?? ""),
+      url: typeof item.url === "string" ? item.url : null,
+      source: String(item.source ?? "manual"),
+      taskId: item.task_id ? String(item.task_id) : null,
+    }));
+
+  const roleValue = personResult.data?.role_profile as { name?: string } | Array<{ name?: string }> | null;
   const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
-  const title = `EOD Report: ${personResult.data.display_name} — ${formatReportDate(reportDate)}`;
-  const completedLines = capFactLines(completedHuman.map((item) => factLine(item, timezone, "completed", window)));
-  const markdown = [
-    `# ${title}`,
-    "",
-    `Role profile: ${roleName ?? "Not set"}`,
-    `Goal: ${workspace.goal.text ?? "No goal was recorded."}`,
-    `Goal source: ${humanizeGoalSource(workspace.goal.provenance)}`,
-    ...(workspace.sessionQuality.status === "needs_correction" && workspace.sessionQuality.message
-      ? [`Session quality: ${workspace.sessionQuality.message}`]
-      : []),
-    "",
-    "## Completed Work",
-    ...(completedLines.length ? completedLines : []),
-    ...(automation.line ? [automation.line] : []),
-    ...(automationOutside.line ? [`${automationOutside.line}${outsideWindowLabel(window)}`] : []),
-    ...(!completedLines.length && !automation.line && !automationOutside.line ? ["- No tasks were completed on this date."] : []),
-    "",
-    "## Progressed Work",
-    ...(progressed.length
-      ? capFactLines(progressed.map((item) => factLine(item, timezone, undefined, window)))
-      : ["- No progress updates were recorded for this day."]),
-    "",
-    "## Deferred Work",
-    ...capFactLines(deferred.map((item) => factLine(item, timezone, undefined, window))),
-    ...(!deferred.length ? ["- No work was explicitly deferred."] : []),
-    "",
-    "## Carried Work",
-    ...capFactLines(carried.map((item) => factLine(item, timezone, undefined, window))),
-    ...(!carried.length ? ["- Nothing carries over from this day."] : []),
-    "",
-    "## Unplanned Work",
-    ...(unplanned.length
-      ? capFactLines(unplanned.map((item) => factLine(item, timezone, "created", window)))
-      : ["- No tasks were created outside the day's plan."]),
-    "",
-    "## Output Evidence",
-    ...eodLineItems(outputEvidence, "No output artifacts (files, videos, or links) were linked to this day."),
-    "",
-    "## Activity Context",
-    ...(activityContextLines.length
-      ? activityContextLines
-      : activityGroups.length
-        ? activityGroups.map((group) => {
-            const first = formatLocalTime(group.firstAt, timezone);
-            const last = formatLocalTime(group.lastAt, timezone);
-            const range = first && last ? (first === last ? first : `${first}–${last}`) : "time not recorded";
-            const highlights = group.highlights.map((summary) => `“${summary}”`).join("; ");
-            const more = group.count > group.highlights.length ? ` (+${group.count - group.highlights.length} more)` : "";
-            return `- ${group.app} — ${group.count} frame${group.count === 1 ? "" : "s"} (${range}): ${highlights}${more}`;
-          })
-        : ["- No retained activity context was recorded for this day."]),
-    ...(gallery.viewable.length || gallery.pending || gallery.unavailable || gallery.excludedSensitive || gallery.excludedPolicy
-      ? [`Activity context: ${activityCounts}.`]
-      : []),
-    "",
-    "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
-  ].join("\n");
+  const session = (sessionResult.data ?? {}) as { clocked_in_at?: unknown; clocked_out_at?: unknown };
+
+  const facts: EodReportFacts = {
+    date: reportDate,
+    personName: displayName,
+    timezone,
+    roleName: roleName ?? null,
+    goal: { text: workspace.goal.text, provenance: workspace.goal.provenance },
+    session: {
+      clockedInAt: typeof session.clocked_in_at === "string" ? session.clocked_in_at : null,
+      clockedOutAt: typeof session.clocked_out_at === "string" ? session.clocked_out_at : null,
+    },
+    completed: completedFacts,
+    carried: carriedFacts,
+    automation,
+    automationOutsideLabel: outsideWindowLabel(window) || null,
+    planItems,
+    updates: updates.map((update) => ({ kind: String(update.update_kind ?? "update"), text: String(update.input_text ?? "") })),
+    blockers,
+    recaps,
+    hourly,
+    github,
+    media,
+    evidence: outputEvidence,
+  };
+  const content = buildEodReportMarkdown(facts);
+  const title = `EOD Report: ${displayName} — ${formatReportDate(reportDate)}`;
   return {
     title,
-    markdown,
-    metrics: {
-      completed: completedHuman.length,
-      automation: automation.count + automationOutside.count,
-      progressed: progressed.length,
-      deferred: deferred.length,
-      carried: carried.length,
-      unplanned: unplanned.length,
-    },
+    markdown: content.markdown,
+    metrics: content.metrics,
   };
 }
 
-async function persistDailyWorkspaceEod(access: WorkOsAccess, personId: string, reportDate: string, draftKey: string | null) {
+async function persistDailyWorkspaceEod(
+  access: WorkOsAccess,
+  personId: string,
+  reportDate: string,
+  draftKey: string | null,
+  options: { loom?: EodLoomContext | null } = {},
+) {
   const ownerId = await organizationOwnerId(access.organizationId);
-  const content = await buildDailyWorkspaceEodContent(access, personId, reportDate, ownerId);
+  const content = await buildDailyWorkspaceEodContent(access, personId, reportDate, ownerId, options);
   const { data: existing, error: existingError } = await db().from("work_reports").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
     .eq("report_date", reportDate)
@@ -343,6 +408,19 @@ async function persistDailyWorkspaceEod(access: WorkOsAccess, personId: string, 
   return data as Json;
 }
 
+/** Builds the deterministic document without persisting it. Used when a Loom
+ * is attached to an existing draft: the recording shapes the markdown the
+ * employee reviews, and the submission stores exactly what they approved. */
+export async function renderDailyWorkspaceEod(
+  access: WorkOsAccess,
+  personId: string,
+  reportDate: string,
+  options: { loom?: EodLoomContext | null } = {},
+) {
+  const ownerId = await organizationOwnerId(access.organizationId);
+  return buildDailyWorkspaceEodContent(access, personId, reportDate, ownerId, options);
+}
+
 export async function draftWorkOsEod(access: WorkOsAccess, personId: string, body: Json) {
   const draftKey = text(body.draft_idempotency_key);
   if (draftKey) {
@@ -359,7 +437,8 @@ export async function draftWorkOsEod(access: WorkOsAccess, personId: string, bod
   // a finished shift while the employee is still working.
   const gate = await eodDraftShiftGate(access, personId, reportDate);
   if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
-  const report = await persistDailyWorkspaceEod(access, personId, reportDate, draftKey);
+  const loom = body.loom && typeof body.loom === "object" ? body.loom as EodLoomContext : null;
+  const report = await persistDailyWorkspaceEod(access, personId, reportDate, draftKey, loom ? { loom } : {});
   await saveReportVersion(access, report, "draft", text(report.markdown) ?? "", draftKey);
   await audit(access, "report.drafted", "report", report.id as string, { personId, reportDate: report.report_date });
   return report;
