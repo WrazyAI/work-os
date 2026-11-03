@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
+  adminEodPreviewState,
   adminTaskPreviewState,
   applyAdminAction,
   previewAdminAction,
@@ -8,6 +9,7 @@ import {
   type AdminAgentActionServices,
 } from "../src/lib/work-admin-agent-actions";
 import { previewFingerprint } from "../src/lib/work-admin-action-previews";
+import type { AdminAgentEodDetail } from "../src/lib/work-admin-agent-eods";
 import type { AdminPreviewAction } from "../src/modules/work-os/admin-agent/contracts";
 import {
   adminAccess,
@@ -53,8 +55,8 @@ type FakeExtras = {
   tasks?: Record<string, Json>;
   /** The row createTask returns; defaults to the supplied task plus payload. */
   created?: Json;
-  /** The report reviewEod returns. */
-  report?: Json;
+  /** The production detail shape the EOD reader returns; null means not found. */
+  report?: AdminAgentEodDetail | null;
   /** Directory used to name and validate assignees. */
   people?: Array<{ id: string; displayName: string; active?: boolean }>;
 };
@@ -105,11 +107,11 @@ function fakeServices(taskRow: Json, extras: FakeExtras = {}) {
     },
     getEod: async (_access, reportId) => {
       calls.getEod.push(reportId);
-      return extras.report ?? {};
+      return extras.report ?? null;
     },
     reviewEod: async (_access, reportId, body, reviewerPersonId) => {
       calls.reviewEod.push({ reportId, body, reviewerPersonId });
-      return extras.report ?? taskRow;
+      return (extras.report ?? taskRow) as unknown as Json;
     },
     ...(extras.people
       ? {
@@ -681,6 +683,36 @@ test("reopen reports the current completion and warns when already open", async 
   assert.ok(alreadyDone.warnings.some((warning) => /already complete/i.test(warning)));
 });
 
+test("complete and reopen warn instead of previewing a clean write on an archived target", async () => {
+  // The write service answers not-found for archived/deleted rows even though
+  // the admin detail reader can still load them.
+  for (const status of ["archived", "deleted"]) {
+    const target = { ...task, status };
+    const complete = await previewAdminAction(
+      adminAccess,
+      "task.complete",
+      { task_id: "t1" },
+      fakeServices(target).services,
+    );
+    assert.ok(
+      complete.warnings.some((warning) => new RegExp(status).test(warning)),
+      `task.complete ${status}`,
+    );
+    assert.ok(complete.warnings.some((warning) => /restore it/i.test(warning)));
+
+    const reopen = await previewAdminAction(
+      adminAccess,
+      "task.reopen",
+      { task_id: "t1" },
+      fakeServices(target).services,
+    );
+    assert.ok(
+      reopen.warnings.some((warning) => new RegExp(status).test(warning)),
+      `task.reopen ${status}`,
+    );
+  }
+});
+
 test("apply complete and reopen call the completion service with the action's flag", async () => {
   const done = { ...task, completed: true, status: "completed" };
   const completeServices = fakeServices(task);
@@ -808,13 +840,33 @@ test("apply archive and delete call the removal service with the right mode", as
 // EOD review
 // ---------------------------------------------------------------------------
 
-const pendingReport: Json = {
-  id: "r1",
-  person_id: personB,
-  status: "pending_review",
-  title: "EOD",
-  updated_at: "2026-11-02T00:00:00Z",
-};
+/** The production reader (`getAdminAgentEod` → `toEodDetail`) returns this
+ * camelCase shape: `person.id`/`person.displayName`, `managerNotes`,
+ * `updatedAt`. Tests use it verbatim so the branches production actually takes
+ * are the branches under test. */
+function eodReport(overrides: Partial<AdminAgentEodDetail> = {}): AdminAgentEodDetail {
+  return {
+    id: "r1",
+    person: { id: personB, displayName: "Grace Hopper" },
+    reportDate: "2026-11-02",
+    status: "pending_review",
+    title: "Checkout ship log",
+    excerpt: "Shipped the checkout flow",
+    submittedAt: "2026-11-02T10:00:00.000Z",
+    reviewedAt: null,
+    createdAt: "2026-11-02T09:00:00.000Z",
+    updatedAt: "2026-11-02T00:00:00Z",
+    markdown: "# Checkout",
+    submittedMarkdown: "# Checkout",
+    managerNotes: null,
+    reviewedBy: null,
+    metrics: {},
+    missingEvidence: [] as unknown as AdminAgentEodDetail["missingEvidence"],
+    ...overrides,
+  };
+}
+
+const pendingReport = eodReport();
 
 test("EOD review preview names the decision and preserves self-review refusal", async () => {
   const preview = await previewAdminAction(
@@ -822,9 +874,11 @@ test("EOD review preview names the decision and preserves self-review refusal", 
     "eod.review",
     { report_id: "r1", status: "approved", manager_notes: "Looks good" },
     fakeServices(task, { report: pendingReport }).services,
+    { reviewerPersonId: personA },
   );
-  assert.match(preview.summary, /Approve EOD/);
+  assert.match(preview.summary, /Approve EOD for Grace Hopper/);
   assert.deepEqual(preview.state, { status: "pending_review", updatedAt: "2026-11-02T00:00:00Z" });
+  assert.deepEqual(preview.state, adminEodPreviewState(pendingReport));
   assert.deepEqual(preview.changes, [
     { field: "status", from: "pending_review", to: "approved" },
     { field: "manager_notes", from: null, to: "Looks good" },
@@ -838,11 +892,26 @@ test("EOD review preview names the decision and preserves self-review refusal", 
   });
   assert.deepEqual(preview.warnings, []);
 
+  // The camelCase `managerNotes` the detail read returns is the change source.
+  const existingNotes = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved", manager_notes: "Second look" },
+    fakeServices(task, { report: eodReport({ managerNotes: "Earlier note" }) }).services,
+    { reviewerPersonId: personA },
+  );
+  assert.deepEqual(existingNotes.changes[1], {
+    field: "manager_notes",
+    from: "Earlier note",
+    to: "Second look",
+  });
+
   const own = await previewAdminAction(
     adminAccess,
     "eod.review",
     { report_id: "r1", status: "approved" },
-    fakeServices(task, { report: { ...pendingReport, person_id: personA } }).services,
+    fakeServices(task, { report: eodReport({ person: { id: personA, displayName: "Ada Lovelace" } }) }).services,
+    { reviewerPersonId: personA },
   );
   assert.ok(own.warnings.some((warning) => /own report/i.test(warning)));
 
@@ -851,9 +920,33 @@ test("EOD review preview names the decision and preserves self-review refusal", 
     "eod.review",
     { report_id: "r1", status: "rejected" },
     fakeServices(task, { report: pendingReport }).services,
+    { reviewerPersonId: personA },
   );
-  assert.match(rejected.summary, /Reject EOD/);
+  assert.match(rejected.summary, /Reject EOD for Grace Hopper/);
   assert.deepEqual(rejected.changes, [{ field: "status", from: "pending_review", to: "rejected" }]);
+});
+
+test("the reviewer person option is explicit and falls back to the access person", async () => {
+  // Omitted option: a bare unmapped access has nobody to compare against.
+  const unmapped = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved" },
+    fakeServices(task, { report: eodReport({ person: { id: personA, displayName: "Ada Lovelace" } }) }).services,
+  );
+  assert.equal(adminAccess.personId, null);
+  assert.deepEqual(unmapped.warnings, []);
+
+  // The fallback uses the access's own mapping, so a mapped admin still sees
+  // the refusal for their own report without any extra option.
+  const mapped = await previewAdminAction(
+    mappedAdminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved" },
+    fakeServices(task, { report: eodReport({ person: { id: personA, displayName: "Ada Lovelace" } }) }).services,
+  );
+  assert.equal(mappedAdminAccess.personId, personA);
+  assert.ok(mapped.warnings.some((warning) => /own report/i.test(warning)));
 });
 
 test("EOD review warns for a non-pending report and a manager edit", async () => {
@@ -861,7 +954,8 @@ test("EOD review warns for a non-pending report and a manager edit", async () =>
     adminAccess,
     "eod.review",
     { report_id: "r1", status: "approved" },
-    fakeServices(task, { report: { ...pendingReport, status: "approved" } }).services,
+    fakeServices(task, { report: eodReport({ status: "approved" }) }).services,
+    { reviewerPersonId: personA },
   );
   assert.ok(decided.warnings.some((warning) => /already approved|pending report/i.test(warning)));
 
@@ -870,6 +964,7 @@ test("EOD review warns for a non-pending report and a manager edit", async () =>
     "eod.review",
     { report_id: "r1", status: "approved", markdown: "Rewritten summary" },
     fakeServices(task, { report: pendingReport }).services,
+    { reviewerPersonId: personA },
   );
   assert.ok(edited.warnings.some((warning) => /replaces the employee/i.test(warning)));
   assert.equal(edited.request.markdown, "Rewritten summary");
@@ -883,6 +978,7 @@ test("apply EOD review passes the reviewer person even for an unmapped token", a
     "eod.review",
     { report_id: "r1", status: "approved", manager_notes: "Looks good" },
     services,
+    { reviewerPersonId: personA },
   );
   const result = await applyAdminAction(adminAccess, "eod.review", preview.request, services, reviewerToken, preview.state);
   assert.equal(result.status, 200);
@@ -903,16 +999,18 @@ test("apply EOD review passes the reviewer person even for an unmapped token", a
   assert.deepEqual(auditRow.metadata.changes, preview.changes);
 });
 
-test("an EOD review preview goes stale when the report moved on", async () => {
-  const report = { ...pendingReport };
+test("an EOD review preview goes stale when the production report moved on", async () => {
+  const report = eodReport();
   const { services, calls } = fakeServices(task, { report });
   const preview = await previewAdminAction(
     adminAccess,
     "eod.review",
     { report_id: "r1", status: "approved" },
     services,
+    { reviewerPersonId: personA },
   );
-  report.updated_at = "2026-11-02T01:00:00Z";
+  // `updatedAt` is the camelCase field the detail reader returns.
+  report.updatedAt = "2026-11-02T01:00:00Z";
   await assert.rejects(
     applyAdminAction(adminAccess, "eod.review", preview.request, services, reviewerToken, preview.state),
     (error: unknown) => (error as Error)?.name === "WorkOsConflictError"

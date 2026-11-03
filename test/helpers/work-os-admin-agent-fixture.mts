@@ -72,7 +72,6 @@ const access = (
   userId: string,
   personId: string | null,
   featureFlags: Record<string, boolean>,
-  reviewerPersonId: string | null = personId,
 ) => ({
   organizationId,
   personId,
@@ -82,16 +81,12 @@ const access = (
   featureFlags,
   organizationOwnerId: userId,
   workspaces: [{ organizationId, name: "Workspace", role: "admin", personId }],
-  // What `requireAdminAgentAccess` resolves: the token's person when it has one,
-  // otherwise the admin membership's person. An unmapped admin token still has
-  // a reviewer identity, which is what makes self-review enforceable.
-  reviewerPersonId,
 }) as unknown as WorkOsAccess;
 
 export const adminAccess = access(org, adminMembership, adminUser, null, {
   employee_companion: true,
   admin_agent_api: true,
-}, personA);
+});
 export const mappedAdminAccess = access(org, adminMembership, adminUser, personA, {
   employee_companion: true,
   admin_agent_api: true,
@@ -418,9 +413,9 @@ create table work_agent_idempotency (
   primary key (token_id, key)
 );
 insert into work_organizations (id) values ('${org}'), ('${otherOrg}');
-insert into work_org_members (id, organization_id, user_id, person_id, role, feature_flags, active) values
-  ('${adminMembership}', '${org}', '${adminUser}', '${personA}', 'admin', '{}', true),
-  ('${otherAdminMembership}', '${otherOrg}', '${otherAdminUser}', null, 'admin', '{}', true);
+insert into work_org_members (id, organization_id, user_id, role, feature_flags, active) values
+  ('${adminMembership}', '${org}', '${adminUser}', 'admin', '{}', true),
+  ('${otherAdminMembership}', '${otherOrg}', '${otherAdminUser}', 'admin', '{}', true);
 `;
 
 export const migration = () => readFile(new URL("../../supabase/migrations/0069_work_admin_agent_access.sql", import.meta.url), "utf8");

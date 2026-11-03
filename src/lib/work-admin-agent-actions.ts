@@ -3,6 +3,7 @@ import { previewFingerprint } from "@/lib/work-admin-action-previews";
 import {
   getAdminAgentEod,
   reviewAdminAgentEod,
+  type AdminAgentEodDetail,
   type AdminAgentEodReviewInput,
 } from "@/lib/work-admin-agent-eods";
 import { taskRequiresCompletionEvidence } from "@/modules/work-os/completion-evidence";
@@ -58,8 +59,9 @@ export type AdminAgentActionServices = {
   completeTask: (access: WorkOsAccess, taskId: string, completed: boolean) => Promise<Json>;
   archiveTask: (access: WorkOsAccess, taskId: string, mode: "archive" | "delete") => Promise<Json>;
   /** Reads the report a decision would apply to. A preview must describe the
-   * current status from the same reader the confirm path re-reads. */
-  getEod: (access: WorkOsAccess, reportId: string) => Promise<Json>;
+   * current status from the same reader the confirm path re-reads, so the
+   * contract is the concrete admin detail shape rather than a loose row. */
+  getEod: (access: WorkOsAccess, reportId: string) => Promise<AdminAgentEodDetail | null>;
   /** `reviewerPersonId` is the resolved admin identity (token person, otherwise
    * the membership person), so self-review is enforced even for an unmapped
    * admin token. */
@@ -90,6 +92,15 @@ export type AdminActionActor = {
   tokenName: string;
   previewId: string;
   reviewerPersonId: string | null;
+};
+
+/** Extra context for describing an action. The reviewer person is an
+ * authorization result (Task 8 resolves it from the token, otherwise the admin
+ * membership), not a property of `WorkOsAccess`, so it is passed explicitly and
+ * falls back to the access's own person mapping — the same order
+ * `reviewAdminAgentEod` uses. */
+export type AdminActionPreviewOptions = {
+  reviewerPersonId?: string | null;
 };
 
 const NAME_MAX = 240;
@@ -383,16 +394,6 @@ export function adminTaskPreviewState(task: Json): Json {
   };
 }
 
-/** The person this admin decides as. The admin surface attaches the resolved
- * reviewer person to the access object it hands this layer (Task 13 spreads
- * `agent.reviewerPersonId` onto `agent.access`); a bare `WorkOsAccess` falls
- * back to its own person mapping, the same order `reviewAdminAgentEod` uses. */
-function reviewerPersonId(access: WorkOsAccess): string | null {
-  const resolved = (access as WorkOsAccess & { reviewerPersonId?: string | null }).reviewerPersonId;
-  if (typeof resolved === "string" && resolved.trim()) return resolved;
-  return access.personId;
-}
-
 /** The details reader attaches the employee-attached completion evidence it
  * already loaded. `taskRequiresCompletionEvidence` is the same predicate the
  * completion service enforces, so the preview can say why a completion will be
@@ -416,39 +417,22 @@ function childWarning(mode: "archive" | "delete", children: number): string | nu
 
 /** The report state an EOD decision was previewed from. Task 13's confirm
  * `readState` must project the report the same way so a status change or a
- * later edit invalidates the preview. */
-export function adminEodPreviewState(report: Json): Json {
-  return {
-    status: stringField(report, "status"),
-    updatedAt: stringField(report, "updated_at") ?? stringField(report, "updatedAt"),
-  };
-}
-
-function eodPersonId(report: Json): string | null {
-  const direct = stringField(report, "person_id");
-  if (direct) return direct;
-  return isRecord(report.person) ? stringField(report.person, "id") : null;
-}
-
-function eodPersonName(report: Json): string | null {
-  if (isRecord(report.person)) {
-    const name = stringField(report.person, "displayName") ?? stringField(report.person, "display_name");
-    if (name) return name;
-  }
-  return stringField(report, "display_name");
-}
-
-function eodManagerNotes(report: Json): string | null {
-  return stringField(report, "manager_notes") ?? stringField(report, "managerNotes");
+ * later edit invalidates the preview. The parameter is the production
+ * `AdminAgentEodDetail`, so a different reader cannot silently project a
+ * different shape. */
+export function adminEodPreviewState(
+  report: Pick<AdminAgentEodDetail, "status" | "updatedAt">,
+): Json {
+  return { status: report.status, updatedAt: report.updatedAt };
 }
 
 /** `Approve EOD for <person>` when the report names its author, otherwise the
  * decision alone. The action is always visible at the front of the summary. */
-function eodSummary(decision: "approved" | "rejected", report: Json): string {
+function eodSummary(decision: "approved" | "rejected", report: AdminAgentEodDetail): string {
   const verb = decision === "approved" ? "Approve" : "Reject";
-  const title = stringField(report, "title");
-  const label = eodPersonName(report)
-    ?? (title && title.toLowerCase() !== "eod" ? title : null);
+  const name = report.person?.displayName?.trim();
+  const title = report.title?.trim();
+  const label = name || (title && title.toLowerCase() !== "eod" ? title : null);
   return label ? `${verb} EOD for ${label}` : `${verb} EOD`;
 }
 
@@ -719,7 +703,13 @@ async function planCompletion(
   const taskId = payloadTaskId(input);
   const task = await requireTask(services, access, taskId);
   const current = task.completed === true;
+  const status = stringField(task, "status");
   const warnings: string[] = [];
+  if (status === "archived" || status === "deleted") {
+    // The write service answers not-found for both; the preview must not look
+    // like a clean completion just because the row was still readable.
+    warnings.push(`This task is ${status}; restore it before changing its completion.`);
+  }
   if (current === completed) {
     warnings.push(completed ? "This task is already complete." : "This task is already open.");
   }
@@ -783,6 +773,7 @@ async function planEodReview(
   access: WorkOsAccess,
   payload: Json,
   services: AdminAgentActionServices,
+  reviewerPersonId: string | null,
 ): Promise<ActionPlan> {
   const input = objectInput(payload, "EOD review payload");
   rejectUnknownFields(input, EOD_REVIEW_FIELDS, "admin EOD review action");
@@ -802,13 +793,11 @@ async function planEodReview(
   const markdown = textField(input, "markdown", DESCRIPTION_MAX) || undefined;
 
   const report = await services.getEod(access, reportId);
-  if (!isRecord(report) || !stringField(report, "id") || !stringField(report, "status")) {
-    throw new WorkOsNotFoundError("EOD report not found");
-  }
-  const currentStatus = stringField(report, "status") as string;
+  if (!report) throw new WorkOsNotFoundError("EOD report not found");
+  const currentStatus = report.status;
   const warnings: string[] = [];
-  const author = eodPersonId(report);
-  if (author && author === reviewerPersonId(access)) {
+  const author = report.person?.id;
+  if (author && author === reviewerPersonId) {
     warnings.push("This is your own report; the decision will be refused. Another manager must review it.");
   }
   if (currentStatus !== "pending_review") {
@@ -819,7 +808,7 @@ async function planEodReview(
   }
 
   const changes: AdminPreviewChange[] = [change("status", currentStatus, decision)];
-  if (managerNotes !== undefined) changes.push(change("manager_notes", eodManagerNotes(report), managerNotes));
+  if (managerNotes !== undefined) changes.push(change("manager_notes", report.managerNotes, managerNotes));
 
   const request: Json = { report_id: reportId, status: decision };
   if (managerNotes !== undefined) request.manager_notes = managerNotes;
@@ -843,7 +832,7 @@ async function planEodReview(
         access,
         reportId,
         body,
-        actor ? actor.reviewerPersonId : reviewerPersonId(access),
+        actor?.reviewerPersonId ?? reviewerPersonId,
       );
       return { status: 200, body: result, targetId: reportId };
     },
@@ -855,6 +844,7 @@ async function planAdminAction(
   action: AdminPreviewAction,
   payload: Json,
   services: AdminAgentActionServices,
+  reviewerPersonId: string | null,
 ): Promise<ActionPlan> {
   switch (action) {
     case "task.create":
@@ -874,7 +864,7 @@ async function planAdminAction(
     case "task.delete":
       return planRemoval(access, payload, services, "delete");
     case "eod.review":
-      return planEodReview(access, payload, services);
+      return planEodReview(access, payload, services, reviewerPersonId);
     default:
       throw new WorkOsValidationError(`Action ${String(action)} is not supported by this surface`);
   }
@@ -890,8 +880,10 @@ export async function previewAdminAction(
   action: AdminPreviewAction,
   payload: Json,
   services: AdminAgentActionServices,
+  options: AdminActionPreviewOptions = {},
 ): Promise<AdminActionPreview> {
-  const plan = await planAdminAction(access, action, payload, services);
+  const reviewerPersonId = options.reviewerPersonId ?? access.personId;
+  const plan = await planAdminAction(access, action, payload, services, reviewerPersonId);
   return {
     action,
     summary: plan.summary,
@@ -918,7 +910,13 @@ export async function applyAdminAction(
   actor: AdminActionActor,
   expectedState?: Json,
 ): Promise<{ status: number; body: Json }> {
-  const plan = await planAdminAction(access, action, payload, services);
+  const plan = await planAdminAction(
+    access,
+    action,
+    payload,
+    services,
+    actor.reviewerPersonId ?? access.personId,
+  );
   if (expectedState !== undefined && action !== "task.create") {
     // `plan.state` is the fresh projection the plan itself was built from, so a
     // task and an EOD report compare through the same stored fingerprint.
@@ -981,7 +979,7 @@ export const defaultAdminAgentActionServices: AdminAgentActionServices = {
   archiveTask: (access, taskId, mode) => removeWorkOsAdminTask(access, taskId, mode),
   getEod: async (access, reportId) => {
     const found = await getAdminAgentEod(access, reportId);
-    return (found?.eod ?? {}) as Json;
+    return found?.eod ?? null;
   },
   reviewEod: (access, reportId, body, reviewerPersonId) =>
     reviewAdminAgentEod(access, reportId, body as unknown as AdminAgentEodReviewInput, reviewerPersonId),
