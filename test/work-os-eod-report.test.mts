@@ -118,6 +118,16 @@ test("an outside label after a time keeps the time track", () => {
   });
 });
 
+test("the trailing bracket keeps a title that contains a dash intact", () => {
+  assert.deepEqual(splitEodTaskRow("Ship v2 — onboarding [Work OS · 3:30 PM · (outside shift)]"), {
+    title: "Ship v2 — onboarding",
+    project: "Work OS",
+    time: "3:30 PM",
+    outside: "outside shift",
+    count: 1,
+  });
+});
+
 test("ranking a collapsed task sees every linked task id", () => {
   const ranking = rankEodCompleted({
     ...facts,
@@ -201,7 +211,7 @@ test("an outside-window label with no project reads as a suffix, not a stray tra
     carried: [],
     planItems: [],
   });
-  assert.match(outsideOnly.markdown, /- Outside check \(outside shift\)/);
+  assert.match(outsideOnly.markdown, /- Outside check \[\(outside shift\)\]/);
   assert.doesNotMatch(outsideOnly.markdown, /Outside check — \(outside shift\)/);
 });
 
@@ -282,6 +292,8 @@ test("a refinement may rewrite prose but must keep the report structure", () => 
   assert.equal(preservesEodStructure(report.markdown, report.markdown.replace("## Completed today", "## Work")), false);
   assert.equal(preservesEodStructure(report.markdown, report.markdown), true);
   assert.equal(preservesEodStructure("## Summary\nOld", "## Summary\nNew"), true);
+  const droppedAppendixRow = report.markdown.replace(/- Choose a walking route[^\n]*\n?/, "");
+  assert.equal(preservesEodStructure(report.markdown, droppedAppendixRow), false, "the appendix is not rewritten");
 });
 
 test("the refinement facts are plain prose, never selectable ids", () => {

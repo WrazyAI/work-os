@@ -135,6 +135,29 @@ export interface EodTaskRowParts {
  * typographic weight instead of one long paragraph. */
 export function splitEodTaskRow(value: string): EodTaskRowParts {
   let text = String(value ?? "").trim();
+  // The current builder wraps project, time, and window metadata in a trailing
+  // bracket, so a title that itself contains `—` or `·` stays intact.
+  const bracket = /\s+\[([^\]]+)\]\s*$/.exec(text);
+  if (bracket) {
+    const meta = bracket[1]!;
+    text = text.slice(0, bracket.index).trim();
+    let time: string | null = null;
+    let outside: string | null = null;
+    const projectParts: string[] = [];
+    for (const track of meta.split(" · ").map((part) => part.trim()).filter(Boolean)) {
+      if (/^\d{1,2}:\d{2}\s*(?:AM|PM)$/i.test(track)) { time = track; continue; }
+      const windowMatch = /^\((outside (?:the )?(?:shift|workday))\)$/i.exec(track);
+      if (windowMatch) { outside = windowMatch[1]!; continue; }
+      projectParts.push(track);
+    }
+    let count = 1;
+    const countMatch = /^(.*?)\s+×(\d+)$/.exec(text);
+    if (countMatch) {
+      text = countMatch[1]!.trim();
+      count = Number(countMatch[2]) || 1;
+    }
+    return { title: text, project: projectParts.join(" · ") || null, time, outside, count };
+  }
   let outside: string | null = null;
   const outsideMatch = /\s+\((outside (?:the )?(?:shift|workday))\)\s*$/i.exec(text);
   if (outsideMatch) {

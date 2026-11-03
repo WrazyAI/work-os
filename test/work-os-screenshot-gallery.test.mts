@@ -58,7 +58,7 @@ test("EOD activity context prefers interval recaps and never repeats an hour", a
   assert.match(aiDraft, /hour\.label/);
   assert.match(eod, /listActivityIntervalActivityLines/);
   assert.match(eod, /hourStarts/);
-  assert.match(eod, /intervalProvenanceLabel/);
+  assert.match(await source("src/lib/work-os-eod-report.ts"), /recapProvenance/);
 });
 
 test("the gallery reports pending and total frames honestly", async () => {

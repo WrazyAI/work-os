@@ -15,8 +15,8 @@ const DRAFT = [
   "Completed 4 work tasks today, including the settlement reconciliation and the handoff note.",
   "",
   "## Completed today",
-  "- Reconcile September 10 payments — Payments · 3:30 PM",
-  "- Document the handoff — Payments · 4:10 PM",
+  "- Reconcile September 10 payments [Payments · 3:30 PM]",
+  "- Document the handoff [Payments · 4:10 PM]",
   "",
   "## Next",
   "- Two approvals still pending.",
@@ -27,8 +27,8 @@ const DRAFT = [
   "## Full record",
   "",
   "### Work completed (4)",
-  "- Reconcile September 10 payments — Payments · 3:30 PM",
-  "- Document the handoff — Payments · 4:10 PM",
+  "- Reconcile September 10 payments [Payments · 3:30 PM]",
+  "- Document the handoff [Payments · 4:10 PM]",
 ].join("\n");
 
 const NORMAL: OutstandingEodDay[] = [

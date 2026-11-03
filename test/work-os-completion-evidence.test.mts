@@ -227,7 +227,7 @@ test("the evidence route and server path keep their truthful contract", async ()
   assert.doesNotMatch(route, /storagePath|storage_path/);
   // The evidence row reaches the existing admin and EOD reads unchanged.
   assert.match(adminEvidence, /from\("work_evidence"\)/);
-  assert.match(eod, /source !== "worktivity"/);
+  assert.match(eod, /!== "worktivity"/);
 });
 
 test("completion evidence errors carry actionable codes", () => {

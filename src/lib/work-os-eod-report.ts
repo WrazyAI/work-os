@@ -146,7 +146,7 @@ export function collapseEodTasks(facts: EodTaskFact[], personName: string): Coll
     // A title is only one row when it is the same kind of task in the same
     // project. A personal task and a work task that share a title are still
     // two facts, and the brief must not lose the work one.
-    const key = `${titleKey}::${kind}::${fact.project ?? ""}`;
+    const key = `${titleKey}::${kind}::${fact.project ?? ""}::${fact.outsideLabel ?? ""}`;
     const existing = byTitle.get(key);
     if (!existing) {
       byTitle.set(key, { ...fact, ids: [fact.id], count: 1, kind });
@@ -318,16 +318,17 @@ export function buildEodSummary(facts: EodReportFacts): string {
 
 function taskLine(item: CollapsedEodTask, timezone: string, includeProject = true): string {
   const time = item.exact ? formatLocalTime(item.at, timezone) : null;
-  const meta = [
-    includeProject ? item.project : null,
-    time,
-    item.outsideLabel?.trim() ?? null,
-  ].filter(Boolean).join(" · ");
   const title = item.count > 1 ? `${item.title} ×${item.count}` : item.title;
-  if (!meta) return `- ${title}`;
-  // A lone outside-window label follows the title; a project or time keeps the
-  // em-dash track that the row splitter reads back.
-  return item.project || time ? `- ${title} — ${meta}` : `- ${title} ${meta}`;
+  if (!includeProject) {
+    // The other-tasks appendix is read as a note, so it keeps a plain track.
+    const meta = [time, item.outsideLabel?.trim()].filter(Boolean).join(" · ");
+    return meta ? `- ${title} — ${meta}` : `- ${title}`;
+  }
+  // Work rows wrap their project, time, and window label in one trailing
+  // bracket. Titles may contain `—` or `·`; the bracket is the unambiguous
+  // metadata boundary the page reads back.
+  const meta = [item.project, time, item.outsideLabel?.trim()].filter(Boolean).join(" · ");
+  return meta ? `- ${title} [${meta}]` : `- ${title}`;
 }
 
 function recapLine(recap: EodRecap): string {
@@ -391,7 +392,9 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
   const carried = collapseEodTasks(facts.carried, facts.personName);
   const carriedWork = carried.filter((item) => item.kind === "work");
   const progress = eodProgressRecaps(facts);
-  const mismatches = eodPlanMismatches(facts);
+  const allMismatches = eodPlanMismatches(facts, 200);
+  const mismatches = allMismatches.slice(0, 5);
+  const extraMismatches = allMismatches.slice(5);
   const allBlockers = eodBlockers(facts, 200);
   const blockers = allBlockers.slice(0, 5);
   const extraBlockers = allBlockers.slice(5);
@@ -427,7 +430,14 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
         ]
       : []),
     ...(carriedWork.length ? ["", "## Next", ...carriedWork.map((item) => taskLine(item, facts.timezone))] : []),
-    ...(mismatches.length ? ["", "## Plan check", ...mismatches.map((item) => `- ${item.title} — ${item.note}`)] : []),
+    ...(mismatches.length
+      ? [
+          "",
+          "## Plan check",
+          ...mismatches.map((item) => `- ${item.title} — ${item.note}`),
+          ...(extraMismatches.length ? [`  …and ${extraMismatches.length} more in the full record.`] : []),
+        ]
+      : []),
     "",
     "## Evidence",
     `- ${deliverables.length} work deliverable${deliverables.length === 1 ? "" : "s"} · ${facts.recaps.length} recorded recap${facts.recaps.length === 1 ? "" : "s"}${facts.media.length ? ` · ${facts.media.length} Loom recording${facts.media.length === 1 ? "" : "s"}` : ""}.`,
@@ -454,6 +464,13 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
           "### Routine runs",
           ...(automation.line ? [automation.line] : []),
           ...(automationOutside.line ? [`${automationOutside.line}${facts.automationOutsideLabel ?? ""}`] : []),
+        ]
+      : []),
+    ...(extraMismatches.length
+      ? [
+          `### More plan discrepancies (${extraMismatches.length})`,
+          ...extraMismatches.map((item) => `- ${item.title} — ${item.note}`),
+          "",
         ]
       : []),
     ...(extraBlockers.length
@@ -531,8 +548,9 @@ function sessionLabel(facts: EodReportFacts): string {
   const start = formatLocalTime(facts.session.clockedInAt, facts.timezone);
   const end = formatLocalTime(facts.session.clockedOutAt, facts.timezone);
   if (start && end) return `${start} – ${end}`;
-  if (start) return `${start} – still open`;
-  return "No recorded session";
+  if (start) return `${start} – ${facts.session.clockedOutAt ? "end time unavailable" : "still open"}`;
+  if (!facts.session.clockedInAt && !facts.session.clockedOutAt) return "No recorded session";
+  return "Recorded session — time unavailable";
 }
 
 /** Exposed for the report page: the brief's section names in display order. */

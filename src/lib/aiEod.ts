@@ -222,13 +222,26 @@ function withoutBottleneck(markdown: string) {
   return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
 }
 
+function normalizedAppendix(value: string): string {
+  return value.replace(/\r\n/g, "\n").split("\n").map((line) => line.trimEnd()).join("\n").trim();
+}
+
+function fullRecordBody(markdown: string): string | null {
+  const match = /(?:^|\n)##\s*Full record\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i.exec(markdown);
+  return match ? normalizedAppendix(match[1] ?? "") : null;
+}
+
 /** A refinement may shorten prose, but it may not drop a section the current
- * report carries. A truncated response that loses the full record is rejected
- * instead of replacing the employee's draft. */
+ * report carries, and it may not rewrite the full-record appendix. A truncated
+ * response that loses the appendix is rejected instead of replacing the
+ * employee's draft. */
 export function preservesEodStructure(original: string, refined: string): boolean {
   const required = ["## Summary", "## Completed today", "## Evidence", "## Full record"]
     .filter((heading) => original.includes(heading));
-  return required.every((heading) => refined.includes(heading));
+  if (!required.every((heading) => refined.includes(heading))) return false;
+  const originalAppendix = fullRecordBody(original);
+  if (originalAppendix === null) return true;
+  return fullRecordBody(refined) === originalAppendix;
 }
 
 /** Refines report wording from employee feedback without rewriting any Bottleneck section. */
