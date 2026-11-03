@@ -132,7 +132,6 @@ export default function AdminOverviewPage() {
     return rank(left) - rank(right) || left.displayName.localeCompare(right.displayName);
   });
   const onShift = people.filter((person) => person.attendance.state === "active" || person.attendance.state === "paused");
-  const quiet = people.length - onShift.length;
   const readiness = data.readiness;
   const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
   const digest = activityDigest(data.recentActivity);
@@ -186,7 +185,7 @@ export default function AdminOverviewPage() {
           </div>
         ) : (
           <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">
-            No one is on shift right now. {quiet ? `${quiet} teammate${quiet === 1 ? " is" : "s are"} off shift or not observed.` : ""}
+            No one is on shift right now.
           </p>
         )}
         <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">

@@ -26,7 +26,7 @@ type SortKey = "title" | "assignees" | "created" | "due" | "status";
 
 const SORT_NATURAL: Record<SortKey, 1 | -1> = { title: 1, assignees: 1, created: -1, due: 1, status: 1 };
 
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_76px_24px] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_140px_104px_92px_76px_24px] xl:grid-cols-[minmax(0,1fr)_150px_140px_104px_104px_88px_24px]";
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_76px_24px] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_120px_92px_92px_76px_24px] xl:grid-cols-[minmax(0,1fr)_120px_120px_92px_96px_80px_24px]";
 
 function taskUrl(task: AnyRow): string | null {
   const url = task.url || task.provider_url || task.raw?.url;
@@ -299,7 +299,7 @@ export default function AdminTasksPage() {
                         {done ? <Check size={11} aria-hidden /> : null}
                       </button>
                       <span className="min-w-0">
-                        <span className={cx("block truncate text-[12.5px] font-semibold", done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>
+                        <span className={cx("line-clamp-2 text-[12.5px] font-semibold leading-[1.35]", done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>
                           {String(task.title ?? "Untitled task")}
                         </span>
                         {task.description ? <span className="mt-0.5 block truncate text-[11px] text-[var(--text-tertiary)]">{String(task.description)}</span> : null}
