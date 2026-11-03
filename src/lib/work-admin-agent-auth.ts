@@ -77,13 +77,20 @@ function isCompletionEvidence(error: unknown): error is CompletionEvidenceError 
 
 /** Task 10's preview store answers with its own code and status. Matching the
  * class name keeps this module from importing the preview store, which imports
- * the auth module for its access contract. */
+ * the auth module for its access contract. A stale preview also carries the
+ * state it was re-read as, so the caller can see what changed. */
 function previewErrorResponse(error: unknown): NextResponse | null {
   if (!isNamed(error, "WorkAdminPreviewError")) return null;
-  const { code, status } = error as Error & { code?: unknown; status?: unknown };
+  const { code, status, currentState } = error as Error & { code?: unknown; status?: unknown; currentState?: unknown };
   const resolvedCode = typeof code === "string" && code ? code : "conflict";
   const resolvedStatus = typeof status === "number" && status >= 400 && status < 600 ? status : 409;
-  return adminAgentError(resolvedCode, error.message, resolvedStatus);
+  const body: Record<string, unknown> = {
+    error: error.message,
+    code: resolvedCode,
+    request_id: randomUUID(),
+  };
+  if (currentState !== undefined) body.current_state = currentState;
+  return NextResponse.json(body, { status: resolvedStatus });
 }
 
 /** A keyset cursor minted against a different filter set is a 422 with its own

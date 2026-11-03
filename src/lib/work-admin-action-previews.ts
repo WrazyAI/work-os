@@ -48,12 +48,16 @@ const PREVIEW_MESSAGES: Record<WorkAdminPreviewErrorCode, string> = {
 export class WorkAdminPreviewError extends Error {
   code: WorkAdminPreviewErrorCode;
   status: 404 | 409 | 410;
+  /** The state read during a stale confirm, so a client can show what changed
+   * instead of guessing. Absent for every other code. */
+  currentState?: Json;
 
-  constructor(code: WorkAdminPreviewErrorCode, message = PREVIEW_MESSAGES[code]) {
+  constructor(code: WorkAdminPreviewErrorCode, message = PREVIEW_MESSAGES[code], currentState?: Json) {
     super(message);
     this.name = "WorkAdminPreviewError";
     this.code = code;
     this.status = PREVIEW_STATUS[code];
+    if (currentState !== undefined) this.currentState = currentState;
   }
 }
 
@@ -105,8 +109,9 @@ export type CreateAdminPreviewInput = {
   /** The real target state the preview was computed from; only the fingerprint
    * of it is persisted. */
   state: Json;
-  /** Defaults to now + 15 minutes. A past value is stored as given so tests and
-   * clock skew exercise the expiry path instead of being rejected here. */
+  /** Defaults to now + 15 minutes and is capped there: a caller cannot extend
+   * a preview's life. A past value is stored as given so tests and clock skew
+   * exercise the expiry path instead of being rejected here. */
   expiresAt?: Date;
   /** Creation key. For API previews the partial unique index makes a retry with
    * the same key replay the same preview and a different request a 409. */
@@ -155,19 +160,44 @@ const COLUMNS = `id, organization_id, user_id, token_id, source, action, target_
   request, preview, state_fingerprint, result_status, result_body, idempotency_key,
   expires_at, confirmed_at, created_at`;
 
-/** Ownership is organization + user, plus the token that created it. A session
- * admin may read their own account's previews; a different user or workspace
- * sees a 404 rather than a hint that the id exists. */
-const OWNER_PREDICATE = `organization_id = $2 and (user_id = $3 or token_id = $4::uuid)`;
+/** Ownership is pinned to the surface that created the preview: an API preview
+ * (`token_id` set) belongs to that token only, while a session/Otto preview
+ * (`token_id` null) belongs to the user who created it. The organization always
+ * has to match, and anyone else sees a 404 rather than a hint that the id
+ * exists. */
+const OWNER_PREDICATE = `organization_id = $2 and (
+  (token_id is not null and token_id = $4::uuid)
+  or (token_id is null and user_id = $3)
+)`;
 
-function normalizeUuid(value: string | null | undefined): string | null {
+/** Preview ids arrive from the URL, so a malformed one is treated as missing
+ * (404) instead of raising Postgres `22P02`. */
+function normalizePreviewId(value: string | null | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return UUID_PATTERN.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+/** A token id is server-resolved, so a non-empty value that is not a UUID is a
+ * caller/server bug and must not silently widen ownership to "session". */
+function normalizeTokenId(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  if (!UUID_PATTERN.test(trimmed)) throw new WorkOsValidationError("tokenId must be a UUID");
+  return trimmed.toLowerCase();
 }
 
 function normalizeKey(value: string | null | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return trimmed ? trimmed : null;
+}
+
+/** Previews live at most `ADMIN_PREVIEW_TTL_MS`; a caller-supplied date can
+ * shorten that window but never extend it. */
+function resolveExpiry(requested: Date | undefined, now: number): Date {
+  const cap = now + ADMIN_PREVIEW_TTL_MS;
+  const requestedAt = requested?.getTime();
+  if (requestedAt === undefined || !Number.isFinite(requestedAt) || requestedAt > cap) return new Date(cap);
+  return new Date(requestedAt);
 }
 
 function timestamp(value: string | Date | null): string | null {
@@ -233,8 +263,13 @@ function replayOrConflict(existing: PreviewRow, input: CreateAdminPreviewInput):
 }
 
 export async function createAdminPreview(input: CreateAdminPreviewInput): Promise<AdminPreview> {
-  const expiresAt = input.expiresAt ?? new Date(Date.now() + ADMIN_PREVIEW_TTL_MS);
-  const tokenId = normalizeUuid(input.tokenId);
+  const expiresAt = resolveExpiry(input.expiresAt, Date.now());
+  const tokenId = normalizeTokenId(input.tokenId);
+  // Otto previews run inside a session, so they never carry a token; a token
+  // plus the Otto source would make the ownership rules ambiguous.
+  if (input.source === "otto" && tokenId) {
+    throw new WorkOsValidationError("Otto previews are session-scoped and cannot carry a token id");
+  }
   const key = normalizeKey(input.idempotencyKey);
   if (key && key.length > PREVIEW_IDEMPOTENCY_KEY_MAX) {
     throw new WorkOsValidationError(`Idempotency-Key must be ${PREVIEW_IDEMPOTENCY_KEY_MAX} characters or fewer`);
@@ -294,25 +329,28 @@ export async function getAdminPreview(
   previewId: string,
   tokenId?: string | null,
 ): Promise<AdminPreview | null> {
-  const id = normalizeUuid(previewId);
+  const id = normalizePreviewId(previewId);
   if (!id) return null;
   const { rows } = await getPool().query<PreviewRow>(
     `select ${COLUMNS} from work_admin_action_previews where id = $1 and ${OWNER_PREDICATE}`,
-    [id, access.organizationId, access.ctx.user.id, normalizeUuid(tokenId)],
+    [id, access.organizationId, access.ctx.user.id, normalizeTokenId(tokenId)],
   );
   return rows[0] ? toAdminPreview(rows[0]) : null;
 }
 
-type ClaimOutcome =
-  | { kind: "replay"; result: AdminPreviewConfirmResult }
-  | { kind: "claimed"; previousKey: string | null };
+type ClaimOutcome = { kind: "replay"; result: AdminPreviewConfirmResult } | { kind: "claimed" };
 
-/** Confirm a preview exactly once.
+/** Confirm a preview exactly once. The preview id is the canonical one-time
+ * replay key: `confirmed_at` records the claim, and every later confirm of the
+ * same id replays the stored result regardless of which `Idempotency-Key` the
+ * caller sends. The confirm key is validated for the route contract but is
+ * never written into `idempotency_key`, which belongs to creation dedupe (and
+ * is protected by the partial unique index on `(token_id, idempotency_key)`).
  *
- * The claim (`confirmed_at` + the confirm key) commits before `apply()` runs,
- * so a concurrent confirm can never execute the action twice: it either
- * replays the stored result or is told the apply is in flight. When `apply()`
- * throws, the claim is released so a retry can re-read state and try again. */
+ * The claim commits before `apply()` runs, so a concurrent confirm can never
+ * execute the action twice: it either replays the stored result or is told the
+ * apply is in flight. When `apply()` throws, the claim is released so a retry
+ * can re-read state and try again. */
 export async function confirmAdminPreview(
   access: WorkOsAccess,
   previewId: string,
@@ -320,13 +358,13 @@ export async function confirmAdminPreview(
   deps: AdminPreviewConfirmDeps,
   tokenId?: string | null,
 ): Promise<AdminPreviewConfirmResult> {
-  const id = normalizeUuid(previewId);
+  const id = normalizePreviewId(previewId);
   if (!id) throw new WorkAdminPreviewError("preview_not_found");
   const key = normalizeKey(idempotencyKey);
   if (key && key.length > PREVIEW_IDEMPOTENCY_KEY_MAX) {
     throw new WorkOsValidationError(`Idempotency-Key must be ${PREVIEW_IDEMPOTENCY_KEY_MAX} characters or fewer`);
   }
-  const ownerTokenId = normalizeUuid(tokenId);
+  const ownerTokenId = normalizeTokenId(tokenId);
   const claimedAt = new Date().toISOString();
 
   const claim = await transaction<ClaimOutcome>(async (client) => {
@@ -359,21 +397,21 @@ export async function confirmAdminPreview(
     }
 
     // Re-read the target while the row is locked and compare against the state
-    // the preview described. A mismatch writes nothing at all.
-    const currentFingerprint = previewFingerprint(await deps.readState());
-    if (currentFingerprint !== String(row.state_fingerprint)) {
-      throw new WorkAdminPreviewError("preview_stale");
+    // the preview described. A mismatch writes nothing at all, and carries the
+    // fresh state back so the caller can see what changed.
+    const currentState = await deps.readState();
+    if (previewFingerprint(currentState) !== String(row.state_fingerprint)) {
+      throw new WorkAdminPreviewError("preview_stale", undefined, currentState);
     }
 
-    // Keep a creation key intact: it is what makes a retried create replay this
-    // preview instead of minting a second one.
+    // The creation key is left exactly as it was: it is what makes a retried
+    // create replay this preview, and the index on it must not see a confirm
+    // key reused across two previews.
     await client.query(
-      `update work_admin_action_previews
-         set confirmed_at = $2, idempotency_key = coalesce(idempotency_key, $3)
-       where id = $1`,
-      [id, claimedAt, key],
+      `update work_admin_action_previews set confirmed_at = $2 where id = $1`,
+      [id, claimedAt],
     );
-    return { kind: "claimed", previousKey: row.idempotency_key };
+    return { kind: "claimed" };
   });
 
   if (claim.kind === "replay") return claim.result;
@@ -384,10 +422,9 @@ export async function confirmAdminPreview(
   } catch (error) {
     // Release only our own claim; a takeover by a later retry keeps its claim.
     await getPool().query(
-      `update work_admin_action_previews
-         set confirmed_at = null, idempotency_key = $2
-       where id = $1 and confirmed_at = $3`,
-      [id, claim.previousKey, claimedAt],
+      `update work_admin_action_previews set confirmed_at = null
+       where id = $1 and confirmed_at = $2`,
+      [id, claimedAt],
     ).catch(() => undefined);
     throw error;
   }
@@ -398,8 +435,13 @@ export async function confirmAdminPreview(
       [id, result.status, result.body],
     );
   } catch (error) {
-    // The action already ran; reporting a failure here would invite a retry of
-    // a completed write. A missing stored result only loses the replay body.
+    // The action already ran, so the caller still gets its result; only the
+    // replay body is lost. A retry re-reads the target, and because the action
+    // changed it the fingerprint no longer matches, so the retry answers
+    // preview_stale rather than applying twice. (The one exception is an action
+    // that leaves the fingerprinted state identical; those are single-table
+    // writes that are safe to repeat. This is deliberate: no sentinel column is
+    // added, so a stored-result failure can never hide a completed write.)
     console.error("[work-os] store admin preview result failed", {
       message: error instanceof Error ? error.message : String(error),
     });
