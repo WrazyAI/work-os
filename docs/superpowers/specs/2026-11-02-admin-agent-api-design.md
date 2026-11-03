@@ -213,9 +213,11 @@ buffered and truncated at the proxy boundary.
 | GET | `/insights` | `insights:read` | Optional `person_id`, `range=7d/30d/90d`, `through`; org-wide when omitted |
 | GET | `/openapi.yaml` | any | Served contract |
 
-`person_ids` accepts at most 20 ids. An empty value means the whole
-organization for an admin. Unknown ids are ignored rather than treated as an
-authorization error; cross-organization ids never appear in results.
+`person_ids` accepts at most 20 ids. Omitting it means the whole organization
+for an admin; an explicit empty array means no rows. This keeps a URL builder
+that always emits `person_ids=` from silently widening to the whole
+organization. Unknown ids are ignored rather than treated as an authorization
+error; cross-organization ids never appear in results.
 
 ### Pagination and ordering
 
@@ -443,7 +445,7 @@ action: Assign, Delegate, Add co-assignee, Complete, Reopen, Approve, Reject.
 | 409 | `evidence_required` | Task records an expected outcome and needs a file |
 | 413 / 415 | `file_too_large` / `unsupported_file_type` | Evidence rejected |
 | 422 | `invalid_cursor` | Cursor does not match the current filters |
-| 422 | `validation_error` | Bad filter, date, scope, or body |
+| 400 | `validation_error` | Bad filter, date, scope, or body |
 | 429 | `rate_limited` | Limit exceeded; `Retry-After` set |
 
 Rate limits: 120 requests and 20 write-class requests per minute per token.
