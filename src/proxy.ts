@@ -52,6 +52,14 @@ function isPublic(pathname: string): boolean {
   // Public landing destinations and its explicitly published film must work
   // without a session. Keep this exact so no adjacent private route is opened.
   if (pathname === "/privacy" || pathname === "/terms") return true;
+  // The public employee site. Keep these exact: a tutorial slug is the only
+  // wildcard, so an adjacent private route can never inherit the exemption.
+  if (
+    pathname === "/work-os/welcome"
+    || pathname === "/work-os/welcome/downloads"
+    || pathname === "/work-os/welcome/tutorials"
+    || /^\/work-os\/welcome\/tutorials\/[a-z0-9][a-z0-9-]{1,63}$/.test(pathname)
+  ) return true;
   if (pathname === "/landing/task-workflow.mp4" || pathname === "/landing/task-workflow.vtt") return true;
   // Dev-only fixture surface for rendered QA; NODE_ENV is inlined at build
   // time, so this branch cannot exist in a production bundle.
