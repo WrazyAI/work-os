@@ -185,7 +185,7 @@ function PulseTimeline({ model, showPosition = true, expanded = false }: { model
   </div>;
 }
 
-function WeekInstrument({ week, loading = false, error = false }: { week?: InsightsData | null; loading?: boolean; error?: boolean }) {
+function WeekInstrument({ week, loading = false, error = false, currentDate }: { week?: InsightsData | null; loading?: boolean; error?: boolean; currentDate: string }) {
   const days = week?.days ?? [];
   const values = days.map((entry) => Number(entry.tasksCompleted ?? 0));
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -202,9 +202,11 @@ function WeekInstrument({ week, loading = false, error = false }: { week?: Insig
     ? `${line} L${points[points.length - 1].x.toFixed(1)} 122 L${points[0].x.toFixed(1)} 122 Z`
     : "";
   const label = days.map((entry) => `${formatWorkOsDate(entry.date)} ${Number(entry.tasksCompleted ?? 0)} tasks completed`).join(", ");
+  const todayIndex = days.findIndex((entry) => entry.date === currentDate);
+  const heading = week?.range === "day" ? "Today" : week?.range === "30d" ? "Last 30 days" : "This week";
   return <section className="dashboard-instrument dashboard-week" aria-labelledby="dashboard-week-title">
     <header className="dashboard-instrument-head">
-      <h2 id="dashboard-week-title">This week</h2>
+      <h2 id="dashboard-week-title">{heading}</h2>
       <span><strong>{total}</strong> completed</span>
     </header>
     {days.length ? <>
@@ -217,10 +219,10 @@ function WeekInstrument({ week, loading = false, error = false }: { week?: Insig
         <text className="dashboard-week-axis" x="6" y={chartY(0) + 3}>0</text>
         {points.length > 1 ? <path className="dashboard-week-area" d={area} /> : null}
         {points.length > 1 ? <path className="dashboard-week-line" pathLength={1} d={line} /> : null}
-        {points.map((point, index) => <circle key={`${point.date}-dot`} className={index === points.length - 1 ? "dashboard-week-dot is-today" : "dashboard-week-dot"} cx={point.x} cy={point.y} r={index === points.length - 1 ? 4.2 : 3.4} />)}
-        {days.map((entry, index) => <text key={`${entry.date}-label`} className={index === days.length - 1 ? "dashboard-week-day is-today" : "dashboard-week-day"} x={points[index]?.x ?? 0} y="146" textAnchor="middle">{index === days.length - 1 ? "Today" : weekdayInitial(entry.date)}</text>)}
+        {points.map((point, index) => <circle key={`${point.date}-dot`} className={index === todayIndex ? "dashboard-week-dot is-today" : "dashboard-week-dot"} cx={point.x} cy={point.y} r={index === todayIndex ? 4.2 : 3.4} />)}
+        {days.map((entry, index) => <text key={`${entry.date}-label`} className={index === todayIndex ? "dashboard-week-day is-today" : "dashboard-week-day"} x={points[index]?.x ?? 0} y="146" textAnchor="middle">{index === todayIndex ? "Today" : weekdayInitial(entry.date)}</text>)}
       </svg>
-      <p className="dashboard-instrument-note">Tasks completed, not a productivity score. Today is the filled mark.</p>
+      <p className="dashboard-instrument-note">Tasks completed, not a productivity score.{todayIndex >= 0 ? " Today is the filled mark." : ""}</p>
     </> : <div className="dashboard-instrument-empty">{loading ? "Loading this week’s record…" : error ? "This week’s record is unavailable right now." : "No recorded days in this range."}</div>}
   </section>;
 }
@@ -232,10 +234,11 @@ function weekdayInitial(value: string) {
   return new Intl.DateTimeFormat(undefined, { timeZone: "UTC", weekday: "narrow" }).format(parsed);
 }
 
-function DashboardMargin({ week, weekLoading = false, weekError = false }: {
+function DashboardMargin({ week, weekLoading = false, weekError = false, currentDate }: {
   week?: InsightsData | null;
   weekLoading?: boolean;
   weekError?: boolean;
+  currentDate: string;
 }) {
   const days = week?.days ?? [];
   const consistency = week?.consistency;
@@ -248,7 +251,7 @@ function DashboardMargin({ week, weekLoading = false, weekError = false }: {
     consistency && dayCount > 0 ? { label: "Days with a completed task", value: `${consistency.daysWithCompletion} of ${dayCount}`, percent: Math.round((consistency.daysWithCompletion / dayCount) * 100), quiet: true } : null,
   ].filter((row): row is { label: string; value: string; percent: number; quiet?: boolean } => row !== null);
   return <aside className="dashboard-margin" aria-label="Workday instruments">
-    <WeekInstrument week={week} loading={weekLoading} error={weekError} />
+    <WeekInstrument week={week} loading={weekLoading} error={weekError} currentDate={currentDate} />
     {reliability.length ? <section className="dashboard-instrument dashboard-reliability" aria-labelledby="dashboard-reliability-title">
       <header className="dashboard-instrument-head">
         <h2 id="dashboard-reliability-title">Plan reliability</h2>
@@ -401,7 +404,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <span className="work-queue-showing">Showing {Math.min(5, openCount)} of {openCount} open</span>
         </footer>
       </section>
-      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} />
+      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} currentDate={currentDate} />
     </div>
   </main>;
 }
@@ -501,7 +504,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
           <span className="work-queue-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
         </footer>
       </section>
-      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} />
+      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} currentDate={currentDate} />
     </div>
   </main>;
 }
