@@ -6,6 +6,7 @@ import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import type { InsightsData } from "./types";
 
 const shift = { startsAt: "2026-08-26T15:00:00Z", endsAt: "2026-08-26T20:00:00Z", timezone: "UTC", breaks: [] };
 const attendance = { source: "worktivity" as const, state: "off_shift" as const, status: "yet_to_start" as const, observedAt: "2026-08-26T12:08:00Z", clockedInAt: null, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "No activity observed yet" };
@@ -194,7 +195,7 @@ describe("dashboard surfaces", () => {
     expect(markup).not.toContain("workday-band-footer");
     expect(markup).toContain("Make the first task visible");
     // One owner per count, and each fact names where it goes.
-    expect(markup).toContain("0</strong><small>completed");
+    expect(markup).toContain('<span class="band-fact-label">completed</span><strong>0</strong>');
     expect(markup).toContain('aria-label="1 open today. Review open tasks for today"');
     expect(markup).toContain('aria-label="1 overdue. Review overdue work"');
     expect(markup).toContain('aria-label="1 carried over. Review tasks carried over from earlier workdays"');
@@ -213,6 +214,36 @@ describe("dashboard surfaces", () => {
     // before Work OS mirrors the session.
     expect(observedMarkup).toContain('data-workday="active"');
     expect(observedMarkup).not.toContain("studio-sleep-zs");
+  });
+
+  it("shows the weekly record and the next check-in beside the queue", () => {
+    const now = Date.parse("2026-08-26T13:46:00Z");
+    const activeShift = { startsAt: "2026-08-26T09:00:00Z", endsAt: "2026-08-26T17:00:00Z", timezone: "UTC", breaks: [] };
+    const activeAttendance = { ...attendance, state: "active" as const, status: "working" as const, clockedInAt: activeShift.startsAt, message: "Activity observed" };
+    const activeSession = { id: "session-1", state: "active" as const, scheduled_starts_at: activeShift.startsAt, scheduled_ends_at: activeShift.endsAt, clocked_in_at: activeShift.startsAt, clocked_out_at: null, paused_seconds: 0 };
+    const model = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: activeAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, activeAttendance), tasks: [task], carryover: [], focus: "Make the first task visible", focusSource: "Your focus note" }, now);
+    const week: InsightsData = {
+      range: "7d",
+      from: "2026-08-25",
+      through: "2026-08-26",
+      days: [
+        { date: "2026-08-25", observedSeconds: 0, pausedSeconds: 0, planStatus: "confirmed", planned: 1, plannedCompleted: 1, carryOver: 0, overdue: 0, updates: 1, outputEvidence: 0, activityContext: 0, tasksCompleted: 2, tasksOpen: 0, outcomesOnTime: 2, outcomesLate: 0, references: [] },
+        { date: "2026-08-26", observedSeconds: 0, pausedSeconds: 0, planStatus: "confirmed", planned: 1, plannedCompleted: 0, carryOver: 0, overdue: 0, updates: 0, outputEvidence: 0, activityContext: 0, tasksCompleted: 1, tasksOpen: 1, outcomesOnTime: 1, outcomesLate: 0, references: [] },
+      ],
+      totals: { observedSeconds: 0, pausedSeconds: 0, planned: 2, plannedCompleted: 1, carryOver: 0, overdue: 0, updates: 1, outputEvidence: 0, activityContext: 0, tasksCompleted: 3, tasksOpen: 1 },
+      consistency: { dayCount: 2, daysWithGoal: 2, daysWithUpdate: 1, daysWithCompletion: 2, currentStreak: 2, commitmentRate: 1, bestDay: { date: "2026-08-25", tasksCompleted: 2 } },
+      brief: { generated: false, summary: "", wins: [], attention: [], nextFocus: [], referenceIds: [] },
+      freshness: { niftySyncedAt: null, worktivityObservedAt: null },
+    };
+    const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", week, nextCheckIn: "12:00 PM", canPause: true, canClockOut: true, onPause: noop, onClockOut: noop, onAddTask: noop }));
+
+    expect(markup).toContain("dashboard-margin");
+    expect(markup).toContain("This week");
+    expect(markup).toContain("Plan reliability");
+    expect(markup).toContain("3</strong> completed");
+    expect(markup).toContain('aria-label="Tasks completed each day:');
+    expect(markup).toContain("Next check-in 12:00 PM");
+    expect(markup).toContain("On-time outcomes");
   });
 
   it("shows a quiet activity-watch note while a clock-in is expected and keeps the manual control", () => {

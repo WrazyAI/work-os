@@ -6,6 +6,7 @@ import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { WorktivityControlNotice, type WorktivityControlNoticeState } from "./WorktivityControlNotice";
 import { shiftPulse } from "./shiftPulse";
+import type { InsightsData, InsightDay } from "./types";
 import type { TaskRow } from "./taskWorkspace";
 import SidebarNav from "./SidebarNav";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
@@ -26,6 +27,75 @@ const otherTasks: TaskRow[] = [
   { id: "older-1", title: "Document the provider retry behavior", due_date: "2026-08-21", completed: false, priority: "medium" },
   { id: "older-2", title: "Resolve the remaining installer follow-up", due_date: "2026-08-19", completed: false, priority: "low" },
 ];
+
+/** The preview's seven-day record; the live dashboard reads the same shape from
+ *  the insights endpoint. Completed counts rise across the week so the margin
+ *  chart and reliability bars both have something truthful-looking to draw. */
+function previewWeek(through: string): InsightsData {
+  const completed = [3, 5, 2, 6, 4, 7, 2];
+  const days: InsightDay[] = completed.map((tasksCompleted, index) => {
+    const date = new Date(`${through}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - (completed.length - 1 - index));
+    return {
+      date: date.toISOString().slice(0, 10),
+      observedSeconds: 21_600,
+      pausedSeconds: 1_800,
+      planStatus: "confirmed" as const,
+      planned: 7,
+      plannedCompleted: tasksCompleted,
+      carryOver: 1,
+      overdue: 0,
+      updates: 3,
+      outputEvidence: 2,
+      activityContext: 4,
+      tasksCompleted,
+      tasksOpen: Math.max(0, 7 - tasksCompleted),
+      goalSet: true,
+      completed: tasksCompleted,
+      progressed: 1,
+      deferred: 0,
+      carried: 1,
+      unplanned: 0,
+      outcomesOnTime: Math.max(0, tasksCompleted - 1),
+      outcomesLate: tasksCompleted > 0 ? 1 : 0,
+      sessionCorrections: 0,
+      breakFreshness: "observed" as const,
+      references: [],
+    };
+  });
+  const total = (key: "observedSeconds" | "pausedSeconds" | "planned" | "plannedCompleted" | "carryOver" | "overdue" | "updates" | "outputEvidence" | "activityContext" | "tasksCompleted" | "tasksOpen") =>
+    days.reduce((sum, day) => sum + Number(day[key] ?? 0), 0);
+  return {
+    range: "7d",
+    from: days[0]?.date ?? through,
+    through,
+    days,
+    totals: {
+      observedSeconds: total("observedSeconds"),
+      pausedSeconds: total("pausedSeconds"),
+      planned: total("planned"),
+      plannedCompleted: total("plannedCompleted"),
+      carryOver: total("carryOver"),
+      overdue: total("overdue"),
+      updates: total("updates"),
+      outputEvidence: total("outputEvidence"),
+      activityContext: total("activityContext"),
+      tasksCompleted: total("tasksCompleted"),
+      tasksOpen: total("tasksOpen"),
+    },
+    consistency: {
+      dayCount: days.length,
+      daysWithGoal: 6,
+      daysWithUpdate: 5,
+      daysWithCompletion: 7,
+      currentStreak: 3,
+      commitmentRate: 0.8,
+      bestDay: { date: days[5]?.date ?? through, tasksCompleted: 7 },
+    },
+    brief: { generated: true, summary: "", wins: [], attention: [], nextFocus: [], referenceIds: [] },
+    freshness: { niftySyncedAt: null, worktivityObservedAt: null },
+  };
+}
 
 function PreviewRail({ onShift = true }: { onShift?: boolean }) {
   const expanded = new URLSearchParams(window.location.search).get("sidebar") === "expanded";
@@ -91,7 +161,7 @@ export default function TodayPreview() {
       if (!text) return;
       setPending(text); setReceipt(null); setInput(""); setPanel("update"); setOpen(true);
     };
-    return <div className="workspace today-preview"><PreviewRail onShift={false} /><section className="stage"><header className="masthead"><div><p>August 26</p><h1>Today</h1></div><div className="mast-actions"><button className="icon" aria-label="Refresh"><RefreshCw size={17} /></button><button className="avatar">DZ</button></div></header>{worktivityControlNotice}<OffShiftDashboard {...actionProps} attendanceControlsSupported={attendanceControlsSupported} model={model} tasks={previewTasks} currentDate="2026-08-26" busy={worktivityControlBusy} canClockIn={!worktivityControlBusy} onClockIn={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onOpenTasks={() => undefined} onOpenCarryover={() => undefined} onOpenFocus={() => { setPanel("goal"); setOpen(true); }} onOpenTask={() => undefined} onToggleTask={(task, completed) => setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed } : item))} onRetryPendingTask={() => undefined} onDismissPendingTask={() => undefined} /><ProgressComposer mode="agenda" input={input} open={open} panel={panel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="employee" goalSuggestion={null} saveState="saved" onInput={setInput} onOpen={() => { setPanel("update"); setOpen(true); }} onOpenGoal={() => { setPanel("goal"); setOpen(true); }} onClose={() => { setOpen(false); setPending(""); }} onSubmit={submitAgendaUpdate} onClassify={(kind) => { const text = pending; if (kind === "new_task") setTasks((current) => [...current, { id: crypto.randomUUID(), title: text, due_date: "2026-08-26", completed: false }]); setReceipt({ text, kind, createdAt: new Date().toISOString(), message: kind === "new_task" ? `Added “${text}” to today’s agenda.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onApplyGoal={setGoal} /></section></div>;
+    return <div className="workspace today-preview"><PreviewRail onShift={false} /><section className="stage"><header className="masthead"><div><p>August 26</p><h1>Today</h1></div><div className="mast-actions"><button className="icon" aria-label="Refresh"><RefreshCw size={17} /></button><button className="avatar">DZ</button></div></header>{worktivityControlNotice}<OffShiftDashboard {...actionProps} attendanceControlsSupported={attendanceControlsSupported} model={model} tasks={previewTasks} currentDate="2026-08-26" busy={worktivityControlBusy} week={previewWeek("2026-08-26")} nextCheckIn="4:30 PM" canClockIn={!worktivityControlBusy} onClockIn={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onOpenTasks={() => undefined} onOpenCarryover={() => undefined} onOpenFocus={() => { setPanel("goal"); setOpen(true); }} onOpenTask={() => undefined} onToggleTask={(task, completed) => setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed } : item))} onRetryPendingTask={() => undefined} onDismissPendingTask={() => undefined} /><ProgressComposer mode="agenda" input={input} open={open} panel={panel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="employee" goalSuggestion={null} saveState="saved" onInput={setInput} onOpen={() => { setPanel("update"); setOpen(true); }} onOpenGoal={() => { setPanel("goal"); setOpen(true); }} onClose={() => { setOpen(false); setPending(""); }} onSubmit={submitAgendaUpdate} onClassify={(kind) => { const text = pending; if (kind === "new_task") setTasks((current) => [...current, { id: crypto.randomUUID(), title: text, due_date: "2026-08-26", completed: false }]); setReceipt({ text, kind, createdAt: new Date().toISOString(), message: kind === "new_task" ? `Added “${text}” to today’s agenda.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onApplyGoal={setGoal} /></section></div>;
   }
   const activeNow = new Date("2026-08-25T13:46:00Z");
   const activeShift = { startsAt: "2026-08-25T09:00:00Z", endsAt: "2026-08-25T17:00:00Z", timezone: "UTC", breaks: [] };
@@ -104,7 +174,7 @@ export default function TodayPreview() {
     <PreviewRail />
     <section className="stage"><header className="masthead"><div><p>{formatWorkOsDate(currentDate, "—", new Date(`${currentDate}T12:00:00Z`))}</p><h1>Today</h1></div><div className="mast-actions"><button className="avatar">DZ</button></div></header>
       {worktivityControlNotice}
-      <ActiveWorkdayDashboard {...actionProps} attendanceControlsSupported={attendanceControlsSupported} model={activeModel} tasks={activeTasks} previousTasks={previousTasks} otherTasks={otherTasks} currentDate="2026-08-25" busy={worktivityControlBusy} canPause={!observedOnly} canClockOut={!observedOnly} observedOnly={observedOnly} onOpenTasks={() => undefined} onOpenCarryover={() => undefined} onOpenFocus={() => { setPanel("goal"); setOpen(true); }} onOpenTask={() => undefined} onToggleTask={(task, completed) => setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed } : item))} onPause={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onClockOut={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onAddTask={() => setTasks((current) => [...current, { id: crypto.randomUUID(), title: "New task for today", due_date: "2026-08-25", completed: false }])} onRetryPendingTask={() => undefined} onDismissPendingTask={() => undefined} />
+      <ActiveWorkdayDashboard {...actionProps} attendanceControlsSupported={attendanceControlsSupported} model={activeModel} tasks={activeTasks} previousTasks={previousTasks} otherTasks={otherTasks} currentDate="2026-08-25" busy={worktivityControlBusy} week={previewWeek("2026-08-25")} nextCheckIn="12:00 PM" canPause={!observedOnly} canClockOut={!observedOnly} observedOnly={observedOnly} onOpenTasks={() => undefined} onOpenCarryover={() => undefined} onOpenFocus={() => { setPanel("goal"); setOpen(true); }} onOpenTask={() => undefined} onToggleTask={(task, completed) => setTasks((current) => current.map((item) => item.id === task.id ? { ...item, completed } : item))} onPause={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onClockOut={() => setWorktivityControlPreview({ status: "starting", phase: "desktop" })} onAddTask={() => setTasks((current) => [...current, { id: crypto.randomUUID(), title: "New task for today", due_date: "2026-08-25", completed: false }])} onRetryPendingTask={() => undefined} onDismissPendingTask={() => undefined} />
       <ProgressComposer input={input} open={open} panel={panel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="employee" goalSuggestion={null} saveState="saved" onInput={setInput} onOpen={() => { setPanel("update"); setOpen(true); }} onOpenGoal={() => { setPanel("goal"); setOpen(true); }} onClose={() => { setOpen(false); setPending(""); }} onSubmit={() => { if (!input.trim()) return; setPending(input.trim()); setReceipt(null); setInput(""); setPanel("update"); setOpen(true); }} onClassify={(kind) => { const text = pending; if (kind === "new_task") setTasks((current) => [...current, { id: crypto.randomUUID(), title: text, due_date: "2026-08-25", completed: false }]); setReceipt({ text, kind, createdAt: new Date().toISOString(), message: kind === "new_task" ? `Added “${text}” to today’s tasks and recorded the update.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onApplyGoal={setGoal} />
     </section>
   </div>;

@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Open the focus band on Tasks to read the full goal for the selected day.
+- Today now reads like the web workspace: one workday surface for status, time, counts, and focus, with your weekly record beside the task list.
 
 ## 0.5.18 — 2026-11-02
 

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Pencil, Plus, RefreshCw, Target, X } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
 import { dashboardRemainingLabel, type WorkdayDashboardModel } from "./dashboardModel";
+import type { InsightsData } from "./types";
 import { MascotPet } from "./MascotPet";
 import { ProgressRing } from "./ProgressRing";
 import { FadeArc } from "./LoadingUi";
@@ -42,6 +43,12 @@ export interface OffShiftDashboardProps extends DashboardSurfaceActions {
   canClockIn?: boolean;
   attendanceControlsSupported?: boolean;
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
+  /** The seven-day record that feeds the margin instruments. Optional so the
+   *  command center still renders while it loads or when the read fails. */
+  week?: InsightsData | null;
+  weekLoading?: boolean;
+  nextCheckIn?: string | null;
+  nextCheckInRequired?: boolean;
 }
 
 export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
@@ -57,6 +64,10 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
   observedOnly?: boolean;
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
   onRetryGoalSave?: () => void;
+  week?: InsightsData | null;
+  weekLoading?: boolean;
+  nextCheckIn?: string | null;
+  nextCheckInRequired?: boolean;
 }
 
 function syncClass(tone: WorkdayDashboardModel["sync"]["tone"]) {
@@ -75,14 +86,15 @@ function elapsedDuration(label: string) {
 /** One count in the workday band. A zero has nowhere useful to go, so it is a
  *  plain fact rather than a disabled control, and the accessible name starts
  *  with the visible value and label (WCAG 2.5.3) before naming the destination. */
-function BandFact({ value, label, review, danger = false, onClick }: {
+function BandFact({ value, label, detail, review, danger = false, onClick }: {
   value: number;
   label: string;
+  detail: string;
   review: string;
   danger?: boolean;
   onClick: () => void;
 }) {
-  const content = <><strong className={danger && value > 0 ? "is-danger" : undefined}>{value}</strong><small>{label}</small></>;
+  const content = <><span className="band-fact-label">{label}</span><strong className={danger && value > 0 ? "is-danger" : undefined}>{value}</strong><span className="band-fact-detail">{detail}</span></>;
   return value > 0
     ? <button type="button" className="band-fact" aria-label={`${value} ${label}. ${review}`} onClick={onClick}>{content}</button>
     : <span className="band-fact is-empty">{content}</span>;
@@ -107,20 +119,31 @@ function DashboardTaskRow({ task, currentDate, busy = false, taskFlight, onOpenT
   const state = taskState(task, currentDate);
   const progress = subtaskProgress(task);
   const due = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
+  const dueLabel = due ? due === currentDate ? "Today" : formatWorkOsDate(due) : "No date";
+  const stateLabel = task.completed ? "Done" : state === "overdue" ? "Overdue" : "Open";
+  const project = typeof task.project?.name === "string" ? task.project.name : null;
+  const priority = task.priority ? `${String(task.priority).replace(/^./, (value) => value.toUpperCase())} priority` : null;
+  const subtitle = [project, priority].filter(Boolean).join(" · ");
   return <article className={`dashboard-task-row ${state}${pending ? " is-pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-task-id={id}>
     <button type="button" className={`dashboard-task-check${task.completed || flight === "leaving" ? " is-complete" : ""}${flight === "completing" ? " is-completing" : ""}`} disabled={!!pending || !!flight || !taskCheckboxEnabled(task)} aria-busy={flight === "completing"} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} onClick={() => { if (!pending && !flight) onToggleTask(task, !task.completed); }}>
       {pending === "syncing" || flight === "completing" ? <FadeArc size={13} /> : task.completed || flight === "leaving" ? <Check size={15} aria-hidden="true" /> : null}
     </button>
     <button type="button" className="dashboard-task-row-copy" disabled={!!pending || !!flight} onClick={() => onOpenTask(task)}>
       <strong>{title}</strong>
-      <span>{task.priority ? `${String(task.priority).replace(/^./, (value) => value.toUpperCase())} priority` : due ? `Due ${formatWorkOsDate(due)}` : "No due date"}</span>
+      {subtitle ? <span>{subtitle}</span> : null}
     </button>
-    <div className="dashboard-task-row-meta">
-      {progress.total > 0 && <ProgressRing completed={progress.completed} total={progress.total} size={24} stroke={3} label="subtasks" />}
-      {due && <span className={state === "overdue" ? "is-overdue" : ""}>{formatWorkOsDate(due)}</span>}
+    <span className="dashboard-task-row-progress">{progress.total > 0 ? <ProgressRing completed={progress.completed} total={progress.total} size={24} stroke={3} label="subtasks" /> : null}</span>
+    <span className={`dashboard-task-row-due${state === "overdue" ? " is-overdue" : ""}`}>{dueLabel}</span>
+    <span className={`dashboard-task-pill is-${state}`}>{stateLabel}</span>
+    <div className="dashboard-task-row-actions">
       {pending === "failed" && <span className="dashboard-pending-actions"><button type="button" title={task.pending_error || "Retry adding task"} aria-label={`Retry adding ${title}`} onClick={() => onRetryPendingTask?.(task)}><RefreshCw size={13} /></button><button type="button" aria-label={`Dismiss ${title}`} onClick={() => onDismissPendingTask?.(task)}><Check size={12} /></button></span>}
       {!pending && hasTaskMenu(task, currentDate) && <div className={`dashboard-task-menu ${menuOpen ? "open" : ""}`}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy || !!flight} onToggle={() => setMenuOpen((value) => !value)} onClose={() => setMenuOpen(false)}><TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => actions.onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={() => actions.onEditTask?.(task)} onAssign={actions.onAssignTask ? () => actions.onAssignTask?.(task) : undefined} onArchive={() => actions.onArchiveTask?.(task)} onDelete={() => actions.onDeleteTask?.(task)} onClose={() => setMenuOpen(false)} /></EllipsisMenu></div>}
     </div>
+    <span className="dashboard-task-row-meta">
+      {progress.total > 0 ? <span>{progress.completed}/{progress.total} subtasks</span> : null}
+      <span>Due {dueLabel}</span>
+      <span className={state === "overdue" ? "is-overdue" : undefined}>{stateLabel}</span>
+    </span>
   </article>;
 }
 
@@ -158,6 +181,84 @@ function PulseTimeline({ model, showPosition = true, expanded = false }: { model
     </div>
     {expanded && <div className="dashboard-pulse-labels"><span><small>Start</small><strong>{start}</strong></span><span><small>End</small><strong>{end}</strong></span></div>}
   </div>;
+}
+
+function WeekInstrument({ week, loading = false }: { week?: InsightsData | null; loading?: boolean }) {
+  const days = week?.days ?? [];
+  const values = days.map((entry) => Number(entry.tasksCompleted ?? 0));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const max = Math.max(4, Math.ceil(Math.max(1, ...values) / 2) * 2);
+  const chartX = (index: number) => 42 + (index * 280) / Math.max(1, days.length - 1);
+  const chartY = (value: number) => 122 - (value / max) * 92;
+  const points = days.map((entry, index) => ({
+    x: chartX(index),
+    y: chartY(Number(entry.tasksCompleted ?? 0)),
+    date: entry.date,
+  }));
+  const line = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+  const area = points.length
+    ? `${line} L${points[points.length - 1].x.toFixed(1)} 122 L${points[0].x.toFixed(1)} 122 Z`
+    : "";
+  const label = days.map((entry) => `${formatWorkOsDate(entry.date)} ${Number(entry.tasksCompleted ?? 0)} tasks completed`).join(", ");
+  return <section className="dashboard-instrument dashboard-week" aria-labelledby="dashboard-week-title">
+    <header className="dashboard-instrument-head">
+      <h2 id="dashboard-week-title">This week</h2>
+      <span><strong>{total}</strong> completed</span>
+    </header>
+    {days.length ? <>
+      <svg className="dashboard-week-chart" viewBox="0 0 340 156" role="img" aria-label={`Tasks completed each day: ${label}.`}>
+        <line className="dashboard-week-grid" x1="34" y1={chartY(max)} x2="330" y2={chartY(max)} />
+        <line className="dashboard-week-grid" x1="34" y1={chartY(max / 2)} x2="330" y2={chartY(max / 2)} />
+        <line className="dashboard-week-grid" x1="34" y1={chartY(0)} x2="330" y2={chartY(0)} />
+        <text className="dashboard-week-axis" x="6" y={chartY(max) + 3}>{max}</text>
+        <text className="dashboard-week-axis" x="6" y={chartY(max / 2) + 3}>{max / 2}</text>
+        <text className="dashboard-week-axis" x="6" y={chartY(0) + 3}>0</text>
+        {points.length > 1 ? <path className="dashboard-week-area" d={area} /> : null}
+        {points.length > 1 ? <path className="dashboard-week-line" pathLength={1} d={line} /> : null}
+        {points.map((point, index) => <circle key={`${point.date}-dot`} className={index === points.length - 1 ? "dashboard-week-dot is-today" : "dashboard-week-dot"} cx={point.x} cy={point.y} r={index === points.length - 1 ? 4.2 : 3.4} />)}
+        {days.map((entry, index) => <text key={`${entry.date}-label`} className={index === days.length - 1 ? "dashboard-week-day is-today" : "dashboard-week-day"} x={points[index]?.x ?? 0} y="146" textAnchor="middle">{index === days.length - 1 ? "Today" : weekdayInitial(entry.date)}</text>)}
+      </svg>
+      <p className="dashboard-instrument-note">Tasks completed, not a productivity score. Today is the filled mark.</p>
+    </> : <div className="dashboard-instrument-empty">{loading ? "Loading this week’s record…" : "No recorded days in this range."}</div>}
+  </section>;
+}
+
+function weekdayInitial(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const parsed = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, { timeZone: "UTC", weekday: "narrow" }).format(parsed);
+}
+
+function DashboardMargin({ week, weekLoading = false }: {
+  week?: InsightsData | null;
+  weekLoading?: boolean;
+}) {
+  const days = week?.days ?? [];
+  const consistency = week?.consistency;
+  const dayCount = consistency?.dayCount ?? days.length;
+  const onTime = days.reduce((sum, entry) => sum + Number(entry.outcomesOnTime ?? 0), 0);
+  const late = days.reduce((sum, entry) => sum + Number(entry.outcomesLate ?? 0), 0);
+  const reliability = [
+    onTime + late > 0 ? { label: "On-time outcomes", value: `${onTime} of ${onTime + late}`, percent: Math.round((onTime / (onTime + late)) * 100) } : null,
+    consistency && dayCount > 0 ? { label: "Days with an update", value: `${consistency.daysWithUpdate} of ${dayCount}`, percent: Math.round((consistency.daysWithUpdate / dayCount) * 100) } : null,
+    consistency && dayCount > 0 ? { label: "Days with a completed task", value: `${consistency.daysWithCompletion} of ${dayCount}`, percent: Math.round((consistency.daysWithCompletion / dayCount) * 100), quiet: true } : null,
+  ].filter((row): row is { label: string; value: string; percent: number; quiet?: boolean } => row !== null);
+  return <aside className="dashboard-margin" aria-label="Workday instruments">
+    <WeekInstrument week={week} loading={weekLoading} />
+    {reliability.length ? <section className="dashboard-instrument dashboard-reliability" aria-labelledby="dashboard-reliability-title">
+      <header className="dashboard-instrument-head">
+        <h2 id="dashboard-reliability-title">Plan reliability</h2>
+        <span>{dayCount} {dayCount === 1 ? "day" : "days"}</span>
+      </header>
+      <div className="dashboard-rel-rows">
+        {reliability.map((row) => <div className="dashboard-rel-row" key={row.label}>
+          <div className="dashboard-rel-top"><span>{row.label}</span><small>{row.value} · {row.percent}%</small></div>
+          <div className="dashboard-rel-track"><i className={row.quiet ? "is-quiet" : undefined} style={{ width: `${row.percent}%` }} /></div>
+        </div>)}
+      </div>
+    </section> : null}
+  </aside>;
 }
 
 function WorkdayBand({ model, currentDate, observedOnly = false, children }: { model: WorkdayDashboardModel; currentDate: string; observedOnly?: boolean; children: ReactNode }) {
@@ -223,7 +324,7 @@ function WorkdayBand({ model, currentDate, observedOnly = false, children }: { m
   </>;
 }
 
-export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
+export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", week = null, weekLoading = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
   const taskCopy = model.metrics.carryover > 0
     ? { title: "Start by clearing the oldest decision", body: `${model.metrics.carryover} unfinished task${model.metrics.carryover === 1 ? "" : "s"} is waiting from an earlier workday.` }
     : { title: "Your agenda is open", body: "Choose a first priority or use the composer below to add one without clocking in." };
@@ -260,46 +361,49 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
         <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} />
       </div>
       <div className="workday-band-facts" aria-label="Workday counts">
-        <BandFact value={model.metrics.planned} label="planned" review="Review today’s tasks" onClick={() => onOpenTasks("today")} />
-        <BandFact value={model.metrics.carryover} label="carried over" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
-        <BandFact value={model.metrics.overdue} label="overdue" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
-        <BandFact value={model.metrics.completed} label="completed" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />
+        <BandFact value={model.metrics.planned} label="planned" detail="on today’s list" review="Review today’s tasks" onClick={() => onOpenTasks("today")} />
+        <BandFact value={model.metrics.carryover} label="carried over" detail="older open work" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
+        <BandFact value={model.metrics.overdue} label="overdue" detail="open work past due" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
+        <BandFact value={model.metrics.completed} label="completed" detail="outcomes today" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />
       </div>
+      <section className="day-focus-strip" aria-label="Today’s focus">
+        <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
+        <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
+          <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
+          <Pencil size={12} aria-hidden="true" />
+        </button>
+        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? ` · Next check-in ${nextCheckIn}${nextCheckInRequired ? " (required)" : ""}` : ""}</small>
+      </section>
       {(model.activityWatch === "clock-in" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-in" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.</small>}
         {goalSaveState !== "saved" && <small className="dashboard-save-warning"><RefreshCw size={12} aria-hidden="true" /> Focus changes are {goalSaveState === "saving" ? "saving" : "waiting to retry"}.</small>}
       </footer>}
     </WorkdayBand>
 
-    <section className="day-focus-strip" aria-label="Today’s focus">
-      <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
-      <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
-        <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
-        <Pencil size={12} aria-hidden="true" />
-      </button>
-      <small className="day-focus-source">{model.focus.source}</small>
-    </section>
-
-    <section className="dashboard-panel work-queue-panel" aria-label="Work queue">
-      <header className="work-queue-header is-static">
-        <h3>First moves</h3>
-        <div className="work-queue-actions">
-          <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Open Tasks <ChevronRight size={14} aria-hidden="true" /></button>
+    <div className="dashboard-body">
+      <section className="dashboard-panel work-queue-panel" aria-label="Work queue">
+        <header className="work-queue-header is-static">
+          <h3>First moves</h3>
+          <div className="work-queue-actions">
+            <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Open Tasks <ChevronRight size={14} aria-hidden="true" /></button>
+          </div>
+        </header>
+        {openCount > 0 ? <div className="dashboard-task-columns" aria-hidden="true"><span /><span>Task</span><span /><span>Due</span><span>Status</span><span /></div> : null}
+        <div className="work-queue-list">
+          <DashboardTaskQueue actions={actions} tasks={tasks} currentDate={currentDate} emptyTitle={taskCopy.title} emptyBody={taskCopy.body} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
         </div>
-      </header>
-      <div className="work-queue-list">
-        <DashboardTaskQueue actions={actions} tasks={tasks} currentDate={currentDate} emptyTitle={taskCopy.title} emptyBody={taskCopy.body} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
-      </div>
-      <footer className="dashboard-panel-footer">
-        <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
-        <small>{model.sync.detail}</small>
-        <span className="work-queue-showing">Showing {Math.min(5, openCount)} of {openCount} open</span>
-      </footer>
-    </section>
+        <footer className="dashboard-panel-footer">
+          <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
+          <small>{model.sync.detail}</small>
+          <span className="work-queue-showing">Showing {Math.min(5, openCount)} of {openCount} open</span>
+        </footer>
+      </section>
+      <DashboardMargin week={week} weekLoading={weekLoading} />
+    </div>
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", week = null, weekLoading = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
@@ -334,6 +438,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         <div className="workday-band-state">
           <span className="workday-band-label"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" />{observedOnly ? "Worktivity status" : model.stateLabel}</span>
           {(!confirmed || !attendanceControlsSupported) && <p className={`workday-band-detail ${syncClass(model.stateTone)}`}>{attendanceControlsSupported ? model.stateDetail : "Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status."}</p>}
+          {confirmed && attendanceControlsSupported && model.attendance?.observedAt ? <p className="workday-band-detail">Last observed {formatWorkOsTime(model.attendance.observedAt, model.schedule.timezone ?? undefined)} by Worktivity.</p> : null}
         </div>
         <div className="workday-band-actions">
           {attendanceControlsSupported && canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} aria-hidden="true" /> : <CirclePause size={14} aria-hidden="true" />}{model.state === "paused" ? "Resume" : "Pause"}</button>}
@@ -353,44 +458,47 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         </div>
       </div>
       <div className="workday-band-facts" aria-label="Workday counts">
-        <BandFact value={model.metrics.completed} label="completed" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />
-        <BandFact value={model.metrics.open} label="open today" review="Review open tasks for today" onClick={() => onOpenTasks("today")} />
-        <BandFact value={model.metrics.overdue} label="overdue" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
-        <BandFact value={model.metrics.carryover} label="carried over" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
+        <BandFact value={model.metrics.completed} label="completed" detail="outcomes today" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />
+        <BandFact value={model.metrics.open} label="open today" detail="attributed to today" review="Review open tasks for today" onClick={() => onOpenTasks("today")} />
+        <BandFact value={model.metrics.overdue} label="overdue" detail="open work past due" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
+        <BandFact value={model.metrics.carryover} label="carried over" detail="older open work" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
       </div>
+      <section className="day-focus-strip" aria-label="Today’s focus">
+        <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
+        <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
+          <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
+          <Pencil size={12} aria-hidden="true" />
+        </button>
+        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? ` · Next check-in ${nextCheckIn}${nextCheckInRequired ? " (required)" : ""}` : ""}</small>
+      </section>
       {(model.activityWatch === "clock-out" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}
         {goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} aria-hidden="true" /> Retry focus save</button>}
       </footer>}
     </WorkdayBand>
 
-    <section className="day-focus-strip" aria-label="Today’s focus">
-      <span className="day-focus-kicker"><Target size={12} aria-hidden="true" /> Focus</span>
-      <button type="button" className="day-focus-copy" onClick={onOpenFocus} title="Edit today’s focus">
-        <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
-        <Pencil size={12} aria-hidden="true" />
-      </button>
-      <small className="day-focus-source">{model.focus.source}</small>
-    </section>
-
-    <section className="dashboard-panel work-queue-panel" aria-label="Work queue">
-      <header className="work-queue-header">
-        <div className="work-queue-tabs" role="tablist" aria-label="Workday tasks">
-          {tabs.map((item, index) => <button key={item.id} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`work-queue-tab-${item.id}`} aria-controls="work-queue-list" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} onKeyDown={onTabKeyDown}>{item.label} <em>{item.count}</em></button>)}
+    <div className="dashboard-body">
+      <section className="dashboard-panel work-queue-panel" aria-label="Work queue">
+        <header className="work-queue-header">
+          <div className="work-queue-tabs" role="tablist" aria-label="Workday tasks">
+            {tabs.map((item, index) => <button key={item.id} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`work-queue-tab-${item.id}`} aria-controls="work-queue-list" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} onKeyDown={onTabKeyDown}>{item.label} <em>{item.count}</em></button>)}
+          </div>
+          <div className="work-queue-actions">
+            <button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} aria-hidden="true" /> Add task</button>
+            <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
+          </div>
+        </header>
+        {openInTab > 0 ? <div className="dashboard-task-columns" aria-hidden="true"><span /><span>Task</span><span /><span>Due</span><span>Status</span><span /></div> : null}
+        <div className="work-queue-list" role="tabpanel" id="work-queue-list" aria-labelledby={`work-queue-tab-${tab}`}>
+          <DashboardTaskQueue actions={actions} tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
         </div>
-        <div className="work-queue-actions">
-          <button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} aria-hidden="true" /> Add task</button>
-          <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
-        </div>
-      </header>
-      <div className="work-queue-list" role="tabpanel" id="work-queue-list" aria-labelledby={`work-queue-tab-${tab}`}>
-        <DashboardTaskQueue actions={actions} tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
-      </div>
-      <footer className="dashboard-panel-footer">
-        <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
-        <small>{model.sync.detail}</small>
-        <span className="work-queue-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
-      </footer>
-    </section>
+        <footer className="dashboard-panel-footer">
+          <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
+          <small>{model.sync.detail}</small>
+          <span className="work-queue-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
+        </footer>
+      </section>
+      <DashboardMargin week={week} weekLoading={weekLoading} />
+    </div>
   </main>;
 }

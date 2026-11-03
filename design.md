@@ -427,30 +427,28 @@ content axis, tokens, and action language.
 
 ### 5.1 Pre-shift / not clocked in
 
-The clocked-out dashboard uses the same three-part composition as the active
-day — one workday band, one focus strip, one queue — so the page does not change
-its shape when the shift starts:
+The clocked-out dashboard uses the same command-surface composition as the
+active day, so the page does not change its shape when the shift starts:
 
-1. Attendance band. The state line (Ready to begin, Off shift, or Worktivity
+1. Command surface. The state line (Ready to begin, Off shift, or Worktivity
    status), the short state detail plus the clock-in contract, one primary Clock
-   in action in the Windows Companion, and one quiet Set focus action. The web
-   dashboard shows status and
-   directs employees to the Companion for attendance actions. Otto is a
-   restrained mark in the band, never the reason it is tall.
-2. Window instrument. The time until the window opens at the band's leading edge,
-   with the scheduled start and end on the axis. Before the window opens there is
-   no position to mark, so the axis carries no now dot; the live fact is the time
-   until it starts.
-3. Counts. Planned, carried over, overdue, and completed sit in the band as four
-   linked facts, each opening the view it measures. A zero is a quiet fact, not a
-   control.
-4. Focus strip. Today's focus on one line with its provenance, under the shared
-   pan contract (§6.2).
-5. First moves. A short open-task queue with direct completion, a full Tasks
+   in action in the Windows Companion, and one quiet Set focus action. The
+   scheduled-window instrument sits on the same row; before the window opens the
+   leading reading is the time until it starts and the axis carries no now dot.
+   The four counts follow on a hairline row — planned, carried over, overdue,
+   and completed — each opening the view it measures. A zero is a quiet fact,
+   not a control. The focus line is the surface's last row: today's focus, its
+   provenance, and the next check-in, under the shared pan contract (§6.2).
+   Otto is a restrained mark in the surface, never the reason it is tall.
+2. Margin instruments. This week's completed-task chart and plan reliability,
+   set as labels on hairlines rather than cards. On wide windows they sit beside
+   the queue; at narrow widths they move below it. They read the same seven-day
+   insights record as the web. An unavailable read leaves the queue intact and
+   shows a quiet empty state in place of the chart.
+3. First moves. A short open-task queue with direct completion, a full Tasks
    path, and the task-record sync state in its footer.
 
-At 1024×768 the first task row is visible without scrolling, matching the active
-day. The readiness hero and its separate pulse, metric, and work-in-motion cards
+The readiness hero and its separate pulse, metric, and work-in-motion cards
 were removed: they restated the counts and the window, and together they pushed
 the queue below the fold.
 
@@ -460,40 +458,52 @@ start attendance.
 
 ### 5.2 Active / clocked in
 
-The active dashboard is organized around one command surface:
+The active dashboard is organized around one command surface, the same
+composition the web Today page uses:
 
-1. Attendance band: the state line (On shift, Paused, or Worktivity status), the
-   window instrument, and Pause/Resume and Clock out in the connected Windows
-   Companion. Worktivity owns the state and confirms each change before Work OS
-   mirrors it. The band has no permanent footer: one exists only while it carries
-   a pending activity check or a focus-save retry, so the normal state spends its
-   height on the instrument instead of a restated status sentence.
+1. Attendance row: the state line (On shift, Paused, or Worktivity status), one
+   quiet provider-observation line when Worktivity has confirmed the session, and
+   Pause/Resume and Clock out in the connected Windows Companion. Worktivity owns
+   the state and confirms each change before Work OS mirrors it. The surface has
+   no permanent footer: one exists only while it carries a pending activity
+   check or a focus-save retry, so the normal state spends its height on the
+   instrument instead of a restated status sentence.
 2. Window instrument: elapsed and remaining at the ends of one bounded progress
-   bar whose start and end label the axis. The position marker carries the
+   bar; hovering or focusing the line reveals its scheduled start and end, and
+   the detailed dialog carries the full axis. The position marker carries the
    present without restating the reader's own clock. It is a calm instrument,
    not a gamified score.
-3. Counts: completed, open today, overdue, and carried over sit in the band as
-   four linked facts. Each has a single owner on the page and opens the view it
-   measures; a zero is stated quietly and is not a control.
-4. Focus strip: today's focus as one line with its provenance and save state,
-   under the shared pan contract (§6.2).
+3. Counts: completed, open today, overdue, and carried over sit on a full-width
+   hairline row with their plain-language detail. Each has a single owner on the
+   page and opens the view it measures; a zero is stated quietly and is not a
+   control.
+4. Focus line: today's focus as one line with its provenance, save state, and
+   the next check-in, under the shared pan contract (§6.2). It is the command
+   surface's last row, not a second card.
 5. Task queue: Today, Yesterday, Older tabs with live counts, Add task, and a
    direct full-workspace path. The tabs are the panel's title; no eyebrow or
-   heading restates the selected view.
-6. Otto chat entry: a compact launcher outside page flow. Opening it creates the
+   heading restates the selected view. Above 900px the queue reads as a table
+   with Task, Due, and Status tracks; below it, due and status fold into one
+   metadata line so the title keeps its width.
+6. Margin instruments: This week's completed-task chart and plan reliability,
+   set as labels on hairlines rather than cards. On wide windows they sit beside
+   the queue; at narrow widths they move below it. They read the same seven-day
+   insights record as the web. An unavailable read leaves the command center and
+   queue intact and shows a quiet empty state in place of the chart.
+7. Otto chat entry: a compact launcher outside page flow. Opening it creates the
    shared bounded chat sheet and must not cover the queue.
 
-The band and the focus strip stay deliberately compact: at 1024×768 the first
-task row is visible without scrolling, because the queue is the visual anchor
-and the attendance state is context, not a second hero. The 132px progress ring
-is a documented deviation from the earlier composition: it and the timeline bar
+The command surface stays deliberately compact: at 1024×768 the first task row
+is visible without scrolling, because the queue is the visual anchor and the
+attendance state is context, not a second hero. The 132px progress ring is a
+documented deviation from the earlier composition: it and the timeline bar
 encoded the same window percentage, so the bar is the one instrument and the
 ring's vertical space belongs to the work. The four counts have one owner — the
-band — rather than a flow legend and a facts row that disagreed about which
-numbers the day is made of.
+command surface — rather than a flow legend and a facts row that disagreed about
+which numbers the day is made of.
 
-The workday band opens a detailed workday dialog when its non-control area is
-pressed; its clock and task buttons keep their own actions. A keyboard-reachable
+The command surface opens a detailed workday dialog when its non-control area
+is pressed; its clock and task buttons keep their own actions. A keyboard-reachable
 details button appears on focus and opens the same dialog. The dialog separates provider
 status, scheduled window, task counts, and focus without inventing attendance
 or task facts. It traps focus, closes on Escape, backdrop, or close, and restores

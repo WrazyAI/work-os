@@ -1802,6 +1802,10 @@ export default function App() {
           : todayTaskHistoryQuery;
   const backlogQuery = useTaskBacklogQuery({ enabled: employeeBootstrapEnabled, sortDate: visibleDay?.shiftDate });
   const insightsQuery = useInsightsQuery({ enabled: employeeBootstrapEnabled && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
+  // The dashboard's margin rail reads the same seven-day record the web Today
+  // page uses. It is a secondary instrument: a failed read leaves the command
+  // center intact and the rail simply reports that the record is unavailable.
+  const dashboardInsightsQuery = useInsightsQuery({ enabled: employeeBootstrapEnabled && !debugScenario.enabled && view === "day", range: "7d", through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
   // The masthead bell's owner-scoped reads run in both workspaces — the
   // administration bell lists the signed-in account's own notifications — so
@@ -5175,6 +5179,10 @@ export default function App() {
         attendanceControlsSupported={attendanceControlsSupported}
         canClockIn={attendanceControlsSupported && gate.canClockIn && !worktivityPending}
         goalSaveState={planSaveState}
+        week={dashboardInsightsQuery.data ?? null}
+        weekLoading={dashboardInsightsQuery.isLoading}
+        nextCheckIn={visibleDay.prompt.nextPromptAt ? formatTime(visibleDay.prompt.nextPromptAt, visibleDay.shift?.timezone) : null}
+        nextCheckInRequired={visibleDay.prompt.required}
         onClockIn={clockIn}
         onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
         onOpenCarryover={() => { setCarryOverOpen(true); setView("tasks"); }}
@@ -5201,6 +5209,10 @@ export default function App() {
         canClockOut={canControlWorktivity}
         observedOnly={observedOnly}
         goalSaveState={planSaveState}
+        week={dashboardInsightsQuery.data ?? null}
+        weekLoading={dashboardInsightsQuery.isLoading}
+        nextCheckIn={visibleDay.prompt.nextPromptAt ? formatTime(visibleDay.prompt.nextPromptAt, visibleDay.shift?.timezone) : null}
+        nextCheckInRequired={visibleDay.prompt.required}
         onRetryGoalSave={() => setPlanDirty(true)}
         onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
         onOpenCarryover={() => { setCarryOverOpen(true); setTaskView("unfinished"); setView("tasks"); }}
