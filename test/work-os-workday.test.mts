@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, promptInstant, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -15,6 +15,33 @@ test("session transitions reject impossible branches", () => {
   assert.equal(nextSessionState("paused", "resume"), "active");
   assert.equal(nextSessionState("active", "clock_out"), "clocked_out");
   assert.throws(() => nextSessionState("clocked_out", "pause"));
+});
+
+test("prompt instants keep the database millisecond precision", () => {
+  const fromDatabase = new Date("2026-11-02T15:04:14.974Z");
+  assert.equal(promptInstant(fromDatabase), "2026-11-02T15:04:14.974Z");
+  assert.equal(promptInstant("2026-11-02T15:04:14.974Z"), "2026-11-02T15:04:14.974Z");
+  assert.equal(promptInstant(null), null);
+  assert.equal(promptInstant("not-a-date"), null);
+  // Two prompt instances that differ only below a second must not collapse.
+  assert.notEqual(promptInstant(fromDatabase), promptInstant("2026-11-02T15:04:14.000Z"));
+});
+
+test("a backdated provider session starts its cadence at the session row", () => {
+  const backdated = { ...session, clockedInAt: "2026-08-12T09:00:00.000Z", createdAt: "2026-08-12T12:00:00.000Z" };
+  assert.equal(
+    firstFollowUpAt({ session: backdated, firstFollowUpMinutes: 10, at: "2026-08-12T12:01:00.000Z" }),
+    "2026-08-12T12:10:00.000Z",
+  );
+  const normal = { ...session, clockedInAt: "2026-08-12T09:00:00.000Z", createdAt: "2026-08-12T09:00:30.000Z" };
+  assert.equal(
+    firstFollowUpAt({ session: normal, firstFollowUpMinutes: 10, at: "2026-08-12T09:01:00.000Z" }),
+    "2026-08-12T09:10:00.000Z",
+  );
+  assert.equal(
+    firstFollowUpAt({ session: backdated, planConfirmedAt: "2026-08-12T11:00:00.000Z", firstFollowUpMinutes: 10, at: "2026-08-12T11:01:00.000Z" }),
+    "2026-08-12T11:10:00.000Z",
+  );
 });
 
 test("the goal question holds the day's first prompt and suppresses breaks, final hour, and post clock-out", () => {

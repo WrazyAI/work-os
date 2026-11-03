@@ -1,5 +1,18 @@
 export const ACTIVE_WORK_SESSION_STATES = ["clocked_in", "active", "paused", "eod_due"] as const;
 
+/** Prompt timestamps may arrive as Date objects from the database shim.
+ * Passing one to Date.parse stringifies it without milliseconds, which can
+ * collapse two prompt instances onto the same due instant. Keep the real
+ * instant whenever the caller supplies one. */
+export function promptInstant(value: unknown): string | null {
+  const instant = value instanceof Date
+    ? value
+    : typeof value === "string" && value.trim()
+      ? new Date(value)
+      : null;
+  return instant && Number.isFinite(instant.getTime()) ? instant.toISOString() : null;
+}
+
 export type WorkSessionState = "scheduled" | (typeof ACTIVE_WORK_SESSION_STATES)[number] | "clocked_out";
 export type WorkSessionAction = "clock_in" | "pause" | "resume" | "mark_active" | "mark_eod_due" | "clock_out";
 export type ProgressUpdateKind =
@@ -16,6 +29,9 @@ export interface SessionShape {
   scheduledStartsAt: string | null;
   scheduledEndsAt: string | null;
   clockedInAt?: string | null;
+  /** When this session row was created. A provider backfill can set
+   * clockedInAt before the session existed; the cadence starts at the row. */
+  createdAt?: string | null;
   clockedOutAt?: string | null;
   snoozedUntil?: string | null;
   firstFollowUpAt?: string | null;
@@ -118,8 +134,19 @@ export function firstFollowUpMinutes(value: unknown = process.env.WORK_OS_FIRST_
 }
 
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "firstFollowUpMinutes" | "session" | "at">) {
-  const baseline = context.planConfirmedAt ?? context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
-  const baselineAt = Date.parse(baseline ?? context.at);
+  const planConfirmedAt = promptInstant(context.planConfirmedAt);
+  const clockedInAt = promptInstant(context.session?.clockedInAt);
+  const createdAt = promptInstant(context.session?.createdAt);
+  // A provider backfill can date the clock-in to an earlier interval that was
+  // already covered by a prior session. Anchoring its first follow-up to the
+  // old instant reuses that prompt instance; start from the session instead.
+  const backdated = clockedInAt !== null && createdAt !== null
+    && Date.parse(clockedInAt) < Date.parse(createdAt) - 60_000;
+  const baseline = planConfirmedAt
+    ?? (backdated ? createdAt : clockedInAt)
+    ?? context.session?.scheduledStartsAt
+    ?? context.at;
+  const baselineAt = Date.parse(promptInstant(baseline) ?? promptInstant(context.at) ?? "");
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
   const minutes = firstFollowUpOption(context.firstFollowUpMinutes) ?? firstFollowUpMinutes();
   const resolvedAt = baselineAt + minutes * 60_000;

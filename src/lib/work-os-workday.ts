@@ -7,7 +7,7 @@ import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, promptInstant, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-local-config";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
@@ -262,24 +262,25 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
   const promptDecision = decideWorkdayPrompt({
     session: session ? {
       state: session.state as WorkSessionState,
-      scheduledStartsAt: session.scheduled_starts_at as string | null,
-      scheduledEndsAt: session.scheduled_ends_at as string | null,
-      clockedInAt: session.clocked_in_at as string | null,
-      clockedOutAt: session.clocked_out_at as string | null,
-      snoozedUntil: session.snoozed_until as string | null,
-      firstFollowUpAt: session.first_follow_up_at as string | null,
-      nextFallbackAt: session.next_fallback_at as string | null,
+      scheduledStartsAt: promptInstant(session.scheduled_starts_at),
+      scheduledEndsAt: promptInstant(session.scheduled_ends_at),
+      clockedInAt: promptInstant(session.clocked_in_at),
+      createdAt: promptInstant(session.created_at),
+      clockedOutAt: promptInstant(session.clocked_out_at),
+      snoozedUntil: promptInstant(session.snoozed_until),
+      firstFollowUpAt: promptInstant(session.first_follow_up_at),
+      nextFallbackAt: promptInstant(session.next_fallback_at),
       lastPromptKind: session.last_prompt_kind as "follow_up" | "hourly_fallback" | "eod" | null,
-      lastPromptAt: session.last_prompt_at as string | null,
+      lastPromptAt: promptInstant(session.last_prompt_at),
     } : null,
     breaks: shift?.breaks ?? [], hasConfirmedPlan: plan?.status === "confirmed",
     hasGoal: Boolean(dailyPlanGoalText(plan)),
-    planConfirmedAt: plan?.confirmed_at as string | null,
-    firstFollowUpAt: session?.first_follow_up_at as string | null,
-    nextFallbackAt: session?.next_fallback_at as string | null,
+    planConfirmedAt: promptInstant(plan?.confirmed_at),
+    firstFollowUpAt: promptInstant(session?.first_follow_up_at),
+    nextFallbackAt: promptInstant(session?.next_fallback_at),
     lastPromptKind: session?.last_prompt_kind as "follow_up" | "hourly_fallback" | "eod" | null,
-    lastPromptAt: session?.last_prompt_at as string | null,
-    lastSubstantiveUpdateAt: session?.last_substantive_update_at as string | null, at: at.toISOString(),
+    lastPromptAt: promptInstant(session?.last_prompt_at),
+    lastSubstantiveUpdateAt: promptInstant(session?.last_substantive_update_at), at: at.toISOString(),
     checkInIntervalMinutes: cadence.checkInIntervalMinutes,
     firstFollowUpMinutes: cadence.firstFollowUpMinutes,
     storedCheckInIntervalMinutes: session?.check_in_interval_minutes as number | null,
