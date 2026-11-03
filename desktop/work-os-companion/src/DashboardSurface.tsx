@@ -394,7 +394,6 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
             <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Open Tasks <ChevronRight size={14} aria-hidden="true" /></button>
           </div>
         </header>
-        {openCount > 0 ? <div className="dashboard-task-columns" aria-hidden="true"><span /><span>Task</span><span /><span>Due</span><span>Status</span><span /></div> : null}
         <div className="work-queue-list">
           <DashboardTaskQueue actions={actions} tasks={tasks} currentDate={currentDate} emptyTitle={taskCopy.title} emptyBody={taskCopy.body} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
         </div>
@@ -494,7 +493,6 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
             <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
           </div>
         </header>
-        {openInTab > 0 ? <div className="dashboard-task-columns" aria-hidden="true"><span /><span>Task</span><span /><span>Due</span><span>Status</span><span /></div> : null}
         <div className="work-queue-list" role="tabpanel" id="work-queue-list" aria-labelledby={`work-queue-tab-${tab}`}>
           <DashboardTaskQueue actions={actions} tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} />
         </div>

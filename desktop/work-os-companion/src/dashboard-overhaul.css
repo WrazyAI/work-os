@@ -1562,21 +1562,6 @@ body {
 .work-queue-actions .dashboard-secondary-action { min-height: 34px; padding: 0 12px; border-radius: 9px; font-size: 11.5px; }
 .dashboard-inline-link { font-size: 11.5px; }
 
-.dashboard-task-columns {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 60px 80px 70px minmax(34px, auto);
-  column-gap: 12px;
-  align-items: center;
-  height: 32px;
-  padding: 0 20px;
-  border-top: 1px solid var(--dash-line);
-  border-bottom: 1px solid var(--dash-line);
-  color: var(--dash-muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 .work-queue-list { padding: 0 20px; }
 .dashboard-task-row {
   display: grid;
@@ -1709,7 +1694,6 @@ body {
 }
 
 @media (max-width: 900px) {
-  .dashboard-task-columns { display: none; }
   .dashboard-task-row {
     grid-template-columns: 28px minmax(0, 1fr) minmax(34px, auto);
     grid-template-areas:
