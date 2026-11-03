@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { adminAgentRouteError, requireAdminAgentAccess } from "@/lib/work-admin-agent-auth";
+import { createAdminPreview } from "@/lib/work-admin-action-previews";
+import { adminPreviewRecord, defaultAdminAgentActionServices, previewAdminAction } from "@/lib/work-admin-agent-actions";
+import { adminAgentError, adminAgentRouteError, requireAdminAgentAccess } from "@/lib/work-admin-agent-auth";
+import { adminAgentJsonBody } from "@/lib/work-admin-agent-preview-routes";
 import { listAdminAgentTasks, parseAdminAgentTaskFilters } from "@/lib/work-admin-agent-tasks";
 import { employeeTaskToday } from "@/lib/work-os-employee-tasks";
 import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
@@ -34,6 +37,31 @@ export async function GET(req: Request) {
       total: page.total,
       cursor: { next: page.nextCursor },
     });
+  } catch (error) {
+    return adminAgentRouteError(error);
+  }
+}
+
+/** Create work for named owner(s). This is a preview creator: it resolves the
+ * owners, project, and due date and answers `202` with the described action.
+ * Only `POST /previews/{id}/confirm` writes the task. */
+export async function POST(req: Request) {
+  try {
+    const auth = await requireAdminAgentAccess(req, "tasks:write");
+    if (auth.response) return auth.response;
+    const key = (req.headers.get("idempotency-key") ?? "").trim();
+    if (!key) return adminAgentError("validation_error", "Idempotency-Key is required", 400);
+    assertAgentRateLimit(auth.agent.tokenId, true);
+    const payload = await adminAgentJsonBody(req, "Task create payload");
+    const preview = await previewAdminAction(
+      auth.agent.access,
+      "task.create",
+      payload,
+      defaultAdminAgentActionServices,
+      { reviewerPersonId: auth.agent.reviewerPersonId },
+    );
+    const stored = await createAdminPreview(adminPreviewRecord(auth.agent, "task.create", preview, key));
+    return NextResponse.json(stored, { status: 202 });
   } catch (error) {
     return adminAgentRouteError(error);
   }

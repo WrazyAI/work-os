@@ -1,5 +1,5 @@
 import { db, audit, type Json } from "@/lib/work-os-internal";
-import { previewFingerprint } from "@/lib/work-admin-action-previews";
+import { ADMIN_PREVIEW_TTL_MS, previewFingerprint, type CreateAdminPreviewInput, type AdminPreviewRecord } from "@/lib/work-admin-action-previews";
 import {
   getAdminAgentEod,
   reviewAdminAgentEod,
@@ -383,15 +383,24 @@ function taskTitle(task: Json): string {
 
 /** The target state a preview was computed from: the current assignees and the
  * current parent, never the planned result. Task 13's confirm `readState` must
- * call this same helper so the stored fingerprint compares like for like. */
+ * call this same helper so the stored fingerprint compares like for like.
+ * `updated_at` is normalised because the pg driver hands back `Date` objects
+ * while a cached or seeded row can be a string: the same instant must produce
+ * the same fingerprint either way. */
 export function adminTaskPreviewState(task: Json): Json {
   return {
-    updatedAt: typeof task.updated_at === "string" ? task.updated_at : null,
+    updatedAt: stateTimestamp(task.updated_at),
     status: typeof task.status === "string" ? task.status : null,
     completed: task.completed === true,
     assignees: assigneeIds(task),
     parentId: taskParentId(task),
   };
+}
+
+function stateTimestamp(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString();
+  return null;
 }
 
 /** The details reader attaches the employee-attached completion evidence it
@@ -423,7 +432,7 @@ function childWarning(mode: "archive" | "delete", children: number): string | nu
 export function adminEodPreviewState(
   report: Pick<AdminAgentEodDetail, "status" | "updatedAt">,
 ): Json {
-  return { status: report.status, updatedAt: report.updatedAt };
+  return { status: report.status, updatedAt: stateTimestamp(report.updatedAt) };
 }
 
 /** `Approve EOD for <person>` when the report names its author, otherwise the
@@ -467,6 +476,13 @@ function payloadTaskId(payload: Json): string {
   const value = payload.task_id;
   if (typeof value !== "string" || !value.trim()) throw new WorkOsValidationError("task_id is required");
   return value.trim();
+}
+
+/** The id a stored request names for its own target. `task.create` stores none,
+ * so its confirm falls back to the record's (null) target id. */
+function requestId(request: Json, field: string): string | null {
+  const value = request[field];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function requireTask(
@@ -893,6 +909,64 @@ export async function previewAdminAction(
     targetType: plan.targetType,
     targetId: plan.targetId,
     request: plan.request,
+  };
+}
+
+/** The confirm path fingerprints the same projection the preview used, so a
+ * stored preview and a fresh target always compare like for like. A create has
+ * no target and its stored fingerprint is the empty state. */
+export async function readAdminPreviewTargetState(
+  access: WorkOsAccess,
+  record: Pick<AdminPreviewRecord, "action" | "request" | "targetId">,
+  services: AdminAgentActionServices = defaultAdminAgentActionServices,
+): Promise<Json> {
+  if (record.action === "task.create") return {};
+  const targetId = requestId(record.request, record.action === "eod.review" ? "report_id" : "task_id")
+    ?? record.targetId;
+  if (record.action === "eod.review") {
+    if (!targetId) throw new WorkOsNotFoundError("EOD report not found");
+    const report = await services.getEod(access, targetId);
+    if (!report) throw new WorkOsNotFoundError("EOD report not found");
+    return adminEodPreviewState(report);
+  }
+  if (!targetId) throw new WorkOsNotFoundError("Task not found");
+  return adminTaskPreviewState(await services.getTask(access, targetId));
+}
+
+/** The insert input a route builds from an already-resolved preview. Keeping
+ * this in one place is what makes every preview creator store the same resolved
+ * `request`, target, state, and fifteen-minute window, and what makes a retried
+ * create with the same `Idempotency-Key` replay the row instead of minting a
+ * second one. */
+export function adminPreviewRecord(
+  actor: { access: WorkOsAccess; tokenId: string },
+  action: AdminPreviewAction,
+  preview: AdminActionPreview,
+  idempotencyKey: string,
+): CreateAdminPreviewInput {
+  const expiresAt = new Date(Date.now() + ADMIN_PREVIEW_TTL_MS);
+  return {
+    organizationId: actor.access.organizationId,
+    userId: actor.access.ctx.user.id,
+    tokenId: actor.tokenId,
+    source: "api",
+    action,
+    targetType: preview.targetType,
+    targetId: preview.targetId,
+    // The resolved request, never the raw body: an assignment preview stores
+    // the exact final list, and apply must not recompute a delta.
+    request: preview.request,
+    preview: {
+      action,
+      summary: preview.summary,
+      changes: preview.changes,
+      warnings: preview.warnings,
+      state: preview.state,
+      expiresAt: expiresAt.toISOString(),
+    },
+    state: preview.state,
+    expiresAt,
+    idempotencyKey,
   };
 }
 

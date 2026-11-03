@@ -338,6 +338,43 @@ export async function getAdminPreview(
   return rows[0] ? toAdminPreview(rows[0]) : null;
 }
 
+/** The stored preview plus the parts a confirm needs and the display shape
+ * deliberately omits: the resolved `request` an apply must replay verbatim and
+ * the action label that selects the re-read projection. */
+export type AdminPreviewRecord = {
+  preview: AdminPreview;
+  action: AdminPreviewAction;
+  request: Json;
+  targetType: string;
+  targetId: string | null;
+};
+
+/** The confirm path must execute the request the preview resolved, not a
+ * client payload, so it reads the row instead of the response body. Ownership
+ * is the same predicate as `getAdminPreview`: an API preview belongs to its
+ * token, a session preview to its user, and a stranger sees `null`. */
+export async function getAdminPreviewRecord(
+  access: WorkOsAccess,
+  previewId: string,
+  tokenId?: string | null,
+): Promise<AdminPreviewRecord | null> {
+  const id = normalizePreviewId(previewId);
+  if (!id) return null;
+  const { rows } = await getPool().query<PreviewRow>(
+    `select ${COLUMNS} from work_admin_action_previews where id = $1 and ${OWNER_PREDICATE}`,
+    [id, access.organizationId, access.ctx.user.id, normalizeTokenId(tokenId)],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    preview: toAdminPreview(row),
+    action: row.action,
+    request: row.request,
+    targetType: row.target_type,
+    targetId: row.target_id,
+  };
+}
+
 type ClaimOutcome = { kind: "replay"; result: AdminPreviewConfirmResult } | { kind: "claimed" };
 
 /** Confirm a preview exactly once. The preview id is the canonical one-time
