@@ -139,17 +139,30 @@ export interface CollapsedEodTask extends EodTaskFact {
 export function collapseEodTasks(facts: EodTaskFact[], personName: string): CollapsedEodTask[] {
   const byTitle = new Map<string, CollapsedEodTask>();
   for (const fact of facts) {
-    const key = normalizeEodTitle(fact.title);
-    if (!key) continue;
+    const titleKey = normalizeEodTitle(fact.title);
+    if (!titleKey) continue;
+    const kind = classifyEodTask(fact.title, fact.project, personName);
+    // A title is only one row when it is the same kind of task in the same
+    // project. A personal task and a work task that share a title are still
+    // two facts, and the brief must not lose the work one.
+    const key = `${titleKey}::${kind}::${fact.project ?? ""}`;
     const existing = byTitle.get(key);
     if (!existing) {
-      byTitle.set(key, { ...fact, count: 1, kind: classifyEodTask(fact.title, fact.project, personName) });
+      byTitle.set(key, { ...fact, count: 1, kind });
       continue;
     }
     existing.count += 1;
-    if (!existing.project && fact.project) existing.project = fact.project;
-    if (!existing.at && fact.at) existing.at = fact.at;
-    if (fact.exact) existing.exact = true;
+    if (!existing.at) {
+      existing.at = fact.at;
+      existing.exact = fact.exact;
+    } else if (fact.exact && !existing.exact) {
+      // The timestamp and its precision travel together. A provider-observed
+      // sync time must never be printed as an exact completion time.
+      existing.at = fact.at;
+      existing.exact = true;
+    } else if (fact.exact && existing.exact && fact.at && existing.at && fact.at < existing.at) {
+      existing.at = fact.at;
+    }
     if (!existing.outsideLabel && fact.outsideLabel) existing.outsideLabel = fact.outsideLabel;
   }
   return [...byTitle.values()];
@@ -198,7 +211,6 @@ export interface EodPlanMismatch {
  * plan's full item list is never the report's job. */
 export function eodPlanMismatches(facts: EodReportFacts, limit = 5): EodPlanMismatch[] {
   const completedIds = new Set(facts.completed.map((item) => item.id));
-  const completedTitles = new Set(facts.completed.map((item) => normalizeEodTitle(item.title)));
   const seen = new Set<string>();
   const mismatches: EodPlanMismatch[] = [];
   for (const item of facts.planItems) {
@@ -206,7 +218,9 @@ export function eodPlanMismatches(facts: EodReportFacts, limit = 5): EodPlanMism
     const title = item.title.trim();
     const key = normalizeEodTitle(title);
     if (!title || seen.has(key)) continue;
-    const taskCompleted = completedIds.has(item.taskId) || completedTitles.has(key);
+    // The plan item is linked to one task. A same-titled task elsewhere is not
+    // evidence that this commitment was completed.
+    const taskCompleted = completedIds.has(item.taskId);
     if (taskCompleted && item.completionState !== "completed") {
       seen.add(key);
       mismatches.push({ title, note: "completed in the task record; the plan still shows it open." });
@@ -346,11 +360,22 @@ function githubEvidenceLine(facts: EodReportFacts): string | null {
   return parts.length ? `- GitHub, provider-recorded — ${parts.join("; ")}.` : null;
 }
 
+function fullText(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function evidenceSourceLabel(source: string): string {
+  if (source === "manual") return "Employee-attached";
+  if (source === "agent") return "Agent-recorded";
+  if (source === "nifty") return "Nifty";
+  return source || "Recorded";
+}
+
 function mediaLine(media: EodMediaFact): string {
   const length = Number.isFinite(media.durationSeconds) && (media.durationSeconds ?? 0) > 0
     ? ` (${Math.floor((media.durationSeconds as number) / 60)}:${String(Math.round((media.durationSeconds as number) % 60)).padStart(2, "0")})`
     : "";
-  const digest = media.digest ? ` — ${clipText(media.digest, 320)}` : "";
+  const digest = media.digest ? ` — ${fullText(media.digest)}` : "";
   return `- ${media.title}${length}${digest} — ${media.url}`;
 }
 
@@ -363,7 +388,9 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
   const carriedWork = carried.filter((item) => item.kind === "work");
   const progress = eodProgressRecaps(facts);
   const mismatches = eodPlanMismatches(facts);
-  const blockers = eodBlockers(facts);
+  const allBlockers = eodBlockers(facts, 200);
+  const blockers = allBlockers.slice(0, 5);
+  const extraBlockers = allBlockers.slice(5);
   const automation = collapseAutomation([
     ...facts.automation.filter((item) => !item.outside).map((item) => item.title),
   ]);
@@ -387,7 +414,14 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
     ...(top.length ? top.map((item) => taskLine(item, facts.timezone)) : ["- No work deliverables were recorded today."]),
     ...(deliverables.length > top.length ? [`  …and ${deliverables.length - top.length} more in the full record.`] : []),
     ...(progress.length ? ["", "## In progress", ...progress.map(recapLine)] : []),
-    ...(blockers.length ? ["", "## Blocked", ...blockers.map((blocker) => `- ${blocker}`)] : []),
+    ...(blockers.length
+      ? [
+          "",
+          "## Blocked",
+          ...blockers.map((blocker) => `- ${blocker}`),
+          ...(extraBlockers.length ? [`  …and ${extraBlockers.length} more in the full record.`] : []),
+        ]
+      : []),
     ...(carriedWork.length ? ["", "## Next", ...carriedWork.map((item) => taskLine(item, facts.timezone))] : []),
     ...(mismatches.length ? ["", "## Plan check", ...mismatches.map((item) => `- ${item.title} — ${item.note}`)] : []),
     "",
@@ -415,6 +449,13 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
           ...(automationOutside.line ? [`${automationOutside.line}${facts.automationOutsideLabel ?? ""}`] : []),
         ]
       : []),
+    ...(extraBlockers.length
+      ? [
+          `### More blockers (${extraBlockers.length})`,
+          ...extraBlockers.map((blocker) => `- ${blocker}`),
+          "",
+        ]
+      : []),
     ...(nonWork.length
       ? [
           `### Other tasks (${nonWork.length})`,
@@ -427,7 +468,7 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
           `### Activity context (${facts.recaps.length})`,
           ...facts.recaps.flatMap((recap) => [
             recapLine(recap),
-            recap.detail ? `  ${clipText(recap.detail, 700)}` : "",
+            recap.detail ? `  ${fullText(recap.detail)}` : "",
           ]).filter(Boolean),
           "",
         ]
@@ -435,14 +476,19 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
     ...(facts.hourly.length
       ? [
           `### Hourly activity (${facts.hourly.length})`,
-          ...facts.hourly.map((hour) => `- ${hour.label}: ${clipText(hour.summary, 240)}`),
+          ...facts.hourly.map((hour) => `- ${hour.label}: ${fullText(hour.summary)}`),
           "",
         ]
       : []),
     ...(facts.evidence.length
       ? [
           `### Output evidence (${facts.evidence.length})`,
-          ...facts.evidence.map((item) => `- ${item.title}${item.url ? ` — ${item.url}` : ""}${item.summary ? ` — ${clipText(item.summary, 200)}` : ""}`),
+          ...facts.evidence.map((item) => [
+            item.title,
+            evidenceSourceLabel(item.source),
+            item.url,
+            item.summary ? fullText(item.summary) : "",
+          ].filter(Boolean).join(" — ")),
           "",
         ]
       : []),

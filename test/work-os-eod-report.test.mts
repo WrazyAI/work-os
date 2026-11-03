@@ -98,6 +98,54 @@ test("the appendix keeps every omitted fact and collapses repeats", () => {
   assert.match(report.markdown, /Settlement walkthrough/);
 });
 
+test("a project-free exact completion keeps its time track", () => {
+  assert.deepEqual(splitEodTaskRow("Ship the release — 3:30 PM"), {
+    title: "Ship the release",
+    project: null,
+    time: "3:30 PM",
+    outside: null,
+    count: 1,
+  });
+});
+
+test("a personal and a work task with the same title stay separate", () => {
+  const sameTitle = buildEodReportMarkdown({
+    ...facts,
+    completed: [
+      { id: "work-copy", title: "Review the queue", project: "Work OS", at: "2026-10-22T19:30:00.000Z", exact: true, outsideLabel: null },
+      { id: "personal-copy", title: "Review the queue", project: "Personal", at: "2026-10-22T19:31:00.000Z", exact: true, outsideLabel: null },
+    ],
+    planItems: [],
+    carried: [],
+  });
+  const document = parseEodMarkdown(sameTitle.markdown);
+  assert.match(document.sections.find((section) => section.key === "completed")?.lines.map((line) => line.text).join("\n") ?? "", /Review the queue/);
+  assert.match(sameTitle.markdown, /Other tasks/);
+  assert.match(sameTitle.markdown, /Personal task/);
+});
+
+test("blockers beyond the brief limit stay in the full record", () => {
+  const sixBlockers = buildEodReportMarkdown({
+    ...facts,
+    blockers: ["Blocker one", "Blocker two", "Blocker three", "Blocker four", "Blocker five", "Blocker six"],
+  });
+  assert.match(sixBlockers.markdown, /## Blocked\n- Blocker one/);
+  assert.match(sixBlockers.markdown, /…and 1 more in the full record/);
+  assert.match(sixBlockers.markdown, /### More blockers \(1\)\n- Blocker six/);
+});
+
+test("the full record keeps long recap and evidence detail", () => {
+  const detail = `The interval shows ${"a long evidence trail ".repeat(50)}and the final handoff.`;
+  const full = buildEodReportMarkdown({
+    ...facts,
+    recaps: [{ ...facts.recaps[0]!, detail }],
+    evidence: [{ title: "Long evidence", summary: detail, url: null, source: "manual", taskId: null }],
+  });
+  assert.match(full.markdown, /and the final handoff\./);
+  assert.match(full.markdown, /Employee-attached/);
+  assert.doesNotMatch(full.markdown, /…/);
+});
+
 test("an outside-window label with no project reads as a suffix, not a stray track", () => {
   const outsideOnly = buildEodReportMarkdown({
     ...facts,

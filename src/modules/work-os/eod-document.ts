@@ -153,7 +153,11 @@ export function splitEodTaskRow(value: string): EodTaskRowParts {
   let project: string | null = null;
   const projectIndex = text.lastIndexOf(" — ");
   if (projectIndex > 0) {
-    project = text.slice(projectIndex + 3).trim() || null;
+    const candidate = text.slice(projectIndex + 3).trim();
+    // A project-free row is `Title — 3:30 PM`; the track after the dash is the
+    // time, not a project.
+    if (!time && /^\d{1,2}:\d{2}\s*(?:AM|PM)$/i.test(candidate)) time = candidate;
+    else project = candidate || null;
     text = text.slice(0, projectIndex).trim();
   }
   let count = 1;

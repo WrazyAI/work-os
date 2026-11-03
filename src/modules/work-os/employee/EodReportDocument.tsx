@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow, type EodDocument, type EodSection, type EodSectionLine } from "@/modules/work-os/eod-document";
 import styles from "./EodReportDocument.module.css";
 
@@ -125,13 +126,14 @@ function SectionRows({ section }: { section: EodSection }) {
 }
 
 function Section({ section }: { section: EodSection }) {
+  const headingId = useId();
   const count = section.lines.filter((line) => line.kind === "bullet").length;
   if (!count) return null;
   const label = section.heading.replace(/\s*\(\d+\)\s*$/, "");
   return (
-    <section className={styles.section} aria-labelledby={`eod-${section.heading.replace(/\W+/g, "-")}`}>
+    <section className={styles.section} aria-labelledby={headingId}>
       <div className={styles.sectionLabel}>
-        <h3 id={`eod-${section.heading.replace(/\W+/g, "-")}`}>{label}</h3>
+        <h3 id={headingId}>{label}</h3>
         {section.key !== "evidence" ? <span className={styles.sectionCount}>{count}</span> : null}
       </div>
       <div className={styles.sectionBody}>
@@ -175,9 +177,11 @@ export default function EodReportDocument({
   const summary = document.summary?.lines.find((line) => line.text)?.text ?? "";
   const sections = document.sections.filter((section) => section.key !== "summary");
   const appendixCount = document.appendix.reduce((count, section) => count + section.lines.filter((line) => line.kind === "bullet").length, 0);
-  const role = metaValue(document, "role profile");
+  const roleValue = metaValue(document, "role profile");
+  const goalValue = metaValue(document, "goal");
+  const role = roleValue && !/^not set$/i.test(roleValue) ? roleValue : "";
+  const goal = goalValue && !/^no goal was recorded\.?$/i.test(goalValue) ? goalValue : "";
   const session = metaValue(document, "session");
-  const goal = metaValue(document, "goal");
   const source = goalSourceLabel(metaValue(document, "goal source"));
 
   if (!summary && !sections.length) {

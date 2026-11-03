@@ -140,9 +140,11 @@ export default function EodReportDocument({ markdown }: { markdown: string }) {
   const summary = document.summary?.lines.find((line) => line.text)?.text ?? "";
   const sections = document.sections.filter((section) => section.key !== "summary");
   const appendixCount = document.appendix.reduce((count, section) => count + section.lines.filter((line) => line.kind === "bullet").length, 0);
-  const role = metaValue(document, "role profile");
+  const roleValue = metaValue(document, "role profile");
+  const goalValue = metaValue(document, "goal");
+  const role = roleValue && !/^not set$/i.test(roleValue) ? roleValue : "";
+  const goal = goalValue && !/^no goal was recorded\.?$/i.test(goalValue) ? goalValue : "";
   const session = metaValue(document, "session");
-  const goal = metaValue(document, "goal");
   const source = goalSourceLabel(metaValue(document, "goal source"));
 
   if (!summary && !sections.length) return <p className="eod-doc-empty">Nothing to preview yet.</p>;

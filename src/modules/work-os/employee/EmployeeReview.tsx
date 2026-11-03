@@ -282,7 +282,7 @@ export default function EmployeeReview() {
   /* A refusal for an open shift is explained by the prompt, not by a raw
      error banner. */
   const shiftRefusal = draftEod.error instanceof HttpError && draftEod.error.status === 409 && draftEod.error.reason === EOD_SHIFT_OPEN_REASON;
-  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || redraftEod.error || submitEod.error || review.error || disputeEvidence.error;
+  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || submitEod.error || review.error || disputeEvidence.error;
   const status = String(eodReport?.status || "");
   const editorLocked = status === "pending_review" || status === "approved";
   const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";
