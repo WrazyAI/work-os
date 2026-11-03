@@ -113,8 +113,11 @@ export function parseEodInline(value: string): EodInlineSegment[] {
     if (index > last) segments.push({ text: text.slice(last, index), href: null });
     if (match[1] && match[2]) segments.push({ text: match[1], href: match[2] });
     else {
-      const bare = (match[3] ?? "").replace(/[.,;:]+$/, "");
+      const rawUrl = match[3] ?? "";
+      const bare = rawUrl.replace(/[.,;:]+$/, "");
       segments.push({ text: bare, href: bare });
+      const trailing = rawUrl.slice(bare.length);
+      if (trailing) segments.push({ text: trailing, href: null });
     }
     last = index + match[0].length;
   }

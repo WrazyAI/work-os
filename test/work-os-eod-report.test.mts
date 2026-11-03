@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildEodReportMarkdown, rankEodCompleted, type EodReportFacts } from "../src/lib/work-os-eod-report";
-import { parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
+import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
 import { eodSnippet } from "../src/modules/work-os/admin/eod";
 import { buildEodFactBlock, preservesEodStructure } from "../src/lib/aiEod";
 import { eodLineItems } from "../src/lib/work-os-eod";
@@ -116,6 +116,14 @@ test("an outside label after a time keeps the time track", () => {
     outside: "outside shift",
     count: 1,
   });
+});
+
+test("a bare URL keeps its trailing punctuation as text", () => {
+  assert.deepEqual(parseEodInline("See https://example.com."), [
+    { text: "See ", href: null },
+    { text: "https://example.com", href: "https://example.com" },
+    { text: ".", href: null },
+  ]);
 });
 
 test("the trailing bracket keeps a title that contains a dash intact", () => {
