@@ -317,13 +317,13 @@ function tasksFixture(state: PreviewState) {
     { id: "t-2", title: "Reconcile September invoices", description: "", completed: true, due_date: "2026-09-29", priority: "medium", project: { name: "Finance" }, assignees: [{ displayName: "Luis Moreno" }], provider: "nifty", synced_at: NOW, url: "https://nifty.pm/task/example" },
     { id: "t-3", title: "Refresh the onboarding screenshots", description: "", completed: false, due_date: null, priority: null, project: { name: "Design" }, assignees: [], provider: "nifty", synced_at: null, url: null },
   ];
-  return { tasks: rows, nextOffset: null, summary: empty ? { open: 0, overdue: 0, completedWeek: 0 } : { open: 41, overdue: 7, completedWeek: 12 } };
+  return { tasks: rows, nextOffset: null, summary: empty ? { open: 0, overdue: 0, overdueRecorded: 0, completedWeek: 0 } : { open: 41, overdue: 7, overdueRecorded: 4, completedWeek: 12 } };
 }
 
 function organizationFixture(state: PreviewState) {
   const empty = state === "empty";
   return {
-    organization: { id: "org-1", name: "Preview Workspace", slug: "preview", feature_flags: { employee_companion: true, desktop_companion: true, screenshot_summaries: true, github_evidence: true, ghl_evidence: false, voice_input: true, seo_mission_control: false } },
+    organization: { id: "org-1", name: "Preview Workspace", slug: "preview", feature_flags: { employee_companion: true, admin_agent_api: true, desktop_companion: true, screenshot_summaries: true, github_evidence: true, ghl_evidence: false, voice_input: true, seo_mission_control: false } },
     memberships: empty ? [] : [
       { id: "m-1", user_id: "u-1", person_id: "p-ada", role: "admin", active: true, feature_flags: {}, person: { id: "p-ada", display_name: "Ada Okafor", email: "ada.okafor@example.com" } },
       { id: "m-2", user_id: "u-2", person_id: "p-luis", role: "employee", active: true, feature_flags: { desktop_companion: true }, person: { id: "p-luis", display_name: "Luis Moreno", email: "luis.moreno@example.com" } },
@@ -430,6 +430,12 @@ function installAdminFetchStub(state: PreviewState) {
       ],
     });
     if (url.includes("/api/work-os/status")) return json(statusFixture());
+    if (url.includes("/api/work-os/me/admin-agent-tokens")) return json({
+      tokens: state === "empty" ? [] : [
+        { id: "tok-1", kind: "admin", name: "Reporting agent", token_prefix: "wos_admin_ab12", scopes: ["tasks:read", "eods:read", "insights:read"], created_at: `${TODAY}T08:00:00.000Z`, last_used_at: `${TODAY}T09:30:00.000Z`, expires_at: "2027-01-01T00:00:00.000Z", revoked_at: null },
+        { id: "tok-2", kind: "admin", name: "Old notebook", token_prefix: "wos_admin_cd34", scopes: ["tasks:read"], created_at: "2026-06-01T08:00:00.000Z", last_used_at: null, expires_at: "2026-09-01T00:00:00.000Z", revoked_at: null },
+      ],
+    });
     if (url.includes("/api/work-os/admin/overview")) return json(overviewFixture(state));
     if (url.includes("/api/work-os/admin/insights")) return json(insightsFixture(state));
     if (url.includes("/api/work-os/admin/activity-intervals")) return json(intervalsFixture(state));

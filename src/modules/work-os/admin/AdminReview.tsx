@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FileCheck2,
   FilePlus2,
+  Filter,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -18,11 +19,14 @@ import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
 import {
-  AdminCard,
+  Avatar,
   Button,
+  DateRangeFilter,
   Drawer,
   EmptyState,
+  Group,
   Notice,
+  Panel,
   SectionHeading,
   SegmentedControl,
   SelectField,
@@ -113,9 +117,9 @@ export default function AdminReviewPage() {
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
 
   return (
-    <div className="grid gap-5">
-      <AdminCard padded={false}>
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+    <div className="flex flex-col">
+      <Group label="Queue" detail="Newest submission first. Open a report to read it and decide.">
+        <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
           <SegmentedControl<StatusFilter>
             ariaLabel="Report status"
             value={status}
@@ -130,46 +134,52 @@ export default function AdminReviewPage() {
           />
           <div className="flex flex-wrap items-end gap-2">
             <SelectField label="Person" value={personId} onChange={setPersonId} options={personOptions} placeholder="All people" ariaLabel="Filter by person" />
-            <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
-            <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
-            <Button variant="primary" onClick={() => setDraftOpen(true)}>
+            <DateRangeFilter
+              from={from}
+              to={to}
+              onFrom={setFrom}
+              onTo={setTo}
+              applied={from !== isoDaysAgo(30) || to !== today}
+            />
+            <Button onClick={() => setDraftOpen(true)}>
               <FilePlus2 size={13} aria-hidden /> Draft EOD
             </Button>
           </div>
         </div>
-        {reports.error ? <div className="px-5 py-4"><Notice tone="err">{(reports.error as Error).message}</Notice></div> : null}
+        {reports.error ? <div className="pb-3"><Notice tone="err">{(reports.error as Error).message}</Notice></div> : null}
 
-        {/* Queue — the page's one object; a report opens in the side panel */}
-        <div>
+        <Panel padded={false}>
           {reports.isLoading ? (
-            <div className="grid gap-2 p-4">
-              {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-16 w-full" />)}
+            <div className="grid gap-1.5 p-3">
+              {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-14 w-full" />)}
             </div>
           ) : list.length ? (
-            <ul className="max-h-[75vh] overflow-y-auto">
+            <ul className="max-h-[68vh] overflow-y-auto">
               {list.map((report) => {
                 const active = report.id === selected?.id;
-                const snippet = eodSnippet(report.submitted_markdown ?? report.markdown, 140);
+                const snippet = eodSnippet(report.submitted_markdown ?? report.markdown, 160);
+                const showStatus = status !== "pending_review" || report.status !== "pending_review";
                 return (
                   <li key={report.id}>
                     <button
                       type="button"
                       onClick={() => setSelectedId(report.id)}
                       aria-current={active ? "true" : undefined}
-                      className={cx("w-full border-b px-5 py-3.5 text-left transition", !active && "hover:bg-[var(--bg-secondary)]")}
+                      className={cx("flex w-full items-start gap-3 border-b px-3.5 py-3 text-left transition last:border-b-0", !active && "hover:bg-[var(--bg-secondary)]")}
                       style={{ borderColor: "var(--border-subtle)", background: active ? "var(--bg-secondary)" : "transparent" }}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <span className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{report.person?.display_name ?? "Unmapped person"}</span>
-                          <span className="shrink-0 text-[11.5px] text-[var(--text-tertiary)]">{formatWorkOsDate(report.report_date)}</span>
+                      <Avatar name={report.person?.display_name ?? "?"} size={26} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{report.person?.display_name ?? "Unmapped person"}</span>
+                          <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">{formatWorkOsDate(report.report_date)}</span>
                         </span>
-                        <span className="flex shrink-0 items-center gap-3">
-                          <span className="text-[11px] text-[var(--text-tertiary)]">{report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}</span>
-                          <StateMark tone={statusTone(report.status)}>{statusLabel(report.status)}</StateMark>
-                        </span>
-                      </div>
-                      {snippet ? <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-4 text-[var(--text-secondary)]">{snippet}</p> : null}
+                        {snippet ? <span className="mt-0.5 block truncate text-[11px] text-[var(--text-secondary)]">{snippet}</span> : null}
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        {showStatus ? <StateMark tone={statusTone(report.status)}>{statusLabel(report.status)}</StateMark> : null}
+                        <span className="text-[10.5px] text-[var(--text-tertiary)]">{report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}</span>
+                      </span>
                     </button>
                   </li>
                 );
@@ -184,8 +194,11 @@ export default function AdminReviewPage() {
               />
             </div>
           )}
-        </div>
-      </AdminCard>
+        </Panel>
+        <p className="mt-2 text-[10.5px] text-[var(--text-tertiary)]">
+          {list.length} report{list.length === 1 ? "" : "s"} in this view · {formatWorkOsDate(from)} to {formatWorkOsDate(to)}
+        </p>
+      </Group>
 
       <Drawer
         open={!!selected}
@@ -298,7 +311,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
       ) : null}
 
       {/* The report as a document: meta, sections, disclaimer */}
-      <AdminCard>
+      <Panel>
         <div className="grid gap-5">
           {document.meta.length ? (
             <dl className="grid gap-x-5 gap-y-2.5 sm:grid-cols-2">
@@ -332,9 +345,9 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
           ))}
           {document.closing ? <p className="border-t pt-3 text-[11.5px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>{document.closing}</p> : null}
         </div>
-      </AdminCard>
+      </Panel>
 
-      <AdminCard>
+      <Panel>
         <SectionHeading icon={Camera} title="Sourced evidence" detail="What the day's record captured alongside the report." />
         {evidence.isLoading ? (
           <Skeleton className="h-24 w-full" />
@@ -362,9 +375,9 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         ) : (
           <p className="text-[12px] text-[var(--text-tertiary)]">No evidence is linked to this report date.</p>
         )}
-      </AdminCard>
+      </Panel>
 
-      <AdminCard>
+      <Panel>
         <SectionHeading icon={Activity} title="Activity context" detail="Interval recaps recorded for this workday. Observed context only — it never proves completion." />
         {intervals.isLoading ? (
           <Skeleton className="h-24 w-full" />
@@ -406,9 +419,9 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         ) : (
           <p className="text-[12px] text-[var(--text-tertiary)]">No activity recaps were recorded for this workday.</p>
         )}
-      </AdminCard>
+      </Panel>
 
-      <AdminCard>
+      <Panel>
         <SectionHeading icon={ShieldCheck} title="Decision record" detail="Notes and an optional manager version are saved with the decision." />
         <label className="grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
           Manager notes
@@ -450,7 +463,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
             ))}
           </ul>
         ) : null}
-      </AdminCard>
+      </Panel>
 
       <details className="text-[11.5px] text-[var(--text-tertiary)]">
         <summary className="cursor-pointer font-semibold">View original markdown</summary>
@@ -461,3 +474,4 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
     </div>
   );
 }
+

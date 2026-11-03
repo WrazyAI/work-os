@@ -581,16 +581,17 @@ export async function listAdminOttoTasks(access: WorkOsAccess, input: {
  * effective-due predicate the rows use. */
 export async function countAdminTaskRecord(access: WorkOsAccess, input: {
   ownerId: string; personId: string | null; today: string;
-}): Promise<{ open: number; overdue: number; completedWeek: number }> {
+}): Promise<{ open: number; overdue: number; overdueRecorded: number; completedWeek: number }> {
   if (access.role !== "admin") throw new WorkOsConflictError("Administration access is required.");
   const today = calendarDate(input.today, "today");
   const personId = input.personId === null ? null : input.personId.toLowerCase();
   if (personId !== null && !UUID.test(personId)) throw new WorkOsValidationError("personId must be a person id");
-  const { rows } = await getPool().query<{ open: number | string; overdue: number | string }>(`WITH selected_person AS (
+  const { rows } = await getPool().query<{ open: number | string; overdue: number | string; overdue_recorded: number | string }>(`WITH selected_person AS (
       SELECT p.id, p.nifty_member_id FROM work_people p
       WHERE p.organization_id = $1 AND p.id = $3::uuid
     ), base AS (
       SELECT t.completed,
+        t.due_date AS recorded_due,
         coalesce(t.due_date, (coalesce(t.provider_created_at, t.created_at) AT TIME ZONE 'UTC')::date + 1) AS effective_due
       FROM work_tasks t
       WHERE t.organization_id = $1 AND t.user_id = $2
@@ -607,7 +608,8 @@ export async function countAdminTaskRecord(access: WorkOsAccess, input: {
     )
     SELECT
       count(*) FILTER (WHERE NOT completed)::int AS open,
-      count(*) FILTER (WHERE NOT completed AND effective_due IS NOT NULL AND effective_due < $4::date)::int AS overdue
+      count(*) FILTER (WHERE NOT completed AND effective_due IS NOT NULL AND effective_due < $4::date)::int AS overdue,
+      count(*) FILTER (WHERE NOT completed AND recorded_due IS NOT NULL AND recorded_due < $4::date)::int AS overdue_recorded
     FROM base`, [access.organizationId, input.ownerId, personId, today]);
   const { rows: completed } = await getPool().query<{ n: number | string }>(`SELECT count(*)::int AS n
     FROM work_task_day_events
@@ -618,6 +620,7 @@ export async function countAdminTaskRecord(access: WorkOsAccess, input: {
   return {
     open: Number(rows[0]?.open ?? 0),
     overdue: Number(rows[0]?.overdue ?? 0),
+    overdueRecorded: Number(rows[0]?.overdue_recorded ?? 0),
     completedWeek: Number(completed[0]?.n ?? 0),
   };
 }

@@ -569,12 +569,30 @@ test("github admin integration routes stay admin-scoped and token-safe", async (
   assert.doesNotMatch(integration, /console\.log/);
 });
 
-test("the evidence page blurs future integrations and surfaces github state", async () => {
+test("the administration pages read as label/content groups, not a card wall", async () => {
+  const pages = ["AdminOverview", "AdminPeople", "AdminTasks", "AdminReview", "AdminInsights", "AdminEvidence", "AdminSettings"];
+  for (const page of pages) {
+    const src = await source(`src/modules/work-os/admin/${page}.tsx`);
+    assert.match(src, /\bGroup\b/, `${page} uses the index gutter`);
+    assert.doesNotMatch(src, /AdminCard/, `${page} does not fall back to a card per section`);
+  }
+  const tasks = await source("src/modules/work-os/admin/AdminTasks.tsx");
+  assert.match(tasks, /overdueRecorded/, "the task headline separates recorded from default due dates");
+  assert.match(tasks, /role="columnheader"/, "sortable headers expose their column role");
+  const evidence = await source("src/modules/work-os/admin/AdminEvidence.tsx");
+  assert.match(evidence, /TrendBars/, "the evidence volume trend is a labeled chart");
+  const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
+  assert.match(settings, /Switch/, "settings states are switches, not native checkboxes");
+});
+
+test("the evidence page marks future integrations and keeps bots out of the person queue", async () => {
   const evidence = await source("src/modules/work-os/admin/AdminEvidence.tsx");
   assert.match(evidence, /Coming soon/);
-  assert.match(evidence, /Unmapped GitHub accounts/);
+  assert.match(evidence, /Unmapped accounts/);
   assert.match(evidence, /Map &amp; backfill/);
   assert.match(evidence, /Manage repositories/);
+  assert.match(evidence, /isAutomation/, "provider bots are separated from the person queue");
+  assert.match(evidence, /never mapped to a person/, "a bot is never attributed to a teammate");
   const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
   assert.match(settings, /GHL — coming soon/);
   assert.match(settings, /comingSoon/);

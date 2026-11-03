@@ -2,26 +2,31 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, ListChecks, Plus, Search } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, ChevronUp, ExternalLink, ListChecks, Plus, Search } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys } from "./api";
 import {
-  AdminCard,
   Button,
   Drawer,
   EmptyState,
+  Group,
   Notice,
+  Panel,
   SegmentedControl,
   SelectField,
   Skeleton,
   StateMark,
   TextField,
   cx,
-  statusLabel,
 } from "./ui";
 
 type AnyRow = Record<string, any>;
 type TaskFilter = "open" | "completed" | "all";
+type SortKey = "title" | "assignees" | "created" | "due" | "status";
+
+const SORT_NATURAL: Record<SortKey, 1 | -1> = { title: 1, assignees: 1, created: -1, due: 1, status: 1 };
+
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_76px_24px] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_140px_104px_92px_76px_24px] xl:grid-cols-[minmax(0,1fr)_150px_140px_104px_104px_88px_24px]";
 
 function taskUrl(task: AnyRow): string | null {
   const url = task.url || task.provider_url || task.raw?.url;
@@ -40,12 +45,63 @@ function assigneeNames(task: AnyRow, peopleById: Map<string, string>): string[] 
     .filter((name): name is string => !!name);
 }
 
+function createdStamp(task: AnyRow): string | null {
+  const value = task.provider_created_at ?? task.created_at ?? task.created;
+  return typeof value === "string" && value ? value : null;
+}
+
+/** The due date a row reads against: the recorded date, else the default one
+ * day after creation, exactly as the record's overdue predicate does. */
+function effectiveDue(task: AnyRow): string | null {
+  if (typeof task.due_date === "string" && task.due_date) return task.due_date;
+  const created = createdStamp(task);
+  if (!created) return null;
+  const parsed = new Date(created);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const next = new Date(parsed);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
+function statusRank(task: AnyRow, today: string): number {
+  if (task.completed === true) return 2;
+  const due = effectiveDue(task);
+  return due && due < today ? 0 : 1;
+}
+
+function sortTasks(rows: AnyRow[], sort: { key: SortKey; dir: 1 | -1 }, peopleById: Map<string, string>, today: string) {
+  const value = (task: AnyRow): string | number | null => {
+    if (sort.key === "title") return String(task.title ?? "").toLowerCase() || null;
+    if (sort.key === "assignees") return assigneeNames(task, peopleById).join(", ").toLowerCase() || null;
+    if (sort.key === "created") {
+      const stamp = createdStamp(task);
+      const parsed = stamp ? Date.parse(stamp) : Number.NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    if (sort.key === "due") return effectiveDue(task);
+    return statusRank(task, today);
+  };
+  return [...rows].sort((left, right) => {
+    const a = value(left);
+    const b = value(right);
+    if (a == null && b == null) return String(left.title ?? "").localeCompare(String(right.title ?? ""));
+    if (a == null) return 1;
+    if (b == null) return -1;
+    const compared = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
+    if (compared) return compared * sort.dir;
+    return String(left.title ?? "").localeCompare(String(right.title ?? "")) || String(left.id).localeCompare(String(right.id));
+  });
+}
+
 export default function AdminTasksPage() {
   const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
   const [filter, setFilter] = useState<TaskFilter>("open");
   const [personId, setPersonId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(100);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "created", dir: -1 });
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -71,10 +127,10 @@ export default function AdminTasksPage() {
     staleTime: 60_000,
   });
   const completedParam = filter === "open" ? "false" : filter === "completed" ? "true" : "";
-  const tasks = useQuery<{ tasks: AnyRow[]; nextOffset: number | null; summary?: { open: number; overdue: number; completedWeek: number } }>({
-    queryKey: adminKeys.tasks({ filter, personId, projectId }),
+  const tasks = useQuery<{ tasks: AnyRow[]; nextOffset: number | null; summary?: { open: number; overdue: number; overdueRecorded?: number; completedWeek: number } }>({
+    queryKey: adminKeys.tasks({ filter, personId, projectId, pageSize: String(pageSize) }),
     queryFn: () => {
-      const params = new URLSearchParams({ limit: "200" });
+      const params = new URLSearchParams({ limit: String(pageSize) });
       if (completedParam) params.set("completed", completedParam);
       if (personId) params.set("personId", personId);
       if (projectId) params.set("projectId", projectId);
@@ -116,40 +172,33 @@ export default function AdminTasksPage() {
     },
   });
 
-  const rows = useMemo(() => {
-    const list = tasks.data?.tasks ?? [];
-    const query = search.trim().toLowerCase();
-    if (!query) return list;
-    return list.filter((task) => `${task.title ?? ""} ${task.description ?? ""}`.toLowerCase().includes(query));
-  }, [tasks.data, search]);
-
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
   const projectOptions = (projects.data?.projects ?? []).map((project) => ({ value: String(project.id), label: String(project.name) }));
   // TASKS is the one project that owns organization work; the picker is gone.
   const tasksProjectId = (projects.data?.projects ?? []).find((project) => String(project.name ?? "").trim().toUpperCase() === "TASKS")?.id;
-  const peopleById = new Map((people.data?.people ?? []).map((person) => [String(person.id), String(person.display_name)]));
+  const peopleById = useMemo(() => new Map((people.data?.people ?? []).map((person) => [String(person.id), String(person.display_name)])), [people.data]);
+
+  const rows = useMemo(() => {
+    const list = tasks.data?.tasks ?? [];
+    const query = search.trim().toLowerCase();
+    const matched = query
+      ? list.filter((task) => `${task.title ?? ""} ${task.description ?? ""}`.toLowerCase().includes(query))
+      : list;
+    return sortTasks(matched, sort, peopleById, today);
+  }, [tasks.data, search, sort, peopleById, today]);
+
+  const summary = tasks.data?.summary;
+  const recordedOverdue = summary?.overdueRecorded ?? summary?.overdue ?? 0;
+  const defaultOverdue = Math.max(0, (summary?.overdue ?? 0) - recordedOverdue);
+
+  const toggleSort = (key: SortKey) => {
+    setSort((current) => current.key === key ? { key, dir: current.dir === 1 ? -1 : 1 } : { key, dir: SORT_NATURAL[key] });
+  };
 
   return (
-    <div className="grid gap-5">
-      {/* Counts stay a quiet line; the list is the page */}
-      {tasks.data?.summary ? (
-        <p className="text-[12px] text-[var(--text-tertiary)]">
-          <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{tasks.data.summary.open}</strong> open
-          {" · "}
-          <strong
-            className="font-semibold tabular-nums"
-            style={{ color: tasks.data.summary.overdue ? "var(--status-warn)" : "var(--text-primary)" }}
-          >
-            {tasks.data.summary.overdue}
-          </strong>{" "}
-          overdue
-          {" · "}
-          <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{tasks.data.summary.completedWeek}</strong> completed this week
-        </p>
-      ) : null}
-
-      <AdminCard padded={false}>
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+    <div className="flex flex-col">
+      <Group label="Record" detail="The workspace task record and what is still open.">
+        <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
           <SegmentedControl<TaskFilter>
             ariaLabel="Task status"
             value={filter}
@@ -169,8 +218,8 @@ export default function AdminTasksPage() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Title or description"
-                  className="min-h-[34px] w-[200px] rounded-[10px] border bg-transparent pl-8 pr-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
-                  style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+                  className="min-h-[34px] w-[200px] rounded-[9px] border bg-transparent pl-8 pr-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+                  style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
                 />
               </span>
             </label>
@@ -182,77 +231,140 @@ export default function AdminTasksPage() {
           </div>
         </div>
 
-        {tasks.isLoading ? (
-          <div className="grid gap-2 p-5">
-            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-12 w-full" />)}
+        {summary ? (
+          <div className="pb-3">
+            <p className="text-[12px] text-[var(--text-tertiary)]">
+              <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{summary.open}</strong> open
+              {" · "}
+              <strong
+                className="font-semibold tabular-nums"
+                style={{ color: recordedOverdue ? "var(--status-warn)" : "var(--text-primary)" }}
+              >
+                {recordedOverdue}
+              </strong>{" "}
+              past a recorded due date
+              {" · "}
+              <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{summary.completedWeek}</strong> completed this week
+            </p>
+            {defaultOverdue ? (
+              <p className="mt-1 text-[10.5px] leading-4 text-[var(--text-tertiary)]">
+                Another {defaultOverdue} are past the default due date (one day after creation) and have no date recorded.
+              </p>
+            ) : null}
           </div>
-        ) : tasks.error ? (
-          <div className="p-5"><Notice tone="err">{(tasks.error as Error).message}</Notice></div>
-        ) : rows.length ? (
-          <ul>
-            {rows.map((task) => {
-              const done = task.completed === true;
-              const names = assigneeNames(task, peopleById);
-              const url = taskUrl(task);
-              return (
-                <li key={String(task.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                  <button
-                    type="button"
-                    aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
-                    title={done ? "Reopen task" : "Mark complete"}
-                    disabled={complete.isPending}
-                    onClick={() => complete.mutate({ id: String(task.id), completed: !done })}
-                    className="grid size-6 shrink-0 place-items-center rounded-full border transition"
-                    style={{
-                      borderColor: done ? "var(--accent)" : "var(--border-hot)",
-                      background: done ? "var(--accent)" : "transparent",
-                      color: done ? "var(--text-inverse)" : "transparent",
-                    }}
-                  >
-                    {done ? <Check size={13} aria-hidden /> : null}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <p className={cx("truncate text-[13px] font-semibold", done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>{String(task.title ?? "Untitled task")}</p>
-                    {task.description ? <p className="truncate text-[11.5px] text-[var(--text-secondary)]">{String(task.description)}</p> : null}
-                    <p className="truncate text-[11.5px] text-[var(--text-tertiary)]">
-                      {task.project?.name ? String(task.project.name) : "No project"}
-                      {names.length ? ` · ${names.join(", ")}` : ""}
-                      {task.due_date ? ` · due ${formatWorkOsDate(String(task.due_date))}` : ""}
-                      {task.priority ? ` · ${statusLabel(String(task.priority))} priority` : ""}
-                    </p>
-                  </div>
-                  <span className="flex shrink-0 items-center gap-3">
-                    {task.pending_status === "failed" ? <StateMark tone="err">Sync failed</StateMark> : null}
-                    <ProvenanceBadge task={task} />
-                    {url ? (
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                      >
-                        Open <ExternalLink size={11} aria-hidden />
-                      </a>
-                    ) : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="p-5">
-            <EmptyState
-              icon={ListChecks}
-              title={filter === "open" ? "No open tasks match" : "No tasks match these filters"}
-              body="Change the filters, clear the search, or add a task."
-              action={<Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Plus size={12} aria-hidden /> Add task</Button>}
-            />
-          </div>
-        )}
-        {tasks.data?.nextOffset != null ? (
-          <p className="border-t px-5 py-3 text-[11.5px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>Showing the first 200 tasks. Narrow the filters to see the rest.</p>
         ) : null}
-      </AdminCard>
+
+        <Panel padded={false}>
+          <div className={cx(ROW_GRID, "border-b px-3 py-2 text-[10.5px] font-medium text-[var(--text-tertiary)]")} style={{ borderColor: "var(--border)" }}>
+            <SortHeader label="Task" active={sort.key === "title"} dir={sort.dir} onClick={() => toggleSort("title")} />
+            <span role="columnheader" className="hidden lg:block">Project</span>
+            <span className="hidden xl:block"><SortHeader label="Assignees" active={sort.key === "assignees"} dir={sort.dir} onClick={() => toggleSort("assignees")} /></span>
+            <span className="hidden lg:block"><SortHeader label="Created" active={sort.key === "created"} dir={sort.dir} onClick={() => toggleSort("created")} /></span>
+            <span className="hidden lg:block"><SortHeader label="Due" active={sort.key === "due"} dir={sort.dir} onClick={() => toggleSort("due")} /></span>
+            <SortHeader label="Status" active={sort.key === "status"} dir={sort.dir} onClick={() => toggleSort("status")} />
+            <span role="columnheader" className="sr-only">Open</span>
+          </div>
+
+          {tasks.isLoading ? (
+            <div className="grid gap-1 p-3">
+              {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-11 w-full" />)}
+            </div>
+          ) : tasks.error ? (
+            <div className="p-4"><Notice tone="err">{(tasks.error as Error).message}</Notice></div>
+          ) : rows.length ? (
+            <ul>
+              {rows.map((task) => {
+                const done = task.completed === true;
+                const names = assigneeNames(task, peopleById);
+                const url = taskUrl(task);
+                const due = effectiveDue(task);
+                const overdue = !done && due != null && due < today;
+                const created = createdStamp(task);
+                return (
+                  <li key={String(task.id)} className={cx(ROW_GRID, "border-b px-3 py-2.5 transition last:border-b-0 hover:bg-[var(--bg-secondary)]")} style={{ borderColor: "var(--border-subtle)" }}>
+                    <span className="flex min-w-0 items-start gap-2.5">
+                      <button
+                        type="button"
+                        aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
+                        title={done ? "Reopen task" : "Mark complete"}
+                        disabled={complete.isPending}
+                        onClick={() => complete.mutate({ id: String(task.id), completed: !done })}
+                        className="mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-full border transition"
+                        style={{
+                          borderColor: done ? "var(--accent)" : "var(--border-hot)",
+                          background: done ? "var(--accent)" : "transparent",
+                          color: done ? "var(--text-inverse)" : "transparent",
+                        }}
+                      >
+                        {done ? <Check size={11} aria-hidden /> : null}
+                      </button>
+                      <span className="min-w-0">
+                        <span className={cx("block truncate text-[12.5px] font-semibold", done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]")}>
+                          {String(task.title ?? "Untitled task")}
+                        </span>
+                        {task.description ? <span className="mt-0.5 block truncate text-[11px] text-[var(--text-tertiary)]">{String(task.description)}</span> : null}
+                        {task.pending_status === "failed" ? <span className="mt-1 block"><StateMark tone="err">Sync failed</StateMark></span> : null}
+                      </span>
+                    </span>
+                    <span className="hidden min-w-0 truncate text-[11.5px] text-[var(--text-secondary)] lg:block">
+                      {task.project?.name ? String(task.project.name) : <span className="text-[var(--text-tertiary)]">No project</span>}
+                    </span>
+                    <span className="hidden min-w-0 truncate text-[11.5px] text-[var(--text-secondary)] xl:block">
+                      {names.length ? names.join(", ") : <span className="text-[var(--text-tertiary)]">Unassigned</span>}
+                    </span>
+                    <span className="hidden text-[11px] tabular-nums text-[var(--text-tertiary)] lg:block">
+                      {created ? formatWorkOsDate(created.slice(0, 10)) : "—"}
+                    </span>
+                    <span className="hidden lg:block">
+                      {typeof task.due_date === "string" && task.due_date ? (
+                        <span className={cx("text-[11.5px] tabular-nums", overdue ? "font-medium" : "")} style={{ color: overdue ? "var(--status-warn)" : "var(--text-secondary)" }}>
+                          {formatWorkOsDate(task.due_date)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[var(--text-tertiary)]" title={due ? `Defaults to ${formatWorkOsDate(due)}` : undefined}>No due date</span>
+                      )}
+                    </span>
+                    <span>
+                      <StateMark tone={done ? "ok" : overdue ? "warn" : "neutral"}>{done ? "Done" : overdue ? "Overdue" : "Open"}</StateMark>
+                    </span>
+                    <span className="flex justify-end">
+                      {url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Open ${task.title} in its provider`}
+                          className="text-[var(--text-tertiary)] transition hover:text-[var(--text-primary)]"
+                        >
+                          <ExternalLink size={12} aria-hidden />
+                        </a>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <EmptyState
+                icon={ListChecks}
+                title={filter === "open" ? "No open tasks match" : "No tasks match these filters"}
+                body="Change the filters, clear the search, or add a task."
+                action={<Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Plus size={12} aria-hidden /> Add task</Button>}
+              />
+            </div>
+          )}
+        </Panel>
+
+        {tasks.data?.nextOffset != null ? (
+          <p className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-tertiary)]">
+            <span>Showing the first {rows.length} tasks.</span>
+            <Button size="sm" onClick={() => setPageSize((size) => size + 100)} disabled={tasks.isFetching}>
+              {tasks.isFetching ? "Loading…" : "Load more"}
+            </Button>
+          </p>
+        ) : null}
+      </Group>
 
       <Drawer
         open={createOpen}
@@ -278,7 +390,7 @@ export default function AdminTasksPage() {
               onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
               rows={3}
               placeholder="Context, links, or acceptance notes."
-              className="w-full resize-y rounded-[10px] border bg-transparent px-3 py-2 text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+              className="w-full resize-y rounded-[9px] border bg-transparent px-3 py-2 text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -299,8 +411,27 @@ export default function AdminTasksPage() {
   );
 }
 
-function ProvenanceBadge({ task }: { task: AnyRow }) {
-  if (String(task.provider ?? "") === "local") return <span className="text-[10.5px] text-[var(--text-tertiary)]">Work OS record</span>;
-  if (task.synced_at) return <span className="text-[10.5px] text-[var(--text-tertiary)]">Recorded</span>;
-  return <StateMark tone="warn">Sync pending</StateMark>;
+/** A labeled column header that sorts the bounded record. */
+function SortHeader({ label, active, dir, onClick }: {
+  label: string;
+  active: boolean;
+  dir: 1 | -1;
+  onClick: () => void;
+}) {
+  const Icon = active ? (dir === 1 ? ChevronUp : ChevronDown) : ArrowUpDown;
+  return (
+    <span role="columnheader" aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cx(
+          "group/sort inline-flex items-center gap-1 text-left font-medium transition hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
+          active ? "text-[var(--text-secondary)]" : "text-[var(--text-tertiary)]",
+        )}
+      >
+        {label}
+        <Icon size={11} className={active ? "opacity-100" : "opacity-0 transition group-hover/sort:opacity-60 group-focus-visible/sort:opacity-100"} aria-hidden />
+      </button>
+    </span>
+  );
 }

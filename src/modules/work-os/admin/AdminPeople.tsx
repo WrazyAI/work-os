@@ -2,16 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, FileCheck2, MessageSquareText, ShieldCheck, Users } from "lucide-react";
+import { CalendarClock, ChevronRight, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys, type AdminOverview, type PersonDetailResponse } from "./api";
 import {
-  AdminCard,
   Avatar,
   Drawer,
   EmptyState,
+  Group,
   Notice,
   SectionHeading,
+  SegmentedControl,
   Skeleton,
   StateMark,
   formatClock,
@@ -74,100 +75,109 @@ export default function AdminPeoplePage() {
   const roleOptions = (roster.data?.roleProfiles ?? []).map((profile) => ({ value: profile.id, label: profile.name }));
   const selectedStatus = selectedId ? peopleById.get(selectedId) ?? null : null;
 
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<ViewFilter>("all");
+
+  const board = useMemo(() => {
+    const rows: BoardRow[] = (roster.data?.people ?? []).map((person) => {
+      const status = peopleById.get(String(person.id));
+      const role = status?.roleProfile ?? null;
+      const schedule = status?.schedule ?? null;
+      const state = status?.attendance.state ?? "unknown";
+      const needs = [!role ? "role profile" : null, !schedule ? "schedule" : null].filter(Boolean) as string[];
+      return { person, status, role, schedule, state, needs };
+    });
+    const needle = query.trim().toLowerCase();
+    const searched = needle
+      ? rows.filter((row) => `${row.person.display_name ?? ""} ${row.person.email ?? ""}`.toLowerCase().includes(needle))
+      : rows;
+    const filtered = view === "needs_setup"
+      ? searched.filter((row) => row.needs.length > 0)
+      : view === "on_shift"
+        ? searched.filter((row) => row.state === "active" || row.state === "paused")
+        : searched;
+    const byName = (left: BoardRow, right: BoardRow) => String(left.person.display_name ?? "").localeCompare(String(right.person.display_name ?? ""));
+    const active = filtered.filter((row) => row.state === "active" || row.state === "paused");
+    const unconfigured = filtered.filter((row) => row.state !== "active" && row.state !== "paused" && row.needs.length > 0);
+    const quiet = filtered.filter((row) => row.state !== "active" && row.state !== "paused" && !row.needs.length);
+    return {
+      onShift: active.sort(byName),
+      needsSetup: unconfigured.sort(byName),
+      quiet: quiet.sort(byName),
+      total: rows.length,
+      setupCount: rows.filter((row) => row.needs.length > 0).length,
+      empty: !filtered.length,
+    };
+  }, [roster.data, peopleById, query, view]);
+
   return (
-    <div className="grid gap-5">
-      <AdminCard padded={false}>
-        <div className="px-5 pt-4 pb-2">
-          <SectionHeading
-            icon={Users}
-            title="Roster"
-            detail="Mappings, schedules, and today's recorded state. Select a person to open their record."
+    <div className="flex flex-col">
+      <Group label="Roster" detail="Mappings, schedules, and today's recorded state.">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+          <SegmentedControl<ViewFilter>
+            ariaLabel="Roster view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "all", label: "Everyone" },
+              { value: "needs_setup", label: `Needs setup${board.setupCount ? ` (${board.setupCount})` : ""}` },
+              { value: "on_shift", label: "On shift" },
+            ]}
           />
+          <label className="relative block w-full sm:w-[230px]">
+            <span className="sr-only">Search people</span>
+            <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" aria-hidden />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Name or email"
+              className="min-h-[34px] w-full rounded-[9px] border pl-8 pr-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus-visible:border-[var(--border-hot)]"
+              style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
+            />
+          </label>
         </div>
+
         {overview.isLoading || roster.isLoading ? (
-          <div className="grid gap-2 px-5 pb-5">
-            {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-14 w-full" />)}
+          <div className="grid gap-1.5">
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-12 w-full" />)}
           </div>
         ) : overview.error || roster.error ? (
-          <div className="px-5 pb-5"><Notice tone="err">{((overview.error || roster.error) as Error).message}</Notice></div>
-        ) : (roster.data?.people ?? []).length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-[12.5px]">
-              <thead>
-                <tr className="border-y text-[11px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
-                  <th className="px-5 py-2.5 font-medium">Person</th>
-                  <th className="px-3 py-2.5 font-medium">Role profile</th>
-                  <th className="px-3 py-2.5 font-medium">Schedule</th>
-                  <th className="px-3 py-2.5 font-medium">Status now</th>
-                  <th className="px-3 py-2.5 font-medium">Today</th>
-                  <th className="px-3 py-2.5 font-medium">EOD</th>
-                  <th className="px-5 py-2.5 font-medium">Last update</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(roster.data?.people ?? []).map((person) => {
-                  const personId = String(person.id);
-                  const status = peopleById.get(personId);
-                  return (
-                    <tr
-                      key={personId}
-                      tabIndex={0}
-                      className="cursor-pointer border-b transition hover:bg-[var(--bg-secondary)]"
-                      style={{ borderColor: "var(--border-subtle)" }}
-                      onClick={() => setSelectedId(personId)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedId(personId);
-                        }
-                      }}
-                    >
-                      <td className="px-5 py-3">
-                        <span className="flex items-center gap-2.5">
-                          <Avatar name={String(person.display_name)} size={28} />
-                          <span className="min-w-0">
-                            <span className="block truncate font-semibold text-[var(--text-primary)]">{String(person.display_name)}</span>
-                            <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{person.email ? String(person.email) : "No email"}</span>
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-[var(--text-secondary)]">{status?.roleProfile ?? "Unmapped"}</td>
-                      <td className="px-3 py-3 text-[var(--text-secondary)]">
-                        {status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}
-                      </td>
-                      <td className="px-3 py-3">
-                        <StateMark tone={stateTone(status?.attendance.state ?? "unknown")}>
-                          {stateLabel(status?.attendance.state ?? "unknown")}
-                          {status?.attendance.freshness === "stale" ? " · stale" : ""}
-                        </StateMark>
-                      </td>
-                      <td className="px-3 py-3 tabular-nums text-[var(--text-secondary)]">
-                        {status ? `${status.updatesToday} update${status.updatesToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
-                      </td>
-                      <td className="px-3 py-3">
-                        {status?.eodToday ? (
-                          <StateMark tone={status.eodToday === "approved" ? "ok" : status.eodToday === "pending_review" ? "info" : "neutral"}>
-                            {statusLabel(status.eodToday)}
-                          </StateMark>
-                        ) : status?.eodOutstanding ? (
-                          <StateMark tone="warn">Outstanding</StateMark>
-                        ) : (
-                          <span className="text-[var(--text-tertiary)]">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-[11.5px] text-[var(--text-tertiary)]">{status?.lastUpdateAt ? relativeTime(status.lastUpdateAt) : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Notice tone="err">{((overview.error || roster.error) as Error).message}</Notice>
+        ) : board.empty ? (
+          <EmptyState
+            icon={Users}
+            title={query ? "No one matches that search" : "No people yet"}
+            body={query ? "Clear the search or switch the view." : "People are created through onboarding or membership mapping in Settings."}
+          />
         ) : (
-          <div className="px-5 pb-5">
-            <EmptyState icon={Users} title="No people yet" body="People are created through onboarding or membership mapping in Settings." />
+          <div className="flex flex-col">
+            {board.onShift.length ? (
+              <BoardSection
+                title="On shift"
+                note="Recording right now"
+                rows={board.onShift}
+                onOpen={setSelectedId}
+              />
+            ) : null}
+            {board.needsSetup.length ? (
+              <BoardSection
+                title="Needs setup"
+                note="Record a role profile and a schedule before a workday can be recorded."
+                rows={board.needsSetup}
+                onOpen={setSelectedId}
+              />
+            ) : null}
+            {board.quiet.length ? (
+              <BoardSection
+                title="Other people"
+                note="Configured, not on shift right now"
+                rows={board.quiet}
+                onOpen={setSelectedId}
+              />
+            ) : null}
           </div>
         )}
-      </AdminCard>
+      </Group>
 
       <Drawer
         open={!!selectedId}
@@ -342,5 +352,96 @@ export default function AdminPeoplePage() {
         )}
       </Drawer>
     </div>
+  );
+}
+
+type ViewFilter = "all" | "needs_setup" | "on_shift";
+
+type BoardRow = {
+  person: Record<string, unknown>;
+  status: AdminOverview["people"][number] | undefined;
+  role: string | null;
+  schedule: AdminOverview["people"][number]["schedule"];
+  state: string;
+  needs: string[];
+};
+
+/** One state band of the coverage board: a quiet heading, then flat rows. */
+function BoardSection({ title, note, rows, onOpen }: {
+  title: string;
+  note: string;
+  rows: BoardRow[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <section className="border-b py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 pb-1">
+        <h3 className="text-[11.5px] font-semibold text-[var(--text-secondary)]">
+          {title}
+          <span className="ml-1.5 font-medium tabular-nums text-[var(--text-tertiary)]">{rows.length}</span>
+        </h3>
+        <p className="text-[10.5px] text-[var(--text-tertiary)]">{note}</p>
+      </div>
+      <div>
+        {rows.map((row) => <PersonRow key={String(row.person.id)} row={row} onOpen={onOpen} />)}
+      </div>
+    </section>
+  );
+}
+
+function PersonRow({ row, onOpen }: { row: BoardRow; onOpen: (id: string) => void }) {
+  const personId = String(row.person.id);
+  const status = row.status;
+  const today = status
+    ? [
+        status.updatesToday ? `${status.updatesToday} update${status.updatesToday === 1 ? "" : "s"}` : null,
+        status.tasksCompletedToday ? `${status.tasksCompletedToday} done` : null,
+        status.evidenceToday ? `${status.evidenceToday} evidence` : null,
+      ].filter(Boolean)
+    : [];
+  const missing = [
+    !row.role ? "No role profile" : null,
+    !row.schedule ? "No schedule" : null,
+  ].filter(Boolean);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(personId)}
+      className="flex w-full items-center gap-3 border-b py-2.5 text-left transition last:border-b-0 hover:bg-[var(--bg-secondary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      style={{ borderColor: "var(--border-subtle)" }}
+    >
+      <Avatar name={String(row.person.display_name ?? "")} size={26} />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-baseline gap-x-2">
+          <span className="truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{String(row.person.display_name ?? "Unnamed person")}</span>
+          {row.state === "active" || row.state === "paused" ? (
+            <StateMark tone={stateTone(row.state)}>
+              {stateLabel(row.state)}
+              {status?.attendance.freshness === "stale" ? " · stale" : ""}
+            </StateMark>
+          ) : null}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-[var(--text-tertiary)]">
+          {row.role ?? "No role profile"}
+          {row.schedule ? ` · ${row.schedule.start}–${row.schedule.end} ${row.schedule.timezone}` : " · No schedule"}
+        </span>
+      </span>
+      <span className="hidden shrink-0 items-center gap-3 text-[11px] tabular-nums text-[var(--text-secondary)] lg:flex">
+        {today.length ? today.join(" · ") : null}
+      </span>
+      <span className="shrink-0">
+        {status?.eodToday ? (
+          <StateMark tone={status.eodToday === "approved" ? "ok" : status.eodToday === "pending_review" ? "info" : "neutral"}>
+            {statusLabel(status.eodToday)}
+          </StateMark>
+        ) : status?.eodOutstanding ? (
+          <StateMark tone="warn">EOD outstanding</StateMark>
+        ) : missing.length ? (
+          <span className="text-[10.5px] font-semibold" style={{ color: "var(--status-warn)" }}>Needs setup</span>
+        ) : null}
+      </span>
+      <ChevronRight size={13} className="shrink-0 text-[var(--text-tertiary)]" aria-hidden />
+    </button>
   );
 }

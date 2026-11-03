@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
-import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Filter, Info, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 /* Shared primitives for the Work OS administration surface. They follow the
- * design.md blueprint and the refined desktop companion language: raised
- * panels with hairline structure, flat rows instead of nested boxes, quiet
- * metadata, and signal reserved for state and actions. */
+ * design.md blueprint and the refined employee language: one paper surface,
+ * label/content groups with an index gutter, flat rows instead of nested
+ * boxes, quiet metadata, and signal reserved for state and actions. */
 
 export function cx(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
@@ -30,13 +30,54 @@ export const TONE_COLOR: Record<Tone, string> = {
 export function AdminCard({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
   return (
     <section
-      className={cx("rounded-2xl border", padded && "p-5", className)}
-      style={{ borderColor: "var(--border)", background: "var(--bg-card)", boxShadow: "var(--shadow-sm)" }}
+      className={cx("overflow-hidden rounded-[16px] border", padded && "p-5", className)}
+      style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
     >
       {children}
     </section>
   );
 }
+
+/** One page section. The narrow label column is the workspace's index: the
+ * reader can scan section names down the left edge, the way the employee
+ * Settings page reads, instead of counting cards. */
+export function Group({ label, detail, action, children, className, id }: {
+  label: string;
+  detail?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
+  return (
+    <section
+      id={id}
+      className={cx("grid grid-cols-[minmax(0,1fr)] gap-x-9 gap-y-2.5 border-t py-6 first:border-t-0 first:pt-0 md:grid-cols-[190px_minmax(0,1fr)] md:py-7 md:first:pt-0", className)}
+      style={{ borderColor: "var(--border)" }}
+    >
+      <div className="min-w-0">
+        <h2 className="text-[12.5px] font-[640] leading-5 tracking-[-0.005em] text-[var(--text-primary)]">{label}</h2>
+        {detail ? <p className="mt-1 max-w-[30ch] text-[10.5px] leading-[1.55] text-[var(--text-tertiary)]">{detail}</p> : null}
+        {action ? <div className="mt-2">{action}</div> : null}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
+/** A plot ground or a bounded table: the only raised surfaces the admin pages
+ * use, so charts and dense records keep a paper edge without becoming cards. */
+export function Panel({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
+  return (
+    <div
+      className={cx("overflow-hidden rounded-[16px] border", padded && "p-4", className)}
+      style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 
 export function SectionHeading({ icon: Icon, title, detail, action }: {
   icon?: typeof Info;
@@ -71,32 +112,37 @@ export function PanelLink({ href, icon: Icon, children }: { href: string; icon?:
   );
 }
 
-export function Metric({ label, value, detail, tone = "neutral", href, onClick }: {
+/** The range's facts as one record: a single bounded band with hairline
+ * separators. Equal-weight cards are gone; the first fact leads. */
+export function Record({ children, className, columns = 4 }: { children: ReactNode; className?: string; columns?: 3 | 4 | 5 }) {
+  const grid = columns === 5 ? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-5" : columns === 3 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2 lg:grid-cols-4";
+  return (
+    <div
+      className={cx("grid gap-px overflow-hidden rounded-[16px] border", grid, className)}
+      style={{ borderColor: "var(--border)", background: "var(--border)" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function Fact({ label, value, detail, tone = "neutral", lead = false }: {
   label: string;
   value: ReactNode;
   detail?: string;
   tone?: Tone;
-  href?: string;
-  onClick?: () => void;
+  lead?: boolean;
 }) {
-  const body = (
-    <>
-      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+  return (
+    <div className="min-w-0 px-4 py-3.5" style={{ background: "var(--color-paper)" }}>
+      <span className="flex items-center gap-1.5 text-[9.5px] font-[650] uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
         {tone !== "neutral" ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: TONE_COLOR[tone] }} /> : null}
         {label}
       </span>
-      <span className="mt-1.5 block text-[22px] font-semibold leading-none tracking-[-0.02em] text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">{value}</span>
-      {detail ? <span className="mt-1.5 block text-[10.5px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
-    </>
+      <span className={cx("mt-2 block font-[590] leading-none tracking-[-0.04em] text-[var(--text-primary)] [font-variant-numeric:tabular-nums]", lead ? "text-[30px]" : "text-[25px]")}>{value}</span>
+      {detail ? <span className="mt-2 block text-[10px] leading-[1.45] text-[var(--text-tertiary)]">{detail}</span> : null}
+    </div>
   );
-  const className = cx(
-    "block rounded-[14px] border p-3.5 text-left transition",
-    (href || onClick) && "hover:border-[var(--border-hot)]",
-  );
-  const style = { borderColor: "var(--border)", background: "var(--bg-card)" };
-  if (href) return <Link href={href} className={className} style={style}>{body}</Link>;
-  if (onClick) return <button type="button" onClick={onClick} className={className} style={style}>{body}</button>;
-  return <div className={className} style={style}>{body}</div>;
 }
 
 const pillTones: Record<string, { color: string; background: string; border: string }> = {
@@ -211,7 +257,7 @@ export function Button({ variant = "secondary", size = "md", className, children
       type="button"
       {...rest}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-[10px] border font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-1.5 rounded-[8px] border font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-[12px]",
         className,
       )}
@@ -229,7 +275,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, a
   ariaLabel: string;
 }) {
   return (
-    <div role="tablist" aria-label={ariaLabel} className="inline-flex items-center gap-0.5 rounded-[10px] border p-0.5" style={{ borderColor: "var(--border)", background: "var(--bg-secondary)" }}>
+    <div role="tablist" aria-label={ariaLabel} className="inline-flex flex-wrap items-center gap-0.5 rounded-[9px] border p-0.5" style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -238,9 +284,9 @@ export function SegmentedControl<T extends string>({ options, value, onChange, a
             role="tab"
             aria-selected={active}
             onClick={() => onChange(option.value)}
-            className={cx("rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition", !active && "hover:text-[var(--text-primary)]")}
+            className={cx("rounded-[7px] px-2.5 py-1.5 text-[11.5px] font-semibold transition", !active && "hover:text-[var(--text-primary)]")}
             style={active
-              ? { background: "var(--bg-card)", color: "var(--text-primary)", boxShadow: "var(--shadow-sm)" }
+              ? { background: "var(--bg-secondary)", color: "var(--text-primary)" }
               : { background: "transparent", color: "var(--text-tertiary)" }}
           >
             {option.label}
@@ -447,4 +493,118 @@ export function relativeTime(value?: string | null, now = new Date()) {
 export function statusLabel(value?: string | null) {
   if (!value) return "—";
   return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+/** A binary control that reads as a switch, not a browser checkbox. */
+export function Switch({ checked, onChange, label, ariaLabel, disabled, className }: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel ?? label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "inline-flex items-center gap-2 rounded-[6px] text-[11.5px] font-medium text-[var(--text-secondary)] transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
+        className,
+      )}
+    >
+      <span
+        aria-hidden
+        className="relative inline-flex shrink-0 items-center rounded-full transition"
+        style={{
+          width: 28,
+          height: 16,
+          background: checked ? "var(--accent)" : "var(--bg-tertiary)",
+          boxShadow: checked ? "none" : "inset 0 0 0 1px var(--border)",
+        }}
+      >
+        <span
+          className="absolute rounded-full transition"
+          style={{ width: 12, height: 12, left: checked ? 14 : 2, background: "var(--color-paper)" }}
+        />
+      </span>
+      {label ? <span>{label}</span> : null}
+    </button>
+  );
+}
+
+/** The date-range control shared by the review queue and the evidence record. */
+export function DateRangeFilter({ from, to, onFrom, onTo, applied, label = "Range", ariaLabel = "Report range" }: {
+  from: string;
+  to: string;
+  onFrom: (value: string) => void;
+  onTo: (value: string) => void;
+  applied: boolean;
+  label?: string;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (restoreFocus: boolean) => {
+      setOpen(false);
+      if (restoreFocus) buttonRef.current?.focus();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close(true);
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (layerRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      close(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-label={`${ariaLabel}, ${from} to ${to}`}
+        title={ariaLabel}
+        onClick={() => setOpen((value) => !value)}
+        className="relative inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] border px-2.5 text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
+      >
+        <Filter size={13} aria-hidden />
+        {label}
+        {applied ? <span aria-hidden className="absolute right-1.5 top-1.5 size-1.5 rounded-full" style={{ background: "var(--accent)" }} /> : null}
+      </button>
+      {open ? (
+        <div
+          ref={layerRef}
+          className="absolute left-0 z-30 mt-1.5 w-[280px] max-w-[calc(100vw-2rem)] rounded-[12px] border p-3 sm:left-auto sm:right-0"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)", boxShadow: "var(--shadow-md)" }}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <TextField label="From" type="date" value={from} onChange={onFrom} ariaLabel={`${ariaLabel} from`} />
+            <TextField label="To" type="date" value={to} onChange={onTo} ariaLabel={`${ariaLabel} to`} />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[10px] text-[var(--text-tertiary)]">Applies to this record</span>
+            <Button size="sm" onClick={() => { setOpen(false); buttonRef.current?.focus(); }}>Done</Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }

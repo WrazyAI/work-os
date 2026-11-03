@@ -41,19 +41,20 @@ export interface ChartSeries {
 }
 
 /** Grouped daily bars for two or three count series over a short range. */
-export function TrendBars({ data, series, ariaLabel }: {
+export function TrendBars({ data, series, ariaLabel, height = 190 }: {
   data: Array<Record<string, string | number>>;
   series: ChartSeries[];
   ariaLabel: string;
+  height?: number;
 }) {
   const reduced = useReducedMotion();
   return (
-    <div role="img" aria-label={ariaLabel} className="h-[190px] w-full">
+    <div role="img" aria-label={ariaLabel} className="w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -18 }} barCategoryGap="26%" barGap={2}>
+        <BarChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }} barCategoryGap="26%" barGap={2}>
           <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tick={AXIS_TICK} interval="preserveStartEnd" />
-          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} width={36} />
+          <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} width={44} />
           <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--accent-subtle)" }} isAnimationActive={false} />
           {series.map((entry) => (
             <Bar
@@ -178,7 +179,7 @@ export function StackedTimeBars({ data, ariaLabel }: {
     <div className="w-full">
       <div role="img" aria-label={ariaLabel} className="h-[190px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 6, right: 6, bottom: 0, left: -18 }} barCategoryGap="26%">
+          <BarChart data={rows} margin={{ top: 6, right: 6, bottom: 0, left: 0 }} barCategoryGap="26%">
             <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
             <XAxis dataKey="label" tickLine={false} axisLine={false} tick={AXIS_TICK} interval="preserveStartEnd" />
             <YAxis
@@ -186,7 +187,7 @@ export function StackedTimeBars({ data, ariaLabel }: {
               tickLine={false}
               axisLine={false}
               tick={AXIS_TICK}
-              width={36}
+              width={44}
               tickFormatter={(value) => {
                 const minutes = Number(value);
                 if (!minutes) return "0";
@@ -346,10 +347,10 @@ export function StackedCountBars({ data, ariaLabel }: {
     <div className="flex flex-wrap items-start gap-5">
       <div role="img" aria-label={ariaLabel} className="min-w-[240px] flex-1">
         <ResponsiveContainer width="100%" height={190}>
-          <BarChart data={chartData} margin={{ top: 6, right: 6, bottom: 0, left: -18 }} barCategoryGap="26%">
+          <BarChart data={chartData} margin={{ top: 6, right: 6, bottom: 0, left: 0 }} barCategoryGap="26%">
             <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
             <XAxis dataKey="label" tickLine={false} axisLine={false} tick={AXIS_TICK} interval="preserveStartEnd" />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} width={36} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} width={44} />
             <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--accent-subtle)" }} isAnimationActive={false} />
             {people.map((person) => (
               <Bar

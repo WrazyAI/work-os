@@ -335,7 +335,7 @@ test("effective_due_count_matches_rendered_overdue", async () => {
     const counts = await service.countAdminTaskRecord(adminAccess, {
       ownerId: adminUser, personId: personA, today: "2026-10-22",
     });
-    assert.deepEqual(counts, { open: 5, overdue: 2, completedWeek: 0 });
+    assert.deepEqual(counts, { open: 5, overdue: 2, overdueRecorded: 1, completedWeek: 0 });
     const dates = (await model()).adminTaskDates({ due_date: null, provider_created_at: "2026-10-01T09:00:00.000Z" });
     assert.deepEqual(dates, { createdDate: "2026-10-01", effectiveDueDate: "2026-10-02" });
     assert.equal((await model()).adminTaskStatusRank({ completed: false, due_date: null, provider_created_at: "2026-10-01T09:00:00.000Z" }, "2026-10-22"), 0);
@@ -1164,11 +1164,11 @@ test("two_org_same_owner_and_foreign_person_rows_counts_parity", async () => {
     const counts = await service.countAdminTaskRecord(adminAccess, {
       ownerId: adminUser, personId: personA, today: "2026-10-22",
     });
-    assert.deepEqual(counts, { open: 1, overdue: 1, completedWeek: 0 }, "the count matches the organization-bounded row result");
+    assert.deepEqual(counts, { open: 1, overdue: 1, overdueRecorded: 0, completedWeek: 0 }, "the count matches the organization-bounded row result");
     const inactiveCounts = await service.countAdminTaskRecord(adminAccess, {
       ownerId: adminUser, personId: personC, today: "2026-10-22",
     });
-    assert.deepEqual(inactiveCounts, { open: 1, overdue: 1, completedWeek: 0 }, "the inactive same-org count matches its rows");
+    assert.deepEqual(inactiveCounts, { open: 1, overdue: 1, overdueRecorded: 0, completedWeek: 0 }, "the inactive same-org count matches its rows");
     const teamCount = await service.countAdminTaskRecord(adminAccess, {
       ownerId: adminUser, personId: null, today: "2026-10-22",
     });
@@ -1277,7 +1277,7 @@ function routeFixture() {
       },
       countAdminTaskRecord: async (_access: unknown, input: unknown) => {
         calls.adminCounts.push(input);
-        return { open: 0, overdue: 0, completedWeek: 0 };
+        return { open: 0, overdue: 0, overdueRecorded: 0, completedWeek: 0 };
       },
     },
     "src/lib/work-os.ts": {

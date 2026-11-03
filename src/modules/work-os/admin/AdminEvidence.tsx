@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Cable, Camera, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
+import { Activity, Cable, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import {
@@ -14,20 +14,22 @@ import {
   type GithubIntegrationActorsResponse,
   type GithubIntegrationReposResponse,
 } from "./api";
-import { CHART_COLORS, CHART_PALETTE, SparkTrend } from "./charts";
+import { CHART_PALETTE, TrendBars } from "./charts";
 import {
-  AdminCard,
   Button,
+  DateRangeFilter,
   Drawer,
   EmptyState,
+  Group,
   Notice,
+  Panel,
   SectionHeading,
   SegmentedControl,
   SelectField,
   Skeleton,
   StateMark,
   StatusPill,
-  TextField,
+  Switch,
   relativeTime,
   statusLabel,
 } from "./ui";
@@ -68,6 +70,7 @@ export default function AdminEvidencePage() {
   const [reposOpen, setReposOpen] = useState(false);
   const [actorPerson, setActorPerson] = useState<Record<string, string>>({});
   const [mappingReceipt, setMappingReceipt] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(60);
 
   const people = useQuery<{ people: Array<{ id: string; display_name: string }> }>({
     queryKey: adminKeys.people(),
@@ -165,59 +168,69 @@ export default function AdminEvidencePage() {
     return [...map.entries()].sort((left, right) => right[0].localeCompare(left[0]));
   }, [evidence.data]);
 
+  const visibleGroups = useMemo(() => {
+    let remaining = visibleCount;
+    return grouped
+      .map(([date, rows]) => {
+        const slice = rows.slice(0, Math.max(0, remaining));
+        remaining -= slice.length;
+        return [date, slice, rows.length] as const;
+      })
+      .filter(([, rows]) => rows.length);
+  }, [grouped, visibleCount]);
+
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
   const githubConnection = (connections.data?.connections ?? []).find((row) => row.provider === "github" && row.active !== false) ?? null;
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
   const actors = githubActors.data?.actors ?? [];
+  // Provider bots are automation, not people: mapping one to a teammate would
+  // attribute machine work to a person, so they never enter the person queue.
+  const isAutomation = (login?: string | null) => !!login && (login.endsWith("[bot]") || /^(dependabot|coderabbitai|github-actions|renovate)/i.test(login));
+  const humanActors = actors.filter((actor) => !isAutomation(actor.login));
+  const botActors = actors.filter((actor) => isAutomation(actor.login));
+  const botEvents = botActors.reduce((sum, actor) => sum + actor.events, 0);
 
+  const totalEvidence = evidence.data?.evidence.length ?? 0;
   const evidenceSources = evidence.data?.summary?.sources ?? [];
   const evidenceDays = evidence.data?.summary?.days ?? [];
 
   return (
-    <div className="grid gap-5">
-      {/* Record shape — one quiet facts line and one volume trend */}
-      {evidenceSources.length || evidenceDays.length ? (
-        <AdminCard>
-          <SectionHeading
-            icon={Camera}
-            title="Record shape"
-            detail={`Evidence in this range by source, ${from} to ${to}.`}
-          />
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[var(--text-secondary)]">
-            <span className="text-[var(--text-tertiary)]">
-              <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{evidenceSources.reduce((sum, entry) => sum + entry.count, 0)}</strong> items
-            </span>
-            {evidenceSources.slice(0, 6).map((entry, index) => (
-              <span key={entry.source} className="inline-flex items-center gap-1.5">
-                <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
-                {entry.source === "worktivity" ? "Worktivity (activity)" : entry.source}
-                <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{entry.count}</strong>
+    <div className="flex flex-col">
+      <Group label="Shape" detail="What the evidence record holds in this range.">
+        {evidenceSources.length || evidenceDays.length ? (
+          <div className="grid gap-4">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[var(--text-secondary)]">
+              <span className="text-[var(--text-tertiary)]">
+                <strong className="text-[22px] font-[590] tracking-[-0.03em] tabular-nums text-[var(--text-primary)]">{evidenceSources.reduce((sum, entry) => sum + entry.count, 0)}</strong> items
               </span>
-            ))}
-          </div>
-          {evidenceDays.length ? (
-            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <p className="text-[10.5px] text-[var(--text-tertiary)]">Volume per day</p>
-              <SparkTrend
-                ariaLabel="Evidence volume per day in this range"
-                color={CHART_COLORS.accent}
-                data={evidenceDays.map((entry) => ({ label: entry.date.slice(5), value: entry.count }))}
-              />
+              {evidenceSources.slice(0, 6).map((entry, index) => (
+                <span key={entry.source} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                  {entry.source === "worktivity" ? "Worktivity (activity)" : entry.source}
+                  <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{entry.count}</strong>
+                </span>
+              ))}
             </div>
-          ) : null}
-        </AdminCard>
-      ) : null}
+            {evidenceDays.length ? (
+              <Panel padded={false} className="p-3.5">
+                <TrendBars
+                  height={124}
+                  ariaLabel="Evidence volume per day in this range"
+                  data={evidenceDays.map((entry) => ({ label: entry.date.slice(5).replace("-", "/"), items: entry.count }))}
+                  series={[{ key: "items", label: "Evidence items", color: "var(--text-primary)" }]}
+                />
+                <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">Items recorded per day. Observation is context, never completion.</p>
+              </Panel>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-[12.5px] text-[var(--text-tertiary)]">No evidence was recorded in this range.</p>
+        )}
+      </Group>
 
-      {/* Integrations band */}
-      <AdminCard>
-        <SectionHeading
-          icon={Cable}
-          title="Integrations"
-          detail="Provider evidence that feeds this record. Observation is never completion."
-          action={<Link href="/work-os/admin/settings" className="text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open Settings</Link>}
-        />
+      <Group label="Integrations" detail="Provider evidence that feeds this record.">
         <div className="grid gap-3 lg:grid-cols-2">
-          <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
+          <div className="rounded-[12px] border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
                 <GitBranch size={15} className="text-[var(--text-tertiary)]" aria-hidden /> GitHub
@@ -234,81 +247,84 @@ export default function AdminEvidencePage() {
                 Manage repositories
               </Button>
               {githubConnection ? (
-                <span className="text-[11px] text-[var(--text-tertiary)]">
-                  {githubActors.data?.configuration.repositoryManagementReady ? "Add or remove repo webhooks here." : "Repository management token not configured — see the drawer for manual steps."}
+                <span className="text-[10.5px] leading-4 text-[var(--text-tertiary)]">
+                  {githubActors.data?.configuration.repositoryManagementReady ? "Add or remove repo webhooks here." : "Repository token not configured — see the drawer for manual steps."}
                 </span>
               ) : null}
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-xl border p-4" style={{ borderColor: "var(--border-subtle)" }} aria-disabled="true">
-            <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-                  <Cable size={15} className="text-[var(--text-tertiary)]" /> GHL
-                </span>
-                <StateMark tone="ok">Connected</StateMark>
-              </div>
-              <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
-                Opportunity, appointment, and conversation activity from GoHighLevel becomes output evidence for the mapped person.
-              </p>
-              <div className="mt-3 flex gap-2 text-[11px] text-[var(--text-tertiary)]">
-                <span>Opportunities</span>·<span>Appointments</span>·<span>Conversations</span>
-              </div>
-            </div>
-            <div className="absolute inset-0 flex items-end justify-end p-4">
+          <div className="rounded-[12px] border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)", opacity: 0.72 }} aria-disabled="true">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <Cable size={15} className="text-[var(--text-tertiary)]" aria-hidden /> GHL
+              </span>
               <StatusPill tone="neutral">Coming soon</StatusPill>
             </div>
+            <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
+              Opportunity, appointment, and conversation activity from GoHighLevel becomes output evidence for the mapped person.
+            </p>
+            <p className="mt-3 text-[10.5px] text-[var(--text-tertiary)]">Opportunities · appointments · conversations</p>
           </div>
         </div>
-      </AdminCard>
 
-      {/* Unmapped GitHub accounts — flat rows */}
-      {actors.length ? (
-        <AdminCard>
-          <SectionHeading
-            icon={GitBranch}
-            title="Unmapped GitHub accounts"
-            detail={`${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} from ${actors.length} account${actors.length === 1 ? "" : "s"} waiting for a person. Mapping an account also attributes its earlier events.`}
-          />
-          <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
-            {actors.map((actor) => {
-              const value = actorPerson[actor.key] ?? actor.suggestion?.personId ?? "";
-              return (
-                <li key={actor.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-1 last:pb-1">
-                  <span className="min-w-0 flex-1 basis-[220px]">
-                    <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{actor.login ?? `GitHub id ${actor.id}`}</span>
-                    <span className="block truncate text-[11px] text-[var(--text-tertiary)]">
-                      {actor.events} event{actor.events === 1 ? "" : "s"} · last {relativeTime(actor.lastSeen)}{actor.titles[0] ? ` · ${actor.titles[0]}` : ""}
-                    </span>
-                  </span>
-                  <SelectField
-                    label="Person"
-                    value={value}
-                    onChange={(next) => setActorPerson((current) => ({ ...current, [actor.key]: next }))}
-                    options={personOptions}
-                    placeholder="Select a person"
-                    ariaLabel={`Map ${actor.login ?? actor.id} to a person`}
-                  />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={!value || mapActor.isPending}
-                    onClick={() => mapActor.mutate({ actor, personId: value })}
-                  >
-                    <Check size={12} aria-hidden /> Map &amp; backfill
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-          {mappingReceipt ? <div className="mt-3"><Notice tone="ok">{mappingReceipt}</Notice></div> : null}
-          {mapActor.error ? <div className="mt-3"><Notice tone="err">{(mapActor.error as Error).message}</Notice></div> : null}
-        </AdminCard>
-      ) : null}
+        {humanActors.length || botActors.length ? (
+          <div className="mt-6">
+            <SectionHeading
+              icon={GitBranch}
+              title="Unmapped accounts"
+              detail={`${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} waiting for a person. Mapping an account also attributes its earlier events.`}
+            />
+            {humanActors.length ? (
+              <ul className="grid">
+                {humanActors.map((actor) => {
+                  const value = actorPerson[actor.key] ?? actor.suggestion?.personId ?? "";
+                  return (
+                    <li key={actor.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+                      <span className="min-w-0 flex-1 basis-[220px]">
+                        <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{actor.login ?? `GitHub id ${actor.id}`}</span>
+                        <span className="block truncate text-[11px] text-[var(--text-tertiary)]">
+                          {actor.events} event{actor.events === 1 ? "" : "s"} · last {relativeTime(actor.lastSeen)}{actor.titles[0] ? ` · ${actor.titles[0]}` : ""}
+                        </span>
+                      </span>
+                      <SelectField
+                        label="Person"
+                        value={value}
+                        onChange={(next) => setActorPerson((current) => ({ ...current, [actor.key]: next }))}
+                        options={personOptions}
+                        placeholder="Select a person"
+                        ariaLabel={`Map ${actor.login ?? actor.id} to a person`}
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!value || mapActor.isPending}
+                        onClick={() => mapActor.mutate({ actor, personId: value })}
+                      >
+                        <Check size={12} aria-hidden /> Map &amp; backfill
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[12px] text-[var(--text-tertiary)]">No human accounts are waiting for a person.</p>
+            )}
 
-      <AdminCard padded={false}>
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+            {botActors.length ? (
+              <p className="mt-3 border-t pt-3 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
+                <span className="font-semibold text-[var(--text-secondary)]">Automation</span> · {botActors.length} account{botActors.length === 1 ? "" : "s"}, {botEvents} event{botEvents === 1 ? "" : "s"} — {botActors.slice(0, 3).map((actor) => actor.login ?? actor.id).join(", ")}{botActors.length > 3 ? ` and ${botActors.length - 3} more` : ""}. Bots are never mapped to a person.
+              </p>
+            ) : null}
+
+            {mappingReceipt ? <div className="mt-3"><Notice tone="ok">{mappingReceipt}</Notice></div> : null}
+            {mapActor.error ? <div className="mt-3"><Notice tone="err">{(mapActor.error as Error).message}</Notice></div> : null}
+          </div>
+        ) : null}
+      </Group>
+
+      <Group label="Record" detail="Evidence and activity recaps, newest first.">
+        <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
           <SegmentedControl<EvidenceTab>
             ariaLabel="Evidence view"
             value={tab}
@@ -323,17 +339,23 @@ export default function AdminEvidencePage() {
             {tab === "evidence" ? (
               <SelectField label="Source" value={source} onChange={setSource} options={SOURCE_OPTIONS} placeholder="All sources" ariaLabel="Filter by source" />
             ) : null}
-            <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Evidence from date" />
-            <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Evidence to date" />
+            <DateRangeFilter
+              from={from}
+              to={to}
+              onFrom={setFrom}
+              onTo={setTo}
+              applied={from !== isoDaysAgo(7) || to !== today}
+              ariaLabel="Evidence range"
+            />
             {tab === "evidence" ? (
-              <label className="flex min-h-[34px] items-center gap-2 rounded-[10px] border px-3 text-[11.5px] text-[var(--text-secondary)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-                <input type="checkbox" checked={disputedOnly} onChange={(event) => setDisputedOnly(event.target.checked)} />
-                Disputed only
-              </label>
+              <span className="flex min-h-[34px] items-center rounded-[8px] border px-2.5" style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}>
+                <Switch checked={disputedOnly} onChange={setDisputedOnly} label="Disputed only" />
+              </span>
             ) : null}
           </div>
         </div>
 
+        <Panel padded={false}>
         {tab === "evidence" ? (
           evidence.isLoading ? (
             <div className="grid gap-2 p-5">
@@ -343,10 +365,10 @@ export default function AdminEvidencePage() {
             <div className="p-5"><Notice tone="err">{(evidence.error as Error).message}</Notice></div>
           ) : grouped.length ? (
             <div>
-              {grouped.map(([date, rows]) => (
+              {visibleGroups.map(([date, rows, total]) => (
                 <section key={date}>
                   <h3 className="border-y px-5 py-2 text-[11.5px] font-medium text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                    {formatWorkOsDate(date)} · {rows.length} item{rows.length === 1 ? "" : "s"}
+                    {formatWorkOsDate(date)} · {total} item{total === 1 ? "" : "s"}
                   </h3>
                   <ul>
                     {rows.map((row) => {
@@ -385,6 +407,12 @@ export default function AdminEvidencePage() {
                   </ul>
                 </section>
               ))}
+              {totalEvidence > visibleCount ? (
+                <p className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[11px] text-[var(--text-tertiary)]">
+                  <span>Showing {Math.min(visibleCount, totalEvidence)} of {totalEvidence} items.</span>
+                  <Button size="sm" onClick={() => setVisibleCount((count) => count + 60)}>Show more</Button>
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="p-5">
@@ -447,7 +475,8 @@ export default function AdminEvidencePage() {
             <EmptyState icon={Activity} title="No activity recaps in this range" body="Recaps appear when the workspace generates an interval review from retained frames." />
           </div>
         )}
-      </AdminCard>
+        </Panel>
+      </Group>
 
       <GithubReposDrawer open={reposOpen} onClose={() => setReposOpen(false)} />
 

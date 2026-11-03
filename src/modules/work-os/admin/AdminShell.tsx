@@ -70,68 +70,64 @@ export default function AdminShell({ section, children }: { section: AdminSectio
   return (
     <div data-work-os-workspace="" className="min-h-[calc(100vh-6rem)] bg-[var(--bg-primary)]">
       <div className="mx-auto w-full max-w-[1240px] px-6 pb-16 pt-8 md:px-10 md:pt-10">
-        <header>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Work OS</p>
-              <h1 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[var(--text-primary)]">
-                {meta.title}
-              </h1>
-              <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{meta.purpose}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {sessionData?.personId ? (
-                <WorkOsViewModeForm
-                  mode="employee"
-                  next="/work-os/today"
-                  formClassName="inline-flex"
-                  buttonClassName="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                  title="Open your own workday"
-                  ariaLabel="Switch to my workspace"
-                >
-                  <ArrowLeftRight size={13} aria-hidden /> Switch to my workspace
-                </WorkOsViewModeForm>
-              ) : sessionData ? (
-                <span className="text-[11px] leading-5 text-[var(--text-tertiary)]">
-                  No personal workday is mapped to this account
+        <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <h1 className="text-[34px] font-[630] leading-[1.02] tracking-[-0.045em] text-[var(--text-primary)]">
+              {meta.title}
+            </h1>
+            <p className="mt-2 max-w-[62ch] text-[12px] leading-[1.55] text-[var(--text-tertiary)]">{meta.purpose}</p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+              <span>{today}</span>
+              {sessionData ? (
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <Building2 size={11} aria-hidden />
+                  <span className="truncate">{sessionData.organizationName}</span>
+                  {sessionData.organizations.length > 1 ? (
+                    <Link
+                      href="/work-os/select-workspace"
+                      className="shrink-0 font-semibold text-[var(--text-secondary)] underline-offset-2 transition hover:text-[var(--text-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    >
+                      Switch workspace
+                    </Link>
+                  ) : null}
                 </span>
               ) : null}
-              <Button
-                variant="ghost"
-                aria-label="Refresh this page"
-                title="Refresh this page"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ["work-os"] })}
-              >
-                <RefreshCw size={14} aria-hidden />
-              </Button>
+              <span>
+                {status.isLoading ? (
+                  "Checking workspace…"
+                ) : schemaReady ? (
+                  <StatusDot tone="ok">Workspace ready</StatusDot>
+                ) : (
+                  <StatusDot tone="warn">Migration required</StatusDot>
+                )}
+              </span>
             </div>
           </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11.5px] text-[var(--text-tertiary)]">
-            <span>{today}</span>
-            {sessionData ? (
-              <span className="inline-flex min-w-0 items-center gap-1.5">
-                <Building2 size={12} aria-hidden />
-                <span className="truncate">{sessionData.organizationName}</span>
-                {sessionData.organizations.length > 1 ? (
-                  <Link
-                    href="/work-os/select-workspace"
-                    className="shrink-0 font-semibold text-[var(--text-secondary)] underline-offset-2 transition hover:text-[var(--text-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                  >
-                    Switch workspace
-                  </Link>
-                ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {sessionData?.personId ? (
+              <WorkOsViewModeForm
+                mode="employee"
+                next="/work-os/today"
+                formClassName="inline-flex"
+                buttonClassName="inline-flex min-h-[34px] items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--color-paper)] px-3 py-1.5 text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                title="Open your own workday"
+                ariaLabel="Switch to my workspace"
+              >
+                <ArrowLeftRight size={13} aria-hidden /> Switch to my workspace
+              </WorkOsViewModeForm>
+            ) : sessionData ? (
+              <span className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+                No personal workday is mapped to this account
               </span>
             ) : null}
-            <span>
-              {status.isLoading ? (
-                "Checking workspace…"
-              ) : schemaReady ? (
-                <StatusDot tone="ok">Workspace ready</StatusDot>
-              ) : (
-                <StatusDot tone="warn">Migration required</StatusDot>
-              )}
-            </span>
+            <Button
+              variant="ghost"
+              aria-label="Refresh this page"
+              title="Refresh this page"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["work-os"] })}
+            >
+              <RefreshCw size={14} aria-hidden />
+            </Button>
           </div>
         </header>
 

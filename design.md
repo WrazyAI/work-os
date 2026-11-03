@@ -2227,10 +2227,27 @@ surfaces, and a mapped administrator reaches their employee workspace through
 `/work-os/today`). Legacy `?surface=admin&tab=…` links redirect to the closest
 new destination instead of rendering a dead tab.
 
-The workspace owns its navigation: a horizontal section nav in the masthead,
-not a second sidebar. The host shell keeps its chrome, and the Work OS surface
-paints its own `.work-os-surface` token scope (the §3.1 palette in light and
-dark) so the workspace reads as one material even inside a host application.
+The host console's Work OS sidebar owns section navigation. The masthead does
+not repeat it: it is one title, one purpose line, and one quiet meta line
+(date, workspace, schema state) with the view switch and page refresh on the
+right. The old `Work OS` eyebrow is gone, and the page leads. This is a
+deliberate revision of the earlier horizontal-in-masthead nav: the sidebar
+already lists the seven destinations, and a second nav only duplicated them.
+The Work OS surface paints its own `.work-os-surface` token scope (the §3.1
+palette in light and dark) so the workspace reads as one material even inside a
+host application.
+
+**Surface and rhythm.** Administration is a ledger, not a dashboard of cards.
+Every page is a quiet sequence of label/content groups: a 190px label column
+and a wide content column, separated by a hairline rule, with the page title at
+34px and no eyebrow. The label column is the workspace's index — the same
+device the employee Settings page uses — so the reader scans section names down
+the left edge instead of counting boxes. Cards survive only where the content
+needs a paper ground: charts, bounded tables, and the KPI record. There is one
+KPI record per page at most, a single bounded band with hairline separators,
+never a wall of equal-weight tiles. Radius tops out at 16px on those grounds;
+controls use 8–9px; there is no resting shadow. Signal green stays on state and
+the one forward action.
 
 **Notifications.** The masthead carries the same notifications bell and panel
 as the employee workspace (§8.12), reading the signed-in administrator's own
@@ -2263,41 +2280,56 @@ they show — so it renders no page refresh.
 
 ### 16.2 Page contracts
 
-Every section keeps one header rhythm: the card's name and its one-line detail
-own the first row, and the card's filters and toolbar controls sit in grouped
-rows beneath it (`.admin-controls`, design.md §8.2). The task record is the
-exception: its primary Add task action trails the name and detail on the title
-row, while segmented views, search, and selects share one compact controls row
-beneath it and wrap deliberately at narrow widths. Overview stays quiet meta
-only; Settings keeps each field group inside its own card instead of the
+Every section keeps one header rhythm: the section's name and its one-line
+detail own the first row, and its filters and toolbar controls sit in grouped
+rows beneath it (`.admin-controls`, design.md §8.2). The task record keeps
+segmented views, search, selects, and the primary Add task on one compact
+controls row that wraps deliberately at narrow widths. Overview stays quiet meta
+only; Settings gives each field group its own gutter section instead of a
 header.
 
-- **Overview** is the command center: a needs-attention list (reviews pending,
-  outstanding EODs, overdue tasks, disputed evidence, configuration blockers),
-  a right-now roster with attendance state and observation freshness, a recent
-  activity stream (updates, interval recaps, completed tasks, evidence,
-  submissions), today's counts, and a quiet workspace-health panel. Readiness
-  is context, never the lead.
+- **Overview** reads in the operator's order as six gutter groups: **Now**
+  (only the people on shift, then a quiet line for everyone else), **Decisions**
+  (one ranked queue with the verb inline — Review, Open queue, Open tasks,
+  Inspect, Fix setup), **Today** (one four-fact record), **Record** (activity
+  grouped by person, with a count line and an expandable list of every record),
+  **Time** (observed minutes per day), and **Setup** (configuration gaps beside
+  source freshness). The stream never repeats a dozen near-identical rows: one
+  person's CI runs and pushes are one line with counts, and expanding it still
+  shows each record. Readiness is context, never the lead.
 - **EOD Review** renders the report as a structured document — meta lines,
   sections, and the activity-context disclaimer — beside its sourced evidence
   and interval recaps. The decision record keeps manager notes and an optional
   manager version, and the raw markdown stays available behind a disclosure.
+  The queue keeps one row per report: person, report date, one line of context,
+  submission time. Status earns ink only when it is not the view's default.
+  Drafting an EOD is a secondary action on the controls row, never the primary.
 - **Insights** uses fixed ranges with deterministic facts first: a written
-  brief, a metric strip with equal-earlier-period comparisons, one daily-record
-  chart, observed-app context, backlog pressure, and a per-person facts table
-  with a detail drawer. It never converts activity into a productivity score.
+  brief, one facts record whose four leading numbers sit in a bounded band and
+  whose three supporting facts sit on a quiet line beneath it, one labeled
+  daily-record chart with a legend, observed-app context, backlog pressure, and
+  a per-person facts table with a detail drawer. It never converts activity into
+  a productivity score. Chart series read as one record: ink for outcomes,
+  muted ink for updates, cool observation for submissions; green is state only.
 - **Evidence** separates evidence from activity recaps, filters by date range,
-  person, source, and disputed state, and groups rows by day. The detail drawer
-  exposes provenance and, for flagged or disputed items only, restricted
-  screenshot access with a recorded reason and audit entry.
-- **People** is a roster with a person drawer: mappings, schedule and
+  person, source, and disputed state, and groups rows by day. The record opens
+  with a labeled volume chart and a bounded list (first 60 items, then Show
+  more). The detail drawer exposes provenance and, for flagged or disputed items
+  only, restricted screenshot access with a recorded reason and audit entry.
+- **People** is a coverage board with a person drawer: mappings, schedule and
   exceptions, recent workdays, reports, updates and recaps, and a seven-day
-  evidence summary.
+  evidence summary. The board groups people into On shift, Needs setup (those
+  missing a role profile or a schedule), and Other people, with search, a
+  needs-setup filter, and the missing item named in the row. The drawer is where
+  a mapping or role is set.
 - **Tasks** is the organization task record with the primary Add task action in
   the card title row, bounded filters on one compact controls row beneath it,
-  and the local add-task flow: one flat list, never grouped or ordered by
+  and the local add-task flow: one flat table, never grouped or ordered by
   project, which stays a small per-task detail beside the task's priority and
-  labels. Each row shows the task's description on its own line
+  labels. Columns carry the record's sort (Task, Assignees, Created, Due,
+  Status), the first activation applies the natural order, rows missing a value
+  stay last in both directions, and the list loads 100 at a time with a Show
+  more control. Each row shows the task's description on its own line
   beneath the title — clipped with the shared fade and never a pan — and the
   assignee cell resolves the recorded assignee ids through the roster, so a task
   with a real assignee is never displayed as Unassigned.
@@ -2314,7 +2346,10 @@ header.
   reset), rendered by the one shared component so the two surfaces can never
   drift — then groups the workspace's system status, features, memberships,
   teams, provider connections, field mappings, and blueprints into sections
-  with one action per decision area. The record-dependent groups appear only
+  with one action per decision area. Feature and membership states are switches,
+  not native checkboxes. Admin agent access is a summary band with Active and
+  Inactive counts that opens a token-management modal, the same pattern as the
+  employee surface. The record-dependent groups appear only
   for accounts with a personal workday; the device, display, guides, and
   diagnostics half always shows.
 
@@ -2354,11 +2389,12 @@ own creation stamp when recorded, then the local record's — in the same
 letter-month form as its due date and immediately ahead of it, so the two dates
 read together. A task with no recorded due date reads against the default it
 implies: one day after it was created. The derived value is the row's effective
-due date everywhere the row is read — the Due cell, the overdue warning and the
+due date everywhere the row is read — the overdue warning and the
 Overdue/Pending/Done pill, the Due column's sorting, and the status lock —
-exactly as a recorded date would, and it renders plainly with no "default"
-marker. Only a task whose created date is also missing shows a dash and claims
-no overdue state, so a task past its derived date does read Overdue.
+exactly as a recorded date would; the Due cell itself says `No due date` rather
+than printing the derived date as if someone had chosen it. Only a task whose
+created date is also missing shows a dash and claims no overdue state, so a
+task past its derived date does read Overdue.
 
 The effective due date drives both the Overdue pill and the status lock in this
 record: an open task past its effective date cannot change workflow status
@@ -2368,6 +2404,15 @@ date; only an administrator with no person mapping falls back to UTC. The
 edit form still seeds and writes the recorded date, so saving it never turns
 the derived default into a recorded one; a task with no recorded date opens
 the editor empty, and the date the operator types becomes the real due date.
+
+**Recorded versus default overdue.** The task summary separates the two counts.
+The headline says how many tasks are past a **recorded** due date; a quiet second
+line names how many more are past the default (creation plus one day) with no
+date recorded. Both stay in the record and both still read Overdue on the row:
+the distinction is honesty about the number, not a change to its meaning. The
+shared `countAdminTaskRecord` returns `overdue`, `overdueRecorded`, `open`, and
+`completedWeek`; the admin table uses the recorded count in its headline and
+keeps `overdue` available to the agent reads that already rely on it.
 
 **Cached state.** Administration reads through the shared in-memory TanStack
 Query cache, not a fetch per visit: list and summary reads revalidate after 45
@@ -2408,7 +2453,10 @@ task records, provider evidence, and review state remain visually distinct.
 The Overview and Insights day charts stack observed work time by teammate:
 each segment is one employee's observed minutes for that day, sized by time
 worked and named in the hover tooltip and legend, and activity context is never
-completion. Empty, loading, and degraded states follow §9's state matrix:
+completion. Every chart leaves room for its axis: the left margin is zero and
+the Y-axis reserves its label width, so a tick never clips. A chart that carries
+more than one series carries a legend in the same ink vocabulary as the bars.
+Empty, loading, and degraded states follow §9's state matrix:
 skeletons reserve geometry, empty states name the next action, and errors stay
 local.
 
@@ -2416,11 +2464,16 @@ local.
 
 Provider integrations surface as one band at the top of the Evidence page: a
 live provider card (connection state, workspace, mapped accounts, last event,
-and the repository-management action) beside future providers rendered blurred
-with a `Coming soon` pill and no controls. Unmapped provider accounts appear as
+and the repository-management action) beside future providers rendered as a
+quiet disabled card with a `Coming soon` pill and no controls — never a blurred
+mock. Unmapped provider accounts appear as
 a queue — account, event count, last activity, a person selector seeded from
 the employee's own provider username — with one `Map & backfill` action that
-verifies the account and attributes its earlier events. A repository drawer
+verifies the account and attributes its earlier events. Accounts whose login
+ends in `[bot]` (or names a known automation actor) are automation, not people:
+they are summarised on one line with their event count and never offered a
+person selector, because mapping one would attribute machine work to a teammate.
+A repository drawer
 lists the organization's repositories with their webhook state; without a
 repository-management token it shows the manual setup instead. Provider tokens
 and webhook secrets never reach the client. Ingested GitHub events are default

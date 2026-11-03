@@ -229,7 +229,7 @@ function adminRouteHarness(overrides: Record<string, unknown> = {}) {
     listPersonTasks: async () => [],
     countAdminTaskRecord: async (_access: unknown, options: { today: string }) => {
       comparisons.push(["due_date", options.today]);
-      return { open: 0, overdue: 0, completedWeek: 0 };
+      return { open: 0, overdue: 0, overdueRecorded: 0, completedWeek: 0 };
     },
     createAdminClient: () => ({ from: () => query }),
     getTaskByLocalOrProviderId: async () => null,
@@ -257,7 +257,7 @@ test("the admin summary counts overdue against the employee day the rows are dec
   assert.deepEqual(comparisons, [["due_date", "2026-10-27"]]);
   assert.equal(body.tasks[0].capabilities.overdue, true);
   assert.equal(body.tasks[0].capabilities.statusLocked, true);
-  assert.deepEqual(body.summary, { open: 0, overdue: 0, completedWeek: 0 });
+  assert.deepEqual(body.summary, { open: 0, overdue: 0, overdueRecorded: 0, completedWeek: 0 });
 });
 
 test("admin task creation refuses a malformed due date before the write", async () => {
