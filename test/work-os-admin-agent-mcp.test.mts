@@ -5,21 +5,38 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   ADMIN_AGENT_MCP_TOOL_NAMES,
+  adminPreviewIdempotencyKey,
   createAdminAgentMcpServer,
+  createAdminAgentMcpServices,
   type AdminAgentMcpIdempotency,
   type AdminAgentMcpServices,
 } from "../src/lib/work-admin-agent-mcp";
 import type { AdminAgentAccess } from "../src/lib/work-admin-agent-auth";
+import type { AdminAgentActionServices } from "../src/lib/work-admin-agent-actions";
+import {
+  ADMIN_PREVIEW_TTL_MS,
+  type AdminPreviewConfirmDeps,
+  type AdminPreviewConfirmResult,
+  type AdminPreviewRecord,
+  type CreateAdminPreviewInput,
+} from "../src/lib/work-admin-action-previews";
 import type { AdminAgentScope } from "../src/lib/work-agent-tokens";
 import { AGENT_MCP_TOOL_NAMES } from "../src/lib/work-agent-mcp";
+import { AGENT_RATE_LIMIT_MAX_WRITES } from "../src/lib/work-agent-rate-limit";
 import type { Json } from "../src/lib/work-os-internal";
 import type { WorkOsAccess } from "../src/lib/work-os-api";
+import type { AdminPreview } from "../src/modules/work-os/admin-agent/contracts";
 
 const png = Buffer.from("89504e470d0a1a0a", "hex");
 
 function adminWith(scopes: AdminAgentScope[]): AdminAgentAccess {
   return {
-    access: {} as WorkOsAccess,
+    // The preview record needs the organization and user the row is owned by;
+    // no reader is reached in these tests.
+    access: {
+      organizationId: "org-1",
+      ctx: { user: { id: "user-1" } },
+    } as unknown as WorkOsAccess,
     tokenId: `test-${randomUUID()}`,
     tokenName: "Admin MCP test",
     tokenPrefix: "wos_admin_test",
@@ -41,7 +58,7 @@ const ALL_SCOPES: AdminAgentScope[] = [
 
 function fakeServices() {
   const calls = {
-    preview: [] as Array<{ action: string; payload: Json }>,
+    preview: [] as Array<{ action: string; payload: Json; key: string | null }>,
     confirm: [] as Array<{ previewId: string; key: string }>,
     progress: [] as Array<{ taskId: string; body: Json; key: string }>,
     evidence: [] as Array<{ taskId: string; bytes: number; key: string; note: string }>,
@@ -92,8 +109,8 @@ function fakeServices() {
       calls.insights.push(input);
       return { range: "7d" };
     },
-    previewAction: async (_agent, action, payload) => {
-      calls.preview.push({ action, payload });
+    previewAction: async (_agent, action, payload, idempotencyKey) => {
+      calls.preview.push({ action, payload, key: idempotencyKey ?? null });
       return {
         id: "preview-1",
         action,
@@ -164,6 +181,150 @@ function bodyOf(result: unknown): Json {
   return JSON.parse(textOf(result)) as Json;
 }
 
+/** An error shaped like the preview store's `WorkAdminPreviewError`. The admin
+ * mapper matches it by class name, so a fake store can model expiry without a
+ * database. */
+function previewStoreError(code: string, status: number): Error {
+  const error = new Error(code);
+  error.name = "WorkAdminPreviewError";
+  return Object.assign(error, { code, status });
+}
+
+type StoredPreview = {
+  card: AdminPreview;
+  request: Json;
+  targetType: string;
+  targetId: string | null;
+  result: { status: number; body: Json } | null;
+};
+
+/** A minimal stand-in for `work_admin_action_previews`: it replays by creation
+ * key even when the row has expired (exactly like the real store) and refuses
+ * an expired or already-applied confirm the same way. This is what lets the
+ * TTL test prove a repeated preview is no longer wedged. */
+function previewStore() {
+  const byKey = new Map<string, StoredPreview>();
+  const byId = new Map<string, StoredPreview>();
+  const calls = {
+    create: [] as Array<{ key: string; action: string; request: Json }>,
+    confirm: [] as Array<{ previewId: string; key: string }>,
+    apply: 0,
+    reads: 0,
+  };
+  let sequence = 0;
+
+  const create = async (input: CreateAdminPreviewInput): Promise<AdminPreview> => {
+    const key = input.idempotencyKey ?? "";
+    calls.create.push({ key, action: input.action, request: input.request });
+    const existing = byKey.get(key);
+    if (existing) return existing.card;
+    const card: AdminPreview = {
+      id: `preview-${++sequence}`,
+      action: input.action,
+      summary: input.preview.summary,
+      changes: input.preview.changes,
+      warnings: input.preview.warnings,
+      state: input.state,
+      expiresAt: (input.expiresAt ?? new Date()).toISOString(),
+    };
+    const stored: StoredPreview = {
+      card,
+      request: input.request,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      result: null,
+    };
+    byKey.set(key, stored);
+    byId.set(card.id, stored);
+    return card;
+  };
+
+  const record = async (
+    _access: WorkOsAccess,
+    previewId: string,
+  ): Promise<AdminPreviewRecord | null> => {
+    const stored = byId.get(previewId);
+    if (!stored) return null;
+    return {
+      preview: stored.card,
+      action: stored.card.action,
+      request: stored.request,
+      targetType: stored.targetType,
+      targetId: stored.targetId,
+    };
+  };
+
+  const confirm = async (
+    _access: WorkOsAccess,
+    previewId: string,
+    idempotencyKey: string | null,
+    deps: AdminPreviewConfirmDeps,
+  ): Promise<AdminPreviewConfirmResult> => {
+    calls.confirm.push({ previewId, key: idempotencyKey ?? "" });
+    const stored = byId.get(previewId);
+    if (!stored) throw previewStoreError("preview_not_found", 404);
+    // Replay wins over expiry, exactly like the real store.
+    if (stored.result) return { ...stored.result, replayed: true };
+    if (new Date(stored.card.expiresAt).getTime() <= Date.now()) {
+      throw previewStoreError("preview_expired", 410);
+    }
+    await deps.readState();
+    calls.reads += 1;
+    const applied = await deps.apply();
+    stored.result = { status: applied.status, body: applied.body };
+    return { status: applied.status, body: applied.body, replayed: false };
+  };
+
+  return { byKey, byId, calls, create, record, confirm };
+}
+
+/** The action layer's seven services with every write recorded, so a preview
+ * that accidentally applied would be visible as a counter. */
+function actionServices(writes: string[]): AdminAgentActionServices {
+  const task = {
+    id: "task-1",
+    title: "Ship",
+    status: "active",
+    completed: false,
+    assignee_person_ids: [],
+    updated_at: "2026-11-02T00:00:00.000Z",
+  };
+  return {
+    getTask: async () => ({ ...task }),
+    createTask: async () => {
+      writes.push("createTask");
+      return { task };
+    },
+    updateTask: async () => {
+      writes.push("updateTask");
+      return { task };
+    },
+    moveTask: async () => {
+      writes.push("moveTask");
+      return { task };
+    },
+    completeTask: async () => {
+      writes.push("completeTask");
+      return { task };
+    },
+    archiveTask: async () => {
+      writes.push("archiveTask");
+      return { task };
+    },
+    getEod: async () => null,
+    reviewEod: async () => {
+      writes.push("reviewEod");
+      return {};
+    },
+    listPeople: async () => [{ id: "p1", displayName: "Ada", active: true }],
+  };
+}
+
+const ASSIGN_ARGUMENTS = {
+  action: "task.assign",
+  payload: { task_id: "task-1", mode: "add", person_ids: ["p1"] },
+};
+
 test("the admin server exposes exactly the thirteen admin tools", async () => {
   const { calls, services } = fakeServices();
   const { client, close } = await connect(services);
@@ -185,11 +346,12 @@ test("the admin server exposes exactly the thirteen admin tools", async () => {
     "log_progress",
     "attach_evidence",
   ]);
+  assert.equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 9);
   assert.equal(calls.preview.length, 0);
   await close();
 });
 
-test("preview_action advertises its action enum and payload slot", async () => {
+test("preview_action advertises its action enum, payload slot, and key", async () => {
   const { services } = fakeServices();
   const { client, close } = await connect(services);
   try {
@@ -212,6 +374,7 @@ test("preview_action advertises its action enum and payload slot", async () => {
       "task.update",
     ]);
     assert.equal(schema.properties?.payload?.type, "object");
+    assert.ok(schema.properties?.idempotency_key, "an explicit creation key is accepted");
     assert.deepEqual((schema.required ?? []).slice().sort(), ["action", "payload"]);
   } finally {
     await close();
@@ -260,37 +423,143 @@ test("preview_action requires the scope of its own action", async () => {
   assert.equal(calls.preview.length, 0);
 });
 
-test("preview_action never writes; confirm_action executes once with the default key", async () => {
-  const { calls, services } = fakeServices();
+test("preview_action never reaches the apply path; confirm_action applies once then replays", async () => {
+  const writes: string[] = [];
+  const store = previewStore();
+  const services = createAdminAgentMcpServices({
+    actions: actionServices(writes),
+    applyAction: async () => {
+      store.calls.apply += 1;
+      return { status: 200, body: { task: { id: "task-1" } } };
+    },
+    previews: { create: store.create, record: store.record, confirm: store.confirm },
+  });
   const { client, close } = await connect(services);
-  const preview = await client.callTool({
-    name: "preview_action",
-    arguments: { action: "task.assign", payload: { task_id: "t1", mode: "add", person_ids: ["p1"] } },
-  });
-  assert.equal(preview.isError, undefined);
-  assert.equal(calls.preview.length, 1);
-  assert.equal(calls.confirm.length, 0, "a preview never confirms");
-  const previewBody = bodyOf(preview);
-  assert.equal(previewBody.id, "preview-1");
-  assert.equal(previewBody.action, "task.assign");
-  assert.deepEqual(calls.preview[0], {
-    action: "task.assign",
-    payload: { task_id: "t1", mode: "add", person_ids: ["p1"] },
-  });
+  try {
+    const preview = await client.callTool({ name: "preview_action", arguments: ASSIGN_ARGUMENTS });
+    assert.equal(preview.isError, undefined);
+    // The action layer resolved the change, but nothing was applied: the apply
+    // spy and every write service are untouched.
+    assert.equal(store.calls.apply, 0, "preview_action must not call applyAdminAction");
+    assert.deepEqual(writes, [], "preview_action must not call a write service");
+    assert.equal(store.calls.confirm.length, 0);
+    assert.equal(store.calls.create.length, 1);
+    const card = bodyOf(preview);
+    assert.equal(card.id, "preview-1");
+    assert.equal(card.action, "task.assign");
+    assert.equal(card.summary, "Assign Ship");
+    assert.deepEqual(card.changes, [{ field: "assignees", from: [], to: ["p1"] }]);
+    assert.deepEqual(
+      (store.calls.create[0].request as Json).final_assignee_person_ids,
+      ["p1"],
+      "the stored request is the resolved list, not the delta",
+    );
 
-  const confirmed = await client.callTool({
-    name: "confirm_action",
-    arguments: { preview_id: "preview-1" },
+    const confirmed = await client.callTool({
+      name: "confirm_action",
+      arguments: { preview_id: "preview-1" },
+    });
+    assert.equal(confirmed.isError, undefined);
+    assert.equal(bodyOf(confirmed).replayed, false);
+    assert.equal(store.calls.apply, 1, "confirm is the only path to applyAdminAction");
+    assert.deepEqual(store.calls.confirm, [{ previewId: "preview-1", key: "mcp:confirm:preview-1" }]);
+    assert.deepEqual(bodyOf(confirmed).result, { task: { id: "task-1" } });
+
+    const replay = await client.callTool({
+      name: "confirm_action",
+      arguments: { preview_id: "preview-1" },
+    });
+    assert.equal(replay.isError, undefined);
+    assert.equal(bodyOf(replay).replayed, true);
+    assert.equal(store.calls.apply, 1, "a repeated confirm replays instead of applying twice");
+  } finally {
+    await close();
+  }
+});
+
+test("a repeated preview_action mints a fresh preview after the window expires", async () => {
+  const base = Date.UTC(2026, 10, 2, 12, 0, 0);
+  const realNow = Date.now;
+  const writes: string[] = [];
+  const store = previewStore();
+  const services = createAdminAgentMcpServices({
+    actions: actionServices(writes),
+    applyAction: async () => {
+      store.calls.apply += 1;
+      return { status: 200, body: { task: { id: "task-1" } } };
+    },
+    previews: { create: store.create, record: store.record, confirm: store.confirm },
   });
-  assert.equal(confirmed.isError, undefined);
-  assert.equal(calls.confirm.length, 1);
-  assert.equal(calls.preview.length, 1, "a confirm never recreates the preview");
-  assert.deepEqual(calls.confirm[0], {
-    previewId: "preview-1",
-    key: "mcp:confirm:preview-1",
+  const { client, close } = await connect(services);
+  try {
+    // The derived key is stable inside one TTL window and moves with the window.
+    const payload = ASSIGN_ARGUMENTS.payload;
+    assert.equal(
+      adminPreviewIdempotencyKey("task.assign", payload, base),
+      adminPreviewIdempotencyKey("task.assign", payload, base + 1),
+    );
+    assert.notEqual(
+      adminPreviewIdempotencyKey("task.assign", payload, base),
+      adminPreviewIdempotencyKey("task.assign", payload, base + ADMIN_PREVIEW_TTL_MS),
+    );
+    assert.ok(adminPreviewIdempotencyKey("task.assign", payload, base).length <= 160);
+
+    Date.now = () => base;
+    const first = await client.callTool({ name: "preview_action", arguments: ASSIGN_ARGUMENTS });
+    const retried = await client.callTool({ name: "preview_action", arguments: ASSIGN_ARGUMENTS });
+    assert.equal(first.isError, undefined);
+    assert.equal(bodyOf(retried).id, bodyOf(first).id, "a retry inside the window replays");
+    assert.equal(store.byId.size, 1, "only one preview row exists inside the window");
+
+    // Let the card expire. Confirming it is the dead end the TTL bucket fixes.
+    Date.now = () => base + ADMIN_PREVIEW_TTL_MS;
+    const expired = await client.callTool({
+      name: "confirm_action",
+      arguments: { preview_id: bodyOf(first).id },
+    });
+    assert.equal(expired.isError, true);
+    assert.equal(bodyOf(expired).code, "preview_expired");
+    assert.equal(store.calls.apply, 0);
+
+    // The next identical request must mint a fresh card rather than replay the
+    // expired row, so the action is still reachable and confirmable.
+    const fresh = await client.callTool({ name: "preview_action", arguments: ASSIGN_ARGUMENTS });
+    assert.equal(fresh.isError, undefined);
+    assert.notEqual(bodyOf(fresh).id, bodyOf(first).id);
+    assert.equal(store.byId.size, 2);
+    assert.notEqual(store.calls.create[0].key, store.calls.create.at(-1)?.key);
+
+    const confirmed = await client.callTool({
+      name: "confirm_action",
+      arguments: { preview_id: bodyOf(fresh).id },
+    });
+    assert.equal(confirmed.isError, undefined);
+    assert.equal(bodyOf(confirmed).replayed, false);
+    assert.equal(store.calls.apply, 1);
+  } finally {
+    Date.now = realNow;
+    await close();
+  }
+});
+
+test("preview_action forwards an explicit idempotency key", async () => {
+  const store = previewStore();
+  const services = createAdminAgentMcpServices({
+    actions: actionServices([]),
+    applyAction: async () => ({ status: 200, body: { task: { id: "task-1" } } }),
+    previews: { create: store.create, record: store.record, confirm: store.confirm },
   });
-  assert.equal(bodyOf(confirmed).replayed, false);
-  await close();
+  const { client, close } = await connect(services);
+  try {
+    const result = await client.callTool({
+      name: "preview_action",
+      arguments: { ...ASSIGN_ARGUMENTS, idempotency_key: "manual-preview-key" },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(store.calls.create[0].key, "manual-preview-key");
+  } finally {
+    await close();
+  }
 });
 
 test("confirm_action honours an explicit idempotency key", async () => {
@@ -302,6 +571,31 @@ test("confirm_action honours an explicit idempotency key", async () => {
   });
   assert.deepEqual(calls.confirm[0], { previewId: "preview-2", key: "manual-key" });
   await close();
+});
+
+test("write tools spend the shared write budget and report retry_after", async () => {
+  const { calls, services } = fakeServices();
+  const { client, close } = await connect(services);
+  try {
+    let limited: Json | null = null;
+    for (let index = 0; index <= AGENT_RATE_LIMIT_MAX_WRITES; index += 1) {
+      const result = await client.callTool({
+        name: "log_progress",
+        arguments: { task_id: "t1", summary: `Note ${index}` },
+      });
+      if (result.isError) {
+        limited = bodyOf(result);
+        break;
+      }
+    }
+    assert.ok(limited, "the write budget must eventually refuse a call");
+    assert.equal(limited.code, "rate_limited");
+    assert.equal(typeof limited.retry_after, "number");
+    assert.ok(Number(limited.retry_after) >= 1);
+    assert.equal(calls.progress.length, AGENT_RATE_LIMIT_MAX_WRITES);
+  } finally {
+    await close();
+  }
 });
 
 test("attach_evidence enforces the 8 MB base64 bound before the service", async () => {
@@ -507,21 +801,6 @@ test("tool input shapes are strict and unknown fields are errors", async () => {
     });
     assert.equal(unknownAction.isError, true);
     assert.equal(calls.preview.length, 0);
-  } finally {
-    await close();
-  }
-});
-
-test("the admin server has no apply path outside confirm_action", async () => {
-  const { services } = fakeServices();
-  const { client, close } = await connect(services);
-  try {
-    const { tools } = await client.listTools();
-    const exports = Object.keys(await import("../src/lib/work-admin-agent-mcp"));
-    assert.ok(exports.includes("createAdminAgentMcpServer"));
-    assert.ok(exports.includes("ADMIN_AGENT_MCP_TOOL_NAMES"));
-    assert.ok(!exports.some((name) => /apply/i.test(name)));
-    assert.equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 9);
   } finally {
     await close();
   }

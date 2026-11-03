@@ -12,9 +12,11 @@ import {
   defaultAdminAgentActionServices,
   previewAdminAction,
   readAdminPreviewTargetState,
+  type AdminAgentActionServices,
 } from "@/lib/work-admin-agent-actions";
 import { adminPreviewActionScope } from "@/lib/work-admin-agent-preview-routes";
 import {
+  ADMIN_PREVIEW_TTL_MS,
   confirmAdminPreview,
   createAdminPreview,
   getAdminPreviewRecord,
@@ -88,7 +90,7 @@ export type AdminAgentMcpServices = {
   listRecords: (agent: AdminAgentAccess, input: Json) => Promise<Json>;
   getOverview: (agent: AdminAgentAccess, input: Json) => Promise<Json>;
   getInsights: (agent: AdminAgentAccess, input: Json) => Promise<Json>;
-  previewAction: (agent: AdminAgentAccess, action: AdminPreviewAction, payload: Json) => Promise<Json>;
+  previewAction: (agent: AdminAgentAccess, action: AdminPreviewAction, payload: Json, idempotencyKey?: string) => Promise<Json>;
   confirmAction: (agent: AdminAgentAccess, previewId: string, idempotencyKey: string) => Promise<Json>;
   logProgress: (agent: AdminAgentAccess, taskId: string, body: Json, idempotencyKey: string) => Promise<Json>;
   attachEvidence: (agent: AdminAgentAccess, taskId: string, input: { fileName: string; contentType: string; bytes: Uint8Array; note: string }, idempotencyKey: string) => Promise<Json>;
@@ -102,10 +104,18 @@ const PROGRESS_SUMMARY_MAX = 2_000;
 const ACTIVITY_ITEM_LIMIT = 20;
 
 /** A preview is a write intent, so an identical retry must replay the stored
- * card instead of minting a second one. The derived key is stable over the
- * action and its payload, exactly like the employee create tools. */
-export function adminPreviewIdempotencyKey(action: AdminPreviewAction, payload: Json): string {
-  return `mcp:preview:${agentRequestHash("MCP", "preview_action", { action, payload })}`;
+ * card instead of minting a second one. The key is bucketed by the preview TTL:
+ * a retry inside the current window replays the stored card, while an attempt
+ * after the window mints a fresh one. Without the bucket, an expired row would
+ * replay forever and that action could never be previewed again — every later
+ * confirm would answer `preview_expired` with no way out. */
+export function adminPreviewIdempotencyKey(
+  action: AdminPreviewAction,
+  payload: Json,
+  now: number = Date.now(),
+): string {
+  const bucket = Math.floor(now / ADMIN_PREVIEW_TTL_MS);
+  return `mcp:preview:${agentRequestHash("MCP", "preview_action", { action, payload })}:${bucket}`;
 }
 
 /** The preview id is already the canonical one-time confirm key; the default
@@ -263,7 +273,8 @@ const ADMIN_PREVIEW_ACTION_SCHEMA = z.discriminatedUnion("action", [
 /** The advertised shape stays a plain object so a client can see the action
  * enum and the payload slot; the union above is applied on the same value
  * before the service runs, so an unknown field or a mismatched payload is
- * still refused with the field name. */
+ * still refused with the field name. `idempotency_key` is optional: the
+ * server derives a TTL-bucketed key when it is absent. */
 const PREVIEW_INPUT_SHAPE = strictShape({
   action: z.enum([
     "task.create",
@@ -277,6 +288,8 @@ const PREVIEW_INPUT_SHAPE = strictShape({
     "eod.review",
   ]).describe("The consequential action to describe"),
   payload: z.record(z.string(), z.unknown()).describe("The action's own input, validated per action"),
+  idempotency_key: z.string().min(1).max(160).optional()
+    .describe("Optional explicit creation key; omit to let the server derive one per TTL window"),
 });
 
 /** Optional tool arguments reach the service as a clean object: an omitted
@@ -313,138 +326,172 @@ function previewValidationError(error: z.ZodError): WorkOsValidationError {
   return new WorkOsValidationError(`The preview payload is invalid — ${path}${issue.message}`);
 }
 
+/** The dependencies a test replaces to exercise the real action layer and the
+ * real key derivation without Postgres. Production passes nothing, so every
+ * seam below resolves to the shipped function. */
+export type AdminAgentMcpDefaultDeps = {
+  /** The action layer's read/write services. A spy here observes the only
+   * services an apply can reach. */
+  actions?: AdminAgentActionServices;
+  /** `applyAdminAction` is the single writer a confirm reaches. Injecting it
+   * lets a test prove `preview_action` never calls it. */
+  applyAction?: typeof applyAdminAction;
+  previews?: {
+    create?: typeof createAdminPreview;
+    record?: typeof getAdminPreviewRecord;
+    confirm?: typeof confirmAdminPreview;
+  };
+};
+
 /** The production wiring. Reads call the same admin readers (and therefore the
  * same validation) as `GET /api/agent/admin/v1/*`; writes call the same
  * additive services and the same preview store. */
-const defaultServices: AdminAgentMcpServices = {
-  searchPeople: async (agent, input) => {
-    // The directory parser owns the defaults (active, limit) and the
-    // team/role validation, so MCP cannot drift from the REST read.
-    const params = new URLSearchParams();
-    if (input.query) params.set("q", input.query);
-    if (input.active !== undefined) params.set("active", input.active ? "true" : "false");
-    if (input.teamId) params.set("team_id", input.teamId);
-    if (input.role) params.set("role", input.role);
-    if (input.limit !== undefined) params.set("limit", String(input.limit));
-    if (input.cursor) params.set("cursor", input.cursor);
-    const page = await listAdminAgentPeople(agent.access, parseAdminAgentPeopleFilters(params));
-    return { people: page.people, total: page.total, cursor: { next: page.nextCursor } } as unknown as Json;
-  },
-  getPerson: async (agent, personId) => {
-    const person = await getAdminAgentPerson(agent.access, personId);
-    return person ? { person } as unknown as Json : null;
-  },
-  listTasks: async (agent, input) => {
-    const filters = parseAdminAgentTaskFilters(filterParams(input));
-    const page = await listAdminAgentTasks(agent.access, filters);
-    return { tasks: page.tasks, total: page.total, cursor: { next: page.nextCursor } };
-  },
-  getTask: async (agent, taskId) => {
-    const detail = await getAdminAgentTask(agent.access, taskId);
-    // The design promises the timeline with the detail; the activity reader
-    // already scopes to this organization and honours archived rows.
-    const activity = await getAdminAgentTaskActivity(agent.access, taskId, { limit: ACTIVITY_ITEM_LIMIT });
-    return {
-      ...(detail as unknown as Json),
-      activity: { items: activity.items as unknown as Json, cursor: { next: activity.nextCursor } },
-    };
-  },
-  listEods: async (agent, input) => {
-    const filters = parseAdminAgentEodFilters(filterParams(input));
-    const page = await listAdminAgentEods(agent.access, filters);
-    return { eods: page.eods, counts: page.counts, total: page.total, cursor: { next: page.nextCursor } } as unknown as Json;
-  },
-  getEod: async (agent, reportId) => {
-    const found = await getAdminAgentEod(agent.access, reportId);
-    return found ? { eod: found.eod, versions: found.versions } as unknown as Json : null;
-  },
-  listRecords: async (agent, input) => {
-    const filters = parseAdminAgentRecordFilters(filterParams(input));
-    const page = await listAdminAgentRecords(agent.access, filters);
-    return {
-      records: page.records as unknown as Json,
-      total: page.total,
-      cursor: { next: page.nextCursor },
-      coverage: page.coverage,
-    };
-  },
-  getOverview: async (agent, input) => {
-    const date = typeof input.date === "string" && input.date.trim() ? input.date.trim() : undefined;
-    return getAdminAgentOverview(agent.access, date) as unknown as Json;
-  },
-  getInsights: async (agent, input) => {
-    const range = parseAdminAgentInsightRange(typeof input.range === "string" ? input.range : null);
-    const insights = await getAdminAgentInsights(agent.access, range, {
-      personId: typeof input.person_id === "string" ? input.person_id : null,
-      through: typeof input.through === "string" ? input.through : null,
-    });
-    return insights as unknown as Json;
-  },
-  previewAction: async (agent, action, payload) => {
-    // Describing an action never calls `applyAdminAction`: the `run` closure
-    // the plan builds is unreachable from here.
-    const preview = await previewAdminAction(
-      agent.access,
-      action,
-      payload,
-      defaultAdminAgentActionServices,
-      { reviewerPersonId: agent.reviewerPersonId },
-    );
-    const stored = await createAdminPreview(
-      adminPreviewRecord(agent, action, preview, adminPreviewIdempotencyKey(action, payload)),
-    );
-    return stored as unknown as Json;
-  },
-  confirmAction: async (agent, previewId, idempotencyKey) => {
-    const record = await getAdminPreviewRecord(agent.access, previewId, agent.tokenId);
-    if (!record) throw new WorkAdminPreviewError("preview_not_found");
-    const required = adminPreviewActionScope(record.action);
-    // An action this surface no longer recognizes cannot be confirmed.
-    if (!required) throw new WorkAdminPreviewError("preview_not_found");
-    if (!hasAdminAgentScope(agent.scopes, required)) throw new AdminMcpScopeError(required);
+export function createAdminAgentMcpServices(
+  deps: AdminAgentMcpDefaultDeps = {},
+): AdminAgentMcpServices {
+  const actions = deps.actions ?? defaultAdminAgentActionServices;
+  const applyAction = deps.applyAction ?? applyAdminAction;
+  const createPreview = deps.previews?.create ?? createAdminPreview;
+  const readPreviewRecord = deps.previews?.record ?? getAdminPreviewRecord;
+  const confirmPreview = deps.previews?.confirm ?? confirmAdminPreview;
 
-    let currentState: Json | undefined;
-    const result = await confirmAdminPreview(
-      agent.access,
-      previewId,
-      idempotencyKey,
-      {
-        readState: async () => {
-          currentState = await readAdminPreviewTargetState(agent.access, record);
-          return currentState;
-        },
-        apply: async () => applyAdminAction(
-          agent.access,
-          record.action,
-          record.request,
-          defaultAdminAgentActionServices,
-          {
-            tokenId: agent.tokenId,
-            tokenName: agent.tokenName,
-            previewId: record.preview.id,
-            reviewerPersonId: agent.reviewerPersonId,
-          },
-          currentState,
+  return {
+    searchPeople: async (agent, input) => {
+      // The directory parser owns the defaults (active, limit) and the
+      // team/role validation, so MCP cannot drift from the REST read.
+      const params = new URLSearchParams();
+      if (input.query) params.set("q", input.query);
+      if (input.active !== undefined) params.set("active", input.active ? "true" : "false");
+      if (input.teamId) params.set("team_id", input.teamId);
+      if (input.role) params.set("role", input.role);
+      if (input.limit !== undefined) params.set("limit", String(input.limit));
+      if (input.cursor) params.set("cursor", input.cursor);
+      const page = await listAdminAgentPeople(agent.access, parseAdminAgentPeopleFilters(params));
+      return { people: page.people, total: page.total, cursor: { next: page.nextCursor } } as unknown as Json;
+    },
+    getPerson: async (agent, personId) => {
+      const person = await getAdminAgentPerson(agent.access, personId);
+      return person ? { person } as unknown as Json : null;
+    },
+    listTasks: async (agent, input) => {
+      const filters = parseAdminAgentTaskFilters(filterParams(input));
+      const page = await listAdminAgentTasks(agent.access, filters);
+      return { tasks: page.tasks, total: page.total, cursor: { next: page.nextCursor } };
+    },
+    getTask: async (agent, taskId) => {
+      const detail = await getAdminAgentTask(agent.access, taskId);
+      // The design promises the timeline with the detail; the activity reader
+      // already scopes to this organization and honours archived rows.
+      const activity = await getAdminAgentTaskActivity(agent.access, taskId, { limit: ACTIVITY_ITEM_LIMIT });
+      return {
+        ...(detail as unknown as Json),
+        activity: { items: activity.items as unknown as Json, cursor: { next: activity.nextCursor } },
+      };
+    },
+    listEods: async (agent, input) => {
+      const filters = parseAdminAgentEodFilters(filterParams(input));
+      const page = await listAdminAgentEods(agent.access, filters);
+      return { eods: page.eods, counts: page.counts, total: page.total, cursor: { next: page.nextCursor } } as unknown as Json;
+    },
+    getEod: async (agent, reportId) => {
+      const found = await getAdminAgentEod(agent.access, reportId);
+      return found ? { eod: found.eod, versions: found.versions } as unknown as Json : null;
+    },
+    listRecords: async (agent, input) => {
+      const filters = parseAdminAgentRecordFilters(filterParams(input));
+      const page = await listAdminAgentRecords(agent.access, filters);
+      return {
+        records: page.records as unknown as Json,
+        total: page.total,
+        cursor: { next: page.nextCursor },
+        coverage: page.coverage,
+      };
+    },
+    getOverview: async (agent, input) => {
+      const date = typeof input.date === "string" && input.date.trim() ? input.date.trim() : undefined;
+      return getAdminAgentOverview(agent.access, date) as unknown as Json;
+    },
+    getInsights: async (agent, input) => {
+      const range = parseAdminAgentInsightRange(typeof input.range === "string" ? input.range : null);
+      const insights = await getAdminAgentInsights(agent.access, range, {
+        personId: typeof input.person_id === "string" ? input.person_id : null,
+        through: typeof input.through === "string" ? input.through : null,
+      });
+      return insights as unknown as Json;
+    },
+    previewAction: async (agent, action, payload, idempotencyKey) => {
+      // Describing an action never calls `applyAdminAction`: the `run` closure
+      // the plan builds is unreachable from here.
+      const preview = await previewAdminAction(
+        agent.access,
+        action,
+        payload,
+        actions,
+        { reviewerPersonId: agent.reviewerPersonId },
+      );
+      const stored = await createPreview(
+        adminPreviewRecord(
+          agent,
+          action,
+          preview,
+          idempotencyKey ?? adminPreviewIdempotencyKey(action, payload),
         ),
-      },
-      agent.tokenId,
-    );
-    return { status: result.status, replayed: result.replayed, result: result.body };
-  },
-  logProgress: (agent, taskId, body, idempotencyKey) => addAdminAgentProgress(
-    agent.access,
-    taskId,
-    body,
-    idempotencyKey,
-    { tokenId: agent.tokenId, tokenName: agent.tokenName },
-  ),
-  attachEvidence: (agent, taskId, input, idempotencyKey) => attachAdminAgentEvidence(
-    agent.access,
-    taskId,
-    { ...input, idempotencyKey },
-    { tokenId: agent.tokenId, tokenName: agent.tokenName },
-  ),
-};
+      );
+      return stored as unknown as Json;
+    },
+    confirmAction: async (agent, previewId, idempotencyKey) => {
+      const record = await readPreviewRecord(agent.access, previewId, agent.tokenId);
+      if (!record) throw new WorkAdminPreviewError("preview_not_found");
+      const required = adminPreviewActionScope(record.action);
+      // An action this surface no longer recognizes cannot be confirmed.
+      if (!required) throw new WorkAdminPreviewError("preview_not_found");
+      if (!hasAdminAgentScope(agent.scopes, required)) throw new AdminMcpScopeError(required);
+
+      let currentState: Json | undefined;
+      const result = await confirmPreview(
+        agent.access,
+        previewId,
+        idempotencyKey,
+        {
+          readState: async () => {
+            currentState = await readAdminPreviewTargetState(agent.access, record, actions);
+            return currentState;
+          },
+          apply: async () => applyAction(
+            agent.access,
+            record.action,
+            record.request,
+            actions,
+            {
+              tokenId: agent.tokenId,
+              tokenName: agent.tokenName,
+              previewId: record.preview.id,
+              reviewerPersonId: agent.reviewerPersonId,
+            },
+            currentState,
+          ),
+        },
+        agent.tokenId,
+      );
+      return { status: result.status, replayed: result.replayed, result: result.body };
+    },
+    logProgress: (agent, taskId, body, idempotencyKey) => addAdminAgentProgress(
+      agent.access,
+      taskId,
+      body,
+      idempotencyKey,
+      { tokenId: agent.tokenId, tokenName: agent.tokenName },
+    ),
+    attachEvidence: (agent, taskId, input, idempotencyKey) => attachAdminAgentEvidence(
+      agent.access,
+      taskId,
+      { ...input, idempotencyKey },
+      { tokenId: agent.tokenId, tokenName: agent.tokenName },
+    ),
+  };
+}
+
+const defaultServices = createAdminAgentMcpServices();
 
 export function createAdminAgentMcpServer(
   agent: AdminAgentAccess,
@@ -595,12 +642,18 @@ export function createAdminAgentMcpServer(
       return mcpToolError("insufficient_scope", "This action is not available on this token");
     }
     return runTool(agent, required, true, async () => {
-      const parsed = ADMIN_PREVIEW_ACTION_SCHEMA.safeParse(args);
+      // The union validates the action and its payload only; the envelope's
+      // optional idempotency_key is not part of any action's payload.
+      const parsed = ADMIN_PREVIEW_ACTION_SCHEMA.safeParse({
+        action: args.action,
+        payload: args.payload,
+      });
       if (!parsed.success) throw previewValidationError(parsed.error);
       return mcpToolResult(await services.previewAction(
         agent,
         parsed.data.action,
         parsed.data.payload as Json,
+        args.idempotency_key,
       ));
     });
   });
