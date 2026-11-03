@@ -46,7 +46,37 @@ export type AdminRead = { kind: "tasks"; page: Page<TaskCard>; people: PersonRef
   | { kind: "recaps"; page: Page<ReviewedRecap> }
   | { kind: "recap"; recap: ReviewedRecap }
   | { kind: "resolution"; resolution: Exclude<Resolution, { kind: "resolved" }> };
+export type AdminOttoOperationAction =
+  | "assign_task"
+  | "delegate_task"
+  | "add_contributor"
+  | "remove_contributor"
+  | "create_task"
+  | "complete_task"
+  | "reopen_task";
+
+/** One requested mutation. The model never executes it: the server resolves the
+ * task and people, stores a preview, and returns that preview for the
+ * administrator to confirm. */
+export type AdminOttoOperation = {
+  action: AdminOttoOperationAction;
+  task_query: string | null;
+  person_names: string[];
+  title: string | null;
+  due_date: string | null;
+};
+
+export type AdminOttoPendingAction = {
+  previewId: string;
+  action: string;
+  summary: string;
+  changes: Array<{ field: string; from: unknown; to: unknown }>;
+  warnings: string[];
+  expiresAt: string;
+};
+
 export type ChatRequest = { conversationId: string | null; requestId: string; text: string;
   choicePersonId?: string; continuation?: string };
 export type ChatResult = { conversationId: string; turnId: string; reply: string; result: AdminRead | null;
+  pendingAction?: AdminOttoPendingAction;
   contextVersion: number; errorCode?: "unsupported" | "ambiguous" | "missing" };

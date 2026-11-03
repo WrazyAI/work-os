@@ -1,4 +1,5 @@
 import type {
+  AdminOttoPendingAction,
   AdminRead,
   ChatRequest,
   ChatResult,
@@ -164,6 +165,22 @@ function adminRead(value: unknown): AdminRead | null {
     throw new Error("Admin Otto result kind is invalid.");
   }
   return record as unknown as AdminRead;
+}
+
+function pendingAction(value: unknown): AdminOttoPendingAction | undefined {
+  if (value === null || value === undefined) return undefined;
+  const record = object(value, "Admin Otto pending action");
+  if (!Array.isArray(record.changes) || !Array.isArray(record.warnings)) {
+    throw new Error("Admin Otto pending action details are invalid.");
+  }
+  return {
+    previewId: text(record.previewId, "Admin Otto preview id"),
+    action: text(record.action, "Admin Otto preview action"),
+    summary: text(record.summary, "Admin Otto preview summary"),
+    changes: record.changes as AdminOttoPendingAction["changes"],
+    warnings: record.warnings.filter((entry): entry is string => typeof entry === "string"),
+    expiresAt: text(record.expiresAt, "Admin Otto preview expiry"),
+  };
 }
 
 function pageShell(value: Record<string, unknown>) {
@@ -340,16 +357,28 @@ export async function sendAdminOttoChat(input: ChatRequest, signal?: AbortSignal
   return requestJson(`${ADMIN_OTTO}/chat`, { ...jsonBody({
     schemaVersion: 1,
     ...input,
-  }), signal }, (body): ChatResult => ({
-    conversationId: text(body.conversationId, "Admin Otto conversation id"),
-    turnId: text(body.turnId, "Admin Otto turn id"),
-    reply: typeof body.reply === "string" ? body.reply : "",
-    result: adminRead(body.result),
-    contextVersion: number(body.contextVersion, "Admin Otto context version"),
-    ...(body.errorCode === "unsupported" || body.errorCode === "ambiguous" || body.errorCode === "missing"
-      ? { errorCode: body.errorCode }
-      : {}),
-  }), ADMIN_OTTO_CHAT_TIMEOUT_MS);
+  }), signal }, (body): ChatResult => {
+    const action = pendingAction(body.pendingAction);
+    return {
+      conversationId: text(body.conversationId, "Admin Otto conversation id"),
+      turnId: text(body.turnId, "Admin Otto turn id"),
+      reply: typeof body.reply === "string" ? body.reply : "",
+      result: adminRead(body.result),
+      ...(action ? { pendingAction: action } : {}),
+      contextVersion: number(body.contextVersion, "Admin Otto context version"),
+      ...(body.errorCode === "unsupported" || body.errorCode === "ambiguous" || body.errorCode === "missing"
+        ? { errorCode: body.errorCode }
+        : {}),
+    };
+  }, ADMIN_OTTO_CHAT_TIMEOUT_MS);
+}
+
+export async function confirmAdminOttoAction(previewId: string): Promise<{ result: unknown; replayed: boolean }> {
+  return requestJson(
+    `${ADMIN_OTTO}/actions/${encodeURIComponent(previewId)}/confirm`,
+    { method: "POST" },
+    (body) => ({ result: body.result, replayed: body.replayed === true }),
+  );
 }
 
 export async function fetchAdminOttoThread(conversationId: string, signal?: AbortSignal): Promise<AdminOttoThreadView> {

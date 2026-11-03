@@ -56,7 +56,7 @@ describe("admin Otto design contract", () => {
     expect(chat).toContain("workos-chat-head admin-otto-head");
     expect(chat).toContain("conversation-pane-title");
     expect(chat).toContain("progress-header-actions");
-    expect(chat).toContain("Administration, read-only");
+    expect(chat).toContain("Administration, confirmed changes");
     expect(chat).not.toContain("admin-otto-tabs-row");
     expect(chat).not.toContain("admin-otto-eyebrow");
     expect(chat).not.toContain("admin-otto-readonly-note");
