@@ -130,6 +130,7 @@ export function classifyEodTask(title: string, project: string | null, personNam
 }
 
 export interface CollapsedEodTask extends EodTaskFact {
+  ids: string[];
   count: number;
   kind: EodTaskKind;
 }
@@ -148,10 +149,11 @@ export function collapseEodTasks(facts: EodTaskFact[], personName: string): Coll
     const key = `${titleKey}::${kind}::${fact.project ?? ""}`;
     const existing = byTitle.get(key);
     if (!existing) {
-      byTitle.set(key, { ...fact, count: 1, kind });
+      byTitle.set(key, { ...fact, ids: [fact.id], count: 1, kind });
       continue;
     }
     existing.count += 1;
+    existing.ids.push(fact.id);
     if (!existing.at) {
       existing.at = fact.at;
       existing.exact = fact.exact;
@@ -187,9 +189,9 @@ export function rankEodCompleted(facts: EodReportFacts): CollapsedEodTask[] {
   return work
     .map((item) => {
       let score = 0;
-      if (linkedIds.has(item.id)) score += 100;
+      if (item.ids.some((id) => linkedIds.has(id))) score += 100;
       if (outcomeTitles.has(normalizeEodTitle(item.title))) score += 100;
-      if (evidenceTaskIds.has(item.id)) score += 40;
+      if (item.ids.some((id) => evidenceTaskIds.has(id))) score += 40;
       if (item.project) score += 20;
       if (!item.outsideLabel) score += 10;
       if (item.exact) score += 5;
@@ -372,9 +374,11 @@ function evidenceSourceLabel(source: string): string {
 }
 
 function mediaLine(media: EodMediaFact): string {
-  const length = Number.isFinite(media.durationSeconds) && (media.durationSeconds ?? 0) > 0
-    ? ` (${Math.floor((media.durationSeconds as number) / 60)}:${String(Math.round((media.durationSeconds as number) % 60)).padStart(2, "0")})`
-    : "";
+  let length = "";
+  if (Number.isFinite(media.durationSeconds) && (media.durationSeconds ?? 0) > 0) {
+    const total = Math.round(media.durationSeconds as number);
+    length = ` (${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")})`;
+  }
   const digest = media.digest ? ` — ${fullText(media.digest)}` : "";
   return `- ${media.title}${length}${digest} — ${media.url}`;
 }
@@ -438,6 +442,9 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
     "",
     `### Work completed (${work.length})`,
     ...(work.length ? work.map((item) => taskLine(item, facts.timezone)) : ["- No work deliverables were recorded."]),
+    ...(facts.updates.length
+      ? ["", `### Recorded updates (${facts.updates.length})`, ...facts.updates.map((update) => `- [${update.kind}] ${fullText(update.text)}`)]
+      : []),
     ...(carried.length
       ? ["", `### Carried and deferred (${carried.length})`, ...carried.map((item) => taskLine(item, facts.timezone))]
       : []),

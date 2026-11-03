@@ -139,7 +139,10 @@ export function splitEodTaskRow(value: string): EodTaskRowParts {
   const outsideMatch = /\s+\((outside (?:the )?(?:shift|workday))\)\s*$/i.exec(text);
   if (outsideMatch) {
     outside = outsideMatch[1];
-    text = text.slice(0, outsideMatch.index).trim();
+    // The builder writes `Project · 3:30 PM · (outside shift)`. Remove the
+    // trailing separator with the label, or the time parser sees an empty
+    // final track and leaves the time inside the project.
+    text = text.slice(0, outsideMatch.index).trim().replace(/\s*·\s*$/, "").trim();
   }
   let time: string | null = null;
   const metaIndex = text.lastIndexOf(" · ");

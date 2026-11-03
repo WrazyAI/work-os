@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEodReportMarkdown, type EodReportFacts } from "../src/lib/work-os-eod-report";
+import { buildEodReportMarkdown, rankEodCompleted, type EodReportFacts } from "../src/lib/work-os-eod-report";
 import { parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
 import { eodSnippet } from "../src/modules/work-os/admin/eod";
 import { buildEodFactBlock, preservesEodStructure } from "../src/lib/aiEod";
@@ -106,6 +106,54 @@ test("a project-free exact completion keeps its time track", () => {
     outside: null,
     count: 1,
   });
+});
+
+test("an outside label after a time keeps the time track", () => {
+  assert.deepEqual(splitEodTaskRow("Ship the release — Work OS · 3:30 PM · (outside shift)"), {
+    title: "Ship the release",
+    project: "Work OS",
+    time: "3:30 PM",
+    outside: "outside shift",
+    count: 1,
+  });
+});
+
+test("ranking a collapsed task sees every linked task id", () => {
+  const ranking = rankEodCompleted({
+    ...facts,
+    completed: [
+      ...Array.from({ length: 8 }, (_, index) => ({
+        id: `work-${index}`,
+        title: `Work item ${index}`,
+        project: "Work OS",
+        at: "2026-10-22T19:30:00.000Z",
+        exact: true,
+        outsideLabel: null,
+      })),
+      { id: "shared-a", title: "Shared deliverable", project: "Work OS", at: "2026-10-22T19:31:00.000Z", exact: true, outsideLabel: null },
+      { id: "shared-b", title: "Shared deliverable", project: "Work OS", at: "2026-10-22T19:32:00.000Z", exact: true, outsideLabel: null },
+    ],
+    planItems: [{ id: "p-shared", taskId: "shared-b", kind: "outcome", title: "A commitment with a different title", disposition: "selected", completionState: "open", blocker: null }],
+    evidence: [],
+  });
+  assert.equal(ranking[0]?.title, "Shared deliverable");
+  assert.equal(ranking[0]?.count, 2);
+});
+
+test("long Loom durations round before splitting minutes and seconds", () => {
+  const rounded = buildEodReportMarkdown({
+    ...facts,
+    media: [{ title: "Loom", url: "https://www.loom.com/share/x", durationSeconds: 119.6, digest: null }],
+  });
+  assert.match(rounded.markdown, /Loom \(2:00\)/);
+});
+
+test("recorded updates stay in the full record", () => {
+  const withUpdate = buildEodReportMarkdown({
+    ...facts,
+    updates: [{ kind: "material_progress", text: "Shipped the retry fix." }],
+  });
+  assert.match(withUpdate.markdown, /### Recorded updates \(1\)\n- \[material_progress\] Shipped the retry fix\./);
 });
 
 test("a personal and a work task with the same title stay separate", () => {

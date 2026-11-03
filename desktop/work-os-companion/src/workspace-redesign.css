@@ -6304,7 +6304,7 @@ button:not(:disabled):active {
 .eod-doc-section {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
-  gap: 16px;
+  gap: 0;
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
 }
@@ -6315,6 +6315,7 @@ button:not(:disabled):active {
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
+  padding-right: 14px;
 }
 .eod-doc-label h3 {
   margin: 0;
@@ -6330,7 +6331,11 @@ button:not(:disabled):active {
   font-variant-numeric: tabular-nums;
 }
 
-.eod-doc-body { min-width: 0; }
+.eod-doc-body {
+  min-width: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
 .eod-doc-rows {
   display: grid;
   gap: 0;
@@ -6489,7 +6494,8 @@ button:not(:disabled):active {
 
 @media (max-width: 720px) {
   .eod-doc-section { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 0; }
-  .eod-doc-label { justify-content: flex-start; gap: 8px; }
+  .eod-doc-label { justify-content: flex-start; gap: 8px; padding-right: 0; }
+  .eod-doc-body { padding-left: 0; border-left: 0; }
   .eod-doc-summary { font-size: 16px; padding: 13px 0 16px; }
 }
 
