@@ -1,17 +1,16 @@
-# Admin agent API — local verification
+# Admin agent API — verification
 
 Date: 2026-11-03 (plan dated 2026-11-02).
-Branch: `codex/admin-agent-api`
-Head: `c7c98faf`
-Base: `7f6a2146`
+Work OS: `84d2b8c2` (PR #143 merged)
+Agent OS: `6187b097` (converged and deployed)
 Ledger: `451d4159-e201-4d22-b347-a4f1b7bd9a9f`
 
 ## Status
 
-Local implementation and review are complete. Production migration, feature
-enablement, deployment, and live probes are deliberately **not** run: they are
-external side effects that require the merge/deploy authorization and the
-target environment. The branch is clean and ready for that step.
+Implemented, reviewed, merged, deployed, and live-verified against the David
+Yeboah workspace. Migration `0069` is applied to Neon; the `admin_agent_api`
+flag is enabled; live REST and MCP probes passed; all verification tokens were
+revoked.
 
 ## Local checks
 
@@ -59,22 +58,36 @@ and `work-os-agent-kind-isolation.test.mts`.
 - Task-scoped admin evidence: `person_id` null, uploader/target in metrics,
   task-based storage path, openable by an authorized session.
 
-## Remaining external steps
+## Live deployment verification (2026-11-03)
 
-1. Merge the branch into `main` (or push the feature branch for review).
-2. Apply `supabase/migrations/0069_work_admin_agent_access.sql` to the intended
-   Neon database with `npm run db:apply:work-os` after verifying the resolved
-   host. Never replay the historical migration set.
-3. Deploy through the Agent OS atomic redeploy (`npm run redeploy`) and verify
-   the deployed identity and `/api/agent/admin/v1/openapi.yaml`.
-4. Enable `admin_agent_api` for the David Yeboah workspace in Admin → Settings
-   → Workspace features.
-5. Mint a 15-minute admin token with read scopes plus `tasks:write` and
-   `eods:review`. Run `/me`, `/people?q=David`, David's tasks and last week's
-   EODs, preview and confirm an assignment on a disposable task, read the audit
-   rows, call the admin MCP `tools/list` (13 tools), and revoke the token.
-6. Confirm the revoked token answers `401` and a cross-organization id answers
-   `404`.
+- Work OS `main`: `84d2b8c2` (PR #143 merged).
+- Agent OS `main`: `6187b097` (converged and manually reconciled).
+- Migration `0069_work_admin_agent_access.sql`: applied to Neon
+  `ep-delicate-firefly-b21oupgo.c-6.eu-central-1.aws.neon.tech`.
+- Deployed through `npm run redeploy`; `.deployed-commit` is `6187b097`;
+  `/api/agent/admin/v1/openapi.yaml` answers `200`.
+- `admin_agent_api` enabled for the David Yeboah workspace
+  (`b094c847-1332-4cab-9588-bdd7f8e99e7d`).
+
+A 20-minute admin token was minted with all seven scopes and used live:
+
+| Check | Result |
+| --- | --- |
+| `GET /me` | 200, admin role, nullable person, seven scopes |
+| `GET /people?q=David` | 200, David Z / Engineering |
+| `GET /tasks?person_ids=<id>` | 200, 684 tasks |
+| `GET /eods?person_ids=<id>&from=2026-10-27&to=2026-11-03` | 200, 1 submitted EOD |
+| `GET /records?person_ids=<id>&from=2026-10-27&to=2026-11-03` | 200, 50-row first page |
+| `GET /overview` | 200, 10 people, 352 open / 224 overdue tasks |
+| `POST /previews` + confirm (`task.create`) | 202 preview → 201 task `ec62fcc1…` |
+| Task assign preview + confirm | 202 → 200, final assignee list applied |
+| Task delete preview + confirm | 202 → 200, task tombstoned |
+| `POST /api/agent/admin/mcp` `tools/list` | 200, exactly 13 tools |
+| `work_audit_log` | `admin.task.create`, `admin.task.assign`, `admin.task.archive` rows |
+| `GET /me` after revocation | 401 `token_revoked` |
+
+The disposable task was removed, all live verification tokens were revoked, and
+the temporary token file/scripts were deleted from the VPS.
 
 ## Known limitations carried to follow-ups
 
