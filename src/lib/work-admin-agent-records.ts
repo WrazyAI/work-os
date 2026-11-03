@@ -1,8 +1,10 @@
 import {
+  WorkOsForbiddenError,
   WorkOsValidationError,
   type WorkOsAccess,
 } from "@/lib/work-os-api";
 import { isCalendarDate } from "@/lib/work-os-task-permissions";
+import { AdminAgentInvalidCursorError } from "@/lib/work-admin-agent-tasks";
 import {
   ADMIN_OTTO_MAX_WINDOWS,
   ADMIN_RECORD_COVERAGE,
@@ -27,6 +29,10 @@ export const ADMIN_AGENT_RECORD_QUERY_MAX = 200;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SOURCE_SET = new Set<string>(ADMIN_AGENT_RECORD_SOURCES);
+
+function requireAdminAccess(access: WorkOsAccess): void {
+  if (access.role !== "admin") throw new WorkOsForbiddenError("Administration access is required.");
+}
 
 export type AdminAgentRecordFilters = {
   /** Absent reads the whole organization; an explicit empty list is no rows. */
@@ -86,6 +92,11 @@ export function validateAdminAgentRecordFilters(
   if (filters.to !== null && !isCalendarDate(filters.to)) {
     throw new WorkOsValidationError("to must be a calendar date");
   }
+  // A lone bound would silently mean a single day (the window's other end
+  // defaults to it), which is never what a one-sided range asks for.
+  if ((filters.from === null) !== (filters.to === null)) {
+    throw new WorkOsValidationError("from and to must be provided together");
+  }
   if (filters.from !== null && filters.to !== null && filters.to < filters.from) {
     throw new WorkOsValidationError("to must not be before from");
   }
@@ -134,9 +145,40 @@ export function parseAdminAgentRecordFilters(params: URLSearchParams): AdminAgen
   });
 }
 
-function emptyRecordPage(): AdminAgentRecordPage {
+function emptyRecordPage(coverage: string[]): AdminAgentRecordPage {
   // A copy, so a caller cannot mutate the shared coverage line for later pages.
-  return { records: [], total: 0, nextCursor: null, coverage: [...ADMIN_RECORD_COVERAGE] };
+  return { records: [], total: 0, nextCursor: null, coverage: [...coverage] };
+}
+
+/** The source half of the coverage contract, shared by populated and empty
+ * pages so an empty answer still says what it would have contained. */
+function sourceCoverage(sources: WorkRecord["source"][] | null): string[] {
+  return sources
+    ? [...ADMIN_RECORD_COVERAGE, `Sources: ${sources.join(", ")}.`]
+    : [...ADMIN_RECORD_COVERAGE];
+}
+
+/** The person half: a whole-organization read states the hard ceiling instead
+ * of implying the roster is never truncated, and an explicit read states how
+ * many of the requested ids actually resolved to active members. */
+function personScopeCoverage(requested: number | null, selected: number): string {
+  if (requested === 0) return "People: no people were requested, so no records match.";
+  if (requested === null) {
+    return `People: the whole organization, at most ${ADMIN_OTTO_MAX_WINDOWS} active people per request.`;
+  }
+  return `People: ${selected} of ${requested} requested active people in this organization.`;
+}
+
+/** Otto's record cursors are signed and bound to their window, source, and
+ * query scope, so a mismatch — or an undecodable cursor — is the admin API's
+ * `invalid_cursor` (422) rather than a generic validation error. */
+function recordCursorFailure(error: unknown): never {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : "";
+  if (name === "WorkOsValidationError" && /^cursor\b/i.test(message)) {
+    throw new AdminAgentInvalidCursorError("Record cursor does not match these filters");
+  }
+  throw error;
 }
 
 /** One page of the record projection. `person_ids` selects people; the local
@@ -146,11 +188,19 @@ export async function listAdminAgentRecords(
   access: WorkOsAccess,
   filters: AdminAgentRecordFilters,
 ): Promise<AdminAgentRecordPage> {
+  // The guard runs before every early return: a direct or MCP caller must see
+  // the same authorization failure as the route, never an empty page.
+  requireAdminAccess(access);
   const validated = validateAdminAgentRecordFilters(filters);
-  if (validated.personIds !== null && validated.personIds.length === 0) return emptyRecordPage();
+  const requested = validated.personIds === null ? null : validated.personIds.length;
+  const coverageFor = (selected: number) => [
+    ...sourceCoverage(validated.sources),
+    personScopeCoverage(requested, selected),
+  ];
+  if (requested === 0) return emptyRecordPage(coverageFor(0));
 
   const resolution = await resolveAdminOttoPeople(access, { kind: "team" });
-  if (resolution.kind !== "resolved") return emptyRecordPage();
+  if (resolution.kind !== "resolved") return emptyRecordPage(coverageFor(0));
   const roster = resolution.people;
   const byId = new Map(roster.map((person) => [person.id, person]));
   // person_ids is an organization-wide filter: an id that is not an active
@@ -162,7 +212,7 @@ export async function listAdminAgentRecords(
       const person = byId.get(personId);
       return person ? [person] : [];
     });
-  if (!selected.length) return emptyRecordPage();
+  if (!selected.length) return emptyRecordPage(coverageFor(0));
   if (selected.length > ADMIN_OTTO_MAX_WINDOWS) {
     throw new WorkOsValidationError(
       `person_ids is required when more than ${ADMIN_OTTO_MAX_WINDOWS} people are active`,
@@ -183,11 +233,11 @@ export async function listAdminAgentRecords(
     cursor: validated.cursor ?? undefined,
     ...(validated.sources === null ? {} : { sources: validated.sources }),
     query: validated.query,
-  });
+  }).catch((error: unknown) => recordCursorFailure(error));
   return {
     records: page.items,
     total: page.total,
     nextCursor: page.nextCursor,
-    coverage: page.coverage,
+    coverage: [...page.coverage, personScopeCoverage(requested, selected.length)],
   };
 }

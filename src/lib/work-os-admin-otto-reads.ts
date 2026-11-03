@@ -28,9 +28,10 @@ const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // overhead; it was widened from 256/512 for that reason. Encoding fails closed
 // above this bound rather than truncating a key and losing records.
 const MAX_CURSOR_LENGTH = 4096;
-// Directory pages are capped at 100; one record/recap request can carry the
-// same number of per-person local windows (widened from 50). A larger roster
-// splits into multiple requests.
+// One record/recap request carries at most this many per-person local windows
+// (widened from 50 to match the 100-person directory page). There is no
+// server-side chunking: a larger roster is rejected, and the caller narrows the
+// request instead of being served in several pages invisibly.
 const MAX_WINDOWS = 100;
 const MAX_TARGETS = 20;
 const MAX_PEOPLE_IDS = 100;
@@ -59,8 +60,8 @@ const LATEST_RECAP_COVERAGE = [
 /** The same coverage line the Otto record page states, for the admin API's
  * empty page: an empty result must still say what it would have contained. */
 export const ADMIN_RECORD_COVERAGE = RECORD_COVERAGE;
-/** Per-person local windows cap one record request; a larger roster splits into
- * more than one request. */
+/** Hard per-request ceiling on per-person local windows. A request that names
+ * more people is rejected; nothing here splits a roster across responses. */
 export const ADMIN_OTTO_MAX_WINDOWS = MAX_WINDOWS;
 
 function requireAdmin(access: WorkOsAccess) {

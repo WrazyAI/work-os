@@ -8,6 +8,7 @@ import { hashAgentToken } from "../src/lib/work-agent-tokens";
 import { listAdminOttoRecords } from "../src/lib/work-os-admin-otto-reads";
 import { getAdminAgentInsights, getAdminAgentOverview } from "../src/lib/work-admin-agent-insights";
 import { listAdminAgentRecords, parseAdminAgentRecordFilters } from "../src/lib/work-admin-agent-records";
+import type { WorkRecord } from "../src/modules/work-os/admin-otto/contracts";
 import {
   adminAccess, adminUser, checkoutEvent, eodCheckout, eodDraft, fixture, org, otherEod,
   otherOrg, otherOrgAccess, otherPerson, otherUpdate, personA, personB, recapInterval,
@@ -25,6 +26,9 @@ const WINDOWS = [
   { personId: personA, timezone: "UTC", from: "2026-11-01", through: "2026-11-02" },
   { personId: personB, timezone: "UTC", from: "2026-11-01", through: "2026-11-02" },
 ];
+// Record cursors are HMAC-signed with a key derived from the database URL; the
+// PGlite fixture needs a stable placeholder so pagination can be exercised.
+process.env.DATABASE_URL ??= "postgres://pglite-test/work-os";
 const OTHER_WINDOW = [{ personId: otherPerson, timezone: "UTC", from: "2026-11-01", through: "2026-11-02" }];
 
 /** Error identity is asserted by name: this test file and the source resolve
@@ -211,10 +215,14 @@ test("the service lists the page and keeps the organization scope", async () => 
 
   // An explicit empty person list is no rows, never the whole organization.
   const none = await listAdminAgentRecords(adminAccess, {
-    personIds: [], sources: null, from: null, to: null, query: null, cursor: null,
+    personIds: [], sources: ["update"], from: null, to: null, query: null, cursor: null,
   });
   assert.deepEqual(none.records, []);
   assert.equal(none.total, 0);
+  // An empty answer is attributable: it still names its sources and its scope.
+  assert.ok(none.coverage.includes("Sources: update."), "the empty page names its requested sources");
+  assert.ok(none.coverage.includes("People: no people were requested, so no records match."));
+  assert.ok(!none.coverage.some((line) => line.startsWith("Sources: update, ")), "no unrequested source sneaks in");
 
   // An id outside this organization is ignored rather than turning the list into
   // an authorization or validation failure.
@@ -224,6 +232,8 @@ test("the service lists the page and keeps the organization scope", async () => 
   });
   assert.deepEqual(foreign.records.map((record) => record.id), [`update:${updateCheckout}`]);
   assert.deepEqual(foreign.records.map((record) => record.personId), [personA]);
+  assert.ok(foreign.coverage.includes("People: 1 of 2 requested active people in this organization."),
+    "an ignored foreign id is visible in the coverage line");
 });
 
 test("the service reads the whole organization when person_ids is absent", async () => {
@@ -232,6 +242,80 @@ test("the service reads the whole organization when person_ids is absent", async
     query: "checkout", cursor: null,
   });
   assert.deepEqual(page.records.map((record) => record.id), [`update:${updateCheckout}`]);
+  assert.ok(page.coverage.includes("People: the whole organization, at most 100 active people per request."),
+    "a whole-organization read states the hard per-request ceiling");
+});
+
+test("the admin guard runs before every empty path", async () => {
+  const employee = { ...adminAccess, role: "employee" } as typeof adminAccess;
+  // An explicit empty person list is the earliest return; a direct or MCP caller
+  // must still be refused rather than handed an empty page.
+  await assert.rejects(
+    () => listAdminAgentRecords(employee, {
+      personIds: [], sources: null, from: null, to: null, query: null, cursor: null,
+    }),
+    namedError("WorkOsForbiddenError"),
+  );
+});
+
+test("a one-sided date range is rejected instead of collapsing to one day", async () => {
+  for (const [from, to] of [["2026-10-01", null], [null, "2026-10-01"]] as const) {
+    await assert.rejects(
+      () => listAdminAgentRecords(adminAccess, {
+        personIds: null, sources: null, from, to, query: null, cursor: null,
+      }),
+      (error: Error) => error.name === "WorkOsValidationError" && /provided together/.test(error.message),
+    );
+    const param = from ? `from=${from}` : `to=${to}`;
+    assert.throws(() => parseAdminAgentRecordFilters(new URLSearchParams(param)), /provided together/);
+    const response = await recordsGET(request(`/api/agent/admin/v1/records?${param}`, RECORDS_SECRET));
+    assert.equal(response.status, 400, `${param} is a client error, not a one-day window`);
+    assert.equal((await response.json() as { code: string }).code, "validation_error");
+  }
+});
+
+test("a record cursor is bound to the text query it was minted for", async () => {
+  const bulk = Array.from(
+    { length: 55 },
+    (_, index) => `e4000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+  );
+  const filters = {
+    personIds: [personA, personB],
+    sources: ["update"] as WorkRecord["source"][],
+    from: "2026-11-01",
+    to: "2026-11-02",
+  };
+  try {
+    await f.db.query(
+      `insert into work_check_ins (id, organization_id, person_id, kind, input_text, occurred_at)
+       select t.id, $2, $3, 'catch_up', 'Checkout bulk record', '2026-11-02T05:00:00Z'
+       from unnest($1::uuid[]) as t(id)`,
+      [bulk, org, personB],
+    );
+    const first = await listAdminAgentRecords(adminAccess, { ...filters, query: "checkout", cursor: null });
+    assert.equal(first.records.length, 50);
+    assert.ok(first.nextCursor, "the page is full, so a cursor is minted");
+
+    const continued = await listAdminAgentRecords(adminAccess, {
+      ...filters, query: "checkout", cursor: first.nextCursor,
+    });
+    assert.ok(continued.records.length > 0, "the cursor continues its own query");
+
+    await assert.rejects(
+      () => listAdminAgentRecords(adminAccess, { ...filters, query: "pricing", cursor: first.nextCursor }),
+      (error: Error) => error.name === "AdminAgentInvalidCursorError",
+    );
+
+    const response = await recordsGET(request(
+      `/api/agent/admin/v1/records?person_ids=${personA},${personB}&sources=update`
+        + `&from=2026-11-01&to=2026-11-02&q=pricing&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      RECORDS_SECRET,
+    ));
+    assert.equal(response.status, 422);
+    assert.equal((await response.json() as { code: string }).code, "invalid_cursor");
+  } finally {
+    await f.db.query(`delete from work_check_ins where id = any($1::uuid[])`, [bulk]);
+  }
 });
 
 test("overview and insights delegate to the administration readers", async () => {
