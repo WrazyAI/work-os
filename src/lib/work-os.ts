@@ -50,7 +50,7 @@ export async function getWorkOsOrganizationOwnerId(organizationId: string) {
 export async function listPeople(userId: string) {
   await ensureWorkOsDefaults(userId);
   return ensureNoError(
-    db().from("work_people").select("*, role_profile:work_role_profiles(*)").eq("user_id", userId).order("display_name"),
+    db().from("work_people").select("*, role_profile:work_role_profiles(*)").eq("user_id", userId).eq("active", true).order("display_name"),
     "load people",
   );
 }

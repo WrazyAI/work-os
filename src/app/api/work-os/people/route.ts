@@ -13,7 +13,10 @@ export async function GET(req: Request) {
     const personIds = await accessibleWorkOsPersonIds(auth.access);
     if (personIds && !personIds.length) return NextResponse.json({ people: [], roleProfiles: [] });
     let query = createAdminClient().from("work_people")
-      .select("*, role_profile:work_role_profiles(*)").eq("organization_id", auth.access.organizationId);
+      .select("*, role_profile:work_role_profiles(*)").eq("organization_id", auth.access.organizationId)
+      // Deactivating a person must remove them from the roster; without this,
+      // a departure still renders as a teammate forever.
+      .eq("active", true);
     if (personIds) query = query.in("id", personIds);
     const { data, error } = await query.order("display_name");
     if (error) throw new Error(`load Work OS people: ${error.message}`);
