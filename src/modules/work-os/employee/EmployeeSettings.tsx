@@ -3,25 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Bell, BookOpenText, HardDriveDownload, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "../timezones";
 import EmployeeMemory from "./EmployeeMemory";
 import AgentAccessSettings from "./AgentAccessSettings";
 import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
 import { fetchJson, requestId, type AnyRow } from "./model";
-import {
-  Field,
-  Masthead,
-  Notice,
-  Panel,
-  PanelHeader,
-  PrimaryButton,
-  SecondaryButton,
-  Skeleton,
-  StatusPill,
-  inputClass,
-  inputStyle,
-} from "./ui";
+import styles from "./EmployeeSettings.module.css";
 
 export default function EmployeeSettings() {
   const queryClient = useQueryClient();
@@ -122,169 +110,206 @@ export default function EmployeeSettings() {
 
   if (onboarding.isLoading && !onboarding.data) {
     return (
-      <div aria-busy="true">
-        <Masthead eyebrow="Work OS" title="Settings" meta="Loading your setup…" />
-        <Panel className="p-5"><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-24 w-full" /></Panel>
+      <div className={styles.page} aria-busy="true">
+        <header className={styles.masthead}>
+          <div className={styles.titleRow}><h1>Settings</h1></div>
+        </header>
+        <div className={styles.groups}>
+          <div className={styles.group}>
+            <div className={styles.groupLabel}><div className={styles.skeleton} style={{ width: 120 }} /></div>
+            <div className={styles.groupContent}><div className={styles.skeletonBlock} /></div>
+          </div>
+          <div className={styles.group}>
+            <div className={styles.groupLabel}><div className={styles.skeleton} style={{ width: 90 }} /></div>
+            <div className={styles.groupContent}><div className={styles.skeletonBlock} style={{ height: 140 }} /></div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <Masthead
-        eyebrow="Work OS"
-        title="Settings"
-        meta="Your profile, working hours, and the consents that keep tracking truthful."
-        actions={onboardingRequired ? <StatusPill tone="overdue">Action required</StatusPill> : <StatusPill tone="done">Configured</StatusPill>}
-      />
+    <div className={styles.page}>
+      <header className={styles.masthead}>
+        <div className={styles.titleRow}>
+          <h1>Settings</h1>
+          <p className={styles.titleMeta}>Your profile, working hours, and the consents that keep tracking truthful.</p>
+          <span className={`${styles.status} ${onboardingRequired ? styles.statusWarn : styles.statusDone}`}>
+            {onboardingRequired ? "Action required" : "Configured"}
+          </span>
+        </div>
+      </header>
 
-      {error ? <Notice tone="err" className="mb-5">{(error as Error).message}</Notice> : null}
+      {error ? <div className={`${styles.notice} ${styles.noticeErr}`}>{(error as Error).message}</div> : null}
 
-      <div className="grid gap-5">
-        <Panel>
-          <PanelHeader icon={<UserRound size={16} />} title="Organization setup" meta="Set by your manager; read back from the same record the workspace uses." />
-          <dl className="grid gap-x-6 gap-y-3 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Fact label="Official role" value={organizationSetup?.roleProfile?.name || "Pending manager setup"} />
-            <Fact label="Team" value={organizationSetup?.teams?.map((team: AnyRow) => team.name).filter(Boolean).join(", ") || "Pending manager setup"} />
-            <Fact label="Manager" value={organizationSetup?.managers?.map((manager: AnyRow) => manager.display_name).filter(Boolean).join(", ") || "Pending manager setup"} />
-            <Fact label="Official schedule" value={officialScheduleLabel} />
-          </dl>
-        </Panel>
+      <div className={styles.groups}>
+        <section className={styles.group} aria-labelledby="settings-org-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-org-title">Organization</h2>
+            <p>Set by your manager; read back from the same record the workspace uses.</p>
+          </div>
+          <div className={styles.groupContent}>
+            <dl className={styles.facts}>
+              <Fact label="Official role" value={organizationSetup?.roleProfile?.name || "Pending manager setup"} />
+              <Fact label="Team" value={organizationSetup?.teams?.map((team: AnyRow) => team.name).filter(Boolean).join(", ") || "Pending manager setup"} />
+              <Fact label="Manager" value={organizationSetup?.managers?.map((manager: AnyRow) => manager.display_name).filter(Boolean).join(", ") || "Pending manager setup"} />
+              <Fact label="Official schedule" value={officialScheduleLabel} />
+            </dl>
+          </div>
+        </section>
 
-        {onboardingRequired ? (
-          <Panel>
-            <PanelHeader
-              icon={<ShieldCheck size={16} />}
-              title="Complete your setup"
-              meta="Confirm your profile, working hours, notification preference, and purpose-limited tracking consent."
-            />
-            <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-4">
-              <Field label="Preferred name">
-                <input value={name} onChange={(event) => setName(event.target.value)} className={inputClass} style={inputStyle} />
-              </Field>
-              <Field label="Work email">
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} style={inputStyle} />
-              </Field>
-              <Field label="Timezone">
-                <input role="combobox" aria-autocomplete="list" list="employee-work-os-timezones" value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Search IANA timezone" className={inputClass} style={inputStyle} />
-                <datalist id="employee-work-os-timezones">
-                  {supportedTimezones().map((zone) => <option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}
-                </datalist>
-              </Field>
-              <Field label="Language">
-                <input value={language} onChange={(event) => setLanguage(event.target.value)} className={inputClass} style={inputStyle} />
-              </Field>
-              <Field label="Shift start">
-                <input type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} className={inputClass} style={inputStyle} />
-              </Field>
-              <Field label="Shift end">
-                <input type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} className={inputClass} style={inputStyle} />
-              </Field>
-              {!worktivityBreaks ? (
-                <>
-                  <Field label="Break start">
-                    <input type="time" value={breakStart} onChange={(event) => setBreakStart(event.target.value)} className={inputClass} style={inputStyle} />
-                  </Field>
-                  <Field label="Break end">
-                    <input type="time" value={breakEnd} onChange={(event) => setBreakEnd(event.target.value)} className={inputClass} style={inputStyle} />
-                  </Field>
-                </>
-              ) : null}
-              <Field label="Sensitive apps/domains to exclude" hint="Comma-separated apps or domains that must never be captured.">
-                <input value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="password manager, bank.example" className={inputClass} style={inputStyle} />
-              </Field>
-              <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-                <input type="checkbox" checked={desktopEnabled} onChange={(event) => setDesktopEnabled(event.target.checked)} /> Desktop notifications
-              </label>
-              <label className="flex items-start gap-2 text-[12px] leading-5 text-[var(--text-secondary)] md:col-span-2">
-                <input type="checkbox" className="mt-0.5" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-                <span>I accept Work OS tracking and sampled screenshot analysis, including encrypted 30-day raw retention, sensitive-capture deletion, and that screenshots do not prove productivity or task completion.</span>
-              </label>
-              <div className="flex items-end">
-                <PrimaryButton
-                  disabled={!name.trim() || !email.trim() || !consent || saveOnboarding.isPending}
-                  onClick={() => saveOnboarding.mutate()}
-                  className="w-full sm:w-auto"
-                >
-                  {saveOnboarding.isPending ? "Saving…" : "Save required consent"}
-                </PrimaryButton>
+        <section className={styles.group} aria-labelledby="settings-consent-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-consent-title">{onboardingRequired ? "Complete setup" : "Privacy & consent"}</h2>
+            <p>
+              {onboardingRequired
+                ? "Confirm your profile, working hours, notification preference, and purpose-limited tracking consent."
+                : "Tracking consent is active. Sampled analysis is encrypted, retained for 30 days, and never proves productivity or task completion."}
+            </p>
+          </div>
+          <div className={styles.groupContent}>
+            {onboardingRequired ? (
+              <div className={styles.formGrid}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Preferred name</span>
+                  <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Work email</span>
+                  <input type="email" className={styles.input} value={email} onChange={(event) => setEmail(event.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Timezone</span>
+                  <input
+                    role="combobox"
+                    aria-autocomplete="list"
+                    list="employee-work-os-timezones"
+                    value={timezone}
+                    onChange={(event) => setTimezone(event.target.value)}
+                    placeholder="Search IANA timezone"
+                    className={styles.input}
+                  />
+                  <datalist id="employee-work-os-timezones">
+                    {supportedTimezones().map((zone) => <option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}
+                  </datalist>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Language</span>
+                  <input className={styles.input} value={language} onChange={(event) => setLanguage(event.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Shift start</span>
+                  <input type="time" className={styles.input} value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Shift end</span>
+                  <input type="time" className={styles.input} value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} />
+                </label>
+                {!worktivityBreaks ? (
+                  <>
+                    <label className={styles.field}>
+                      <span className={styles.fieldLabel}>Break start</span>
+                      <input type="time" className={styles.input} value={breakStart} onChange={(event) => setBreakStart(event.target.value)} />
+                    </label>
+                    <label className={styles.field}>
+                      <span className={styles.fieldLabel}>Break end</span>
+                      <input type="time" className={styles.input} value={breakEnd} onChange={(event) => setBreakEnd(event.target.value)} />
+                    </label>
+                  </>
+                ) : null}
+                <label className={`${styles.field} ${styles.fieldFull}`}>
+                  <span className={styles.fieldLabel}>Sensitive apps/domains to exclude <em>optional</em></span>
+                  <input className={styles.input} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="password manager, bank.example" />
+                  <span className={styles.hint}>Comma-separated apps or domains that must never be captured.</span>
+                </label>
+                <label className={`${styles.checkLine} ${styles.fieldFull}`}>
+                  <input type="checkbox" checked={desktopEnabled} onChange={(event) => setDesktopEnabled(event.target.checked)} />
+                  Desktop notifications
+                </label>
+                <label className={`${styles.checkLine} ${styles.consentLine}`}>
+                  <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+                  <span>I accept Work OS tracking and sampled screenshot analysis, including encrypted 30-day raw retention, sensitive-capture deletion, and that screenshots do not prove productivity or task completion.</span>
+                </label>
+                <div className={styles.formActions}>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    disabled={!name.trim() || !email.trim() || !consent || saveOnboarding.isPending}
+                    onClick={() => saveOnboarding.mutate()}
+                  >
+                    {saveOnboarding.isPending ? "Saving…" : "Save required consent"}
+                  </button>
+                </div>
               </div>
-            </div>
-          </Panel>
-        ) : (
-          <Panel>
-            <PanelHeader
-              icon={<ShieldCheck size={16} />}
-              title="Privacy & consent"
-              meta="Tracking consent is active. Sampled Worktivity analysis is encrypted, retained 30 days, and never proves productivity or task completion."
-            />
-            <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-              <StatusPill tone="done">Tracking active</StatusPill>
-              <StatusPill tone="done">Screenshot analysis active</StatusPill>
-              <SecondaryButton disabled={changeConsent.isPending} style={{ color: "var(--status-warn)" }} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")}>
-                Withdraw screenshot consent
-              </SecondaryButton>
-              <SecondaryButton disabled={changeConsent.isPending} style={{ color: "var(--status-error)" }} onClick={() => changeConsent.mutate("withdraw_tracking")}>
-                Withdraw tracking consent
-              </SecondaryButton>
-            </div>
-            {exclusions ? (
-              <p className="border-t px-5 py-3 text-[12px] leading-5 text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)" }}>
-                Excluded apps and domains: <span className="text-[var(--text-primary)]">{exclusions}</span>
-              </p>
-            ) : null}
-          </Panel>
-        )}
+            ) : (
+              <div>
+                <div className={styles.consentRow}>
+                  <span className={styles.consentChip}>Tracking active</span>
+                  <span className={styles.consentChip}>Screenshot analysis active</span>
+                  <button type="button" className={`${styles.secondaryButton} ${styles.warnButton}`} disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")}>
+                    Withdraw screenshot consent
+                  </button>
+                  <button type="button" className={`${styles.secondaryButton} ${styles.dangerButton}`} disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_tracking")}>
+                    Withdraw tracking consent
+                  </button>
+                </div>
+                {exclusions ? (
+                  <p className={styles.consentDetails}>
+                    Excluded apps and domains: <strong>{exclusions}</strong>
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </section>
 
         <EmployeeMemory enabled={access.featureFlags.work_memory === true} />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <BookOpenText size={15} className="mt-0.5 shrink-0" style={{ color: "var(--text-tertiary)" }} aria-hidden />
-            <div>
-              <p className="text-[12px] font-semibold text-[var(--text-primary)]">Building an external agent?</p>
-              <p className="mt-0.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">The Agent API guide covers authentication, endpoints, limits, and recovery.</p>
+        <section className={styles.group} aria-labelledby="settings-api-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-api-title">Agent API</h2>
+            <p>For external agents that read tasks and log progress.</p>
+          </div>
+          <div className={styles.groupContent}>
+            <p className={styles.companionCopy}>The guide covers authentication, endpoints, limits, and recovery. Tokens are created below.</p>
+            <div className={styles.companionActions}>
+              <Link href="/docs/agent-api" className={styles.linkButton}>Open API guide</Link>
             </div>
           </div>
-          <Link
-            href="/docs/agent-api"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold transition hover:border-[var(--border-hot)]"
-            style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-primary)" }}
-          >
-            Open API guide
-          </Link>
-        </div>
+        </section>
 
         <AgentAccessSettings />
 
-        <Panel>
-          <PanelHeader icon={<Bell size={16} />} title="This device" meta="Preferences stay on this device only." />
-          <div className="grid gap-3 px-5 py-4 text-[12px] text-[var(--text-secondary)]">
-            <p>Timezone: <span className="text-[var(--text-primary)]">{timezone}</span>{timezone !== (onboarding.data?.profile?.timezone || timezone) ? " (updated in setup above)" : ""}</p>
-            <p>Desktop notifications: <span className="text-[var(--text-primary)]">{desktopEnabled ? "On" : "Off"}</span></p>
+        <section className={styles.group} aria-labelledby="settings-device-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-device-title">This device</h2>
+            <p>Preferences stay on this device only.</p>
           </div>
-        </Panel>
-
-        <Panel>
-          <PanelHeader
-            icon={<HardDriveDownload size={16} />}
-            title="Windows Companion"
-            meta="Attendance controls live in the companion."
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-            <p className="max-w-xl text-[12px] leading-5 text-[var(--text-secondary)]">
-              Clock in, pause, resume, and clock out from the Windows Work OS Companion; it opens Worktivity if needed and waits for Worktivity to confirm each change. This dashboard stays status-only.
-            </p>
-            <div className="flex gap-2">
-              <Link href="/work-os/desktop/connect" className="inline-flex items-center gap-2 rounded-[10px] border px-3.5 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--bg-card)" }}>
-                Connect this computer
-              </Link>
-              <SecondaryButton onClick={() => void onboarding.refetch()} disabled={onboarding.isFetching}>
-                <RefreshCw size={13} className={onboarding.isFetching ? "animate-spin" : undefined} /> Refresh setup
-              </SecondaryButton>
+          <div className={styles.groupContent}>
+            <div className={styles.deviceFacts}>
+              <span>Timezone: <strong>{timezone}</strong>{timezone !== (onboarding.data?.profile?.timezone || timezone) ? " (updated in setup above)" : ""}</span>
+              <span>Desktop notifications: <strong>{desktopEnabled ? "On" : "Off"}</strong></span>
             </div>
           </div>
-        </Panel>
+        </section>
+
+        <section className={styles.group} aria-labelledby="settings-companion-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-companion-title">Windows Companion</h2>
+            <p>Attendance controls live in the companion.</p>
+          </div>
+          <div className={styles.groupContent}>
+            <p className={styles.companionCopy}>
+              Clock in, pause, resume, and clock out from the Windows Work OS Companion; it opens Worktivity if needed and waits for Worktivity to confirm each change. This dashboard stays status-only.
+            </p>
+            <div className={styles.companionActions}>
+              <Link href="/work-os/desktop/connect" className={styles.linkButton}>Connect this computer</Link>
+              <button type="button" className={styles.secondaryButton} onClick={() => void onboarding.refetch()} disabled={onboarding.isFetching}>
+                <RefreshCw size={13} className={onboarding.isFetching ? "animate-spin" : undefined} /> Refresh setup
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -292,9 +317,9 @@ export default function EmployeeSettings() {
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</dt>
-      <dd className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{value}</dd>
+    <div className={styles.fact}>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Brain, Check, Trash2, X } from "lucide-react";
 import { calendarDateLabel, fetchJson, formatDateTimeShort, requestId, type WorkMemoryResponse } from "./model";
-import { EmptyState, Notice, Panel, PrimaryButton, SecondaryButton, Skeleton, inputClass, inputStyle } from "./ui";
+import { EmptyState, Notice, PrimaryButton, SecondaryButton, Skeleton } from "./ui";
+import styles from "./EmployeeSettings.module.css";
 
 type MemoryTab = "review" | "remembered";
 
@@ -31,27 +32,31 @@ export default function EmployeeMemory({ enabled = true }: { enabled?: boolean }
   const remembered = facts.filter((fact) => fact.review_status === "confirmed");
 
   return (
-    <Panel>
-      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--bg-primary)", color: "var(--accent-deep)" }}>
-            <Brain size={18} />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">What Otto remembers</h2>
-            <p className="mt-0.5 text-[12px] leading-5 text-[var(--text-secondary)]">Facts Otto proposed from your updates, kept only when you say they are true.</p>
+    <>
+      <section className={styles.group} aria-labelledby="settings-memory-title">
+        <div className={styles.groupLabel}>
+          <h2 id="settings-memory-title">Memory</h2>
+          <p>Facts Otto proposes from your updates, kept only when you say they are true.</p>
+        </div>
+        <div className={styles.groupContent}>
+          <div className={styles.memoryBand}>
+            <div className={styles.memoryLead}>
+              <span className={styles.memoryMark} aria-hidden="true"><Brain size={16} /></span>
+              <div>
+                <p className={styles.memoryTitle}>What Otto remembers</p>
+                <p className={styles.memoryCopy}>Facts Otto proposed from your updates, kept only when you say they are true.</p>
+              </div>
+            </div>
+            <div className={styles.memorySide}>
+              <span className={styles.memoryCount}>Remembered <strong>{remembered.length}</strong></span>
+              <span className={`${styles.memoryCount} ${proposed.length ? styles.memoryNeed : styles.memoryNeedQuiet}`}>
+                Need review <strong>{proposed.length}</strong>
+              </span>
+              <button type="button" className={styles.secondaryButton} onClick={() => setOpen(true)}>View</button>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-[12px] text-[var(--text-secondary)]">
-            Remembered <strong className="tabular-nums text-[var(--text-primary)]">{remembered.length}</strong>
-          </span>
-          <span className="text-[12px]" style={{ color: proposed.length ? "var(--status-warn)" : "var(--text-secondary)" }}>
-            Need review <strong className="tabular-nums">{proposed.length}</strong>
-          </span>
-          <SecondaryButton onClick={() => setOpen(true)}>View</SecondaryButton>
-        </div>
-      </div>
+      </section>
       {open ? (
         <MemoryModal
           facts={facts}
@@ -61,7 +66,7 @@ export default function EmployeeMemory({ enabled = true }: { enabled?: boolean }
           onClose={() => setOpen(false)}
         />
       ) : null}
-    </Panel>
+    </>
   );
 }
 

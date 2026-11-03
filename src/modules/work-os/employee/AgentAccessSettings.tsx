@@ -3,22 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpenText, Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Plus, Trash2 } from "lucide-react";
 import { fetchJson, formatDateTimeShort } from "./model";
-import {
-  EmptyState,
-  Field,
-  Notice,
-  Panel,
-  PanelHeader,
-  PrimaryButton,
-  QuietButton,
-  SecondaryButton,
-  Skeleton,
-  StatusPill,
-  inputClass,
-  inputStyle,
-} from "./ui";
+import styles from "./EmployeeSettings.module.css";
 
 const SCOPE_OPTIONS = [
   { id: "tasks:read", label: "Read tasks" },
@@ -95,60 +82,60 @@ export default function AgentAccessSettings() {
   };
 
   const rows = tokens.data?.tokens ?? [];
+  const now = Date.now();
+  const expired = (token: AgentTokenRow) => !token.revoked_at && Number.isFinite(Date.parse(token.expires_at)) && Date.parse(token.expires_at) <= now;
+  const activeRows = rows.filter((token) => !token.revoked_at && !expired(token));
+  const inactiveRows = rows.filter((token) => token.revoked_at || expired(token));
   const error = tokens.error || create.error || revoke.error;
 
   return (
-    <Panel id="agent-access">
-      <PanelHeader
-        icon={<KeyRound size={16} />}
-        title="Agent access"
-        meta="Scoped tokens let external agents read your tasks, log progress, and attach evidence. Secrets are shown once."
-        actions={
-          <Link
-            href="/docs/agent-api"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12px] font-semibold transition hover:border-[var(--border-hot)]"
-            style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-primary)" }}
-          >
-            <BookOpenText size={13} aria-hidden /> API guide
-          </Link>
-        }
-      />
-      <div className="grid gap-4 px-5 py-5">
-        {error ? <Notice tone="err">{(error as Error).message}</Notice> : null}
+    <section className={styles.group} id="agent-access" aria-labelledby="settings-access-title">
+      <div className={styles.groupLabel}>
+        <h2 id="settings-access-title">Agent access</h2>
+        <p>Scoped tokens let external agents read your tasks, log progress, and attach evidence. Secrets are shown once.</p>
+        <Link href="/docs/agent-api" className={styles.quietButton} style={{ marginTop: 6 }}>API guide</Link>
+      </div>
+      <div className={styles.groupContent}>
+        {error ? <div className={`${styles.notice} ${styles.noticeErr}`}>{(error as Error).message}</div> : null}
 
         {secret ? (
-          <Notice tone="info">
-            <div className="grid gap-2">
-              <p className="text-[12px] font-semibold text-[var(--text-primary)]">This is the only time you will see it. Store the secret now.</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="rounded-[8px] border px-3 py-2 text-[12px]" style={{ borderColor: "var(--border)", background: "var(--bg-card)", wordBreak: "break-all" }}>
-                  {secret}
-                </code>
-                <SecondaryButton onClick={() => void copySecret()}>
-                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
-                </SecondaryButton>
-                <QuietButton onClick={() => { setSecret(null); setCopied(false); }}>Done</QuietButton>
-              </div>
+          <div className={styles.secretNotice}>
+            <p className={styles.secretTitle}>This is the only time you will see it. Store the secret now.</p>
+            <div className={styles.secretRow}>
+              <code className={styles.secretCode}>{secret}</code>
+              <button type="button" className={styles.secondaryButton} onClick={() => void copySecret()}>
+                {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+              </button>
+              <button type="button" className={styles.quietButton} onClick={() => { setSecret(null); setCopied(false); }}>Done</button>
             </div>
-          </Notice>
+          </div>
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-          <Field label="Token name">
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Release automation" className={inputClass} style={inputStyle} maxLength={80} />
-          </Field>
-          <Field label="Expiry">
-            <select value={expiresInDays} onChange={(event) => setExpiresInDays(Number(event.target.value))} className={inputClass} style={inputStyle}>
+        <div className={styles.accessForm}>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Token name</span>
+            <input
+              className={styles.input}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Release automation"
+              maxLength={80}
+            />
+          </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Expiry</span>
+            <select className={styles.select} value={expiresInDays} onChange={(event) => setExpiresInDays(Number(event.target.value))}>
               {EXPIRY_OPTIONS.map((days) => <option key={days} value={days}>{days} days</option>)}
             </select>
-          </Field>
-          <PrimaryButton disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
+          </label>
+          <button type="button" className={styles.primaryButton} disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
             <Plus size={13} /> {create.isPending ? "Creating…" : "Create token"}
-          </PrimaryButton>
+          </button>
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+
+        <div className={styles.scopeRow}>
           {SCOPE_OPTIONS.map((option) => (
-            <label key={option.id} className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+            <label key={option.id} className={styles.scopeLabel}>
               <input type="checkbox" checked={scopes.includes(option.id)} onChange={() => toggleScope(option.id)} />
               {option.label}
             </label>
@@ -156,37 +143,60 @@ export default function AgentAccessSettings() {
         </div>
 
         {tokens.isLoading && !tokens.data ? (
-          <div aria-busy="true" className="grid gap-2"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
-        ) : rows.length ? (
-          <div className="grid gap-2">
-            {rows.map((token) => (
-              <div key={token.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-card)" }}>
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">{token.name}</p>
-                  <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-                    <code>{token.token_prefix}…</code> · created {formatDateTimeShort(token.created_at)} · last used {formatDateTimeShort(token.last_used_at)} · expires {formatDateTimeShort(token.expires_at)}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {token.scopes.map((scope) => <StatusPill key={scope} tone="info">{scope}</StatusPill>)}
-                    {token.revoked_at ? <StatusPill tone="error">Revoked</StatusPill> : null}
-                  </div>
-                </div>
-                {token.revoked_at ? null : confirmRevoke === token.id ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-[var(--text-secondary)]">Revoke {token.name}?</span>
-                    <SecondaryButton disabled={revoke.isPending} style={{ color: "var(--status-error)" }} onClick={() => revoke.mutate(token.id)}>Confirm</SecondaryButton>
-                    <QuietButton onClick={() => setConfirmRevoke(null)}>Cancel</QuietButton>
-                  </div>
-                ) : (
-                  <SecondaryButton onClick={() => setConfirmRevoke(token.id)}><Trash2 size={13} /> Revoke</SecondaryButton>
-                )}
-              </div>
-            ))}
+          <div className="grid gap-2" aria-busy="true">
+            <div className={styles.skeletonBlock} style={{ height: 54 }} />
+            <div className={styles.skeletonBlock} style={{ height: 54 }} />
           </div>
         ) : (
-          <EmptyState title="No agent tokens" message="Create one when an external agent needs to work on your tasks." />
+          <>
+            <div className={styles.tokenList}>
+              {activeRows.length ? activeRows.map((token) => (
+                <div key={token.id} className={styles.tokenRow}>
+                  <div className={styles.tokenMain}>
+                    <p className={styles.tokenName}>{token.name}</p>
+                    <p className={styles.tokenMeta}>
+                      <code>{token.token_prefix}…</code> · created {formatDateTimeShort(token.created_at)} · last used {formatDateTimeShort(token.last_used_at)} · expires {formatDateTimeShort(token.expires_at)}
+                    </p>
+                    <div className={styles.tokenScopes}>
+                      {token.scopes.map((scope) => <span key={scope} className={styles.scopeChip}>{scope}</span>)}
+                    </div>
+                  </div>
+                  <div className={styles.tokenActions}>
+                    {confirmRevoke === token.id ? (
+                      <>
+                        <span className={styles.hint}>Revoke {token.name}?</span>
+                        <button type="button" className={`${styles.secondaryButton} ${styles.dangerButton}`} disabled={revoke.isPending} onClick={() => revoke.mutate(token.id)}>Confirm</button>
+                        <button type="button" className={styles.quietButton} onClick={() => setConfirmRevoke(null)}>Cancel</button>
+                      </>
+                    ) : (
+                      <button type="button" className={styles.secondaryButton} onClick={() => setConfirmRevoke(token.id)}>
+                        <Trash2 size={13} /> Revoke
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )) : (
+                <div className={styles.empty}>
+                  <strong className={styles.emptyTitle}>No active agent tokens</strong>
+                  <p className={styles.emptyCopy}>Create one when an external agent needs to work on your tasks.</p>
+                </div>
+              )}
+            </div>
+
+            {inactiveRows.length ? (
+              <details className={styles.revokedBlock}>
+                <summary>Inactive tokens ({inactiveRows.length})</summary>
+                {inactiveRows.map((token) => (
+                  <div key={token.id} className={styles.revokedRow}>
+                    <span><strong>{token.name}</strong> · <code>{token.token_prefix}…</code></span>
+                    <span>{token.revoked_at ? `revoked ${formatDateTimeShort(token.revoked_at)}` : `expired ${formatDateTimeShort(token.expires_at)}`}</span>
+                  </div>
+                ))}
+              </details>
+            ) : null}
+          </>
         )}
       </div>
-    </Panel>
+    </section>
   );
 }
