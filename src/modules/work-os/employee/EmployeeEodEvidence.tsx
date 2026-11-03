@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ScanSearch } from "lucide-react";
+import { ScanSearch } from "lucide-react";
 import { fetchJson, formatTime, type EodScreenshotGallery } from "./model";
-import { EmptyState, Panel, PanelHeader, PrimaryButton, Skeleton, StatusPill } from "./ui";
+import styles from "./EmployeeReview.module.css";
 
 function confidenceLabel(value: number) {
   if (!Number.isFinite(value)) return "unrated";
@@ -52,71 +52,85 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
     : "Checking recorded frames…";
 
   return (
-    <Panel>
-      <PanelHeader
-        icon={<Camera size={16} />}
-        title="Screenshot evidence"
-        meta={counts}
-        actions={
-          <PrimaryButton disabled={prepare.isPending || !data} onClick={() => prepare.mutate()}>
-            <ScanSearch size={14} /> {prepare.isPending ? "Analyzing…" : "Analyze waiting screenshots"}
-          </PrimaryButton>
-        }
-      />
-      {error ? <p className="px-5 py-3 text-[12px] leading-5" style={{ color: "var(--status-error)" }}>{(error as Error).message}</p> : null}
+    <section className={styles.section} aria-labelledby="review-frames-title">
+      <header className={styles.sectionHead}>
+        <div>
+          <h2 id="review-frames-title">Screenshot evidence</h2>
+          <p className={styles.sectionMeta}>{counts}</p>
+        </div>
+      </header>
+
+      <div className={styles.evidenceActions}>
+        <p className={styles.evidenceNote}>One analyzed line per recorded hour. Frames are observations, never proof of completion.</p>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={prepare.isPending || !data}
+          onClick={() => prepare.mutate()}
+        >
+          <ScanSearch size={14} /> {prepare.isPending ? "Analyzing…" : "Analyze waiting screenshots"}
+        </button>
+      </div>
+
+      {error ? <p className={styles.evidenceNote} style={{ color: "var(--status-error)" }}>{(error as Error).message}</p> : null}
+
       {gallery.isLoading && !data ? (
-        <div className="grid gap-2 px-5 py-4" aria-busy="true">
-          <Skeleton className="h-3 w-2/3" /><Skeleton className="h-3 w-1/2" />
+        <div className="grid gap-2 py-3" aria-busy="true">
+          <div className={styles.skeleton} style={{ width: "66%" }} />
+          <div className={styles.skeleton} style={{ width: "50%" }} />
         </div>
       ) : data && (hours.length || viewable.length) ? (
         <div>
           {hours.length ? (
-            <ul>
+            <ul className={styles.rows}>
               {hours.map((hour) => (
-                <li key={hour.hourStart} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                  <span className="w-14 shrink-0 text-[11px] font-bold tabular-nums text-[var(--text-tertiary)]">{hour.label}</span>
-                  <span className="min-w-0 flex-1 text-[12px] leading-5 text-[var(--text-secondary)]">
-                    {hour.summary}
-                    {!hour.synthesized ? <span className="ml-1 text-[11px] text-[var(--text-tertiary)]">(counts only — the summarizer was unavailable)</span> : null}
-                  </span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">{hour.frameCount} frame{hour.frameCount === 1 ? "" : "s"}</span>
+                <li key={hour.hourStart} className={styles.evidenceRow}>
+                  <span className={styles.evidenceTime}>{hour.label}</span>
+                  <div className={styles.evidenceBody}>
+                    <span className={styles.evidenceCopy}>{hour.summary}</span>
+                    <span className={styles.evidenceMeta}>
+                      {!hour.synthesized ? <span>Counts only — the summarizer was unavailable</span> : null}
+                      <span>{hour.frameCount} frame{hour.frameCount === 1 ? "" : "s"}</span>
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
           ) : null}
+
           {viewable.length ? (
-            <details className="border-t px-5 py-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-tertiary)]">
-                Analyzed frames · {viewable.length}
-              </summary>
-              <ul className="mt-2 grid gap-2">
+            <details className={styles.frames}>
+              <summary>Analyzed frames · {viewable.length}</summary>
+              <ul className={styles.rows}>
                 {viewable.map((frame) => (
-                  <li key={frame.summaryId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="w-14 shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">{formatTime(frame.capturedAt, timezone)}</span>
-                    {frame.visibleApp ? <span className="text-[11px] font-semibold text-[var(--text-secondary)]">{frame.visibleApp}</span> : null}
-                    <span className="min-w-0 flex-1 text-[12px] leading-5 text-[var(--text-secondary)]">{frame.summary}</span>
-                    <span className="text-[10.5px] text-[var(--text-tertiary)]" title={`confidence ${frame.confidence}`}>{confidenceLabel(frame.confidence)}</span>
+                  <li key={frame.summaryId} className={styles.evidenceRow}>
+                    <span className={styles.evidenceTime}>{formatTime(frame.capturedAt, timezone)}</span>
+                    <div className={styles.evidenceBody}>
+                      {frame.visibleApp ? <span className={styles.evidenceTitle}>{frame.visibleApp}</span> : null}
+                      <span className={styles.evidenceCopy}>{frame.summary}</span>
+                      <span className={styles.evidenceMeta} title={`confidence ${frame.confidence}`}>{confidenceLabel(frame.confidence)}</span>
+                    </div>
                   </li>
                 ))}
               </ul>
             </details>
           ) : null}
+
           {data.pending > 0 ? (
-            <p className="border-t px-5 py-3 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }} role="status">
+            <p className={styles.evidenceNote} role="status">
               {data.pending} frame{data.pending === 1 ? " is" : "s are"} still being analyzed. This list refreshes automatically.
             </p>
           ) : null}
         </div>
       ) : (
-        <EmptyState
-          icon={<Camera size={20} />}
-          title="No frames recorded for this day"
-          message="Worktivity screenshots appear here once capture has observations for the day."
-          action={data && (data.pending > 0 || data.total > 0)
-            ? <StatusPill tone="info">{data.pending > 0 ? `${data.pending} pending analysis` : `${data.total} recorded`}</StatusPill>
-            : undefined}
-        />
+        <div className={styles.empty}>
+          <strong className={styles.emptyTitle}>No frames recorded for this day</strong>
+          <p className={styles.emptyCopy}>Worktivity screenshots appear here once capture has observations for the day.</p>
+          {data && (data.pending > 0 || data.total > 0) ? (
+            <span className={styles.status}>{data.pending > 0 ? `${data.pending} pending analysis` : `${data.total} recorded`}</span>
+          ) : null}
+        </div>
       )}
-    </Panel>
+    </section>
   );
 }

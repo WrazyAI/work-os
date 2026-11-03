@@ -1,27 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Check,
-  ClipboardList,
-  FileCheck2,
-  FileSearch,
-  RefreshCw,
-  Send,
-  Sparkles,
-  Video,
-  Wand2,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Check, FileCheck2, Send, Sparkles, Video, Wand2, X } from "lucide-react";
 import EmployeeEodEvidence from "./EmployeeEodEvidence";
 import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { useNow } from "./useNow";
-import { HttpError, fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
+import { HttpError, fetchJson, calendarDateLabel, longDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
 import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
 import {
   EOD_SHIFT_OPEN_LINK_LABEL,
@@ -32,23 +19,8 @@ import {
   eodDraftBlocked,
   eodDraftWindowOpen,
 } from "@/lib/work-os-shift-gate";
-import {
-  EmptyState,
-  IconButton,
-  Masthead,
-  Notice,
-  Panel,
-  PanelHeader,
-  PrimaryButton,
-  QuietButton,
-  SecondaryButton,
-  Skeleton,
-  StatusPill,
-  SyncChip,
-  inlineInputClass,
-  inputClass,
-  inputStyle,
-} from "./ui";
+import { SyncChip } from "./ui";
+import styles from "./EmployeeReview.module.css";
 
 const EOD_STATUS_META: Record<OutstandingEodDay["status"], { label: string; tone: "open" | "overdue" | "error" }> = {
   no_draft: { label: "Needs draft", tone: "overdue" },
@@ -68,13 +40,17 @@ function outstandingRowMeta(day: OutstandingEodDay) {
   return [observedLabel(day.observedMinutes), outcomes].filter(Boolean).join(" · ");
 }
 
+function eodStatusLabel(value: string) {
+  return value ? value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase()) : "Not drafted";
+}
+
 function proposalSummary(proposal: AnyRow) {
   const change = proposal.proposed_change ?? {};
   return change.name || change.title || change.summary || change.progress || change.description || proposal.input_text;
 }
 
 export default function EmployeeReview() {
-  const { day, refresh, refreshAttendance, sync, syncing } = useEmployeeDay();
+  const { day, refresh, sync, syncing } = useEmployeeDay();
   const outstanding = useOutstandingEods();
   const now = useNow();
   const [selectedDate, setSelectedDate] = useState("");
@@ -307,11 +283,9 @@ export default function EmployeeReview() {
      employee to the dashboard, where the Windows Companion closes the
      shift. */
   const shiftOpenPrompt = (prefix: string, suffix: string) => (
-    <p className="max-w-[560px] text-[12px] leading-5 text-[var(--text-secondary)]">
+    <p className={styles.recordNote}>
       {prefix}{" "}
-      <Link href="/work-os/today" className="font-semibold underline underline-offset-2" style={{ color: "var(--accent-deep)" }}>
-        {EOD_SHIFT_OPEN_LINK_LABEL}
-      </Link>
+      <Link href="/work-os/today" className={styles.inlineLink}>{EOD_SHIFT_OPEN_LINK_LABEL}</Link>
       {suffix}
     </p>
   );
@@ -319,95 +293,98 @@ export default function EmployeeReview() {
   const eodPanel = (() => {
     if (eodConfirmation) {
       return (
-        <div className="grid gap-2" role="status">
-          <div className="flex items-center">
-            <QuietButton onClick={() => setEodConfirmation(false)} className="!px-2" aria-label="Back to all EODs"><ArrowLeft size={14} /> All EODs</QuietButton>
-          </div>
-          <div className="grid justify-items-center gap-1 pb-2 pt-1 text-center">
-            <CheckedMoment className="!h-[176px] !w-[176px]" />
-            <strong className="text-[14px] font-semibold text-[var(--text-primary)]">EOD submitted</strong>
-            <p className="max-w-[340px] text-[12px] leading-5 text-[var(--text-tertiary)]">
-              {historical ? `Your report for ${calendarDateLabel(selectedDate)} is with your manager.` : "Your report is with your manager. You are done for today."}
-            </p>
-          </div>
+        <div className={styles.confirm} role="status">
+          <CheckedMoment className="!h-[168px] !w-[168px]" />
+          <strong className={styles.confirmTitle}>EOD submitted</strong>
+          <p className={styles.confirmCopy}>
+            {historical ? `Your report for ${calendarDateLabel(selectedDate)} is with your manager.` : "Your report is with your manager. You are done for today."}
+          </p>
+          <button type="button" className={styles.secondaryButton} onClick={() => setEodConfirmation(false)}>
+            <ArrowLeft size={13} /> All EODs
+          </button>
         </div>
       );
     }
     if (historical && selectedDay.isLoading && !selectedDay.data) {
       return (
-        <div className="grid gap-3 px-5 py-5" aria-busy="true">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-40 w-full" />
+        <div className="grid gap-3" aria-busy="true">
+          <div className={styles.skeleton} style={{ width: "40%" }} />
+          <div className={styles.skeletonBlock} style={{ height: 300 }} />
         </div>
       );
     }
     if (historical && selectedDay.error && !selectedDay.data) {
       return (
-        <EmptyState
-          title="That day could not be loaded"
-          message={(selectedDay.error as Error).message}
-          action={<SecondaryButton onClick={() => void selectedDay.refetch()}>Try again</SecondaryButton>}
-        />
+        <div className={styles.empty}>
+          <strong className={styles.emptyTitle}>That day could not be loaded</strong>
+          <p className={styles.emptyCopy}>{(selectedDay.error as Error).message}</p>
+          <button type="button" className={styles.secondaryButton} onClick={() => void selectedDay.refetch()}>Try again</button>
+        </div>
       );
     }
     if (eodReport) {
       return (
-        <>
-          {eodNotice ? <Notice tone={eodNotice.tone} className="mb-3">{eodNotice.text}</Notice> : null}
-          {shiftBlocked && !editorLocked ? <div className="mb-3">{shiftOpenPrompt(EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX.webRebuild)}</div> : null}
+        <div className={styles.editorWrap}>
+          {eodNotice ? (
+            <div className={`${styles.notice} ${eodNotice.tone === "warn" ? styles.noticeWarn : eodNotice.tone === "err" ? styles.noticeErr : ""}`}>
+              {eodNotice.text}
+            </div>
+          ) : null}
+          {shiftBlocked && !editorLocked ? <div className={styles.notice}>{shiftOpenPrompt(EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX.webRebuild)}</div> : null}
           <textarea
             value={reportMarkdown}
             onChange={(event) => setReportMarkdown(event.target.value)}
             rows={16}
-            className={`${inputClass} resize-y`}
-            style={{ ...inputStyle, minHeight: 280 }}
+            className={styles.editor}
             disabled={editorLocked}
             aria-label="EOD report draft"
           />
+
           {!editorLocked ? (
-            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">Ask the assistant to adjust this draft</span>
-                <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
+            <div className={styles.disclosure}>
+              <div className={styles.disclosureHead}>
+                <span className={styles.disclosureLabel}>Ask the assistant to adjust this draft</span>
+                <button type="button" className={styles.disclosureToggle} onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
                   {refineOpen ? "Close" : "Refine draft"}
                 </button>
               </div>
               {refineOpen ? (
-                <div className="mt-2 flex flex-wrap items-start gap-2">
+                <div className={`${styles.disclosureBody} ${styles.inlineRow}`}>
                   <input
                     value={refineInput}
                     onChange={(event) => setRefineInput(event.target.value)}
                     placeholder="e.g. Lead with the settlement outcome and drop the stale ticket."
-                    className={`${inputClass} min-w-[220px] flex-1`}
-                    style={inputStyle}
+                    className={`${styles.input} ${styles.grow}`}
                     aria-label="EOD refinement request"
                   />
-                  <SecondaryButton
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
                     disabled={!refineInput.trim() || assistantDraft.isPending}
                     onClick={() => assistantDraft.mutate({ mode: "refine", date: eodDay?.shiftDate ?? "", draft: stripBottleneckSection(reportMarkdown), bottleneck: extractBottleneckSection(reportMarkdown), feedback: refineInput.trim() })}
                   >
                     <Wand2 size={13} /> {assistantDraft.isPending ? "Refining…" : "Apply refinement"}
-                  </SecondaryButton>
+                  </button>
                 </div>
               ) : null}
             </div>
           ) : null}
+
           {!editorLocked && day.data?.access?.featureFlags?.loom_updates === true ? (
-            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">Recorded a Loom for this day?</span>
-                <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setLoomOpen((value) => !value); setEodNotice(null); }}>
+            <div className={styles.disclosure}>
+              <div className={styles.disclosureHead}>
+                <span className={styles.disclosureLabel}>Recorded a Loom for this day?</span>
+                <button type="button" className={styles.disclosureToggle} onClick={() => { setLoomOpen((value) => !value); setEodNotice(null); }}>
                   {loomOpen ? "Close" : "Analyze a Loom"}
                 </button>
               </div>
               {loomOpen ? (
-                <div className="mt-2 grid gap-2">
+                <div className={styles.disclosureBody}>
                   <input
                     value={loomUrl}
                     onChange={(event) => setLoomUrl(event.target.value)}
                     placeholder="https://www.loom.com/share/…"
-                    className={inputClass}
-                    style={inputStyle}
+                    className={styles.input}
                     aria-label="Loom share link"
                   />
                   <textarea
@@ -416,177 +393,213 @@ export default function EmployeeReview() {
                     rows={3}
                     maxLength={50000}
                     placeholder="Paste the transcript when Loom has none (optional)."
-                    className={`${inputClass} resize-y`}
-                    style={inputStyle}
+                    className={styles.textarea}
                     aria-label="Loom transcript"
                   />
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">Draft context only — it never files an update, and a recording from another day is refused.</p>
-                    <SecondaryButton
+                  <div className={styles.inlineRow}>
+                    <p className={`${styles.recordNote} ${styles.grow}`}>Draft context only — it never files an update, and a recording from another day is refused.</p>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
                       disabled={!loomUrl.trim() || assistantDraft.isPending}
                       onClick={() => assistantDraft.mutate({ mode: "loom", date: eodDay?.shiftDate ?? "", loom: { url: loomUrl.trim(), transcript: loomTranscript.trim() || undefined } })}
                     >
                       <Video size={13} /> {assistantDraft.isPending ? "Analyzing…" : "Rebuild draft"}
-                    </SecondaryButton>
+                    </button>
                   </div>
                 </div>
               ) : null}
             </div>
           ) : null}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+
+          <div className={styles.editorFoot}>
+            <p className={styles.editorNote}>
               {status === "pending_review" ? "Submitted — waiting for review."
                 : status === "approved" ? "Approved."
                   : status === "rejected" ? "Changes were requested. Update the report and resubmit it."
                     : "Nothing is filed until you submit."}
               {draftSource ? ` · ${draftSource === "ai" ? "Assistant draft" : "Standard draft"}` : ""}
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className={styles.editorActions}>
               {!editorLocked && !shiftBlocked ? (
-                <SecondaryButton
-                  disabled={redraftEod.isPending}
-                  onClick={() => redraftEod.mutate()}
-                >
+                <button type="button" className={styles.secondaryButton} disabled={redraftEod.isPending} onClick={() => redraftEod.mutate()}>
                   <Sparkles size={13} /> {redraftEod.isPending ? "Redrafting…" : "Redraft with assistant"}
-                </SecondaryButton>
+                </button>
               ) : null}
-              <PrimaryButton
+              <button
+                type="button"
+                className={styles.primaryButton}
                 disabled={!reportMarkdown.trim() || editorLocked || submitEod.isPending}
                 onClick={() => submitEod.mutate()}
               >
                 <Send size={14} /> {submitEod.isPending ? "Submitting…" : submitLabel}
-              </PrimaryButton>
+              </button>
             </div>
           </div>
-        </>
+        </div>
       );
     }
     if (shiftBlocked) {
       return (
-        <div className="grid gap-2">
+        <div className={styles.record}>
           {shiftOpenPrompt(EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX.web)}
-          <p className="text-[11px] text-[var(--text-tertiary)]">Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+          <p className={styles.recordNote}>Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
         </div>
       );
     }
     return (
-      <div className="flex flex-wrap items-center gap-3">
-        <PrimaryButton
-          disabled={draftEod.isPending || assistantDraft.isPending || (historical && !selectedDay.data)}
-          onClick={() => draftEod.mutate()}
-        >
-          <FileCheck2 size={14} /> {draftEod.isPending || assistantDraft.isPending ? "Drafting…" : historical ? `Draft EOD for ${calendarDateLabel(selectedDate)}` : "Draft EOD"}
-        </PrimaryButton>
-        <p className="text-[11px] text-[var(--text-tertiary)]">Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+      <div className={styles.record}>
+        <div className={styles.facts}>
+          <div className={styles.fact}>
+            <span className={styles.factValue}>{eodDay?.signals?.completedTasks ?? 0}</span>
+            <span className={styles.factLabel}>Completed</span>
+            <span className={styles.factSub}>task outcomes today</span>
+          </div>
+          <div className={styles.fact}>
+            <span className={styles.factValue}>{eodDay?.signals?.employeeUpdates ?? 0}</span>
+            <span className={styles.factLabel}>Updates</span>
+            <span className={styles.factSub}>recorded by you</span>
+          </div>
+          <div className={styles.fact}>
+            <span className={styles.factValue}>{eodDay?.signals?.outputEvidence ?? 0}</span>
+            <span className={styles.factLabel}>Evidence</span>
+            <span className={styles.factSub}>output records</span>
+          </div>
+        </div>
+        <div className={styles.recordAction}>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            disabled={draftEod.isPending || assistantDraft.isPending || (historical && !selectedDay.data)}
+            onClick={() => draftEod.mutate()}
+          >
+            <FileCheck2 size={14} /> {draftEod.isPending || assistantDraft.isPending ? "Drafting…" : historical ? `Draft EOD for ${calendarDateLabel(selectedDate)}` : "Draft EOD"}
+          </button>
+          <p className={styles.recordNote}>Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+        </div>
       </div>
     );
   })();
 
+  const statusLabel = eodStatusLabel(status);
+  const statusClass = status === "approved" ? styles.statusApproved : status === "rejected" ? styles.statusRejected : status === "pending_review" ? styles.statusSubmitted : "";
+
   return (
-    <div id="employee-eod-panel">
-      <Masthead
-        eyebrow="Work OS"
-        title="Review"
-        meta={historical ? `Drafting for ${calendarDateLabel(selectedDate)} · historical records are read-only outside the report.` : "Your end-of-day report, proposed changes, and recorded evidence."}
-        actions={
-          <>
+    <div className={styles.page} id="employee-eod-panel">
+      <header className={`${styles.masthead} ${styles.reveal}`} style={{ "--delay": "0ms" } as CSSProperties}>
+        <div className={styles.metaRow}><span>{selectedDate ? longDateLabel(selectedDate) : "Loading your review"}</span></div>
+        <div className={styles.titleRow}>
+          <h1>Review</h1>
+          <p className={styles.titleMeta}>
+            {historical ? `Drafting for ${calendarDateLabel(selectedDate)} · historical records are read-only outside the report.` : "Your end-of-day report, proposed changes, and recorded evidence."}
+          </p>
+          <div className={styles.utilities}>
             <input
               type="date"
               value={selectedDate}
               max={day.data?.shiftDate ?? undefined}
               onChange={(event) => setSelectedDate(event.target.value)}
               aria-label="Report date"
-              className={`${inlineInputClass} w-auto`}
-              style={inputStyle}
+              className={styles.dateField}
             />
-            {historical ? <SecondaryButton onClick={() => setSelectedDate(day.data?.shiftDate ?? "")}>Back to today</SecondaryButton> : null}
-            <IconButton label="Refresh review" onClick={() => { void refreshAttendance().then(refresh); }} disabled={day.isFetching || selectedDay.isFetching}>
-              <RefreshCw size={15} className={day.isFetching || selectedDay.isFetching ? "animate-spin" : undefined} />
-            </IconButton>
-            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
-          </>
-        }
-      />
+            {historical ? (
+              <button type="button" className={styles.secondaryButton} onClick={() => setSelectedDate(day.data?.shiftDate ?? "")}>Back to today</button>
+            ) : null}
+            <SyncChip compact sync={day.data?.niftySync} syncing={syncing || day.isFetching || selectedDay.isFetching} onSync={() => sync.mutate()} />
+          </div>
+        </div>
+      </header>
 
-      {error ? <Notice tone="err" className="mb-5">{(error as Error).message}</Notice> : null}
+      {error ? <div className={`${styles.notice} ${styles.noticeErr}`}>{(error as Error).message}</div> : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid content-start gap-5">
-          <Panel>
-            <div id="employee-eod-editor">
-              <PanelHeader
-                icon={<FileCheck2 size={16} />}
-                title="End-of-day report"
-                meta={historical ? `Report for ${calendarDateLabel(selectedDate)}.` : "One report per workday."}
-                actions={<StatusPill tone={status === "approved" ? "done" : status === "rejected" ? "error" : status === "pending_review" ? "info" : "open"}>{status ? status.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase()) : "Not drafted"}</StatusPill>}
-              />
+      <div className={styles.grid}>
+        <div className={styles.main}>
+          <section className={`${styles.surface} ${styles.reveal}`} id="employee-eod-editor" style={{ "--delay": "80ms" } as CSSProperties} aria-labelledby="review-eod-title">
+            <div className={styles.surfaceHead}>
+              <div>
+                <span className={styles.eyebrow}>End of day</span>
+                <h2 className={styles.surfaceTitle} id="review-eod-title">
+                  {historical ? `Report for ${calendarDateLabel(selectedDate)}` : "Today's report"}
+                </h2>
+                <p className={styles.surfaceMeta}>
+                  {historical ? "The recorded day stays read-only outside the report." : "One report per workday. The record is drafted from your day; nothing is filed until you submit it."}
+                </p>
+              </div>
+              <span className={`${styles.status} ${statusClass}`}>{statusLabel}</span>
             </div>
-            <div className="px-5 py-5">{eodPanel}</div>
-          </Panel>
+            <div className={styles.surfaceBody}>{eodPanel}</div>
+          </section>
 
           {!historical && proposals.length ? (
-            <Panel>
-              <PanelHeader
-                icon={<ClipboardList size={16} />}
-                title="Review proposed changes"
-                meta="Otto proposed these from your updates. Nothing is applied until you approve it."
-              />
-              <ul>
+            <section className={`${styles.section} ${styles.reveal}`} style={{ "--delay": "160ms" } as CSSProperties} aria-labelledby="review-proposals-title">
+              <header className={styles.sectionHead}>
+                <div>
+                  <h2 id="review-proposals-title">Proposed changes</h2>
+                  <p className={styles.sectionMeta}>Otto proposed these from your updates. Nothing is applied until you approve it.</p>
+                </div>
+                <span className={styles.sectionCount}>{proposals.length}</span>
+              </header>
+              <ul className={styles.rows}>
                 {proposals.map((proposal) => (
-                  <li key={proposal.id} className="flex flex-wrap items-start gap-3 border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">{String(proposal.operation ?? "").replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())}</p>
-                      <p className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{proposal.task?.title || proposal.before_state?.title || proposalSummary(proposal)}</p>
-                      {proposal.task?.title || proposal.before_state?.title ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{proposalSummary(proposal)}</p> : null}
-                      {proposal.failure_reason ? <p className="mt-2 text-[12px]" style={{ color: "var(--status-warn)" }}>{proposal.failure_reason}</p> : null}
+                  <li key={proposal.id} className={styles.row}>
+                    <div className={styles.rowMain}>
+                      <span className={styles.rowKicker}>{String(proposal.operation ?? "").replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())}</span>
+                      <span className={styles.rowTitle}>{proposal.task?.title || proposal.before_state?.title || proposalSummary(proposal)}</span>
+                      {proposal.task?.title || proposal.before_state?.title ? <p className={styles.rowCopy}>{proposalSummary(proposal)}</p> : null}
+                      {proposal.failure_reason ? <p className={styles.rowFailure}>{proposal.failure_reason}</p> : null}
                     </div>
-                    <div className="flex gap-2">
-                      <SecondaryButton aria-label="Reject proposal" onClick={() => review.mutate({ id: proposal.id, decision: "reject" })} disabled={review.isPending}>
+                    <div className={styles.rowActions}>
+                      <button type="button" className={styles.secondaryButton} aria-label="Reject proposal" onClick={() => review.mutate({ id: proposal.id, decision: "reject" })} disabled={review.isPending}>
                         <X size={14} /> Reject
-                      </SecondaryButton>
+                      </button>
                       {proposal.status !== "stale" ? (
-                        <PrimaryButton aria-label="Accept proposal" onClick={() => review.mutate({ id: proposal.id, decision: "accept" })} disabled={review.isPending}>
+                        <button type="button" className={styles.primaryButton} aria-label="Accept proposal" onClick={() => review.mutate({ id: proposal.id, decision: "accept" })} disabled={review.isPending}>
                           <Check size={14} /> Approve
-                        </PrimaryButton>
+                        </button>
                       ) : null}
                     </div>
                   </li>
                 ))}
               </ul>
-            </Panel>
+            </section>
           ) : null}
 
-          <Panel>
-            <PanelHeader
-              icon={<FileSearch size={16} />}
-              title="Recorded evidence"
-              meta="Activity context sampled by Worktivity. Evidence never proves productivity or completion."
-            />
+          <section className={`${styles.section} ${styles.reveal}`} style={{ "--delay": "220ms" } as CSSProperties} aria-labelledby="review-evidence-title">
+            <header className={styles.sectionHead}>
+              <div>
+                <h2 id="review-evidence-title">Recorded evidence</h2>
+                <p className={styles.sectionMeta}>Activity context sampled by Worktivity. Evidence never proves productivity or completion.</p>
+              </div>
+              <span className={styles.sectionCount}>{evidence.length}</span>
+            </header>
             {evidence.length ? (
-              <ul>
+              <ul className={styles.rows}>
                 {evidence.map((item) => (
-                  <li key={item.id} className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[12px] font-semibold text-[var(--text-primary)]">{item.title}</p>
-                      <span className="text-[10.5px] text-[var(--text-tertiary)]">{item.source === "loom" ? "Loom recording" : item.source}</span>
+                  <li key={item.id} className={styles.row}>
+                    <div className={styles.rowMain}>
+                      <span className={styles.rowKicker}>{item.source === "loom" ? "Loom recording" : item.source}</span>
+                      <span className={styles.rowTitle}>{item.title}</span>
+                      {item.summary ? <p className={styles.rowCopy}>{item.summary}</p> : null}
+                      {item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer" className={styles.rowCopy} style={{ textDecoration: "underline", textUnderlineOffset: 3 }}>Open recording</a> : null}
                     </div>
-                    {item.summary ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
-                    {item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-[11px] font-semibold" style={{ color: "var(--accent-deep)" }}>Open recording</a> : null}
-                    <div className="mt-2 flex items-center gap-3">
+                    <div className={styles.rowActions}>
+                      {item.event?.correction_status === "disputed" ? <span className={styles.status} style={{ color: "var(--status-error)" }}>Disputed</span> : null}
                       {item.evidence_event_id && item.event?.correction_status !== "disputed" ? (
-                        <button type="button" disabled={disputeEvidence.isPending} onClick={() => disputeEvidence.mutate(item.evidence_event_id)} className="text-[11px] font-semibold disabled:opacity-50" style={{ color: "var(--status-warn)" }}>
+                        <button type="button" className={styles.dispute} disabled={disputeEvidence.isPending} onClick={() => disputeEvidence.mutate(item.evidence_event_id)}>
                           Dispute this evidence
                         </button>
                       ) : null}
-                      {item.event?.correction_status === "disputed" ? <StatusPill tone="overdue">Disputed</StatusPill> : null}
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <EmptyState icon={<FileSearch size={20} />} title="No evidence recorded for this day" message="Sampled activity shows up here once Worktivity has observations." />
+              <div className={styles.empty}>
+                <strong className={styles.emptyTitle}>No evidence recorded for this day</strong>
+                <p className={styles.emptyCopy}>Sampled activity shows up here once Worktivity has observations.</p>
+              </div>
             )}
-          </Panel>
+          </section>
 
           <EmployeeEodEvidence
             date={selectedDate}
@@ -595,54 +608,61 @@ export default function EmployeeReview() {
           />
         </div>
 
-        <aside className="grid content-start gap-5">
-          <Panel>
-            <PanelHeader
-              icon={<AlertTriangle size={16} />}
-              title="Outstanding EODs"
-              meta={outstanding.data?.count ? `${outstanding.data.count} past day${outstanding.data.count === 1 ? "" : "s"} without a submitted report.` : "Every past workday has a report."}
-            />
+        <aside className={`${styles.side} ${styles.reveal}`} style={{ "--delay": "280ms" } as CSSProperties}>
+          <section className={styles.rail} aria-labelledby="review-outstanding-title">
+            <header className={styles.railHead}>
+              <h2 id="review-outstanding-title">Outstanding EODs</h2>
+              <span className={styles.railCount}>{outstanding.data?.count ?? 0}</span>
+            </header>
+            <p className={styles.railCopy}>
+              {outstanding.data?.count ? `${outstanding.data.count} past day${outstanding.data.count === 1 ? "" : "s"} without a submitted report.` : "Every past workday has a report."}
+            </p>
             {outstanding.isLoading && !outstanding.data ? (
-              <div className="grid gap-3 px-5 py-4" aria-busy="true">
-                <Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-44" /><Skeleton className="h-4 w-36" />
+              <div className="grid gap-2 py-3" aria-busy="true">
+                <div className={styles.skeleton} style={{ width: "60%" }} />
+                <div className={styles.skeleton} style={{ width: "80%" }} />
+                <div className={styles.skeleton} style={{ width: "50%" }} />
               </div>
             ) : outstanding.error && !outstandingDays.length ? (
-              <EmptyState
-                title="Could not load outstanding EODs"
-                message={(outstanding.error as Error).message}
-                action={<SecondaryButton onClick={() => void outstanding.refetch()}>Try again</SecondaryButton>}
-              />
+              <div className={styles.empty}>
+                <strong className={styles.emptyTitle}>Could not load outstanding EODs</strong>
+                <p className={styles.emptyCopy}>{(outstanding.error as Error).message}</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => void outstanding.refetch()}>Try again</button>
+              </div>
             ) : outstandingDays.length ? (
-              <ul>
+              <ul className={styles.rows}>
                 {outstandingDays.map((outstandingDay) => {
                   const meta = EOD_STATUS_META[outstandingDay.status];
                   return (
-                    <li key={outstandingDay.date} className="border-b last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+                    <li key={outstandingDay.date}>
                       <button
                         type="button"
+                        className={styles.dayRow}
                         onClick={() => {
                           setSelectedDate(outstandingDay.date);
                           window.requestAnimationFrame(() => document.getElementById("employee-eod-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
                         }}
-                        className="flex w-full items-start justify-between gap-3 px-5 py-3 text-left transition hover:bg-[var(--bg-tertiary)]"
                       >
                         <span className="min-w-0">
-                          <span className="block text-[12px] font-semibold text-[var(--text-primary)]">{calendarDateLabel(outstandingDay.date)}</span>
-                          <span className="mt-0.5 block text-[11px] text-[var(--text-tertiary)]">{outstandingRowMeta(outstandingDay) || "Recorded workday"}</span>
+                          <span className={styles.dayDate}>{calendarDateLabel(outstandingDay.date)}</span>
+                          <span className={styles.dayMeta}>{outstandingRowMeta(outstandingDay) || "Recorded workday"}</span>
                         </span>
-                        <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+                        <span className={styles.dayStatus} style={{ color: meta.tone === "error" ? "var(--status-error)" : meta.tone === "open" ? "var(--text-tertiary)" : "var(--status-warn)" }}>{meta.label}</span>
                       </button>
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <EmptyState icon={<Check size={18} />} title="You’re caught up" message="No past workday is missing a submitted EOD." />
+              <div className={styles.empty}>
+                <strong className={styles.emptyTitle}>You’re caught up</strong>
+                <p className={styles.emptyCopy}>No past workday is missing a submitted EOD.</p>
+              </div>
             )}
-          </Panel>
+          </section>
 
           {historical ? (
-            <Notice tone="info">Historical workspace: tasks and evidence are read-only, and the report editor drafts against {calendarDateLabel(selectedDate)}.</Notice>
+            <p className={styles.historical}>Historical workspace: tasks and evidence are read-only, and the report editor drafts against {calendarDateLabel(selectedDate)}.</p>
           ) : null}
         </aside>
       </div>
