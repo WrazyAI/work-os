@@ -24,6 +24,18 @@
       "type": "feature",
       "summary": "Administrators can assign tasks and manage them from the organization task record.",
       "verification": "cd736e84, 5f7c36e8: assignment scope and task-action review fixes; recorded in Unreleased changelog."
+    },
+    {
+      "id": "task-focus-details",
+      "type": "feature",
+      "summary": "Open the focus band on Tasks to read the full goal for the selected day.",
+      "verification": "18d1c23a, 1772766d: full Work OS suite 981 passed / 0 failed / 11 skipped; typecheck; companion build; rendered 1024px and 390px focus-dialog checks."
+    },
+    {
+      "id": "premium-dashboard-command-surface",
+      "type": "feature",
+      "summary": "Today uses the web workspace's premium command surface, with a weekly record and reliability instruments beside the task list.",
+      "verification": "fa43cbea, c4a8f2b6, 5bcebb53: full Work OS suite 981 passed / 0 failed / 11 skipped; typecheck; companion build; rendered 1280px, 1024px, and 390px checks for active, pre-shift, empty, dense, focus, tooltip, and reduced-motion states."
     }
   ],
   "emergency": null
