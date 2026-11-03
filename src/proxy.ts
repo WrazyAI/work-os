@@ -60,6 +60,9 @@ function isPublic(pathname: string): boolean {
     || pathname === "/work-os/welcome/tutorials"
     || /^\/work-os\/welcome\/tutorials\/[a-z0-9][a-z0-9-]{1,63}$/.test(pathname)
   ) return true;
+  // Public installer bytes. The route resolves the newest published release and
+  // fails closed; updater grants and the release API stay private.
+  if (/^\/downloads\/work-os\/(windows|macos|linux)(\/checksums)?$/.test(pathname)) return true;
   if (pathname === "/landing/task-workflow.mp4" || pathname === "/landing/task-workflow.vtt") return true;
   // Dev-only fixture surface for rendered QA; NODE_ENV is inlined at build
   // time, so this branch cannot exist in a production bundle.

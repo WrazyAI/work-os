@@ -1,15 +1,24 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  MACOS_INSTALLER_ASSET,
+  MACOS_UPDATER_ASSET,
+  WINDOWS_CHECKSUM_ASSET,
+  WINDOWS_INSTALLER_ASSET,
+  WINDOWS_INSTALLER_SIGNATURE_ASSET,
+} from "./work-os-installer-assets";
+
+export {
+  MACOS_INSTALLER_ASSET,
+  MACOS_UPDATER_ASSET,
+  WINDOWS_CHECKSUM_ASSET,
+  WINDOWS_INSTALLER_ASSET,
+  WINDOWS_INSTALLER_SIGNATURE_ASSET,
+};
 
 const GITHUB_API = "https://api.github.com";
 const REPOSITORY = "WrazyAI/work-os";
 const INTERNAL_TAG_PREFIX = "work-os-companion-internal-v";
 const DOWNLOAD_GRANT_TTL_SECONDS = 10 * 60;
-
-export const WINDOWS_INSTALLER_ASSET = "Work-OS-Companion-Setup-UNSIGNED.exe";
-export const WINDOWS_INSTALLER_SIGNATURE_ASSET = `${WINDOWS_INSTALLER_ASSET}.sig`;
-export const WINDOWS_CHECKSUM_ASSET = "SHA256SUMS.txt";
-export const MACOS_INSTALLER_ASSET = "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg";
-export const MACOS_UPDATER_ASSET = "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz";
 export type InternalReleasePlatform = "windows-x86_64" | "darwin-aarch64" | "darwin-x86_64";
 type UpdaterAsset = typeof WINDOWS_INSTALLER_ASSET | typeof MACOS_UPDATER_ASSET;
 
