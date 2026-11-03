@@ -169,14 +169,16 @@ export default function AdminEvidencePage() {
   }, [evidence.data]);
 
   const visibleGroups = useMemo(() => {
+    const result: Array<readonly [string, EvidenceRow[], number]> = [];
     let remaining = visibleCount;
-    return grouped
-      .map(([date, rows]) => {
-        const slice = rows.slice(0, Math.max(0, remaining));
-        remaining -= slice.length;
-        return [date, slice, rows.length] as const;
-      })
-      .filter(([, rows]) => rows.length);
+    for (const [date, rows] of grouped) {
+      if (remaining <= 0) break;
+      const slice = rows.slice(0, Math.max(0, remaining));
+      if (!slice.length) continue;
+      result.push([date, slice, rows.length] as const);
+      remaining -= slice.length;
+    }
+    return result;
   }, [grouped, visibleCount]);
 
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
