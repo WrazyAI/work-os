@@ -222,6 +222,18 @@ function withoutBottleneck(markdown: string) {
   return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
 }
 
+/** The refinement model only sees the brief. The full record is reattached
+ * unchanged, so a brief edit can never delete the appendix. */
+export function splitEodBrief(markdown: string): { brief: string; appendix: string | null } {
+  const match = /(?:^|\n)(##\s*Full record\s*\n[\s\S]*)$/i.exec(markdown);
+  if (!match) return { brief: markdown.trimEnd(), appendix: null };
+  return { brief: markdown.slice(0, match.index).trimEnd(), appendix: match[1].trim() };
+}
+
+function withoutFullRecord(markdown: string): string {
+  return markdown.replace(/(?:^|\n)##\s*Full record\s*\n[\s\S]*$/i, "").trimEnd();
+}
+
 function normalizedAppendix(value: string): string {
   return value.replace(/\r\n/g, "\n").split("\n").map((line) => line.trimEnd()).join("\n").trim();
 }
@@ -248,14 +260,16 @@ export function preservesEodStructure(original: string, refined: string): boolea
 export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string, annotations: EodAnnotation[] = []): Promise<EodDraftResult> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
+  const original = withoutBottleneck(draft);
+  const { brief, appendix } = splitEodBrief(original);
   try {
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(aiRequestBody(EOD_MODEL, {
         messages: [
-          { role: "system", content: "You revise a Work OS EOD report from the employee's feedback. Preserve the document's structure and section headings, keep the manager brief concise, and keep the full record complete. Apply the feedback, preserve truthful task and progress statements, and never add a Bottleneck section. Do not invent completion, evidence, timing, or outcomes." },
-          { role: "user", content: `Known Work OS facts:\n${buildEodFactBlock(grounding)}\n\nCurrent report:\n${withoutBottleneck(draft)}\n\nEmployee feedback:\n${feedback.trim() || "(none)"}\n${annotations.length ? `\nEmployee annotations on the draft:\n${formatEodAnnotations(annotations)}\n` : ""}\nReturn only the revised markdown report. Do not include a Bottleneck heading or content. Keep the existing headings and do not add facts that are absent from the report or the facts above.` },
+          { role: "system", content: "You revise the brief of a Work OS EOD report from the employee's feedback. Preserve the brief's section headings, keep the manager brief concise, and keep every recorded fact truthful. The full record is preserved separately; never write a Full record section. Apply the feedback, preserve truthful task and progress statements, and never add a Bottleneck section. Do not invent completion, evidence, timing, or outcomes." },
+          { role: "user", content: `Known Work OS facts:\n${buildEodFactBlock(grounding)}\n\nCurrent report brief:\n${brief}\n\nEmployee feedback:\n${feedback.trim() || "(none)"}\n${annotations.length ? `\nEmployee annotations on the draft:\n${formatEodAnnotations(annotations)}\n` : ""}\nReturn only the revised brief markdown. Do not include a Full record or Bottleneck heading or content. Keep the existing headings and do not add facts that are absent from the report or the facts above.` },
         ],
         temperature: 0.2,
         max_tokens: AI_TOKEN_BUDGETS.eodRevision,
@@ -269,8 +283,9 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
     if (choice?.finish_reason === "length") {
       return { ok: false, reason: "ai_malformed", detail: "refinement stopped before the full record was written" };
     }
-    const markdown = withoutBottleneck(String(choice?.message?.content ?? ""));
-    if (!markdown) return { ok: false, reason: "ai_malformed", detail: "empty refined report" };
+    const refinedBrief = withoutFullRecord(withoutBottleneck(String(choice?.message?.content ?? "")));
+    if (!refinedBrief) return { ok: false, reason: "ai_malformed", detail: "empty refined report" };
+    const markdown = appendix ? `${refinedBrief}\n\n${appendix}` : refinedBrief;
     if (!preservesEodStructure(draft, markdown)) {
       return { ok: false, reason: "ai_malformed", detail: "refinement dropped a required report section" };
     }

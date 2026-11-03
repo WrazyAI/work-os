@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildEodReportMarkdown, rankEodCompleted, type EodReportFacts } from "../src/lib/work-os-eod-report";
 import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
 import { eodSnippet } from "../src/modules/work-os/admin/eod";
-import { buildEodFactBlock, preservesEodStructure } from "../src/lib/aiEod";
+import { buildEodFactBlock, preservesEodStructure, splitEodBrief } from "../src/lib/aiEod";
 import { eodLineItems } from "../src/lib/work-os-eod";
 
 const completed = [
@@ -302,6 +302,14 @@ test("a refinement may rewrite prose but must keep the report structure", () => 
   assert.equal(preservesEodStructure("## Summary\nOld", "## Summary\nNew"), true);
   const droppedAppendixRow = report.markdown.replace(/- Choose a walking route[^\n]*\n?/, "");
   assert.equal(preservesEodStructure(report.markdown, droppedAppendixRow), false, "the appendix is not rewritten");
+});
+
+test("refinement sees the brief separately from the full record", () => {
+  const { brief, appendix } = splitEodBrief(report.markdown);
+  assert.doesNotMatch(brief, /## Full record/);
+  assert.match(brief, /## Summary/);
+  assert.match(appendix ?? "", /^## Full record/);
+  assert.match(appendix ?? "", /Work Memory P3/);
 });
 
 test("the refinement facts are plain prose, never selectable ids", () => {
