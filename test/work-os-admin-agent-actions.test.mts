@@ -8,7 +8,6 @@ import {
   type AdminAgentActionServices,
 } from "../src/lib/work-admin-agent-actions";
 import { previewFingerprint } from "../src/lib/work-admin-action-previews";
-import { WorkOsValidationError } from "../src/lib/work-os-api";
 import type { AdminPreviewAction } from "../src/modules/work-os/admin-agent/contracts";
 import {
   adminAccess,
@@ -19,6 +18,14 @@ import {
   personB,
   personC,
 } from "./helpers/work-os-admin-agent-fixture.mts";
+
+/** tsx loads an extensionless relative import through a CommonJS preparse
+ * virtual module, so the class object can differ from the one an aliased
+ * `@/lib/...` import loads. The error carries a stable `name`, which is the same
+ * discriminator the server's error mapper uses. */
+function isValidationError(error: unknown): boolean {
+  return error instanceof Error && error.name === "WorkOsValidationError";
+}
 
 /** The preview layer is deliberately service-shaped: these tests hand it fakes
  * and assert what it would describe, store, and send, while the audit write
@@ -63,7 +70,8 @@ function fakeServices(taskRow: Json, extras: FakeExtras = {}) {
     moveTask: [] as Array<{ taskId: string; parentTaskId: string }>,
     completeTask: [] as Array<{ taskId: string; completed: boolean }>,
     archiveTask: [] as Array<{ taskId: string; mode: "archive" | "delete" }>,
-    reviewEod: [] as Array<{ reportId: string; body: Json }>,
+    getEod: [] as string[],
+    reviewEod: [] as Array<{ reportId: string; body: Json; reviewerPersonId?: string | null }>,
   };
   const createdByIdempotencyKey = new Map<string, Json>();
   const services: AdminAgentActionServices = {
@@ -95,8 +103,12 @@ function fakeServices(taskRow: Json, extras: FakeExtras = {}) {
       calls.archiveTask.push({ taskId, mode });
       return taskRow;
     },
-    reviewEod: async (_access, reportId, body) => {
-      calls.reviewEod.push({ reportId, body });
+    getEod: async (_access, reportId) => {
+      calls.getEod.push(reportId);
+      return extras.report ?? {};
+    },
+    reviewEod: async (_access, reportId, body, reviewerPersonId) => {
+      calls.reviewEod.push({ reportId, body, reviewerPersonId });
       return extras.report ?? taskRow;
     },
     ...(extras.people
@@ -116,7 +128,12 @@ const token = {
   tokenId: "90000000-0000-4000-8000-000000000011",
   tokenName: "Admin laptop",
   previewId: "91000000-0000-4000-8000-000000000021",
+  reviewerPersonId: null as string | null,
 };
+
+/** The resolved membership person travels with the applied action so a decision
+ * is self-review checked even when the token itself is unmapped. */
+const reviewerToken = { ...token, reviewerPersonId: personA };
 
 let f: Awaited<ReturnType<typeof fixture>>;
 before(async () => { f = await fixture(); });
@@ -188,8 +205,8 @@ test("assign rejects an inactive or unknown person instead of warning", async ()
         { task_id: "t1", mode: "add", person_ids: requested },
         fakeServices(task, { people: [ada, grace, linus] }).services,
       ),
-      (error: unknown) => error instanceof WorkOsValidationError
-        && /Assignees must be active Work OS organization members/.test(error.message),
+      (error: unknown) => isValidationError(error)
+        && /Assignees must be active Work OS organization members/.test((error as Error).message),
     );
   }
 });
@@ -197,11 +214,11 @@ test("assign rejects an inactive or unknown person instead of warning", async ()
 test("assign rejects an unknown mode and a malformed person list", async () => {
   await assert.rejects(
     previewAdminAction(adminAccess, "task.assign", { task_id: "t1", mode: "append", person_ids: [] }, fakeServices(task).services),
-    WorkOsValidationError,
+    isValidationError,
   );
   await assert.rejects(
     previewAdminAction(adminAccess, "task.assign", { task_id: "t1", mode: "add", person_ids: [" "] }, fakeServices(task).services),
-    WorkOsValidationError,
+    isValidationError,
   );
 });
 
@@ -312,7 +329,7 @@ test("create names the owners from the requested people and rejects an unknown i
       { name: "Ship", assignee_person_ids: ["90000000-0000-4000-8000-000000000099"] },
       services,
     ),
-    (error: unknown) => error instanceof WorkOsValidationError && /active Work OS organization members/.test(error.message),
+    (error: unknown) => isValidationError(error) && /active Work OS organization members/.test((error as Error).message),
   );
 });
 
@@ -411,7 +428,7 @@ test("validateAdminTaskCreate rejects unknown fields, a blank title, and bad dat
   ]) {
     assert.throws(
       () => validateAdminTaskCreate(payload, [personB]),
-      WorkOsValidationError,
+      isValidationError,
       JSON.stringify(payload),
     );
   }
@@ -422,7 +439,7 @@ test("a null or non-object payload is a validation error, not a crash", async ()
   for (const action of ["task.update", "task.assign", "task.move"] as AdminPreviewAction[]) {
     await assert.rejects(
       previewAdminAction(adminAccess, action, null as unknown as Json, services),
-      WorkOsValidationError,
+      isValidationError,
       action,
     );
   }
@@ -595,6 +612,348 @@ test("apply refuses an action it does not recognize", async () => {
   const { services } = fakeServices(task);
   await assert.rejects(
     applyAdminAction(adminAccess, "task.explode" as AdminPreviewAction, { task_id: "t1" }, services, token),
-    WorkOsValidationError,
+    isValidationError,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Task lifecycle: complete, reopen, archive, delete
+// ---------------------------------------------------------------------------
+
+test("complete blocks a task with an expected outcome until evidence exists", async () => {
+  const outcome = { ...task, expected_outcome: "Ship" };
+  const preview = await previewAdminAction(
+    adminAccess,
+    "task.complete",
+    { task_id: "t1" },
+    fakeServices(outcome).services,
+  );
+  assert.ok(preview.warnings.some((warning) => /evidence/i.test(warning)));
+  assert.deepEqual(preview.changes, [{ field: "completed", from: false, to: true }]);
+  assert.equal((preview.state as Json).completed, false);
+  assert.deepEqual(preview.request, { task_id: "t1" });
+
+  // Evidence already attached: the completion is ready to apply.
+  const evidenced = await previewAdminAction(
+    adminAccess,
+    "task.complete",
+    { task_id: "t1" },
+    fakeServices({ ...outcome, completion_evidence: [{ id: "e1" }] }).services,
+  );
+  assert.deepEqual(evidenced.warnings, []);
+
+  // A plain task records no outcome, so it never asks for evidence.
+  const plain = await previewAdminAction(
+    adminAccess,
+    "task.complete",
+    { task_id: "t1" },
+    fakeServices(task).services,
+  );
+  assert.deepEqual(plain.warnings, []);
+});
+
+test("reopen reports the current completion and warns when already open", async () => {
+  const done = { ...task, completed: true, status: "completed" };
+  const preview = await previewAdminAction(
+    adminAccess,
+    "task.reopen",
+    { task_id: "t1" },
+    fakeServices(done).services,
+  );
+  assert.equal(preview.summary, "Reopen Ship");
+  assert.deepEqual(preview.changes, [{ field: "completed", from: true, to: false }]);
+  assert.equal((preview.state as Json).completed, true);
+
+  const alreadyOpen = await previewAdminAction(
+    adminAccess,
+    "task.reopen",
+    { task_id: "t1" },
+    fakeServices(task).services,
+  );
+  assert.ok(alreadyOpen.warnings.some((warning) => /already open/i.test(warning)));
+
+  const alreadyDone = await previewAdminAction(
+    adminAccess,
+    "task.complete",
+    { task_id: "t1" },
+    fakeServices(done).services,
+  );
+  assert.ok(alreadyDone.warnings.some((warning) => /already complete/i.test(warning)));
+});
+
+test("apply complete and reopen call the completion service with the action's flag", async () => {
+  const done = { ...task, completed: true, status: "completed" };
+  const completeServices = fakeServices(task);
+  const completePreview = await previewAdminAction(
+    adminAccess,
+    "task.complete",
+    { task_id: "t1" },
+    completeServices.services,
+  );
+  const completed = await applyAdminAction(
+    adminAccess,
+    "task.complete",
+    completePreview.request,
+    completeServices.services,
+    token,
+    completePreview.state,
+  );
+  assert.equal(completed.status, 200);
+  assert.deepEqual(completeServices.calls.completeTask, [{ taskId: "t1", completed: true }]);
+  const completeAudit = await lastAudit("admin.task.complete");
+  assert.equal(completeAudit.target_type, "work_os_task");
+  assert.equal(completeAudit.target_id, "t1");
+  assert.equal(completeAudit.actor_user_id, adminUser);
+  assert.equal(completeAudit.metadata.tokenId, token.tokenId);
+  assert.equal(completeAudit.metadata.tokenName, token.tokenName);
+  assert.equal(completeAudit.metadata.action, "task.complete");
+  assert.deepEqual(completeAudit.metadata.changes, [{ field: "completed", from: false, to: true }]);
+
+  const reopenServices = fakeServices(done);
+  const reopenPreview = await previewAdminAction(
+    adminAccess,
+    "task.reopen",
+    { task_id: "t1" },
+    reopenServices.services,
+  );
+  const reopened = await applyAdminAction(
+    adminAccess,
+    "task.reopen",
+    reopenPreview.request,
+    reopenServices.services,
+    token,
+    reopenPreview.state,
+  );
+  assert.equal(reopened.status, 200);
+  assert.deepEqual(reopenServices.calls.completeTask, [{ taskId: "t1", completed: false }]);
+  const reopenAudit = await lastAudit("admin.task.reopen");
+  assert.equal(reopenAudit.target_type, "work_os_task");
+  assert.equal(reopenAudit.actor_user_id, adminUser);
+});
+
+test("archive and delete are distinct previews", async () => {
+  assert.equal(
+    (await previewAdminAction(adminAccess, "task.archive", { task_id: "t1" }, fakeServices(task).services)).summary,
+    "Archive Ship",
+  );
+  assert.equal(
+    (await previewAdminAction(adminAccess, "task.delete", { task_id: "t1" }, fakeServices(task).services)).summary,
+    "Delete Ship",
+  );
+
+  const archive = await previewAdminAction(adminAccess, "task.archive", { task_id: "t1" }, fakeServices(task).services);
+  assert.deepEqual(archive.changes, [{ field: "status", from: "open", to: "archived" }]);
+  assert.equal(archive.targetType, "task");
+  assert.equal(archive.targetId, "t1");
+  assert.deepEqual(archive.request, { task_id: "t1" });
+
+  const remove = await previewAdminAction(adminAccess, "task.delete", { task_id: "t1" }, fakeServices(task).services);
+  assert.deepEqual(remove.changes, [{ field: "status", from: "open", to: "deleted" }]);
+});
+
+test("archive and delete previews warn about the children they cascade to", async () => {
+  const parent = { ...task, subtasks: [{ id: "s1" }, { id: "s2" }] };
+  const archive = await previewAdminAction(adminAccess, "task.archive", { task_id: "t1" }, fakeServices(parent).services);
+  assert.ok(archive.warnings.some((warning) => /2 subtasks/i.test(warning)));
+
+  const remove = await previewAdminAction(adminAccess, "task.delete", { task_id: "t1" }, fakeServices(parent).services);
+  assert.ok(remove.warnings.some((warning) => /2 subtasks/i.test(warning)));
+
+  const alreadyArchived = await previewAdminAction(
+    adminAccess,
+    "task.archive",
+    { task_id: "t1" },
+    fakeServices({ ...task, status: "archived" }).services,
+  );
+  assert.ok(alreadyArchived.warnings.some((warning) => /already archived/i.test(warning)));
+});
+
+test("apply archive and delete call the removal service with the right mode", async () => {
+  const archiveServices = fakeServices(task);
+  const archivePreview = await previewAdminAction(adminAccess, "task.archive", { task_id: "t1" }, archiveServices.services);
+  const archived = await applyAdminAction(
+    adminAccess,
+    "task.archive",
+    archivePreview.request,
+    archiveServices.services,
+    token,
+    archivePreview.state,
+  );
+  assert.equal(archived.status, 200);
+  assert.deepEqual(archiveServices.calls.archiveTask, [{ taskId: "t1", mode: "archive" }]);
+  const archiveAudit = await lastAudit("admin.task.archive");
+  assert.equal(archiveAudit.target_type, "work_os_task");
+  assert.equal(archiveAudit.target_id, "t1");
+  assert.equal(archiveAudit.actor_user_id, adminUser);
+  assert.equal(archiveAudit.metadata.action, "task.archive");
+
+  const deleteServices = fakeServices(task);
+  const deletePreview = await previewAdminAction(adminAccess, "task.delete", { task_id: "t1" }, deleteServices.services);
+  const deleted = await applyAdminAction(
+    adminAccess,
+    "task.delete",
+    deletePreview.request,
+    deleteServices.services,
+    token,
+    deletePreview.state,
+  );
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(deleteServices.calls.archiveTask, [{ taskId: "t1", mode: "delete" }]);
+  const deleteAudit = await lastAudit("admin.task.delete");
+  assert.equal(deleteAudit.target_type, "work_os_task");
+  assert.equal(deleteAudit.actor_user_id, adminUser);
+});
+
+// ---------------------------------------------------------------------------
+// EOD review
+// ---------------------------------------------------------------------------
+
+const pendingReport: Json = {
+  id: "r1",
+  person_id: personB,
+  status: "pending_review",
+  title: "EOD",
+  updated_at: "2026-11-02T00:00:00Z",
+};
+
+test("EOD review preview names the decision and preserves self-review refusal", async () => {
+  const preview = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved", manager_notes: "Looks good" },
+    fakeServices(task, { report: pendingReport }).services,
+  );
+  assert.match(preview.summary, /Approve EOD/);
+  assert.deepEqual(preview.state, { status: "pending_review", updatedAt: "2026-11-02T00:00:00Z" });
+  assert.deepEqual(preview.changes, [
+    { field: "status", from: "pending_review", to: "approved" },
+    { field: "manager_notes", from: null, to: "Looks good" },
+  ]);
+  assert.equal(preview.targetType, "eod");
+  assert.equal(preview.targetId, "r1");
+  assert.deepEqual(preview.request, {
+    report_id: "r1",
+    status: "approved",
+    manager_notes: "Looks good",
+  });
+  assert.deepEqual(preview.warnings, []);
+
+  const own = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved" },
+    fakeServices(task, { report: { ...pendingReport, person_id: personA } }).services,
+  );
+  assert.ok(own.warnings.some((warning) => /own report/i.test(warning)));
+
+  const rejected = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "rejected" },
+    fakeServices(task, { report: pendingReport }).services,
+  );
+  assert.match(rejected.summary, /Reject EOD/);
+  assert.deepEqual(rejected.changes, [{ field: "status", from: "pending_review", to: "rejected" }]);
+});
+
+test("EOD review warns for a non-pending report and a manager edit", async () => {
+  const decided = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved" },
+    fakeServices(task, { report: { ...pendingReport, status: "approved" } }).services,
+  );
+  assert.ok(decided.warnings.some((warning) => /already approved|pending report/i.test(warning)));
+
+  const edited = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved", markdown: "Rewritten summary" },
+    fakeServices(task, { report: pendingReport }).services,
+  );
+  assert.ok(edited.warnings.some((warning) => /replaces the employee/i.test(warning)));
+  assert.equal(edited.request.markdown, "Rewritten summary");
+});
+
+test("apply EOD review passes the reviewer person even for an unmapped token", async () => {
+  assert.equal(adminAccess.personId, null);
+  const { services, calls } = fakeServices(task, { report: pendingReport });
+  const preview = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved", manager_notes: "Looks good" },
+    services,
+  );
+  const result = await applyAdminAction(adminAccess, "eod.review", preview.request, services, reviewerToken, preview.state);
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.reviewEod, [{
+    reportId: "r1",
+    body: { status: "approved", manager_notes: "Looks good" },
+    reviewerPersonId: personA,
+  }]);
+  assert.equal(adminAccess.personId, null);
+
+  const auditRow = await lastAudit("admin.eod.review");
+  assert.equal(auditRow.target_type, "work_report");
+  assert.equal(auditRow.target_id, "r1");
+  assert.equal(auditRow.actor_user_id, adminUser);
+  assert.equal(auditRow.metadata.tokenId, reviewerToken.tokenId);
+  assert.equal(auditRow.metadata.tokenName, reviewerToken.tokenName);
+  assert.equal(auditRow.metadata.action, "eod.review");
+  assert.deepEqual(auditRow.metadata.changes, preview.changes);
+});
+
+test("an EOD review preview goes stale when the report moved on", async () => {
+  const report = { ...pendingReport };
+  const { services, calls } = fakeServices(task, { report });
+  const preview = await previewAdminAction(
+    adminAccess,
+    "eod.review",
+    { report_id: "r1", status: "approved" },
+    services,
+  );
+  report.updated_at = "2026-11-02T01:00:00Z";
+  await assert.rejects(
+    applyAdminAction(adminAccess, "eod.review", preview.request, services, reviewerToken, preview.state),
+    (error: unknown) => (error as Error)?.name === "WorkOsConflictError"
+      && (error as { reason?: string }).reason === "preview_stale",
+  );
+  assert.deepEqual(calls.reviewEod, []);
+});
+
+test("lifecycle and EOD review reject malformed or unknown input", async () => {
+  const { services } = fakeServices(task);
+  for (const [action, payload] of [
+    ["task.complete", { task_id: "t1", completed: true }],
+    ["task.reopen", { task_id: "t1", completed: false }],
+    ["task.complete", {}],
+    ["task.archive", { task_id: "t1", mode: "delete" }],
+    ["eod.review", { report_id: "r1" }],
+    ["eod.review", { report_id: "r1", status: "pending_review" }],
+    ["eod.review", { status: "approved" }],
+    ["eod.review", { report_id: "r1", status: "approved", person_id: personA }],
+  ] as Array<[AdminPreviewAction, Json]>) {
+    await assert.rejects(
+      previewAdminAction(adminAccess, action, payload, services),
+      isValidationError,
+      `${action} ${JSON.stringify(payload)}`,
+    );
+  }
+
+  await assert.rejects(
+    previewAdminAction(adminAccess, "eod.review", { report_id: "missing", status: "approved" }, services),
+    (error: unknown) => (error as Error)?.name === "WorkOsNotFoundError",
+  );
+});
+
+test("lifecycle previews never execute a consequential write", async () => {
+  const { services, calls } = fakeServices(task, { report: pendingReport });
+  await previewAdminAction(adminAccess, "task.complete", { task_id: "t1" }, services);
+  await previewAdminAction(adminAccess, "task.reopen", { task_id: "t1" }, services);
+  await previewAdminAction(adminAccess, "task.archive", { task_id: "t1" }, services);
+  await previewAdminAction(adminAccess, "task.delete", { task_id: "t1" }, services);
+  await previewAdminAction(adminAccess, "eod.review", { report_id: "r1", status: "approved" }, services);
+  assert.deepEqual(calls.completeTask, []);
+  assert.deepEqual(calls.archiveTask, []);
+  assert.deepEqual(calls.reviewEod, []);
 });
