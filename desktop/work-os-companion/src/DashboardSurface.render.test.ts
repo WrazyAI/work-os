@@ -244,6 +244,10 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain('aria-label="Tasks completed each day:');
     expect(markup).toContain("Next check-in 12:00 PM");
     expect(markup).toContain("On-time outcomes");
+
+    const failed = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", weekError: true, canPause: true, canClockOut: true, onPause: noop, onClockOut: noop, onAddTask: noop }));
+    expect(failed).toContain("This week’s record is unavailable right now.");
+    expect(failed).not.toContain("No recorded days in this range.");
   });
 
   it("shows a quiet activity-watch note while a clock-in is expected and keeps the manual control", () => {

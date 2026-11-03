@@ -47,6 +47,7 @@ export interface OffShiftDashboardProps extends DashboardSurfaceActions {
    *  command center still renders while it loads or when the read fails. */
   week?: InsightsData | null;
   weekLoading?: boolean;
+  weekError?: boolean;
   nextCheckIn?: string | null;
   nextCheckInRequired?: boolean;
 }
@@ -66,6 +67,7 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
   onRetryGoalSave?: () => void;
   week?: InsightsData | null;
   weekLoading?: boolean;
+  weekError?: boolean;
   nextCheckIn?: string | null;
   nextCheckInRequired?: boolean;
 }
@@ -183,7 +185,7 @@ function PulseTimeline({ model, showPosition = true, expanded = false }: { model
   </div>;
 }
 
-function WeekInstrument({ week, loading = false }: { week?: InsightsData | null; loading?: boolean }) {
+function WeekInstrument({ week, loading = false, error = false }: { week?: InsightsData | null; loading?: boolean; error?: boolean }) {
   const days = week?.days ?? [];
   const values = days.map((entry) => Number(entry.tasksCompleted ?? 0));
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -219,7 +221,7 @@ function WeekInstrument({ week, loading = false }: { week?: InsightsData | null;
         {days.map((entry, index) => <text key={`${entry.date}-label`} className={index === days.length - 1 ? "dashboard-week-day is-today" : "dashboard-week-day"} x={points[index]?.x ?? 0} y="146" textAnchor="middle">{index === days.length - 1 ? "Today" : weekdayInitial(entry.date)}</text>)}
       </svg>
       <p className="dashboard-instrument-note">Tasks completed, not a productivity score. Today is the filled mark.</p>
-    </> : <div className="dashboard-instrument-empty">{loading ? "Loading this week’s record…" : "No recorded days in this range."}</div>}
+    </> : <div className="dashboard-instrument-empty">{loading ? "Loading this week’s record…" : error ? "This week’s record is unavailable right now." : "No recorded days in this range."}</div>}
   </section>;
 }
 
@@ -230,9 +232,10 @@ function weekdayInitial(value: string) {
   return new Intl.DateTimeFormat(undefined, { timeZone: "UTC", weekday: "narrow" }).format(parsed);
 }
 
-function DashboardMargin({ week, weekLoading = false }: {
+function DashboardMargin({ week, weekLoading = false, weekError = false }: {
   week?: InsightsData | null;
   weekLoading?: boolean;
+  weekError?: boolean;
 }) {
   const days = week?.days ?? [];
   const consistency = week?.consistency;
@@ -245,7 +248,7 @@ function DashboardMargin({ week, weekLoading = false }: {
     consistency && dayCount > 0 ? { label: "Days with a completed task", value: `${consistency.daysWithCompletion} of ${dayCount}`, percent: Math.round((consistency.daysWithCompletion / dayCount) * 100), quiet: true } : null,
   ].filter((row): row is { label: string; value: string; percent: number; quiet?: boolean } => row !== null);
   return <aside className="dashboard-margin" aria-label="Workday instruments">
-    <WeekInstrument week={week} loading={weekLoading} />
+    <WeekInstrument week={week} loading={weekLoading} error={weekError} />
     {reliability.length ? <section className="dashboard-instrument dashboard-reliability" aria-labelledby="dashboard-reliability-title">
       <header className="dashboard-instrument-head">
         <h2 id="dashboard-reliability-title">Plan reliability</h2>
@@ -324,7 +327,7 @@ function WorkdayBand({ model, currentDate, observedOnly = false, children }: { m
   </>;
 }
 
-export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", week = null, weekLoading = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
+export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", week = null, weekLoading = false, weekError = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask, ...actions }: OffShiftDashboardProps) {
   const taskCopy = model.metrics.carryover > 0
     ? { title: "Start by clearing the oldest decision", body: `${model.metrics.carryover} unfinished task${model.metrics.carryover === 1 ? "" : "s"} is waiting from an earlier workday.` }
     : { title: "Your agenda is open", body: "Choose a first priority or use the composer below to add one without clocking in." };
@@ -398,12 +401,12 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <span className="work-queue-showing">Showing {Math.min(5, openCount)} of {openCount} open</span>
         </footer>
       </section>
-      <DashboardMargin week={week} weekLoading={weekLoading} />
+      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} />
     </div>
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", week = null, weekLoading = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", week = null, weekLoading = false, weekError = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
@@ -498,7 +501,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
           <span className="work-queue-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
         </footer>
       </section>
-      <DashboardMargin week={week} weekLoading={weekLoading} />
+      <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} />
     </div>
   </main>;
 }

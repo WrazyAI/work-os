@@ -1,7 +1,7 @@
 :root {
   --dash-ink: #182018;
   --dash-ink-soft: #304033;
-  --dash-muted: #687267;
+  --dash-muted: #5f695e;
   --dash-faint: #939c90;
   --dash-paper: #eef1eb;
   --dash-card: rgba(255, 255, 252, 0.94);
@@ -1792,4 +1792,20 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-week-line { animation: none; }
+}
+
+
+/* Phone controls are touch targets first: the visual mark can stay compact, but
+   every tappable surface on Today reaches the 40px small-class minimum. */
+@media (max-width: 520px) {
+  .dashboard-primary-action,
+  .dashboard-secondary-action,
+  .dashboard-danger-action,
+  .work-queue-actions .dashboard-secondary-action,
+  .work-queue-tabs button,
+  .dashboard-inline-link { min-height: 40px; }
+  .dashboard-icon-link { width: 40px; height: 40px; }
+  .dashboard-task-row-actions .ellipsis-button { width: 40px; height: 40px; }
+  .dashboard-task-check { position: relative; }
+  .dashboard-task-check::after { content: ""; position: absolute; inset: -11px; border-radius: 8px; }
 }

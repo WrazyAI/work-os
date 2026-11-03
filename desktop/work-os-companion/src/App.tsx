@@ -5181,6 +5181,7 @@ export default function App() {
         goalSaveState={planSaveState}
         week={dashboardInsightsQuery.data ?? null}
         weekLoading={dashboardInsightsQuery.isLoading}
+        weekError={dashboardInsightsQuery.isError}
         nextCheckIn={visibleDay.prompt.nextPromptAt ? formatTime(visibleDay.prompt.nextPromptAt, visibleDay.shift?.timezone) : null}
         nextCheckInRequired={visibleDay.prompt.required}
         onClockIn={clockIn}
@@ -5211,6 +5212,7 @@ export default function App() {
         goalSaveState={planSaveState}
         week={dashboardInsightsQuery.data ?? null}
         weekLoading={dashboardInsightsQuery.isLoading}
+        weekError={dashboardInsightsQuery.isError}
         nextCheckIn={visibleDay.prompt.nextPromptAt ? formatTime(visibleDay.prompt.nextPromptAt, visibleDay.shift?.timezone) : null}
         nextCheckInRequired={visibleDay.prompt.required}
         onRetryGoalSave={() => setPlanDirty(true)}
