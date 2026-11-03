@@ -508,6 +508,14 @@
 }
 
 .primaryButton { border: 1px solid var(--signal); background: var(--signal); color: var(--signal-ink); font-weight: 650; }
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.disclosureToggle:focus-visible,
+.dayRow:focus-visible,
+.dateField:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}
 .primaryButton:hover { background: #9ce84c; }
 .primaryButton:disabled { opacity: .45; cursor: default; }
 

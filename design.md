@@ -1609,6 +1609,11 @@ for the employee's own `Refine draft` request and for reading an attached Loom.
   render the same markdown through the shared parser; the employee may edit the
   source, but the submitted report keeps the same headings and the same
   brief/appendix split.
+- **The page reads as a day edition.** A dateline carries the role, session,
+  and goal; the summary is the lead at reading size; completed work groups by
+  project so the project is stated once for a run of rows; the full record is
+  a disclosure beneath the brief. The document has one measure and one action
+  (`Submit EOD`), not a second dashboard.
 
 ### 8.17 Settings groups: one label column, one content column
 

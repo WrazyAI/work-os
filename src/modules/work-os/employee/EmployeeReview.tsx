@@ -184,7 +184,10 @@ export default function EmployeeReview() {
     // A shift that is still open refuses the draft; the prompt replaces it.
     if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
       setRefusal(attemptedRef.current);
+      return;
     }
+    const message = error instanceof Error ? error.message : "The report could not be rebuilt.";
+    setEodNotice({ tone: "err", text: `${message} The report was not changed.` });
   };
 
   const draftEod = useMutation({
@@ -279,7 +282,7 @@ export default function EmployeeReview() {
   /* A refusal for an open shift is explained by the prompt, not by a raw
      error banner. */
   const shiftRefusal = draftEod.error instanceof HttpError && draftEod.error.status === 409 && draftEod.error.reason === EOD_SHIFT_OPEN_REASON;
-  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || submitEod.error || review.error || disputeEvidence.error;
+  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || redraftEod.error || submitEod.error || review.error || disputeEvidence.error;
   const status = String(eodReport?.status || "");
   const editorLocked = status === "pending_review" || status === "approved";
   const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";

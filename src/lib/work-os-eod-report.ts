@@ -308,7 +308,10 @@ function taskLine(item: CollapsedEodTask, timezone: string, includeProject = tru
     item.outsideLabel?.trim() ?? null,
   ].filter(Boolean).join(" · ");
   const title = item.count > 1 ? `${item.title} ×${item.count}` : item.title;
-  return meta ? `- ${title} — ${meta}` : `- ${title}`;
+  if (!meta) return `- ${title}`;
+  // A lone outside-window label follows the title; a project or time keeps the
+  // em-dash track that the row splitter reads back.
+  return item.project || time ? `- ${title} — ${meta}` : `- ${title} ${meta}`;
 }
 
 function recapLine(recap: EodRecap): string {

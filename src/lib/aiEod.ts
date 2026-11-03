@@ -222,6 +222,15 @@ function withoutBottleneck(markdown: string) {
   return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
 }
 
+/** A refinement may shorten prose, but it may not drop a section the current
+ * report carries. A truncated response that loses the full record is rejected
+ * instead of replacing the employee's draft. */
+export function preservesEodStructure(original: string, refined: string): boolean {
+  const required = ["## Summary", "## Completed today", "## Evidence", "## Full record"]
+    .filter((heading) => original.includes(heading));
+  return required.every((heading) => refined.includes(heading));
+}
+
 /** Refines report wording from employee feedback without rewriting any Bottleneck section. */
 export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string, annotations: EodAnnotation[] = []): Promise<EodDraftResult> {
   const key = process.env.OPENROUTER_API_KEY;
@@ -241,10 +250,17 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
       signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
-    const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const payload = (await response.json()) as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> };
     recordAiUsage("eod_revise", EOD_MODEL, payload);
-    const markdown = withoutBottleneck(String(payload.choices?.[0]?.message?.content ?? ""));
+    const choice = payload.choices?.[0];
+    if (choice?.finish_reason === "length") {
+      return { ok: false, reason: "ai_malformed", detail: "refinement stopped before the full record was written" };
+    }
+    const markdown = withoutBottleneck(String(choice?.message?.content ?? ""));
     if (!markdown) return { ok: false, reason: "ai_malformed", detail: "empty refined report" };
+    if (!preservesEodStructure(draft, markdown)) {
+      return { ok: false, reason: "ai_malformed", detail: "refinement dropped a required report section" };
+    }
     return { ok: true, markdown, model: EOD_MODEL };
   } catch (error) {
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };

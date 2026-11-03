@@ -195,6 +195,23 @@ export async function buildDailyWorkspaceEodContent(
 
   const taskById = new Map<string, Json>();
   for (const task of workspace.tasks) taskById.set(String(task.id ?? ""), task);
+  // The workspace page is capped at 50 tasks; a busy day can complete more.
+  // Resolve the project for every fact task so the brief never loses context
+  // just because the task fell outside the page.
+  const factTaskIds = [...new Set(
+    [...dayWork.completed, ...dayWork.carried, ...dayWork.deferred]
+      .map((item) => item.id)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (factTaskIds.length) {
+    const factTasks = await db().from("work_tasks")
+      .select("id,project:work_projects(name)")
+      .eq("organization_id", access.organizationId)
+      .in("id", factTaskIds)
+      .limit(250);
+    if (factTasks.error) throw new Error(`load EOD task projects: ${factTasks.error.message}`);
+    for (const task of (factTasks.data ?? []) as Json[]) taskById.set(String(task.id ?? ""), task);
+  }
   const projectOf = (taskId: string): string | null => {
     const project = taskById.get(taskId)?.project as { name?: unknown } | Array<{ name?: unknown }> | null | undefined;
     const name = Array.isArray(project) ? project[0]?.name : project?.name;

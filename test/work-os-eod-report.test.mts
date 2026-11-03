@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildEodReportMarkdown, type EodReportFacts } from "../src/lib/work-os-eod-report";
 import { parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
 import { eodSnippet } from "../src/modules/work-os/admin/eod";
-import { buildEodFactBlock } from "../src/lib/aiEod";
+import { buildEodFactBlock, preservesEodStructure } from "../src/lib/aiEod";
 import { eodLineItems } from "../src/lib/work-os-eod";
 
 const completed = [
@@ -98,6 +98,17 @@ test("the appendix keeps every omitted fact and collapses repeats", () => {
   assert.match(report.markdown, /Settlement walkthrough/);
 });
 
+test("an outside-window label with no project reads as a suffix, not a stray track", () => {
+  const outsideOnly = buildEodReportMarkdown({
+    ...facts,
+    completed: [{ id: "outside", title: "Outside check", project: null, at: "2026-10-22T13:00:00.000Z", exact: false, outsideLabel: " (outside shift)" }],
+    carried: [],
+    planItems: [],
+  });
+  assert.match(outsideOnly.markdown, /- Outside check \(outside shift\)/);
+  assert.doesNotMatch(outsideOnly.markdown, /Outside check — \(outside shift\)/);
+});
+
 test("provider-observed sync times never become work times", () => {
   const observed = splitEodTaskRow(document.sections.find((section) => section.key === "completed")!.lines.find((line) => /Fix companion clock-out/.test(line.text))!.text);
   assert.equal(observed.time, null);
@@ -168,6 +179,13 @@ test("the admin queue snippet reads the new completed section", () => {
   const snippet = eodSnippet(report.markdown);
   assert.ok(snippet);
   assert.match(snippet, /LaunchLoom|Work Memory P3|Refine companion/);
+});
+
+test("a refinement may rewrite prose but must keep the report structure", () => {
+  assert.equal(preservesEodStructure(report.markdown, report.markdown.replace("## Full record", "## Notes")), false);
+  assert.equal(preservesEodStructure(report.markdown, report.markdown.replace("## Completed today", "## Work")), false);
+  assert.equal(preservesEodStructure(report.markdown, report.markdown), true);
+  assert.equal(preservesEodStructure("## Summary\nOld", "## Summary\nNew"), true);
 });
 
 test("the refinement facts are plain prose, never selectable ids", () => {
