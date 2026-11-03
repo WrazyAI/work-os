@@ -1,4 +1,5 @@
 import { db, audit, type Json } from "@/lib/work-os-internal";
+import { previewFingerprint } from "@/lib/work-admin-action-previews";
 import { reviewAdminAgentEod, type AdminAgentEodReviewInput } from "@/lib/work-admin-agent-eods";
 import {
   createWorkOsEmployeeTask,
@@ -7,7 +8,12 @@ import {
 } from "@/lib/work-os-employee-tasks";
 import { removeWorkOsAdminTask, updateWorkOsAdminTask } from "@/lib/work-os-task-admin";
 import { isCalendarDate } from "@/lib/work-os-task-permissions";
-import { WorkOsNotFoundError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
+import {
+  WorkOsConflictError,
+  WorkOsNotFoundError,
+  WorkOsValidationError,
+  type WorkOsAccess,
+} from "@/lib/work-os-api";
 import type {
   AdminPreview,
   AdminPreviewAction,
@@ -17,10 +23,10 @@ import type {
 
 /** The action layer between an admin agent request and the services that
  * already own the writes. Every consequential action is described once, as a
- * preview (`summary`, `changes`, `warnings`, `state`), and only the confirm
- * route reaches `applyAdminAction`. A preview never calls a write service, and
- * an apply always writes the audit entry naming the admin, token, target, and
- * exact change list. */
+ * preview (`summary`, `changes`, `warnings`, `state`, `request`), and only the
+ * confirm route reaches `applyAdminAction`. A preview never calls a write
+ * service; an apply writes the request it was handed and always records the
+ * admin, token, target, and exact change list. */
 
 export type AdminAgentPersonOption = {
   id: string;
@@ -32,9 +38,16 @@ export type AdminAgentPersonOption = {
  * validate assignees and name people in a preview. The directory is optional so
  * a unit test can hand the layer fakes without installing a database; a real
  * preview (default services below) always supplies it. */
+export type AdminAgentCreateTaskOptions = {
+  /** Deterministic creation key. The preview id is passed here, so a retried
+   * confirm returns the task the first attempt created instead of a second one. */
+  idempotencyKey?: string;
+  actor?: { tokenId: string; tokenName: string };
+};
+
 export type AdminAgentActionServices = {
   getTask: (access: WorkOsAccess, taskId: string) => Promise<Json>;
-  createTask: (access: WorkOsAccess, payload: Json) => Promise<Json>;
+  createTask: (access: WorkOsAccess, payload: Json, options?: AdminAgentCreateTaskOptions) => Promise<Json>;
   updateTask: (access: WorkOsAccess, taskId: string, payload: Json) => Promise<Json>;
   moveTask: (access: WorkOsAccess, taskId: string, parentTaskId: string) => Promise<Json>;
   completeTask: (access: WorkOsAccess, taskId: string, completed: boolean) => Promise<Json>;
@@ -43,9 +56,20 @@ export type AdminAgentActionServices = {
   listPeople?: (access: WorkOsAccess) => Promise<AdminAgentPersonOption[]>;
 };
 
+/** The preview plus the resolved request the preview store must persist. Task
+ * 13 stores `request` in the preview row and hands it back to apply verbatim. */
 export type AdminActionPreview = Omit<AdminPreview, "id" | "expiresAt"> & {
   targetType: string;
   targetId: string | null;
+  request: Json;
+};
+
+/** The actor that confirmed the preview. `previewId` doubles as the create
+ * idempotency key; `tokenId` scopes it to one admin token. */
+export type AdminActionActor = {
+  tokenId: string;
+  tokenName: string;
+  previewId: string;
 };
 
 const NAME_MAX = 240;
@@ -94,6 +118,14 @@ const UPDATE_FIELDS = new Set([
   "blocked_reason",
 ]);
 
+/** Fields the preview resolves once and apply must consume verbatim instead of
+ * recomputing from a possibly newer target snapshot. They are accepted on an
+ * apply request but never sent to a write service. */
+const RESOLVED_REQUEST_FIELDS = new Set([
+  "final_assignee_person_ids",
+  "resolved_owner_person_ids",
+]);
+
 type AssignmentMode = "add" | "remove" | "replace";
 
 type ActionPlan = {
@@ -103,7 +135,10 @@ type ActionPlan = {
   state: Json;
   targetType: string;
   targetId: string | null;
-  run: () => Promise<{ status: number; body: Json; targetId: string | null }>;
+  request: Json;
+  /** The current target row the plan was built from; null for create. */
+  task: Json | null;
+  run: (actor?: AdminActionActor) => Promise<{ status: number; body: Json; targetId: string | null }>;
 };
 
 function isRecord(value: unknown): value is Json {
@@ -187,6 +222,17 @@ async function readPeople(
   return services.listPeople ? services.listPeople(access) : null;
 }
 
+/** An inactive or unknown assignee is a caller mistake, exactly as the write
+ * service treats it. The preview refuses it instead of warning and letting the
+ * confirm fail after the user has already said yes. */
+function assertActiveAssignees(ids: string[], people: AdminAgentPersonOption[] | null): void {
+  if (!people) return;
+  const active = new Set(people.filter((person) => person.active).map((person) => person.id));
+  if (ids.some((id) => !active.has(id))) {
+    throw new WorkOsValidationError("Assignees must be active Work OS organization members");
+  }
+}
+
 function rejectUnknownFields(input: Json, allowed: Set<string>, label: string): void {
   for (const key of Object.keys(input)) {
     if (allowed.has(key)) continue;
@@ -194,10 +240,10 @@ function rejectUnknownFields(input: Json, allowed: Set<string>, label: string): 
   }
 }
 
-/** Accepts the employee create fields and normalizes them. `activePersonIds`
- * is the resolved directory read; a caller that has not read the directory can
- * omit it, and the service that owns the write enforces membership again before
- * inserting. */
+/** Accepts the employee create fields and normalizes them. `assignee_person_ids`
+ * is always emitted, even when empty: the delegated create service defaults a
+ * subtask to the mapped caller only when the array is absent, and an admin
+ * preview must describe exactly who will own the new work. */
 export function validateAdminTaskCreate(
   payload: Json,
   activePersonIdsForValidation?: Iterable<string> | null,
@@ -220,16 +266,14 @@ export function validateAdminTaskCreate(
   }
   const labels = labelsField(input);
   if (labels !== undefined) result.labels = labels;
-  if ("assignee_person_ids" in input) {
-    const ids = normalizePersonIds(input.assignee_person_ids);
-    if (activePersonIdsForValidation) {
-      const allowed = new Set(activePersonIdsForValidation);
-      if (ids.some((id) => !allowed.has(id))) {
-        throw new WorkOsValidationError("Assignees must be active Work OS organization members");
-      }
+  const assignees = "assignee_person_ids" in input ? normalizePersonIds(input.assignee_person_ids) : [];
+  if (activePersonIdsForValidation) {
+    const allowed = new Set(activePersonIdsForValidation);
+    if (assignees.some((id) => !allowed.has(id))) {
+      throw new WorkOsValidationError("Assignees must be active Work OS organization members");
     }
-    result.assignee_person_ids = ids;
   }
+  result.assignee_person_ids = assignees;
   return result;
 }
 
@@ -237,7 +281,7 @@ function validateTaskUpdate(payload: Json, activePersonIdsForValidation?: Iterab
   const input = objectInput(payload, "Task patch");
   const patch: Json = {};
   for (const key of Object.keys(input)) {
-    if (key === "task_id") continue;
+    if (key === "task_id" || RESOLVED_REQUEST_FIELDS.has(key)) continue;
     if (!UPDATE_FIELDS.has(key)) {
       throw new WorkOsValidationError(`Field ${key} cannot be updated through the admin task API`);
     }
@@ -303,13 +347,16 @@ function taskTitle(task: Json): string {
   return typeof task.title === "string" && task.title.trim() ? task.title.trim() : "Untitled task";
 }
 
-function taskState(task: Json, assignees = assigneeIds(task), parentId = taskParentId(task)): Json {
+/** The target state a preview was computed from: the current assignees and the
+ * current parent, never the planned result. Task 13's confirm `readState` must
+ * call this same helper so the stored fingerprint compares like for like. */
+export function adminTaskPreviewState(task: Json): Json {
   return {
     updatedAt: typeof task.updated_at === "string" ? task.updated_at : null,
     status: typeof task.status === "string" ? task.status : null,
     completed: task.completed === true,
-    assignees,
-    parentId,
+    assignees: assigneeIds(task),
+    parentId: taskParentId(task),
   };
 }
 
@@ -317,9 +364,27 @@ function taskBody(result: Json): Json {
   return isRecord(result) && "task" in result ? result : { task: result };
 }
 
-function taskIdOf(result: Json): string | null {
-  const row = isRecord(result) && isRecord(result.task) ? result.task : result;
-  return typeof row.id === "string" && row.id.trim() ? row.id : null;
+function taskRow(result: Json): Json | null {
+  if (isRecord(result) && isRecord(result.task)) return result.task;
+  return isRecord(result) ? result : null;
+}
+
+function stringField(row: Json | null, field: string): string | null {
+  if (!row) return null;
+  const value = row[field];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Audit targets follow the canonical task convention: provider-backed rows
+ * are `nifty_task`, local Work OS rows `work_os_task`. The preview store's
+ * `targetType` stays the simpler `task` surface label. */
+function auditTargetType(task: Json | null): string {
+  const provider = stringField(task, "provider");
+  return provider && provider !== "local" ? "nifty_task" : "work_os_task";
+}
+
+function auditTargetId(task: Json | null, fallback: string | null): string {
+  return stringField(task, "provider_task_id") ?? stringField(task, "id") ?? fallback ?? "unknown";
 }
 
 function payloadTaskId(payload: Json): string {
@@ -352,18 +417,8 @@ function ownerNames(owners: string[], people: AdminAgentPersonOption[] | null): 
   return owners.map((id) => (byId.has(id) ? personName(byId.get(id) as AdminAgentPersonOption) : id)).join(", ");
 }
 
-function assignmentWarnings(final: string[], people: AdminAgentPersonOption[] | null): string[] {
-  const warnings: string[] = [];
-  if (!final.length) warnings.push("This leaves the task with no assignees.");
-  if (people) {
-    const byId = new Map(people.map((person) => [person.id, person]));
-    for (const id of final) {
-      const person = byId.get(id);
-      if (!person) warnings.push(`Person ${id} is not an active organization member.`);
-      else if (!person.active) warnings.push(`${person.displayName} is not an active organization member.`);
-    }
-  }
-  return warnings;
+function assignmentWarnings(final: string[]): string[] {
+  return final.length ? [] : ["This leaves the task with no assignees."];
 }
 
 function hasParent(task: Json): boolean {
@@ -384,36 +439,48 @@ function resolveAssignment(current: string[], mode: AssignmentMode, requested: s
   return [...requestedSet].sort();
 }
 
-function planCreate(
+function pickFields(input: Json, allowed: Set<string>): Json {
+  const picked: Json = {};
+  for (const key of allowed) {
+    if (key in input) picked[key] = input[key];
+  }
+  return picked;
+}
+
+async function planCreate(
   access: WorkOsAccess,
   payload: Json,
   services: AdminAgentActionServices,
 ): Promise<ActionPlan> {
-  return (async () => {
-    const people = await readPeople(services, access);
-    const input = validateAdminTaskCreate(payload, activePersonIds(people));
-    const owners = Array.isArray(input.assignee_person_ids) ? input.assignee_person_ids as string[] : [];
-    const names = ownerNames(owners, people);
-    const project = typeof input.project_id === "string" ? input.project_id : null;
-    const dueDate = typeof input.due_date === "string" ? input.due_date : null;
-    return {
-      summary: `Create ${String(input.name)} for ${names || "unassigned"}`,
-      changes: [
-        change("name", null, input.name),
-        change("owners", [], owners),
-        change("project", null, project),
-        change("due_date", null, dueDate),
-      ],
-      warnings: [],
-      state: {},
-      targetType: "task",
-      targetId: null,
-      run: async () => {
-        const created = await services.createTask(access, input);
-        return { status: 201, body: taskBody(created), targetId: taskIdOf(created) };
-      },
-    };
-  })();
+  const people = await readPeople(services, access);
+  const input = validateAdminTaskCreate(pickFields(payload, CREATE_FIELDS), activePersonIds(people));
+  const owners = input.assignee_person_ids as string[];
+  const names = ownerNames(owners, people);
+  const project = typeof input.project_id === "string" ? input.project_id : null;
+  const dueDate = typeof input.due_date === "string" ? input.due_date : null;
+  return {
+    summary: `Create ${String(input.name)} for ${names || "unassigned"}`,
+    changes: [
+      change("name", null, input.name),
+      change("owners", [], owners),
+      change("project", null, project),
+      change("due_date", null, dueDate),
+    ],
+    warnings: [],
+    state: {},
+    targetType: "task",
+    targetId: null,
+    request: { ...input, resolved_owner_person_ids: owners },
+    task: null,
+    run: async (actor) => {
+      const created = await services.createTask(access, input, {
+        idempotencyKey: actor?.previewId,
+        actor: actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : undefined,
+      });
+      const row = taskRow(created);
+      return { status: 201, body: taskBody(created), targetId: auditTargetId(row, null) };
+    },
+  };
 }
 
 async function planUpdate(
@@ -421,10 +488,11 @@ async function planUpdate(
   payload: Json,
   services: AdminAgentActionServices,
 ): Promise<ActionPlan> {
-  const taskId = payloadTaskId(payload);
+  const input = objectInput(payload, "Task patch");
+  const taskId = payloadTaskId(input);
   const task = await requireTask(services, access, taskId);
   const people = await readPeople(services, access);
-  const patch = validateTaskUpdate(payload, activePersonIds(people));
+  const patch = validateTaskUpdate(input, activePersonIds(people));
   const changes: AdminPreviewChange[] = [];
   for (const field of Object.keys(patch)) {
     if (field === "name") changes.push(change("name", task.title ?? null, patch.name));
@@ -432,13 +500,16 @@ async function planUpdate(
     else changes.push(change(field, task[field] ?? null, patch[field]));
   }
   const assigned = Array.isArray(patch.assignee_person_ids) ? patch.assignee_person_ids as string[] : null;
+  if (assigned) assertActiveAssignees(assigned, people);
   return {
     summary: `Update ${taskTitle(task)}`,
     changes,
-    warnings: assigned ? assignmentWarnings(assigned, people) : [],
-    state: taskState(task),
+    warnings: assigned ? assignmentWarnings(assigned) : [],
+    state: adminTaskPreviewState(task),
     targetType: "task",
     targetId: taskId,
+    request: { task_id: taskId, ...patch },
+    task,
     run: async () => {
       const result = await services.updateTask(access, taskId, patch);
       return { status: 200, body: taskBody(result), targetId: taskId };
@@ -451,28 +522,46 @@ async function planAssign(
   payload: Json,
   services: AdminAgentActionServices,
 ): Promise<ActionPlan> {
-  rejectUnknownFields(payload, new Set(["task_id", "mode", "person_ids"]), "admin task assign action");
-  const taskId = payloadTaskId(payload);
-  const mode = payload.mode;
-  if (mode !== "add" && mode !== "remove" && mode !== "replace") {
-    throw new WorkOsValidationError("mode must be add, remove, or replace");
-  }
-  const requested = normalizePersonIds(payload.person_ids, "person_ids");
+  const input = objectInput(payload, "Task assign payload");
+  rejectUnknownFields(
+    input,
+    new Set(["task_id", "mode", "person_ids", "final_assignee_person_ids"]),
+    "admin task assign action",
+  );
+  const taskId = payloadTaskId(input);
   const task = await requireTask(services, access, taskId);
   const current = assigneeIds(task);
-  // The final list is resolved once against this snapshot; the confirm path
-  // re-reads the same state before apply, so the list cannot drift underneath.
-  const final = resolveAssignment(current, mode, requested);
   const people = await readPeople(services, access);
+  const requested = normalizePersonIds(input.person_ids, "person_ids");
+  let final: string[];
+  if (Array.isArray(input.final_assignee_person_ids)) {
+    // A stored request already resolved the list; reuse it instead of applying
+    // the delta again against a possibly changed snapshot.
+    final = normalizePersonIds(input.final_assignee_person_ids, "final_assignee_person_ids");
+  } else {
+    const mode = input.mode;
+    if (mode !== "add" && mode !== "remove" && mode !== "replace") {
+      throw new WorkOsValidationError("mode must be add, remove, or replace");
+    }
+    final = resolveAssignment(current, mode, requested);
+  }
+  assertActiveAssignees(final, people);
   return {
     summary: `Assign ${taskTitle(task)}`,
     changes: [change("assignees", current, final)],
-    warnings: assignmentWarnings(final, people),
-    state: taskState(task, final),
+    warnings: assignmentWarnings(final),
+    state: adminTaskPreviewState(task),
     targetType: "task",
     targetId: taskId,
+    request: {
+      task_id: taskId,
+      mode: input.mode === "add" || input.mode === "remove" || input.mode === "replace" ? input.mode : "replace",
+      person_ids: requested,
+      final_assignee_person_ids: final,
+    },
+    task,
     run: async () => {
-      // The stored action is a delta, but the write is the exact final list.
+      // The stored action is a delta, but the write is the exact resolved list.
       const result = await services.updateTask(access, taskId, { assignee_person_ids: final });
       return { status: 200, body: taskBody(result), targetId: taskId };
     },
@@ -484,9 +573,14 @@ async function planMove(
   payload: Json,
   services: AdminAgentActionServices,
 ): Promise<ActionPlan> {
-  rejectUnknownFields(payload, new Set(["task_id", "parent_task_id"]), "admin task move action");
-  const taskId = payloadTaskId(payload);
-  const parentTaskId = payload.parent_task_id;
+  const input = objectInput(payload, "Task move payload");
+  rejectUnknownFields(
+    input,
+    new Set(["task_id", "parent_task_id"]),
+    "admin task move action",
+  );
+  const taskId = payloadTaskId(input);
+  const parentTaskId = input.parent_task_id;
   if (typeof parentTaskId !== "string" || !parentTaskId.trim()) {
     throw new WorkOsValidationError("parent_task_id is required");
   }
@@ -509,9 +603,11 @@ async function planMove(
     summary: `Move ${taskTitle(task)}`,
     changes: [change("parent", from, parentId)],
     warnings,
-    state: taskState(task, assigneeIds(task), parentId),
+    state: adminTaskPreviewState(task),
     targetType: "task",
     targetId: taskId,
+    request: { task_id: taskId, parent_task_id: parentId },
+    task,
     run: async () => {
       const result = await services.moveTask(access, taskId, parentId);
       return { status: 200, body: taskBody(result), targetId: taskId };
@@ -541,7 +637,9 @@ async function planAdminAction(
 
 /** Describe one action without writing anything. The `run` closure is only
  * invoked by `applyAdminAction`, so a preview route can never execute a
- * consequential write by accident. */
+ * consequential write by accident. `request` is the resolved payload the
+ * preview store must persist; `state` is the target as it was before the
+ * action, which is what the confirm path fingerprints. */
 export async function previewAdminAction(
   access: WorkOsAccess,
   action: AdminPreviewAction,
@@ -557,21 +655,34 @@ export async function previewAdminAction(
     state: plan.state,
     targetType: plan.targetType,
     targetId: plan.targetId,
+    request: plan.request,
   };
 }
 
-/** Execute a confirmed preview and record who did it. The preview id is the
- * one-time key; this function only ever runs from the confirm route. */
+/** Execute a confirmed preview and record who did it. Pass the stored
+ * `preview.request` as `payload` and the stored `preview.state` as
+ * `expectedState`; a target that moved since the preview answers
+ * `409 preview_stale` before any write. `actor.previewId` is the create
+ * idempotency key, so a retry after a failed audit returns the first task
+ * instead of creating a second one. */
 export async function applyAdminAction(
   access: WorkOsAccess,
   action: AdminPreviewAction,
   payload: Json,
   services: AdminAgentActionServices,
-  actor: { tokenId: string; tokenName: string },
+  actor: AdminActionActor,
+  expectedState?: Json,
 ): Promise<{ status: number; body: Json }> {
   const plan = await planAdminAction(access, action, payload, services);
-  const result = await plan.run();
-  await audit(access, `admin.${action}`, plan.targetType, result.targetId, {
+  if (expectedState !== undefined && action !== "task.create") {
+    if (!plan.task) throw new WorkOsNotFoundError();
+    if (previewFingerprint(adminTaskPreviewState(plan.task)) !== previewFingerprint(expectedState)) {
+      throw new WorkOsConflictError("This change is stale; refresh it", "preview_stale");
+    }
+  }
+  const result = await plan.run(actor);
+  const resultTask = taskRow(result.body);
+  await audit(access, `admin.${action}`, auditTargetType(resultTask), auditTargetId(resultTask, result.targetId), {
     tokenId: actor.tokenId,
     tokenName: actor.tokenName,
     action,
@@ -589,7 +700,26 @@ export const defaultAdminAgentActionServices: AdminAgentActionServices = {
     const details = await getWorkOsEmployeeTaskDetails(access, taskId, { allowArchived: true });
     return details.task as Json;
   },
-  createTask: (access, payload) => createWorkOsEmployeeTask(access, payload) as Promise<Json>,
+  createTask: async (access, payload, options = {}) => {
+    try {
+      return await createWorkOsEmployeeTask(access, payload, options.actor, options.idempotencyKey) as Json;
+    } catch (error) {
+      // A retry after a successful create with a failed follow-up write hits
+      // the (organization, token, key) unique index; return the row the first
+      // attempt created instead of surfacing a duplicate-key failure.
+      if (!options.actor || !options.idempotencyKey) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate key|unique constraint|already exists/i.test(message)) throw error;
+      const { data, error: loadError } = await db().from("work_tasks").select("*")
+        .eq("organization_id", access.organizationId)
+        .eq("agent_token_id", options.actor.tokenId)
+        .eq("agent_idempotency_key", options.idempotencyKey)
+        .maybeSingle();
+      if (loadError) throw new Error(`reconcile admin task create: ${loadError.message}`);
+      if (!data) throw error;
+      return data as Json;
+    }
+  },
   updateTask: (access, taskId, payload) => updateWorkOsAdminTask(access, taskId, payload),
   moveTask: (access, taskId, parentTaskId) =>
     moveWorkOsEmployeeSubtask(access, taskId, { parent_task_id: parentTaskId }) as unknown as Promise<Json>,

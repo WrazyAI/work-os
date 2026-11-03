@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
+  adminTaskPreviewState,
   applyAdminAction,
   previewAdminAction,
   validateAdminTaskCreate,
@@ -9,12 +10,20 @@ import {
 import { previewFingerprint } from "../src/lib/work-admin-action-previews";
 import { WorkOsValidationError } from "../src/lib/work-os-api";
 import type { AdminPreviewAction } from "../src/modules/work-os/admin-agent/contracts";
-import { adminAccess, fixture, personA, personB, personC } from "./helpers/work-os-admin-agent-fixture.mts";
+import {
+  adminAccess,
+  adminUser,
+  fixture,
+  mappedAdminAccess,
+  personA,
+  personB,
+  personC,
+} from "./helpers/work-os-admin-agent-fixture.mts";
 
 /** The preview layer is deliberately service-shaped: these tests hand it fakes
- * and assert what it would describe and send, while the audit write (the one
- * side effect apply owns) runs against the PGlite fixture. Nothing here needs
- * a real task table, which is the point of the dependency boundary. */
+ * and assert what it would describe, store, and send, while the audit write
+ * (the one side effect apply owns) runs against the PGlite fixture. Nothing
+ * here needs a real task table, which is the point of the dependency boundary. */
 
 type Json = Record<string, unknown>;
 
@@ -46,21 +55,29 @@ type FakeExtras = {
 function fakeServices(taskRow: Json, extras: FakeExtras = {}) {
   const calls = {
     getTask: [] as string[],
-    createTask: [] as Json[],
+    createTask: [] as Array<{
+      payload: Json;
+      options?: { idempotencyKey?: string; actor?: { tokenId: string; tokenName: string } };
+    }>,
     updateTask: [] as Array<{ taskId: string; payload: Json }>,
     moveTask: [] as Array<{ taskId: string; parentTaskId: string }>,
     completeTask: [] as Array<{ taskId: string; completed: boolean }>,
     archiveTask: [] as Array<{ taskId: string; mode: "archive" | "delete" }>,
     reviewEod: [] as Array<{ reportId: string; body: Json }>,
   };
+  const createdByIdempotencyKey = new Map<string, Json>();
   const services: AdminAgentActionServices = {
     getTask: async (_access, taskId) => {
       calls.getTask.push(taskId);
       return extras.tasks?.[taskId] ?? taskRow;
     },
-    createTask: async (_access, payload) => {
-      calls.createTask.push(payload);
-      return extras.created ?? { ...taskRow, ...payload };
+    createTask: async (_access, payload, options) => {
+      calls.createTask.push({ payload, options });
+      const key = options?.idempotencyKey;
+      if (key && createdByIdempotencyKey.has(key)) return createdByIdempotencyKey.get(key) as Json;
+      const created = extras.created ?? { ...taskRow, ...payload };
+      if (key) createdByIdempotencyKey.set(key, created);
+      return created;
     },
     updateTask: async (_access, taskId, payload) => {
       calls.updateTask.push({ taskId, payload });
@@ -92,10 +109,14 @@ function fakeServices(taskRow: Json, extras: FakeExtras = {}) {
       }
       : {}),
   };
-  return { services, calls };
+  return { services, calls, createdByIdempotencyKey };
 }
 
-const token = { tokenId: "90000000-0000-4000-8000-000000000011", tokenName: "Admin laptop" };
+const token = {
+  tokenId: "90000000-0000-4000-8000-000000000011",
+  tokenName: "Admin laptop",
+  previewId: "91000000-0000-4000-8000-000000000021",
+};
 
 let f: Awaited<ReturnType<typeof fixture>>;
 before(async () => { f = await fixture(); });
@@ -106,8 +127,9 @@ async function lastAudit(action: string) {
     action: string;
     target_type: string;
     target_id: string | null;
+    actor_user_id: string | null;
     metadata: Json;
-  }>("select action, target_type, target_id, metadata from work_audit_log where action = $1 order by id desc limit 1", [action]);
+  }>("select action, target_type, target_id, actor_user_id, metadata from work_audit_log where action = $1 order by id desc limit 1", [action]);
   return rows[0];
 }
 
@@ -120,13 +142,10 @@ test("assign add resolves the final list once and lists the change", async () =>
     services,
   );
   assert.deepEqual(preview.changes, [{ field: "assignees", from: [personA], to: [personA, personB] }]);
-  assert.deepEqual(preview.state, {
-    updatedAt: task.updated_at,
-    status: "open",
-    completed: false,
-    assignees: [personA, personB].sort(),
-    parentId: null,
-  });
+  // The stored state is the target before the action, not the planned result.
+  assert.deepEqual(preview.state, adminTaskPreviewState(task));
+  assert.deepEqual((preview.state as Json).assignees, [personA]);
+  assert.deepEqual(preview.request.final_assignee_person_ids, [personA, personB]);
   // The final list is resolved against one snapshot, not once per id.
   assert.deepEqual(calls.getTask, ["t1"]);
 });
@@ -140,15 +159,16 @@ test("remove and replace are exact final lists", async () => {
     fakeServices(shared).services,
   );
   assert.deepEqual(remove.changes, [{ field: "assignees", from: [personA, personB], to: [personB] }]);
+  assert.deepEqual(remove.request.final_assignee_person_ids, [personB]);
 
   const replace = await previewAdminAction(
     adminAccess,
     "task.assign",
     { task_id: "t1", mode: "replace", person_ids: [personC, personC] },
-    fakeServices(shared).services,
+    fakeServices(shared, { people: [ada, grace, { ...linus, active: true }] }).services,
   );
   assert.deepEqual(replace.changes, [{ field: "assignees", from: [personA, personB], to: [personC] }]);
-  assert.deepEqual((replace.state as Json).assignees, [personC]);
+  assert.deepEqual(replace.request.final_assignee_person_ids, [personC]);
 
   const empty = await previewAdminAction(
     adminAccess,
@@ -159,14 +179,19 @@ test("remove and replace are exact final lists", async () => {
   assert.ok(empty.warnings.some((warning) => /no assignees/i.test(warning)));
 });
 
-test("assign warns when the final list keeps an inactive person", async () => {
-  const preview = await previewAdminAction(
-    adminAccess,
-    "task.assign",
-    { task_id: "t1", mode: "add", person_ids: [personC] },
-    fakeServices(task, { people: [ada, grace, linus] }).services,
-  );
-  assert.ok(preview.warnings.some((warning) => /not an active organization member/i.test(warning)));
+test("assign rejects an inactive or unknown person instead of warning", async () => {
+  for (const requested of [[personC], ["90000000-0000-4000-8000-000000000099"]]) {
+    await assert.rejects(
+      previewAdminAction(
+        adminAccess,
+        "task.assign",
+        { task_id: "t1", mode: "add", person_ids: requested },
+        fakeServices(task, { people: [ada, grace, linus] }).services,
+      ),
+      (error: unknown) => error instanceof WorkOsValidationError
+        && /Assignees must be active Work OS organization members/.test(error.message),
+    );
+  }
 });
 
 test("assign rejects an unknown mode and a malformed person list", async () => {
@@ -180,7 +205,7 @@ test("assign rejects an unknown mode and a malformed person list", async () => {
   );
 });
 
-test("move changes the parent and warns about the target shape", async () => {
+test("move changes the parent and keeps the pre-action state", async () => {
   const subtask = { ...task, id: "t1", parent_task_id: "t0", project_id: "project-1" };
   const parent = { id: "t2", title: "Parent", parent_task_id: null, project_id: "project-1" };
   const otherProject = { id: "t3", title: "Elsewhere", parent_task_id: null, project_id: "project-2" };
@@ -193,7 +218,8 @@ test("move changes the parent and warns about the target shape", async () => {
     fakeServices(subtask, { tasks: { t1: subtask, t2: parent } }).services,
   );
   assert.deepEqual(moved.changes, [{ field: "parent", from: "t0", to: "t2" }]);
-  assert.equal((moved.state as Json).parentId, "t2");
+  assert.equal((moved.state as Json).parentId, "t0");
+  assert.deepEqual(moved.request.parent_task_id, "t2");
   assert.deepEqual(moved.warnings, []);
 
   const differentProject = await previewAdminAction(
@@ -234,21 +260,18 @@ test("a stale preview does not apply", async () => {
   );
   const stored = previewFingerprint(preview.state);
 
-  // The target moved on after the preview was described: the confirm path
-  // re-reads this state, so the fingerprint no longer matches and nothing is
-  // applied. A preview itself never writes.
+  // The target moved on after the preview was described: a fresh projection
+  // fingerprints differently, and apply refuses the stored state.
   current.updated_at = "2026-11-02T01:00:00Z";
-  const fresh = await previewAdminAction(
-    adminAccess,
-    "task.assign",
-    { task_id: "t1", mode: "add", person_ids: [personB] },
-    services,
+  assert.notEqual(previewFingerprint(adminTaskPreviewState(current)), stored);
+  await assert.rejects(
+    applyAdminAction(adminAccess, "task.assign", preview.request, services, token, preview.state),
+    (error: unknown) => (error as Error)?.name === "WorkOsConflictError"
+      && (error as { reason?: string }).reason === "preview_stale"
+      && /stale/i.test((error as Error).message),
   );
-  assert.notEqual(previewFingerprint(fresh.state), stored);
-  // Confirm compares this fingerprint before calling apply; describing the
-  // action again never touches the write services itself.
-  assert.deepEqual(calls.createTask, []);
   assert.deepEqual(calls.updateTask, []);
+  assert.deepEqual(calls.createTask, []);
   assert.deepEqual(calls.moveTask, []);
 });
 
@@ -269,6 +292,8 @@ test("create names the owners from the requested people and rejects an unknown i
     { field: "project", from: null, to: "project-1" },
     { field: "due_date", from: null, to: "2026-11-15" },
   ]);
+  assert.deepEqual(preview.request.assignee_person_ids, [personB]);
+  assert.deepEqual(preview.request.resolved_owner_person_ids, [personB]);
 
   const unowned = await previewAdminAction(
     adminAccess,
@@ -278,6 +303,7 @@ test("create names the owners from the requested people and rejects an unknown i
   );
   assert.equal(unowned.summary, "Create Ship for unassigned");
   assert.deepEqual((unowned.changes[1] as { to: unknown }).to, []);
+  assert.deepEqual(unowned.request.assignee_person_ids, []);
 
   await assert.rejects(
     previewAdminAction(
@@ -288,6 +314,25 @@ test("create names the owners from the requested people and rejects an unknown i
     ),
     (error: unknown) => error instanceof WorkOsValidationError && /active Work OS organization members/.test(error.message),
   );
+});
+
+test("a mapped admin creating a subtask never inherits the caller as owner", async () => {
+  const { services, calls } = fakeServices(task, { people: [ada, grace] });
+  const preview = await previewAdminAction(
+    mappedAdminAccess,
+    "task.create",
+    { name: "Sub", parent_task_id: "t0" },
+    services,
+  );
+  assert.equal(mappedAdminAccess.personId, personA);
+  assert.equal(preview.summary, "Create Sub for unassigned");
+  assert.deepEqual(preview.changes[1], { field: "owners", from: [], to: [] });
+  assert.deepEqual(preview.request.assignee_person_ids, []);
+
+  await applyAdminAction(mappedAdminAccess, "task.create", preview.request, services, token);
+  // The explicit empty list is what stops the delegated create service from
+  // defaulting a subtask to the mapped caller.
+  assert.deepEqual((calls.createTask[0].payload as Json).assignee_person_ids, []);
 });
 
 test("an unmapped admin previews an assignment without inventing a person", async () => {
@@ -322,7 +367,8 @@ test("update describes each supplied field against the task state", async () => 
     { field: "due_date", from: "2026-11-10", to: "2026-11-20" },
     { field: "labels", from: ["release"], to: ["release", "launch"] },
   ]);
-  assert.equal((preview.state as Json).updatedAt, task.updated_at);
+  assert.deepEqual(preview.state, adminTaskPreviewState(current));
+  assert.equal((preview.request as Json).task_id, "t1");
 });
 
 test("validateAdminTaskCreate normalizes the employee create fields", () => {
@@ -350,6 +396,11 @@ test("validateAdminTaskCreate normalizes the employee create fields", () => {
   assert.equal(validated.due_date, "2026-11-15");
 });
 
+test("validateAdminTaskCreate always emits an assignee list", () => {
+  assert.deepEqual(validateAdminTaskCreate({ name: "Ship" }).assignee_person_ids, []);
+  assert.deepEqual(validateAdminTaskCreate({ name: "Ship" }, [personA]).assignee_person_ids, []);
+});
+
 test("validateAdminTaskCreate rejects unknown fields, a blank title, and bad dates", () => {
   for (const payload of [
     { name: "Ship", completed: true },
@@ -362,6 +413,17 @@ test("validateAdminTaskCreate rejects unknown fields, a blank title, and bad dat
       () => validateAdminTaskCreate(payload, [personB]),
       WorkOsValidationError,
       JSON.stringify(payload),
+    );
+  }
+});
+
+test("a null or non-object payload is a validation error, not a crash", async () => {
+  const { services } = fakeServices(task);
+  for (const action of ["task.update", "task.assign", "task.move"] as AdminPreviewAction[]) {
+    await assert.rejects(
+      previewAdminAction(adminAccess, action, null as unknown as Json, services),
+      WorkOsValidationError,
+      action,
     );
   }
 });
@@ -384,22 +446,23 @@ test("previews never execute a consequential write", async () => {
   assert.deepEqual(calls.reviewEod, []);
 });
 
-test("apply assign sends the exact final list and audits the admin actor", async () => {
+test("apply assign uses the stored resolved request and audits the admin actor", async () => {
   const { services, calls } = fakeServices(task);
-  const result = await applyAdminAction(
+  const preview = await previewAdminAction(
     adminAccess,
     "task.assign",
     { task_id: "t1", mode: "add", person_ids: [personB] },
     services,
-    token,
   );
+  const result = await applyAdminAction(adminAccess, "task.assign", preview.request, services, token, preview.state);
   assert.equal(result.status, 200);
   assert.deepEqual(calls.updateTask, [
     { taskId: "t1", payload: { assignee_person_ids: [personA, personB] } },
   ]);
   const auditRow = await lastAudit("admin.task.assign");
-  assert.equal(auditRow.target_type, "task");
+  assert.equal(auditRow.target_type, "work_os_task");
   assert.equal(auditRow.target_id, "t1");
+  assert.equal(auditRow.actor_user_id, adminUser);
   assert.equal(auditRow.metadata.tokenId, token.tokenId);
   assert.equal(auditRow.metadata.tokenName, token.tokenName);
   assert.equal(auditRow.metadata.action, "task.assign");
@@ -408,50 +471,124 @@ test("apply assign sends the exact final list and audits the admin actor", async
   ]);
 });
 
-test("apply create validates, returns 201, and audits the new task id", async () => {
-  const created = { ...task, id: "t9", title: "Ship", assignee_person_ids: [personB] };
+test("apply replace sends the previewed final list", async () => {
+  const shared = { ...task, assignee_person_ids: [personA, personB] };
+  const { services, calls } = fakeServices(shared, { people: [ada, grace, { ...linus, active: true }] });
+  const preview = await previewAdminAction(
+    adminAccess,
+    "task.assign",
+    { task_id: "t1", mode: "replace", person_ids: [personC] },
+    services,
+  );
+  await applyAdminAction(adminAccess, "task.assign", preview.request, services, token, preview.state);
+  assert.deepEqual(calls.updateTask, [
+    { taskId: "t1", payload: { assignee_person_ids: [personC] } },
+  ]);
+});
+
+test("apply uses the resolved list, not a delta against newer state", async () => {
+  const shared: Json = { ...task, assignee_person_ids: [personA, personB] };
+  const { services, calls } = fakeServices(shared);
+  const preview = await previewAdminAction(
+    adminAccess,
+    "task.assign",
+    { task_id: "t1", mode: "remove", person_ids: [personA] },
+    services,
+  );
+  // A concurrent writer adds a third person after the preview. The stored
+  // request still names the list the admin approved.
+  shared.assignee_person_ids = [personA, personB, personC];
+  await applyAdminAction(adminAccess, "task.assign", preview.request, services, token);
+  assert.deepEqual(calls.updateTask, [
+    { taskId: "t1", payload: { assignee_person_ids: [personB] } },
+  ]);
+});
+
+test("apply create returns 201, keys the create, and audits the provider id", async () => {
+  const created = {
+    ...task,
+    id: "t9",
+    title: "Ship",
+    provider: "local",
+    provider_task_id: "pt-t9",
+    assignee_person_ids: [personB],
+  };
   const { services, calls } = fakeServices(task, { people: [ada, grace], created });
-  const result = await applyAdminAction(
+  const preview = await previewAdminAction(
     adminAccess,
     "task.create",
     { name: "Ship", assignee_person_ids: [personB] },
     services,
-    token,
   );
+  const result = await applyAdminAction(adminAccess, "task.create", preview.request, services, token);
   assert.equal(result.status, 201);
-  assert.deepEqual(calls.createTask, [{ name: "Ship", assignee_person_ids: [personB] }]);
+  assert.deepEqual(calls.createTask[0].payload, { name: "Ship", assignee_person_ids: [personB] });
+  assert.equal(calls.createTask[0].options?.idempotencyKey, token.previewId);
+  assert.deepEqual(calls.createTask[0].options?.actor, {
+    tokenId: token.tokenId,
+    tokenName: token.tokenName,
+  });
   assert.deepEqual((result.body as Json).task, created);
   const auditRow = await lastAudit("admin.task.create");
-  assert.equal(auditRow.target_id, "t9");
+  assert.equal(auditRow.target_type, "work_os_task");
+  assert.equal(auditRow.target_id, "pt-t9");
+  assert.equal(auditRow.actor_user_id, adminUser);
   assert.equal(auditRow.metadata.action, "task.create");
+});
+
+test("a create whose audit fails does not duplicate the task on retry", async () => {
+  const { services, calls, createdByIdempotencyKey } = fakeServices(task, { people: [ada, grace] });
+  const payload = { name: "Ship" };
+
+  await f.db.query("alter table work_audit_log rename to work_audit_log_hidden");
+  try {
+    await assert.rejects(
+      applyAdminAction(adminAccess, "task.create", payload, services, token),
+      /audit log/,
+    );
+  } finally {
+    await f.db.query("alter table work_audit_log_hidden rename to work_audit_log");
+  }
+  assert.equal(calls.createTask.length, 1);
+  assert.equal(createdByIdempotencyKey.size, 1);
+
+  const retried = await applyAdminAction(adminAccess, "task.create", payload, services, token);
+  assert.equal(retried.status, 201);
+  assert.equal(calls.createTask.length, 2);
+  assert.equal(createdByIdempotencyKey.size, 1);
+  assert.equal(calls.createTask[0].options?.idempotencyKey, calls.createTask[1].options?.idempotencyKey);
+  assert.equal(calls.createTask[1].options?.idempotencyKey, token.previewId);
 });
 
 test("apply update and move use the stored payload and audit their target", async () => {
   const { services, calls } = fakeServices(task);
-  const updated = await applyAdminAction(
+  const updatePreview = await previewAdminAction(
     adminAccess,
     "task.update",
     { task_id: "t1", name: "Ship it" },
     services,
-    token,
   );
+  const updated = await applyAdminAction(adminAccess, "task.update", updatePreview.request, services, token, updatePreview.state);
   assert.equal(updated.status, 200);
   assert.deepEqual(calls.updateTask, [{ taskId: "t1", payload: { name: "Ship it" } }]);
   const updateAudit = await lastAudit("admin.task.update");
+  assert.equal(updateAudit.target_type, "work_os_task");
   assert.equal(updateAudit.target_id, "t1");
+  assert.equal(updateAudit.actor_user_id, adminUser);
 
-  const moved = await applyAdminAction(
+  const movePreview = await previewAdminAction(
     adminAccess,
     "task.move",
     { task_id: "t1", parent_task_id: "t2" },
     services,
-    token,
   );
+  const moved = await applyAdminAction(adminAccess, "task.move", movePreview.request, services, token, movePreview.state);
   assert.equal(moved.status, 200);
   assert.deepEqual(calls.moveTask, [{ taskId: "t1", parentTaskId: "t2" }]);
   const moveAudit = await lastAudit("admin.task.move");
-  assert.equal(moveAudit.target_type, "task");
+  assert.equal(moveAudit.target_type, "work_os_task");
   assert.equal(moveAudit.target_id, "t1");
+  assert.equal(moveAudit.actor_user_id, adminUser);
 });
 
 test("apply refuses an action it does not recognize", async () => {
