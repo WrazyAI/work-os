@@ -410,6 +410,14 @@ explicit and visible, never an implicit oldest or most-privileged membership:
   it authorizes the device; the resulting device session is bound to that
   workspace. A workspace without a mapped workday is not offered as a companion
   choice, and the screen says so.
+- The browser round-trip hands off automatically. After approval the web screen
+  keeps the authorized device on screen and attempts the companion handoff once
+  as soon as the callback is issued, so the employee does not have to press
+  again. Because a browser may refuse an external-protocol launch without a
+  fresh press, the same `Open Work OS` action stays visible as the fallback.
+  The companion keeps a visible waiting state with a `Reopen browser` action
+  until the callback lands, and the page names the signed-in account and the
+  chosen workspace before the decision.
 
 ## 5. Dashboard blueprint
 
@@ -419,30 +427,28 @@ content axis, tokens, and action language.
 
 ### 5.1 Pre-shift / not clocked in
 
-The clocked-out dashboard uses the same three-part composition as the active
-day — one workday band, one focus strip, one queue — so the page does not change
-its shape when the shift starts:
+The clocked-out dashboard uses the same command-surface composition as the
+active day, so the page does not change its shape when the shift starts:
 
-1. Attendance band. The state line (Ready to begin, Off shift, or Worktivity
+1. Command surface. The state line (Ready to begin, Off shift, or Worktivity
    status), the short state detail plus the clock-in contract, one primary Clock
-   in action in the Windows Companion, and one quiet Set focus action. The web
-   dashboard shows status and
-   directs employees to the Companion for attendance actions. Otto is a
-   restrained mark in the band, never the reason it is tall.
-2. Window instrument. The time until the window opens at the band's leading edge,
-   with the scheduled start and end on the axis. Before the window opens there is
-   no position to mark, so the axis carries no now dot; the live fact is the time
-   until it starts.
-3. Counts. Planned, carried over, overdue, and completed sit in the band as four
-   linked facts, each opening the view it measures. A zero is a quiet fact, not a
-   control.
-4. Focus strip. Today's focus on one line with its provenance, under the shared
-   pan contract (§6.2).
-5. First moves. A short open-task queue with direct completion, a full Tasks
+   in action in the Windows Companion, and one quiet Set focus action. The
+   scheduled-window instrument sits on the same row; before the window opens the
+   leading reading is the time until it starts and the axis carries no now dot.
+   The four counts follow on a hairline row — planned, carried over, overdue,
+   and completed — each opening the view it measures. A zero is a quiet fact,
+   not a control. The focus line is the surface's last row: today's focus, its
+   provenance, and the next check-in, under the shared pan contract (§6.2).
+   Otto is a restrained mark in the surface, never the reason it is tall.
+2. Margin instruments. This week's completed-task chart and plan reliability,
+   set as labels on hairlines rather than cards. On wide windows they sit beside
+   the queue; at narrow widths they move below it. They read the same seven-day
+   insights record as the web. An unavailable read leaves the queue intact and
+   shows a quiet empty state in place of the chart.
+3. First moves. A short open-task queue with direct completion, a full Tasks
    path, and the task-record sync state in its footer.
 
-At 1024×768 the first task row is visible without scrolling, matching the active
-day. The readiness hero and its separate pulse, metric, and work-in-motion cards
+The readiness hero and its separate pulse, metric, and work-in-motion cards
 were removed: they restated the counts and the window, and together they pushed
 the queue below the fold.
 
@@ -452,40 +458,52 @@ start attendance.
 
 ### 5.2 Active / clocked in
 
-The active dashboard is organized around one command surface:
+The active dashboard is organized around one command surface, the same
+composition the web Today page uses:
 
-1. Attendance band: the state line (On shift, Paused, or Worktivity status), the
-   window instrument, and Pause/Resume and Clock out in the connected Windows
-   Companion. Worktivity owns the state and confirms each change before Work OS
-   mirrors it. The band has no permanent footer: one exists only while it carries
-   a pending activity check or a focus-save retry, so the normal state spends its
-   height on the instrument instead of a restated status sentence.
+1. Attendance row: the state line (On shift, Paused, or Worktivity status), one
+   quiet provider-observation line when Worktivity has confirmed the session, and
+   Pause/Resume and Clock out in the connected Windows Companion. Worktivity owns
+   the state and confirms each change before Work OS mirrors it. The surface has
+   no permanent footer: one exists only while it carries a pending activity
+   check or a focus-save retry, so the normal state spends its height on the
+   instrument instead of a restated status sentence.
 2. Window instrument: elapsed and remaining at the ends of one bounded progress
-   bar whose start and end label the axis. The position marker carries the
+   bar; hovering or focusing the line reveals its scheduled start and end, and
+   the detailed dialog carries the full axis. The position marker carries the
    present without restating the reader's own clock. It is a calm instrument,
    not a gamified score.
-3. Counts: completed, open today, overdue, and carried over sit in the band as
-   four linked facts. Each has a single owner on the page and opens the view it
-   measures; a zero is stated quietly and is not a control.
-4. Focus strip: today's focus as one line with its provenance and save state,
-   under the shared pan contract (§6.2).
+3. Counts: completed, open today, overdue, and carried over sit on a full-width
+   hairline row with their plain-language detail. Each has a single owner on the
+   page and opens the view it measures; a zero is stated quietly and is not a
+   control.
+4. Focus line: today's focus as one line with its provenance, save state, and
+   the next check-in, under the shared pan contract (§6.2). It is the command
+   surface's last row, not a second card.
 5. Task queue: Today, Yesterday, Older tabs with live counts, Add task, and a
    direct full-workspace path. The tabs are the panel's title; no eyebrow or
-   heading restates the selected view.
-6. Otto chat entry: a compact launcher outside page flow. Opening it creates the
+   heading restates the selected view. Above 900px the queue reads as a table
+   with Task, Due, and Status tracks; below it, due and status fold into one
+   metadata line so the title keeps its width.
+6. Margin instruments: This week's completed-task chart and plan reliability,
+   set as labels on hairlines rather than cards. On wide windows they sit beside
+   the queue; at narrow widths they move below it. They read the same seven-day
+   insights record as the web. An unavailable read leaves the command center and
+   queue intact and shows a quiet empty state in place of the chart.
+7. Otto chat entry: a compact launcher outside page flow. Opening it creates the
    shared bounded chat sheet and must not cover the queue.
 
-The band and the focus strip stay deliberately compact: at 1024×768 the first
-task row is visible without scrolling, because the queue is the visual anchor
-and the attendance state is context, not a second hero. The 132px progress ring
-is a documented deviation from the earlier composition: it and the timeline bar
+The command surface stays deliberately compact: at 1024×768 the first task row
+is visible without scrolling, because the queue is the visual anchor and the
+attendance state is context, not a second hero. The 132px progress ring is a
+documented deviation from the earlier composition: it and the timeline bar
 encoded the same window percentage, so the bar is the one instrument and the
 ring's vertical space belongs to the work. The four counts have one owner — the
-band — rather than a flow legend and a facts row that disagreed about which
-numbers the day is made of.
+command surface — rather than a flow legend and a facts row that disagreed about
+which numbers the day is made of.
 
-The workday band opens a detailed workday dialog when its non-control area is
-pressed; its clock and task buttons keep their own actions. A keyboard-reachable
+The command surface opens a detailed workday dialog when its non-control area
+is pressed; its clock and task buttons keep their own actions. A keyboard-reachable
 details button appears on focus and opens the same dialog. The dialog separates provider
 status, scheduled window, task counts, and focus without inventing attendance
 or task facts. It traps focus, closes on Escape, backdrop, or close, and restores
@@ -531,10 +549,18 @@ workspace than a list of cards.
 1. Masthead title/date and date navigator.
 2. One compact agenda strip: focus statement, save/provenance state, live count
    shortcuts, and Review unfinished work only when relevant.
-3. One toolbar row: the four views (My day, Unfinished, Completed, All tasks),
-   the search field, the date-range filter, and the local Add task action. The
-   controls wrap below the views only when the row runs out of width.
-4. One flat task-list panel.
+3. One flat task-list panel whose header borrows the dashboard queue's outline:
+   the four views (My day, Unfinished, Completed, All tasks) are the panel title,
+   and the compact search field and the date-range filter ride the trailing
+   edge. The controls wrap below the views only when the header runs out of
+   width.
+4. The list's own header row — the quiet sortable column row for Name, Date
+   Due, and Status — carries the local Add task action at its right edge, so the
+   action belongs to the list it adds to and the panel title row stays a title.
+   Ordering and the action share that row without crowding: the date and status
+   tracks keep the width the rows use, and the action sits in the space the
+   status column leaves free. The column labels are written as words, not
+   shouted labels, so the row reads as a quiet table header.
 5. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
@@ -546,12 +572,29 @@ Use a flat, readable list:
 
     completion | task + metadata | progress | due | status | actions
 
-The Tasks page has one date navigator in the masthead, one toolbar row (the
-views, search, date filter, and Add task), and one task list. Do not repeat a
-Task queue heading or status section headers. The list begins with one quiet
-sortable column row for Name, Date due, and Status; it aligns to the task, due,
-and status tracks rather than introducing
-a second boxed toolbar. Keep the canonical default order visible through the row
+The actions column is one intrinsic menu cell at the trailing edge: a row with
+an action for this actor carries a single ellipsis trigger aligned with the
+status pill, and the trigger never widens the row or shifts when a menu opens.
+The menu is detached (§8.3) and opens beside its trigger, so the row keeps its
+height and no action is inlined as text. A row with nothing available to this
+actor renders no trigger — an empty menu is never offered — and a cached
+payload that predates the capability answer waits for the refresh instead of
+guessing from assignees. The status items are the one place a menu states a
+stored state: the option that matches the status the row displays carries the
+check mark and is disabled, because choosing it would write the value the task
+already holds.
+
+The Tasks page has one date navigator in the masthead, one task-list panel, and
+one task list. The panel header carries the views, a compact search, and the
+date filter on one row while width permits; search and the date filter ride the
+right edge, the search stays compact while the header is one row, and the
+controls wrap beneath the views rather than compressing them. Once wrapped on a
+small screen, the search may take the row. Do not repeat a Task queue heading or
+status section headers. The list begins with one quiet sortable column row for
+Name, Date Due, and Status, which also carries the Add task action at its
+right edge; the row aligns to the task, due, and status tracks rather than
+introducing a second boxed toolbar, and the action never crowds the status
+label. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
 
@@ -570,7 +613,7 @@ Due today, Due date) before anything is hidden; then the project name and
 description drop, so the title, completion control, and due signal always
 survive. The agenda strip stays one compact row down to 780px — the focus
 statement and the carry action — and becomes a two-line stack below. The counts
-live in the view chips.
+live in the panel's view tabs.
 
 The carry action reports the unfinished count as a compact amber badge in the
 same language as the notifications badge: the number alone in a circle, growing
@@ -591,9 +634,12 @@ never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
 The same line carries every clipped task title — and the subtask titles in the
 chat cards — in the chat task cards and the inline task lists: the employee
-ledger's title and description, and the administration record's title. The row
-is the hover and focus target, so the text reveals wherever the pointer rests on
-the task. A surface without hover (below 481px) wraps the
+ledger's title and the administration record's title. The row is the hover and
+focus target, so the title reveals wherever the pointer rests on the task.
+A clipped task description uses the line's fade-only mode: it fades at the edge
+it clips at and never moves, because a title and its description sliding at once
+compete for the reader's attention. Reading the whole description belongs in the
+task drawer, not in the list. A surface without hover (below 481px) wraps the
 goal instead of clipping it, because a pointer-only reveal is not a reveal on a
 touch screen.
 
@@ -602,8 +648,9 @@ Rows:
 - Minimum 64px high, with 12–16px vertical breathing room.
 - Transparent/paper surface with hairline dividers.
 - One title line, one metadata line, optional one-line description.
-- A single semantic status pill: Open, Overdue, Done, or Sync issue. The pill
-  stays quiet for Open; the failing states lead.
+- A single semantic status pill: Pending, In progress, Overdue, or Done. Pending
+  and In progress share the quiet treatment — the label carries the difference
+  — so neither competes with the Overdue and Done states, which lead.
 - The project line renders only when the view actually mixes projects, and the
   On today tag appears only where it discriminates (not inside My day).
 - The description renders only when it adds something beyond the title; it is
@@ -621,9 +668,15 @@ Rows:
   content the employee is meant to read.
 - The failing state is stated once, by the pill. The due date does not repeat it
   in red alongside.
-- The status vocabulary (Open, Complete, Overdue, Sync issue) and its tints are
-  defined once in `styles.css`. A theme layer places the pill; it does not
-  restate its colour, size, or weight.
+- The status vocabulary is Pending, In progress, Overdue, Done, and its tints
+  are defined once in `styles.css`. Precedence is Done → Overdue → In progress
+  → Pending: a completed task reads Done even when its due date has passed, an
+  open task past its due date reads Overdue whatever its stored workflow
+  status, and Pending is the default a new task starts in. Overdue is derived
+  from the due date, never stored, so no status write can fake or clear it.
+  Open remains the collective noun for incomplete work in counts and copy, and
+  provider sync keeps its own chip instead of adding a fifth task status. A
+  theme layer places the pill; it does not restate its colour, size, or weight.
 - The active sort is stated once, in the column row. A day group states an order
   only when that group deviates from the view's own.
 - No raw provider IDs, object stringification, or invalid date output.
@@ -665,7 +718,7 @@ orders rows inside each group. The groups do not print a header row each: §6.2
 keeps status section headers out of the list, and a group header stacked
 directly under the column row reads as a second header while only restating the
 status pill every row already carries. The row sequence carries the grouping and
-the view chips carry the counts. Unfinished is
+the view tabs carry the counts. Unfinished is
 open backlog, with overdue work first; the default order applies within each
 group. Completed is historical record. All tasks is the complete inspectable
 set. Every view loads 50 parent
@@ -682,12 +735,14 @@ sentinel loading and mounted-row window belong to live, unbounded feeds such as
 the debugger trace.
 
 The default order is due date latest-first, with open work above completed and
-undated items last. My day is assembled on the client, so its list, its view
+undated items last. Within a My day group, tasks with the same due date (or no
+due date) appear newest-created first; later updates do not move older tasks
+ahead. Explicit column sorts continue to order by their selected field. My day is assembled on the client, so its list, its view
 chip, and the agenda-strip counts all derive from the same day list (the
 canonical default order only applies where the server pages a view; a client
 view whose rows skip the active sort would make the column header lie). The
 strip counts name exactly what they measure — overdue, due today, done today —
-and never repeat a view chip under a different definition. The Tasks column row exposes Name, Date due, and Status
+and never repeat a view chip under a different definition. The Tasks column row exposes Name, Date Due, and Status
 sorting. Activating a column starts in its natural direction, toggles on the
 second activation, and restores the default on the third. The choice persists
 for the Tasks workspace, and paginated results must be sorted before pagination
@@ -707,10 +762,91 @@ stable header, scrollable body, and footer actions. The underlying list stays
 in place and does not reflow. The drawer includes full title, description,
 source/provenance, dates, assignees, subtasks, and lifecycle actions.
 
+The drawer's action block carries the task's status control, the assignee
+control, and its lifecycle actions — Edit task, Archive task (reversible), and
+Delete task (which always asks for confirmation) — and every control renders
+only when the task's capability payload allows it. A cached payload without
+capabilities shows no controls rather than advertising an action the server
+would refuse, and a completed task has no status path until it is reopened.
+
+The status control states the task's current status and opens the detached
+menu of §8.3, listing Pending and In progress with the current option marked
+and inert. An overdue task keeps it disabled with the note "Update the due date
+first": overdue is derived from the due date, so the control unlocks only once
+the due date is today or later, and reopening a completed task restores the
+status it held before completion (reading Overdue again if its due date has
+since passed). The assignee control lists only the people this actor may
+assign; when a current assignee sits outside that scope the control locks and
+states why, so a client never submits a set the server would reject. Replacing
+the assignees records the actor as the task's assigner.
+
 At narrow widths it becomes a bottom sheet with a safe viewport inset and an
 internal scroll region. Menus and drawers must collide with the viewport, close
 on Escape/outside click where appropriate, and restore focus to their trigger.
 Destructive archive/delete actions are explicit and separate.
+
+**Completion evidence previews.** The drawer's employee-attached evidence rows
+show the file before download: an image uses its real bytes as the thumbnail,
+and every other supported type carries one type tile with a readable extension
+badge (PDF, Word, Markdown, text, CSV, ZIP, 7Z). The row's download action stays
+separate from the row itself; activating the row opens the preview dialog.
+
+The preview matrix is explicit and never guesses:
+
+- Images render at full size in the dialog.
+- PDFs render in an embedded viewer (a blob URL in an iframe) with a persistent
+  download fallback for webviews that cannot display PDF.
+- Plain text, Markdown, and CSV render as readable text, capped at 200 KB with a
+  truncation notice. Markdown uses the safe renderer, so raw HTML stays inert
+  text; it is never injected.
+- Word (`.doc`, `.docx`) and ZIP/7Z keep a metadata preview — name, type, size,
+  attachment time, provenance, and note — with a primary Download action. The
+  companion does not extract Word or archive contents, and `.docx` is not given
+  a partial text preview.
+- HTML and SVG are not supported types and are never inlined.
+
+Both thumbnails and previews read through the authenticated bearer fetch and
+hand a short-lived object URL to the renderer; a token never appears in an
+`<img>`, `<iframe>`, or other URL. Object URLs are revoked when the row closes,
+the dialog closes, or the selection changes. A thumbnail reserves its geometry
+while loading, and a corrupt or missing file falls back to a clearly unavailable
+type tile; the dialog states Preview unavailable and keeps Download available.
+
+The dialog is labelled by the file name, described by the provenance sentence,
+opens with focus on its close control, traps Tab within the dialog, closes on
+Escape or a backdrop press, and restores focus to the evidence row. At 720px
+and below it takes the full viewport with a single internal scroll region; the
+footer action becomes full-width at 560px. Evidence remains employee-attached
+output evidence: the preview and its provenance line never call the file a
+provider confirmation or proof of completion.
+
+### 6.6 Completion evidence
+
+A completion may carry one explicit employee upload: one file plus an optional
+short note. The task row's completion control and the drawer's `Mark complete`
+open the same completion step, so the two paths cannot tell different stories.
+The step states whether the task records an expected outcome (where the
+attachment is required before completion) or is a simple task (where evidence is
+optional), and it keeps the honest no-evidence path wherever the task allows it.
+
+The step moves only through persisted states: idle, saving the file, saved but
+not complete with `Retry completion`, and confirmed completion. A failed upload
+keeps the selected file and note for retry and never marks the task done. A
+completion failure keeps the saved evidence and says the task is not complete
+yet. The same step can attach evidence to an already completed task without
+changing its state.
+
+The record is `manual`, employee-attached output evidence with the employee,
+task, timestamp, file name, size, and note. It is never provider confirmation,
+never a Worktivity screenshot, and never a completion claim by itself. The
+drawer lists it under `Completion evidence` with `Employee-attached` provenance
+and a download action. Administration and EOD reads receive the same row as
+output evidence. The raw-screenshot restriction (§16.4) does not apply because
+these are explicit employee uploads, while the file is served only from an
+authenticated, person-scoped route and raw storage paths never reach a client.
+
+One file: PNG, JPEG, WebP, PDF, text, Markdown, or CSV up to 8 MB; the note is
+1,000 characters or fewer.
 
 ## 7. Shared tool and chat surfaces
 
@@ -730,6 +866,16 @@ Do not nest a bordered card for every row. Task selection, approval, action
 results, batch review, navigation, thinking, and tool-call variants share the
 same spacing, border, focus, and receipt language while keeping their distinct
 approval contracts.
+
+The live working card is the shared frame for every wait in both chats. Its
+header carries the 34px status tile, the 10px `Working now` eyebrow, the 14px
+active label, the tabular elapsed time, and one disclosure; the body shows the
+current step at 13px with the shared spinner, and the steps already done
+underneath at 12px with muted checks. The same card carries the request itself
+(`Sending your update`), the interpretation (`Thinking`, `Reviewing your
+agenda`), and task loading (`Loading tasks`), and it settles into the collapsed
+`Completed` receipt. The card owns the full assistant turn — no separate mascot
+mark beside it — and the full trace remains available through the disclosure.
 
 Tool surfaces must preserve:
 
@@ -872,18 +1018,17 @@ Inputs have persistent labels where the field is not self-evident, visible
 focus, inline validation, and deliberate disabled/loading states. Placeholder
 text is not the only label.
 
-The task record's controls are one compact row: the views, the always-visible
-search, and the person/project selects read in order, and the primary Add task
-action stays last, right-aligned while the row has room. A card never shares
-its title row with controls: the name and its one-line detail own the first
-row, and filters and toolbar controls group into rows beneath it
-(`.admin-controls`, grouped by `.admin-controls-group`) in reading order —
-filters first, the primary action last, right-aligned while its row has room
-and full-width once the row wraps. Below the compact desktop class the task
-row wraps deliberately, filters before the action, with 40px targets once
-stacked. Date range stays a peer control or popover, with clear/reset behavior
-and a result count when active. Filtered empty says No tasks match these
-filters, never No tasks.
+The task record's header owns the name and its one-line detail on the left and
+the primary Add task action at the trailing edge. Beneath it, one compact
+controls row carries the views, the always-visible search, and the
+person/project selects in reading order; search leads into the record filters,
+and Add task never sits in that row. Below the compact desktop class the views
+take the first row and search plus filters follow; at the small class the name
+and Add task share the first line, the summary drops to the next, and the
+action keeps a 40px target (`.admin-controls`, grouped by
+`.admin-controls-group`). Date range stays a peer control or popover, with
+clear/reset behavior and a result count when active. Filtered empty says No
+tasks match these filters, never No tasks.
 
 ### 8.3 Menus and detached surfaces
 
@@ -894,6 +1039,17 @@ page and shifting the user's scroll position. The outside-click boundary is the
 trigger plus the menu itself, including when the menu renders through a portal
 at the document body; a press inside the menu never dismisses it before the
 item's action runs.
+
+The task status control behaves as one menu wherever it appears: in the drawer
+it is a trigger that states the current status, and in a row or administration
+menu it is the same item list inside that row's action menu. Opening it focuses
+the first enabled item, and Escape, an outside press, or running an item closes
+it and returns focus to the trigger. Its items are Pending and In progress;
+whichever matches the status the row displays is marked and disabled, because
+choosing it would write the value the task already holds. An overdue task's
+options are all disabled with the due-date note. It is never a segmented
+control, a native select, or an inline panel, and it never changes the row's
+height.
 
 ### 8.4 Worktivity attendance controls
 
@@ -938,7 +1094,10 @@ owns the facts. It carries the same title and model statement, one close
 control, and two peer tabs:
 
 - **Needs review** — proposed facts newest first, each a bordered card with
-  `Keep` and `Not true`, and an honest empty state.
+  `Keep` and `Discard`, and an honest empty state. The chosen action stays
+  pending until the server confirms it; a confirmed row exits and the remaining
+  rows move into place. Reduced motion removes the movement, and errors leave
+  the proposal available to retry.
 - **Remembered** — kept facts as flat rows on hairlines, each with the verified
   glyph, `Kept <month day>`, and `Forget`; beneath a divider, the Recent
   activity feed with its kind label, summary, calendar day, `Forget`, the
@@ -1256,7 +1415,8 @@ days — in the amber recoverable-attention tone.
   and offer `Try again` and `Dismiss`; outdated items dismiss only because the
   task moved on. Approving or dismissing refreshes the task surfaces the change
   could touch. Recap-sourced next steps never appear here — they belong to the
-  mascot chat moment (§9.1) — and nothing is written back until an approval.
+  mascot chat moment (§9.1) or its compact bubble — and nothing is written back
+  until an approval.
 
 ### 8.13 Keyboard and focus
 
@@ -1515,6 +1675,8 @@ The visual system must keep these evidence classes distinct:
 - Inferred Worktivity boundaries, explicitly labeled with their observation
   time and inference provenance.
 - Employee-authored progress or claims.
+- Explicit employee-attached completion evidence: an upload and note, labeled
+  as such and never provider-confirmed.
 - AI-suggested interpretation.
 - Work OS task state.
 - Historical provider/Nifty state.
@@ -1527,6 +1689,21 @@ activity event alone is not a provider-confirmed clock action. Provider
 credentials are not a verified connection. A successful browser request is not
 a provider-confirmed mutation. Use labels, placement, and source/freshness copy
 to keep meanings separate.
+
+**Completing a task completes its open subtasks.** A finished task never shows
+open work underneath it, on every surface that can mark a task done: the chat
+selection card, the companion's task list and task drawer, the web app's
+employee list and drawer, and the administration task record. The subtasks
+close first, so a subtask that cannot close leaves the task above it open and
+the failure names the subtask, rather than leaving a completed task sitting
+above open work. Reopening a task never reopens its subtasks, a subtask that is
+already done is never closed again, and each cascaded subtask keeps its own
+completion record, day event, audit entry, and plan-item state, recorded as
+`employee_explicit`: the employee's own act is the source, never an inference.
+In the chat selection card a task and its subtasks are one selection unit:
+checking the task checks its open subtasks, unticking either clears the other,
+and the review lists each subtask the approval will close, so nothing closes
+behind the employee's back.
 
 Every asynchronous surface defines:
 
@@ -1729,6 +1906,35 @@ face. Sending that note records it as the employee amendment.
 Neither action mutates anything other than the recap, and the Tasks-tab stream
 keeps its inline review as the same round check (`Looks right`) and pencil
 (`Add or correct`) actions.
+
+**Next steps after approval.** Confirming a recap hands the same compact bubble
+to the suggestions the confirmation generated; the panel never opens on its
+own. While generation runs the bubble says `Working out what could come next`,
+carries the reason (`Otto is reading your recap for anything worth doing.`), and
+Otto keeps his working pose. The ready bubble leads with `Next steps` and the
+source line (`From your … recap`), then one decision row per suggestion: its
+kind (`Mark done`, `New task`, `Subtask`), the title, the evidence-bounded
+reason, and that item's own accept, edit, and skip controls. Nothing is applied
+in bulk and nothing is applied by opening the bubble; each control decides only
+its row, and a failed row keeps its reason and a retry. Titles that can be
+edited are edited in the bubble.
+
+The compact window grows upward with the list, keeping Otto and the elapsed pill
+in place; three rows fit, and a longer list scrolls inside the bubble rather
+than moving the companion off screen. The scrolling edge is frosted — a soft
+blur plus the bubble's own tint fading out — and appears only where more
+content continues; the read prompter uses the same frost, and its top edge
+waits until the track has travelled so the first spoken line is never under it.
+The bubble eases in over a quarter-second, and reduced motion removes the
+entrance, the frost transitions, and the slide. `Listen` reads the lead and each row's
+title and reason with the same voice and one-audio-owner rule as the recap, and
+the row being spoken is marked in place — the controls stay available while it
+reads. The empty state says nothing needs action; a failed generation keeps its
+reason and `Try again`. After the last row is settled the bubble shows the
+result (`N changes applied · N skipped`), then Otto returns to the orb and the
+success beat plays. A row that failed suppresses the success and stays
+retryable. `Not now` hides the bubble but keeps the moment in the chat; the
+chat card remains the durable record, and the bubble is only its front door.
 
 The collapsed companion's prompt bubble carries the day's current demand
 (check-in, agenda, or EOD). Tapping the copy opens the chat; when the demand
@@ -2118,11 +2324,11 @@ they show — so it renders no page refresh.
 
 Every section keeps one header rhythm: the section's name and its one-line
 detail own the first row, and its filters and toolbar controls sit in grouped
-rows beneath it (`.admin-controls`, design.md §8.2) — segmented views, then
-search, then selects, then the primary action. The task record keeps all of
-those on one compact row that wraps deliberately at narrow widths. Overview
-stays quiet meta only; Settings gives each field group its own gutter section
-instead of a header.
+rows beneath it (`.admin-controls`, design.md §8.2). The task record keeps
+segmented views, search, selects, and the primary Add task on one compact
+controls row that wraps deliberately at narrow widths. Overview stays quiet meta
+only; Settings gives each field group its own gutter section instead of a
+header.
 
 - **Overview** reads in the operator's order as six gutter groups: **Now**
   (only the people on shift, then a quiet line for everyone else), **Decisions**
@@ -2152,21 +2358,30 @@ instead of a header.
   with a labeled volume chart and a bounded list (first 60 items, then Show
   more). The detail drawer exposes provenance and, for flagged or disputed items
   only, restricted screenshot access with a recorded reason and audit entry.
-  Provider bots are never offered a person selector: a mapping would attribute
-  machine work to a teammate, so automation sits on its own line.
 - **People** is a coverage board with a person drawer: mappings, schedule and
   exceptions, recent workdays, reports, updates and recaps, and a seven-day
   evidence summary. The board groups people into On shift, Needs setup (those
   missing a role profile or a schedule), and Other people, with search, a
   needs-setup filter, and the missing item named in the row. The drawer is where
   a mapping or role is set.
-- **Tasks** is the organization task record with bounded filters on one compact
-  controls row and the local add-task flow: one flat table, never grouped or
-  ordered by project, which stays a small per-task detail beside the task's
-  priority and labels. Columns carry the record's sort (Task, Assignees,
-  Created, Due, Status), the first activation applies the natural order, rows
-  missing a value stay last in both directions, and the list loads 100 at a
-  time with a Show more control.
+- **Tasks** is the organization task record with the primary Add task action in
+  the card title row, bounded filters on one compact controls row beneath it,
+  and the local add-task flow: one flat table, never grouped or ordered by
+  project, which stays a small per-task detail beside the task's priority and
+  labels. Columns carry the record's sort (Task, Assignees, Created, Due,
+  Status), the first activation applies the natural order, rows missing a value
+  stay last in both directions, and the list loads 100 at a time with a Show
+  more control. Each row shows the task's description on its own line
+  beneath the title — clipped with the shared fade and never a pan — and the
+  assignee cell resolves the recorded assignee ids through the roster, so a task
+  with a real assignee is never displayed as Unassigned.
+  Each row carries the same trailing ellipsis action menu as the companion task
+  lists (§6.2): its status actions, Edit task, Assign, Archive (reversible), and
+  Delete permanently, each present only when the task's capability payload
+  allows it. The task drawer carries the status control, the assignee control,
+  and the lifecycle buttons — Mark complete or Reopen task, Edit task, Archive
+  task, Delete task — under the same gate, and archiving or deleting waits for
+  an explicit confirmation.
   **Settings** leads with the account's own settings — the same groups the
   employee Settings page carries (profile, this device, page guides, reading
   & display, workday, sync & session, memory, suggestions, diagnostics, and
@@ -2179,6 +2394,21 @@ instead of a header.
   employee surface. The record-dependent groups appear only
   for accounts with a personal workday; the device, display, guides, and
   diagnostics half always shows.
+
+**Recap follows.** The account's own settings include one shared two-column
+Recap follows group even when no personal workday is mapped. All active
+employees is the default and includes later hires; Selected saves exactly the
+ticked ids, and an explicitly empty selection means no recap alerts and never
+falls back to All. Saved inactive choices remain visible, named, checked, and
+disabled because delivery excludes them; the active count, not the retained id
+count, drives the no-alerts summary. The group saves only on Save with the
+loaded revision, keeps a failed draft and a revision conflict visible until an
+explicit successful reload, and disables choice controls while a save is in
+flight. A successful save re-reads the authoritative settings, invalidates the
+scoped inbox reads, and wakes the existing delivery/inbox feed in both windows
+through an ids-and-context-only signal; it never shares a settings object or
+narrows named on-demand queries. Following changes recap alerts, never record
+access.
 
 **EOD Review order and range.** The review queue reads newest submission
 first: a report's submission time is its clock, a row that was never submitted
@@ -2202,11 +2432,20 @@ letter-month form as its due date and immediately ahead of it, so the two dates
 read together. A task with no recorded due date reads against the default it
 implies: one day after it was created. The derived value is the row's effective
 due date everywhere the row is read — the overdue warning and the
-Overdue/Open/Done pill, and the Due column's sorting — exactly as a recorded
-date would, and the Due cell says `No due date` rather than printing the derived
-date as if someone had chosen it. Only a task whose created date is also missing
-shows a dash and claims no overdue state, so a task past its derived date does
-read Overdue.
+Overdue/Pending/Done pill, the Due column's sorting, and the status lock —
+exactly as a recorded date would; the Due cell itself says `No due date` rather
+than printing the derived date as if someone had chosen it. Only a task whose
+created date is also missing shows a dash and claims no overdue state, so a
+task past its derived date does read Overdue.
+
+The effective due date drives both the Overdue pill and the status lock in this
+record: an open task past its effective date cannot change workflow status
+until the date is today or later, even when no due date was ever recorded. The
+workday that rule compares against is the acting administrator's shift-local
+date; only an administrator with no person mapping falls back to UTC. The
+edit form still seeds and writes the recorded date, so saving it never turns
+the derived default into a recorded one; a task with no recorded date opens
+the editor empty, and the date the operator types becomes the real due date.
 
 **Recorded versus default overdue.** The task summary separates the two counts.
 The headline says how many tasks are past a **recorded** due date; a quiet second
@@ -2239,13 +2478,13 @@ date; a row missing a value in any step stays after the rows that record one.
 Every labeled column header is a button: the first activation applies
 that column's natural order — A→Z for Task and Assignees, newest first for
 Created, earliest first for Due (which orders by the row's effective due date,
-the derived default included), attention order (Overdue → Open → Done) for
-Status — a second activation reverses it, and another column switches to its
-own natural order. Rows missing the sorted value stay last in both directions,
-and ties break by title then id so the list never jitters. The sorted column's
-`th` carries `aria-sort` with an always-visible direction indicator, inactive
-columns reveal a quiet affordance on hover or keyboard focus, and the empty
-actions column is never sortable.
+the derived default included), attention order (Overdue → Pending/In progress →
+Done) for Status — a second activation reverses it, and another column switches
+to its own natural order. Rows missing the sorted value stay last in both
+directions, and ties break by title then id so the list never jitters. The
+sorted column's `th` carries `aria-sort` with an always-visible direction
+indicator, inactive columns reveal a quiet affordance on hover or keyboard
+focus, and the empty actions column is never sortable.
 
 ### 16.3 Data and provenance
 
