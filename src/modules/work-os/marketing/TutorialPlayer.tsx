@@ -15,7 +15,7 @@ export default function TutorialPlayer({ tutorial }: { tutorial: Tutorial }) {
         aria-label={`${tutorial.title} walkthrough`}
       >
         <source src={tutorial.video} type="video/mp4" />
-        <track kind="captions" src={tutorial.captions} srcLang="en" label="English" default />
+        <track kind="captions" src={tutorial.captions} srcLang="en" label="English" />
         Your browser cannot play this film. The written walkthrough below covers every step.
       </video>
       <figcaption>

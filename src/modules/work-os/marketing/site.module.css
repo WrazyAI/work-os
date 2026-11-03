@@ -164,8 +164,16 @@
   }
 
   .nav {
-    gap: 18px;
+    gap: 16px;
     font-size: 13px;
+  }
+
+  .nav a:first-child {
+    display: none;
+  }
+
+  .nav .back {
+    display: none;
   }
 
   .footer {

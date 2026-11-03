@@ -7,19 +7,19 @@ const VIEWS = [
   {
     id: "today",
     label: "My Day",
-    src: "/work-os/workspace-today.webp",
+    src: "/site/work-os/workspace-today.webp",
     alt: "Work OS desktop My Day with the workday surface, counts, focus, task queue and weekly record; demonstration data",
   },
   {
     id: "tasks",
     label: "Tasks",
-    src: "/work-os/workspace-tasks.webp",
+    src: "/site/work-os/workspace-tasks.webp",
     alt: "Work OS desktop Tasks with focus, views, search, due dates and status; demonstration data",
   },
   {
     id: "insights",
     label: "Insights",
-    src: "/work-os/workspace-insights.webp",
+    src: "/site/work-os/workspace-insights.webp",
     alt: "Work OS desktop Insights with measured outcomes, plan reliability and the weekly chart; demonstration data",
   },
 ] as const;

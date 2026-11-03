@@ -11,7 +11,7 @@ const hash = (relative: string) => createHash("sha256").update(readFileSync(path
 test("the site companion is the configured mascot, not a second identity", () => {
   assert.ok(existsSync(path.join(root, "src/modules/work-os/marketing/Companion.tsx")));
   assert.equal(
-    hash("public/work-os/studio-otto.svg"),
+    hash("public/site/work-os/studio-otto.svg"),
     hash("desktop/work-os-companion/public/studio-otto.svg"),
     "the published mascot must byte-match the companion source",
   );

@@ -17,7 +17,7 @@ export interface Tutorial {
   platformNote: string;
 }
 
-const BASE = "/work-os/tutorials";
+const BASE = "/site/work-os/tutorials";
 
 export const TUTORIALS: readonly Tutorial[] = [
   {

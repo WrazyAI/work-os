@@ -28,7 +28,7 @@ export default function Companion() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/work-os/studio-otto.svg")
+    fetch("/site/work-os/studio-otto.svg")
       .then((response) => response.text())
       .then((markup) => {
         if (cancelled || !art.current) return;
@@ -164,7 +164,7 @@ export default function Companion() {
         }}
       >
         <div ref={art} className={styles.art}>
-          <img src="/work-os/studio-otto.svg" alt="" width={220} height={248} />
+          <img src="/site/work-os/studio-otto.svg" alt="" width={220} height={248} />
         </div>
       </button>
       <p className={styles.note}>

@@ -65,7 +65,7 @@ export default function DownloadChooser() {
             </p>
           </>
         )}
-        <img className={styles.pet} src="/work-os/studio-otto.svg" alt="" width={120} height={135} />
+        <img className={styles.pet} src="/site/work-os/studio-otto.svg" alt="" width={120} height={135} />
       </section>
 
       <section className={styles.options} id="other-platforms" aria-labelledby="other-platforms-title">

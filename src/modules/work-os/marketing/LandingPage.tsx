@@ -76,7 +76,7 @@ export default function LandingPage() {
           </div>
           <Link className={styles.filmCard} href="/work-os/welcome/tutorials/eod-draft">
             <span className={styles.filmStill}>
-              <img src="/work-os/pilot-eod-desktop-60.png" alt="EOD tutorial opening frame with the companion" width={1440} height={900} />
+              <img src="/site/work-os/tutorials/eod-draft.jpg" alt="EOD tutorial opening frame with the companion" width={1440} height={900} />
               <span className={styles.play} aria-hidden="true">▶</span>
             </span>
             <span className={styles.filmCaption}>
