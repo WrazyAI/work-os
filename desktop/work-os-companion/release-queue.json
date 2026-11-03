@@ -36,6 +36,12 @@
       "type": "feature",
       "summary": "Today uses the web workspace's premium command surface, with a weekly record and reliability instruments beside the task list.",
       "verification": "fa43cbea, c4a8f2b6, 5bcebb53: full Work OS suite 981 passed / 0 failed / 11 skipped; typecheck; companion build; rendered 1280px, 1024px, and 390px checks for active, pre-shift, empty, dense, focus, tooltip, and reduced-motion states."
+    },
+    {
+      "id": "eod-day-edition",
+      "type": "feature",
+      "summary": "The end-of-day report leads with a short, ranked summary and keeps every task, recap, and note in a full-record disclosure.",
+      "verification": "195b5e09: EOD Work OS suites 60 passed; admin-preview file 23 passed alone; companion EOD tests 19 passed; rendered 1440, 1024, and 390 checks on web and desktop; TestSprite run c3153dac passed 4/4."
     }
   ],
   "emergency": null
