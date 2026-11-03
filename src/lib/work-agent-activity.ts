@@ -1,5 +1,6 @@
 import type { AgentAccess } from "@/lib/work-agent-auth";
 import { getWorkOsEmployeeTaskDetails } from "@/lib/work-os-employee-tasks";
+import type { WorkOsAccess } from "@/lib/work-os-api";
 import { db, type Json } from "@/lib/work-os-internal";
 
 /** One merged timeline per task: day events, evidence, and blockers. Raw
@@ -119,14 +120,16 @@ export function mergeAgentActivity(
   return { items: page, nextCursor };
 }
 
-export async function listAgentActivity(
-  agent: AgentAccess,
+export async function listActivityForAccess(
+  access: WorkOsAccess,
   taskId: string,
-  params: { cursor?: string | null; limit?: number } = {},
+  params: { cursor?: string | null; limit?: number; allowArchived?: boolean } = {},
 ) {
-  const details = await getWorkOsEmployeeTaskDetails(agent.access, taskId);
+  const details = await getWorkOsEmployeeTaskDetails(access, taskId, {
+    allowArchived: params.allowArchived === true,
+  });
   const localTaskId = String((details.task as Json).id);
-  const organizationId = agent.access.organizationId;
+  const organizationId = access.organizationId;
   const decoded = decodeActivityCursor(params.cursor);
   let eventsQuery = db().from("work_task_day_events").select("id,event_type,provenance,exact_at,observed_at,task_snapshot,metadata")
     .eq("organization_id", organizationId).eq("task_id", localTaskId);
@@ -149,4 +152,12 @@ export async function listAgentActivity(
     params.cursor,
     params.limit,
   );
+}
+
+export async function listAgentActivity(
+  agent: AgentAccess,
+  taskId: string,
+  params: { cursor?: string | null; limit?: number } = {},
+) {
+  return listActivityForAccess(agent.access, taskId, params);
 }

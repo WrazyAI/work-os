@@ -1,0 +1,1343 @@
+openapi: 3.1.0
+info:
+  title: Work OS Admin Agent API
+  version: 1.0.0
+  description: |
+    Organization-wide access for an administrator's external agent. Tokens are
+    minted in Work OS Settings, shown once, and bound to the admin user who
+    created them; the admin role, feature flag, and scope set are re-checked on
+    every request. An employee token is unknown here and answers 401.
+
+    Every route except this schema requires `Authorization: Bearer
+    wos_admin_…`. The document states the scope each operation needs in
+    `x-required-scope`; `none` means any valid admin token may call it. The
+    generic preview endpoints state the two write scopes they accept in
+    `x-required-scope-any`; a given call needs the stored action's own scope.
+
+    Consequential writes (task and EOD actions) do not write. They resolve the
+    action and answer `202` with a preview card; only
+    `POST /previews/{previewId}/confirm` applies it, exactly once. A write
+    requires an `Idempotency-Key`; replays return the stored response with
+    `Idempotent-Replay: true`. An out-of-scope id, a missing id, and another
+    organization's id are all the same 404.
+servers:
+  - url: https://app.wrazyos.com/api/agent/admin/v1
+    description: Production
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: The token's organization, admin identity, and scopes
+      description: |
+        Available to any valid admin token, including one minted without
+        scopes. The response never contains the token secret, only the
+        non-reversible prefix the settings list also shows.
+      operationId: getAdminMe
+      x-required-scope: none
+      responses:
+        "200":
+          description: Identity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Identity" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /people:
+    get:
+      summary: Organization directory search
+      description: |
+        `q` matches a person's name or email. `active` defaults to true so the
+        list answers "who works here now"; `all` includes inactive people. An
+        id outside this organization is invisible.
+      operationId: listAdminPeople
+      x-required-scope: people:read
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: active
+          in: query
+          schema: { type: string, enum: ["true", "false", all], default: "true" }
+        - name: team_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: role
+          in: query
+          schema: { type: string }
+          description: Role-profile slug or name.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of people
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [people, total, cursor]
+                properties:
+                  people:
+                    type: array
+                    items: { $ref: "#/components/schemas/Person" }
+                  total: { type: integer }
+                  cursor: { $ref: "#/components/schemas/Cursor" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidCursor" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /people/{personId}:
+    get:
+      summary: One person with schedule, manager, and teams
+      operationId: getAdminPerson
+      x-required-scope: people:read
+      parameters:
+        - $ref: "#/components/parameters/PersonId"
+      responses:
+        "200":
+          description: Person detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person]
+                properties:
+                  person: { $ref: "#/components/schemas/PersonDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /projects:
+    get:
+      summary: Active projects work can be filed into
+      description: Archived projects are omitted so new work never lands in a retired project.
+      operationId: listAdminProjects
+      x-required-scope: people:read
+      responses:
+        "200":
+          description: Active projects
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks:
+    get:
+      summary: Cross-person task search
+      description: |
+        An absent `person_ids` reads the whole organization; an explicitly
+        empty one is an empty result. `status` defaults to active, so archived
+        and tombstoned rows stay out unless asked for. Overdue uses the effective
+        due date (recorded due date, otherwise created + 1 day) against the
+        admin's local today. Each task carries its capability flags.
+      operationId: listAdminTasks
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/PersonIds"
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: completed
+          in: query
+          schema: { type: boolean }
+        - name: overdue
+          in: query
+          schema: { type: boolean }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, archived, deleted], default: active }
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: due_from
+          in: query
+          schema: { type: string, format: date }
+        - name: due_to
+          in: query
+          schema: { type: string, format: date }
+        - name: updated_since
+          in: query
+          schema: { type: string, format: date-time }
+          description: Switches to ascending row-change order for the change feed.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks, total, cursor]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+                  total: { type: integer }
+                  cursor: { $ref: "#/components/schemas/Cursor" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidCursor" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Describe creating a task for named owner(s)
+      description: |
+        Resolves the owners, project, and due date and answers `202` with a
+        preview. Only `POST /previews/{previewId}/confirm` creates the task.
+        Assignees must be active members of this organization.
+      operationId: createAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskCreate" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}:
+    get:
+      summary: Task detail with subtasks and completion evidence
+      description: |
+        Archived work stays readable, matching its timeline. A missing,
+        deleted/tombstoned, or cross-organization task is the same 404.
+      operationId: getAdminTask
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Describe a task content, assignment, or blocker edit
+      description: |
+        Content, priority, dates, blockers, labels, and the assignee list. A
+        parent change is its own action (`POST /tasks/{taskId}/move`), so this
+        preview cannot move a subtask. Answers `202`; confirm writes.
+      operationId: updateAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskUpdate" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Describe archiving or deleting a task
+      description: |
+        `mode=archive` (the default) keeps the task recoverable; `mode=delete`
+        tombstones it. Both cascade to subtasks, which the preview names.
+        Answers `202`; confirm writes.
+      operationId: removeAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: mode
+          in: query
+          schema: { type: string, enum: [archive, delete], default: archive }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/assign:
+    post:
+      summary: Describe changing who owns a task
+      description: |
+        `mode` is `replace`, `add`, or `remove`. The preview resolves the final
+        assignee list once and stores it, so confirm applies that exact list
+        instead of re-running a delta against a changed snapshot. Answers `202`.
+      operationId: assignAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskAssign" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/move:
+    post:
+      summary: Describe moving a subtask under another top-level task
+      operationId: moveAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskMove" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/complete:
+    post:
+      summary: Describe completing a task
+      description: |
+        The preview states the current completion and warns about a missing
+        completion-evidence attachment or an archived target. The body may be
+        empty; the route itself is the transition. Answers `202`.
+      operationId: completeAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/reopen:
+    post:
+      summary: Describe reopening a completed task
+      description: The preview states the current completion. The body may be empty. Answers `202`.
+      operationId: reopenAdminTaskPreview
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/progress:
+    post:
+      summary: Append an authored progress note to a task
+      description: |
+        Progress is additive and audited, so it writes directly and is not a
+        preview action. The note never counts as completion evidence.
+      operationId: addAdminTaskProgress
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgressNote" }
+      responses:
+        "201":
+          description: Progress evidence saved
+          headers:
+            Idempotent-Replay:
+              $ref: "#/components/headers/IdempotentReplay"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [evidence]
+                properties:
+                  evidence: { $ref: "#/components/schemas/Progress" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/evidence:
+    post:
+      summary: Attach one completion evidence file to a task
+      description: |
+        Additive and audited, so it writes directly. The 8 MB multipart body is
+        read by this route and stays out of the JSON request path. `note` is
+        optional; the file appears on the task and satisfies the completion
+        gate. `Idempotency-Key` may be a header or a form field.
+      operationId: attachAdminTaskEvidence
+      x-required-scope: tasks:write
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/EvidenceUpload" }
+      responses:
+        "201":
+          description: Evidence saved
+          headers:
+            Idempotent-Replay:
+              $ref: "#/components/headers/IdempotentReplay"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [evidence]
+                properties:
+                  evidence: { $ref: "#/components/schemas/Evidence" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/FileTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedFileType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /tasks/{taskId}/activity:
+    get:
+      summary: Merged task timeline
+      description: Day events, evidence, and blockers in newest-first order.
+      operationId: getAdminTaskActivity
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of activity
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ActivityItem" }
+                  cursor: { $ref: "#/components/schemas/Cursor" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/InvalidCursor" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /evidence/{evidenceId}/file:
+    get:
+      summary: Download one task completion evidence file
+      description: |
+        Served with the stored content type, a safe disposition, and
+        `private, no-store`. Containers download; readable media stays inline.
+        A missing or cross-organization id is the same 404.
+      operationId: getAdminEvidenceFile
+      x-required-scope: tasks:read
+      parameters:
+        - $ref: "#/components/parameters/EvidenceId"
+      responses:
+        "200":
+          description: The stored bytes
+          content:
+            "*/*":
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /eods:
+    get:
+      summary: Cross-person EOD search
+      description: |
+        An absent `person_ids` reads the whole organization; an explicitly
+        empty one is an empty result. Counts stay per status so the reviewer can
+        see the backlog behind a status filter.
+      operationId: listAdminEods
+      x-required-scope: eods:read
+      parameters:
+        - $ref: "#/components/parameters/PersonIds"
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending_review, approved, rejected] }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of EOD reports
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eods, counts, total, cursor]
+                properties:
+                  eods:
+                    type: array
+                    items: { $ref: "#/components/schemas/EodSummary" }
+                  counts:
+                    $ref: "#/components/schemas/EodCounts"
+                  total: { type: integer }
+                  cursor: { $ref: "#/components/schemas/Cursor" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidCursor" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /eods/{reportId}:
+    get:
+      summary: One submitted EOD with its person and version history
+      operationId: getAdminEod
+      x-required-scope: eods:read
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: EOD detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eod, versions]
+                properties:
+                  eod: { $ref: "#/components/schemas/EodDetail" }
+                  versions:
+                    type: array
+                    items: { $ref: "#/components/schemas/EodVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /eods/{reportId}/review:
+    post:
+      summary: Describe an EOD approval or rejection
+      description: |
+        The preview names the decision and warns about self-review and a
+        non-pending report. `eods:read` deliberately does not imply this
+        decision. Answers `202`; confirm performs the review.
+      operationId: reviewAdminEodPreview
+      x-required-scope: eods:review
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EodReview" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /records:
+    get:
+      summary: Cross-person work records
+      description: |
+        Authored updates, submitted EODs, canonical task events, reviewed
+        recaps, and workday snapshots. An absent `person_ids` reads the whole
+        organization. `coverage` states which sources and local windows
+        produced the page.
+      operationId: listAdminRecords
+      x-required-scope: records:read
+      parameters:
+        - $ref: "#/components/parameters/PersonIds"
+        - name: sources
+          in: query
+          schema:
+            type: string
+            description: Comma-separated subset of update, submitted_eod, task, reviewed_recap, workday.
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [records, total, cursor, coverage]
+                properties:
+                  records:
+                    type: array
+                    items: { $ref: "#/components/schemas/Record" }
+                  total: { type: integer }
+                  cursor: { $ref: "#/components/schemas/Cursor" }
+                  coverage:
+                    type: array
+                    items: { type: string }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidCursor" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /overview:
+    get:
+      summary: The administration overview for one local day
+      description: Counts, the decision queue, outstanding EODs, overdue work, and attendance for the admin's chosen day. Read-only.
+      operationId: getAdminOverview
+      x-required-scope: insights:read
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /insights:
+    get:
+      summary: Deterministic 7, 30, or 90-day facts
+      description: |
+        Organization-wide unless `person_id` names one active member of this
+        organization; an outside person is a 404, never a zeroed team view.
+      operationId: getAdminInsights
+      x-required-scope: insights:read
+      parameters:
+        - name: range
+          in: query
+          schema: { type: string, enum: [7d, 30d, 90d], default: 7d }
+        - name: person_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: through
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Insights
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Insights" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /previews:
+    post:
+      summary: Describe a consequential action from its action name
+      description: |
+        `{ action, payload }` describes one consequential action without
+        executing it, for a driver that already speaks the action names. The
+        token must hold the action's own write scope: `tasks:write` for a task
+        action, `eods:review` for an EOD decision. Progress notes and evidence
+        are additive and deliberately not preview actions. Answers `202`.
+      operationId: createAdminPreview
+      x-required-scope: tasks:write
+      x-required-scope-any: [tasks:write, eods:review]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PreviewRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/PreviewCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /previews/{previewId}:
+    get:
+      summary: Rehydrate one pending preview card
+      description: |
+        Ownership is the preview store's rule: an API preview is visible only
+        to the token that created it, and a missing, cross-organization, or
+        other-token id is the same 404. The token must also hold the stored
+        action's write scope.
+      operationId: getAdminPreview
+      x-required-scope: tasks:write
+      x-required-scope-any: [tasks:write, eods:review]
+      parameters:
+        - $ref: "#/components/parameters/PreviewId"
+      responses:
+        "200":
+          description: The stored preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Preview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /previews/{previewId}/confirm:
+    post:
+      summary: Apply a previewed action exactly once
+      description: |
+        The only execution path for a consequential admin action. A confirm is
+        a write, so it requires its own `Idempotency-Key`; the preview id is the
+        canonical one-time replay key, so a later confirm returns the stored
+        result with `Idempotent-Replay: true` instead of writing twice. The
+        target is re-read through the preview's own projection; a target that
+        moved between preview and confirm answers `409 preview_stale` and writes
+        nothing.
+      operationId: confirmAdminPreview
+      x-required-scope: tasks:write
+      x-required-scope-any: [tasks:write, eods:review]
+      parameters:
+        - $ref: "#/components/parameters/PreviewId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The applied result (task or EOD update)
+          headers:
+            Idempotent-Replay:
+              $ref: "#/components/headers/IdempotentReplay"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "201":
+          description: The created task
+          headers:
+            Idempotent-Replay:
+              $ref: "#/components/headers/IdempotentReplay"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task]
+                properties:
+                  task: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { $ref: "#/components/responses/PreviewExpired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /openapi.yaml:
+    get:
+      summary: This schema
+      operationId: getAdminOpenApi
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 document
+          content:
+            application/yaml:
+              schema: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: wos_admin_…
+  parameters:
+    PersonId:
+      name: personId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PreviewId:
+      name: previewId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EvidenceId:
+      name: evidenceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PersonIds:
+      name: person_ids
+      in: query
+      description: Comma-separated person ids, at most 20. Absent reads the whole organization; empty reads nobody.
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 160 }
+      description: Required on every write. A replay of the same key returns the stored response.
+  headers:
+    IdempotentReplay:
+      description: Present and `true` when the stored result was replayed instead of written again.
+      schema: { type: string }
+  responses:
+    PreviewCreated:
+      description: The described action, not applied yet
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Preview" }
+    Unauthorized:
+      description: Missing, invalid, revoked, or expired admin token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: |
+        The caller is not an admin in this organization, the admin agent API or
+        employee companion feature is disabled, or the token is missing the
+        scope this operation requires (`insufficient_scope`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: |
+        Missing, out-of-scope, or cross-organization record. A preview that is
+        missing, owned by another token, or no longer recognized is also this
+        404 (`not_found` / `preview_not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: The request body or parameters are not valid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidCursor:
+      description: The cursor is malformed or was minted for another filter set
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: |
+        The action conflicts with the current state. The status is 409 and the
+        `code` is the reason the writer raised: `preview_stale` (the body also
+        carries `current_state`), `preview_in_flight` (`Retry-After: 1`),
+        `evidence_required`, `evidence_conflict`, `report_not_pending`,
+        `task_completed`, `due_date_passed`, `idempotency_conflict`, or the
+        generic `conflict` when no reason was supplied.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    IdempotencyConflict:
+      description: The Idempotency-Key was already used with a different request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PreviewExpired:
+      description: The preview expired before it was confirmed; create a new one
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FileTooLarge:
+      description: The evidence file is larger than 8 MB
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedFileType:
+      description: The evidence file type is not accepted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: The token exceeded 120 reads or 20 writes per minute; `Retry-After` states the wait
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Scope:
+      type: string
+      enum: [people:read, tasks:read, tasks:write, eods:read, eods:review, records:read, insights:read]
+    Identity:
+      type: object
+      required: [organization_id, user_id, role, person_id, token]
+      properties:
+        organization_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role: { type: string, enum: [admin] }
+        person_id:
+          type: [string, "null"]
+          format: uuid
+          description: The token's optional person mapping; null for an unmapped admin token.
+        token: { $ref: "#/components/schemas/AgentToken" }
+    AgentToken:
+      type: object
+      required: [id, name, prefix, scopes, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Scope" }
+        expires_at: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error, code, request_id]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum:
+            - unauthorized
+            - token_revoked
+            - token_expired
+            - forbidden
+            - feature_disabled
+            - insufficient_scope
+            - not_found
+            - preview_not_found
+            - preview_stale
+            - preview_expired
+            - preview_in_flight
+            - conflict
+            - validation_error
+            - invalid_cursor
+            - rate_limited
+            - evidence_required
+            - evidence_conflict
+            - report_not_pending
+            - task_completed
+            - due_date_passed
+            - file_too_large
+            - unsupported_file_type
+            - idempotency_conflict
+            - idempotency_in_flight
+            - migration_required
+            - internal_error
+        request_id: { type: string, format: uuid }
+        current_state:
+          type: object
+          additionalProperties: true
+          description: Present only on `preview_stale`, with the state the target was re-read as.
+    Cursor:
+      type: object
+      required: [next]
+      properties:
+        next: { type: [string, "null"] }
+    Person:
+      type: object
+      required: [id, displayName, email, active]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        email: { type: [string, "null"] }
+        active: { type: boolean }
+        timezone: { type: [string, "null"] }
+        roleProfile:
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
+    PersonDetail:
+      allOf:
+        - $ref: "#/components/schemas/Person"
+        - type: object
+          required: [schedule, manager, teams]
+          properties:
+            schedule:
+              oneOf:
+                - type: object
+                  properties:
+                    timezone: { type: [string, "null"] }
+                - type: "null"
+            manager:
+              oneOf:
+                - type: object
+                  required: [id, displayName]
+                  properties:
+                    id: { type: string, format: uuid }
+                    displayName: { type: string }
+                - type: "null"
+            teams:
+              type: array
+              items:
+                type: object
+                required: [id, name, isManager, active]
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+                  isManager: { type: boolean }
+                  active: { type: boolean }
+    Project:
+      type: object
+      required: [id, name, provider, providerProjectId, archived]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        provider: { type: string }
+        providerProjectId: { type: string }
+        archived: { type: boolean }
+    Task:
+      type: object
+      required: [id, title, status, completed, assignee_person_ids, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: [string, "null"], format: uuid }
+        parent_task_id: { type: [string, "null"], format: uuid }
+        parent_provider_task_id: { type: [string, "null"] }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        status:
+          type: string
+          description: The stored task status; archived and deleted rows are excluded from active reads.
+        workflow_status: { type: string }
+        completed: { type: boolean }
+        completed_at: { type: [string, "null"], format: date-time }
+        due_date: { type: [string, "null"], format: date }
+        start_date: { type: [string, "null"], format: date }
+        assignee_person_ids:
+          type: array
+          items: { type: string, format: uuid }
+        assigned_by_person_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        capabilities:
+          type: object
+          additionalProperties: true
+          description: The flags the administration dashboard shows for this task and admin.
+    TaskDetail:
+      type: object
+      required: [task, subtasks, completionEvidence]
+      properties:
+        task: { $ref: "#/components/schemas/Task" }
+        subtasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+        completionEvidence:
+          type: array
+          items: { $ref: "#/components/schemas/Evidence" }
+    TaskCreate:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 240 }
+        description: { type: string, maxLength: 20000 }
+        due_date: { type: string, format: date }
+        start_date: { type: string, format: date }
+        priority: { type: string }
+        labels: { type: array, items: { type: string } }
+        story_points: { type: number }
+        expected_outcome: { type: string }
+        definition_of_done: { type: string }
+        estimated_effort_minutes: { type: integer, minimum: 0 }
+        effort_unit: { type: string }
+        task_group_id: { type: string }
+        parent_task_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        assignee_person_ids:
+          type: array
+          items: { type: string, format: uuid }
+          maxItems: 50
+          description: Active members of this organization. An empty list creates an unassigned task.
+    TaskUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 240 }
+        description: { type: string, maxLength: 20000 }
+        due_date: { type: string, format: date }
+        start_date: { type: string, format: date }
+        priority: { type: string }
+        labels: { type: array, items: { type: string } }
+        story_points: { type: number }
+        expected_outcome: { type: string }
+        definition_of_done: { type: string }
+        estimated_effort_minutes: { type: integer, minimum: 0 }
+        effort_unit: { type: string }
+        task_group_id: { type: string }
+        assignee_person_ids:
+          type: array
+          items: { type: string, format: uuid }
+          maxItems: 50
+          description: Replaces the assignee list exactly. Active members of this organization.
+        blocked: { type: boolean }
+        blocked_reason: { type: string }
+    TaskAssign:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: { type: string, enum: [replace, add, remove] }
+        person_ids:
+          type: array
+          items: { type: string, format: uuid }
+          maxItems: 50
+          default: []
+          description: Active members of this organization.
+    TaskMove:
+      type: object
+      required: [parent_task_id]
+      additionalProperties: false
+      properties:
+        parent_task_id:
+          type: string
+          format: uuid
+          description: The new top-level parent. Only subtasks can be moved.
+    ProgressNote:
+      type: object
+      required: [summary]
+      additionalProperties: false
+      properties:
+        title: { type: string, maxLength: 240 }
+        summary: { type: string, maxLength: 2000 }
+    Evidence:
+      type: object
+      required: [id, title, fileName, contentType, sizeBytes, createdAt, taskId, url]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        note: { type: [string, "null"] }
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+        taskId: { type: [string, "null"], format: uuid }
+        url: { type: string }
+    EvidenceUpload:
+      type: object
+      required: [file]
+      additionalProperties: false
+      properties:
+        file:
+          type: string
+          format: binary
+          description: One completion evidence file, at most 8 MB (8388608 bytes).
+        note: { type: string, maxLength: 1000 }
+        idempotency_key:
+          type: string
+          maxLength: 160
+          description: Alternative to the Idempotency-Key header for multipart clients.
+    Progress:
+      type: object
+      required: [id, title, summary, taskId, source, origin, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        summary: { type: string }
+        taskId: { type: [string, "null"], format: uuid }
+        source: { type: string }
+        origin: { type: string }
+        createdAt: { type: string, format: date-time }
+    ActivityItem:
+      type: object
+      required: [id, kind, at, actor, summary]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string, enum: [agent, employee, system] }
+        summary: { type: string }
+        url: { type: [string, "null"] }
+    EodSummary:
+      type: object
+      required: [id, person, reportDate, status, title, excerpt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        person:
+          type: object
+          required: [id, displayName]
+          properties:
+            id: { type: string, format: uuid }
+            displayName: { type: string }
+        reportDate: { type: string, format: date }
+        status: { type: string, enum: [pending_review, approved, rejected] }
+        title: { type: string }
+        excerpt: { type: string }
+        submittedAt: { type: [string, "null"], format: date-time }
+        reviewedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EodDetail:
+      allOf:
+        - $ref: "#/components/schemas/EodSummary"
+        - type: object
+          properties:
+            markdown: { type: string }
+            submittedMarkdown: { type: [string, "null"] }
+            managerNotes: { type: [string, "null"] }
+            reviewedBy: { type: [string, "null"] }
+            metrics: { type: object, additionalProperties: true }
+            missingEvidence:
+              type: array
+              description: One entry per open or due task that has no evidence for the report date.
+              items:
+                type: object
+                required: [title, reason]
+                properties:
+                  taskId: { type: [string, "null"] }
+                  title: { type: string }
+                  reason: { type: string }
+    EodVersion:
+      type: object
+      required: [id, versionKind, markdown, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        versionKind: { type: string, enum: [employee_submission, manager_edit] }
+        markdown: { type: string }
+        createdAt: { type: string, format: date-time }
+    EodCounts:
+      type: object
+      additionalProperties: true
+      description: One count per EOD status, plus the total.
+    EodReview:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [approved, rejected] }
+        manager_notes: { type: string, maxLength: 20000 }
+        markdown:
+          type: string
+          maxLength: 20000
+          description: A manager edit that replaces the employee's submitted text.
+    Record:
+      type: object
+      required: [id, personId, source, localDate, text]
+      properties:
+        id: { type: string }
+        personId: { type: string, format: uuid }
+        source: { type: string, enum: [update, submitted_eod, task, reviewed_recap, workday] }
+        occurredAt: { type: [string, "null"], format: date-time }
+        localDate: { type: string, format: date }
+        text: { type: string }
+        recordUrl: { type: string }
+    Overview:
+      type: object
+      additionalProperties: true
+      description: Counts, the decision queue, outstanding EODs, overdue work, attendance, and freshness for one local day.
+      properties:
+        date: { type: string, format: date }
+    Insights:
+      type: object
+      additionalProperties: true
+      description: Range, totals, previous-range totals, per-person rows, daily and session series, update kinds, top apps, overdue count, notes, and freshness.
+      properties:
+        range: { type: string, enum: [7d, 30d, 90d] }
+        from: { type: string, format: date }
+        through: { type: string, format: date }
+    Preview:
+      type: object
+      required: [id, action, summary, changes, warnings, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        action:
+          type: string
+          enum: [task.create, task.update, task.assign, task.move, task.complete, task.reopen, task.archive, task.delete, eod.review]
+        summary: { type: string }
+        changes:
+          type: array
+          items: { $ref: "#/components/schemas/PreviewChange" }
+        warnings:
+          type: array
+          items: { type: string }
+        state:
+          type: object
+          additionalProperties: true
+          description: The target state the preview was computed from. The confirm compares it again.
+        expiresAt:
+          type: string
+          format: date-time
+          description: At most 15 minutes after creation.
+    PreviewChange:
+      type: object
+      required: [field, from, to]
+      properties:
+        field: { type: string }
+        from: {}
+        to: {}
+    PreviewRequest:
+      type: object
+      required: [action]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [task.create, task.update, task.assign, task.move, task.complete, task.reopen, task.archive, task.delete, eod.review]
+        payload:
+          type: object
+          additionalProperties: true
+          description: The action's own payload, exactly as the typed route would accept it.

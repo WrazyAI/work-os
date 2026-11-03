@@ -5,7 +5,10 @@ import { jsonError, requireWorkOsAccess, type WorkOsOrgRole } from "@/lib/work-o
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FEATURES = new Set(["employee_companion", "github_evidence", "ghl_evidence", "screenshot_summaries", "desktop_companion", "seo_mission_control", "voice_input"]);
+const FEATURES = new Set(["employee_companion", "github_evidence", "ghl_evidence", "screenshot_summaries", "desktop_companion", "seo_mission_control", "voice_input", "admin_agent_api"]);
+/** The admin agent API is workspace policy: a per-member override must never
+ * enable a surface the organization has not enabled for everyone. */
+const MEMBERSHIP_FEATURES = new Set([...FEATURES].filter((key) => key !== "admin_agent_api"));
 
 async function adminAccess(req: Request) {
   return requireWorkOsAccess({
@@ -137,7 +140,7 @@ export async function PATCH(req: Request) {
       patch.feature_flags = {
         ...(currentMembership.feature_flags ?? {}),
         ...Object.fromEntries(Object.entries(body.feature_flags as Record<string, unknown>)
-          .filter(([key, value]) => FEATURES.has(key) && typeof value === "boolean")),
+          .filter(([key, value]) => MEMBERSHIP_FEATURES.has(key) && typeof value === "boolean")),
       };
     }
     const { data: membership, error } = await db.from("work_org_members").update(patch).eq("organization_id", auth.access.organizationId).eq("id", membershipId).select("*").maybeSingle();
