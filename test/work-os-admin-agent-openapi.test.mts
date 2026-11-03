@@ -6,6 +6,7 @@ import test, { after, before } from "node:test";
 import yaml from "js-yaml";
 import { GET as meGET } from "../src/app/api/agent/admin/v1/me/route";
 import { hashAgentToken } from "../src/lib/work-agent-tokens";
+import { ADMIN_AGENT_TASK_PAGE_DEFAULT, ADMIN_AGENT_TASK_PAGE_MAX } from "../src/lib/work-admin-agent-tasks";
 import { adminUser, fixture, org } from "./helpers/work-os-admin-agent-fixture.mts";
 
 const root = new URL("../", import.meta.url);
@@ -55,6 +56,21 @@ const PREVIEW_ROUTES = [
   "/tasks/{taskId}/reopen",
 ];
 
+/** The writer modules whose `WorkOsConflictError` reason is forwarded verbatim
+ * as the response `code`: the admin surface itself, the idempotency cache, and
+ * the shared task services the admin action routes call. */
+const CONFLICT_SOURCES = [
+  "src/lib/work-admin-agent-actions.ts",
+  "src/lib/work-admin-action-previews.ts",
+  "src/lib/work-admin-agent-eods.ts",
+  "src/lib/work-admin-agent-evidence.ts",
+  "src/lib/work-agent-idempotency.ts",
+  "src/lib/work-os-task-admin.ts",
+  "src/lib/work-os-employee-tasks.ts",
+];
+
+const HTTP_METHODS = new Set(["get", "post", "patch", "delete", "put"]);
+
 async function routePaths(dir: string, prefix = ""): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const paths: string[] = [];
@@ -66,6 +82,21 @@ async function routePaths(dir: string, prefix = ""): Promise<string[]> {
     }
   }
   return paths;
+}
+
+/** The same walk, keeping the file so a test can read the exported handlers. */
+async function routeEntries(dir: string, prefix = ""): Promise<Array<{ route: string; file: string }>> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const found: Array<{ route: string; file: string }> = [];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...await routeEntries(full, `${prefix}/${entry.name}`));
+    } else if (entry.name === "route.ts") {
+      found.push({ route: prefix || "/", file: full });
+    }
+  }
+  return found;
 }
 
 async function openapi() {
@@ -167,6 +198,54 @@ test("the evidence contract documents the 8 MB upload limit", async () => {
   const operation = spec.paths["/tasks/{taskId}/evidence"].post;
   const media = operation.requestBody.content["multipart/form-data"];
   assert.ok(media, "evidence is multipart");
+});
+
+test("every documented operation matches an exported route handler", async () => {
+  const spec = await openapi();
+  const directory = fileURLToPath(new URL("../src/app/api/agent/admin/v1", import.meta.url));
+  for (const { route, file } of await routeEntries(directory)) {
+    const key = route.replace(/\[([^\]]+)\]/g, "{$1}");
+    const documented = Object.keys(spec.paths[key] as Record<string, unknown>)
+      .filter((method) => HTTP_METHODS.has(method))
+      .sort();
+    const source = await readFile(file, "utf8");
+    const exported = [...source.matchAll(/export async function (GET|POST|PATCH|DELETE|PUT)\b/g)]
+      .map((match) => match[1].toLowerCase())
+      .sort();
+    assert.deepEqual(documented, exported, `${key} must document exactly the handlers it exports`);
+  }
+});
+
+test("the task list documents the implementation's page ceiling", async () => {
+  const spec = await openapi();
+  const limit = (spec.paths["/tasks"].get.parameters as Array<Record<string, any>>)
+    .find((parameter) => parameter.name === "limit")?.schema;
+  assert.ok(limit, "the task list documents a limit parameter");
+  assert.equal(limit.maximum, ADMIN_AGENT_TASK_PAGE_MAX);
+  assert.equal(limit.default, ADMIN_AGENT_TASK_PAGE_DEFAULT);
+});
+
+test("EOD detail documents missingEvidence as the producer's array", async () => {
+  const spec = await openapi();
+  const missing = spec.components.schemas.EodDetail.allOf[1].properties.missingEvidence;
+  assert.equal(missing.type, "array");
+  assert.deepEqual([...missing.items.required].sort(), ["reason", "title"]);
+  assert.equal(missing.items.properties.taskId.type, "string");
+});
+
+test("every conflict reason the admin writers raise is in the error enum", async () => {
+  const spec = await openapi();
+  const codes = spec.components.schemas.Error.properties.code.enum as string[];
+  const reasons = new Set<string>();
+  for (const file of CONFLICT_SOURCES) {
+    const source = await read(file);
+    for (const match of source.matchAll(/WorkOsConflictError\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"([a-z_]+)"/g)) {
+      reasons.add(match[1]);
+    }
+  }
+  assert.ok(reasons.size >= 8, `the scan must find the writers' reasons, found ${[...reasons].join(", ")}`);
+  for (const reason of reasons) assert.ok(codes.includes(reason), `the Error enum is missing the conflict reason ${reason}`);
+  assert.ok(codes.includes("conflict"), "the mapper's reason-less fallback is documented");
 });
 
 test("the served schema reads the repository contract", async () => {

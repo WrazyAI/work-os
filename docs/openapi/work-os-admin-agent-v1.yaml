@@ -174,7 +174,7 @@ paths:
           description: Switches to ascending row-change order for the change feed.
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
         - name: cursor
           in: query
           schema: { type: string }
@@ -222,7 +222,9 @@ paths:
   /tasks/{taskId}:
     get:
       summary: Task detail with subtasks and completion evidence
-      description: A missing, archived, tombstoned, or cross-organization task is the same 404.
+      description: |
+        Archived work stays readable, matching its timeline. A missing,
+        deleted/tombstoned, or cross-organization task is the same 404.
       operationId: getAdminTask
       x-required-scope: tasks:read
       parameters:
@@ -886,9 +888,12 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
       description: |
-        The action conflicts with the current state: `preview_stale` (the body
+        The action conflicts with the current state. The status is 409 and the
+        `code` is the reason the writer raised: `preview_stale` (the body also
         carries `current_state`), `preview_in_flight` (`Retry-After: 1`),
-        `evidence_required`, `idempotency_conflict`, or another `conflict`.
+        `evidence_required`, `evidence_conflict`, `report_not_pending`,
+        `task_completed`, `due_date_passed`, `idempotency_conflict`, or the
+        generic `conflict` when no reason was supplied.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -969,6 +974,10 @@ components:
             - invalid_cursor
             - rate_limited
             - evidence_required
+            - evidence_conflict
+            - report_not_pending
+            - task_completed
+            - due_date_passed
             - file_too_large
             - unsupported_file_type
             - idempotency_conflict
@@ -1230,7 +1239,16 @@ components:
             managerNotes: { type: string, nullable: true }
             reviewedBy: { type: string, nullable: true }
             metrics: { type: object, additionalProperties: true }
-            missingEvidence: { type: object, additionalProperties: true }
+            missingEvidence:
+              type: array
+              description: One entry per open or due task that has no evidence for the report date.
+              items:
+                type: object
+                required: [title, reason]
+                properties:
+                  taskId: { type: string, nullable: true }
+                  title: { type: string }
+                  reason: { type: string }
     EodVersion:
       type: object
       required: [id, versionKind, markdown, createdAt]

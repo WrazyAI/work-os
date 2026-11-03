@@ -11,9 +11,10 @@ import type { Json } from "@/lib/work-os-internal";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** One task with its subtasks and completion evidence. A missing, archived,
- * tombstoned, or cross-organization task is indistinguishable from an unknown
- * id: the employee reader throws NotFound and the shared mapper answers 404. */
+/** One task with its subtasks and completion evidence. Archived work stays
+ * readable (its timeline and detail must agree), and a deleted, tombstoned, or
+ * cross-organization task is indistinguishable from an unknown id: the reader
+ * throws NotFound and the shared mapper answers 404. */
 export async function GET(req: Request, context: { params: Promise<{ taskId: string }> }) {
   try {
     const auth = await requireAdminAgentAccess(req, "tasks:read");
