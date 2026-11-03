@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import { GET as detailGET } from "../src/app/api/agent/admin/v1/eods/[reportId]/route";
 import { GET as eodsGET } from "../src/app/api/agent/admin/v1/eods/route";
 import { createDbClient } from "../src/lib/db/query";
-import { adminAgentRouteError } from "../src/lib/work-admin-agent-auth";
+import { adminAgentRouteError, requireAdminAgentAccess } from "../src/lib/work-admin-agent-auth";
 import { hashAgentToken } from "../src/lib/work-agent-tokens";
 import {
   AdminAgentInvalidCursorError,
@@ -14,8 +14,8 @@ import {
   type AdminAgentEodFilters,
 } from "../src/lib/work-admin-agent-eods";
 import {
-  adminAccess, adminUser, fixture, mappedAdminAccess, org, otherAdminUser, otherOrg,
-  otherOrgAccess, otherPerson, personA, personB,
+  adminAccess, adminMembership, adminUser, fixture, mappedAdminAccess, org, otherAdminUser,
+  otherOrg, otherOrgAccess, otherPerson, personA, personB,
 } from "./helpers/work-os-admin-agent-fixture.mts";
 
 /** The EOD list and detail run over the real PGlite pool; review runs through
@@ -171,6 +171,13 @@ before(async () => {
        created_by = case when id = $1 then $2::uuid else $3::uuid end
      where id in ($1, $4)`,
     [org, adminUser, otherAdminUser, otherOrg],
+  );
+  // The admin has a membership person while its token stays unmapped: the
+  // resolver must still know who the reviewer is. This is the shape that made
+  // a token-only self-review check bypassable.
+  await f.db.query(
+    `update work_org_members set person_id = $1 where id = $2`,
+    [personA, adminMembership],
   );
   await seedEods();
   await insertToken(EOD_READ_TOKEN, EOD_READ_SECRET, ["eods:read"]);
@@ -418,12 +425,14 @@ test("detail returns the report, its person, and its versions oldest first", asy
   assert.equal(result.eod.submittedMarkdown, "# Checkout shipped\n\nShipped the checkout flow.");
   assert.equal(result.eod.markdown, "# Checkout shipped");
   assert.deepEqual(result.eod.metrics, { completed: 3 });
-  assert.deepEqual(result.versions.map((version) => version.id), [
-    versionA1Draft, versionA1Submission,
-  ]);
+  // Only the versions a reviewer was allowed to see: the employee submission.
+  // The pre-submission draft is employee-private and stays out.
+  assert.deepEqual(result.versions.map((version) => version.id), [versionA1Submission]);
   assert.deepEqual(result.versions.map((version) => version.versionKind), [
-    "draft", "employee_submission",
+    "employee_submission",
   ]);
+  assert.ok(!result.versions.some((version) => version.id === versionA1Draft));
+  assert.ok(!result.versions.some((version) => version.markdown === "# Checkout shipped"));
 
   const approved = await getAdminAgentEod(adminAccess, approvedReportId);
   assert.ok(approved);
@@ -455,7 +464,7 @@ test("the detail route returns the envelope and 404s outside the tenant", async 
   assert.equal(body.eod.id, eodA1);
   assert.equal(body.eod.person.displayName, "Ada Lovelace");
   assert.deepEqual(body.versions.map((version) => version.versionKind), [
-    "draft", "employee_submission",
+    "employee_submission",
   ]);
 
   const crossOrg = await detailRoute(eodA1, OTHER_SECRET);
@@ -488,6 +497,34 @@ test("review refuses a report the admin owns and one already decided", async () 
   );
 });
 
+test("an unmapped admin token cannot review its membership person's own EOD", async () => {
+  const resolved = await requireAdminAgentAccess(
+    request("/api/agent/admin/v1/eods", EOD_READ_SECRET),
+    "eods:read",
+  );
+  assert.ok(resolved.agent, "the seeded admin token must resolve");
+  // The token itself carries no person; the membership does.
+  assert.equal(resolved.agent.access.personId, null);
+  assert.equal(resolved.agent.reviewerPersonId, personA);
+
+  // Without the resolved reviewer person the wrapper only sees the token's null
+  // mapping; with it, the report person is the reviewer's own person.
+  await assert.rejects(
+    () => reviewAdminAgentEod(
+      resolved.agent.access,
+      eodA1,
+      { status: "approved" },
+      resolved.agent.reviewerPersonId,
+    ),
+    (error: Error) => error.name === "WorkOsForbiddenError"
+      && /cannot review your own/i.test(error.message),
+  );
+
+  // The refusal is a read, not a decision: the report is still waiting.
+  const detail = await getAdminAgentEod(adminAccess, eodA1);
+  assert.equal(detail?.eod.status, "pending_review");
+});
+
 test("review answers not-found across organizations and for an unknown report", async () => {
   await assert.rejects(
     () => reviewAdminAgentEod(adminAccess, eodOther, { status: "approved" }),
@@ -504,11 +541,23 @@ test("review answers not-found across organizations and for an unknown report", 
 });
 
 test("review decides a pending report and preserves the employee submission", async () => {
-  const reviewed = await reviewAdminAgentEod(adminAccess, eodB1, {
-    status: "approved",
-    manager_notes: "Clear and well evidenced.",
-    markdown: "# Docs refresh\n\nUpdated the onboarding docs. Nice work.",
-  });
+  // Task 13's review route resolves the admin token and passes the reviewer
+  // person alongside the access, exactly as this call does.
+  const resolved = await requireAdminAgentAccess(
+    request("/api/agent/admin/v1/eods", EOD_READ_SECRET),
+    "eods:read",
+  );
+  assert.ok(resolved.agent);
+  const reviewed = await reviewAdminAgentEod(
+    resolved.agent.access,
+    eodB1,
+    {
+      status: "approved",
+      manager_notes: "Clear and well evidenced.",
+      markdown: "# Docs refresh\n\nUpdated the onboarding docs. Nice work.",
+    },
+    resolved.agent.reviewerPersonId,
+  );
   assert.equal(reviewed.status, "approved");
   assert.equal(reviewed.manager_notes, "Clear and well evidenced.");
   assert.equal(reviewed.reviewed_by, adminUser);
@@ -543,4 +592,64 @@ test("review decides a pending report and preserves the employee submission", as
     () => reviewAdminAgentEod(adminAccess, eodB1, { status: "rejected" }),
     (error: Error) => error.name === "WorkOsConflictError",
   );
+});
+
+test("a decision that loses the conditional update is a conflict, not a 500", async () => {
+  const raceReportId = "e0000000-0000-4000-8000-000000000007";
+  await f.db.query(
+    `insert into work_reports
+      (id, organization_id, person_id, user_id, report_date, kind, status, title, markdown,
+       submitted_markdown, submitted_at, created_at, updated_at)
+     values ($1,$2,$3,$4,'2026-10-27','eod','pending_review','Race report',
+       '# Race report', '# Race report', '2026-10-27T17:00:00Z',
+       '2026-10-27T17:00:00Z','2026-10-27T17:00:00Z')`,
+    [raceReportId, org, personA, adminUser],
+  );
+
+  // Simulate a concurrent reviewer winning between this call's pre-check read
+  // and the shared service's conditional update: the competing decision commits
+  // immediately before that UPDATE statement runs.
+  const pool = globalThis.__workOsPgPool as unknown as {
+    query: (sql: string, values?: unknown[]) => Promise<unknown>;
+  };
+  const originalQuery = pool.query;
+  let raced = false;
+  pool.query = async (sql: string, values?: unknown[]) => {
+    if (
+      !raced
+      && /^UPDATE "work_reports" SET/i.test(sql.trim())
+      && (values ?? []).includes(raceReportId)
+    ) {
+      raced = true;
+      await originalQuery.call(pool, "update work_reports set status = 'approved' where id = $1", [raceReportId]);
+    }
+    return originalQuery.call(pool, sql, values);
+  };
+  let failure: Error | null = null;
+  try {
+    await reviewAdminAgentEod(adminAccess, raceReportId, { status: "approved" });
+  } catch (error) {
+    failure = error as Error;
+  } finally {
+    pool.query = originalQuery;
+  }
+
+  assert.equal(raced, true, "the conditional update must have lost the race");
+  assert.ok(failure, "the lost race must reject");
+  assert.equal(failure.name, "WorkOsConflictError");
+  assert.equal((failure as Error & { reason?: string }).reason, "report_not_pending");
+  assert.match(failure.message, /no longer pending review/i);
+
+  // The route contract answers 409 with its own code, never a 500.
+  const response = adminAgentRouteError(failure);
+  assert.equal(response.status, 409);
+  assert.equal((await response.json() as { code: string }).code, "report_not_pending");
+
+  // The competing decision stands and this call wrote nothing.
+  const row = await f.db.query<{ status: string; reviewed_by: string | null }>(
+    "select status, reviewed_by from work_reports where id = $1",
+    [raceReportId],
+  );
+  assert.equal(row.rows[0].status, "approved");
+  assert.notEqual(row.rows[0].reviewed_by, adminUser);
 });

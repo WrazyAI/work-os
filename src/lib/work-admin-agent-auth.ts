@@ -34,6 +34,11 @@ export type AdminAgentAccess = {
   tokenPrefix: string;
   expiresAt: string | null;
   scopes: AdminAgentScope[];
+  /** The person this admin acts as when deciding another person's record: the
+   * token's mapping when it has one, otherwise the membership's. It is resolved
+   * from the membership on every request, so an unmapped admin token cannot
+   * escape the self-review prohibition. */
+  reviewerPersonId: string | null;
 };
 
 export function parseAdminAgentAuthorization(value: string | null): string | null {
@@ -155,7 +160,7 @@ export async function requireAdminAgentAccess(
     supabase.from("profiles").select("id,email,display_name,avatar_url,role,created_at").eq("id", token.user_id as string).maybeSingle(),
     // Membership comes from organization + user + active, never person: an
     // unmapped admin is valid and its role is authoritative for this call.
-    supabase.from("work_org_members").select("id,organization_id,user_id,role,active,feature_flags")
+    supabase.from("work_org_members").select("id,organization_id,user_id,person_id,role,active,feature_flags")
       .eq("organization_id", token.organization_id as string)
       .eq("user_id", token.user_id as string)
       .eq("active", true)
@@ -205,6 +210,10 @@ export async function requireAdminAgentAccess(
   const organizationId = token.organization_id as string;
   const organizationName = String(organization.name ?? "Workspace");
   const personId = (token.person_id as string | null) ?? null;
+  // Self-review integrity cannot depend on the token's optional person mapping:
+  // an admin token is valid with `person_id = null` while the admin still has a
+  // membership person. The membership answers who the reviewer actually is.
+  const reviewerPersonId = personId ?? ((membership.person_id as string | null) ?? null);
   const access: WorkOsAccess = {
     ctx: { user: { id: token.user_id as string }, profile },
     organizationId,
@@ -224,6 +233,7 @@ export async function requireAdminAgentAccess(
       tokenPrefix: token.token_prefix as string,
       expiresAt: (token.expires_at as string | null) ?? null,
       scopes,
+      reviewerPersonId,
     },
   };
 }

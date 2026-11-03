@@ -55,7 +55,7 @@ export type AdminAgentEodDetail = AdminAgentEod & {
 
 export type AdminAgentEodVersion = {
   id: string;
-  versionKind: "draft" | "employee_submission" | "manager_edit";
+  versionKind: "employee_submission" | "manager_edit";
   markdown: string;
   createdBy: string | null;
   createdAt: string;
@@ -435,9 +435,13 @@ export async function getAdminAgentEod(
   if (!row) return null;
 
   const versions = await pool.query<EodRow>(
+    // Draft versions are the employee's pre-submission scratch text: they were
+    // never shown to a manager, so the admin detail returns only the submitted
+    // and manager-edited history.
     `select id, version_kind, markdown, created_by, created_at
      from work_report_versions
      where organization_id = $1 and report_id = $2
+       and version_kind in ('employee_submission', 'manager_edit')
      order by created_at asc, id asc`,
     [access.organizationId, reportId],
   );
@@ -446,12 +450,15 @@ export async function getAdminAgentEod(
 }
 
 /** Review translation: `reviewWorkOsEod` speaks in plain errors, so the admin
- * API maps the three decision states before delegating to it. A race between
- * the pre-check and the shared review is translated the same way. */
+ * API maps the decision states before delegating to it. The reviewer's person
+ * is resolved from the membership by the auth layer and passed in, because an
+ * admin token is valid with `person_id = null`; without it the self-review
+ * prohibition would only fire for mapped tokens. */
 export async function reviewAdminAgentEod(
   access: WorkOsAccess,
   reportId: string,
   body: AdminAgentEodReviewInput,
+  reviewerPersonId?: string | null,
 ): Promise<Json> {
   if (!isUuid(reportId)) throw new WorkOsNotFoundError("EOD report not found");
   if (body?.status !== "approved" && body?.status !== "rejected") {
@@ -471,19 +478,40 @@ export async function reviewAdminAgentEod(
   const report = found.rows[0];
   if (!report) throw new WorkOsNotFoundError("EOD report not found");
   // Review integrity: a manager who is also an employee must never decide their
-  // own report, even when the admin token is mapped to that person.
-  if (report.person_id !== null && report.person_id === access.personId) {
+  // own report. The token's own mapping is the fallback; the resolved reviewer
+  // person (token or membership) is authoritative when supplied.
+  const effectivePersonId = reviewerPersonId ?? access.personId;
+  if (report.person_id !== null && report.person_id === effectivePersonId) {
     throw new WorkOsForbiddenError("You cannot review your own EOD report. Ask another manager to review it.");
   }
   if (report.status !== "pending_review") {
     throw new WorkOsConflictError("report is no longer pending review", "report_not_pending");
   }
 
+  // The shared service repeats the self-review check against `access.personId`,
+  // so hand it the same person this wrapper checked.
+  const reviewerAccess: WorkOsAccess = effectivePersonId === access.personId
+    ? access
+    : {
+      ...access,
+      personId: effectivePersonId,
+      workspaces: access.workspaces.map((workspace) =>
+        workspace.organizationId === access.organizationId
+          ? { ...workspace, personId: effectivePersonId }
+          : workspace),
+    };
+
   try {
-    return await reviewWorkOsEod(access, reportId, body as unknown as Json);
+    return await reviewWorkOsEod(reviewerAccess, reportId, body as unknown as Json);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (message === "only pending reports can be reviewed") {
+    // A concurrent decision is a 409 on both sides of the race: the shared
+    // service's own pre-check, and the conditional update in `reviewReport`
+    // that loses after the pre-check passed.
+    if (
+      message === "only pending reports can be reviewed"
+      || message === "report is no longer pending review"
+    ) {
       throw new WorkOsConflictError("report is no longer pending review", "report_not_pending");
     }
     if (/cannot review your own/i.test(message)) throw new WorkOsForbiddenError(message);

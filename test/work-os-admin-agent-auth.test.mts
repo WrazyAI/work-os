@@ -114,6 +114,7 @@ test("the idempotency cache accepts an admin identity", async () => {
     tokenPrefix: "wos_admin_ab",
     expiresAt: null,
     scopes: ["people:read"],
+    reviewerPersonId: null,
   };
   await assert.rejects(
     () => withAgentIdempotency({
@@ -135,11 +136,17 @@ test("the admin resolver is kind-scoped, membership-based, and flag-gated", asyn
   assert.match(membership, /\.eq\("organization_id"/);
   assert.match(membership, /\.eq\("user_id"/);
   assert.match(membership, /\.eq\("active", true\)/);
-  assert.doesNotMatch(membership, /person_id/, "admin membership must never be looked up by person");
+  assert.doesNotMatch(membership, /\.eq\("person_id"/, "admin membership must never be looked up by person");
+  // The membership person is authoritative for self-review even when the token
+  // has no person mapping.
+  assert.match(membership, /select\("[^"]*person_id/);
 
   assert.match(auth, /role !== "admin"/);
   assert.match(auth, /ADMIN_AGENT_FEATURE_FLAG/);
   assert.match(auth, /employee_companion/);
+  // The reviewer person falls back to the membership when the token is unmapped.
+  assert.match(auth, /reviewerPersonId/);
+  assert.match(auth, /personId \?\? \(\(membership\.person_id/);
 });
 
 test("the idempotency module no longer requires an employee token", async () => {
