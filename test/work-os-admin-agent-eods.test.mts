@@ -203,34 +203,34 @@ test("the eods route returns the documented envelope with per-status counts", as
   assert.equal(response.status, 200);
   const body = await response.json() as {
     eods: Array<{ id: string; person: { id: string; displayName: string }; status: string; excerpt: string }>;
-    counts: { draft: number; pending_review: number; approved: number; rejected: number; total: number };
+    counts: { pending_review: number; approved: number; rejected: number; total: number };
     total: number;
     cursor: { next: string | null };
   };
   assert.deepEqual(Object.keys(body).sort(), ["counts", "cursor", "eods", "total"]);
   assert.deepEqual(body.eods.map((eod) => eod.id), [
-    eodB2, eodB1, eodA1, approvedReportId, eodA3,
+    eodB2, eodB1, eodA1, approvedReportId,
   ]);
   assert.deepEqual(body.eods[2].person, { id: personA, displayName: "Ada Lovelace" });
   assert.match(body.eods[2].excerpt, /^# Checkout shipped/);
   assert.deepEqual(body.counts, {
-    draft: 1, pending_review: 2, approved: 1, rejected: 1, total: 5,
+    pending_review: 2, approved: 1, rejected: 1, total: 4,
   });
-  assert.equal(body.total, 5);
+  assert.equal(body.total, 4);
   assert.equal(body.cursor.next, null);
 });
 
 test("the eod list orders by report date then creation and honors each filter", async () => {
   const byPerson = await listAdminAgentEods(adminAccess, { ...defaults, personIds: [personA] });
-  assert.deepEqual(byPerson.eods.map((eod) => eod.id), [eodA1, approvedReportId, eodA3]);
-  assert.equal(byPerson.total, 3);
+  assert.deepEqual(byPerson.eods.map((eod) => eod.id), [eodA1, approvedReportId]);
+  assert.equal(byPerson.total, 2);
 
   const byStatus = await listAdminAgentEods(adminAccess, { ...defaults, status: "pending_review" });
   assert.deepEqual(byStatus.eods.map((eod) => eod.id), [eodB1, eodA1]);
   assert.equal(byStatus.total, 2);
   // Counts stay per status: the status filter narrows rows, not the summary.
   assert.deepEqual(byStatus.counts, {
-    draft: 1, pending_review: 2, approved: 1, rejected: 1, total: 5,
+    pending_review: 2, approved: 1, rejected: 1, total: 4,
   });
 
   const byDate = await listAdminAgentEods(adminAccess, {
@@ -238,11 +238,31 @@ test("the eod list orders by report date then creation and honors each filter", 
   });
   assert.deepEqual(byDate.eods.map((eod) => eod.id), [eodB1, eodA1]);
   assert.deepEqual(byDate.counts, {
-    draft: 0, pending_review: 2, approved: 0, rejected: 0, total: 2,
+    pending_review: 2, approved: 0, rejected: 0, total: 2,
   });
+});
 
-  const draft = await listAdminAgentEods(adminAccess, { ...defaults, status: "draft" });
-  assert.deepEqual(draft.eods.map((eod) => eod.id), [eodA3]);
+test("unsubmitted drafts stay out of the admin EOD surface", async () => {
+  const page = await listAdminAgentEods(adminAccess, defaults);
+  assert.ok(!page.eods.some((eod) => eod.id === eodA3));
+
+  // Detail answers not-found for a draft, and no status filter can request one.
+  assert.equal(await getAdminAgentEod(adminAccess, eodA3), null);
+  assert.equal((await detailRoute(eodA3, EOD_READ_SECRET)).status, 404);
+  assert.throws(
+    () => parseAdminAgentEodFilters(new URLSearchParams("status=draft")),
+    (error: Error) => error.name === "WorkOsValidationError",
+  );
+  await assert.rejects(
+    () => listAdminAgentEods(adminAccess, { ...defaults, status: "draft" as never }),
+    (error: Error) => error.name === "WorkOsValidationError",
+  );
+  // A draft cannot be reviewed either; it is not waiting for a decision.
+  await assert.rejects(
+    () => reviewAdminAgentEod(adminAccess, eodA3, { status: "approved" }),
+    (error: Error) => error.name === "WorkOsConflictError"
+      && (error as Error & { reason?: string }).reason === "report_not_pending",
+  );
 });
 
 test("the eod text search covers title, submission, and body with literal wildcards", async () => {
@@ -267,7 +287,7 @@ test("an empty person list is no rows, not the whole team", async () => {
   assert.equal(page.nextCursor, null);
   // Counts describe the same filters, so an empty person list counts nothing.
   assert.deepEqual(page.counts, {
-    draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0,
+    pending_review: 0, approved: 0, rejected: 0, total: 0,
   });
 });
 
@@ -286,7 +306,7 @@ test("the eod list never returns another organization's reports", async () => {
 test("the cursor walks the list without gaps and keeps full precision", async () => {
   const first = await listAdminAgentEods(adminAccess, { ...defaults, limit: 2 });
   assert.deepEqual(first.eods.map((eod) => eod.id), [eodB2, eodB1]);
-  assert.equal(first.total, 5);
+  assert.equal(first.total, 4);
   assert.ok(first.nextCursor);
   const encoded = JSON.parse(Buffer.from(first.nextCursor, "base64url").toString("utf8")) as {
     reportDate: string; createdAt: string;
@@ -301,7 +321,7 @@ test("the cursor walks the list without gaps and keeps full precision", async ()
     walked.push(...page.eods.map((eod) => eod.id));
     cursor = page.nextCursor;
   }
-  assert.deepEqual(walked, [eodB2, eodB1, eodA1, approvedReportId, eodA3]);
+  assert.deepEqual(walked, [eodB2, eodB1, eodA1, approvedReportId]);
 });
 
 test("a malformed or stale cursor is invalid_cursor", async () => {
@@ -375,6 +395,7 @@ test("query parameters default to the whole organization and reject bad input", 
     `person_ids=${Array.from({ length: 21 }, (_, index) => `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`).join(",")}`,
     `person_ids=${Array.from({ length: 21 }, () => personA).join(",")}`,
     "status=open",
+    "status=draft",
     "from=soon",
     "to=2026-02-30",
     "limit=zero",

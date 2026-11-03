@@ -24,7 +24,7 @@ import type { Json } from "@/lib/work-os-internal";
 // contract.
 export { AdminAgentInvalidCursorError };
 
-export const ADMIN_AGENT_EOD_STATUSES = ["draft", "pending_review", "approved", "rejected"] as const;
+export const ADMIN_AGENT_EOD_STATUSES = ["pending_review", "approved", "rejected"] as const;
 export type AdminAgentEodStatus = (typeof ADMIN_AGENT_EOD_STATUSES)[number];
 
 export type AdminAgentEodPerson = { id: string; displayName: string };
@@ -177,7 +177,7 @@ export function validateAdminAgentEodFilters(filters: AdminAgentEodFilters): Adm
     }
   }
   if (filters.status !== null && !STATUS_SET.has(filters.status)) {
-    throw new WorkOsValidationError("status must be draft, pending_review, approved, or rejected");
+    throw new WorkOsValidationError("status must be pending_review, approved, or rejected");
   }
   if (filters.from !== null && !isCalendarDate(filters.from)) {
     throw new WorkOsValidationError("from must be a calendar date");
@@ -213,7 +213,7 @@ export function parseAdminAgentEodFilters(params: URLSearchParams): AdminAgentEo
     ? null
     : rawStatus.trim().toLowerCase();
   if (status !== null && !STATUS_SET.has(status)) {
-    throw new WorkOsValidationError("status must be draft, pending_review, approved, or rejected");
+    throw new WorkOsValidationError("status must be pending_review, approved, or rejected");
   }
 
   const rawLimit = params.get("limit");
@@ -286,11 +286,13 @@ const EOD_FROM = `
   left join work_people p
     on p.id = r.person_id and p.organization_id = r.organization_id`;
 
-/** The kind predicate keeps this EOD surface from answering a future report
- * kind it has no review contract for. */
+/** The kind and status predicates keep this surface to submitted EODs: a draft
+ * is employee-private until it is submitted, and no future report kind has a
+ * review contract here. */
 const EOD_FILTERS = `
   r.organization_id = $1
   and r.kind = 'eod'
+  and r.status in ('pending_review', 'approved', 'rejected')
   and ($2::uuid[] is null or r.person_id = any($2::uuid[]))
   and ($3::text is null or r.status = $3)
   and ($4::date is null or r.report_date >= $4::date)
@@ -311,7 +313,7 @@ const EOD_SELECT = `
   to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at_cursor`;
 
 function emptyCounts(): AdminAgentEodCounts {
-  return { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 };
+  return { pending_review: 0, approved: 0, rejected: 0, total: 0 };
 }
 
 export async function listAdminAgentEods(
@@ -425,7 +427,8 @@ export async function getAdminAgentEod(
      from work_reports r
      left join work_people p
        on p.id = r.person_id and p.organization_id = r.organization_id
-     where r.organization_id = $1 and r.id = $2 and r.kind = 'eod'`,
+     where r.organization_id = $1 and r.id = $2 and r.kind = 'eod'
+       and r.status in ('pending_review', 'approved', 'rejected')`,
     [access.organizationId, reportId],
   );
   const row = report.rows[0];
