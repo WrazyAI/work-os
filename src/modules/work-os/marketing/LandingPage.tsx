@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ProductTheater from "./ProductTheater";
+import Companion from "./Companion";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
 import styles from "./landing.module.css";
 
@@ -30,8 +31,7 @@ export default function LandingPage() {
           </div>
           <div className={styles.companion}>
             <p className={styles.speech}>Your work has a story.<br />Let’s keep the pieces together.</p>
-            <img src="/work-os/studio-otto.svg" alt="The Work OS companion" width={220} height={248} />
-            <p className={styles.companionNote}>Your companion, one click away.</p>
+            <Companion />
           </div>
         </section>
 
