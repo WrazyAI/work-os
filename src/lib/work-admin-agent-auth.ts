@@ -75,6 +75,10 @@ function isCompletionEvidence(error: unknown): error is CompletionEvidenceError 
   return error instanceof CompletionEvidenceError || isNamed(error, "CompletionEvidenceError");
 }
 
+function isAgentRateLimit(error: unknown): error is AgentRateLimitError {
+  return error instanceof AgentRateLimitError || isNamed(error, "AgentRateLimitError");
+}
+
 /** Task 10's preview store answers with its own code and status. Matching the
  * class name keeps this module from importing the preview store, which imports
  * the auth module for its access contract. A stale preview also carries the
@@ -103,7 +107,7 @@ function invalidCursorResponse(error: unknown): NextResponse | null {
 /** One error mapper for every admin route: the same `{ error, code,
  * request_id }` contract as the employee surface. */
 export function adminAgentRouteError(error: unknown): NextResponse {
-  if (error instanceof AgentRateLimitError) {
+  if (isAgentRateLimit(error)) {
     const response = adminAgentError("rate_limited", error.message, 429);
     response.headers.set("Retry-After", String(error.retryAfter));
     return response;

@@ -123,7 +123,7 @@ test("the idempotency cache accepts an admin identity", async () => {
       requestHash: "hash",
       handler: async () => ({ status: 200, body: {} }),
     }),
-    WorkOsValidationError,
+    (error: unknown) => (error as Error).name === "WorkOsValidationError",
   );
 });
 

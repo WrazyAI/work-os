@@ -478,7 +478,8 @@ test("unsupported, oversized, and lying uploads are rejected before storage", as
       bytes: new TextEncoder().encode("<html></html>"),
       idempotencyKey: "attach-html",
     }, actor),
-    CompletionEvidenceError,
+    (error: unknown) => (error as Error).name === "CompletionEvidenceError"
+      && (error as CompletionEvidenceError).code === "unsupported_file_type",
   );
   await assert.rejects(
     () => attachAdminAgentEvidence(adminAccess, taskCheckout, {

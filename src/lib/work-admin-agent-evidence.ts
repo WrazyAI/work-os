@@ -42,17 +42,21 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export type AdminEvidenceActor = { tokenId: string; tokenName: string };
 
 /** Tests need deterministic object storage; production never calls the setter
- * and always uses the configured R2/local adapter. */
+ * and always uses the configured R2/local adapter. The override lives on
+ * `globalThis` so a relative test import and an aliased production import see
+ * the same value even though they are distinct module instances. */
 type EvidenceStorage = Pick<StorageBackend, "upload" | "download" | "remove">;
 
-let storageOverride: EvidenceStorage | null = null;
+type TestStorageGlobal = typeof globalThis & {
+  __workOsAdminEvidenceStorage?: EvidenceStorage | null;
+};
 
 export function setAdminEvidenceStorageForTests(storage: EvidenceStorage | null): void {
-  storageOverride = storage;
+  (globalThis as TestStorageGlobal).__workOsAdminEvidenceStorage = storage;
 }
 
 function evidenceStorage(): EvidenceStorage {
-  return storageOverride ?? getStorageBackend();
+  return (globalThis as TestStorageGlobal).__workOsAdminEvidenceStorage ?? getStorageBackend();
 }
 
 function text(value: unknown): string | null {
