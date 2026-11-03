@@ -50,6 +50,9 @@ export async function POST(req: Request) {
     }
     const action = body.action;
     const required = adminPreviewActionScope(action);
+    // A recognized action always has a scope; the null branch keeps the check
+    // fail-closed if the map and the action list ever drift.
+    if (!required) return adminAgentError("insufficient_scope", "This action is not available on this token", 403);
     if (!hasAdminAgentScope(auth.agent.scopes, required)) {
       return adminAgentError("insufficient_scope", `This token is missing the ${required} scope`, 403);
     }

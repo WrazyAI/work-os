@@ -43,6 +43,9 @@ export async function POST(req: Request, context: { params: Promise<{ previewId:
     const record = await getAdminPreviewRecord(auth.agent.access, previewId, auth.agent.tokenId);
     if (!record) throw new WorkAdminPreviewError("preview_not_found");
     const required = adminPreviewActionScope(record.action);
+    // An action this surface no longer recognizes cannot be authorized: treat
+    // the card as gone instead of skipping the scope check.
+    if (!required) throw new WorkAdminPreviewError("preview_not_found");
     if (!hasAdminAgentScope(auth.agent.scopes, required)) {
       return adminAgentError("insufficient_scope", `This token is missing the ${required} scope`, 403);
     }

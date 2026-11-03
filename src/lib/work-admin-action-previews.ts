@@ -384,6 +384,16 @@ type ClaimOutcome = { kind: "replay"; result: AdminPreviewConfirmResult } | { ki
  * never written into `idempotency_key`, which belongs to creation dedupe (and
  * is protected by the partial unique index on `(token_id, idempotency_key)`).
  *
+ * The target is re-read **before** the row transaction opens. Doing it inside
+ * would hold the preview row lock while waiting for a second pooled connection,
+ * so a burst of confirms could occupy every client and then wait on itself.
+ * The stored fingerprint is still compared inside the transaction against the
+ * pre-read state, and `apply()` re-reads the target against that same state, so
+ * a target that changes after the pre-read is refused with `preview_stale`
+ * rather than applied from a stale snapshot. A pre-read failure is deferred
+ * until replay, not-found, and expiry have answered, so those codes keep their
+ * precedence.
+ *
  * The claim commits before `apply()` runs, so a concurrent confirm can never
  * execute the action twice: it either replays the stored result or is told the
  * apply is in flight. When `apply()` throws, the claim is released so a retry
@@ -403,6 +413,19 @@ export async function confirmAdminPreview(
   }
   const ownerTokenId = normalizeTokenId(tokenId);
   const claimedAt = new Date().toISOString();
+
+  // Outside the transaction and outside the row lock: the target reader uses
+  // the shared pool, and nesting it under `for update` is what could exhaust
+  // the pool. See the note above on why this is still safe.
+  let currentState: Json | undefined;
+  let readError: unknown;
+  let readFailed = false;
+  try {
+    currentState = await deps.readState();
+  } catch (error) {
+    readFailed = true;
+    readError = error;
+  }
 
   const claim = await transaction<ClaimOutcome>(async (client) => {
     const { rows } = await client.query<PreviewRow>(
@@ -432,13 +455,15 @@ export async function confirmAdminPreview(
     if (new Date(row.expires_at).getTime() <= Date.now()) {
       throw new WorkAdminPreviewError("preview_expired");
     }
+    // A target that could not be re-read is a 404/validation answer from the
+    // reader; surface it only now so a replay or an expiry still wins.
+    if (readFailed) throw readError;
 
-    // Re-read the target while the row is locked and compare against the state
-    // the preview described. A mismatch writes nothing at all, and carries the
-    // fresh state back so the caller can see what changed.
-    const currentState = await deps.readState();
-    if (previewFingerprint(currentState) !== String(row.state_fingerprint)) {
-      throw new WorkAdminPreviewError("preview_stale", undefined, currentState);
+    // Compare the pre-read state with the state the preview described. A
+    // mismatch writes nothing at all and carries the fresh state back so the
+    // caller can see what changed.
+    if (previewFingerprint(currentState as Json) !== String(row.state_fingerprint)) {
+      throw new WorkAdminPreviewError("preview_stale", undefined, currentState as Json);
     }
 
     // The creation key is left exactly as it was: it is what makes a retried

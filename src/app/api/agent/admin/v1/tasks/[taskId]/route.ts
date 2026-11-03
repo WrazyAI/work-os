@@ -73,11 +73,19 @@ export async function DELETE(req: Request, context: { params: Promise<{ taskId: 
     for (const field of Object.keys(body)) {
       if (field !== "mode") throw new WorkOsValidationError(`Field ${field} cannot be set on a task removal`);
     }
-    const requested = new URL(req.url).searchParams.get("mode") ?? body.mode ?? "archive";
-    if (typeof requested !== "string" || !REMOVAL_MODES.has(requested)) {
-      throw new WorkOsValidationError("mode must be archive or delete");
+    // `?mode=` with no value means "not specified", not "an invalid mode", so a
+    // URL builder that always emits the parameter cannot break the default.
+    let mode = "archive";
+    for (const candidate of [new URL(req.url).searchParams.get("mode"), body.mode]) {
+      if (candidate === undefined || candidate === null) continue;
+      if (typeof candidate !== "string") throw new WorkOsValidationError("mode must be archive or delete");
+      const trimmed = candidate.trim();
+      if (!trimmed) continue;
+      if (!REMOVAL_MODES.has(trimmed)) throw new WorkOsValidationError("mode must be archive or delete");
+      mode = trimmed;
+      break;
     }
-    const action = requested === "delete" ? "task.delete" : "task.archive";
+    const action = mode === "delete" ? "task.delete" : "task.archive";
     const preview = await previewAdminAction(
       auth.agent.access,
       action,

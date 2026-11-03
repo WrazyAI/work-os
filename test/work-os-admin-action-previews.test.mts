@@ -12,7 +12,7 @@ import {
   WorkAdminPreviewError,
   type CreateAdminPreviewInput,
 } from "../src/lib/work-admin-action-previews";
-import { WorkOsConflictError, type WorkOsAccess } from "../src/lib/work-os-api";
+import { WorkOsConflictError, WorkOsNotFoundError, type WorkOsAccess } from "../src/lib/work-os-api";
 import {
   adminAccess, adminMembership, adminUser, fixture, org, otherOrgAccess,
 } from "./helpers/work-os-admin-agent-fixture.mts";
@@ -278,6 +278,78 @@ test("a stale confirm reports the fresh state in the 409 body", async () => {
   const body = await response.json() as { code: string; current_state: unknown };
   assert.equal(body.code, "preview_stale");
   assert.deepEqual(body.current_state, fresh);
+});
+
+test("the target is read once before the claim and a stale state still refuses", async () => {
+  const created = await createAdminPreview({ ...input, state: { updatedAt: "a", status: "open" } });
+  let reads = 0;
+  let applied = 0;
+  await assert.rejects(
+    () => confirmAdminPreview(adminAccess, created.id, "key-1", {
+      readState: async () => {
+        reads += 1;
+        return { updatedAt: "b", status: "open" };
+      },
+      apply: async () => { applied += 1; return { status: 200, body: { ok: true } }; },
+    }),
+    (error: Error) => error.name === "WorkAdminPreviewError"
+      && (error as Error & { code: string }).code === "preview_stale",
+  );
+  assert.equal(reads, 1, "the re-read happens once, outside the claim");
+  assert.equal(applied, 0);
+  assert.ok(await getAdminPreview(adminAccess, created.id), "a stale confirm leaves the preview readable");
+  // Nothing was claimed, so a confirm against the unchanged state still runs.
+  const accepted = await confirmAdminPreview(adminAccess, created.id, "key-2", {
+    readState: async () => ({ updatedAt: "a", status: "open" }),
+    apply: async () => ({ status: 200, body: { ok: true } }),
+  });
+  assert.equal(accepted.replayed, false);
+});
+
+test("expiry and replay answer before a failed target read", async () => {
+  const expired = await createAdminPreview({ ...input, state, expiresAt: new Date(Date.now() - 1_000) });
+  let expiredReads = 0;
+  const refusedRead = async () => {
+    expiredReads += 1;
+    throw new WorkOsNotFoundError("Task not found");
+  };
+  await assert.rejects(
+    () => confirmAdminPreview(adminAccess, expired.id, "key-1", {
+      readState: refusedRead,
+      apply: async () => { throw new Error("must not apply"); },
+    }),
+    (error: Error) => error.name === "WorkAdminPreviewError"
+      && (error as Error & { code: string }).code === "preview_expired",
+  );
+  assert.equal(expiredReads, 1, "the target is re-read even when the preview has expired");
+
+  const confirmed = await createAdminPreview({ ...input, state });
+  await confirmAdminPreview(adminAccess, confirmed.id, "key-1", {
+    readState: async () => state,
+    apply: async () => ({ status: 200, body: { ok: true } }),
+  });
+  const replay = await confirmAdminPreview(adminAccess, confirmed.id, "key-2", {
+    readState: refusedRead,
+    apply: async () => { throw new Error("must not apply"); },
+  });
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.body, { ok: true });
+});
+
+test("a target read failure leaves a live preview unclaimed", async () => {
+  const created = await createAdminPreview({ ...input, state });
+  await assert.rejects(
+    () => confirmAdminPreview(adminAccess, created.id, "key-1", {
+      readState: async () => { throw new WorkOsNotFoundError("Task not found"); },
+      apply: async () => { throw new Error("must not apply"); },
+    }),
+    (error: Error) => error.name === "WorkOsNotFoundError",
+  );
+  const confirmed = await confirmAdminPreview(adminAccess, created.id, "key-2", {
+    readState: async () => state,
+    apply: async () => ({ status: 200, body: { ok: true } }),
+  });
+  assert.equal(confirmed.replayed, false);
 });
 
 test("a malformed token id is rejected instead of widening ownership", async () => {

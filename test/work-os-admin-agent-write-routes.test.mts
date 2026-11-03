@@ -30,6 +30,7 @@ import {
   taskCheckout,
   taskCheckoutDone,
   taskCheckoutReview,
+  taskDocumentation,
   taskSubtask,
   taskUnassigned,
   taskUnderscore,
@@ -70,16 +71,22 @@ type RequestOptions = {
   key?: string;
   method?: string;
   body?: unknown;
+  /** An exact body, so a test can send a truncated payload that `JSON.stringify`
+   * would never produce. */
+  rawBody?: string;
 };
 
 function request(pathname: string, secret: string, options: RequestOptions = {}) {
   const headers: Record<string, string> = { authorization: `Bearer ${secret}` };
   if (options.key !== undefined) headers["Idempotency-Key"] = options.key;
-  if (options.body !== undefined) headers["content-type"] = "application/json";
+  const hasBody = options.body !== undefined || options.rawBody !== undefined;
+  if (hasBody) headers["content-type"] = "application/json";
   return new Request(`https://example.test${pathname}`, {
     method: options.method ?? "POST",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.rawBody !== undefined
+      ? options.rawBody
+      : options.body === undefined ? undefined : JSON.stringify(options.body),
   });
 }
 
@@ -351,6 +358,68 @@ test("a missing Idempotency-Key answers 400 before anything is stored", async ()
   assert.equal(await previewCount(), before, "a keyless write must not store a preview");
 });
 
+test("a malformed lifecycle body answers 400 instead of being ignored", async () => {
+  const token = await newToken(WRITE_SCOPES);
+  const before = await previewCount();
+  // `Request.json()` rejects on a truncated payload. Treating that as "no
+  // body" would skip the transition guard (complete) and the mode (delete).
+  const complete = await taskCompletePOST(request(
+    `/api/agent/admin/v1/tasks/${taskCheckout}/complete`,
+    token,
+    { key: "malformed-complete", rawBody: '{"completed": false' },
+  ), taskParams(taskCheckout));
+  assert.equal(complete.status, 400);
+  assert.equal((await complete.json() as { code: string }).code, "validation_error");
+
+  const remove = await taskDELETE(request(
+    `/api/agent/admin/v1/tasks/${taskCheckout}?mode=delete`,
+    token,
+    { key: "malformed-delete", method: "DELETE", rawBody: '{"mode": "delete"' },
+  ), taskParams(taskCheckout));
+  assert.equal(remove.status, 400);
+  assert.equal((await remove.json() as { code: string }).code, "validation_error");
+
+  assert.equal(await previewCount(), before, "a malformed write must not store a preview");
+  assert.equal((await taskRow(taskCheckout)).status, "open", "a malformed delete must not archive");
+});
+
+test("a blank ?mode= is treated as absent", async () => {
+  const token = await newToken(WRITE_SCOPES);
+  const response = await taskDELETE(request(
+    `/api/agent/admin/v1/tasks/${taskCheckout}?mode=`,
+    token,
+    { key: "blank-mode", method: "DELETE" },
+  ), taskParams(taskCheckout));
+  assert.equal(response.status, 202);
+  assert.equal((await response.json() as { action: string }).action, "task.archive");
+});
+
+test("a preview with an unrecognized action fails closed", async () => {
+  const token = await newToken(WRITE_SCOPES);
+  const created = await tasksPOST(request("/api/agent/admin/v1/tasks", token, {
+    key: "legacy-action-preview", body: { name: "Legacy preview" },
+  }));
+  assert.equal(created.status, 202);
+  const preview = await created.json() as { id: string };
+  // A legacy or hand-edited row can name an action this surface no longer
+  // knows. It has no scope, so it must not be readable or confirmable.
+  await f.db.query(
+    "update work_admin_action_previews set action = $2 where id = $1",
+    [preview.id, "task.legacy"],
+  );
+  const read = await previewGET(
+    request(`/api/agent/admin/v1/previews/${preview.id}`, token, { method: "GET" }),
+    params({ previewId: preview.id }),
+  );
+  assert.equal(read.status, 404);
+  assert.equal((await read.json() as { code: string }).code, "preview_not_found");
+  const confirm = await previewConfirmPOST(
+    request(`/api/agent/admin/v1/previews/${preview.id}/confirm`, token, { key: "legacy-action-confirm" }),
+    params({ previewId: preview.id }),
+  );
+  assert.equal(confirm.status, 404);
+});
+
 test("a token without the action's write scope answers 403", async () => {
   const readOnly = await newToken(READ_SCOPES);
   const responses = await Promise.all([
@@ -410,6 +479,34 @@ test("confirm applies the update once and a second confirm replays it", async ()
   assert.equal(audits.rows[0].total, 1, "the confirm path ran the action exactly once");
 });
 
+test("a confirmed assign applies the resolved final list", async () => {
+  const token = await newToken(WRITE_SCOPES);
+  const created = await taskAssignPOST(request(
+    `/api/agent/admin/v1/tasks/${taskDocumentation}/assign`,
+    token,
+    { key: "assign-confirm-preview", body: { mode: "add", person_ids: [personB] } },
+  ), taskParams(taskDocumentation));
+  assert.equal(created.status, 202);
+  const preview = await created.json() as {
+    id: string;
+    changes: Array<{ field: string; from: unknown; to: unknown }>;
+  };
+  // The preview resolves the delta once; the stored request is the exact list.
+  assert.deepEqual(preview.changes[0], { field: "assignees", from: [personA], to: [personA, personB] });
+  assert.deepEqual((await taskRow(taskDocumentation)).assignee_person_ids, [personA]);
+
+  const confirmed = await previewConfirmPOST(
+    request(`/api/agent/admin/v1/previews/${preview.id}/confirm`, token, { key: "assign-confirm-first" }),
+    params({ previewId: preview.id }),
+  );
+  assert.equal(confirmed.status, 200);
+  assert.deepEqual(
+    (await taskRow(taskDocumentation)).assignee_person_ids,
+    [personA, personB],
+    "confirm applies the preview's resolved list, not the delta",
+  );
+});
+
 test("a confirmed create returns 201 and records the preview as its idempotency key", async () => {
   const token = await newToken(WRITE_SCOPES);
   const created = await previewsPOST(request("/api/agent/admin/v1/previews", token, {
@@ -418,7 +515,7 @@ test("a confirmed create returns 201 and records the preview as its idempotency 
   }));
   assert.equal(created.status, 202);
   const preview = await created.json() as { id: string };
-  assert.equal(preview.id.length > 0, true);
+  assert.ok(preview.id);
 
   const confirmed = await previewConfirmPOST(request(`/api/agent/admin/v1/previews/${preview.id}/confirm`, token, {
     key: "confirm-create-first",
