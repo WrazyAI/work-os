@@ -23,6 +23,7 @@ import {
   type AdminOttoMessageRef,
 } from "@/lib/work-os-admin-otto-conversation";
 import { summarizeAdminOttoRead } from "@/lib/work-os-admin-otto-summary";
+import { executeAdminOttoOperation } from "@/lib/work-os-admin-otto-actions";
 import type {
   AdminRead,
   ChatRequest,
@@ -38,7 +39,7 @@ import type {
 } from "@/modules/work-os/admin-otto/contracts";
 
 /**
- * Admin Otto's read-only conversational runner. Every ordinary turn is sent to
+ * Admin Otto's conversational runner. Every ordinary turn is sent to
  * the same OpenRouter-backed interpret model and configuration as the employee
  * assistant; the model answers conversationally and may select one typed read.
  * This module owns the actor/organization context, resolves names against the
@@ -54,6 +55,8 @@ export type AdminOttoChatDeps = {
   /** Legacy/test-only intent-only parser. It never replaces the model in
    * production but keeps the typed contract for existing callers. */
   parseIntent?: (text: string, context: AdminOttoIntentContext) => Promise<ReadIntent | null>;
+  /** Test seam for the action-preview service. Production uses the default. */
+  executeOperation?: typeof executeAdminOttoOperation;
   /** Model-backed final reply for a completed read. Returns null to fall back
    * to the grounded server summary. */
   summarizeRead?: (
@@ -159,6 +162,7 @@ type ExecutedRead = {
   refs: StoredReadRefs;
   reply: string;
   errorCode?: ChatResult["errorCode"];
+  pendingAction?: ChatResult["pendingAction"];
   stale?: boolean;
 };
 
@@ -187,7 +191,7 @@ const MAX_PEOPLE = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const UNSUPPORTED_REPLY = "I can only read existing Work OS records here: unfinished tasks, work records, reviewed recaps, a latest reviewed recap, or a workday. I can't change, message, or run anything.";
+const UNSUPPORTED_REPLY = "I can read Work OS records and prepare task changes — assign, delegate, add or remove a co-assignee, create, complete, or reopen — for your confirmation. I can't message, approve an EOD, impersonate, or run anything.";
 
 function requireAdmin(access: WorkOsAccess) {
   if (access.role !== "admin" || access.featureFlags.employee_companion !== true) {
@@ -1496,6 +1500,7 @@ async function persistExecution(
     turnId: write.turnId,
     reply: executed.reply,
     result: read,
+    ...(executed.pendingAction ? { pendingAction: executed.pendingAction } : {}),
     contextVersion: write.version,
     ...(executed.errorCode ? { errorCode: executed.errorCode } : {}),
   };
@@ -1620,6 +1625,27 @@ export async function executeAdminOttoChat(
     : deps.parseIntent
       ? { reply: "", intent: await deps.parseIntent(request.text, context) }
       : await parseAdminOttoInterpretation(request.text, context);
+
+  if (interpretation.operation) {
+    const unauthorized = interpretation.operation.person_names.find((name) => !nameAuthorizedByText(name, request.text));
+    if (unauthorized) {
+      const executed: ExecutedRead = {
+        read: null,
+        refs: adminOttoMessageRef("I can only assign people you named in this message."),
+        reply: "I can only assign people you named in this message.",
+      };
+      return persistExecution(access, thread, request, executed, deps, now, newId);
+    }
+    const action = await (deps.executeOperation ?? executeAdminOttoOperation)(access, interpretation.operation);
+    await recheckAfterRead(access, deps);
+    const executed: ExecutedRead = {
+      read: null,
+      refs: adminOttoMessageRef(action.reply),
+      reply: action.reply,
+      ...(action.pendingAction ? { pendingAction: action.pendingAction } : {}),
+    };
+    return persistExecution(access, thread, request, executed, deps, now, newId);
+  }
 
   if (!interpretation.intent) {
     if (interpretation.reply) {

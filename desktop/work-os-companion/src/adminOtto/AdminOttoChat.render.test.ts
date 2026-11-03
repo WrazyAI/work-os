@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AdminOttoChat, AdminReplyText, AdminResultCard, createAdminOttoSurfaceController, resetAdminOttoConversation, syncAdminOttoConversation } from "./AdminOttoChat";
+import { AdminOttoChat, AdminPendingActionCard, AdminReplyText, AdminResultCard, createAdminOttoSurfaceController, resetAdminOttoConversation, syncAdminOttoConversation } from "./AdminOttoChat";
 import { fixtureInboxPage, fixtureRecordsResult, fixtureTaskResult, FIXTURE_REVIEWED_RECAP } from "./fixtures";
 import { parseAdminRecordHref } from "./recordLinks";
 import { createAdminAudioInterlock } from "./audioInterlock";
@@ -28,7 +28,7 @@ describe("admin Otto chat", () => {
     // presence dot, quiet admin subtitle, peer tabs, and close action.
     expect(html).toContain("workos-chat-head admin-otto-head");
     expect(html).toContain("conversation-pane-title");
-    expect(html).toContain("Administration, read-only");
+    expect(html).toContain("Administration, confirmed changes");
     expect(html).not.toContain("WORK OS · ADMINISTRATION");
     expect(html).not.toContain("admin-otto-tabs-row");
     expect(html).toContain("chat-composer");
@@ -291,5 +291,24 @@ describe("admin Otto chat", () => {
     expect(controller.snapshot().draft).toBe("What is unfinished today?");
     expect(controller.recovery().requestId).toBe(requests[0]);
     controller.dispose();
+  });
+
+  it("pending_action_card_shows_change_and_confirmation", () => {
+    const html = renderToStaticMarkup(createElement(AdminPendingActionCard, {
+      action: {
+        previewId: "11111111-1111-4111-8111-111111111111",
+        action: "task.assign",
+        summary: "Assign Checkout to Aden",
+        changes: [{ field: "assignees", from: [], to: ["Aden Badon"] }],
+        warnings: ["This task has an expected outcome and needs completion evidence."],
+        expiresAt: "2026-11-03T18:00:00.000Z",
+      },
+    }));
+    expect(html).toContain("Assign Checkout to Aden");
+    expect(html).toContain("assignees");
+    expect(html).toContain("Aden Badon");
+    expect(html).toContain("completion evidence");
+    expect(html).toContain("Confirm change");
+    expect(html).toContain('data-admin-action-confirm="11111111-1111-4111-8111-111111111111"');
   });
 });

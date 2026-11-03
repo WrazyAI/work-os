@@ -1,4 +1,4 @@
-import type { AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
 import type { AdminOttoThreadView } from "./api";
 
 export type AdminOttoEntryTurn = {
@@ -6,6 +6,7 @@ export type AdminOttoEntryTurn = {
   role: "user" | "assistant";
   text: string;
   result?: AdminRead | null;
+  pendingAction?: AdminOttoPendingAction;
 };
 
 export type AdminOttoEntrySnapshot = {
@@ -187,6 +188,7 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
             role: "assistant",
             text: result.reply || "No readable result was returned.",
             result: result.result,
+            ...(result.pendingAction ? { pendingAction: result.pendingAction } : {}),
           }],
           draft: "",
           busy: false,

@@ -1,6 +1,6 @@
 import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, INTERPRET_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 import { WorkOsValidationError } from "@/lib/work-os-api";
-import type { PersonRef, ReadIntent, Target } from "@/modules/work-os/admin-otto/contracts";
+import type { AdminOttoOperation, PersonRef, ReadIntent, Target } from "@/modules/work-os/admin-otto/contracts";
 
 /**
  * A bounded, typed translation of an administrator's message into a natural
@@ -40,6 +40,9 @@ export type AdminOttoIntentContext = {
 export type AdminOttoInterpretation = {
   reply: string;
   intent: ReadIntent | null;
+  /** A requested mutation. The chat runner turns this into a stored preview;
+   * the model never executes it. */
+  operation?: AdminOttoOperation | null;
 };
 
 export type AdminOttoIntentDeps = {
@@ -71,6 +74,10 @@ const MAX_CONTEXT_PEOPLE = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ACTIONS = new Set<string>(ADMIN_OTTO_INTENT_ACTIONS);
+const OPERATION_ACTIONS = new Set<string>([
+  "assign_task", "delegate_task", "add_contributor", "remove_contributor",
+  "create_task", "complete_task", "reopen_task",
+]);
 /** Strict JSON schema for the one structured call. Every field is required so
  * a partial answer is a malformed provider response, not an implicit default. */
 export const ADMIN_OTTO_INTENT_RESPONSE_SCHEMA = {
@@ -79,9 +86,24 @@ export const ADMIN_OTTO_INTENT_RESPONSE_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest"],
+    required: ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest", "operation"],
     properties: {
       reply: { type: "string" },
+      operation: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["action", "task_query", "person_names", "title", "due_date"],
+        properties: {
+          action: {
+            type: ["string", "null"],
+            enum: ["assign_task", "delegate_task", "add_contributor", "remove_contributor", "create_task", "complete_task", "reopen_task", null],
+          },
+          task_query: { type: ["string", "null"] },
+          person_names: { type: "array", maxItems: MAX_NAMES, items: { type: "string" } },
+          title: { type: ["string", "null"] },
+          due_date: { type: ["string", "null"] },
+        },
+      },
       action: {
         type: ["string", "null"],
         enum: [...ADMIN_OTTO_INTENT_ACTIONS, null],
@@ -326,10 +348,10 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     ? people.map((person) => `- ${person.displayName}${person.active ? "" : " (inactive)"} | ${person.timezone}`).join("\n")
     : "(no currently resolved people)";
   return [
-    "You are Admin Otto, the read-only administration assistant inside Work OS. You are backed by the same OpenRouter model configuration as the employee assistant. Answer the administrator naturally and helpfully, and never claim a mutation, message, approval, impersonation, or employee decision.",
+    "You are Admin Otto, the administration assistant inside Work OS. You are backed by the same OpenRouter model configuration as the employee assistant. You can read records and propose task changes. You never execute a change, send a message, approve an EOD, impersonate an employee, or run anything.",
     "Output ONLY JSON matching the supplied schema. Do nothing else.",
     "",
-    "Return a natural reply in `reply`. When the administrator is asking for records, also choose exactly one read action for the server to execute. The server, not you, reads the records and writes the grounded result. For a read, leave `reply` empty or use one short lead-in sentence.",
+    "Return a natural reply in `reply`. When the administrator is asking for records, choose exactly one read action for the server to execute. When the administrator asks to assign, delegate, add or remove a co-assignee, create, complete, or reopen a task, choose exactly one operation. The server, not you, resolves the task, stores a preview, and the administrator confirms it. Never claim the change already happened.",
     "",
     "Allowed read actions:",
     "- unfinished: open, non-archived, non-deleted tasks for a person, several people, or the whole team. Set overdueOnly for overdue tasks only.",
@@ -340,10 +362,19 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "- read_recap: the latest reviewed recap for exactly one employee.",
     "- workday: the employee's workday/schedule snapshot for one date.",
     "",
+    "Allowed operations (set exactly one `operation` object, and set `action` to null):",
+    "- assign_task: replace the task's assignees with the named people.",
+    "- delegate_task: replace the task with exactly one named person.",
+    "- add_contributor: add the named people to the task's existing assignees.",
+    "- remove_contributor: remove the named people from the task's assignees.",
+    "- create_task: create a task with `title`, optional `person_names`, and optional `due_date`.",
+    "- complete_task / reopen_task: change the task's completion state.",
+    "For every operation except create_task, put the administrator's task words in `task_query` (a short title fragment, never a UUID). The server finds the unique matching task and asks for a more specific title if several match. For create_task, leave `task_query` null and put the title in `title`.",
+    "",
     "Conversation rules:",
     "- Greetings, thanks, capability questions, questions about yourself or how you work, and questions asking you to confirm what you just said are not reads: set action to null and write a specific natural answer in reply.",
     "- You run on the deployment's model and query live Work OS records only when a read action runs. You do not continuously monitor anyone. If asked whether an answer is real-time, explain that distinction honestly instead of claiming continuous monitoring.",
-    "- You can read open or overdue tasks, work updates and EOD reports, reviewed recaps, a latest reviewed recap, and workdays. You cannot edit, message, approve, impersonate, or run anything. Explicit ranges are capped at 31 days; person overviews default to the recent 7-day window.",
+    "- You can read open or overdue tasks, work updates and EOD reports, reviewed recaps, a latest reviewed recap, and workdays. You can also propose assigning, delegating, adding or removing a co-assignee, creating, completing, or reopening a task; every proposal needs the administrator's confirmation. You cannot message, approve an EOD, impersonate, or run anything. Explicit ranges are capped at 31 days; person overviews default to the recent 7-day window.",
     "- Use the recent conversation to resolve follow-ups such as \"what else can you do?\", \"show me those\", or \"are you sure?\". Do not repeat a previous assistant reply verbatim; answer the new question and add useful detail.",
     "- If a request is not a supported read, politely say what you can read and that you cannot perform the requested action. Do not invent a result.",
     "",
@@ -375,12 +406,68 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
   ].filter(Boolean).join("\n");
 }
 
+function normalizeOperation(value: unknown): AdminOttoOperation | null {
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new WorkOsValidationError("operation must be an object or null");
+  }
+  const raw = value as Record<string, unknown>;
+  if (!exactKeys(raw, ["action", "task_query", "person_names", "title", "due_date"])) {
+    throw new WorkOsValidationError("operation contains unsupported fields");
+  }
+  if (raw.action === null) return null;
+  if (typeof raw.action !== "string" || !OPERATION_ACTIONS.has(raw.action)) {
+    throw new WorkOsValidationError("operation action is not supported");
+  }
+  const action = raw.action as AdminOttoOperation["action"];
+  const taskQuery = raw.task_query === null || raw.task_query === undefined
+    ? null
+    : typeof raw.task_query === "string" && raw.task_query.trim() && raw.task_query.trim().length <= 200
+      ? raw.task_query.replace(/\s+/g, " ").trim()
+      : (() => { throw new WorkOsValidationError("task_query must be 1 to 200 characters or null"); })();
+  if (Array.isArray(raw.person_names) && raw.person_names.length > MAX_NAMES) {
+    throw new WorkOsValidationError(`person_names must contain at most ${MAX_NAMES} values`);
+  }
+  const personNames = Array.isArray(raw.person_names)
+    ? raw.person_names.map((entry) => {
+      if (typeof entry !== "string") throw new WorkOsValidationError("person_names must be strings");
+      const name = entry.replace(/\s+/g, " ").trim();
+      if (!name || name.length > MAX_NAME_LENGTH) {
+        throw new WorkOsValidationError(`person_names must be between 1 and ${MAX_NAME_LENGTH} characters`);
+      }
+      return name;
+    }).filter((name, index, all) => all.indexOf(name) === index)
+    : (() => { throw new WorkOsValidationError("person_names must be an array"); })();
+  const title = raw.title === null || raw.title === undefined
+    ? null
+    : typeof raw.title === "string" && raw.title.trim() && raw.title.trim().length <= 240
+      ? raw.title.trim()
+      : (() => { throw new WorkOsValidationError("title must be 1 to 240 characters or null"); })();
+  const dueDate = calendarDate(raw.due_date, "due_date");
+  if (action === "create_task") {
+    if (!title) throw new WorkOsValidationError("create_task requires a title");
+    if (taskQuery) throw new WorkOsValidationError("create_task cannot carry a task_query");
+  } else {
+    if (!taskQuery) throw new WorkOsValidationError(`${action} requires a task_query`);
+    if (title || dueDate) throw new WorkOsValidationError(`${action} cannot carry a title or due_date`);
+  }
+  if (action === "delegate_task" && personNames.length !== 1) {
+    throw new WorkOsValidationError("delegate_task requires exactly one person");
+  }
+  if (["assign_task", "delegate_task", "add_contributor", "remove_contributor"].includes(action) && !personNames.length) {
+    throw new WorkOsValidationError(`${action} requires at least one person`);
+  }
+  return { action, task_query: taskQuery, person_names: personNames, title, due_date: dueDate };
+}
+
 export function validateAdminOttoInterpretation(value: unknown): AdminOttoInterpretation {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new WorkOsValidationError("response must be an object");
   }
   const raw = value as Record<string, unknown>;
-  if (!exactKeys(raw, ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest"])) {
+  const allowed = ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest", "operation"];
+  const required = allowed.filter((key) => key !== "operation");
+  if (Object.keys(raw).some((key) => !allowed.includes(key)) || required.some((key) => !(key in raw))) {
     throw new WorkOsValidationError("response contains unsupported fields");
   }
   if (typeof raw.reply !== "string") throw new WorkOsValidationError("reply must be text");
@@ -402,8 +489,18 @@ export function validateAdminOttoInterpretation(value: unknown): AdminOttoInterp
     if (error instanceof WorkOsValidationError) malformed(error.message);
     throw error;
   }
-  if (!intent && !reply) throw new WorkOsValidationError("a conversational reply is required when there is no read intent");
-  return { reply, intent };
+  let operation: AdminOttoOperation | null;
+  try {
+    operation = normalizeOperation(raw.operation);
+  } catch (error) {
+    if (error instanceof WorkOsValidationError) malformed(error.message);
+    throw error;
+  }
+  if (intent && operation) throw new WorkOsValidationError("A turn cannot carry both a read and an action");
+  if (!intent && !operation && !reply) {
+    throw new WorkOsValidationError("a conversational reply is required when there is no read or action");
+  }
+  return { reply, intent, ...(operation ? { operation } : {}) };
 }
 
 /**
@@ -437,7 +534,7 @@ export async function parseAdminOttoInterpretation(
         messages: [
           {
             role: "system",
-            content: "You are the Work OS administration assistant. You answer the administrator conversationally and translate explicit read requests into one approved read-only intent. Questions never authorize a mutation. You never invent people or records, and you output only valid JSON.",
+            content: "You are the Work OS administration assistant. You answer the administrator conversationally, translate explicit read requests into one approved read intent, and translate explicit task changes into one operation preview. You never execute a change; the administrator confirms every preview. Questions never authorize a mutation. You never invent people or records, and you output only valid JSON.",
           },
           { role: "user", content: buildAdminOttoIntentPrompt(input, context, now) },
         ],

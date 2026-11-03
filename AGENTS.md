@@ -148,10 +148,13 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
   `src/app/api/work-os/me/interpret/route.ts`. Questions answer in `reply` and
   never authorize a mutation.
 - Admin Otto: `src/lib/work-os-admin-otto-intent.ts` returns `{ reply,
-  intent }`; `src/lib/work-os-admin-otto-chat.ts` executes the typed read under
-  admin authorization; `src/lib/work-os-admin-otto-summary.ts` writes the
-  grounded reply from the real result. Admin chat is read-only: no mutations,
-  messaging, approvals, impersonation, or employee decision controls.
+  intent, operation }`; `src/lib/work-os-admin-otto-chat.ts` executes typed
+  reads under admin authorization; `src/lib/work-os-admin-otto-summary.ts`
+  writes the grounded reply from the real result. Task operations (assign,
+  delegate, add/remove co-assignee, create, complete, reopen) create a durable
+  preview and never execute from the model; only the session-bound confirm
+  route applies a preview after the administrator confirms. No messaging, EOD
+  approvals, impersonation, or employee decision controls.
 - Do not reintroduce deterministic greeting/capability reply tables in admin
   chat. The model answers conversation; the server owns name resolution, typed
   reads, source filters, and grounded summaries.

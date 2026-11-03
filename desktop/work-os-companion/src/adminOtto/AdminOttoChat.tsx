@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type {
+  AdminOttoPendingAction,
   AdminRead,
   InboxPage,
   OttoScope,
@@ -15,7 +16,7 @@ import { createAdminAudioInterlock } from "./audioInterlock";
 import { onOttoAudioStop, requestOttoAudio, type OttoAudioLease } from "./audioOwner";
 import { sameOttoScope } from "./mode";
 import { adminEscapeAction, adminRecapOpenFocus, chooseAdminRecapReturnFocus, type AdminFocusTarget } from "./adminFocus";
-import { fetchAdminOttoInbox, fetchAdminOttoThread, sendAdminOttoChat } from "./api";
+import { confirmAdminOttoAction, fetchAdminOttoInbox, fetchAdminOttoThread, sendAdminOttoChat } from "./api";
 import { createAdminOttoEntryController, type AdminOttoEntryController, type AdminOttoEntryRecovery, type AdminOttoEntryTransport } from "./chatEntry";import { AdminRecapInbox } from "./AdminRecapInbox";
 import { AdminRecapView, useReducedMotion, type AdminRecapPlayback } from "./AdminRecapView";
 import { RecapPrompter } from "../RecapPrompter";
@@ -268,6 +269,71 @@ function ResolutionResult({ result }: { result: Extract<AdminRead, { kind: "reso
           {resolution.choices.map((person) => <li key={person.id}>{person.displayName}</li>)}
         </ul>
       ) : null}
+    </section>
+  );
+}
+
+function changeValue(value: unknown): string {
+  if (value === null || value === undefined) return "none";
+  if (Array.isArray(value)) return value.length ? value.map((entry) => String(entry)).join(", ") : "none";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+/** One server-stored preview. The model cannot confirm it; only this button
+ * calls the session-bound confirm route. */
+export function AdminPendingActionCard({ action }: { action: AdminOttoPendingAction }) {
+  const [status, setStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const confirm = async () => {
+    setStatus("busy");
+    setError(null);
+    try {
+      await confirmAdminOttoAction(action.previewId);
+      setStatus("done");
+    } catch (cause) {
+      setStatus("error");
+      setError(cause instanceof Error ? cause.message : "The change could not be confirmed.");
+    }
+  };
+  return (
+    <section className="admin-otto-result-card admin-otto-action-card" aria-label="Confirm change">
+      <header className="admin-otto-result-head">
+        <h4>{action.summary}</h4>
+      </header>
+      {action.changes.length ? (
+        <ul className="admin-otto-result-list">
+          {action.changes.map((change) => (
+            <li key={change.field}>
+              <div className="admin-otto-result-row">
+                <p className="admin-otto-result-meta">
+                  {change.field}: {changeValue(change.from)} → {changeValue(change.to)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {action.warnings.map((warning) => (
+        <p key={warning} className="admin-otto-quiet">{warning}</p>
+      ))}
+      {status === "done" ? (
+        <p className="admin-otto-status" role="status">Change applied.</p>
+      ) : (
+        <div className="admin-otto-result-actions">
+          <button
+            type="button"
+            className="admin-otto-secondary"
+            data-admin-action-confirm={action.previewId}
+            disabled={status === "busy"}
+            onClick={() => void confirm()}
+          >
+            {status === "busy" ? "Applying…" : "Confirm change"}
+          </button>
+          <span className="admin-otto-quiet">Expires {new Date(action.expiresAt).toLocaleTimeString()}</span>
+        </div>
+      )}
+      {error ? <p className="admin-otto-error" role="alert">{error}</p> : null}
     </section>
   );
 }
@@ -603,7 +669,7 @@ export function AdminOttoChat({
         <header className="workos-chat-head admin-otto-head">
           <span className="admin-otto-head-title">
             <span className="conversation-pane-title">Otto</span>
-            <span className="admin-otto-head-sub">Administration, read-only</span>
+            <span className="admin-otto-head-sub">Administration, confirmed changes</span>
           </span>
           <ChatTabs
             tabs={tabs}
@@ -639,7 +705,7 @@ export function AdminOttoChat({
               {!chat.turns.length && chat.hydration === "idle" ? (
                 <div className="admin-otto-welcome">
                   <p>Ask about work, people, EOD reports, or recaps.</p>
-                  <p className="admin-otto-quiet">Answers come from records you can already open. Nothing here changes employee data.</p>
+                  <p className="admin-otto-quiet">Answers come from records you can already open. Any task change is shown for your confirmation first.</p>
                 </div>
               ) : null}
               {chat.turns.map((turn, index) => (
@@ -661,6 +727,7 @@ export function AdminOttoChat({
                           playback={playback}
                         />
                       ) : null}
+                      {turn.pendingAction ? <AdminPendingActionCard action={turn.pendingAction} /> : null}
                     </>
                   )}
                 </ChatTurn>

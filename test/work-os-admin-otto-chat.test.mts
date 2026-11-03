@@ -866,8 +866,8 @@ test("unsupported_request_is_honest_and_never_mutates", async () => {
     const result = await chatWith(parseIntent, { text: "Delete Alex's task." });
     assert.equal(result.errorCode, "unsupported");
     assert.equal(result.result, null);
-    assert.match(result.reply, /can only read existing Work OS records/i);
-    assert.match(result.reply, /can't change, message, or run anything/i);
+    assert.match(result.reply, /can read Work OS records and prepare task changes/i);
+    assert.match(result.reply, /can't message, approve an EOD, impersonate, or run anything/i);
     assert.deepEqual(await rows(f.db, "select count(*)::int as n from work_tasks"), before);
     assert.equal(await turnCount(f.db), 2);
   } finally { await f.close(); }
@@ -1576,7 +1576,7 @@ test("model_backed_conversation_persists_natural_replies_without_canned_text", a
     assert.equal(view.turns[1].text, greeting.reply);
     assert.equal(view.turns[3].text, realTime.reply);
     assert.equal(view.resultStatus, "ready");
-    assert.ok(!view.turns.some((turn) => /can only read existing Work OS records/i.test(turn.text)),
+    assert.ok(!view.turns.some((turn) => /can read Work OS records and prepare task changes/i.test(turn.text)),
       "no canned capability or unsupported reply is persisted");
   } finally { await f.close(); }
 });
@@ -2192,4 +2192,44 @@ test("two_client_first_request_unique_wait_commit_and_rollback_use_real_postgres
     await setup.query(`drop schema if exists ${schema} cascade`);
     await setup.end();
   }
+});
+
+test("an action operation returns a pending preview and no read", async () => {
+  const f = await fixture();
+  try {
+    const service = await chat();
+    const previewId = "11111111-1111-4111-8111-111111111111";
+    const result = await service.executeAdminOttoChat(adminAccess, {
+      conversationId: null,
+      requestId: randomUUID(),
+      text: "Assign the checkout task to Aden",
+    }, {
+      interpret: async () => ({
+        reply: "",
+        intent: null,
+        operation: {
+          action: "assign_task",
+          task_query: "checkout",
+          person_names: ["Aden"],
+          title: null,
+          due_date: null,
+        },
+      }),
+      executeOperation: async () => ({
+        reply: "Assign Checkout to Aden",
+        pendingAction: {
+          previewId,
+          action: "task.assign",
+          summary: "Assign Checkout to Aden",
+          changes: [{ field: "assignees", from: [], to: ["aden"] }],
+          warnings: [],
+          expiresAt: "2026-11-03T18:00:00.000Z",
+        },
+      }),
+    });
+    assert.equal(result.result, null);
+    assert.equal(result.reply, "Assign Checkout to Aden");
+    assert.equal(result.pendingAction?.previewId, previewId);
+    assert.equal(result.pendingAction?.action, "task.assign");
+  } finally { await f.close(); }
 });
