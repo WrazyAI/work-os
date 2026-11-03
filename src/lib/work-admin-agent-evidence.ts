@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getStorageBackend, type StorageBackend } from "@/lib/db/storage";
 import { getWorkOsEmployeeTaskDetails, type CompletionEvidenceUpload } from "@/lib/work-os-employee-tasks";
 import { addTaskProgress } from "@/lib/work-os-tasks";
@@ -37,6 +37,7 @@ const IDEMPOTENCY_KEY_MAX = 160;
 const PROGRESS_SUMMARY_MAX = 2_000;
 const PROGRESS_TITLE_MAX = 240;
 const PROGRESS_FIELDS = new Set(["summary", "title"]);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type AdminEvidenceActor = { tokenId: string; tokenName: string };
 
@@ -109,7 +110,7 @@ export function adminEvidenceMetrics(input: {
     ...(input.note ? { note: input.note } : {}),
     adminUserId: input.adminUserId,
     adminTokenId: input.adminTokenId,
-    ...(input.targetPersonId ? { attachedForPersonId: input.targetPersonId } : {}),
+    attachedForPersonId: input.targetPersonId,
   };
 }
 
@@ -124,7 +125,7 @@ function adminProgressMetrics(input: {
     origin: ADMIN_PROGRESS_ORIGIN,
     adminUserId: input.adminUserId,
     adminTokenId: input.adminTokenId,
-    ...(input.targetPersonId ? { attachedForPersonId: input.targetPersonId } : {}),
+    attachedForPersonId: input.targetPersonId,
   };
 }
 
@@ -211,6 +212,23 @@ function requireIdempotencyKey(value: string | null | undefined): string {
   return key;
 }
 
+function sha256(value: string | Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/** The content fingerprint stored beside a row. A reused key must describe the
+ * same write, not merely land on the same task: the REST routes hash the
+ * request already, but MCP and other direct callers reach the service without
+ * that cache. */
+function existingRequestHash(row: Json): string | null {
+  const metrics = isRecord(row.metrics) ? row.metrics : {};
+  return typeof metrics.requestHash === "string" ? metrics.requestHash : null;
+}
+
+function differentRequest(message: string): WorkOsConflictError {
+  return new WorkOsConflictError(message, "idempotency_conflict");
+}
+
 /** Validate the progress body here so the REST route, the MCP tool, and any
  * direct caller share one contract. A `url`, `person_id`, `metrics`, or other
  * field is refused: a note may add context but must never masquerade as
@@ -247,10 +265,14 @@ export async function addAdminAgentProgress(
   const task = await loadTask(access, taskId);
   const localTaskId = String(task.id);
   const key = requireIdempotencyKey(idempotencyKey);
+  const requestHash = sha256(JSON.stringify({ summary, title }));
   const existing = await evidenceByKey(access, key);
   if (existing) {
     if (String(existing.task_id ?? "") !== localTaskId || !isAdminProgressRow(existing)) {
       throw new WorkOsConflictError("That progress reference belongs to another task", "evidence_conflict");
+    }
+    if (existingRequestHash(existing) !== requestHash) {
+      throw differentRequest("Idempotency-Key was already used with a different progress note");
     }
     return progressRecord(existing);
   }
@@ -264,11 +286,14 @@ export async function addAdminAgentProgress(
     person_id: null,
     source: "agent",
     idempotency_key: key,
-    metrics: adminProgressMetrics({
-      adminUserId: access.ctx.user.id,
-      adminTokenId: actor.tokenId,
-      targetPersonId,
-    }),
+    metrics: {
+      ...adminProgressMetrics({
+        adminUserId: access.ctx.user.id,
+        adminTokenId: actor.tokenId,
+        targetPersonId,
+      }),
+      requestHash,
+    },
   });
   await audit(access, "admin.task.progress", "work_os_task", localTaskId, {
     evidenceId: String((evidence as Json).id ?? ""),
@@ -295,11 +320,21 @@ export async function attachAdminAgentEvidence(
   });
   assertCompletionEvidenceBytes(input.bytes, validated.contentType);
   const key = requireIdempotencyKey(input.idempotencyKey);
+  const requestHash = sha256(JSON.stringify({
+    contentType: validated.contentType,
+    fileName: validated.fileName,
+    sizeBytes: validated.size,
+    note: validated.note,
+    fileHash: sha256(input.bytes),
+  }));
 
   const existing = await evidenceByKey(access, key);
   if (existing) {
     if (String(existing.task_id ?? "") !== localTaskId || !isAdminEvidenceRow(existing)) {
       throw new WorkOsConflictError("That evidence reference belongs to another task", "evidence_conflict");
+    }
+    if (existingRequestHash(existing) !== requestHash) {
+      throw differentRequest("Idempotency-Key was already used with a different evidence file");
     }
     return { evidence: adminEvidenceRecord(existing) };
   }
@@ -339,15 +374,18 @@ export async function attachAdminAgentEvidence(
     title: `${taskTitle.slice(0, 220)} — completion evidence`,
     summary: validated.note || `Administrator-attached file: ${validated.fileName}.`,
     url: `/api/agent/admin/v1/evidence/${evidenceId}/file`,
-    metrics: adminEvidenceMetrics({
-      contentType: validated.contentType,
-      fileName: validated.fileName,
-      sizeBytes: validated.size,
-      note: validated.note,
-      adminUserId: access.ctx.user.id,
-      adminTokenId: actor.tokenId,
-      targetPersonId,
-    }),
+    metrics: {
+      ...adminEvidenceMetrics({
+        contentType: validated.contentType,
+        fileName: validated.fileName,
+        sizeBytes: validated.size,
+        note: validated.note,
+        adminUserId: access.ctx.user.id,
+        adminTokenId: actor.tokenId,
+        targetPersonId,
+      }),
+      requestHash,
+    },
     raw: {
       origin: ADMIN_EVIDENCE_RAW_ORIGIN,
       adminUserId: access.ctx.user.id,
@@ -376,6 +414,9 @@ export async function attachAdminAgentEvidence(
     // that row instead of surfacing a duplicate-key failure.
     const raced = await evidenceByKey(access, key);
     if (raced && String(raced.task_id ?? "") === localTaskId && isAdminEvidenceRow(raced)) {
+      if (existingRequestHash(raced) !== requestHash) {
+        throw differentRequest("Idempotency-Key was already used with a different evidence file");
+      }
       return { evidence: adminEvidenceRecord(raced) };
     }
     throw new Error(`save admin task evidence record: ${inserted.error.message}`);
@@ -402,7 +443,7 @@ export async function getAdminAgentEvidenceFile(
   access: WorkOsAccess,
   evidenceId: string,
 ): Promise<{ bytes: Uint8Array; contentType: string; fileName: string } | null> {
-  if (!text(evidenceId)) return null;
+  if (!text(evidenceId) || !UUID_PATTERN.test(evidenceId)) return null;
   const { data, error } = await db().from("work_evidence")
     .select("id,organization_id,person_id,task_id,source,title,summary,metrics,created_at")
     .eq("organization_id", access.organizationId)

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { GET as evidenceFileGET } from "../src/app/api/agent/admin/v1/evidence/[evidenceId]/file/route";
 import { POST as taskEvidencePOST } from "../src/app/api/agent/admin/v1/tasks/[taskId]/evidence/route";
 import { POST as taskProgressPOST } from "../src/app/api/agent/admin/v1/tasks/[taskId]/progress/route";
+import { GET as sessionEvidenceFileGET } from "../src/app/api/work-os/evidence/[eventId]/file/route";
+import { getStorageBackend } from "../src/lib/db/storage";
 import {
   addAdminAgentProgress,
   adminEvidenceMetrics,
@@ -35,13 +40,29 @@ import {
 
 /** Service- and route-level coverage for the two additive admin writes and the
  * authenticated evidence download. The real resolver, PGlite pool, rate
- * limiter, idempotency cache, and evidence service execute; only object storage
- * is an in-memory fake, because the test must not touch R2 or the filesystem. */
+ * limiter, idempotency cache, and evidence service execute. The admin-agent
+ * tests use an in-memory storage fake; the session-route test uses the real
+ * local driver rooted in a temporary directory, because that route resolves
+ * storage itself. */
 
 const OTHER_EVIDENCE = "b0000000-0000-4000-8000-0000000000ff";
 const MISSING_TASK = "a0000000-0000-4000-8000-0000000000ff";
 const actor = { tokenId: "token-1", tokenName: "Admin automation" };
 const WRITE_SCOPES = ["tasks:read", "tasks:write", "eods:read", "eods:review"];
+
+const EMPLOYEE_A_USER = "40000000-0000-4000-8000-000000000012";
+const EMPLOYEE_B_USER = "40000000-0000-4000-8000-000000000014";
+const EMPLOYEE_A_MEMBERSHIP = "50000000-0000-4000-8000-000000000002";
+const EMPLOYEE_B_MEMBERSHIP = "50000000-0000-4000-8000-000000000004";
+const ADMIN_SESSION = "session-admin";
+const EMPLOYEE_A_SESSION = "session-employee-a";
+const EMPLOYEE_B_SESSION = "session-employee-b";
+
+let originalCwd = "";
+let storageRoot = "";
+let originalStorageDriver: string | undefined;
+
+const sessionHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 let f: Fixture;
@@ -231,10 +252,43 @@ before(async () => {
     );
     alter table work_evidence
       add column evidence_event_id uuid references work_evidence_events(id) on delete set null;
+    create table work_desktop_sessions (
+      id uuid primary key default gen_random_uuid(),
+      organization_id uuid not null,
+      user_id uuid not null,
+      token_hash text not null unique,
+      expires_at timestamptz not null,
+      revoked_at timestamptz,
+      last_used_at timestamptz
+    );
   `);
   await f.db.query(
     "insert into profiles (id, email, display_name, role) values ($1, 'admin@example.com', 'Admin', 'member'), ($2, 'other@example.com', 'Other Admin', 'member')",
     [adminUser, otherAdminUser],
+  );
+  await f.db.query(
+    `insert into profiles (id, email, display_name, role) values
+      ($1, 'ada.employee@example.com', 'Ada Employee', 'member'),
+      ($2, 'grace.employee@example.com', 'Grace Employee', 'member')`,
+    [EMPLOYEE_A_USER, EMPLOYEE_B_USER],
+  );
+  // Employee sessions so the session file route can be exercised for a person
+  // with task access and for one without it.
+  await f.db.query(
+    `insert into work_org_members
+      (id, organization_id, user_id, person_id, role, feature_flags, active) values
+      ($1,$2,$3,$4,'employee','{}',true),
+      ($5,$2,$6,$7,'employee','{}',true)`,
+    [EMPLOYEE_A_MEMBERSHIP, org, EMPLOYEE_A_USER, personA, EMPLOYEE_B_MEMBERSHIP, EMPLOYEE_B_USER, personB],
+  );
+  await f.db.query(
+    `insert into work_desktop_sessions
+      (id, organization_id, user_id, token_hash, expires_at, revoked_at, last_used_at)
+     values
+      (gen_random_uuid(), $1, $2, $3, now() + interval '1 day', null, now()),
+      (gen_random_uuid(), $1, $4, $5, now() + interval '1 day', null, now()),
+      (gen_random_uuid(), $1, $6, $7, now() + interval '1 day', null, now())`,
+    [org, adminUser, sessionHash(ADMIN_SESSION), EMPLOYEE_A_USER, sessionHash(EMPLOYEE_A_SESSION), EMPLOYEE_B_USER, sessionHash(EMPLOYEE_B_SESSION)],
   );
   await f.db.query(
     `update work_organizations
@@ -260,11 +314,24 @@ before(async () => {
        '{"employeeAttached":true,"evidenceClass":"output_evidence","contentType":"image/png","sizeBytes":10,"fileName":"other.png"}'::jsonb)`,
     [OTHER_EVIDENCE, otherOrg, otherPerson, otherTask],
   );
+  // The session route reads storage through the real adapter, so point the
+  // local driver at a throwaway root instead of writing into the repository.
+  originalCwd = process.cwd();
+  originalStorageDriver = process.env.OBJECT_STORAGE_DRIVER;
+  storageRoot = await mkdtemp(join(tmpdir(), "work-os-admin-evidence-"));
+  process.chdir(storageRoot);
+  process.env.OBJECT_STORAGE_DRIVER = "local";
 });
 
 after(async () => {
   setAdminEvidenceStorageForTests(null);
   await f.close();
+  if (storageRoot) {
+    process.chdir(originalCwd);
+    await rm(storageRoot, { recursive: true, force: true });
+  }
+  if (originalStorageDriver === undefined) delete process.env.OBJECT_STORAGE_DRIVER;
+  else process.env.OBJECT_STORAGE_DRIVER = originalStorageDriver;
 });
 
 test("admin evidence is task-scoped and records the uploader, not a person", () => {
@@ -309,6 +376,7 @@ test("attaching evidence writes a task-scoped row and one task-path object", asy
   assert.equal(row.metrics.adminTokenId, "token-1");
   assert.equal(row.metrics.attachedForPersonId, personA);
   assert.equal(row.metrics.personId, undefined);
+  assert.match(String(row.metrics.requestHash), /^[0-9a-f]{64}$/);
   assert.equal(row.metrics.note, "Release proof");
   assert.deepEqual(row.raw, {
     origin: "admin_task_completion",
@@ -336,10 +404,11 @@ test("admin evidence appears on the task and satisfies the gate without joining 
   const id = String(evidence.id);
 
   const details = await getWorkOsEmployeeTaskDetails(adminAccess, taskCheckout);
-  assert.ok(
-    (details.completionEvidence as Json[]).some((item) => item.id === id),
-    "the trusted task detail must show the admin attachment",
-  );
+  const visible = (details.completionEvidence as Json[]).find((item) => item.id === id);
+  assert.ok(visible, "the trusted task detail must show the admin attachment");
+  // The in-product task surface points at the session route, which now serves
+  // task-scoped admin evidence too.
+  assert.equal(visible.url, `/api/work-os/evidence/${id}/file`);
 
   // The completion gate reads the owner's evidence for the task; the admin row
   // is output evidence there even though it belongs to no person.
@@ -359,6 +428,24 @@ test("a retried evidence key returns the first row and uploads once", async () =
   assert.equal(second.evidence.id, first.evidence.id);
   assert.equal(fake.uploads.length, 1);
   assert.equal(await evidenceCount("attach-retry"), 1);
+});
+
+test("the same evidence key with different content answers idempotency_conflict", async () => {
+  const fake = useFakeStorage();
+  await attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("attach-content", "First note"), actor);
+  await assert.rejects(
+    () => attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("attach-content", "Second note"), actor),
+    (error: unknown) => (error as { reason?: string }).reason === "idempotency_conflict",
+  );
+  await assert.rejects(
+    () => attachAdminAgentEvidence(adminAccess, taskCheckout, {
+      ...pngUpload("attach-content", "First note"),
+      bytes: new Uint8Array([...PNG_BYTES, 0x02]),
+    }, actor),
+    (error: unknown) => (error as { reason?: string }).reason === "idempotency_conflict",
+  );
+  assert.equal(fake.uploads.length, 1);
+  assert.equal(await evidenceCount("attach-content"), 1);
 });
 
 test("a key reused for another task is a conflict, not a silent overwrite", async () => {
@@ -426,13 +513,48 @@ test("the download returns the stored bytes and content type, and hides other te
 
   assert.equal(await getAdminAgentEvidenceFile(adminAccess, randomUUID()), null);
   assert.equal(await getAdminAgentEvidenceFile(adminAccess, OTHER_EVIDENCE), null);
+  assert.equal(await getAdminAgentEvidenceFile(adminAccess, "not-a-uuid"), null);
 });
 
-test("a shared task records no single attached-for person", async () => {
+test("a session can open task-scoped admin evidence for an admin or an assignee", async () => {
+  // This route resolves storage itself, so use the real local driver rooted in
+  // the temporary directory created in `before`.
+  setAdminEvidenceStorageForTests(getStorageBackend());
+  const { evidence } = await attachAdminAgentEvidence(adminAccess, taskCheckout, pngUpload("session-open"), actor);
+  const id = String(evidence.id);
+
+  const sessionRequest = (token: string) => new Request(
+    `https://example.test/api/work-os/evidence/${id}/file`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  const params = (eventId: string) => ({ params: Promise.resolve({ eventId }) });
+
+  const admin = await sessionEvidenceFileGET(sessionRequest(ADMIN_SESSION), params(id));
+  assert.equal(admin.status, 200);
+  assert.equal(admin.headers.get("content-type"), "image/png");
+  assert.deepEqual(new Uint8Array(await admin.arrayBuffer()), PNG_BYTES);
+
+  const assignee = await sessionEvidenceFileGET(sessionRequest(EMPLOYEE_A_SESSION), params(id));
+  assert.equal(assignee.status, 200);
+  assert.deepEqual(new Uint8Array(await assignee.arrayBuffer()), PNG_BYTES);
+
+  // A person without access to the task, a cross-organization row, and an
+  // unknown row are all 404: the route never confirms that the file exists.
+  const coworker = await sessionEvidenceFileGET(sessionRequest(EMPLOYEE_B_SESSION), params(id));
+  assert.equal(coworker.status, 404);
+  const crossOrg = await sessionEvidenceFileGET(sessionRequest(ADMIN_SESSION), params(OTHER_EVIDENCE));
+  assert.equal(crossOrg.status, 404);
+  const missing = await sessionEvidenceFileGET(sessionRequest(ADMIN_SESSION), params(randomUUID()));
+  assert.equal(missing.status, 404);
+
+  useFakeStorage();
+});
+
+test("a shared task records a null attached-for person", async () => {
   useFakeStorage();
   const { evidence } = await attachAdminAgentEvidence(adminAccess, taskShared, pngUpload("attach-shared"), actor);
   const row = await evidenceRow(String(evidence.id));
-  assert.equal(row.metrics.attachedForPersonId, undefined);
+  assert.equal(row.metrics.attachedForPersonId, null);
   assert.equal(row.metrics.adminUserId, adminUser);
 });
 
@@ -458,6 +580,7 @@ test("progress is a task-scoped agent note, never completion proof", async () =>
   assert.equal(row.metrics.adminTokenId, "token-1");
   assert.equal(row.metrics.attachedForPersonId, personA);
   assert.equal(row.metrics.evidenceClass, undefined);
+  assert.match(String(row.metrics.requestHash), /^[0-9a-f]{64}$/);
   assert.equal(isTaskOutcomeEvidence(row as unknown as Json), false);
 
   const details = await getWorkOsEmployeeTaskDetails(adminAccess, taskCheckout);
@@ -478,6 +601,12 @@ test("a retried progress key returns the first row, and bad notes are rejected",
   const first = await addAdminAgentProgress(adminAccess, taskCheckout, { summary: "First pass" }, "progress-retry", actor);
   const second = await addAdminAgentProgress(adminAccess, taskCheckout, { summary: "First pass" }, "progress-retry", actor);
   assert.equal(second.id, first.id);
+  assert.equal(await evidenceCount("progress-retry"), 1);
+
+  await assert.rejects(
+    () => addAdminAgentProgress(adminAccess, taskCheckout, { summary: "Different pass" }, "progress-retry", actor),
+    (error: unknown) => (error as { reason?: string }).reason === "idempotency_conflict",
+  );
   assert.equal(await evidenceCount("progress-retry"), 1);
 
   await assert.rejects(
@@ -530,6 +659,30 @@ test("both additive write routes require an Idempotency-Key", async () => {
   );
   assert.equal(evidence.status, 400);
   assert.equal(((await evidence.json()) as Json).code, "validation_error");
+});
+
+test("both write routes answer 404 for a missing or cross-organization task", async () => {
+  useFakeStorage();
+  const token = await newToken(WRITE_SCOPES);
+  for (const taskId of [otherTask, MISSING_TASK]) {
+    const progress = await taskProgressPOST(
+      jsonRequest(`/api/agent/admin/v1/tasks/${taskId}/progress`, token, {
+        key: `missing-progress-${taskId}`,
+        body: { summary: "No such task" },
+      }),
+      taskParams(taskId),
+    );
+    assert.equal(progress.status, 404, `progress ${taskId}`);
+    assert.equal(((await progress.json()) as Json).code, "not_found");
+
+    const evidence = await taskEvidencePOST(
+      evidenceRequest(taskId, token, { key: `missing-evidence-${taskId}` }),
+      taskParams(taskId),
+    );
+    assert.equal(evidence.status, 404, `evidence ${taskId}`);
+    assert.equal(((await evidence.json()) as Json).code, "not_found");
+  }
+  assert.equal(storage.uploads.length, 0);
 });
 
 test("the progress route writes directly and replays the same row", async () => {
@@ -591,6 +744,9 @@ test("the evidence route attaches one file and the download route serves it", as
   assert.equal(((await missing.json()) as Json).code, "not_found");
   const crossOrg = await evidenceFileGET(downloadRequest(OTHER_EVIDENCE, token), evidenceParams(OTHER_EVIDENCE));
   assert.equal(crossOrg.status, 404);
+  const malformed = await evidenceFileGET(downloadRequest("not-a-uuid", token), evidenceParams("not-a-uuid"));
+  assert.equal(malformed.status, 404);
+  assert.equal(((await malformed.json()) as Json).code, "not_found");
 });
 
 test("the evidence upload rejects a second file and oversized bytes", async () => {
@@ -643,6 +799,30 @@ test("the download route requires the read scope and a write route is rate limit
     jsonRequest(`/api/agent/admin/v1/tasks/${taskCheckout}/progress`, token, {
       key: "rate-overflow",
       body: { summary: "One too many" },
+    }),
+    taskParams(taskCheckout),
+  );
+  assert.equal(limited.status, 429);
+  assert.equal(((await limited.json()) as Json).code, "rate_limited");
+});
+
+test("keyless writes still spend the write budget", async () => {
+  useFakeStorage();
+  const token = await newToken(WRITE_SCOPES);
+  // The key check runs after the limiter, so twenty keyless attempts exhaust
+  // the write bucket instead of being free probes.
+  for (let index = 0; index < 20; index += 1) {
+    const response = await taskProgressPOST(
+      jsonRequest(`/api/agent/admin/v1/tasks/${taskCheckout}/progress`, token, {
+        body: { summary: `Keyless note ${index}` },
+      }),
+      taskParams(taskCheckout),
+    );
+    assert.equal(response.status, 400, `keyless ${index} should be a validation error`);
+  }
+  const limited = await taskProgressPOST(
+    jsonRequest(`/api/agent/admin/v1/tasks/${taskCheckout}/progress`, token, {
+      body: { summary: "One too many keyless note" },
     }),
     taskParams(taskCheckout),
   );

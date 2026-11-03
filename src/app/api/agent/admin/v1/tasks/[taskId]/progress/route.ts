@@ -15,9 +15,11 @@ export async function POST(req: Request, context: { params: Promise<{ taskId: st
   try {
     const auth = await requireAdminAgentAccess(req, "tasks:write");
     if (auth.response) return auth.response;
+    // Spend the write budget before inspecting the key: a keyless write is
+    // still an attempt to write and must not be a free probe.
+    assertAgentRateLimit(auth.agent.tokenId, true);
     const key = (req.headers.get("idempotency-key") ?? "").trim();
     if (!key) return adminAgentError("validation_error", "Idempotency-Key is required", 400);
-    assertAgentRateLimit(auth.agent.tokenId, true);
     const { taskId } = await context.params;
     const body = await req.json().catch(() => null) as Json | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
