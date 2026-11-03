@@ -39,7 +39,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const eodService = await source("src/lib/work-os-eod.ts");
   assert.match(eodService, /selectDayEodWork/);
   assert.doesNotMatch(eodService, /workspace\.carryOverGroups/);
-  assert.match(eodService, /No tasks were completed on this date/);
+  assert.match(eodService, /buildEodReportMarkdown/, "the deterministic document owns the report shape");
+  assert.match(await source("src/lib/work-os-eod-report.ts"), /planItems/, "the report reads plan disagreements without rendering the plan");
+  assert.match(await source("src/lib/work-os-eod-report.ts"), /eodPlanMismatches/);
   assert.match(await source("src/lib/work-os-eod-window.ts"), /resolveEodActivityWindow/, "the workday window resolves from the schedule, then the session");
   assert.match(await source("src/lib/work-os-eod-window.ts"), /withinEodActivityWindow/, "day facts are compared against the workday window");
   assert.match(await source("src/lib/work-os-eod-facts.ts"), /outsideShiftMarker/, "out-of-shift facts carry a plain marker");
@@ -98,7 +100,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /github_evidence/, "the EOD draft reads GitHub activity only behind the feature flag");
   assert.doesNotMatch(activityEngine, /recordWorkMemory/, "interval recaps consume memory without writing inferences back");
   assert.match(eodService, /listActivityIntervalActivityLines/);
-  assert.match(eodService, /intervalProvenanceLabel/);
+  assert.match(await source("src/lib/work-os-eod-report.ts"), /recapProvenance/, "the report labels recap provenance");
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /listActivityIntervalActivityLines/);
   const nextStepsModule = await source("src/lib/work-os-next-steps.ts");
   assert.match(nextStepsModule, /parseNextSteps/, "next-step parsing is exported and validated");
@@ -289,7 +291,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(planInterpretLoom, /loomInput\?\.transcript/);
   const aiDraft = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
   assert.match(aiDraft, /loom_prior_day/);
-  assert.match(aiDraft, /grounding\.media = /);
+  assert.match(aiDraft, /EodLoomContext/, "the Loom shapes the deterministic report");
   assert.doesNotMatch(workdayService, /This workday is already closed/);
   assert.match(onboardingService, /Consent can only be recorded during final onboarding submission/);
   assert.match(onboardingService, /work_submit_employee_onboarding/);
@@ -431,13 +433,14 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(review, /Draft EOD for \$\{calendarDateLabel\(selectedDate\)\}/);
   assert.match(review, /outstandingRowMeta/);
   assert.match(review, /Outstanding EODs/);
-  // The assistant draft is the default on both surfaces: the web creates the
-  // standard record, asks the assistant, and refines without rewriting the
-  // Bottleneck section.
+  // The initial draft is deterministic on both surfaces; the assistant is
+  // kept for the employee's own refinement and Loom requests.
   assert.match(review, /\/api\/work-os\/me\/eod\/ai-draft/);
   assert.match(review, /stripBottleneckSection\(reportMarkdown\)/);
   assert.match(review, /prepareOneScreenshotRound\(date\)/);
-  assert.match(review, /Redraft with assistant/);
+  assert.match(review, /Rebuild from record/);
+  assert.match(review, /EodReportDocument/);
+  assert.match(review, /editingReport/);
 });
 
 test("proposal application is lease-fenced and reports explicit outcomes", async () => {

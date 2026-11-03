@@ -263,6 +263,26 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
 
   const document = parseEodMarkdown(report.submitted_markdown ?? report.markdown);
   const metricFacts = eodMetricFacts(report.metrics);
+  const renderEodSection = (section: (typeof document.sections)[number]) => (
+    <section key={section.heading} className="grid gap-2">
+      <h3 className={cx("text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
+        style={/activity context/i.test(section.heading) ? { color: "var(--status-observed)" } : undefined}
+      >
+        {section.heading}
+      </h3>
+      <ul className="grid gap-1.5">
+        {section.lines.map((line, index) => (
+          <li
+            key={`${section.heading}-${index}`}
+            className={cx("text-[13px] leading-6", line.kind === "note" ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]")}
+          >
+            {line.kind === "bullet" ? <span className="mr-2 inline-block size-1.5 rounded-full align-middle" style={{ background: "var(--text-tertiary)" }} aria-hidden /> : null}
+            {line.text}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 
   return (
     <div className="grid gap-5">
@@ -323,26 +343,15 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
               ))}
             </dl>
           ) : null}
-          {document.sections.map((section) => (
-            <section key={section.heading} className="grid gap-2">
-              <h3 className={cx("text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
-                style={/activity context/i.test(section.heading) ? { color: "var(--status-observed)" } : undefined}
-              >
-                {section.heading}
-              </h3>
-              <ul className="grid gap-1.5">
-                {section.lines.map((line, index) => (
-                  <li
-                    key={`${section.heading}-${index}`}
-                    className={cx("text-[13px] leading-6", line.kind === "note" ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]")}
-                  >
-                    {line.kind === "bullet" ? <span className="mr-2 inline-block size-1.5 rounded-full align-middle" style={{ background: "var(--text-tertiary)" }} aria-hidden /> : null}
-                    {line.text}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+          {document.sections.map(renderEodSection)}
+          {document.appendix.length ? (
+            <details className="border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <summary className="cursor-pointer text-[11.5px] font-semibold text-[var(--text-secondary)]">
+                Full record · {document.appendix.reduce((count, section) => count + section.lines.length, 0)} rows
+              </summary>
+              <div className="mt-4 grid gap-5">{document.appendix.map(renderEodSection)}</div>
+            </details>
+          ) : null}
           {document.closing ? <p className="border-t pt-3 text-[11.5px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>{document.closing}</p> : null}
         </div>
       </Panel>

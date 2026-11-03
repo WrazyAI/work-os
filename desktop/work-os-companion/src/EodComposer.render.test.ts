@@ -29,7 +29,7 @@ describe("EodComposer review surface", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, baseProps));
     expect(markup).toContain("Refine draft");
     expect(markup).toContain("Submit EOD");
-    expect(markup).toContain("Draft with AI");
+    expect(markup).toContain("Rebuild from record");
     expect(markup).toContain("Select text in the preview to add a note");
     expect(markup).not.toContain("Draft notes");
   });
@@ -180,16 +180,14 @@ describe("EodComposer review surface", () => {
   it("offers a delete-draft action beside the draft controls", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
-      onRefresh: () => undefined,
       onDelete: () => undefined,
     }));
     expect(markup).toContain("Delete draft");
     expect(markup).toContain("eod-delete-draft");
     // The trash glyph rides the label, so the action reads without color.
     expect(markup).toMatch(/eod-delete-draft[^>]*>[\s\S]*?<svg/);
-    // The draft-building actions stay in place next to it.
-    expect(markup).toContain("Refresh from record");
-    expect(markup).toContain("Draft with AI");
+    // The draft-building action stays in place next to it.
+    expect(markup).toContain("Rebuild from record");
   });
 
   it("offers no delete action when the surface has no draft to delete", () => {
@@ -209,5 +207,5 @@ describe("EodComposer review surface", () => {
     expect(markup).toMatch(/eod-inline-action[^>]*>clock out<\/button>/);
     // A day that has not ended cannot be rebuilt from the record.
     expect(markup).not.toContain("Refresh from record");
-    expect(markup).not.toContain("Draft with AI");
+    expect(markup).not.toContain("Rebuild from record");
   });

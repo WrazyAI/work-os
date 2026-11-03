@@ -51,8 +51,8 @@ test("metric facts only include recorded counts", () => {
   const facts = eodMetricFacts({ completed: 2, progressed: 1, deferred: 0, unplanned: 1 });
   assert.deepEqual(facts, [
     { label: "Completed", value: 2 },
-    { label: "Progressed", value: 1 },
-    { label: "Unplanned", value: 1 },
+    { label: "Recaps", value: 1 },
+    { label: "Evidence", value: 1 },
   ]);
   assert.deepEqual(eodMetricFacts(null), []);
 });

@@ -56,6 +56,7 @@ test("times render in the employee timezone in plain 12-hour form", () => {
   assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "UTC"), "2:05 PM");
   assert.equal(formatLocalTime("2026-09-17T00:07:00Z", "UTC"), "12:07 AM");
   assert.equal(formatLocalTime(null, "UTC"), null);
+  assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "Not/AZone"), null, "an invalid timezone omits the time instead of inventing UTC");
   assert.equal(formatReportDate("2026-09-17"), "September 17, 2026");
   assert.equal(factLine({ title: "Confirm Acme emergency service claims", at: "2026-09-17T15:03:54Z" }, "UTC", "completed"), "- Confirm Acme emergency service claims — completed 3:03 PM");
   assert.equal(factLine({ title: "Refine the WorkOS design direction" }, "UTC"), "- Refine the WorkOS design direction");

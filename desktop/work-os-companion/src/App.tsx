@@ -2538,43 +2538,6 @@ export default function App() {
     eodPrepareAbortRef.current?.abort();
   };
 
-  const redraftEod = async (target: DayData | null) => {
-    if (!target?.report) return;
-    if (syncBypassRef.current) {
-      setEodDraft({ markdown: simulateAiEod({ tasks: target.tasks, plan: target.plan, shiftDate: target.shiftDate }), source: "simulated" });
-      notifications.success("Simulated an assistant draft on-device — nothing reached the server.", "AI draft (playground)");
-      return;
-    }
-    setEodRedrafting(true);
-    try {
-      const preparation = await prepareEodForDraft(target);
-      if (preparation.abandoned) return;
-      const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
-        method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
-      });
-      setEodGate(null);
-      setEodClockedOut(result.clockedOut === true);
-      setEodDraft({ markdown: result.markdown, source: "ai", screenshots: result.screenshots ?? null, screenshotSyncUnavailable: result.screenshotSyncUnavailable === true });
-      notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
-    } catch (value) {
-      if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
-        // The shift is still open: the day is not finished, so the draft is
-        // refused and the prompt explains it.
-        if ((value as { reason?: string | null }).reason === EOD_SHIFT_OPEN_REASON) {
-          setEodShiftRefused({ date: target.shiftDate, at: target.at ?? null });
-          setEodDraft(null);
-          return;
-        }
-        const message = value instanceof Error ? value.message : "EOD drafting is gated";
-        setEodGate({ gate: /no tasks/i.test(message) ? "no_tasks" : "no_activity", detail: message });
-        setEodDraft(null);
-        return;
-      }
-      setEodDraft({ markdown: target.report.markdown ?? "", source: "deterministic" });
-      notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
-    } finally { setEodRedrafting(false); }
-  };
-
   const refineEod = async (target: DayData | null, markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }> = []) => {
     if (!target || syncBypassRef.current) return false;
     setEodRedrafting(true);
@@ -2684,19 +2647,9 @@ export default function App() {
       applyReportToDay(eodDate, result.report);
       setEodDraft({ markdown: String(result.report.markdown ?? ""), source: "deterministic" });
       setEodGate(null);
+      setEodClockedOut(false);
       invalidateOutstandingEods();
-      // The assistant draft is the default: the standard draft above is the
-      // fallback when the assistant is unavailable or the day is gated.
-      try {
-        const ai = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
-          method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
-        });
-        setEodClockedOut(ai.clockedOut === true);
-        setEodDraft({ markdown: ai.markdown, source: "ai", screenshots: ai.screenshots ?? null, screenshotSyncUnavailable: ai.screenshotSyncUnavailable === true });
-        notifications.success("The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
-      } catch {
-        notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
-      }
+      notifications.success("The report was built from your recorded day. Review every line.", "EOD draft ready");
     } catch (value) {
       // The shift is still open: the draft is refused and the prompt explains
       // it instead of a failure.
@@ -2706,6 +2659,12 @@ export default function App() {
       }
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
     } finally { setEodRedrafting(false); }
+  };
+
+  /** Rebuilds the same deterministic document from the current record. */
+  const redraftEod = async (target: DayData | null) => {
+    if (!target?.report) return;
+    await createEodDraft(target);
   };
 
   /** Deletes the current EOD draft after the employee confirms it. The
@@ -5392,7 +5351,6 @@ export default function App() {
                     onLoomDraft={draftEodWithLoom}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
-                    onRefresh={reviewDay.report.status === "draft" || reviewDay.report.status === "rejected" ? () => void createEodDraft(reviewDay) : undefined}
                     onDelete={["draft", "rejected"].includes(String(reviewDay.report.status)) && !reviewDay.report.submitted_at ? () => setEodDeleteConfirmation(true) : undefined}
                     shiftOpen={reviewShiftOpen}
                     onOpenDashboard={() => setView("day")}

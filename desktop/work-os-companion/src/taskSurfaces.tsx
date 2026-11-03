@@ -5,7 +5,7 @@ import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListC
 import { computeMenuPlacement } from "./menuPlacement";
 import { renderViewportSurface } from "./viewportSurface";
 import { stripPlaceholderBottleneck } from "./interpretation";
-import { ChatMarkdown } from "./ChatMarkdown";
+import EodReportDocument from "./EodReportDocument";
 import { TaskEvidenceList } from "./CompletionEvidence";
 import type { EvidenceLoader } from "./EvidencePreview";
 import { formatWorkOsDate } from "./dateFormat";
@@ -730,8 +730,8 @@ export function EodShiftOpenNotice({ prefix, suffix, onClockOut }: { prefix: str
   </p>;
 }
 
-export function EodComposer({ initialMarkdown, source, dayLabel = "today", redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onDelete, shiftOpen = false, onOpenDashboard, onRefine, onSubmit }: {
-  initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onDelete?: () => void; shiftOpen?: boolean; onOpenDashboard?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+export function EodComposer({ initialMarkdown, source, dayLabel = "today", redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onDelete, shiftOpen = false, onOpenDashboard, onRefine, onSubmit }: {
+  initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onDelete?: () => void; shiftOpen?: boolean; onOpenDashboard?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
   const hasGalleryFrames = (screenshotGallery?.viewable.length ?? 0) > 0 || (screenshotGallery?.processed ?? 0) > 0;
@@ -875,9 +875,10 @@ export function EodComposer({ initialMarkdown, source, dayLabel = "today", redra
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
-      <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><h2>Record the day, then hand it to your manager.</h2>
+      <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><h2>End-of-day report</h2>
+      <small>{dayLabel === "today" ? "Today" : dayLabel} · built from the recorded day.</small>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}</div></div>
-      <div className="eod-composer-actions">{onRefresh && !shiftOpen ? <button disabled={reportLocked} onClick={onRefresh}>Refresh from record</button> : null}{!shiftOpen ? <button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button> : null}{onDelete ? <button className="eod-delete-draft" disabled={reportLocked} onClick={onDelete}><Trash2 size={13} /> Delete draft</button> : null}</div>
+      <div className="eod-composer-actions">{!shiftOpen ? <button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Rebuilding…</> : "Rebuild from record"}</button> : null}{onDelete ? <button className="eod-delete-draft" disabled={reportLocked} onClick={onDelete}><Trash2 size={13} /> Delete draft</button> : null}</div>
     </header>
     {shiftOpen && onOpenDashboard ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_REBUILD_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companionRebuild} onClockOut={onOpenDashboard} /> : null}
     {preparing && <div className="eod-screenshot-preparing" role="status">
@@ -929,8 +930,8 @@ export function EodComposer({ initialMarkdown, source, dayLabel = "today", redra
         </div>
       </div>
       {view === "preview"
-        ? <div className="eod-preview" ref={previewRef} onMouseUp={captureSelection} onKeyUp={captureSelection} aria-label="Report preview" aria-live="polite"><ChatMarkdown text={markdown.trim() ? markdown : "Nothing to preview yet."} /></div>
-        : <textarea className="eod-raw" value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />}
+        ? <div className="eod-preview" ref={previewRef} onMouseUp={captureSelection} onKeyUp={captureSelection} aria-label="Report preview" aria-live="polite"><EodReportDocument markdown={markdown} /></div>
+        : <textarea className="eod-raw" value={markdown} rows={18} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />}
     </section>
     {annotations.length > 0 && <section className="eod-notes" aria-label="Draft notes">
       <header><span>Draft notes</span><small>Sent with the Refine draft action. Select text in the preview to add another.</small></header>

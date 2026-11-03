@@ -49,11 +49,23 @@ export function clipText(value: unknown, max = 180): string {
 
 /** "3:04 PM" in the employee's timezone, or null when the instant is unusable.
  * Never includes a timezone name or offset. */
+function safeTimezone(value: string): string | null {
+  const zone = value || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone }).format(new Date());
+    return zone;
+  } catch {
+    return null;
+  }
+}
+
 export function formatLocalTime(value: unknown, timezone: string): string | null {
   const at = value instanceof Date ? value : new Date(String(value ?? ""));
   if (Number.isNaN(at.getTime())) return null;
+  const zone = safeTimezone(timezone);
+  if (!zone) return null;
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone || "UTC",
+    timeZone: zone,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
