@@ -309,9 +309,7 @@ export default function AdminEvidencePage() {
                   );
                 })}
               </ul>
-            ) : (
-              <p className="text-[12px] text-[var(--text-tertiary)]">No human accounts are waiting for a person.</p>
-            )}
+            ) : null}
 
             {botActors.length ? (
               <p className="mt-3 border-t pt-3 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
