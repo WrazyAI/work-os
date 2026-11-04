@@ -68,7 +68,10 @@ Live site: `https://app.wrazyos.com`
 - A real macOS download, driven with a Mac user agent, produced
   `Work-OS-Companion-macOS-Universal-UNSIGNED.dmg` (**32,014,955 bytes**) and
   opened the macOS guide. The macOS checksum route includes that file name.
-- The same Windows click navigated to the Windows guide while the download
+- The manual “Download” option for Windows was also exercised; it downloaded
+  the same `.exe` and opened the Windows guide. All three download actions
+  share the same component.
+- The Windows click navigated to the Windows guide while the download
   continued.
 - Live guide responses:
   - Windows guide: `200`, `text/html`.
