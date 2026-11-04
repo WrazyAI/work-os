@@ -70,14 +70,8 @@
 .mark {
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--ink);
-  color: var(--signal);
-  font-size: 22px;
-  letter-spacing: -0.12em;
-  padding-right: 4px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .byline {

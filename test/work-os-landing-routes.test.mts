@@ -148,12 +148,9 @@ test("the site never links back to its former /welcome paths", () => {
 });
 
 test("the workspace CTA opens the protected workspace, not the marketing page", () => {
-  const chooser = read("src/modules/work-os/marketing/DownloadChooser.tsx");
-  assert.match(chooser, /href="\/work-os\/workspace"/);
-  assert.doesNotMatch(chooser, /href="https:\/\/app\.wrazyos\.com\/work-os"/);
-
   const chrome = read("src/modules/work-os/marketing/SiteChrome.tsx");
   assert.match(chrome, /href="\/work-os\/workspace"/);
+  assert.doesNotMatch(chrome, /href="https:\/\/app\.wrazyos\.com\/work-os"/);
 
   const workspace = read("src/modules/work-os/workspace.ts");
   assert.match(workspace, /WORK_OS_WORKSPACE_HOME = "\/work-os\/workspace"/);

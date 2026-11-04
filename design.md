@@ -272,6 +272,14 @@ The public site's workspace action enters through `/work-os/workspace`, which
 keeps the authoritative session, membership and role checks. Legacy
 `/work-os/welcome` links redirect to the canonical public routes.
 
+Public downloads offer Windows and macOS only: one detected-platform download
+with an adjacent alternate-platform disclosure. The thank-you guide leads with
+a red warning triangle, explicit security heading, and visible antivirus/IT
+escalation guidance before three short install steps. Unknown-publisher prompts
+never imply that malware alerts are safe to bypass. Extra prompt help and checksum
+commands are disclosures, not a wall of text. The public header uses the same
+Work OS artwork as the companion, never a typed-letter imitation.
+
 The deployed web console hosts the employee workspace on nested routes, so each
 destination is a real, deep-linkable, role-guarded page instead of one stacked
 page:

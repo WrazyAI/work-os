@@ -1,6 +1,6 @@
 "use client";
 
-import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
+import type { AnchorHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
 import { useRouter } from "next/navigation";
 import {
   downloadGuidePath,
@@ -9,6 +9,7 @@ import {
 } from "./download-guides";
 
 type Props = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "download"> & {
+  ref?: Ref<HTMLAnchorElement>;
   platform: DownloadGuidePlatform;
   children: ReactNode;
 };

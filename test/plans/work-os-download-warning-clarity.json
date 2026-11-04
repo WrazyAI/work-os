@@ -1,0 +1,17 @@
+{
+  "projectId": "e8fa6d35-586c-47a7-a69c-13e6b8552a0b",
+  "type": "frontend",
+  "name": "Platform dropdown leads to a warning-first install guide",
+  "description": "An anonymous employee opens the alternate-platform dropdown, closes it with Escape, starts the primary download and uses the resulting install guide; the red security warning must lead the install steps and the extra security help must expand on demand. Do not inspect or run an OS-native installer.",
+  "priority": "p1",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to /work-os/downloads without signing in." },
+    { "type": "action", "description": "Open the arrow button beside the primary download action." },
+    { "type": "action", "description": "Press Escape to close the alternate-platform dropdown." },
+    { "type": "action", "description": "Click the primary platform download action to open its installation guide. Ignore the downloaded file; do not launch it." },
+    { "type": "action", "description": "Expand the extra help with security prompts disclosure beneath the three installation steps." },
+    { "type": "action", "description": "Expand the SHA-256 verification disclosure to read the command for this platform." },
+    { "type": "assertion", "description": "The install guide shows a red outlined, pale red security-warning panel with a warning triangle directly beneath the thank-you heading, above the numbered installation steps. Its visible instructions distinguish antivirus or malware blocks from unknown-publisher prompts and tell the employee not to disable protection." },
+    { "type": "assertion", "description": "The expanded security-help section explains the selected platform's prompts, and the expanded verification section shows a platform-appropriate checksum command and working published-checksums link. The page remains in the selected platform's guide." }
+  ]
+}

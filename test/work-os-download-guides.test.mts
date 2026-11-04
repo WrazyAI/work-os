@@ -19,15 +19,15 @@ test("the Windows and macOS guides name the real files and their own recovery st
   assert.ok(macos);
   assert.equal(windows.fileName, "Work-OS-Companion-Setup-UNSIGNED.exe");
   assert.equal(macos.fileName, "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg");
-  assert.equal(windows.steps.length, 4);
-  assert.equal(macos.steps.length, 4);
+  assert.equal(windows.steps.length, 3);
+  assert.equal(macos.steps.length, 3);
   assert.match(windows.checksumCommand, /Get-FileHash/);
   assert.match(windows.checksumCommand, /Setup-UNSIGNED\.exe/);
   assert.match(macos.checksumCommand, /shasum -a 256/);
   assert.match(macos.checksumCommand, /Universal-UNSIGNED\.dmg/);
 
-  const windowsPrompts = windows.prompts.map((prompt) => `${prompt.title} ${prompt.body}`).join(" ");
-  const macPrompts = macos.prompts.map((prompt) => `${prompt.title} ${prompt.body}`).join(" ");
+  const windowsPrompts = JSON.stringify(windows);
+  const macPrompts = JSON.stringify(macos);
   assert.match(windowsPrompts, /Windows protected your PC/);
   assert.match(windowsPrompts, /More info/);
   assert.match(windowsPrompts, /Run anyway/);
@@ -54,7 +54,7 @@ test("every download button goes through the guided download rather than a bare 
   const chooser = read("src/modules/work-os/marketing/DownloadChooser.tsx");
   const link = read("src/modules/work-os/marketing/DownloadLink.tsx");
   assert.match(chooser, /<DownloadLink/);
-  assert.equal((chooser.match(/<DownloadLink/g) ?? []).length, 3, "primary, Windows option and macOS option");
+  assert.equal((chooser.match(/<DownloadLink/g) ?? []).length, 2, "primary and alternate platform");
   assert.doesNotMatch(chooser, /<a[^>]+download/);
   assert.match(link, /downloadHref\(platform\)/);
   assert.match(link, /const link = document\.createElement\("a"\)/);
@@ -72,9 +72,9 @@ test("the install guide is static for the two real platforms and fails closed fo
   assert.match(page, /generateStaticParams/);
   assert.match(page, /if \(!guide\) notFound\(\)/);
   assert.match(page, /downloadHref\(guide\.platform\)/);
-  assert.match(page, /Check the SHA-256/);
-  assert.match(page, /Install it in four steps/);
-  assert.match(page, /If your computer stops you/);
+  assert.match(page, /Verify this download \(SHA-256\)/);
+  assert.match(page, /Then install in three steps/);
+  assert.match(page, /Read this before installing/);
   const routes = read("test/work-os-landing-routes.test.mts");
   assert.match(routes, /\/work-os\/downloads\/thank-you\/windows/);
   assert.match(routes, /\/work-os\/downloads\/thank-you\/macos/);

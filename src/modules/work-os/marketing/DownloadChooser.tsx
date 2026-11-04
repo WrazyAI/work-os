@@ -1,100 +1,85 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { detectPlatform, type DetectedPlatform } from "@/lib/work-os-installers";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { detectPlatform } from "@/lib/work-os-installers";
+import type { DownloadGuidePlatform } from "./download-guides";
 import DownloadLink from "./DownloadLink";
 import styles from "./downloads.module.css";
 
-const LABELS: Record<DetectedPlatform, string> = {
-  windows: "Windows",
-  macos: "macOS",
-  linux: "Linux",
-  unknown: "your computer",
-};
+// Browser identity is fixed for this visit. A server snapshot avoids both a
+// hydration mismatch and an effect that copies external state into React state.
+const subscribe = () => () => {};
+const serverPlatform = () => "unknown" as const;
+function browserPlatform() {
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return detectPlatform({
+    platform: nav.userAgentData?.platform || navigator.platform,
+    userAgent: navigator.userAgent,
+  });
+}
 
 export default function DownloadChooser() {
-  const [detected, setDetected] = useState<DetectedPlatform>("unknown");
-  const [ready, setReady] = useState(false);
+  const os = useSyncExternalStore(subscribe, browserPlatform, serverPlatform);
+  const detected = os === "windows" || os === "macos";
+  const platform: DownloadGuidePlatform = os === "macos" ? "macos" : "windows";
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const alternative = useRef<HTMLAnchorElement>(null);
+  const menuId = useId();
 
   useEffect(() => {
-    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-    setDetected(detectPlatform({
-      platform: nav.userAgentData?.platform || navigator.platform,
-      userAgent: navigator.userAgent,
-    }));
-    setReady(true);
-  }, []);
+    if (!open) return;
+    function dismiss(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
 
-  const detectedGuide = detected === "windows" || detected === "macos" ? detected : null;
-  const label = detected === "windows" ? "Download for Windows"
-    : detected === "macos" ? "Download for macOS"
-      : "Choose your computer";
+  const label = platform === "windows" ? "Windows" : "macOS";
+  const other = platform === "windows" ? "macos" : "windows";
+  const otherLabel = other === "windows" ? "Windows" : "macOS";
 
   return (
-    <div className={styles.grid}>
-      <section className={styles.primary} aria-labelledby="recommended-title">
-        <p className={styles.eyebrow}>
-          <span aria-hidden="true" className={styles.dot} />
-          {ready ? `It looks like you’re using ${LABELS[detected]}.` : "Checking your computer."}
-        </p>
-        <h2 id="recommended-title">
-          {detected === "linux" ? "Linux is coming later." : "The right fit for your computer."}
-        </h2>
-        {detected === "linux" ? (
-          <>
-            <p className={styles.lede}>
-              A Linux version isn’t available yet. You can still open your Work OS workspace in the browser.
-            </p>
-            <a className={styles.secondaryAction} href="/work-os/workspace">Open the web workspace</a>
-          </>
-        ) : (
-          <>
-            <p className={styles.lede}>
-              {ready && detectedGuide
-                ? "The installer is ready. Sign in to Work OS after installing to connect your workspace."
-                : "Choose Windows or macOS below. Linux is coming later."}
-            </p>
-            {detectedGuide ? (
-              <DownloadLink className={styles.action} platform={detectedGuide}>{label}</DownloadLink>
-            ) : (
-              <a className={styles.action} href="#other-platforms">Choose a version</a>
-            )}
-            <p className={styles.meta}>
-              Unsigned internal build · Verify the SHA-256 checksum before installing
-            </p>
-          </>
-        )}
-        <img className={styles.pet} src="/site/work-os/studio-otto.svg" alt="" width={120} height={135} />
-      </section>
-
-      <section className={styles.options} id="other-platforms" aria-labelledby="other-platforms-title">
-        <h2 id="other-platforms-title">Looking for another version?</h2>
-        <div className={styles.option}>
-          <div>
-            <strong>Windows</strong>
-            <small>NSIS installer · unsigned internal build</small>
-          </div>
-          <DownloadLink platform="windows">Download</DownloadLink>
+    <div className={styles.chooser}>
+      <div ref={container} className={styles.split} onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }} onKeyDown={(event) => {
+        if (event.key === "Escape" && open) {
+          event.preventDefault();
+          setOpen(false);
+          trigger.current?.focus();
+        }
+      }}>
+        <DownloadLink className={styles.action} platform={platform}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg>
+          Download for {label}
+        </DownloadLink>
+        <button ref={trigger} type="button" className={styles.toggle}
+          aria-label="Other platforms" title="Other platforms"
+          aria-expanded={open} aria-controls={menuId}
+          onClick={() => setOpen(!open)} onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setOpen(true);
+              // The panel stays mounted so focus can follow the disclosure.
+              requestAnimationFrame(() => alternative.current?.focus());
+            }
+          }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        <div id={menuId} className={styles.dropdown} hidden={!open}>
+          <DownloadLink ref={alternative} platform={other} aria-label={`Download for ${otherLabel}`} onClick={() => setOpen(false)}>
+            Download for {otherLabel}
+            <small>{other === "macos" ? "Intel and Apple Silicon · .dmg" : "64-bit installer · .exe"}</small>
+          </DownloadLink>
         </div>
-        <div className={styles.option}>
-          <div>
-            <strong>macOS</strong>
-            <small>Universal DMG for Intel and Apple Silicon</small>
-          </div>
-          <DownloadLink platform="macos">Download</DownloadLink>
-        </div>
-        <div className={`${styles.option} ${styles.unavailable}`}>
-          <div>
-            <strong>Linux</strong>
-            <small>A Linux version isn’t available yet.</small>
-          </div>
-          <span>Coming later</span>
-        </div>
-        <p className={styles.checksums}>
-          <Link href="/downloads/work-os/windows/checksums">SHA-256 checksums</Link>
-        </p>
-      </section>
+      </div>
+      <p className={styles.meta}>
+        {detected ? `For your ${label === "macOS" ? "Mac" : "Windows PC"}.` : "Windows selected. Choose the arrow for macOS."}
+        {platform === "macos" ? " Intel and Apple Silicon." : " 64-bit installer."}
+      </p>
     </div>
   );
 }

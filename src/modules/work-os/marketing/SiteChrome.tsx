@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { WORK_OS_SITE } from "./site";
 import styles from "./site.module.css";
 
@@ -7,8 +8,8 @@ export function SiteHeader({ current }: { current: string }) {
     <>
       <a className={styles.skip} href="#main">Skip to content</a>
       <header className={styles.header}>
-        <Link className={styles.brand} href={WORK_OS_SITE.home} aria-label="Work OS home">
-          <span className={styles.mark} aria-hidden="true">w</span>
+        <Link className={styles.brand} href={WORK_OS_SITE.home}>
+          <Image className={styles.mark} src="/site/work-os/work-os-mark.png" alt="" width={34} height={34} unoptimized />
           <span>{WORK_OS_SITE.product}</span>
           <span className={styles.byline}>{WORK_OS_SITE.byline}</span>
         </Link>
