@@ -1,6 +1,7 @@
 /* Ported from the companion's insights.ts so both surfaces compute the same
    deterministic record from one payload (parity copy, kept in step with it). */
 import type { EmployeeDayResponse as DayData, InsightConsistency, InsightDay, EmployeeInsightsResponse as InsightsData, InsightUpdateKinds } from "./model";
+import { isWeekendDate } from "@/modules/work-os/calendar";
 
 export interface InsightSignal {
   label: string;
@@ -64,7 +65,7 @@ function shortDateLabel(date: string) {
 }
 
 export function insightSeries(days: InsightDay[]): InsightSeriesPoint[] {
-  return days.map((day) => ({
+  return days.filter((day) => !isWeekendDate(day.date)).map((day) => ({
     date: day.date,
     label: shortDateLabel(day.date),
     observedMinutes: Math.round((Number(day.observedSeconds ?? 0) / 60) * 10) / 10,

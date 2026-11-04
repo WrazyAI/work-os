@@ -238,6 +238,29 @@ export function resolveShiftWindowForDate(
   return null;
 }
 
+/** Whether a date is a scheduled workday for EOD purposes. A person with no
+ * active schedule keeps every recorded day (legacy/unscheduled accounts); a
+ * scheduled person's days off never become EOD debts, even if a session or
+ * plan was left on the calendar. */
+export function hasScheduledShiftOnDate(
+  rules: WorkOsScheduleRule[],
+  exceptions: WorkOsScheduleException[],
+  date: string,
+): boolean {
+  if (!rules.length) return true;
+  const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
+  if (exception) return resolveShiftWindowForDate(rules, exceptions, date) !== null;
+  // No rule covers the date (for example before the person's first schedule):
+  // keep the legacy record instead of silently hiding those days.
+  const covered = rules.some((rule) => {
+    const from = dateKey(rule.effective_from);
+    const to = dateKey(rule.effective_to);
+    return from !== null && from <= date && (to === null || to >= date);
+  });
+  if (!covered) return true;
+  return resolveShiftWindowForDate(rules, exceptions, date) !== null;
+}
+
 // Compatibility for existing display/check-in callers. New lifecycle code must
 // explicitly choose upcoming or startable semantics.
 export const resolveShiftWindow = resolveUpcomingShiftWindow;

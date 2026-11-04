@@ -151,6 +151,16 @@ test("insight series and flow breakdown stay exact", () => {
   assert.deepEqual(flow.map((slice) => slice.value), [6, 3, 1, 3, 1]);
 });
 
+test("insight series leaves weekend calendar days out of the chart", () => {
+  const series = insightSeries([
+    { ...days[0], date: "2026-09-04" },
+    { ...days[0], date: "2026-09-05" },
+    { ...days[0], date: "2026-09-06" },
+    { ...days[0], date: "2026-09-07" },
+  ]);
+  assert.deepEqual(series.map((point) => point.date), ["2026-09-04", "2026-09-07"]);
+});
+
 test("range summary and period deltas compare the prior window honestly", () => {
   const summary = insightRangeSummary({
     range: "7d",

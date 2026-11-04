@@ -4,6 +4,8 @@ import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate, type OutstandingEodDay } from "@/lib/work-os-eod";
 import { observedSecondsForSession, timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
+import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { loadWorkOsReadinessReport } from "@/lib/work-os-readiness-report";
 
@@ -246,6 +248,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     windowPlansResult,
     windowReportsResult,
     windowEventsResult,
+    windowExceptionsResult,
     readiness,
   ] = await Promise.all([
     db.from("work_people")
@@ -367,6 +370,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("person_id,local_date")
       .eq("organization_id", organizationId).eq("event_type", "completed")
       .gte("local_date", outstandingFrom).lte("local_date", outstandingThrough),
+    db.from("work_schedule_exceptions").select("*")
+      .eq("organization_id", organizationId)
+      .gte("exception_date", outstandingFrom).lte("exception_date", outstandingThrough),
     loadWorkOsReadinessReport(access).catch(() => null),
   ]);
 
@@ -385,6 +391,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
     ["task volume", niftyTasksTodayResult], ["github volume", githubEventsTodayResult],
     ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult], ["outstanding events", windowEventsResult],
+    ["outstanding schedule exceptions", windowExceptionsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
   }
@@ -443,34 +450,68 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   }
 
   // Outstanding EOD days across the lookback window.
+  const scheduleRulesByPerson = new Map<string, WorkOsScheduleRule[]>();
+  for (const schedule of schedules as unknown as Array<WorkOsScheduleRule & { person_id?: string }>) {
+    const personId = String(schedule.person_id ?? "");
+    if (!personId) continue;
+    const list = scheduleRulesByPerson.get(personId) ?? [];
+    list.push(schedule);
+    scheduleRulesByPerson.set(personId, list);
+  }
+  const scheduleExceptionsByPerson = new Map<string, WorkOsScheduleException[]>();
+  for (const exception of (windowExceptionsResult.data ?? []) as unknown as Array<WorkOsScheduleException & { person_id?: string }>) {
+    const personId = String(exception.person_id ?? "");
+    if (!personId) continue;
+    const list = scheduleExceptionsByPerson.get(personId) ?? [];
+    list.push(exception);
+    scheduleExceptionsByPerson.set(personId, list);
+  }
   const outstandingCandidates: Array<OutstandingEodCandidate & { personId: string }> = [];
   const plansByPersonDate = new Map<string, number>();
   for (const plan of (windowPlansResult.data ?? []) as Json[]) {
-    plansByPersonDate.set(`${plan.person_id}:${plan.shift_date}`, (plansByPersonDate.get(`${plan.person_id}:${plan.shift_date}`) ?? 0) + 1);
+    const personId = String(plan.person_id ?? "");
+    const planDate = dateOnly(plan.shift_date);
+    if (!personId || !planDate) continue;
+    const key = `${personId}:${planDate}`;
+    plansByPersonDate.set(key, (plansByPersonDate.get(key) ?? 0) + 1);
   }
   const reportsByPersonDate = new Map<string, Json>();
   for (const report of (windowReportsResult.data ?? []) as Json[]) {
-    reportsByPersonDate.set(`${report.person_id}:${report.report_date}`, report);
+    const personId = String(report.person_id ?? "");
+    const reportDate = dateOnly(report.report_date);
+    if (!personId || !reportDate) continue;
+    reportsByPersonDate.set(`${personId}:${reportDate}`, report);
   }
   const completedByPersonDate = new Map<string, number>();
   for (const event of (windowEventsResult.data ?? []) as Json[]) {
-    const key = `${event.person_id}:${event.local_date}`;
+    const personId = String(event.person_id ?? "");
+    const eventDate = dateOnly(event.local_date);
+    if (!personId || !eventDate) continue;
+    const key = `${personId}:${eventDate}`;
     completedByPersonDate.set(key, (completedByPersonDate.get(key) ?? 0) + 1);
   }
   const sessionKeys = new Set<string>();
   for (const session of (windowSessionsResult.data ?? []) as Json[]) {
-    const key = `${session.person_id}:${session.shift_date}`;
+    const personId = String(session.person_id ?? "");
+    const sessionDate = dateOnly(session.shift_date);
+    if (!personId || !sessionDate) continue;
+    const key = `${personId}:${sessionDate}`;
     if (sessionKeys.has(key)) continue;
     sessionKeys.add(key);
     const report = reportsByPersonDate.get(key) ?? null;
     outstandingCandidates.push({
-      personId: String(session.person_id),
-      date: String(session.shift_date),
+      personId,
+      date: sessionDate,
       hasSession: true,
       observedMinutes: Math.round(observedSecondsForSession(session, now) / 60),
       hasPlan: plansByPersonDate.has(key),
       completedTasks: completedByPersonDate.get(key) ?? 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+      scheduledDay: hasScheduledShiftOnDate(
+        scheduleRulesByPerson.get(personId) ?? [],
+        scheduleExceptionsByPerson.get(personId) ?? [],
+        sessionDate,
+      ),
     });
   }
   // A plan without a session still represents a day of intent.
@@ -486,6 +527,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       hasPlan: true,
       completedTasks: completedByPersonDate.get(key) ?? 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+      scheduledDay: hasScheduledShiftOnDate(
+        scheduleRulesByPerson.get(personId) ?? [],
+        scheduleExceptionsByPerson.get(personId) ?? [],
+        planDate,
+      ),
     });
   }
   const outstandingByPerson = classifyOutstandingByPerson(outstandingCandidates);
@@ -649,7 +695,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     }).length,
   };
 
-  const seriesDates = Array.from({ length: 14 }, (_, index) => addDaysIso(date, index - 13));
+  const seriesDates = workdayDates(addDaysIso(date, -13), date);
   const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, recaps: 0, evidence: 0 }]));
   for (const row of (seriesEventsResult.data ?? []) as Json[]) {
     const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");

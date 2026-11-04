@@ -4,7 +4,7 @@ import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { addDaysIso } from "@/lib/work-os-dates";
 import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { recordWorkMemory } from "@/lib/work-memory";
-import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
+import { localDateForTimezone, localDayBounds, hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
 import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
@@ -510,12 +510,16 @@ export type OutstandingEodCandidate = {
   hasPlan: boolean;
   completedTasks: number;
   report: { id: string; status: string; submitted: boolean } | null;
+  /** False for a scheduled person's day off. Absent preserves the legacy
+   * unscheduled behavior (every recorded day can be outstanding). */
+  scheduledDay?: boolean;
 };
 
 /** A day only counts as outstanding when something was recorded for it and no
  * submitted report exists; a draft or rejected report keeps the day visible. */
 export function classifyOutstandingEodDays(candidates: OutstandingEodCandidate[]): OutstandingEodDay[] {
   return candidates.flatMap((candidate) => {
+    if (candidate.scheduledDay === false) return [];
     const report = candidate.report;
     let status: OutstandingEodStatus | null = null;
     if (report?.status === "rejected") status = "changes_requested";
@@ -564,7 +568,7 @@ export async function listOutstandingEods(access: WorkOsAccess, requestedDays = 
   const today = localDateForTimezone(new Date(), timezone);
   const from = addDaysIso(today, -lookback);
   const through = addDaysIso(today, -1);
-  const [sessionsResult, plansResult, reportsResult, eventsResult] = await Promise.all([
+  const [sessionsResult, plansResult, reportsResult, eventsResult, schedulesResult, exceptionsResult] = await Promise.all([
     db().from("work_sessions").select("shift_date,clocked_in_at,clocked_out_at,paused_seconds,correction_status")
       .eq("organization_id", access.organizationId).eq("person_id", personId)
       .gte("shift_date", from).lte("shift_date", through),
@@ -577,10 +581,18 @@ export async function listOutstandingEods(access: WorkOsAccess, requestedDays = 
     db().from("work_task_day_events").select("id,local_date,provider_task_id")
       .eq("organization_id", access.organizationId).eq("person_id", personId).eq("event_type", "completed")
       .gte("local_date", from).lte("local_date", through),
+    db().from("work_schedules").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true)
+      .order("effective_from", { ascending: false }),
+    db().from("work_schedule_exceptions").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", personId)
+      .gte("exception_date", from).lte("exception_date", through),
   ]);
-  for (const [label, result] of [["sessions", sessionsResult], ["plans", plansResult], ["reports", reportsResult], ["events", eventsResult]] as const) {
+  for (const [label, result] of [["sessions", sessionsResult], ["plans", plansResult], ["reports", reportsResult], ["events", eventsResult], ["schedules", schedulesResult], ["schedule exceptions", exceptionsResult]] as const) {
     if (result.error) throw new Error(`load outstanding EOD ${label}: ${result.error.message}`);
   }
+  const scheduleRules = (schedulesResult.data ?? []) as unknown as WorkOsScheduleRule[];
+  const scheduleExceptions = (exceptionsResult.data ?? []) as unknown as WorkOsScheduleException[];
   const observedByDate = new Map<string, number>();
   const sessionDates = new Set<string>();
   for (const session of (sessionsResult.data ?? []) as Json[]) {
@@ -623,6 +635,7 @@ export async function listOutstandingEods(access: WorkOsAccess, requestedDays = 
       hasPlan: planDates.has(date),
       completedTasks: completedByDate.get(date)?.size ?? 0,
       report: report ? { id: String(report.id), status: String(report.status ?? "draft"), submitted: !!report.submitted_at } : null,
+      scheduledDay: hasScheduledShiftOnDate(scheduleRules, scheduleExceptions, date),
     });
   }
   const days = classifyOutstandingEodDays(candidates);

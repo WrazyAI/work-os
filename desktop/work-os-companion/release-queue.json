@@ -96,6 +96,12 @@
       "type": "feature",
       "summary": "A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records with one-click drill-downs.",
       "verification": "Ledger 438014c3-9084-405d-b241-6e914d5269d8: companion suite 1639 passed; 27 focused record/date/review tests and 15 task-action tests passed; typecheck and production build passed; rendered 1440/1024/930/720/390 checks for Updates to Admin Otto recaps, Outcomes to Tasks Completed, Evidence to the filtered Evidence page, EOD and report rows to the specific report, View all recaps, and View all reports; TestSprite fdcf733b passed 4/4 for the drawer record and Evidence drill-down."
+    },
+    {
+      "id": "weekend-eod-and-chart-days",
+      "type": "fix",
+      "summary": "Weekends no longer ask for an EOD report, and daily charts skip weekend days.",
+      "verification": "5022b3ab: Work OS suite 1252 passed / 0 failed / 11 skipped; focused EOD/chart/route tests 79 passed; companion suite 1641 passed; typecheck and webpack production builds passed; rendered admin overview/insights and employee 30-day insights with no weekend chart labels."
     }
   ],
   "emergency": {
