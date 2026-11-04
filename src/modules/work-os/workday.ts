@@ -70,10 +70,11 @@ export interface WorkdayPrompt {
   reason: string;
 }
 
-/** An employee-submitted EOD is the terminal prompt state for that workday.
- * A manager review is separate from asking the employee to submit again. */
+/** An employee-submitted EOD ends the EOD question for that workday; it does
+ * not end the employee's workday. Progress check-ins and recaps continue while
+ * the session remains open, and only the EOD prompt itself is suppressed. */
 export function suppressPromptForSubmittedEod(prompt: WorkdayPrompt, submittedAt: string | null | undefined): WorkdayPrompt {
-  if (!submittedAt) return prompt;
+  if (!submittedAt || prompt.kind !== "eod") return prompt;
   return { kind: null, nextPromptAt: null, required: false, reason: "EOD submitted." };
 }
 

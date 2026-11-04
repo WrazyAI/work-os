@@ -23,9 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.22 — 2026-11-04
 
 - Each end-of-day report section now carries a small, quiet icon.
+- Recaps that take longer to analyse your screenshots now wait for the result instead of showing a generic check-in.
 
 ## 0.5.21 — 2026-11-04
 

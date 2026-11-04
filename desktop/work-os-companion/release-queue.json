@@ -84,12 +84,18 @@
       "type": "feature",
       "summary": "Each end-of-day report section now carries a small, quiet icon.",
       "verification": "fdf0a563, bc65bda4: EOD document and preview tests 52 passed; companion EOD render tests 19 passed; rendered 1440, 1024, and 390 checks; no console errors."
+    },
+    {
+      "id": "recap-waits-for-slow-analysis",
+      "type": "fix",
+      "summary": "A recap that takes longer to analyse screenshots now waits instead of being replaced by a generic check-in.",
+      "verification": "Ledger f873eaca-ff1b-4e92-9d2a-d9bcebe6c3fa: companion workOsQueries test 7 passed; focused Work OS workday/EOD/route tests 78 passed; live ensure completed 109s after the old 90s client cutoff on 2026-11-04; 180s timeout regression assertion added."
     }
   ],
   "emergency": {
-    "version": "0.5.21",
-    "updateId": "page-scroll-over-tables",
-    "brokenBehavior": "Mouse-wheel scrolling stops when the pointer is over a table, so the page cannot be scrolled from the table area on Windows and macOS.",
-    "restoredBehavior": "Tables with no vertical range pass the wheel through to the page, while genuine bounded scrollers keep their containment."
+    "version": "0.5.22",
+    "updateId": "recap-waits-for-slow-analysis",
+    "brokenBehavior": "A recap that analyses a backlog of screenshots for more than 90 seconds is abandoned by the companion, which then shows a generic check-in even though the recap finishes seconds later.",
+    "restoredBehavior": "The companion waits up to 180 seconds for the recap, so slow analysis returns the evidence-backed recap instead of a generic check-in."
   }
 }

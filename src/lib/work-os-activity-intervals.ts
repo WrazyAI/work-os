@@ -543,25 +543,39 @@ async function synthesizeInterval(input: {
 }): Promise<IntervalSynthesis> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is required for activity interval synthesis");
-  const response = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    signal: AbortSignal.timeout(input.timeoutMs),
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(aiRequestBody(input.model, {
-      messages: intervalSynthesisMessages(input),
-      tools: [intervalTool()],
-      tool_choice: { type: "function", function: { name: "recordActivityInterval" } },
-      temperature: 0.2,
-      max_tokens: AI_TOKEN_BUDGETS.activityInterval,
-    })),
-  });
-  if (!response.ok) throw new Error(`activity interval AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
-  const json = await response.json() as Json;
-  recordAiUsage("activity_interval", input.model, json);
-  const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
-  const args = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-  if (!args) throw new Error("activity interval AI returned no structured recap");
-  return parseIntervalSynthesis(JSON.parse(args), input.observations.length, input.recordedActivityAllowlist ?? []);
+  let lastError: unknown = null;
+  /* The model occasionally answers without the required tool call or with a
+     malformed payload. That is a one-off generation failure, not a reason to
+     replace the employee's recap with a generic check-in; retry once before
+     giving up. Transport and provider errors keep their own failure path. */
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        signal: AbortSignal.timeout(input.timeoutMs),
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(aiRequestBody(input.model, {
+          messages: intervalSynthesisMessages(input),
+          tools: [intervalTool()],
+          tool_choice: { type: "function", function: { name: "recordActivityInterval" } },
+          temperature: 0.2,
+          max_tokens: AI_TOKEN_BUDGETS.activityInterval,
+        })),
+      });
+      if (!response.ok) throw new Error(`activity interval AI failed (${response.status}): ${(await response.text()).slice(0, 160)}`);
+      const json = await response.json() as Json;
+      recordAiUsage("activity_interval", input.model, json);
+      const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
+      const args = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      if (!args) throw new Error("activity interval AI returned no structured recap");
+      return parseIntervalSynthesis(JSON.parse(args), input.observations.length, input.recordedActivityAllowlist ?? []);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : "";
+      if (!/no structured recap|synthesis returned no|JSON/i.test(message)) throw error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("activity interval synthesis failed");
 }
 
 /* ------------------------------------------------------------------ */

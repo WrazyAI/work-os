@@ -643,6 +643,15 @@ export async function submitWorkOsEod(access: WorkOsAccess, reportId: string, bo
     await saveReportVersion(access, report as Json, "employee_submission", text(report.submitted_markdown) ?? text(report.markdown) ?? "", submissionKey);
     return report;
   }
+  /* A report can only be submitted after its day has ended or entered the
+     final ten-minute EOD window. Without this gate an early morning draft
+     could be submitted mid-shift, which also suppresses the day's later
+     prompts. */
+  const reportDate = dateOnly(report.report_date);
+  if (reportDate) {
+    const gate = await eodDraftShiftGate(access, String(report.person_id), reportDate);
+    if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
+  }
   if (!["draft", "rejected"].includes(report.status)) throw new Error("only draft or rejected reports can be submitted");
   const markdown = text(body.markdown) ?? text(report.markdown);
   if (!markdown) throw new Error("markdown is required");

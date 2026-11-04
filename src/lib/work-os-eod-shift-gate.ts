@@ -1,6 +1,6 @@
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { db, loadShiftData } from "@/lib/work-os-internal";
-import { EOD_SHIFT_OPEN_SERVER_MESSAGE, eodDraftBlocked } from "@/lib/work-os-shift-gate";
+import { EOD_SHIFT_OPEN_SERVER_MESSAGE, eodDraftBlocked, eodDraftDateBlocked } from "@/lib/work-os-shift-gate";
 import { localDateForTimezone, resolveShiftWindowForDate } from "@/modules/work-os/companion";
 
 /** A Worktivity observation older than this is not evidence of an open shift. */
@@ -67,7 +67,17 @@ export async function eodDraftShiftGate(
     scheduledEndsAt,
     now: at.getTime(),
   });
-  return blocked ? { blocked: true, message: EOD_SHIFT_OPEN_SERVER_MESSAGE } : { blocked: false };
+  if (blocked) return { blocked: true, message: EOD_SHIFT_OPEN_SERVER_MESSAGE };
+  /* A day that has not reached its EOD window is not describable yet, even
+     before the employee clocks in. Otherwise a morning click can create and
+     submit a report that claims the whole day while none of it has happened.
+     A closed shift is finished and stays draftable whenever it closed. */
+  const closed = Boolean(sessionResult.data?.clocked_out_at)
+    || ["clocked_out", "closed"].includes(String(sessionResult.data?.state ?? ""));
+  if (eodDraftDateBlocked({ closed, scheduledEndsAt, now: at.getTime() })) {
+    return { blocked: true, message: EOD_SHIFT_OPEN_SERVER_MESSAGE };
+  }
+  return { blocked: false };
 }
 
 /** Whether an editable (unsubmitted) EOD draft exists for the day. A

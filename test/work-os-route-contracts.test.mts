@@ -730,6 +730,8 @@ test("an unfinished day can be drafted in its final ten minutes, and a draft can
   const eodService = await source("src/lib/work-os-eod.ts");
   assert.match(eodService, /eodDraftShiftGate/, "the draft refuses a day whose shift is still open");
   assert.match(eodService, /EOD_SHIFT_OPEN_REASON/, "the refusal names the shift_open reason");
+  assert.match(eodService, /export async function submitWorkOsEod[\s\S]{0,1800}eodDraftShiftGate/, "submission uses the same EOD window gate");
+  assert.match(gate, /export function eodDraftDateBlocked/, "a day before its EOD window is not describable");
   assert.match(eodService, /export async function deleteWorkOsEodDraft/, "an unsubmitted EOD draft can be deleted");
   assert.match(eodService, /\["draft", "rejected"\]/, "only a draft or rejected report can be deleted");
   assert.match(eodService, /report\.deleted/, "the deletion is written to the audit log");
