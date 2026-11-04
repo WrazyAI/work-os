@@ -42,6 +42,18 @@
       "type": "feature",
       "summary": "The end-of-day report leads with a short, ranked summary and keeps every task, recap, and note in a full-record disclosure.",
       "verification": "195b5e09: EOD Work OS suites 60 passed; admin-preview file 23 passed alone; companion EOD tests 19 passed; rendered 1440, 1024, and 390 checks on web and desktop; TestSprite run c3153dac passed 4/4."
+    },
+    {
+      "id": "voice-upload-failure-copy",
+      "type": "fix",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
+      "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
+    },
+    {
+      "id": "admin-otto-task-action-previews",
+      "type": "feature",
+      "summary": "Admin Otto can preview task changes and applies them only after you confirm.",
+      "verification": "3cba41f9: Work OS admin Otto action/chat tests 56 passed, 2 opt-in PostgreSQL skipped; companion AdminOttoChat render tests 13 passed."
     }
   ],
   "emergency": null

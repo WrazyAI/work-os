@@ -23,11 +23,13 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.19 — 2026-11-04
 
 - Open the focus band on Tasks to read the full goal for the selected day.
 - Today now reads like the web workspace: one workday surface for status, time, counts, and focus, with your weekly record beside the task list.
 - The end-of-day report now leads with a short, ranked summary and keeps the full day in a disclosure.
+- A failed voice note now explains what happened instead of showing “Failed to fetch.”
+- Admin Otto can preview task changes and applies them only after you confirm.
 
 ## 0.5.18 — 2026-11-02
 
