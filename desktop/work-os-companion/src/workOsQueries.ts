@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 import {
   ACTIVITY_INTERVALS_STALE_MS,
@@ -16,7 +16,7 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
@@ -35,8 +35,7 @@ export type TaskHistoryPage = {
   cursor?: { next: string | null };
 };
 
-/** The complete open backlog plus exact parent counts, returned whole so both
- * the dashboard carry-over tabs and the Tasks Unfinished view are complete. */
+/** Loaded open-backlog window plus exact counts and the next contiguous page. */
 export type TaskBacklog = {
   tasks: Array<Record<string, any>>;
   counts: { total: number; open: number; completed: number; overdue?: number } | null;
@@ -60,15 +59,16 @@ export function normalizeDay(rawDay: DayData): DayData {
   };
 }
 
-export async function fetchDay(options: { variant: "compact" | "details"; refreshProviders?: boolean; refreshAttendance?: boolean; date?: string }): Promise<DayData> {
+export async function fetchDay(options: { variant: "compact" | "details"; refreshProviders?: boolean; refreshAttendance?: boolean; date?: string; signal?: AbortSignal }): Promise<DayData> {
   const params = new URLSearchParams();
   if (options.refreshProviders) params.set("refreshProviders", "true");
   if (options.refreshAttendance) params.set("refreshAttendance", "true");
   if (options.date) params.set("date", options.date);
   if (options.variant === "compact") params.set("compact", "true");
+  const timeout = AbortSignal.timeout(options.refreshProviders ? 90_000 : 35_000);
   const rawDay = await apiRequest<DayData>(`/api/work-os/me/day${params.size ? `?${params}` : ""}`, {
     // A provider refresh can legitimately take longer; a compact read is bounded.
-    signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 35_000),
+    signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
   });
   return normalizeDay(rawDay);
 }
@@ -79,12 +79,12 @@ export function useDayQuery(options: { enabled: boolean; variant: "compact" | "d
     enabled: options.enabled,
     staleTime: options.variant === "compact" ? DAY_STALE_MS : DAY_DETAILS_STALE_MS,
     refetchInterval: options.variant === "compact" && options.pollMs ? options.pollMs : false,
-    queryFn: () => fetchDay({ variant: options.variant }),
+    queryFn: ({ signal }) => fetchDay({ variant: options.variant, signal }),
   });
 }
 
-export async function fetchOnboarding(): Promise<OnboardingData> {
-  return apiRequest<OnboardingData>("/api/work-os/me/onboarding");
+export async function fetchOnboarding(signal?: AbortSignal): Promise<OnboardingData> {
+  return apiRequest<OnboardingData>("/api/work-os/me/onboarding", { signal });
 }
 
 export function useOnboardingQuery(options: { enabled: boolean }) {
@@ -92,7 +92,7 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
     queryKey: workOsKeys.onboarding(),
     enabled: options.enabled,
     staleTime: ONBOARDING_STALE_MS,
-    queryFn: fetchOnboarding,
+    queryFn: ({ signal }) => fetchOnboarding(signal),
   });
 }
 
@@ -144,45 +144,77 @@ export function useTaskHistoryQuery(options: {
   });
 }
 
-/** The open backlog, paged through the cursor endpoint so callers still receive
- * the complete set without a single unbounded query. Servers that predate
- * `view=open` answer it with a windowed row set and no counts, so the response
- * is capability-checked and rebuilt from the assistant's pending selection
- * instead of rendered wrong. */
-export async function fetchTaskBacklog(sortDate?: string): Promise<TaskBacklog> {
-  const tasks: Array<Record<string, any>> = [];
-  let counts: TaskBacklog["counts"] = null;
-  let cursor: string | null = null;
-  // A bounded safety cap: 40 pages of 50 keeps an unlucky server from pinning
-  // the query forever while still covering deep backlogs.
-  for (let page = 0; page < 40; page += 1) {
-    const params = new URLSearchParams({ view: "open", limit: "50" });
-    if (sortDate) params.set("sortDate", sortDate);
-    if (cursor) params.set("cursor", cursor);
-    const open = await apiRequest<TaskHistoryPage & { counts?: TaskBacklog["counts"] }>(`/api/work-os/me/tasks?${params}`);
-    if (!open || !open.counts || !Array.isArray(open.tasks)) break;
-    counts ??= open.counts;
-    tasks.push(...open.tasks);
-    cursor = open.nextCursor ?? open.cursor?.next ?? null;
-    if (!cursor) break;
+/** One page only. A legacy server cannot silently turn a partial list into a
+ * complete backlog: it must provide the counts/cursor contract. */
+export async function fetchTaskBacklog(sortDate?: string, cursor?: string | null, signal?: AbortSignal): Promise<TaskBacklog> {
+  const params = new URLSearchParams({ view: "open", limit: "50" });
+  if (sortDate) {
+    // Unfinished excludes work already scoped to My day. The server applies the
+    // same exclusion to its exact counts, so the bell/tab total is not a count
+    // of loaded rows and matches the destination exactly.
+    params.set("sortDate", sortDate);
+    params.set("date", sortDate);
+    params.set("excludeToday", "true");
   }
-  if (counts) return { tasks, counts };
-  const pending = await apiRequest<{ tasks?: Array<Record<string, any>> }>("/api/work-os/me/tasks?view=pending&limit=100");
-  const fallback = Array.isArray(pending?.tasks) ? pending.tasks.filter((task) => task.completed !== true) : [];
-  return { tasks: fallback, counts: null };
+  if (cursor) params.set("cursor", cursor);
+  const open = await apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`, { signal });
+  if (!open.counts || !Array.isArray(open.tasks)) throw new Error("This workspace needs the paginated task API update. Refresh after the server is updated.");
+  return { tasks: open.tasks, counts: open.counts, nextCursor: open.nextCursor ?? open.cursor?.next ?? null };
 }
 
-export function useTaskBacklogQuery(options: { enabled: boolean; sortDate?: string }) {
+/** Exact open/overdue counts for the notifications bell while the employee
+ * pages are hidden. One row is requested; the server still returns the full
+ * aggregate counts, so no backlog page is downloaded. */
+export function openTaskCountUrl(date?: string) {
+  // No date is valid: the server resolves the employee's current workday, so
+  // the fallback count works even while another window owns the monitor.
+  const params = new URLSearchParams({ view: "open", limit: "1", excludeToday: "true" });
+  if (date) { params.set("date", date); params.set("sortDate", date); }
+  return `/api/work-os/me/tasks?${params}`;
+}
+
+export function useOpenTaskCountQuery(options: { enabled: boolean; date?: string }) {
   return useQuery({
-    queryKey: workOsKeys.taskBacklog(),
-    enabled: options.enabled && !!options.sortDate,
+    queryKey: ["work-os", "task-open-count", options.date ?? "current"],
+    enabled: options.enabled,
     staleTime: TASK_BACKLOG_STALE_MS,
-    queryFn: () => fetchTaskBacklog(options.sortDate),
+    refetchInterval: 60_000,
+    queryFn: ({ signal }) => apiRequest<TaskHistoryPage>(openTaskCountUrl(options.date), { signal }),
   });
 }
 
-export async function fetchTaskDetails(taskId: string): Promise<TaskDetails> {
-  return apiRequest<TaskDetails>(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`);
+export function useTaskBacklogQuery(options: { enabled: boolean; sortDate?: string }) {
+  return useInfiniteQuery({
+    queryKey: [...workOsKeys.taskBacklog(), options.sortDate ?? ""],
+    enabled: options.enabled && !!options.sortDate,
+    staleTime: TASK_BACKLOG_STALE_MS,
+    initialPageParam: null as string | null,
+    getNextPageParam: (page: TaskBacklog) => page.nextCursor ?? undefined,
+    queryFn: ({ pageParam, signal }) => fetchTaskBacklog(options.sortDate, pageParam, signal),
+    select: (data): TaskBacklog => ({ tasks: data.pages.flatMap((page) => page.tasks), counts: data.pages[0]?.counts ?? null, nextCursor: data.pages.at(-1)?.nextCursor }),
+  });
+}
+
+/** Optimistic task changes preserve loaded page boundaries and cursors. New
+ * rows enter only the first page; removed rows do not reset the reader. */
+export function updateTaskBacklogCaches(client: QueryClient, update: (value: TaskBacklog | undefined) => TaskBacklog | undefined) {
+  client.setQueriesData<InfiniteData<TaskBacklog>>({ queryKey: workOsKeys.taskBacklog() }, (current) => {
+    if (!current?.pages.length) return current;
+    const flat = { tasks: current.pages.flatMap((page) => page.tasks), counts: current.pages[0].counts };
+    const next = update(flat);
+    if (!next) return current;
+    const id = (task: Record<string, any>) => String(task.id ?? task.provider_task_id);
+    const rows = new Map(next.tasks.map((task) => [id(task), task]));
+    const previousIds = new Set(flat.tasks.map(id));
+    const inserted = next.tasks.filter((task) => !previousIds.has(id(task)));
+    return { ...current, pages: current.pages.map((page, index) => ({ ...page, counts: next.counts,
+      tasks: [...(index === 0 ? inserted : []), ...page.tasks.flatMap((task) => rows.has(id(task)) ? [rows.get(id(task))!] : [])],
+    })) };
+  });
+}
+
+export async function fetchTaskDetails(taskId: string, signal?: AbortSignal): Promise<TaskDetails> {
+  return apiRequest<TaskDetails>(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { signal });
 }
 
 export function useTaskDetailsQuery(options: { taskId: string | null }) {
@@ -190,7 +222,7 @@ export function useTaskDetailsQuery(options: { taskId: string | null }) {
     queryKey: workOsKeys.taskDetails(options.taskId ?? "none"),
     enabled: !!options.taskId,
     staleTime: TASK_DETAILS_STALE_MS,
-    queryFn: () => fetchTaskDetails(options.taskId!),
+    queryFn: ({ signal }) => fetchTaskDetails(options.taskId!, signal),
   });
 }
 
@@ -199,7 +231,22 @@ export function useInsightsQuery(options: { enabled: boolean; range: "day" | "7d
     queryKey: workOsKeys.insights(options.range, options.through),
     enabled: options.enabled && !!options.through,
     staleTime: INSIGHTS_STALE_MS,
-    queryFn: () => apiRequest<InsightsData>(`/api/work-os/me/insights?range=${options.range}&through=${encodeURIComponent(options.through)}`),
+    queryFn: ({ signal }) => apiRequest<InsightsData>(`/api/work-os/me/insights?range=${options.range}&through=${encodeURIComponent(options.through)}`, { signal }),
+  });
+}
+
+/** Today's small margin widget. Distinct key from the full insight report so
+ * opening Insights cannot replace it with a larger, incompatible payload. */
+export function dashboardInsightsUrl(through: string) {
+  return `/api/work-os/me/insights?range=7d&summary=1&through=${encodeURIComponent(through)}`;
+}
+
+export function useDashboardInsightsQuery(options: { enabled: boolean; through: string }) {
+  return useQuery({
+    queryKey: ["work-os", "dashboard-insights", options.through],
+    enabled: options.enabled && !!options.through,
+    staleTime: INSIGHTS_STALE_MS,
+    queryFn: ({ signal }) => apiRequest<DashboardWeekData>(dashboardInsightsUrl(options.through), { signal }),
   });
 }
 
@@ -208,10 +255,10 @@ export async function fetchHistoricalDay(date: string): Promise<{ plan: DailyPla
   return { plan: planResult.plan, tasks: [] };
 }
 
-export function useHistoricalDayQuery(options: { date: string; currentDate: string }) {
+export function useHistoricalDayQuery(options: { enabled?: boolean; date: string; currentDate: string }) {
   return useQuery({
     queryKey: workOsKeys.historicalDay(options.date),
-    enabled: !!options.date && options.date !== options.currentDate,
+    enabled: options.enabled !== false && !!options.date && options.date !== options.currentDate,
     staleTime: HISTORICAL_STALE_MS,
     queryFn: () => fetchHistoricalDay(options.date),
   });
@@ -227,10 +274,10 @@ export function useTaskOptionsQuery(options: { enabled: boolean }) {
 }
 
 /** Historical day payload for drafting an EOD on a day other than today. */
-export function useReportDayQuery(options: { date: string | null; currentDate: string }) {
+export function useReportDayQuery(options: { enabled?: boolean; date: string | null; currentDate: string }) {
   return useQuery({
     queryKey: workOsKeys.reportDay(options.date ?? "none"),
-    enabled: !!options.date && options.date !== options.currentDate,
+    enabled: options.enabled !== false && !!options.date && options.date !== options.currentDate,
     staleTime: DAY_DETAILS_STALE_MS,
     queryFn: () => fetchDay({ variant: "details", date: options.date! }),
   });
@@ -283,12 +330,31 @@ export function activityIntervalsUrl(date: string, cursor: string | null): strin
   return `/api/work-os/me/activity-intervals?date=${encodeURIComponent(date)}&days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
 }
 
+/** Live notices own only the latest page, never the history observer. With no
+ * day loaded (mapped Admin), the server resolves the employee's local date. */
+export function activityIntervalNotificationOptions(options: { enabled: boolean; date: string | null; pollMs?: number }) {
+  return {
+    queryKey: [...workOsKeys.activityIntervals(options.date ?? "current"), "notification"],
+    enabled: options.enabled,
+    staleTime: ACTIVITY_INTERVALS_STALE_MS,
+    refetchInterval: options.pollMs ?? (false as const),
+    queryFn: ({ signal }: { signal: AbortSignal }) => apiRequest<ActivityIntervalsData>(
+      `/api/work-os/me/activity-intervals?days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}${options.date ? `&date=${encodeURIComponent(options.date)}` : ""}`,
+      { signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) },
+    ),
+  };
+}
+
+export function useActivityIntervalNotificationQuery(options: { enabled: boolean; date: string | null; pollMs?: number }) {
+  return useQuery(activityIntervalNotificationOptions(options));
+}
+
 export function useActivityIntervalsQuery(options: { enabled: boolean; date: string | null; pollMs?: number }) {
   return useInfiniteQuery({
     queryKey: workOsKeys.activityIntervals(options.date ?? "none"),
     enabled: options.enabled && !!options.date,
     staleTime: ACTIVITY_INTERVALS_STALE_MS,
-    refetchInterval: options.pollMs ?? false,
+    refetchInterval: (query) => (query.state.data?.pages.length ?? 0) <= 1 ? options.pollMs ?? false : false,
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage: ActivityIntervalsData) => lastPage.nextCursor ?? undefined,
     queryFn: ({ pageParam, signal }) => {

@@ -31,8 +31,10 @@ describe("admin Otto shell wiring", () => {
   it("boots the admin shell from authoritative context and gates personal reads", () => {
     expect(app).toContain("planAdminOttoBootstrap(");
     expect(app).toContain("fetchAdminOttoContext");
-    expect(app).toMatch(/useDayQuery\(\{ enabled: employeeBootstrapEnabled/);
-    expect(app).toMatch(/useOnboardingQuery\(\{ enabled: employeeBootstrapEnabled/);
+    expect(app).toMatch(/useDayQuery\(\{ enabled: employeePageEnabled/);
+    expect(app).toMatch(/const employeePageEnabled = employeeBootstrapEnabled && dayMonitor\.owns/);
+    expect(app).toMatch(/useOnboardingQuery\(\{ enabled: bootstrapEnabled\.personal/);
+    expect(app).toMatch(/const employeeBootstrapEnabled = bootstrapEnabled\.personal && !adminShellActive/);
     expect(app).toContain("adminOtto: workSessionQuery.data?.role === \"admin\"");
     expect(app).toMatch(/personalBootstrapFlags\(\{\s+syncBypass,/);
     expect(app).toContain("adminOttoRoleAllowed");

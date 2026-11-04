@@ -674,7 +674,7 @@ describe("operational visualizations", () => {
   });
 
   it("switches between administration and the signed-in admin's own workday", () => {
-    expect(app).toContain('import AdminWorkspace from "./admin/AdminWorkspace"');
+    expect(app).toContain('const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));');
     expect(app).toContain("work-os.workspace-mode");
     expect(app).toContain('switchLabel="Open administration"');
     expect(app).toContain("Administration");
@@ -706,7 +706,7 @@ describe("operational visualizations", () => {
     expect(adminWorkspace).toContain('aria-label={`Profile for ${profile.name}`}');
     expect(adminWorkspace).toContain('title="Open profile settings"');
     expect(adminWorkspace).toContain("<ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />");
-    expect(app).toContain("profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}");
+    expect(app).toMatch(/profile=\{visibleOnboarding\s+\? \{ name: visibleOnboarding\.profile\.displayName, avatarUrl: visibleOnboarding\.profile\.avatarUrl, onOpen: openProfileFromAdmin \}\s+: adminOttoContextQuery\.data\?\.displayName/);
     // Changelog: one administration-only workspace-menu item. The employee
     // rail reaches the changelog from Settings and never receives this.
     expect(sidebar).toContain("What's new");

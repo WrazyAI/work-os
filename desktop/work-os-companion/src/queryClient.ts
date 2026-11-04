@@ -64,6 +64,20 @@ export function createWorkOsQueryClient(): QueryClient {
 export const workOsQueryClient = createWorkOsQueryClient();
 
 const PERSIST_DEBOUNCE_MS = 2_500;
+const persistenceBarriers = new WeakMap<QueryClient, () => Promise<() => void>>();
+
+/** Sign-out is ordered after an already-started vault save, not raced with it.
+ * Cancel reads (never mutations), retire queued snapshots, then erase storage. */
+export async function clearWorkOsAccountCache(client: QueryClient): Promise<void> {
+  const resume = await persistenceBarriers.get(client)?.();
+  try {
+    await client.cancelQueries();
+    client.clear();
+    await secureState.clearAccount();
+  } finally {
+    resume?.();
+  }
+}
 
 /** Restores the last cached work state so the first paint shows real content
  * while background revalidation runs. A corrupt cache never blocks boot. */
@@ -80,22 +94,69 @@ export async function restoreWorkOsQueryCache(client: QueryClient): Promise<void
 /** Persists the filtered cache to the Stronghold vault, debounced. */
 export function startWorkOsQueryPersistence(client: QueryClient): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let paused = false;
+  let inFlight: Promise<void> | null = null;
+  let saving = false;
+  let dirty = false;
+  let failures = 0;
+  const snapshot = () => dehydrate(client, {
+    shouldDehydrateQuery: (query) => query.state.status === "success" && isPersistedQueryKey(query.queryKey),
+    shouldDehydrateMutation: () => false,
+  });
+  // Fetch/observer timestamps are not employee data. In particular a successful
+  // revalidation of identical data must not rewrite the encrypted vault.
+  const fingerprint = (state: ReturnType<typeof snapshot>) => JSON.stringify(
+    state.queries.map((query) => [query.queryHash, query.state.data]).sort(([left], [right]) => String(left).localeCompare(String(right))),
+  );
+  let saved = fingerprint(snapshot());
+  const schedule = (delay = PERSIST_DEBOUNCE_MS) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; void persist(); }, delay);
+  };
   const persist = async () => {
+    if (stopped || paused || saving || !dirty) return;
+    dirty = false;
+    const state = snapshot();
+    const next = fingerprint(state);
+    if (next === saved) return;
+    saving = true;
     try {
-      const state = dehydrate(client, {
-        shouldDehydrateQuery: (query) => query.state.status === "success" && isPersistedQueryKey(query.queryKey),
-      });
-      await secureState.saveQueryCache(JSON.stringify(state));
+      inFlight = secureState.saveQueryCache(JSON.stringify(state));
+      await inFlight;
+      saved = next;
+      failures = 0;
     } catch {
-      // Persistence is best-effort; the live cache remains authoritative.
+      // Persistence is best-effort; the live cache remains authoritative. A
+      // real change is retried with backoff instead of being silently lost.
+      failures += 1;
+      dirty = true;
+    } finally {
+      saving = false;
+      inFlight = null;
+      if (dirty && !stopped) schedule(failures ? Math.min(60_000, 5_000 * 2 ** Math.min(failures, 4)) : PERSIST_DEBOUNCE_MS);
     }
   };
-  const unsubscribe = client.getQueryCache().subscribe(() => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void persist(), PERSIST_DEBOUNCE_MS);
+  const unsubscribe = client.getQueryCache().subscribe((event) => {
+    if (paused || stopped) return;
+    if (!isPersistedQueryKey(event.query.queryKey)) return;
+    if (event.type !== "removed" && !(event.type === "updated" && event.action.type === "success")) return;
+    dirty = true;
+    schedule();
   });
+  const barrier = async () => {
+    paused = true;
+    dirty = false;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    await inFlight?.catch(() => undefined);
+    return () => { saved = fingerprint(snapshot()); paused = false; };
+  };
+  persistenceBarriers.set(client, barrier);
   return () => {
+    stopped = true;
     if (timer) clearTimeout(timer);
     unsubscribe();
+    if (persistenceBarriers.get(client) === barrier) persistenceBarriers.delete(client);
   };
 }

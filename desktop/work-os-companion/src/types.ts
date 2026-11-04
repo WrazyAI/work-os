@@ -128,6 +128,17 @@ export interface InsightDay {
   references: Array<{ type: "plan" | "task" | "check_in" | "evidence"; id: string; date: string; label: string; target: string }>;
 }
 
+/** Today's margin instruments only need the weekly daily counts and rhythm
+ * totals. The server returns this bounded subset for `?summary=1`; the full
+ * Insights page remains the owner of analysis, comparison, and references. */
+export interface DashboardWeekData {
+  range: "day" | "7d" | "30d";
+  from: string;
+  through: string;
+  days: Array<Pick<InsightDay, "date" | "tasksCompleted"> & { updates?: number; planned?: number; plannedCompleted?: number; outcomesOnTime?: number; outcomesLate?: number }>;
+  consistency?: InsightConsistency;
+}
+
 export interface InsightsData {
   range: "day" | "7d" | "30d";
   from: string;

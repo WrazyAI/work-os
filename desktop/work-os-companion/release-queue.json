@@ -60,6 +60,12 @@
       "type": "fix",
       "summary": "Shift times fit compact windows, with observation and check-in details behind small help controls.",
       "verification": "Ledger 333fc4ba-74de-48fc-8d32-d9fe717eeb57: 57 focused render/visual tests passed; typecheck and companion build passed; browser checks at 1440/1024/930/720/390 including click, keyboard, Escape, outside dismissal and details-dialog isolation."
+    },
+    {
+      "id": "background-work-lightening",
+      "type": "fix",
+      "summary": "Administration and the floating companion stop repeating hidden employee page work, cache saves, and recap checks.",
+      "verification": "Branch codex/work-os-performance on 2026-11-04: real Chromium App checks 5/5 cover Admin cold start, returning from heavy employee tabs, unmapped Admin, lazy startup, and idle mascot heartbeats; companion Vitest 1642/1642; backend performance/static checks 9/9; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
     }
   ],
   "emergency": {

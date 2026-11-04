@@ -1,8 +1,9 @@
-import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
+import { type WorkOsAccess } from "@/lib/work-os-api";
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
-import { hydrateTaskAssignees, isTaskAssignedToPerson, type TaskListOrder } from "@/lib/work-os";
+import { isTaskAssignedToPerson, type TaskListOrder } from "@/lib/work-os";
+import { employeeWorkspaceTasksForDay, loadEmployeeWorkspaceEvents, loadEmployeeWorkspaceTasks } from "@/lib/work-os-employee-task-selection";
 import { compareWorkspaceTaskCursor, compareWorkspaceTasks, createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import { recordWorkMemory } from "@/lib/work-memory";
@@ -58,7 +59,7 @@ export interface DailyWorkspaceRecord {
   overdueCount: number;
   commitmentCompleted: number;
   commitmentTotal: number;
-  carryOverGroups: Array<{ key: string; label: string; tasks: Json[] }>;
+  carryOverGroups: Array<{ key: string; label: string; tasks: Json[]; count?: number; hasMore?: boolean }>;
   sessionQuality: { status: "none" | "valid" | "needs_correction" | "corrected"; message: string | null; sessionId: string | null; clockedInAt: string | null };
   cursor: { next: string | null };
   totalCount: number;
@@ -346,6 +347,34 @@ export function projectWorkspaceDay(input: {
   };
 }
 
+/** The day preview is not a task-detail response. Full descriptions, raw
+ * provider records and complete subtask lists remain on Tasks/detail paths. */
+export function compactWorkspaceTask(task: Json): Json {
+  const keys = ["id", "provider", "provider_task_id", "title", "completed", "completed_at", "status", "workflow_status", "due_date", "priority", "parent_task_id", "parent_provider_task_id", "project_id", "provider_project_id", "assigned_by_person_id", "dayDisposition", "dayAttribution", "subtaskProgress", "carryReason", "provider_created_at", "created_at"];
+  const row = Object.fromEntries(keys.filter((key) => task[key] !== undefined).map((key) => [key, task[key]]));
+  if (task.project) row.project = { id: task.project.id, name: task.project.name, provider_project_id: task.project.provider_project_id };
+  // Keep ownership IDs intact: capability evaluation must not depend on the
+  // visible assignee preview. Identity objects, unlike IDs, can be large.
+  row.assignee_person_ids = task.assignee_person_ids ?? [];
+  if (Array.isArray(task.assignees)) row.assignees = task.assignees.slice(0, 8);
+  if (Array.isArray(task.subtasks)) {
+    row.subtasks = task.subtasks.slice(0, 8).map(compactWorkspaceTask);
+    row.subtaskCount = task.subtasks.length;
+    row.subtasksHasMore = task.subtasks.length > 8;
+  }
+  if (row.dayAttribution?.childTaskIds) row.dayAttribution = { ...row.dayAttribution, childTaskIds: row.dayAttribution.childTaskIds.slice(0, 8) };
+  return row;
+}
+
+function compactCarryOverGroups(groups: DailyWorkspaceRecord["carryOverGroups"], limit: number) {
+  let remaining = limit;
+  return groups.map((group) => {
+    const tasks = group.tasks.slice(0, remaining).map(compactWorkspaceTask);
+    remaining -= tasks.length;
+    return { key: group.key, label: group.label, count: group.tasks.length, hasMore: tasks.length < group.tasks.length, tasks };
+  });
+}
+
 export async function resolveDailyWorkspace(
   access: WorkOsAccess,
   requestedDate?: string | null,
@@ -358,24 +387,14 @@ export async function resolveDailyWorkspace(
     toDate?: string | null;
     order?: TaskListOrder;
     includeAllTaskIds?: boolean;
+    compact?: boolean;
   } = {},
 ): Promise<DailyWorkspaceRecord> {
   const now = options.now ?? new Date();
   const context = await employeeContext(access, now);
   const date = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : context.currentDate;
-  const ownerId = workOsOrganizationOwnerId(access);
-  const [tasksResult, eventsResult, planResult, sessionResult] = await Promise.all([
-    db().from("work_tasks")
-      .select("*,project:work_projects(id,name,provider_project_id)")
-      .eq("user_id", ownerId)
-      .eq("organization_id", access.organizationId)
-      .not("status", "in", "(archived,deleted)")
-      .order("provider_created_at", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .limit(2500),
-    db().from("work_task_day_events").select("*")
-      .eq("organization_id", access.organizationId).eq("local_date", date)
-      .order("observed_at", { ascending: true }).order("id", { ascending: true }),
+  const [allTasks, planResult, sessionResult] = await Promise.all([
+    loadEmployeeWorkspaceTasks(access, context.niftyMemberId, date, date),
     db().from("work_daily_plans").select("id,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
       .eq("shift_date", date).maybeSingle(),
@@ -383,25 +402,26 @@ export async function resolveDailyWorkspace(
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
       .eq("shift_date", date),
   ]);
-  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["goal", planResult], ["session", sessionResult]] as const) {
+  for (const [label, result] of [["goal", planResult], ["session", sessionResult]] as const) {
     if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
   }
 
-  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[], access.organizationId) as Json[];
+  const dayEvents = await loadEmployeeWorkspaceEvents(access, allTasks, date, date);
   const attributable = allTasks.filter((task) =>
     // Narrow ownership: an assigner sees the row through the list predicates but
     // is never credited with the assignee's day events.
     isTaskAssignedToPerson(task, access.personId, context.niftyMemberId)
   );
+  const dayAttributable = employeeWorkspaceTasksForDay(allTasks, access.personId, context.niftyMemberId, dayEvents, planResult.data);
   const attributableIds = new Set(attributable.map((task) => String(task.id)));
-  const events = (eventsResult.data ?? []).filter((event: any) =>
+  const events = dayEvents.filter((event: any) =>
     event.person_id === access.personId || attributableIds.has(String(event.task_id))
   ) as Json[];
   const projected = projectWorkspaceDay({
     date,
     currentDate: context.currentDate,
     allTasks,
-    attributable,
+    attributable: dayAttributable,
     events,
     plan: (planResult.data as Json | null) ?? null,
     session: selectWorkspaceSession((sessionResult.data ?? []) as Json[]),
@@ -452,7 +472,11 @@ export async function resolveDailyWorkspace(
     currentDate: context.currentDate,
     readOnly: date !== context.currentDate,
     ...projected,
-    tasks: page,
+    tasks: options.compact ? page.map(compactWorkspaceTask) as DailyWorkspaceTaskRow[] : page,
+    ...(options.compact ? {
+      goal: { ...projected.goal, suggestionTaskIds: projected.goal.suggestionTaskIds.slice(0, 24) },
+      carryOverGroups: compactCarryOverGroups(projected.carryOverGroups, 24),
+    } : {}),
     cursor: { next },
     totalCount: filtered.length,
     counts: {

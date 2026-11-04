@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Pencil, Plus, RefreshCw, Target, X } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
 import { dashboardRemainingLabel, type WorkdayDashboardModel } from "./dashboardModel";
-import type { InsightsData } from "./types";
+import type { DashboardWeekData } from "./types";
 import { MascotPet } from "./MascotPet";
 import { ProgressRing } from "./ProgressRing";
 import { FadeArc } from "./LoadingUi";
@@ -45,7 +45,7 @@ export interface OffShiftDashboardProps extends DashboardSurfaceActions {
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
   /** The seven-day record that feeds the margin instruments. Optional so the
    *  command center still renders while it loads or when the read fails. */
-  week?: InsightsData | null;
+  week?: DashboardWeekData | null;
   weekLoading?: boolean;
   weekError?: boolean;
   nextCheckIn?: string | null;
@@ -57,6 +57,8 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
   tasks: TaskRow[];
   previousTasks: TaskRow[];
   otherTasks: TaskRow[];
+  backlogPaging?: { loaded: number; total: number; hasMore: boolean; loading: boolean; error: boolean; onLoadMore: () => void };
+  carryOverTotals?: { yesterday: number; other: number };
   currentDate: string;
   busy?: boolean;
   canPause?: boolean;
@@ -65,7 +67,7 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
   observedOnly?: boolean;
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
   onRetryGoalSave?: () => void;
-  week?: InsightsData | null;
+  week?: DashboardWeekData | null;
   weekLoading?: boolean;
   weekError?: boolean;
   nextCheckIn?: string | null;
@@ -222,7 +224,7 @@ function PulseTimeline({ model, showPosition = true, expanded = false }: { model
   </div>;
 }
 
-function WeekInstrument({ week, loading = false, error = false, currentDate }: { week?: InsightsData | null; loading?: boolean; error?: boolean; currentDate: string }) {
+function WeekInstrument({ week, loading = false, error = false, currentDate }: { week?: DashboardWeekData | null; loading?: boolean; error?: boolean; currentDate: string }) {
   const days = week?.days ?? [];
   const values = days.map((entry) => Number(entry.tasksCompleted ?? 0));
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -272,7 +274,7 @@ function weekdayInitial(value: string) {
 }
 
 function DashboardMargin({ week, weekLoading = false, weekError = false, currentDate }: {
-  week?: InsightsData | null;
+  week?: DashboardWeekData | null;
   weekLoading?: boolean;
   weekError?: boolean;
   currentDate: string;
@@ -445,15 +447,16 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", week = null, weekLoading = false, weekError = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, backlogPaging, carryOverTotals, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", week = null, weekLoading = false, weekError = false, nextCheckIn = null, nextCheckInRequired = false, taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask, ...actions }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
-  const openInTab = sourceTasks.filter((task) => task.completed !== true).length;
+  const openInTab = tab === "today" ? tasks.filter((task) => task.completed !== true).length
+    : tab === "previous" ? carryOverTotals?.yesterday ?? previousTasks.length : carryOverTotals?.other ?? otherTasks.length;
   const tabs = [
     { id: "today" as const, label: "Today", count: tasks.filter((task) => task.completed !== true).length },
-    { id: "previous" as const, label: "Yesterday", count: previousTasks.length },
-    { id: "other" as const, label: "Older", count: otherTasks.length },
+    { id: "previous" as const, label: "Yesterday", count: carryOverTotals?.yesterday ?? previousTasks.length },
+    { id: "other" as const, label: "Older", count: carryOverTotals?.other ?? otherTasks.length },
   ];
   // Peer-view contract (§8.13): one tab stop, arrows move and activate, Home
   // and End jump to the ends, and each tab's accessible name includes its count.
@@ -522,11 +525,12 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
       <section className="dashboard-panel work-queue-panel" aria-label="Work queue">
         <header className="work-queue-header">
           <div className="work-queue-tabs" role="tablist" aria-label="Workday tasks">
-            {tabs.map((item, index) => <button key={item.id} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`work-queue-tab-${item.id}`} aria-controls="work-queue-list" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} onKeyDown={onTabKeyDown}>{item.label} <em>{item.count}</em></button>)}
+            {tabs.map((item, index) => <button key={item.id} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`work-queue-tab-${item.id}`} aria-controls="work-queue-list" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} onKeyDown={onTabKeyDown}>{item.label} <em>{item.count}{item.id !== "today" && backlogPaging?.hasMore ? " loaded" : ""}</em></button>)}
           </div>
           <div className="work-queue-actions">
             <button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} aria-hidden="true" /> Add task</button>
-            <button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
+            <button className="dashboard-inline-link" onClick={() => onOpenTasks(tab === "today" ? "today" : "unfinished")}>Full workspace <ChevronRight size={14} aria-hidden="true" /></button>
+            {tab !== "today" && carryOverTotals && carryOverTotals[tab === "previous" ? "yesterday" : "other"] > sourceTasks.length ? <small>{sourceTasks.length} of {carryOverTotals[tab === "previous" ? "yesterday" : "other"]} loaded</small> : null}
           </div>
         </header>
         <div className="work-queue-list" role="tabpanel" id="work-queue-list" aria-labelledby={`work-queue-tab-${tab}`}>
@@ -536,6 +540,10 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
           <span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span>
           <small>{model.sync.detail}</small>
           <span className="work-queue-showing">Showing {Math.min(5, openInTab)} of {openInTab} open</span>
+          {tab !== "today" && backlogPaging?.hasMore && <>
+            <small>{backlogPaging.loaded} of {backlogPaging.total} backlog tasks loaded</small>
+            <button type="button" className="dashboard-inline-link" disabled={backlogPaging.loading} onClick={backlogPaging.onLoadMore}>{backlogPaging.loading ? "Loading…" : backlogPaging.error ? "Retry load more" : "Load more"}</button>
+          </>}
         </footer>
       </section>
       <DashboardMargin week={week} weekLoading={weekLoading} weekError={weekError} currentDate={currentDate} />

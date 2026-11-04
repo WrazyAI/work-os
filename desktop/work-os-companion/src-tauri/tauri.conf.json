@@ -22,20 +22,6 @@
         "useHttpsScheme": true
       },
       {
-        "label": "debug",
-        "title": "Work OS Debugger",
-        "url": "debug.html",
-        "width": 760,
-        "height": 860,
-        "minWidth": 520,
-        "minHeight": 560,
-        "center": true,
-        "visible": false,
-        "resizable": true,
-        "additionalBrowserArgs": "--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling",
-        "useHttpsScheme": true
-      },
-      {
         "label": "avatar",
         "title": "Work OS Companion",
         "url": "index.html?window=avatar",

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-day-monitor"
+description = "Allow product windows to coordinate one scoped background workday monitor."
+commands.allow = ["claim_day_monitor", "publish_day_monitor", "read_day_monitor", "release_day_monitor"]

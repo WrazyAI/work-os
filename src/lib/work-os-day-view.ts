@@ -66,11 +66,13 @@ export async function getWorkOsDay(
     options.compact ? Promise.resolve([]) : listEvidence(ownerId, { personId, date: shiftDate }),
     options.compact ? Promise.resolve({ data: [], error: null }) : db().from("work_task_proposals").select("*").eq("organization_id", access.organizationId).eq("person_id", personId).in("status", ["pending", "needs_review", "failed", "stale"]).order("created_at", { ascending: false }),
     db().from("work_reports").select(options.compact ? "submitted_at" : "*").eq("organization_id", access.organizationId).eq("person_id", personId).eq("report_date", shiftDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 50, now: at }),
+    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 50, now: at, compact: options.compact }),
   ]);
   if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
   if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);
-  const workday = await getWorkday(access, at);
+  // Current-day reads share the shift inputs already resolved above. A
+  // requested historical date must not change the live workday/prompt context.
+  const workday = await getWorkday(access, at, options.localDate ? null : { shiftDate, shift });
   const actor = { role: access.role, personId: access.personId };
   const taskRows = withTaskCapabilities(workspace.tasks, actor, shiftDate);
   const historyRows = withTaskCapabilities(taskHistory ?? [], actor, shiftDate);

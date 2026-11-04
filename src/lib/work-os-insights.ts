@@ -3,7 +3,7 @@ import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api"
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeContext, projectWorkspaceDay } from "@/lib/work-os-daily-workspace";
-import { hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
+import { employeeWorkspaceTasksForDay, loadEmployeeWorkspaceEvents, loadEmployeeWorkspaceTasks } from "@/lib/work-os-employee-task-selection";
 
 type Json = Record<string, any>;
 export type InsightRange = "day" | "7d" | "30d";
@@ -259,6 +259,72 @@ export function insightDateWindow(range: InsightRange, throughValue?: string | n
   return { through, count, from: addDays(through, -(count - 1)) };
 }
 
+export type InsightSummary = {
+  range: InsightRange;
+  from: string;
+  through: string;
+  days: Array<{ date: string; tasksCompleted: number; updates: number; planned: number; plannedCompleted: number }>;
+  totals: { tasksCompleted: number; updates: number; planned: number; plannedCompleted: number; outcomesOnTime: number; outcomesLate: number };
+  consistency: { dayCount: number; daysWithUpdate: number; daysWithCompletion: number };
+};
+
+/** Small data for Today's margin instruments. Finds only task IDs completed or
+ * explicitly carried in the window, then hydrates those IDs; it deliberately
+ * performs no comparison window, roadmaps, evidence rollups, or full projection. */
+export async function getPersonalInsightSummary(access: WorkOsAccess, throughValue?: string | null, now = new Date()): Promise<InsightSummary> {
+  const { through, from, count } = insightDateWindow("7d", throughValue, now);
+  const personId = access.personId as string;
+  const context = await employeeContext(access, now);
+  const [allTasks, plans, checkIns] = await Promise.all([
+    // Completed-only families: Today's weekly instrument must not pay for an
+    // employee's entire open backlog or unrelated organization work.
+    loadEmployeeWorkspaceTasks(access, context.niftyMemberId, from, through, { completedOnly: true }),
+    db().from("work_daily_plans").select("id,shift_date,status,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,items:work_daily_plan_items(task_id,completion_state,disposition,item_kind,title_snapshot)")
+      .eq("organization_id", access.organizationId).eq("person_id", personId)
+      .gte("shift_date", from).lte("shift_date", through),
+    db().from("work_check_ins").select("shift_date").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).gte("shift_date", from).lte("shift_date", through).eq("substantive", true),
+  ]);
+  for (const [label, result] of [["plans", plans], ["check-ins", checkIns]] as const) {
+    if (result.error) throw new Error(`load insight summary ${label}: ${result.error.message}`);
+  }
+  const events = await loadEmployeeWorkspaceEvents(access, allTasks, from, through);
+  const plansByDate = groupByDate((plans.data ?? []) as Json[], "shift_date");
+  const checkInsByDate = groupByDate((checkIns.data ?? []) as Json[], "shift_date");
+  const eventsByDate = groupByDate(events, "local_date");
+  const byDate = new Map(rangeDates(from, through).map((date) => [date, { date, tasksCompleted: 0, updates: 0, planned: 0, plannedCompleted: 0, outcomesOnTime: 0, outcomesLate: 0 }]));
+  for (const [date, day] of byDate) {
+    const plan = (plansByDate.get(date) ?? [])[0] ?? null;
+    const dayEvents = eventsByDate.get(date) ?? [];
+    const attributable = employeeWorkspaceTasksForDay(allTasks, personId, context.niftyMemberId, dayEvents, plan);
+    const attributableIds = new Set(attributable.map((task) => String(task.id)));
+    const projected = projectWorkspaceDay({
+      date, currentDate: context.currentDate, allTasks, attributable,
+      events: dayEvents.filter((event) => event.person_id === personId || attributableIds.has(String(event.task_id))),
+      plan, session: null,
+    });
+    const timing = outcomeTiming(projected.tasks);
+    day.tasksCompleted = projected.completed;
+    day.outcomesOnTime = timing.onTime;
+    day.outcomesLate = timing.late;
+    for (const item of Array.isArray(plan?.items) ? plan.items as Json[] : []) {
+      if (item.disposition === "removed") continue;
+      day.planned += 1;
+      if (item.completion_state === "completed") day.plannedCompleted += 1;
+    }
+    day.updates = (checkInsByDate.get(date) ?? []).length;
+  }
+  const days = [...byDate.values()];
+  const totals = days.reduce((sum, day) => ({
+    tasksCompleted: sum.tasksCompleted + day.tasksCompleted, updates: sum.updates + day.updates,
+    planned: sum.planned + day.planned, plannedCompleted: sum.plannedCompleted + day.plannedCompleted,
+    outcomesOnTime: sum.outcomesOnTime + day.outcomesOnTime, outcomesLate: sum.outcomesLate + day.outcomesLate,
+  }), { tasksCompleted: 0, updates: 0, planned: 0, plannedCompleted: 0, outcomesOnTime: 0, outcomesLate: 0 });
+  return { range: "7d", from, through, days, totals,
+    consistency: { dayCount: count, daysWithUpdate: days.filter((day) => day.updates > 0).length,
+      daysWithCompletion: days.filter((day) => day.tasksCompleted > 0).length } };
+}
+
 export async function getPersonalInsights(access: WorkOsAccess, range: InsightRange, throughValue?: string | null, now = new Date()) {
   const { through, from } = insightDateWindow(range, throughValue, now);
   const previous = previousInsightWindow(range, throughValue, now);
@@ -266,18 +332,8 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const personId = access.personId as string;
   const ownerId = workOsOrganizationOwnerId(access);
   const context = await employeeContext(access, now);
-  const [tasksResult, eventsResult, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult, taskFreshnessResult, providerConnectionsResult, sourceAccountsResult] = await Promise.all([
-    db().from("work_tasks")
-      .select("*,project:work_projects(id,name,provider_project_id)")
-      .eq("user_id", ownerId)
-      .eq("organization_id", access.organizationId)
-      .not("status", "in", "(archived,deleted)")
-      .order("provider_created_at", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .limit(2500),
-    db().from("work_task_day_events").select("*")
-      .eq("organization_id", access.organizationId).gte("local_date", windowFrom).lte("local_date", through)
-      .order("observed_at", { ascending: true }).order("id", { ascending: true }),
+  const [allTasks, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult, taskFreshnessResult, providerConnectionsResult, sourceAccountsResult] = await Promise.all([
+    loadEmployeeWorkspaceTasks(access, context.niftyMemberId, windowFrom, through),
     db().from("work_daily_plans").select("id,shift_date,status,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,items:work_daily_plan_items(id,task_id,item_kind,completion_state,completed_at,source,disposition,title_snapshot,task:work_tasks(id,title,completed,completed_at,status))")
       .eq("organization_id", access.organizationId).eq("person_id", personId).gte("shift_date", windowFrom).lte("shift_date", through),
     db().from("work_sessions").select("id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,provider_break_seconds,provider_break_observed_at,provider_break_provenance,attendance_observed_at,correction_status,correction_reason")
@@ -292,18 +348,10 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     db().from("work_provider_connections").select("provider,active").eq("organization_id", access.organizationId),
     db().from("work_source_accounts").select("provider,person_id,verified").eq("organization_id", access.organizationId).eq("person_id", personId),
   ]);
-  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["task freshness", taskFreshnessResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
+  for (const [label, result] of [["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["task freshness", taskFreshnessResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
     if (result.error) throw new Error(`load Work OS insight ${label}: ${result.error.message}`);
   }
-  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[], access.organizationId) as Json[];
-  const attributable = allTasks.filter((task) =>
-    (Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId))
-    || isNiftyTaskAttributableToMember(task, context.niftyMemberId)
-  );
-  const attributableIds = new Set(attributable.map((task) => String(task.id)));
-  const events = ((eventsResult.data ?? []) as Json[]).filter((event) =>
-    event.person_id === access.personId || attributableIds.has(String(event.task_id))
-  );
+  const events = await loadEmployeeWorkspaceEvents(access, allTasks, windowFrom, through);
   const plans = groupByDate((plansResult.data ?? []) as Json[], "shift_date");
   const sessions = groupByDate((sessionsResult.data ?? []) as Json[], "shift_date");
   const checkIns = groupByDate((checkInsResult.data ?? []) as Json[], "shift_date");
@@ -317,12 +365,15 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     const daySessions = sessions.get(date) ?? [];
     const dayCheckIns = (checkIns.get(date) ?? []).filter((item) => item.substantive === true);
     const dayEvidence = evidence.get(date) ?? [];
+    const dayEvents = eventsByDate.get(date) ?? [];
+    const attributable = employeeWorkspaceTasksForDay(allTasks, access.personId, context.niftyMemberId, dayEvents, plan);
+    const attributableIds = new Set(attributable.map((task) => String(task.id)));
     const projected = projectWorkspaceDay({
       date,
       currentDate: context.currentDate,
       allTasks,
       attributable,
-      events: eventsByDate.get(date) ?? [],
+      events: dayEvents.filter((event) => event.person_id === personId || attributableIds.has(String(event.task_id))),
       plan,
       session: daySessions[0] ?? null,
     });
