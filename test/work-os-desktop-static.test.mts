@@ -721,7 +721,7 @@ const whatsNewModal = read("src/WhatsNewModal.tsx");
 assert.match(whatsNewModal, /role="dialog" aria-modal="true"/);
 assert.match(whatsNewModal, /No changelog notes shipped with this build\./);
 const changelog = read("CHANGELOG.md");
-assert.match(changelog, /^## Unreleased$/m);
+assert.match(changelog, /^## (?:Unreleased|\d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2})$/m);
 // Every version heading carries the day the build shipped, so the changelog
 // history can show it; undated or impossible dates must not come back.
 const versionHeadings = changelog.split("\n").filter((line) => /^##\s+\d+\.\d+\.\d+\b/.test(line));
