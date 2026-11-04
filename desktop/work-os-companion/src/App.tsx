@@ -35,6 +35,7 @@ import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
 import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
+import { alignOfflineClock } from "./offlineClock";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
@@ -565,7 +566,9 @@ export default function App() {
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
       const params = new URLSearchParams(window.location.search);
       const dayState = devParams?.get("day");
-      const allowedDayStates = ["no_shift", "scheduled", "shift_start", "clocked_in", "paused", "catch_up", "optional", "final_hour", "eod_due", "eod", "clocked_out"];
+      // `real` keeps the local fixture as the source after boot, allowing its
+      // actual clock/task actions to change state instead of forcing a pose.
+      const allowedDayStates = ["real", "no_shift", "scheduled", "shift_start", "clocked_in", "paused", "catch_up", "optional", "final_hour", "eod_due", "eod", "clocked_out"];
       return {
         ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real",
         onboardingState: "complete", dayState: allowedDayStates.includes(dayState ?? "") ? dayState as DebugScenario["dayState"] : "clocked_in",
@@ -2475,7 +2478,13 @@ export default function App() {
     setSyncBypass(syncBypass);
     setDebugSession(debugScenario.enabled && !syncBypass && !session ? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "" } : null);
     if (syncBypass && !day) {
-      const fixture = applyDayScenario(null, debugScenario) as DayData;
+      // One initial scheduled fixture, then unforced local state: a film can
+      // exercise Clock in → Pause → Resume → Clock out through actual controls.
+      const scheduledSeed = import.meta.env.DEV && debugScenario.dayState === "real"
+        && new URLSearchParams(window.location.search).get("seed") === "scheduled";
+      const fixture = scheduledSeed
+        ? alignOfflineClock(applyDayScenario(null, { ...debugScenario, dayState: "scheduled" }) as DayData)
+        : applyDayScenario(null, debugScenario) as DayData;
       setDay(fixture);
       setTaskHistory(fixture.tasks ?? []);
     }
@@ -2732,7 +2741,10 @@ export default function App() {
 
   function bypassAct(label: string, mutator?: (day: DayData) => DayData) {
     diagnostics.info("ui.action.bypass", label, { activeView: view });
-    if (mutator) setDay((current) => mutator(current ?? (applyDayScenario(null, debugScenario) as DayData)));
+    if (mutator) setDay((current) => {
+      const next = mutator(current ?? (applyDayScenario(null, debugScenario) as DayData));
+      return label.startsWith("shift.") ? alignOfflineClock(next) : next;
+    });
     notifications.success(actionSuccessMessages[label] ?? "The change was saved on this device.");
   }
 
