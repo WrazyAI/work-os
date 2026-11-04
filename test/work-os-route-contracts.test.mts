@@ -441,6 +441,11 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(review, /Rebuild from record/);
   assert.match(review, /EodReportDocument/);
   assert.match(review, /editingReport/);
+  assert.match(await source("src/modules/work-os/employee/EodReportDocument.tsx"), /EodSectionIcon/);
+  assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EodSectionIcon/);
+  assert.match(await source("src/modules/work-os/employee/EmployeeEodEvidence.tsx"), /EvidenceImageDialog/);
+  assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EvidenceImageDialog/);
+  assert.match(await source("src/modules/work-os/evidence-image-dialog.tsx"), /evidenceScreenshotUrl/);
 });
 
 test("proposal application is lease-fenced and reports explicit outcomes", async () => {

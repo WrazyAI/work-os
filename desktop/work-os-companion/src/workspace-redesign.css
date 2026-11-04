@@ -6303,7 +6303,7 @@ button:not(:disabled):active {
 
 .eod-doc-section {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 124px minmax(0, 1fr);
   gap: 0;
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
@@ -6318,6 +6318,9 @@ button:not(:disabled):active {
   padding-right: 14px;
 }
 .eod-doc-label h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin: 0;
   color: var(--muted);
   font-size: 9.5px;
@@ -6325,6 +6328,7 @@ button:not(:disabled):active {
   letter-spacing: .01em;
   line-height: 1.5;
 }
+.eod-doc-section-icon { flex: none; color: var(--muted); }
 .eod-doc-label > span {
   color: var(--muted);
   font-size: 9px;

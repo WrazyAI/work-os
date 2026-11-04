@@ -45,6 +45,10 @@ const DATES = Array.from({ length: 14 }, (_, index) => {
   return date.toISOString().slice(0, 10);
 });
 
+/** A deterministic, self-contained frame used by the admin fixture. It is a
+ * data URI so rendered QA never fetches an external image or needs a session. */
+const PREVIEW_SHOT_URL = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#1d211c"/><rect x="20" y="20" width="440" height="260" rx="10" fill="#f7f7f2"/><rect x="20" y="20" width="440" height="34" rx="10" fill="#e7e9e2"/><circle cx="38" cy="37" r="4" fill="#c94e43"/><circle cx="52" cy="37" r="4" fill="#c88918"/><circle cx="66" cy="37" r="4" fill="#5e9d27"/><text x="88" y="42" font-family="sans-serif" font-size="11" fill="#304033">app.wrazyos.com/work-os/review</text><text x="40" y="86" font-family="sans-serif" font-size="16" font-weight="700" fill="#182018">Billing retry suite</text><rect x="40" y="104" width="210" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="122" width="300" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="150" width="180" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="168" width="260" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="204" width="120" height="26" rx="6" fill="#a8f15b"/><text x="56" y="221" font-family="sans-serif" font-size="11" font-weight="700" fill="#182018">Run tests</text></svg>`)}`;
+
 function timeSeries(): AdminTimeSeriesPoint[] {
   return DATES.map((date, index) => {
     const people = PEOPLE.slice(0, 5).map((person, personIndex) => ({
@@ -219,16 +223,36 @@ function reportsResponse(status: string): ReportsResponse {
       `# ${row.title}`,
       `Role profile: ${person.role}`,
       "Goal: keep the week's outcomes moving",
+      "Goal source: Employee",
+      "Session: 9:00 AM – 5:00 PM",
       "",
-      "## Completed work",
-      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]}`,
-      "- Reviewed two pull requests and left substantive comments",
+      "## Summary",
+      "Completed 4 work tasks today, including the billing retry handoff and the settings review.",
+      "",
+      "## Completed today",
+      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]} [Billing · 3:30 PM]`,
+      "- Reviewed two pull requests and left substantive comments [Engineering · 4:10 PM]",
       "",
       "## In progress",
-      "- Migration dry-run against the staging snapshot",
+      "- 10:00–11:00 — Confirmed: Worked through the webhook retry test suite and left review comments.",
       "",
-      "## Activity context",
+      "## Evidence",
+      "- 4 work deliverables · 1 recorded recap.",
+      "",
       "Activity context is descriptive and never proves attendance, productivity, or task completion.",
+      "",
+      "## Full record",
+      "",
+      "### Work completed (2)",
+      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]} [Billing · 3:30 PM]`,
+      "- Reviewed two pull requests and left substantive comments [Engineering · 4:10 PM]",
+      "",
+      "### Other tasks (1)",
+      "- Align the staging checklist — Personal task",
+      "",
+      "### Activity context (1)",
+      "- 10:00–11:00 — Confirmed: Worked through the webhook retry test suite and left review comments.",
+      "  The window shows one drafting block and one review pass; the record does not establish completion.",
     ].join("\n");
     return {
       id: row.id,
@@ -259,6 +283,9 @@ function evidenceResponse(): EvidenceResponse {
     { id: "e-4", person: "p-5", date: DATES[DATES.length - 2], source: "worktivity", title: "Observed research block", summary: "Long browsing block; flagged for review", disputed: true, shot: true },
     { id: "e-5", person: "p-4", date: DATES[DATES.length - 2], source: "nifty", title: "Task completed", summary: "Vendor comparison matrix", disputed: false },
     { id: "e-6", person: "p-8", date: DATES[DATES.length - 3], source: "github", title: "Workflow run passed", summary: "wrazy/agent-os main · lint and tests", disputed: false },
+    { id: "e-7", person: "p-2", date: DATES[DATES.length - 1], source: "worktivity", title: "Billing retry suite in the browser", summary: "VS Code beside a browser running the billing retry tests.", disputed: false, shot: true },
+    { id: "e-8", person: "p-2", date: DATES[DATES.length - 1], source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", disputed: false, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
+    { id: "e-9", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Settings IA review", summary: "Figma and Notion with the settings IA outline open.", disputed: false, shot: true },
   ];
   return {
     evidence: rows.map((row) => {
@@ -271,7 +298,7 @@ function evidenceResponse(): EvidenceResponse {
         source: row.source,
         title: row.title,
         summary: row.summary,
-        url: row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null,
+        url: (row as { url?: string }).url ?? (row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null),
         metrics: null,
         created_at: `${row.date}T09:30:00.000Z`,
         person: { id: person.id, display_name: person.name },
@@ -280,7 +307,7 @@ function evidenceResponse(): EvidenceResponse {
           evidence_class: row.source === "worktivity" ? "activity" : "output",
           metadata: {},
           screenshot: (row as { shot?: boolean }).shot
-            ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", deleted_at: null }
+            ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", previewUrl: PREVIEW_SHOT_URL, deleted_at: null }
             : null,
         },
       };
@@ -401,31 +428,53 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   for (const status of ["pending_review", "draft", "rejected", "approved", "all"]) {
     queryClient.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: reportFrom, to: today }), reportsResponse(status === "all" ? "" : status));
   }
-  queryClient.setQueryData(adminKeys.reportEvidence("p-2", today), evidenceResponse());
-  queryClient.setQueryData(adminKeys.reportEvidence("p-1", today), evidenceResponse());
-  queryClient.setQueryData(adminKeys.reportIntervals("p-2", today), { intervals: [] });
+  const reportDate = DATES[DATES.length - 1];
+  const reportEvidence = evidenceResponse();
+  const evidenceForPerson = (personId: string) => {
+    const evidence = reportEvidence.evidence.filter((item) => item.person_id === personId);
+    const sources = [...evidence.reduce((counts, row) => {
+      counts.set(row.source, (counts.get(row.source) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries()].map(([source, count]) => ({ source, count }));
+    const days = [...evidence.reduce((counts, row) => {
+      counts.set(row.evidence_date, (counts.get(row.evidence_date) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries()].map(([date, count]) => ({ date, count }));
+    return { ...reportEvidence, evidence, summary: { sources, days } };
+  };
+  queryClient.setQueryData(adminKeys.reportEvidence("p-2", reportDate), evidenceForPerson("p-2"));
+  queryClient.setQueryData(adminKeys.reportEvidence("p-1", reportDate), evidenceForPerson("p-1"));
   const seedIntervals = [
     { id: "i-1", person: "p-2", label: "10:00–11:00", reviewStatus: "confirmed", headline: "Worked through the webhook retry test suite and left review comments.", evidenceCount: 6, recordedActivity: [{ description: "Pushed commits to wrazy/agent-os", relation: "performed" as const, url: null }, { description: "CI run on wrazy/agent-os passed", relation: "triggered" as const, url: null }] },
     { id: "i-2", person: "p-1", label: "11:00–12:00", reviewStatus: "inferred", headline: "Drafted the settings IA in Figma with a Notion outline open.", evidenceCount: 5, recordedActivity: [] },
   ];
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), evidenceResponse());
+  const intervalRows = seedIntervals.map((entry) => ({
+    ...entry,
+    windowStart: `${reportDate}T10:00:00.000Z`,
+    windowEnd: `${reportDate}T11:00:00.000Z`,
+    promptKind: "follow_up" as const,
+    generationStatus: "ready",
+    detail: "The window shows one drafting block and one review pass; the record does not establish completion.",
+    employeeFeedback: null,
+    failureReason: null,
+    generatedAt: `${reportDate}T11:05:00.000Z`,
+    reviewedAt: entry.reviewStatus === "confirmed" ? `${reportDate}T11:10:00.000Z` : null,
+    evidenceExpired: false,
+    evidence: [],
+    personId: entry.person,
+    personName: PEOPLE.find((person) => person.id === entry.person)?.name ?? null,
+  }));
+  queryClient.setQueryData(adminKeys.reportIntervals("p-2", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-2") });
+  queryClient.setQueryData(adminKeys.reportIntervals("p-1", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-1") });
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), reportEvidence);
+  for (const personId of ["p-1", "p-2"]) {
+    queryClient.setQueryData(adminKeys.evidence({ personId, source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), evidenceForPerson(personId));
+    queryClient.setQueryData(adminKeys.intervals({ personId, from: evidenceFrom, to: today, limit: "60" }), {
+      intervals: intervalRows.filter((entry) => entry.personId === personId),
+    });
+  }
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
-    intervals: seedIntervals.map((entry) => ({
-      ...entry,
-      windowStart: `${today}T10:00:00.000Z`,
-      windowEnd: `${today}T11:00:00.000Z`,
-      promptKind: "follow_up" as const,
-      generationStatus: "ready",
-      detail: "The window shows one drafting block and one review pass; the record does not establish completion.",
-      employeeFeedback: null,
-      failureReason: null,
-      generatedAt: `${today}T11:05:00.000Z`,
-      reviewedAt: entry.reviewStatus === "confirmed" ? `${today}T11:10:00.000Z` : null,
-      evidenceExpired: false,
-      evidence: [],
-      personId: entry.person,
-      personName: PEOPLE.find((person) => person.id === entry.person)?.name ?? null,
-    })),
+    intervals: intervalRows,
   });
   queryClient.setQueryData(adminKeys.githubActors(), {
     actors: [{ key: "gh-1", id: "66123", login: "chloe-m", events: 12, firstSeen: `${DATES[2]}T10:00:00.000Z`, lastSeen: `${today}T08:58:00.000Z`, titles: ["chore: bump runners"], suggestion: null }],
