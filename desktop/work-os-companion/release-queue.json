@@ -60,12 +60,30 @@
       "type": "fix",
       "summary": "Shift times fit compact windows, with observation and check-in details behind small help controls.",
       "verification": "Ledger 333fc4ba-74de-48fc-8d32-d9fe717eeb57: 57 focused render/visual tests passed; typecheck and companion build passed; browser checks at 1440/1024/930/720/390 including click, keyboard, Escape, outside dismissal and details-dialog isolation."
+    },
+    {
+      "id": "admin-overview-measures-open-records",
+      "type": "feature",
+      "summary": "Every measure on the admin Overview opens the record it shows.",
+      "verification": "60ae7238: companion OverviewCards render tests 4 passed; browser checks at 1000/760/420 for all five destinations, keyboard activation, Right now focus, and the Admin Otto Recaps second-click; typecheck and build passed."
+    },
+    {
+      "id": "admin-overview-recap-measure",
+      "type": "fix",
+      "summary": "The admin Overview counts generated recaps, with reviewed and waiting totals, instead of check-ins.",
+      "verification": "60ae7238, 8e36916b: live admin agent overview returned recapsToday 5, recapsReviewedToday 5, updatesToday 0, and 5 per-person recaps; grouped rollup tests, typecheck and production builds passed."
+    },
+    {
+      "id": "page-scroll-over-tables",
+      "type": "fix",
+      "summary": "Scrolling the page keeps working while the pointer is over a table.",
+      "verification": "60ae7238: browser wheel measurement over .admin-table-wrap moved page scroll 0 to 154 and the heatmap 0 to 500; ordinary surfaces kept containment; companion suite 1632 passed; typecheck and build passed."
     }
   ],
   "emergency": {
-    "version": "0.5.20",
-    "updateId": "compact-dashboard-time-and-help",
-    "brokenBehavior": "The compact employee dashboard overflows its remaining-shift-time reading and crowds attendance controls with secondary metadata.",
-    "restoredBehavior": "Shift times stay inside the compact dashboard with a trailing inset and usable attendance controls; secondary details remain accessible through small help controls. Emergency release explicitly requested by the user."
+    "version": "0.5.21",
+    "updateId": "page-scroll-over-tables",
+    "brokenBehavior": "Mouse-wheel scrolling stops when the pointer is over a table, so the page cannot be scrolled from the table area on Windows and macOS.",
+    "restoredBehavior": "Tables with no vertical range pass the wheel through to the page, while genuine bounded scrollers keep their containment."
   }
 }
