@@ -52,7 +52,7 @@ Ledger: `1e70b015-5f62-4c6f-aca0-09834a93372e`.
 | Work OS typecheck | clean |
 | Companion typecheck | clean |
 | Production build | passed after `npm ci` (the external `node_modules` symlink is not valid for Turbopack) |
-| Full `npm run work-os:test` | _pending final run_ |
+| Full `npm run work-os:test` | 1,274 tests: 1,263 passed, 0 failed, 11 opt-in PostgreSQL skips |
 
 The first full-suite run exposed eleven `preview_expired` failures in the
 preview-store tests because a non-expiry fixture used a 60-second window under
