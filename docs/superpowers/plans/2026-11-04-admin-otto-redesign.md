@@ -81,7 +81,9 @@ Files: shared admin view models and dedicated result/action components, CSS, fix
 - Admin companion: `src/adminOtto` + `src/admin` = 41 files / 314 tests passed after integration; root typecheck and companion typecheck clean at that point.
 - Rendered browser QA (Playwright against Vite `?preview-admin&otto=cards`): wide 1440 and narrow 449; two creates grouped, selection updates from 2 to 1, per-item recorded receipt, no raw IDs/unchanged fields, New chat clears old cards and returns welcome; no page errors or horizontal overflow. Read-only task card checked at 1280. Screenshots: `/tmp/opencode/admin-otto-cards-wide-v3.png`, `...-narrow-v3.png`, `admin-otto-read-v3.png`.
 - UI polish after screenshots: removed repeated per-row action labels and pending receipts, changed footer to selection count, shortened header subtitle, fixed New chat header geometry.
+- Rebased onto `7dbb8be4` (0.5.21/0.5.22 line) after upstream moved; resolved `AdminPreview` state conflict. Re-ran typechecks and 319 admin companion tests; re-ran Playwright checks.
+- Sidebar New chat now awaits the same durable discard as the sheet header; a failed discard preserves the old chat and shows an error instead of claiming a fresh one.
+- Release queue: added `admin-otto-multi-step-tool-cards` (pending 1/5 after 0.5.22 published), with plain-language Unreleased notes. No version bump or packaging.
+
 - Full suite first run exposed 11 failures only in `test/work-os-admin-action-previews.test.mts`: all `preview_expired` because the test's 60-second expiry elapsed under the loaded suite. Focused run passes fast. This is a test-clock fragility, not an apply failure; the explicit expiry test remains. Adjust the non-expiry fixture to a ten-minute window before rerunning.
 - `companion:release:status` currently fails because origin moved to 0.5.21 while this branch is based on 0.5.20; rebase onto latest main before queueing the outcome, then rerun status.
-
-
