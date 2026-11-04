@@ -38,7 +38,9 @@ Branch: `codex/download-warning-clarity`
 The six public UI files match Agent OS `bafebf93` by content. Existing guide
 warnings follow a large hero/details card and four install steps. New branch
 merges the previously deployed site branch onto Work OS `b9169cc2` cleanly.
-Companion version stays 0.5.19; this is a website change, not an installer release.
+This task makes no installer version change. Concurrent main commit `392bca85`
+prepared Companion 0.5.20 while verification ran; it is preserved by content and
+the website change neither triggers nor overrides that separate release.
 
 ## Verification evidence
 
@@ -52,7 +54,7 @@ Companion version stays 0.5.19; this is a website change, not an installer relea
 - Focused suite: 17 passed. Public-site suite: 59 passed. Changed-file lint clean.
 - Full Work OS suite: 1,244 passed, 11 opt-in PostgreSQL skipped, no failures.
   Agent OS full suite: 919 passed, no failures. Both typechecks passed.
-- Initial Work OS production webpack build passed; final Agent OS build pending.
+- Work OS and Agent OS production webpack builds passed.
   Local webpack is used because Turbopack rejects
   the instructed shared node_modules symlink outside its inferred root.
 - CodeRabbit 0.9.2 could not authenticate (not a successful review). Independent
