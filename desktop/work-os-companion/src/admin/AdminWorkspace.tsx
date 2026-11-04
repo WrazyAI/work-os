@@ -107,13 +107,20 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   const content = section === "overview"
     ? <OverviewPage onOpenSection={(next, focus) => navigate(next, focus)} onOpenPerson={(personId) => navigate("people", { personId })} onOpenRecaps={onOpenRecaps} />
     : section === "people"
-      ? <PeoplePage key={focus.personId ?? "people"} initialPersonId={focus.personId} onOpenReport={(reportId) => navigate("review", { reportId })} />
+      ? <PeoplePage
+          key={focus.personId ?? "people"}
+          initialPersonId={focus.personId}
+          onOpenReport={(reportId) => navigate("review", { reportId, personId: focus.personId })}
+          onOpenSection={(next, nextFocus) => navigate(next, nextFocus)}
+          onOpenRecaps={onOpenRecaps}
+        />
       : section === "tasks"
-        ? <TasksPage key={focus.taskId ?? "tasks"} initialTaskId={focus.taskId} />
+        ? <TasksPage key={`tasks-${focus.taskId ?? ""}-${focus.personId ?? ""}-${focus.taskView ?? ""}`} initialTaskId={focus.taskId} initialPersonId={focus.personId} initialFilter={focus.taskView} />
         : section === "review"
           ? <ReviewPage
-              key={focus.reportId ?? "review"}
+              key={`review-${focus.reportId ?? ""}-${focus.personId ?? ""}`}
               initialReportId={focus.reportId}
+              initialPersonId={focus.personId}
               onOpenEvidence={(personId) => navigate("evidence", { personId })}
               onOpenRecaps={onOpenRecaps}
             />

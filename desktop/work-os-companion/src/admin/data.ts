@@ -517,6 +517,11 @@ export function normalizePersonDetail(raw: unknown): PersonDetailResponse {
     reports: asRows(source.reports),
     updates: asRows(source.updates),
     intervals: asRows(source.intervals),
+    recapDays: asRows(source.recapDays).map((day) => ({
+      date: asText(day.date),
+      total: asNumber(day.total),
+      reviewed: asNumber(day.reviewed),
+    })),
     evidenceSummary: {
       total: asNumber(evidenceSummary.total),
       activity: asNumber(evidenceSummary.activity),

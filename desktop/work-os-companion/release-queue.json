@@ -90,6 +90,12 @@
       "type": "fix",
       "summary": "A recap that takes longer to analyse screenshots now waits instead of being replaced by a generic check-in.",
       "verification": "Ledger f873eaca-ff1b-4e92-9d2a-d9bcebe6c3fa: companion workOsQueries test 7 passed; focused Work OS workday/EOD/route tests 78 passed; live ensure completed 109s after the old 90s client cutoff on 2026-11-04; 180s timeout regression assertion added."
+    },
+    {
+      "id": "admin-person-record-drilldowns",
+      "type": "feature",
+      "summary": "A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records with one-click drill-downs.",
+      "verification": "Ledger 438014c3-9084-405d-b241-6e914d5269d8: companion suite 1639 passed; 27 focused record/date/review tests and 15 task-action tests passed; typecheck and production build passed; rendered 1440/1024/930/720/390 checks for Updates to Admin Otto recaps, Outcomes to Tasks Completed, Evidence to the filtered Evidence page, EOD and report rows to the specific report, View all recaps, and View all reports; TestSprite fdcf733b passed 4/4 for the drawer record and Evidence drill-down."
     }
   ],
   "emergency": {

@@ -2393,12 +2393,26 @@ header.
   with a labeled volume chart and a bounded list (first 60 items, then Show
   more). The detail drawer exposes provenance and, for flagged or disputed items
   only, restricted screenshot access with a recorded reason and audit entry.
-- **People** is a coverage board with a person drawer: mappings, schedule and
-  exceptions, recent workdays, reports, updates and recaps, and a seven-day
-  evidence summary. The board groups people into On shift, Needs setup (those
-  missing a role profile or a schedule), and Other people, with search, a
-  needs-setup filter, and the missing item named in the row. The drawer is where
-  a mapping or role is set.
+- **People** is a coverage table with a person drawer: mappings, today's
+  record, schedule and exceptions, recent workdays, reports, updates, and a
+  seven-day evidence summary. The roster names each person's recap count,
+  completed-task count, evidence count, and latest recap; EOD shows the report
+  status or a dash, never an invented state. Search, role, and attendance
+  filters sit in one controls row. The drawer is where a mapping or role is set.
+  **Person record.** The drawer's Today record reads status now, observed time,
+  Updates (ready interval recaps recorded today), Outcomes (tasks completed
+  today), Evidence (today's evidence), and EOD (the day's report status, or a
+  dash when no report exists). Updates opens Admin Otto on its Recaps tab,
+  Outcomes opens Tasks filtered to the person in the Completed view, Evidence
+  opens Evidence filtered to the person, and EOD opens that day's report in EOD
+  Review. Recent workdays is one row per day with that day's observed session
+  time and recap count. Updates lists that day's recaps with `View all recaps`;
+  every report row opens its report in EOD Review with the person filtered, and
+  `View all reports` opens the same filtered queue. A value with no record stays
+  a dash, and an outstanding EOD is never turned into a second status. Today's
+  measures sit in a three-column grid at the wide drawer class and two columns
+  at narrow widths; a measure with a destination underlines its value, while a
+  value with no record stays a quiet fact.
 - **Tasks** is the organization task record with the primary Add task action in
   the card title row, bounded filters on one compact controls row beneath it,
   and the local add-task flow: one flat table, never grouped or ordered by

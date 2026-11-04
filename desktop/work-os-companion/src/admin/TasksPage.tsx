@@ -340,11 +340,11 @@ export function AdminTaskMenuItems({ task, today, busy, onStatus, onComplete, on
 
 /** The organization task record: bounded filters, the flat list, and a drawer
  * that opens one task's detail with its subtasks. */
-export default function TasksPage({ initialTaskId }: { initialTaskId?: string }) {
+export default function TasksPage({ initialTaskId, initialPersonId, initialFilter }: { initialTaskId?: string; initialPersonId?: string; initialFilter?: TaskFilter } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
-  const [filter, setFilter] = useState<TaskFilter>("open");
-  const [personId, setPersonId] = useState("");
+  const [filter, setFilter] = useState<TaskFilter>(initialFilter ?? "open");
+  const [personId, setPersonId] = useState(initialPersonId ?? "");
   const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<TaskSortState | null>(null);

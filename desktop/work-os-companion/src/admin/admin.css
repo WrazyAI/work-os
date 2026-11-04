@@ -1367,6 +1367,183 @@ body:has(.admin-workspace) .notifications-card {
   gap: 18px;
 }
 
+/* Person record: every block is a section of one record, so a hairline and a
+   breath separate them instead of a wall of tight rows. */
+.admin-person-record {
+  gap: 26px;
+}
+
+.admin-person-record > .admin-block {
+  gap: 12px;
+}
+
+.admin-person-record > .admin-block + .admin-block {
+  padding-top: 22px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.admin-person-record .admin-kv-grid {
+  gap: 12px 22px;
+}
+
+.admin-today-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 22px;
+}
+
+.admin-kv-link {
+  align-content: start;
+  min-height: 40px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-kv-link b {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+.admin-kv-link:hover b {
+  text-decoration-color: var(--ink);
+}
+
+.admin-kv-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--signal);
+  outline-offset: 4px;
+}
+
+.admin-recap-items {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-recap-items > li {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.admin-recap-items > li:first-child {
+  padding-top: 2px;
+}
+
+.admin-recap-items > li:last-child {
+  padding-bottom: 2px;
+  border-bottom: 0;
+}
+
+.admin-recap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-recap-head b {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.admin-recap-items p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.admin-block-action {
+  justify-self: start;
+  min-height: 32px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 650 11.5px/1.4 Manrope, Inter, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.admin-block-action:hover {
+  text-decoration-color: var(--signal-deep);
+}
+
+.admin-block-action:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+.admin-rows > li > button.admin-report-row {
+  align-items: baseline;
+  min-height: 40px;
+  padding: 8px 4px;
+}
+
+.admin-report-row > span:first-child {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+.admin-report-row:hover > span:first-child {
+  text-decoration-color: var(--ink);
+}
+
+.admin-report-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-report-meta small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 860px) {
+  .admin-today-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-report-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .admin-report-row > span:first-child {
+    flex: 1 1 100%;
+  }
+
+  .admin-report-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 /* Activity detail: the person line, the full recorded text, and the facts
    grid that carries the record's provenance. */
 .admin-activity-person {
@@ -1448,7 +1625,7 @@ body:has(.admin-workspace) .notifications-card {
 .admin-drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 22px 24px;
+  padding: 20px 24px 28px;
 }
 
 .admin-drawer-foot {

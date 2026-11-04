@@ -179,15 +179,23 @@ export function ReportRangeControl({ from, to, onFromChange, onToChange, initial
 
 /** EOD review: the queue, the report as a structured document beside its
  * sourced evidence and interval recaps, and the decision record. */
-export default function ReviewPage({ initialReportId, onOpenEvidence, onOpenRecaps }: { initialReportId?: string; onOpenEvidence?: (personId: string) => void; onOpenRecaps?: () => void }) {
+export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvidence, onOpenRecaps }: {
+  initialReportId?: string;
+  initialPersonId?: string;
+  onOpenEvidence?: (personId: string) => void;
+  onOpenRecaps?: () => void;
+}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
-  // A deep link (a report opened from a person's update) starts on the full
+  // A deep link (a report opened from a person's record) starts on the full
   // list so the requested record is present whatever its status; the queue
   // keeps its awaiting-review default otherwise.
-  const [status, setStatus] = useState<StatusFilter>(initialReportId ? "all" : "pending_review");
-  const [personId, setPersonId] = useState("");
-  const [from, setFrom] = useState(() => isoDaysAgo(30));
+  const deepLinked = Boolean(initialReportId || initialPersonId);
+  const [status, setStatus] = useState<StatusFilter>(deepLinked ? "all" : "pending_review");
+  const [personId, setPersonId] = useState(initialPersonId ?? "");
+  // A person's "View all reports" action reaches past the queue's default
+  // thirty-day window so it can show every report the drawer listed.
+  const [from, setFrom] = useState(() => isoDaysAgo(deepLinked ? 365 : 30));
   const [to, setTo] = useState(() => todayIso());
   const [selectedId, setSelectedId] = useState<string | null>(initialReportId ?? null);
   const [notes, setNotes] = useState("");

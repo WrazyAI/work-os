@@ -40,10 +40,10 @@ const PEOPLE = [
   { id: "p-8", name: "Hugo Berg", role: "Engineering", email: "hugo@example.com" },
 ] as const;
 
-const DATES = Array.from({ length: 14 }, (_, index) => {
-  const date = new Date(Date.UTC(2026, 9, 14 - (13 - index)));
-  return date.toISOString().slice(0, 10);
-});
+// The preview is a working record, not a historical snapshot: its fourteen-day
+// window follows the machine's current day so "today" measures, recaps, and
+// report links exercise the same paths a live drawer does.
+const DATES = Array.from({ length: 14 }, (_, index) => isoDaysAgo(13 - index));
 
 /** A deterministic, self-contained frame used by the admin fixture. It is a
  * data URI so rendered QA never fetches an external image or needs a session. */
@@ -79,9 +79,9 @@ function overview(): AdminOverview {
     session: index === 6 ? null : { state: index === 2 ? "paused" : "active", clockedInAt: `${DATES[DATES.length - 1]}T07:55:00.000Z`, pausedSeconds: index * 120, observedSeconds: 5400 + index * 900, correctionStatus: index === 5 ? "needs_correction" : "ok" },
     updatesToday: index % 4 === 0 ? 3 : index % 3,
     substantiveUpdatesToday: index % 4 === 0 ? 2 : index % 2,
-    recapsToday: index % 3 === 0 ? 2 : index % 2,
-    recapsReviewedToday: index % 3 === 0 ? 1 : 0,
-    lastRecapAt: index % 4 === 0 ? `${DATES[DATES.length - 1]}T08:${String(15 + index * 2).padStart(2, "0")}:00.000Z` : null,
+    recapsToday: 3,
+    recapsReviewedToday: 2,
+    lastRecapAt: `${DATES[DATES.length - 1]}T09:${String(10 + index).padStart(2, "0")}:00.000Z`,
     evidenceToday: (index * 5) % 7,
     tasksCompletedToday: index % 3 === 0 ? 2 : index % 2,
     lastUpdateAt: `${DATES[DATES.length - 1]}T08:${String(10 + index * 3).padStart(2, "0")}:00.000Z`,
@@ -168,10 +168,6 @@ function peopleResponse(): PeopleResponse {
 
 function personDetail(personId: string): PersonDetailResponse {
   const person = PEOPLE.find((entry) => entry.id === personId) ?? PEOPLE[0];
-  // The day's report id matches reportsResponse for mapped people, so a
-  // People update's "Open EOD review" action opens the same report the
-  // Review queue serves.
-  const personReportIds: Record<string, string> = { "p-1": "r-2", "p-2": "r-1" };
   return {
     person: {
       id: person.id,
@@ -187,11 +183,14 @@ function personDetail(personId: string): PersonDetailResponse {
     schedules: [{ start: "09:00", end: "17:30", timezone: "Europe/Berlin", effective_from: DATES[0] }],
     exceptions: [{ date: DATES[3], kind: "adjusted" }],
     sessions: DATES.slice(-5).reverse().map((date, index) => ({ shift_date: date, state: "closed", observed_seconds: 21600 + index * 600, updates: 2 + (index % 3) })),
-    reports: DATES.slice(-4).reverse().map((date, index) => {
-      const id = index === 0 ? personReportIds[personId] ?? `report-${personId}-${date}` : `report-${personId}-${date}`;
-      const status = index === 0 && personReportIds[personId] ? "pending_review" : ["approved", "pending_review", "rejected", "draft"][index];
-      return { id, report_date: date, status };
-    }),
+    recapDays: DATES.slice(-5).reverse().map((date, index) => ({
+      date,
+      total: [3, 2, 1, 0, 2][index] ?? 0,
+      reviewed: [2, 1, 0, 0, 1][index] ?? 0,
+    })),
+    // The drawer and the Review queue read the same fixture reports, so every
+    // report row can open the record the queue serves.
+    reports: reportsResponse("").reports.filter((report) => report.person?.id === personId).slice(0, 6),
     // `work_check_ins` shape: the live column is `input_text`, with the kind,
     // substance flag, and workday beside it.
     updates: Array.from({ length: 4 }, (_, index) => ({
@@ -203,7 +202,50 @@ function personDetail(personId: string): PersonDetailResponse {
       update_kind: ["progress", "completion_claim", "progress", "blocked"][index],
       occurred_at: `${DATES[DATES.length - 1]}T0${8 - index}:10:00.000Z`,
     })),
-    intervals: [],
+    intervals: [
+      {
+        id: `int-${personId}-1`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T08:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T09:00:00.000Z`,
+        prompt_kind: "follow_up",
+        generation_status: "ready",
+        review_status: "confirmed",
+        headline: "Reviewed the settings IA and consolidated the mapping states.",
+        ai_detail: "The interval covered the settings layout, mapping copy, and the first pass at the empty state.",
+        final_detail: null,
+        employee_feedback: null,
+        timezone: "Europe/Berlin",
+      },
+      {
+        id: `int-${personId}-2`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T07:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T08:00:00.000Z`,
+        prompt_kind: "hourly_fallback",
+        generation_status: "ready",
+        review_status: "inferred",
+        headline: "Worked through the provider mapping review and the schedule exception copy.",
+        ai_detail: "Observed the mapping review, the schedule exception note, and the workspace roster.",
+        final_detail: null,
+        employee_feedback: null,
+        timezone: "Europe/Berlin",
+      },
+      {
+        id: `int-${personId}-3`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T06:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T07:00:00.000Z`,
+        prompt_kind: "follow_up",
+        generation_status: "ready",
+        review_status: "amended",
+        headline: "Confirmed the Worktivity employee mapping and the role profile.",
+        ai_detail: "The interval covered the mapping form and the role profile selector.",
+        final_detail: "Confirmed the mapping and added the missing team note.",
+        employee_feedback: "The team note was missing.",
+        timezone: "Europe/Berlin",
+      },
+    ],
     evidenceSummary: { total: 42, activity: 37, output: 5, disputed: personId === "p-5" ? 1 : 0 },
   };
 }
@@ -216,6 +258,9 @@ function reportsResponse(status: string): ReportsResponse {
     { id: "r-4", person: "p-6", date: DATES[DATES.length - 2], status: "rejected", title: "EOD · Staging access" },
     { id: "r-5", person: "p-4", date: DATES[DATES.length - 3], status: "draft", title: "EOD · Vendor review" },
     { id: "r-6", person: "p-8", date: DATES[DATES.length - 3], status: "approved", title: "EOD · Search indexing" },
+    { id: "r-7", person: "p-1", date: DATES[DATES.length - 2], status: "approved", title: "EOD · Settings IA follow-up" },
+    { id: "r-8", person: "p-1", date: DATES[DATES.length - 3], status: "rejected", title: "EOD · Settings copy review" },
+    { id: "r-9", person: "p-1", date: DATES[DATES.length - 4], status: "draft", title: "EOD · Mapping cleanup" },
   ] as const;
   const rows = (status ? all.filter((row) => row.status === status) : all).map((row) => {
     const person = PEOPLE.find((entry) => entry.id === row.person)!;
@@ -271,7 +316,13 @@ function reportsResponse(status: string): ReportsResponse {
       versions: [{ id: `${row.id}-v1`, version_kind: "generated", created_at: `${row.date}T08:00:00.000Z` }],
     };
   });
-  const counts = { draft: 1, pending_review: 2, approved: 2, rejected: 1, total: 6 };
+  const counts = { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: rows.length };
+  for (const row of rows) {
+    if (row.status === "draft") counts.draft += 1;
+    else if (row.status === "pending_review") counts.pending_review += 1;
+    else if (row.status === "approved") counts.approved += 1;
+    else if (row.status === "rejected") counts.rejected += 1;
+  }
   return { reports: rows, counts };
 }
 
@@ -444,6 +495,18 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   };
   queryClient.setQueryData(adminKeys.reportEvidence("p-2", reportDate), evidenceForPerson("p-2"));
   queryClient.setQueryData(adminKeys.reportEvidence("p-1", reportDate), evidenceForPerson("p-1"));
+  // The person drawer's report links open the year-wide filtered queue so a
+  // record the drawer listed can never fall outside the Review page's default
+  // thirty-day window.
+  for (const person of PEOPLE) {
+    const reports = reportsResponse("").reports.filter((report) => report.person?.id === person.id);
+    const counts = reports.reduce((total, report) => {
+      total[report.status] += 1;
+      total.total += 1;
+      return total;
+    }, { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 });
+    queryClient.setQueryData(adminKeys.reports({ status: "", personId: person.id, from: isoDaysAgo(365), to: today }), { reports, counts });
+  }
   const seedIntervals = [
     { id: "i-1", person: "p-2", label: "10:00–11:00", reviewStatus: "confirmed", headline: "Worked through the webhook retry test suite and left review comments.", evidenceCount: 6, recordedActivity: [{ description: "Pushed commits to wrazy/agent-os", relation: "performed" as const, url: null }, { description: "CI run on wrazy/agent-os passed", relation: "triggered" as const, url: null }] },
     { id: "i-2", person: "p-1", label: "11:00–12:00", reviewStatus: "inferred", headline: "Drafted the settings IA in Figma with a Notion outline open.", evidenceCount: 5, recordedActivity: [] },

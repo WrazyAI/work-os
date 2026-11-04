@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { getPool } from "@/lib/db/pool";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { observedSecondsForSession } from "@/lib/work-os-admin-time-series";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
+import { dateOnly } from "@/lib/work-os-internal";
 import { jsonError, requireWorkOsAccess, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -25,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
     const today = todayIso();
     const evidenceFrom = addDaysIso(today, -6);
 
-    const [personResult, teamsResult, schedulesResult, exceptionsResult, sessionsResult, reportsResult, updatesResult, intervalsResult, evidenceResult] = await Promise.all([
+    const [personResult, teamsResult, schedulesResult, exceptionsResult, sessionsResult, reportsResult, updatesResult, intervalsResult, recapDaysResult, evidenceSummaryResult] = await Promise.all([
       db.from("work_people")
         .select("*, role_profile:work_role_profiles(id,name)")
         .eq("organization_id", organizationId).eq("id", personId).maybeSingle(),
@@ -45,7 +48,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
         .select("id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,attendance_status,attendance_observed_at,correction_status,correction_reason,last_substantive_update_at")
         .eq("organization_id", organizationId).eq("person_id", personId)
         .gte("shift_date", addDaysIso(today, -13))
-        .order("shift_date", { ascending: false }).limit(30),
+        .order("shift_date", { ascending: false }).limit(100),
       db.from("work_reports")
         .select("id,report_date,status,title,submitted_at,reviewed_at,manager_notes,metrics")
         .eq("organization_id", organizationId).eq("person_id", personId)
@@ -57,31 +60,61 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
       db.from("work_activity_intervals")
         .select("id,local_date,window_start,window_end,prompt_kind,generation_status,review_status,headline,ai_detail,final_detail,employee_feedback,timezone")
         .eq("organization_id", organizationId).eq("person_id", personId)
-        .order("window_end", { ascending: false }).limit(6),
-      db.from("work_evidence")
-        .select("id,evidence_date,source,title,created_at,event:work_evidence_events(correction_status)")
-        .eq("organization_id", organizationId).eq("person_id", personId)
-        .gte("evidence_date", evidenceFrom).lte("evidence_date", today)
-        .order("created_at", { ascending: false }).limit(100),
+        .eq("generation_status", "ready")
+        .gte("local_date", addDaysIso(today, -13)).lte("local_date", today)
+        .order("window_end", { ascending: false }).limit(80),
+      // The drawer reads a workday, not a capped recap list, so the per-day
+      // counts come from the database and cannot be truncated by the visible
+      // list's limit.
+      getPool().query<{ local_date: unknown; total: number | string; reviewed: number | string }>(`
+        SELECT i.local_date,
+          count(*)::int AS total,
+          count(*) FILTER (WHERE i.review_status IN ('confirmed', 'amended'))::int AS reviewed
+        FROM work_activity_intervals i
+        WHERE i.organization_id = $1 AND i.person_id = $2 AND i.generation_status = 'ready'
+          AND i.local_date >= $3 AND i.local_date <= $4
+        GROUP BY i.local_date
+        ORDER BY i.local_date DESC
+      `, [organizationId, personId, addDaysIso(today, -13), today]),
+      // Exact seven-day evidence totals. Counting the bounded display read
+      // capped every total at 100 and made the drawer disagree with the
+      // Overview's today count.
+      getPool().query<{ total: number | string; activity: number | string; output: number | string; disputed: number | string }>(`
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE e.source = 'worktivity')::int AS activity,
+          count(*) FILTER (WHERE e.source IS DISTINCT FROM 'worktivity')::int AS output,
+          count(*) FILTER (WHERE ev.correction_status = 'disputed')::int AS disputed
+        FROM work_evidence e
+        LEFT JOIN work_evidence_events ev ON ev.id = e.evidence_event_id
+        WHERE e.organization_id = $1 AND e.person_id = $2
+          AND e.evidence_date >= $3 AND e.evidence_date <= $4
+      `, [organizationId, personId, evidenceFrom, today]),
     ]);
     for (const [label, result] of [
       ["person", personResult], ["teams", teamsResult], ["schedules", schedulesResult], ["exceptions", exceptionsResult],
       ["sessions", sessionsResult], ["reports", reportsResult], ["updates", updatesResult], ["intervals", intervalsResult],
-      ["evidence", evidenceResult],
     ] as const) {
       if (result.error) throw new Error(`load person detail ${label}: ${result.error.message}`);
     }
     if (!personResult.data) return NextResponse.json({ error: "person not found" }, { status: 404 });
 
-    const evidence = (evidenceResult.data ?? []) as Array<Record<string, any>>;
+    const now = new Date();
+    const sessions = (sessionsResult.data ?? []).map((session) => ({
+      ...session,
+      observed_seconds: observedSecondsForSession(session, now),
+    }));
+    const recapDays = recapDaysResult.rows.map((row) => ({
+      date: dateOnly(row.local_date) ?? "",
+      total: Number(row.total ?? 0) || 0,
+      reviewed: Number(row.reviewed ?? 0) || 0,
+    })).filter((row) => row.date);
+    const summary = evidenceSummaryResult.rows[0];
     const evidenceSummary = {
-      total: evidence.length,
-      activity: evidence.filter((row) => String(row.source) === "worktivity").length,
-      output: evidence.filter((row) => String(row.source) !== "worktivity").length,
-      disputed: evidence.filter((row) => {
-        const event = Array.isArray(row.event) ? row.event[0] : row.event;
-        return String(event?.correction_status ?? "") === "disputed";
-      }).length,
+      total: Number(summary?.total ?? 0) || 0,
+      activity: Number(summary?.activity ?? 0) || 0,
+      output: Number(summary?.output ?? 0) || 0,
+      disputed: Number(summary?.disputed ?? 0) || 0,
     };
 
     return NextResponse.json({
@@ -89,10 +122,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
       teams: teamsResult.data ?? [],
       schedules: schedulesResult.data ?? [],
       exceptions: exceptionsResult.data ?? [],
-      sessions: sessionsResult.data ?? [],
+      sessions,
       reports: reportsResult.data ?? [],
       updates: updatesResult.data ?? [],
       intervals: intervalsResult.data ?? [],
+      recapDays,
       evidenceSummary,
     });
   } catch (error) {

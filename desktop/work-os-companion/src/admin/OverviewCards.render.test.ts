@@ -28,13 +28,13 @@ describe("administration overview measures", () => {
     expect(markup).toContain("Recaps today");
     expect(markup).not.toContain("Updates today");
     expect(markup).toContain("Recaps per day over the last 14 days");
-    expect(markup).toContain("3 reviewed · 6 waiting");
+    expect(markup).toContain("16 reviewed · 8 waiting");
   });
 
   it("makes every measure a control that names where it leads", () => {
     const markup = render();
     expect(markup).toContain('aria-label="On shift now: 4, 1 paused · 8 teammates. Show the Right now table"');
-    expect(markup).toContain('aria-label="Recaps today: 9, 3 reviewed · 6 waiting. Open Admin Otto recaps"');
+    expect(markup).toContain('aria-label="Recaps today: 24, 16 reviewed · 8 waiting. Open Admin Otto recaps"');
     expect(markup).toContain('aria-label="Outcomes today: 6, 43 open · 5 overdue. Open Tasks"');
     expect(markup).toContain('aria-label="Awaiting review: 2, oldest 7h ago. Open EOD Review"');
     expect(markup).toContain('aria-label="Evidence today: 24, 3 output · 21 activity. Open Evidence"');

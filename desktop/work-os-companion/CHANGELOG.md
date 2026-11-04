@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.
+
 ## 0.5.22 — 2026-11-04
 
 - Each end-of-day report section now carries a small, quiet icon.

@@ -13,6 +13,8 @@ export interface AdminSectionFocus {
   personId?: string;
   reportId?: string;
   taskId?: string;
+  /** The task view a person measure opens. Completed is the Outcomes target. */
+  taskView?: "open" | "completed" | "all";
   evidenceTab?: "evidence" | "recaps";
   /** A reviewed recap opened from an administration record link. This is a
    * real recap target, deliberately distinct from an EOD `reportId`. */
@@ -284,9 +286,12 @@ export interface PersonDetailResponse {
   schedules: Array<Record<string, unknown>>;
   exceptions: Array<Record<string, unknown>>;
   sessions: Array<Record<string, unknown>>;
-  reports: Array<Record<string, unknown>>;
+  /** The live row is wide and may omit fields; the drawer reads it loosely. */
+  reports: Array<Record<string, any>>;
   updates: Array<Record<string, unknown>>;
   intervals: Array<Record<string, unknown>>;
+  /** Exact ready-recap counts for the drawer's fourteen-day workday rows. */
+  recapDays: Array<{ date: string; total: number; reviewed: number }>;
   evidenceSummary: { total: number; activity: number; output: number; disputed: number };
 }
 
