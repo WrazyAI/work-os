@@ -29,9 +29,10 @@ Branch: `codex/download-warning-clarity`
   public-site branch for baseline (no Agent OS tree/history merge).
 - [x] Add failing real-browser flow checks before changing behavior.
 - [x] Simplify chooser and guides; update focused regression contracts.
-- [ ] Focused tests, typecheck, full suite, production build, rendered/keyboard checks.
-- [ ] CodeRabbit task-batch review and TestSprite public-page verification.
-- [ ] Port only changed public-page files to Agent OS, deploy and verify live.
+- [x] Focused tests, typecheck, full suite, production build, rendered/keyboard checks.
+- [x] CodeRabbit attempted; independent review completed. TestSprite run inspected
+  and classified inconclusive rather than claiming its false pass as acceptance.
+- [x] Port only changed public-page files to Agent OS, deploy and verify live.
 
 ## Baseline
 
@@ -82,3 +83,24 @@ actual logo asset and focused acceptance files are ported to Agent OS based on
 `bafebf93`. Platform layout, proxy, next config and operational surfaces stay
 unchanged. Work OS main's previously deployed public-site branch was reconciled
 inside the same repository, never merged from Agent OS history.
+
+## Final live acceptance
+
+- Work OS implementation: `6bca6b48`; concurrent main reconciliation `376dca30`;
+  verification record `e47a92cb`.
+- Agent OS implementation and deployed commit:
+  `fd60b6cb965b61b7fa298c16b5345e5e755fd926`.
+- Atomic VPS redeploy completed: staging build, swap, service restart and asset
+  checks succeeded; web and runner services both reported active.
+- Live `WORK_OS_SITE_URL=https://app.wrazyos.com node
+  test/work-os-download-flow.browser.mjs` passed all Chromium flow assertions,
+  including both real primary/alternate platform downloads, hashes, routing,
+  original desktop logo bytes, warning-first geometry, keyboard and responsive
+  checks. Live screenshots inspected at wide and narrow widths.
+- Live evidence: `/tmp/opencode/download-warning-live/` and
+  `/tmp/opencode/download-warning-live-browser.log`.
+- Final local Lighthouse: accessibility 100, best practices 100, no remaining
+  label-in-name issue; only unrelated local robots.txt SEO finding remains.
+- No successful CodeRabbit, TestSprite, Safari or native-installer acceptance is
+  claimed. Direct live browser checks and the recorded suites are the acceptance
+  evidence for this website-only task.
