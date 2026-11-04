@@ -346,7 +346,7 @@ test("employee destinations are nested routes with legacy ?tab= redirects", asyn
   assert.match(routes, /reports: "review"/);
   assert.match(routes, /evidence: "review"/);
   assert.match(routes, /people: "today"/);
-  const page = await source("src/app/work-os/page.tsx");
+  const page = await source("src/app/work-os/workspace/page.tsx");
   assert.match(page, /redirect\(employeeDestinationForLegacyTab\(tab\)\)/);
   assert.match(page, /redirect\(tab \? LEGACY_ADMIN_TAB_ROUTES\[tab\] \?\? "\/work-os\/admin" : "\/work-os\/admin"\)/);
   for (const route of ["today", "tasks", "review", "insights", "settings"]) {
@@ -354,7 +354,7 @@ test("employee destinations are nested routes with legacy ?tab= redirects", asyn
   }
   const layout = await source("src/app/work-os/(employee)/layout.tsx");
   assert.match(layout, /canUseEmployeeWorkspace/);
-  assert.match(layout, /redirect\("\/work-os"\)/);
+  assert.match(layout, /redirect\("\/work-os\/workspace"\)/);
   const access = await source("src/lib/work-os-page-access.ts");
   assert.match(access, /export async function resolveWorkOsPageAccess/);
   assert.match(access, /status === 401\) redirect\("\/login"\)/);
@@ -374,7 +374,7 @@ test("the Work OS dispatcher keeps manager review and the admin workspace", asyn
   const adminLayout = await source("src/app/work-os/admin/layout.tsx");
   assert.match(adminLayout, /resolveWorkOsPageAccess/);
   assert.match(adminLayout, /resolved\.access\.role !== "admin"/);
-  assert.match(adminLayout, /redirect\("\/work-os"\)/);
+  assert.match(adminLayout, /redirect\("\/work-os\/workspace"\)/);
 });
 
 test("web onboarding reads back authoritative organization context", async () => {
@@ -388,7 +388,7 @@ test("web onboarding reads back authoritative organization context", async () =>
 });
 
 test("work-os page provides a react-query client and API auth returns 401", async () => {
-  const page = await source("src/app/work-os/page.tsx");
+  const page = await source("src/app/work-os/workspace/page.tsx");
   const providers = await source("src/app/work-os/providers.tsx");
   const api = await source("src/lib/work-os-api.ts");
   assert.match(providers, /QueryClientProvider/);
@@ -505,7 +505,7 @@ test("admin workspace routes are role-gated and organization-scoped", async () =
   assert.match(person, /organizationId/);
   const layout = await source("src/app/work-os/admin/layout.tsx");
   assert.match(layout, /resolveWorkOsPageAccess/);
-  assert.match(layout, /redirect\("\/work-os"\)/);
+  assert.match(layout, /redirect\("\/work-os\/workspace"\)/);
   const shell = await source("src/modules/work-os/admin/AdminShell.tsx");
   assert.match(shell, /data-work-os-workspace/);
   assert.match(shell, /\/work-os\/today/);

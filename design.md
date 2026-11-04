@@ -265,6 +265,13 @@ the mark, rows, and footer remain aligned in both states.
 
 ### 4.3 Web employee workspace
 
+`/work-os` is the public, standalone product landing page, not a console
+destination. Its downloads and tutorials live at `/work-os/downloads` and
+`/work-os/tutorials`; these pages never inherit the dashboard sidebar or header.
+The public site's workspace action enters through `/work-os/workspace`, which
+keeps the authoritative session, membership and role checks. Legacy
+`/work-os/welcome` links redirect to the canonical public routes.
+
 The deployed web console hosts the employee workspace on nested routes, so each
 destination is a real, deep-linkable, role-guarded page instead of one stacked
 page:
@@ -277,7 +284,7 @@ page:
 
 - Employees and mapped administrators use the workspace; managers keep the
   review console and unmapped administrators keep the administration console.
-  `/work-os` dispatches by role and redirects employees to their workspace.
+  `/work-os/workspace` dispatches by role and redirects employees to their workspace.
   Legacy `?tab=` links map onto the destinations (reports/evidence → Review,
   people/schedules/blueprints → Today) so old sidebar links and bookmarks keep
   working.
@@ -395,7 +402,7 @@ explicit and visible, never an implicit oldest or most-privileged membership:
 - An account with one active membership enters it directly. An account with two
   or more and no chosen workspace lands on `/work-os/select-workspace`, which
   lists only that account's own memberships with each role, one plain POST per
-  workspace. Choosing one returns to `/work-os`, where the dispatcher applies
+  workspace. Choosing one returns to `/work-os/workspace`, where the dispatcher applies
   the role.
 - The web stores the choice in the per-device `work-os-org` cookie. The server
   verifies the membership on every request; the cookie selects among verified

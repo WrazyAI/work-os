@@ -9,7 +9,7 @@ import { resolveWorkOsViewModeFor } from "@/lib/work-os-view-mode";
  * who are currently in Administration fall back to the dispatcher. */
 export default async function EmployeeWorkspaceLayout({ children }: { children: React.ReactNode }) {
   const resolved = await resolveWorkOsPageAccess();
-  if (!resolved.ok || !canUseEmployeeWorkspace(resolved.access)) redirect("/work-os");
+  if (!resolved.ok || !canUseEmployeeWorkspace(resolved.access)) redirect("/work-os/workspace");
   const viewMode = await resolveWorkOsViewModeFor(resolved.access);
   if (resolved.access.role === "admin" && viewMode !== "employee") redirect("/work-os/admin");
   const { role, personId, featureFlags, organizationName, workspaces } = resolved.access;

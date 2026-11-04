@@ -469,7 +469,7 @@ export default function DesktopConnect({
   }
 
   function returnToWorkOs() {
-    window.location.assign("/work-os");
+    window.location.assign("/work-os/workspace");
   }
 
   return (

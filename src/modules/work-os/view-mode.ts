@@ -12,7 +12,7 @@
  * preference sees Administration; employees always see the employee workspace.
  */
 import { EMPLOYEE_HOME_HREF, isEmployeeWorkspacePath } from "./employee-routes";
-import { WORK_OS_WORKSPACE_SELECT } from "./workspace";
+import { WORK_OS_WORKSPACE_HOME, WORK_OS_WORKSPACE_SELECT } from "./workspace";
 
 export type WorkOsViewMode = "employee" | "admin";
 
@@ -70,7 +70,7 @@ export function safeWorkOsViewNext(mode: WorkOsViewMode, raw: unknown): string {
   if (url.origin !== "https://work-os.invalid") return fallback;
   const destination = `${url.pathname}${url.search}${url.hash}`;
   if (mode === "employee") {
-    if (url.pathname === "/work-os" || isEmployeeWorkspacePath(url.pathname)) return destination;
+    if (url.pathname === WORK_OS_WORKSPACE_HOME || isEmployeeWorkspacePath(url.pathname)) return destination;
     return fallback;
   }
   if (url.pathname === "/work-os/admin" || url.pathname.startsWith("/work-os/admin/")) return destination;

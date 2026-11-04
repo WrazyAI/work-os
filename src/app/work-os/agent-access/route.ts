@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     if (auth.response.status === 401) {
       return redirectTo(`/login?redirect=${encodeURIComponent("/work-os/agent-access")}`);
     }
-    return redirectTo("/work-os");
+    return redirectTo("/work-os/workspace");
   }
 
   const response = redirectTo("/work-os/settings#agent-access");
