@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
+import EodSectionIcon from "@/modules/work-os/eod-section-icon";
+import EvidenceImageDialog, { EvidenceThumb, evidenceScreenshotUrl, type EvidencePreview } from "@/modules/work-os/evidence-image-dialog";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
@@ -260,13 +262,15 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
     },
   });
 
+  const [preview, setPreview] = useState<EvidencePreview | null>(null);
   const document = parseEodMarkdown(report.submitted_markdown ?? report.markdown);
   const metricFacts = eodMetricFacts(report.metrics);
   const renderEodSection = (section: (typeof document.sections)[number]) => (
     <section key={section.heading} className="grid gap-2">
-      <h3 className={cx("text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
+      <h3 className={cx("inline-flex items-center gap-1.5 text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
         style={/activity context/i.test(section.heading) ? { color: "var(--status-observed)" } : undefined}
       >
+        <EodSectionIcon heading={section.heading} size={12} className="shrink-0 text-[var(--text-tertiary)]" />
         {section.heading}
       </h3>
       <ul className="grid gap-1.5">
@@ -365,17 +369,29 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
               const event = item.event ?? null;
               const screenshot = embeddedRow<Record<string, any>>(event?.screenshot);
               return (
-                <li key={item.id} className="py-3 first:pt-1 last:pb-1">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <span className="text-[12.5px] font-semibold text-[var(--text-primary)]">{item.title}</span>
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
-                      {event?.evidence_class ? <span>{statusLabel(event.evidence_class)}</span> : null}
-                      <span>{item.source === "loom" ? "Loom recording" : item.source}</span>
-                      {event?.correction_status && event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(event.correction_status)}</StateMark> : null}
-                      {screenshot && !screenshot.deleted_at ? <StateMark tone="observed">Screenshot retained</StateMark> : null}
-                    </span>
+                <li key={item.id} className="flex items-start gap-3 py-3 first:pt-1 last:pb-1">
+                  {screenshot && !screenshot.deleted_at && screenshot.id ? (
+                    <EvidenceThumb
+                      thumbSrc={evidenceScreenshotUrl(String(screenshot.id), "thumb")}
+                      fullSrc={evidenceScreenshotUrl(String(screenshot.id), "preview")}
+                      title={item.title}
+                      caption={item.summary}
+                      label={`Preview evidence image for ${item.title}`}
+                      onOpen={setPreview}
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <span className="text-[12.5px] font-semibold text-[var(--text-primary)]">{item.title}</span>
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
+                        {event?.evidence_class ? <span>{statusLabel(event.evidence_class)}</span> : null}
+                        <span>{item.source === "loom" ? "Loom recording" : item.source}</span>
+                        {event?.correction_status && event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(event.correction_status)}</StateMark> : null}
+                        {screenshot && !screenshot.deleted_at ? <StateMark tone="observed">Screenshot retained</StateMark> : null}
+                      </span>
+                    </div>
+                    {item.summary ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
                   </div>
-                  {item.summary ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
                 </li>
               );
             })}
@@ -479,6 +495,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
           {report.submitted_markdown ?? report.markdown}
         </pre>
       </details>
+      <EvidenceImageDialog preview={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

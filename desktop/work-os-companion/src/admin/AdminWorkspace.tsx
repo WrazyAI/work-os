@@ -78,8 +78,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The administration New chat entry. It starts the shared admin Otto
    * thread; it is never a dead sidebar control. */
   onNewChat?: (() => void) | undefined;
-  /** Opens Admin Otto on its Recaps tab: the Overview's recap measure leads
-   * to the recaps it counts. */
+  /** Opens Admin Otto on its Recaps tab: the Overview's recap measure and the
+   * EOD report's See all recaps both lead to the recaps they name. */
   onOpenRecaps: () => void;
   /** A truthful blocked/loading line for the admin Otto context. */
   ottoNotice?: string | null;
@@ -111,11 +111,20 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
       : section === "tasks"
         ? <TasksPage key={focus.taskId ?? "tasks"} initialTaskId={focus.taskId} />
         : section === "review"
-          ? <ReviewPage key={focus.reportId ?? "review"} initialReportId={focus.reportId} />
+          ? <ReviewPage
+              key={focus.reportId ?? "review"}
+              initialReportId={focus.reportId}
+              onOpenEvidence={(personId) => navigate("evidence", { personId })}
+              onOpenRecaps={onOpenRecaps}
+            />
           : section === "insights"
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
-              ? <EvidencePage key={focus.evidenceTab ?? "evidence"} initialTab={focus.evidenceTab} />
+              ? <EvidencePage
+                  key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}`}
+                  initialTab={focus.evidenceTab}
+                  initialPersonId={focus.personId}
+                />
               : <SettingsPage personalSettings={personalSettings} />;
 
   return (

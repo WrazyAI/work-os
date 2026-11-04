@@ -1,4 +1,5 @@
 import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow, type EodDocument, type EodSection, type EodSectionLine } from "../../../src/modules/work-os/eod-document";
+import EodSectionIcon from "./EodSectionIcon";
 
 function Inline({ text }: { text: string }) {
   return <>{parseEodInline(text).map((segment, index) => segment.href
@@ -127,7 +128,10 @@ function Section({ section }: { section: EodSection }) {
   return (
     <section className="eod-doc-section" aria-label={section.heading}>
       <div className="eod-doc-label">
-        <h3>{section.heading.replace(/\s*\(\d+\)\s*$/, "")}</h3>
+        <h3>
+          <EodSectionIcon heading={section.heading} className="eod-doc-section-icon" />
+          <span>{section.heading.replace(/\s*\(\d+\)\s*$/, "")}</span>
+        </h3>
         {section.key !== "evidence" ? <span>{count}</span> : null}
       </div>
       <div className="eod-doc-body"><SectionRows section={section} /></div>

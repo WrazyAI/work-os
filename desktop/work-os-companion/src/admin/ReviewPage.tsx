@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Camera, Check, FileCheck2, FilePlus2, Filter, ScrollText, X } from "lucide-react";
+import { Activity, ArrowUpRight, Camera, Check, ChevronDown, FileCheck2, FilePlus2, FileText, Filter, Github, ScrollText, Video, X, type LucideIcon } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { formatWorkOsFullDate } from "../dateFormat";
 import {
@@ -24,8 +24,9 @@ import {
   reviewAdminReport,
 } from "./data";
 import { parseEodMarkdown, eodMetricFacts, eodSnippet } from "./eod";
+import EodSectionIcon from "../EodSectionIcon";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
-import type { ReportsResponse, WorkOsReportRow } from "./types";
+import type { EvidenceRow, EvidenceResponse, ReportsResponse, WorkOsReportRow } from "./types";
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
 
@@ -178,7 +179,7 @@ export function ReportRangeControl({ from, to, onFromChange, onToChange, initial
 
 /** EOD review: the queue, the report as a structured document beside its
  * sourced evidence and interval recaps, and the decision record. */
-export default function ReviewPage({ initialReportId }: { initialReportId?: string }) {
+export default function ReviewPage({ initialReportId, onOpenEvidence, onOpenRecaps }: { initialReportId?: string; onOpenEvidence?: (personId: string) => void; onOpenRecaps?: () => void }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   // A deep link (a report opened from a person's update) starts on the full
@@ -371,38 +372,240 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
           </div>
         ) : null}
       >
-        {selected ? <ReportBody report={selected} /> : null}
+        {selected ? <ReportBody key={selected.id} report={selected} onOpenEvidence={onOpenEvidence} onOpenRecaps={onOpenRecaps} /> : null}
       </Drawer>
     </div>
   );
 }
 
-function ReportBody({ report }: { report: WorkOsReportRow }) {
+function screenshotOf(row: EvidenceRow): { url: string; title: string } | null {
+  const value = row.event?.screenshot;
+  if (!value || typeof value !== "object") return null;
+  const shot = value as { previewUrl?: unknown; deleted_at?: unknown };
+  if (shot.deleted_at) return null;
+  return typeof shot.previewUrl === "string" && shot.previewUrl
+    ? { url: shot.previewUrl, title: row.title }
+    : null;
+}
+
+function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; title: string }; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const closeHandler = useRef(onClose);
+  useEffect(() => {
+    closeHandler.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        closeHandler.current();
+        return;
+      }
+      // The dialog has one focusable control. Keep Tab on it instead of
+      // letting focus drift behind the drawer.
+      if (event.key === "Tab") {
+        event.preventDefault();
+        closeRef.current?.focus();
+      }
+    };
+    // Capture so the drawer's own Escape listener cannot close the report
+    // underneath this topmost dialog.
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      previous?.focus();
+    };
+  }, []);
+  return (
+    <div
+      className="admin-shot-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label={preview.title}
+      onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) closeHandler.current(); }}
+    >
+      <div className="admin-shot-dialog">
+        <header>
+          <strong>{preview.title}</strong>
+          <button ref={closeRef} type="button" className="admin-shot-close" aria-label="Close evidence preview" onClick={() => closeHandler.current()}>
+            <X size={16} aria-hidden />
+          </button>
+        </header>
+        <img src={preview.url} alt={`Evidence frame: ${preview.title}`} />
+      </div>
+    </div>
+  );
+}
+
+/** One animated disclosure. The body is mounted only after the first open and
+ * unmounted after the close transition, so its query and images do not sit in
+ * memory while the drawer is collapsed. */
+function AdminAccordion({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const headingId = useId();
+  const bodyId = useId();
+  const timer = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current) window.clearTimeout(timer.current);
+    if (frame.current) window.cancelAnimationFrame(frame.current);
+  }, []);
+  const toggle = () => {
+    if (timer.current) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+    if (frame.current) {
+      window.cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
+    if (open) {
+      setOpen(false);
+      timer.current = window.setTimeout(() => setMounted(false), 220);
+      return;
+    }
+    setMounted(true);
+    frame.current = window.requestAnimationFrame(() => { frame.current = null; setOpen(true); });
+  };
+  return (
+    <section className={`admin-accordion ${open ? "is-open" : ""}`}>
+      <button type="button" className="admin-accordion-head" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
+        <span className="admin-accordion-title"><Icon size={13} aria-hidden /><span id={headingId}>{title}</span></span>
+        <ChevronDown size={14} className="admin-accordion-chevron" aria-hidden />
+      </button>
+      <div id={bodyId} className="admin-accordion-body" aria-hidden={!open} aria-labelledby={headingId}>
+        <div className="admin-accordion-inner">{mounted ? children : null}</div>
+      </div>
+    </section>
+  );
+}
+
+function ReportEvidencePanel({ personId, date }: { personId: string; date: string }) {
+  const evidence = useQuery<EvidenceResponse>({
+    queryKey: adminKeys.reportEvidence(personId, date),
+    queryFn: () => fetchReportEvidence(personId, date),
+    select: normalizeEvidence,
+    enabled: !!personId,
+    staleTime: ADMIN_DETAIL_STALE_MS,
+  });
+  const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
+  const rows = evidence.data?.evidence ?? [];
+  const visible = rows.slice(0, 12);
+  return (
+    <div className="admin-drawer-panel">
+      <div className="admin-drawer-panel-head">
+        <span>{evidence.isLoading ? "Loading evidence…" : `${rows.length} record${rows.length === 1 ? "" : "s"}`}</span>
+      </div>
+      {evidence.isLoading ? <Skeleton className="h-20" /> : rows.length ? (
+        <ul className="admin-evidence-list">
+          {visible.map((row) => {
+            const shot = screenshotOf(row);
+            return (
+              <li key={row.id} className="admin-evidence-item">
+                {shot ? (
+                  <button type="button" className="admin-evidence-thumb" aria-label={`Expand evidence image for ${row.title}`} onClick={() => setPreview(shot)}>
+                    <img src={shot.url} alt="" />
+                  </button>
+                ) : (
+                  <span className="admin-evidence-thumb is-empty">
+                    {row.source === "loom" ? <Video size={15} aria-hidden /> : row.source === "github" ? <Github size={15} aria-hidden /> : row.source === "nifty" ? <FileText size={15} aria-hidden /> : <Camera size={15} aria-hidden />}
+                  </span>
+                )}
+                <span className="admin-evidence-copy">
+                  <strong>{row.title}</strong>
+                  <small>{row.summary}</small>
+                  <span className="admin-evidence-meta">
+                    <Pill tone={row.source === "worktivity" ? "observed" : "neutral"}>{statusLabel(row.source)}</Pill>
+                    {row.url ? <a href={row.url} target="_blank" rel="noreferrer">Open</a> : null}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : <p className="admin-empty-note">No evidence rows were recorded for this day.</p>}
+      {preview ? <EvidencePreviewDialog preview={preview} onClose={() => setPreview(null)} /> : null}
+    </div>
+  );
+}
+
+function ReportRecapsPanel({ personId, date, onOpenRecaps }: { personId: string; date: string; onOpenRecaps?: () => void }) {
+  const intervals = useQuery({
+    queryKey: adminKeys.reportIntervals(personId, date),
+    queryFn: () => fetchReportIntervals(personId, date),
+    select: normalizeIntervals,
+    enabled: !!personId,
+    staleTime: ADMIN_DETAIL_STALE_MS,
+  });
+  const rows = intervals.data?.intervals ?? [];
+  const visible = rows.slice(0, 8);
+  return (
+    <div className="admin-drawer-panel">
+      <div className="admin-drawer-panel-head">
+        <span>{intervals.isLoading ? "Loading recaps…" : `${rows.length} recap${rows.length === 1 ? "" : "s"}`}</span>
+        {onOpenRecaps ? (
+          <AdminButton variant="secondary" icon={ArrowUpRight} onClick={onOpenRecaps}>See all recaps</AdminButton>
+        ) : null}
+      </div>
+      {intervals.isLoading ? <Skeleton className="h-20" /> : rows.length ? (
+        <div className="admin-recap-list">
+          {visible.map((interval) => (
+            <article key={interval.id} className="admin-recap-card">
+              <header><strong>{interval.headline ?? "Interval"}</strong><span>{interval.label}</span></header>
+              {interval.detail ? <p>{interval.detail}</p> : null}
+              <div className="admin-recap-meta">
+                <Pill tone={interval.reviewStatus === "confirmed" ? "ok" : interval.reviewStatus === "amended" ? "info" : "neutral"}>
+                  {statusLabel(interval.reviewStatus)}
+                </Pill>
+                <span>{interval.evidenceCount} evidence</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : <p className="admin-empty-note">No interval recaps were recorded for this day.</p>}
+    </div>
+  );
+}
+
+function ReportBody({ report, onOpenEvidence, onOpenRecaps }: { report: WorkOsReportRow; onOpenEvidence?: (personId: string) => void; onOpenRecaps?: () => void }) {
   const document = parseEodMarkdown(report.submitted_markdown ?? report.markdown);
   const facts = eodMetricFacts(report.metrics);
-  const evidence = useQuery({
-    queryKey: adminKeys.reportEvidence(report.person_id ?? "", report.report_date),
-    queryFn: () => fetchReportEvidence(report.person_id!, report.report_date),
-    select: normalizeEvidence,
-    enabled: !!report.person_id,
-    staleTime: ADMIN_DETAIL_STALE_MS,
-  });
-  const intervals = useQuery({
-    queryKey: adminKeys.reportIntervals(report.person_id ?? "", report.report_date),
-    queryFn: () => fetchReportIntervals(report.person_id!, report.report_date),
-    select: normalizeIntervals,
-    enabled: !!report.person_id,
-    staleTime: ADMIN_DETAIL_STALE_MS,
-  });
+
+  const renderEodSection = (section: (typeof document.sections)[number]) => (
+    <div key={section.heading} className="admin-report-section">
+      <h3 className={/activity context/i.test(section.heading) ? "is-observed" : undefined}>
+        <EodSectionIcon heading={section.heading} size={12} />
+        <span>{section.heading}</span>
+      </h3>
+      <ul>
+        {section.lines.map((line, index) => (
+          <li key={`${section.heading}-${index}`} className={line.kind === "note" ? "note" : undefined}>
+            {line.kind === "bullet" ? <span className="admin-dot ok" aria-hidden /> : null}
+            {line.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
   return (
     <div className="admin-grid admin-drawer-grid">
       <div className="admin-chips">
         <Pill tone={reportTone(report.status)}>{statusLabel(report.status)}</Pill>
         {facts.map((fact) => <Pill key={fact.label}>{fact.label}: {fact.value}</Pill>)}
-        <Pill tone="observed" icon={Camera}>{(evidence.data?.evidence ?? []).length} evidence items</Pill>
         {report.manager_notes ? <Pill tone="info">Notes on record</Pill> : null}
       </div>
+      {report.person_id && onOpenEvidence ? (
+        <div className="admin-drawer-quick">
+          <AdminButton variant="secondary" icon={ArrowUpRight} onClick={() => onOpenEvidence(report.person_id!)}>
+            More Evidence
+          </AdminButton>
+        </div>
+      ) : null}
 
       {document.meta.length ? (
         <section className="admin-block">
@@ -415,55 +618,25 @@ function ReportBody({ report }: { report: WorkOsReportRow }) {
       ) : null}
 
       <section className="admin-block">
-        {document.sections.map((section) => (
-          <div key={section.heading} className="admin-report-section">
-            <h3 className={/activity context/i.test(section.heading) ? "is-observed" : undefined}>{section.heading}</h3>
-            <ul>
-              {section.lines.map((line, index) => (
-                <li key={`${section.heading}-${index}`} className={line.kind === "note" ? "note" : undefined}>
-                  {line.kind === "bullet" ? <span className="admin-dot ok" aria-hidden /> : null}
-                  {line.text}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {document.sections.map(renderEodSection)}
+        {document.appendix.length ? (
+          <details className="admin-report-appendix">
+            <summary>
+              Full record · {document.appendix.reduce((count, section) => count + section.lines.filter((line) => line.kind === "bullet").length, 0)} rows
+            </summary>
+            <div className="admin-report-appendix-body">{document.appendix.map(renderEodSection)}</div>
+          </details>
+        ) : null}
         {document.closing ? <p className="admin-quiet">{document.closing}</p> : null}
       </section>
 
-      <section className="admin-block">
-        <h3><Camera size={14} aria-hidden /> Sourced evidence</h3>
-        {evidence.isLoading ? (
-          <Skeleton className="h-20" />
-        ) : (evidence.data?.evidence ?? []).length ? (
-          <ul className="admin-rows">
-            {(evidence.data?.evidence ?? []).slice(0, 10).map((item) => (
-              <li key={item.id}>
-                <span>{item.title}<small>{item.summary}</small></span>
-                <Pill tone={item.source === "worktivity" ? "observed" : "neutral"}>{statusLabel(item.source)}</Pill>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty-note">No evidence rows were recorded for this day.</p>
-        )}
-      </section>
-
-      <section className="admin-block">
-        <h3><Activity size={14} aria-hidden /> Interval recaps</h3>
-        {intervals.isLoading ? (
-          <Skeleton className="h-20" />
-        ) : (intervals.data?.intervals ?? []).length ? (
-          <ul className="admin-rows">
-            {(intervals.data?.intervals ?? []).slice(0, 8).map((interval) => (
-              <li key={interval.id}>
-                <span>{interval.headline ?? "Interval"}<small>{interval.label} · {statusLabel(interval.reviewStatus)} · {interval.evidenceCount} evidence</small></span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty-note">No interval recaps were recorded for this day.</p>
-        )}
+      <section className="admin-block admin-drawer-accordions">
+        <AdminAccordion title="Sourced evidence" icon={Camera}>
+          <ReportEvidencePanel personId={report.person_id ?? ""} date={report.report_date} />
+        </AdminAccordion>
+        <AdminAccordion title="Interval recaps" icon={Activity}>
+          <ReportRecapsPanel personId={report.person_id ?? ""} date={report.report_date} onOpenRecaps={onOpenRecaps} />
+        </AdminAccordion>
       </section>
 
       <details className="admin-details">

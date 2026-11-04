@@ -85,12 +85,20 @@
 }
 
 .sectionLabel h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--text-tertiary);
   font-size: 10.5px;
   font-weight: 640;
   letter-spacing: .01em;
   line-height: 1.5;
+}
+
+.sectionIcon {
+  flex: none;
+  color: var(--text-tertiary);
 }
 
 .sectionCount {

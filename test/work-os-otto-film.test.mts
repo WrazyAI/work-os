@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 const fixturesUrl = new URL("../scripts/tutorial-film/otto-fixtures.mjs", import.meta.url);
 const storyUrl = new URL("../scripts/tutorial-film/otto-story.mjs", import.meta.url);
@@ -103,7 +104,7 @@ test("the filming fingerprint changes when styling or the spoken bytes change", 
   const url=new URL("../scripts/tutorial-film/otto-provenance.mjs",import.meta.url);
   assert.ok(existsSync(url),"missing complete filming-build fingerprint");
   const { fingerprintBuild }=await import(url.href);
-  const dir=mkdtempSync('/tmp/opencode/otto-fingerprint-');
+  const dir=mkdtempSync(join(tmpdir(),'otto-fingerprint-'));
   try {
     writeFileSync(join(dir,'index.html'),'<main>demo</main>');
     writeFileSync(join(dir,'style.css'),'body{color:black}');

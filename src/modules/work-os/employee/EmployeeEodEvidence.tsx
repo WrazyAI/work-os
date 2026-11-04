@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScanSearch } from "lucide-react";
+import EvidenceImageDialog, { EvidenceThumb, evidenceScreenshotUrl, type EvidencePreview } from "@/modules/work-os/evidence-image-dialog";
 import { fetchJson, formatTime, type EodScreenshotGallery } from "./model";
 import styles from "./EmployeeReview.module.css";
 
@@ -22,6 +24,7 @@ function confidenceLabel(value: number) {
  */
 export default function EmployeeEodEvidence({ date, timezone, enabled }: { date: string; timezone?: string; enabled: boolean }) {
   const queryClient = useQueryClient();
+  const [preview, setPreview] = useState<EvidencePreview | null>(null);
   const prepare = useMutation({
     mutationFn: () => fetchJson("/api/work-os/me/eod/screenshots/prepare", {
       method: "POST",
@@ -104,6 +107,14 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
               <ul className={styles.rows}>
                 {viewable.map((frame) => (
                   <li key={frame.summaryId} className={styles.evidenceRow}>
+                    <EvidenceThumb
+                      thumbSrc={evidenceScreenshotUrl(frame.summaryId, "thumb")}
+                      fullSrc={evidenceScreenshotUrl(frame.summaryId, "preview")}
+                      title={frame.visibleApp ?? "Screenshot evidence"}
+                      caption={`${formatTime(frame.capturedAt, timezone)}${frame.visibleApp ? ` · ${frame.visibleApp}` : ""}${frame.summary ? ` — ${frame.summary}` : ""}`}
+                      label={`Preview screenshot captured at ${formatTime(frame.capturedAt, timezone)}`}
+                      onOpen={setPreview}
+                    />
                     <span className={styles.evidenceTime}>{formatTime(frame.capturedAt, timezone)}</span>
                     <div className={styles.evidenceBody}>
                       {frame.visibleApp ? <span className={styles.evidenceTitle}>{frame.visibleApp}</span> : null}
@@ -131,6 +142,7 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
           ) : null}
         </div>
       )}
+      <EvidenceImageDialog preview={preview} onClose={() => setPreview(null)} />
     </section>
   );
 }

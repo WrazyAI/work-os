@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Each end-of-day report section now carries a small, quiet icon.
+
 ## 0.5.21 — 2026-11-04
 
 - Click a measure on the admin Overview to open the record it shows.

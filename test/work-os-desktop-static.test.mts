@@ -20,6 +20,21 @@ assert.doesNotMatch(debugHost, /\?debug=1/);
 const frontend = read("src/main.tsx");
 assert.doesNotMatch(frontend, /getCurrentWindow\(\)\.label === "debug"/);
 
+const adminReview = read("src/admin/ReviewPage.tsx");
+assert.match(adminReview, /EodSectionIcon/);
+assert.match(adminReview, /document\.appendix/);
+assert.match(adminReview, /AdminAccordion/);
+assert.match(adminReview, /ReportEvidencePanel/);
+assert.match(adminReview, /ReportRecapsPanel/);
+assert.match(adminReview, /More Evidence/);
+assert.match(adminReview, /See all recaps/);
+assert.match(adminReview, /mounted \? children : null/, "evidence and recap panels mount only when opened");
+assert.match(read("src/admin/admin.css"), /grid-template-rows 220ms/, "the drawer accordions animate");
+assert.match(read("src/admin/admin.css"), /admin-shot-modal/, "evidence images expand in a dialog");
+assert.match(read("src/admin/AdminWorkspace.tsx"), /initialPersonId=\{focus\.personId\}/);
+assert.match(read("src/admin/EvidencePage.tsx"), /initialPersonId/);
+assert.match(read("src/admin/adminFixtures.ts"), /previewUrl/);
+
 const onboarding = read("src/Onboarding.tsx");
 assert.match(onboarding, /aria-busy=\{busy\}/);
 assert.match(onboarding, /onNotify\("error"/);
