@@ -117,6 +117,19 @@
   white-space: nowrap;
 }
 
+.workspace {
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+}
+
+.workspace:hover {
+  color: var(--signal-deep);
+}
+
 .main {
   width: min(1240px, calc(100% - 64px));
   margin: 0 auto;
@@ -160,6 +173,10 @@
 
   .byline,
   .back {
+    display: none;
+  }
+
+  .nav .workspace {
     display: none;
   }
 

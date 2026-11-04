@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { detectPlatform, type DetectedPlatform } from "@/lib/work-os-installers";
 import styles from "./downloads.module.css";
@@ -46,7 +47,7 @@ export default function DownloadChooser() {
             <p className={styles.lede}>
               A Linux version isn’t available yet. You can still open your Work OS workspace in the browser.
             </p>
-            <a className={styles.secondaryAction} href="https://app.wrazyos.com/work-os">Open the web workspace</a>
+            <a className={styles.secondaryAction} href="/work-os/workspace">Open the web workspace</a>
           </>
         ) : (
           <>
@@ -92,7 +93,7 @@ export default function DownloadChooser() {
           <span>Coming later</span>
         </div>
         <p className={styles.checksums}>
-          <a href="/downloads/work-os/windows/checksums">SHA-256 checksums</a>
+          <Link href="/downloads/work-os/windows/checksums">SHA-256 checksums</Link>
         </p>
       </section>
     </div>

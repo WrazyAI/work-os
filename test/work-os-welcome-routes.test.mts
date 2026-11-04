@@ -5,6 +5,10 @@ import { proxy } from "../src/proxy.ts";
 
 test("public Work OS site routes are reachable anonymously", async () => {
   for (const route of [
+    "/work-os",
+    "/work-os/downloads",
+    "/work-os/tutorials",
+    "/work-os/tutorials/eod-draft",
     "/work-os/welcome",
     "/work-os/welcome/downloads",
     "/work-os/welcome/tutorials",
@@ -18,9 +22,12 @@ test("public Work OS site routes are reachable anonymously", async () => {
 
 test("the public site does not open the employee workspace", async () => {
   for (const route of [
+    "/work-os/workspace",
     "/work-os/today",
     "/work-os/review",
     "/api/work-os/me/day",
+    "/work-os/downloads/internal",
+    "/work-os/tutorials/eod-draft/private",
     "/work-os/welcome/internal",
   ]) {
     const response = await proxy(new NextRequest(`https://app.wrazyos.com${route}`));

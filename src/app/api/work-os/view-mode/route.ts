@@ -54,7 +54,7 @@ function viewModeCookie(request: Request, mode: "employee" | "admin") {
  */
 export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
-  if (!form) return redirectTo("/work-os");
+  if (!form) return redirectTo("/work-os/workspace");
 
   const requested = parseWorkOsViewMode(form.get(WORK_OS_VIEW_MODE_FIELD));
   const auth = await requireWorkOsAccess({});
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     }
     return redirectTo("/login");
   }
-  if (auth.access.role !== "admin") return redirectTo("/work-os");
+  if (auth.access.role !== "admin") return redirectTo("/work-os/workspace");
   if (requested === "employee" && !auth.access.personId) return redirectTo("/work-os/admin");
 
   const next = safeWorkOsViewNext(requested, form.get(WORK_OS_VIEW_NEXT_FIELD));

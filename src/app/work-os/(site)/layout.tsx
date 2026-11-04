@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function WelcomeLayout({ children }: { children: ReactNode }) {
+/** The public Work OS site owns its own materials. It is intentionally not
+ * wrapped by the WrazyOS dashboard shell (see src/components/Shell.tsx). */
+export default function WorkOsSiteLayout({ children }: { children: ReactNode }) {
   return <div className={styles.shell}>{children}</div>;
 }

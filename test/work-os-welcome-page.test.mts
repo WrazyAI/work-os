@@ -7,8 +7,8 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
 
-test("the welcome page is the In good company landing, not a placeholder", () => {
-  const page = read("src/app/work-os/welcome/page.tsx");
+test("the Work OS root page is the In good company landing, not a placeholder", () => {
+  const page = read("src/app/work-os/(site)/page.tsx");
   const landing = read("src/modules/work-os/marketing/LandingPage.tsx");
   assert.match(page, /<LandingPage\s*\/>/, "the route must render the landing component");
   assert.match(landing, /A little company\./);

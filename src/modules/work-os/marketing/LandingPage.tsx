@@ -7,7 +7,7 @@ import styles from "./landing.module.css";
 export default function LandingPage() {
   return (
     <>
-      <SiteHeader current="/work-os/welcome" />
+      <SiteHeader current="/work-os" />
       <main id="main" className={styles.main}>
         <section className={styles.hero} aria-labelledby="welcome-title">
           <div className={styles.heroCopy}>
@@ -18,11 +18,11 @@ export default function LandingPage() {
               into a report, with your companion alongside you.
             </p>
             <div className={styles.actions}>
-              <Link className={styles.primary} href="/work-os/welcome/downloads">
+              <Link className={styles.primary} href="/work-os/downloads">
                 Get Work OS
                 <span aria-hidden="true">↓</span>
               </Link>
-              <Link className={styles.plain} href="/work-os/welcome/tutorials">
+              <Link className={styles.plain} href="/work-os/tutorials">
                 See how it works
                 <span aria-hidden="true">›</span>
               </Link>
@@ -72,9 +72,9 @@ export default function LandingPage() {
               No long tour to sit through. Pick a task, watch the real clicks, and get back to your day.
               Every film starts on the dashboard and shows the route.
             </p>
-            <Link className={styles.primary} href="/work-os/welcome/tutorials">Browse tutorials</Link>
+            <Link className={styles.primary} href="/work-os/tutorials">Browse tutorials</Link>
           </div>
-          <Link className={styles.filmCard} href="/work-os/welcome/tutorials/eod-draft">
+          <Link className={styles.filmCard} href="/work-os/tutorials/eod-draft">
             <span className={styles.filmStill}>
               <img src="/site/work-os/tutorials/eod-draft.jpg" alt="EOD tutorial opening frame with the companion" width={1440} height={900} />
               <span className={styles.play} aria-hidden="true">▶</span>
@@ -93,7 +93,7 @@ export default function LandingPage() {
               Your plan, work activity and end-of-day report belong together. Work OS gives you a
               place to see them, and a chance to add your side of the story.
             </p>
-            <Link className={styles.dark} href="/work-os/welcome/downloads">Find your download</Link>
+            <Link className={styles.dark} href="/work-os/downloads">Find your download</Link>
           </div>
         </section>
       </main>

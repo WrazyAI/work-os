@@ -19,7 +19,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REQUIRED_PATHS = [
   "src/app/layout.tsx",
   "src/app/globals.css",
-  "src/app/work-os/page.tsx",
+  "src/app/work-os/(site)/layout.tsx",
+  "src/app/work-os/(site)/page.tsx",
+  "src/app/work-os/workspace/page.tsx",
   "src/app/login/page.tsx",
   "src/app/forgot-password/page.tsx",
   "src/app/reset-password/page.tsx",

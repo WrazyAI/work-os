@@ -24,8 +24,12 @@ export const WORK_OS_WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 export const WORK_OS_WORKSPACE_ROUTE = "/api/work-os/session/workspace";
 export const WORK_OS_WORKSPACE_FIELD = "organization_id";
 export const WORK_OS_WORKSPACE_NEXT_FIELD = "next";
-export const WORK_OS_WORKSPACE_HOME = "/work-os";
+/** The explicit signed-in dispatcher. The public landing owns `/work-os`, so
+ * every server redirect and workspace CTA uses this named destination. */
+export const WORK_OS_WORKSPACE_HOME = "/work-os/workspace";
 export const WORK_OS_WORKSPACE_SELECT = "/work-os/select-workspace";
+/** The URL prefix that contains the protected workspace (and the public site). */
+const WORK_OS_WORKSPACE_ROOT = "/work-os";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -38,8 +42,8 @@ export function isWorkOsOrganizationId(value: unknown): value is string {
  * Keep a post-selection destination inside Work OS.
  *
  * The value arrives from a form field, so it is untrusted input: absolute URLs,
- * scheme-relative URLs, backslashes, the picker itself, and anything outside
- * /work-os fall back to the dispatcher.
+ * scheme-relative URLs, backslashes, the public landing, the picker itself, and
+ * anything outside /work-os fall back to the protected dispatcher.
  */
 export function safeWorkOsWorkspaceNext(value: unknown): string {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
@@ -52,8 +56,10 @@ export function safeWorkOsWorkspaceNext(value: unknown): string {
     return WORK_OS_WORKSPACE_HOME;
   }
   if (url.origin !== "https://work-os.invalid") return WORK_OS_WORKSPACE_HOME;
-  if (url.pathname === WORK_OS_WORKSPACE_SELECT) return WORK_OS_WORKSPACE_HOME;
-  if (url.pathname !== WORK_OS_WORKSPACE_HOME && !url.pathname.startsWith(`${WORK_OS_WORKSPACE_HOME}/`)) {
+  if (url.pathname === WORK_OS_WORKSPACE_SELECT || url.pathname === WORK_OS_WORKSPACE_ROOT) {
+    return WORK_OS_WORKSPACE_HOME;
+  }
+  if (url.pathname !== WORK_OS_WORKSPACE_ROOT && !url.pathname.startsWith(`${WORK_OS_WORKSPACE_ROOT}/`)) {
     return WORK_OS_WORKSPACE_HOME;
   }
   return `${url.pathname}${url.search}${url.hash}`;

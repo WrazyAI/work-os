@@ -30,7 +30,7 @@ export default function TutorialLibrary() {
           </>
         );
         return published ? (
-          <Link key={tutorial.slug} className={styles.card} href={`/work-os/welcome/tutorials/${tutorial.slug}`}>
+          <Link key={tutorial.slug} className={styles.card} href={`/work-os/tutorials/${tutorial.slug}`}>
             {inner}
           </Link>
         ) : (

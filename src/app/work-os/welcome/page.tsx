@@ -1,5 +1,7 @@
-import LandingPage from "@/modules/work-os/marketing/LandingPage";
+import { redirect } from "next/navigation";
 
-export default function WelcomePage() {
-  return <LandingPage />;
+/** Compatibility for the first published site URL. The landing now owns
+ * /work-os itself; old links and bookmarks follow it here. */
+export default function LegacyWelcomePage() {
+  redirect("/work-os");
 }

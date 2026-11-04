@@ -6,7 +6,7 @@ import WorkOsProviders from "../providers";
 
 export default async function WorkOsAdminLayout({ children }: { children: React.ReactNode }) {
   const resolved = await resolveWorkOsPageAccess();
-  if (!resolved.ok || resolved.access.role !== "admin") redirect("/work-os");
+  if (!resolved.ok || resolved.access.role !== "admin") redirect("/work-os/workspace");
   // Administration is the other half of the administrator's view switch: while
   // My workspace is active, an administration URL is not a second admin page.
   if (await resolveWorkOsViewModeFor(resolved.access) === "employee") redirect("/work-os/today");
