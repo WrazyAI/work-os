@@ -12,8 +12,8 @@ Publish one additional film, **A workday with Otto — an extended look**, at
 
 ## Editorial structure
 
-Approximately four minutes, eight parts of about25–30seconds; extend a dense
-part rather than omit a decision or make the text unreadable. Brief numbered
+Approximately three and a half minutes, eight parts; extend a dense part rather
+than omit a decision or make the text unreadable. The published cut is 3:20. Brief numbered
 title transitions introduce each topic without using the word Chapter.
 Every shared capability is demonstrated floating first, then in-app, with
 clear alternate-take labels where a decision cannot sensibly be repeated.
@@ -34,7 +34,8 @@ clear alternate-take labels where a decision cannot sensibly be repeated.
 7. Catch an earlier recap: floating Tasks → Recent activity → older Not reviewed
    interval → inspect/review; View in app opens the in-app Focus stream.
 8. EOD reminder → Open EOD review → actual main-window handoff → review/submit/
-   confirmation; show direct in-app entry and an earlier report's recorded state.
+   confirmation; show direct in-app entry and an earlier day's recorded status
+   (the EOD list exposes “Changes requested,” not a submitted-report archive).
 
 ## Truth and production constraints
 
@@ -53,7 +54,9 @@ clear alternate-take labels where a decision cannot sensibly be repeated.
   proposal requires its own explicit decision; show actual receipts.
 - 1440×900 H.264, genuine60fps, AAC, self-hosted Inter, original instrumental
   music and English VTT. Duck music underneath actual recap speech. A silent
-  speaking animation does not satisfy the audio requirement.
+  speaking animation does not satisfy the audio requirement. The caption track
+  carries the spoken recap only (timed to the shipped voice), so it never
+  duplicates the burned-in instructional copy.
 - Scene-aware captions never cover active controls or spoken text. Numbered
   interstitials use the existing ink/paper/signal style and configured mascot art.
 - Reuse VPS scratch for capture/render/encode/mix; never touch active `.next`.
