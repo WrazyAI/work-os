@@ -78,6 +78,12 @@
       "type": "fix",
       "summary": "Scrolling the page keeps working while the pointer is over a table.",
       "verification": "60ae7238: browser wheel measurement over .admin-table-wrap moved page scroll 0 to 154 and the heatmap 0 to 500; ordinary surfaces kept containment; companion suite 1632 passed; typecheck and build passed."
+    },
+    {
+      "id": "eod-section-icons",
+      "type": "feature",
+      "summary": "Each end-of-day report section now carries a small, quiet icon.",
+      "verification": "fdf0a563, bc65bda4: EOD document and preview tests 52 passed; companion EOD render tests 19 passed; rendered 1440, 1024, and 390 checks; no console errors."
     }
   ],
   "emergency": {
