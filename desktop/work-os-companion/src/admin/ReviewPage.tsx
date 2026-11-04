@@ -372,7 +372,7 @@ export default function ReviewPage({ initialReportId, onOpenEvidence, onOpenReca
           </div>
         ) : null}
       >
-        {selected ? <ReportBody report={selected} onOpenEvidence={onOpenEvidence} onOpenRecaps={onOpenRecaps} /> : null}
+        {selected ? <ReportBody key={selected.id} report={selected} onOpenEvidence={onOpenEvidence} onOpenRecaps={onOpenRecaps} /> : null}
       </Drawer>
     </div>
   );
@@ -390,6 +390,10 @@ function screenshotOf(row: EvidenceRow): { url: string; title: string } | null {
 
 function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; title: string }; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const closeHandler = useRef(onClose);
+  useEffect(() => {
+    closeHandler.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
@@ -397,7 +401,7 @@ function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; t
       if (event.key === "Escape") {
         event.stopPropagation();
         event.stopImmediatePropagation();
-        onClose();
+        closeHandler.current();
         return;
       }
       // The dialog has one focusable control. Keep Tab on it instead of
@@ -414,19 +418,19 @@ function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; t
       window.removeEventListener("keydown", onKey, true);
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div
       className="admin-shot-modal"
       role="dialog"
       aria-modal="true"
       aria-label={preview.title}
-      onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
+      onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) closeHandler.current(); }}
     >
       <div className="admin-shot-dialog">
         <header>
           <strong>{preview.title}</strong>
-          <button ref={closeRef} type="button" className="admin-shot-close" aria-label="Close evidence preview" onClick={onClose}>
+          <button ref={closeRef} type="button" className="admin-shot-close" aria-label="Close evidence preview" onClick={() => closeHandler.current()}>
             <X size={16} aria-hidden />
           </button>
         </header>

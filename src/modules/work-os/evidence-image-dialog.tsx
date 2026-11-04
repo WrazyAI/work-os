@@ -46,12 +46,11 @@ export default function EvidenceImageDialog({ preview, onClose }: { preview: Evi
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const previousRef = useRef<HTMLElement | null>(null);
   const closeHandler = useRef(onClose);
-  closeHandler.current = onClose;
-  const [failed, setFailed] = useState(false);
-
   useEffect(() => {
-    setFailed(false);
-  }, [preview?.src]);
+    closeHandler.current = onClose;
+  }, [onClose]);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = !!preview && failedSrc === preview.src;
 
   useEffect(() => {
     if (!preview) return;
@@ -102,7 +101,7 @@ export default function EvidenceImageDialog({ preview, onClose }: { preview: Evi
         {failed ? (
           <p className={styles.unavailable}>Preview unavailable. The image is not available to this account.</p>
         ) : (
-          <img src={preview.src} alt={preview.caption || preview.title} onError={() => setFailed(true)} />
+          <img src={preview.src} alt={preview.caption || preview.title} onError={() => setFailedSrc(preview.src)} />
         )}
         {preview.caption ? <p className={styles.caption}>{preview.caption}</p> : null}
       </div>
