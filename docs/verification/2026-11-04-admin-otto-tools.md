@@ -90,3 +90,6 @@ or packaging was performed by this branch.
 - CodeRabbit local review could not authenticate in this environment, so it
   produced no findings. The independent security/state review completed and its
   four Important findings were fixed.
+- Workflow/request-fence bookkeeping has a 30-day cleanup function but no
+  scheduled caller yet; access is already bounded to the same window.
+
