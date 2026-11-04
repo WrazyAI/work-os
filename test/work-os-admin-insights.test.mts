@@ -7,6 +7,7 @@ import {
   previousAdminInsightWindow,
   type AdminInsightTotals,
 } from "../src/lib/work-os-admin-insights";
+import { isWeekendDate, workdayDates } from "../src/modules/work-os/calendar";
 
 const NOW = new Date("2026-09-30T15:00:00Z");
 
@@ -36,6 +37,17 @@ test("insight windows resolve fixed ranges and equal earlier periods", () => {
   assert.deepEqual(adminInsightWindow("90d", "2026-09-30", NOW), { through: "2026-09-30", count: 90, from: "2026-07-03" });
   assert.deepEqual(previousAdminInsightWindow("7d", "2026-09-30", NOW), { through: "2026-09-23", count: 7, from: "2026-09-17" });
   assert.equal(adminInsightWindow("7d", "not-a-date", NOW).through, "2026-09-30");
+});
+
+test("chart date ranges leave weekends out while the range totals keep them", () => {
+  assert.equal(isWeekendDate("2026-09-05"), true);
+  assert.equal(isWeekendDate("2026-09-06"), true);
+  assert.equal(isWeekendDate("2026-09-07"), false);
+  assert.deepEqual(workdayDates("2026-09-04", "2026-09-08"), [
+    "2026-09-04",
+    "2026-09-07",
+    "2026-09-08",
+  ]);
 });
 
 test("completion timing uses the task snapshot due date and ignores undated work", () => {

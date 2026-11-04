@@ -161,6 +161,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(outstandingEod, /employee_companion/);
   assert.match(outstandingEod, /listOutstandingEods/);
   assert.match(outstandingEod, /days must be between 1 and 31/);
+  assert.match(eodService, /scheduledDay/, "a scheduled person's day off is never an EOD debt");
+  assert.match(workdayService, /isScheduledWorkday\(access, context\.shiftDate\)/, "the workday cannot seed a plan on a day off");
+  assert.match(await source("src/lib/work-os-admin-insights.ts"), /workdayDates\(current\.from/, "insight charts skip weekend dates");
+  assert.match(await source("src/lib/work-os-admin-overview.ts"), /workdayDates\(addDaysIso/, "overview charts skip weekend dates");
   assert.match(day, /date must be a valid calendar date/);
   assert.match(day, /localDate/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);

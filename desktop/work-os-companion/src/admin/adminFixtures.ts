@@ -42,8 +42,18 @@ const PEOPLE = [
 
 // The preview is a working record, not a historical snapshot: its fourteen-day
 // window follows the machine's current day so "today" measures, recaps, and
-// report links exercise the same paths a live drawer does.
-const DATES = Array.from({ length: 14 }, (_, index) => isoDaysAgo(13 - index));
+// report links exercise the same paths a live drawer does. Weekend days are
+// skipped so the trend charts match the API's working-day series.
+const DATES = (() => {
+  const dates: string[] = [];
+  for (let offset = 0; dates.length < 14; offset += 1) {
+    const date = isoDaysAgo(offset);
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    dates.unshift(date);
+  }
+  return dates;
+})();
 
 /** A deterministic, self-contained frame used by the admin fixture. It is a
  * data URI so rendered QA never fetches an external image or needs a session. */

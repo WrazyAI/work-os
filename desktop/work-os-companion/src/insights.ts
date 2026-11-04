@@ -1,4 +1,5 @@
 import type { DayData, InsightConsistency, InsightDay, InsightsData, InsightUpdateKinds } from "./types";
+import { isWeekendDate } from "../../../src/modules/work-os/calendar";
 
 export interface InsightSignal {
   label: string;
@@ -62,7 +63,7 @@ function shortDateLabel(date: string) {
 }
 
 export function insightSeries(days: InsightDay[]): InsightSeriesPoint[] {
-  return days.map((day) => ({
+  return days.filter((day) => !isWeekendDate(day.date)).map((day) => ({
     date: day.date,
     label: shortDateLabel(day.date),
     observedMinutes: Math.round((Number(day.observedSeconds ?? 0) / 60) * 10) / 10,

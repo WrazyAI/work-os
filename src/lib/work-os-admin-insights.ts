@@ -3,6 +3,8 @@ import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
 import { timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
+import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
 type Json = Record<string, any>;
@@ -66,12 +68,6 @@ export function previousAdminInsightWindow(range: AdminInsightRange, throughValu
   const current = adminInsightWindow(range, throughValue, now);
   const previousThrough = addDaysIso(current.from, -1);
   return adminInsightWindow(range, previousThrough, now);
-}
-
-function dateRange(from: string, through: string) {
-  const dates: string[] = [];
-  for (let date = from; date <= through; date = addDaysIso(date, 1)) dates.push(date);
-  return dates;
 }
 
 /** Completion timing uses the task snapshot's due date: a completed outcome is
@@ -428,7 +424,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     const kind = String(update.update_kind ?? "unclassified");
     updateKindCounts.set(kind, (updateKindCounts.get(kind) ?? 0) + 1);
   }
-  const series = dateRange(current.from, current.through).map((date) => ({
+  const series = workdayDates(current.from, current.through).map((date) => ({
     date,
     outcomesCompleted: currentEvents.filter((row) => dateOnly(row.local_date) === date).length,
     updates: currentUpdates.filter((row) => dateOnly(row.shift_date) === date).length,
@@ -442,7 +438,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
 
   const timeSeries = timeSeriesFromSessions(
     currentSessions,
-    dateRange(current.from, current.through),
+    workdayDates(current.from, current.through),
     now,
     (personId) => nameById.get(personId) ?? null,
   );
@@ -482,13 +478,37 @@ async function countOutstandingDays(organizationId: string, now: Date, scope: { 
     .eq("organization_id", organizationId).gte("shift_date", from).lte("shift_date", through);
   let reportsQuery = db.from("work_reports").select("person_id,report_date,status,submitted_at")
     .eq("organization_id", organizationId).gte("report_date", from).lte("report_date", through);
+  let schedulesQuery = db.from("work_schedules").select("*")
+    .eq("organization_id", organizationId).eq("active", true);
+  let exceptionsQuery = db.from("work_schedule_exceptions").select("*")
+    .eq("organization_id", organizationId).gte("exception_date", from).lte("exception_date", through);
   if (scopedIds) {
     sessionsQuery = sessionsQuery.in("person_id", scopedIds);
     reportsQuery = reportsQuery.in("person_id", scopedIds);
+    schedulesQuery = schedulesQuery.in("person_id", scopedIds);
+    exceptionsQuery = exceptionsQuery.in("person_id", scopedIds);
   }
-  const [sessions, reports] = await Promise.all([sessionsQuery, reportsQuery]);
+  const [sessions, reports, schedules, exceptions] = await Promise.all([sessionsQuery, reportsQuery, schedulesQuery, exceptionsQuery]);
   if (sessions.error) throw new Error(`load outstanding sessions: ${sessions.error.message}`);
   if (reports.error) throw new Error(`load outstanding reports: ${reports.error.message}`);
+  if (schedules.error) throw new Error(`load outstanding schedules: ${schedules.error.message}`);
+  if (exceptions.error) throw new Error(`load outstanding schedule exceptions: ${exceptions.error.message}`);
+  const rulesByPerson = new Map<string, WorkOsScheduleRule[]>();
+  for (const schedule of (schedules.data ?? []) as unknown as WorkOsScheduleRule[]) {
+    const personId = String((schedule as unknown as { person_id?: string }).person_id ?? "");
+    if (!personId) continue;
+    const list = rulesByPerson.get(personId) ?? [];
+    list.push(schedule);
+    rulesByPerson.set(personId, list);
+  }
+  const exceptionsByPerson = new Map<string, WorkOsScheduleException[]>();
+  for (const exception of (exceptions.data ?? []) as unknown as Array<WorkOsScheduleException & { person_id?: string }>) {
+    const personId = String(exception.person_id ?? "");
+    if (!personId) continue;
+    const list = exceptionsByPerson.get(personId) ?? [];
+    list.push(exception);
+    exceptionsByPerson.set(personId, list);
+  }
   const reportByKey = new Map<string, Json>();
   for (const report of (reports.data ?? []) as Json[]) {
     reportByKey.set(`${report.person_id}:${report.report_date}`, report);
@@ -507,6 +527,7 @@ async function countOutstandingDays(organizationId: string, now: Date, scope: { 
       hasPlan: false,
       completedTasks: 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+      scheduledDay: hasScheduledShiftOnDate(rulesByPerson.get(personId) ?? [], exceptionsByPerson.get(personId) ?? [], String(session.shift_date)),
     });
     byPerson.set(personId, list);
   }

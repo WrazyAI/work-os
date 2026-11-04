@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { classifyOutstandingEodDays, selectDayEodWork, type OutstandingEodCandidate } from "../src/lib/work-os-eod";
+import { hasScheduledShiftOnDate } from "../src/modules/work-os/companion";
 
 function candidate(overrides: Partial<OutstandingEodCandidate>): OutstandingEodCandidate {
   return {
@@ -13,6 +14,37 @@ function candidate(overrides: Partial<OutstandingEodCandidate>): OutstandingEodC
     ...overrides,
   };
 }
+
+test("weekend dates are not scheduled EOD days for a Monday-Friday schedule", () => {
+  const rules = [{
+    id: "schedule-1",
+    timezone: "UTC",
+    days_of_week: [1, 2, 3, 4, 5],
+    shift_start: "09:00",
+    shift_end: "17:00",
+    effective_from: "2026-01-01",
+    effective_to: null,
+  }];
+  assert.equal(hasScheduledShiftOnDate(rules, [], "2026-09-05"), false);
+  assert.equal(hasScheduledShiftOnDate(rules, [], "2026-09-06"), false);
+  assert.equal(hasScheduledShiftOnDate(rules, [], "2026-09-07"), true);
+  assert.equal(hasScheduledShiftOnDate(rules, [{ exception_date: "2026-09-05", kind: "working_day" }], "2026-09-05"), true);
+  assert.equal(hasScheduledShiftOnDate(rules, [{ exception_date: "2026-09-07", kind: "leave" }], "2026-09-07"), false);
+  assert.equal(hasScheduledShiftOnDate([], [], "2026-09-05"), true, "an unscheduled person keeps every recorded day");
+  assert.equal(
+    hasScheduledShiftOnDate([{ ...rules[0], effective_from: "2026-09-07" }], [], "2026-09-05"),
+    true,
+    "a date before the first schedule keeps its legacy record",
+  );
+});
+
+test("a weekend candidate is never outstanding even when a plan exists", () => {
+  const days = classifyOutstandingEodDays([
+    candidate({ date: "2026-09-05", hasPlan: true, scheduledDay: false }),
+    candidate({ date: "2026-09-07", hasPlan: true, scheduledDay: true }),
+  ]);
+  assert.deepEqual(days.map((day) => day.date), ["2026-09-07"]);
+});
 
 test("days with no recorded work are never outstanding", () => {
   const days = classifyOutstandingEodDays([
