@@ -38,3 +38,43 @@ inspect captions at every scene, verify audio/60fps/duration, then update the
 manifest and assets together. Never publish a static overview to bypass a failed
 action. Do not copy contact sheets, silent intermediates or private evidence into
 the public asset tree.
+
+## Extended Otto film
+
+The eight-part showcase has its own adapter; the ten accepted short films stay
+unchanged. Build with the companion-local `vite.otto-film.config.ts`, not the
+installer config. It supplies browser-only native handoff and shared-vault
+adapters. `otto-fixtures.mjs` serves fictional API results exclusively on
+loopback; unknown requests fail. It is never imported by shipped app code.
+
+```sh
+node --import tsx scripts/tutorial-film/otto-seed.mts /path/to/otto-seed.json
+desktop/work-os-companion/node_modules/.bin/vite build --config desktop/work-os-companion/vite.otto-film.config.ts
+# Copy InterVariable.woff2 to dist-otto-film/assets/film-Inter.woff2.
+# Upload dist-otto-film and the dedicated otto-*.mjs modules to isolated scratch.
+FILM_APP=/scratch/app FILM_OUT=/scratch FILM_SEED=/scratch/otto-seed.json \
+PLAYWRIGHT_PATH=/path/to/playwright node /scratch/rig/otto-shoot.mjs --preflight
+```
+
+Omit `--preflight` to record with Xvfb and FFmpeg on the render worker. This
+captures actual60fps wall time rather than speeding up screenshot-per-frame
+playback. The capture rectangle excludes Chromium chrome while retaining the
+entire1440×900 application viewport. Web Audio start/stop clocks record the
+actual spoken sample offsets without replacing the player. The finalizer mixes
+those bytes at their recorded offsets, ducking music beneath them. The compact
+confirmation take lets the real player finish before recording: the previous
+part has already played that recap, so its continuation is honest.
+
+Preflight and capture evidence live separately. Every take fingerprints the
+complete build, including CSS, art and audio. Finalization rejects preflight,
+missing parts, missing paired voice or non60fps recordings:
+
+```sh
+FILM_APP=/scratch/app FILM_OUT=/scratch FILM_PYTHON=/path/to/venv/bin/python \
+node /scratch/rig/otto-finish.mjs
+```
+
+Inspect every part and listen to the final mix before publishing the single
+MP4/JPG/VTT plus measured chapter offsets. The film teaches existing employee
+capabilities; its prepared AI replies are demonstration data, not live employee
+answers or a new historical EOD-status capability.
