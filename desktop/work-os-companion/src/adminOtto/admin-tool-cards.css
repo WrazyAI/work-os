@@ -1,0 +1,101 @@
+/* Thread-native tools: one paper frame, flat rows, no external font/assets. */
+.admin-tool-card {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--conversation-line, var(--dash-line, #d9ded5));
+  border-radius: 16px;
+  background: var(--conversation-paper, var(--dash-paper, #fafaf6));
+  color: var(--conversation-ink, var(--dash-ink, #182018));
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  container-type: inline-size;
+}
+.admin-tool-card * { box-sizing: border-box; }
+.admin-tool-card p, .admin-tool-card h4, .admin-tool-card h5 { margin: 0; }
+.admin-tool-head, .admin-tool-footer, .admin-tool-row, .admin-tool-actions, .admin-tool-record header, .admin-tool-receipt {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.admin-tool-head { padding: 14px 16px; border-bottom: 1px solid var(--conversation-line, #d9ded5); }
+.admin-tool-head h4 { font-size: 13px; font-weight: 700; }
+.admin-tool-state { flex: 0 1 auto; font-size: 11px; font-weight: 600; color: var(--conversation-muted, #687267); }
+.admin-tool-state.is-attention { color: var(--conversation-ink, #182018); text-decoration: underline; text-decoration-color: var(--dash-danger, #c94e43); text-underline-offset: 4px; }
+.admin-tool-body > p { padding: 14px 16px; }
+.admin-tool-rows { list-style: none; padding: 0; margin: 0; max-height: 440px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.admin-tool-rows > li { min-width: 0; padding: 14px 16px; }
+.admin-tool-rows > li + li { border-top: 1px solid var(--conversation-line, #d9ded5); }
+.admin-tool-main { min-width: 0; flex: 1; }
+.admin-tool-title { display: block; font-size: 13px; font-weight: 650; }
+.admin-tool-meta { display: block; color: var(--conversation-muted, #687267); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.admin-tool-card .admin-tool-meta { margin-top: 3px; }
+.admin-tool-card a { color: inherit; text-decoration: underline; text-decoration-color: var(--conversation-line, #d9ded5); text-underline-offset: 3px; }
+.admin-tool-card a:hover { text-decoration-color: currentColor; }
+.admin-tool-card button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--conversation-line, #d9ded5);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.admin-tool-card button:hover:not(:disabled) { background: var(--conversation-surface, #fffcf6); }
+.admin-tool-card button:disabled { opacity: .6; cursor: default; }
+.admin-tool-card :is(button, a, input, summary):focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 3px; }
+.admin-tool-card .admin-tool-primary { background: var(--conversation-ink, #182018); border-color: var(--conversation-ink, #182018); color: var(--conversation-paper, #fafaf6); }
+.admin-tool-card .admin-tool-primary:hover:not(:disabled) { background: var(--conversation-muted, #687267); }
+.admin-tool-footer { flex-wrap: wrap; align-items: center; padding: 12px 16px; border-top: 1px solid var(--conversation-line, #d9ded5); }
+.admin-tool-footer .admin-tool-asof { flex-basis: 100%; }
+.admin-tool-coverage { padding: 0 16px 12px; color: var(--conversation-muted, #687267); font-size: 11px; }
+.admin-tool-coverage summary { cursor: pointer; min-height: 36px; display: list-item; align-content: center; }
+.admin-tool-coverage ul { margin: 4px 0; padding-left: 16px; }
+.admin-tool-person { width: 100%; text-align: left !important; }
+.admin-tool-record header { flex-wrap: wrap; gap: 4px 10px; }
+.admin-tool-record blockquote, .admin-tool-excerpt { margin: 10px 0; white-space: pre-wrap; }
+.admin-tool-record blockquote { padding-left: 12px; border-left: 1px solid var(--conversation-line, #d9ded5); }
+.admin-tool-document { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--conversation-line, #d9ded5); white-space: pre-wrap; }
+.admin-tool-document h5 { margin-bottom: 6px; font-size: 12px; font-weight: 650; }
+.admin-tool-workday { margin: 12px 0; display: grid; gap: 4px; }
+.admin-tool-workday dt { font-size: 11px; color: var(--conversation-muted, #687267); }
+.admin-tool-workday dd { margin: 0; white-space: pre-wrap; }
+.admin-tool-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: 10px; }
+.admin-tool-action-list { max-height: 520px; }
+.admin-tool-action { display: grid; gap: 10px; }
+.admin-tool-selection { display: grid; place-items: center; min-width: 36px; min-height: 36px; margin: -5px 0 -5px -8px; cursor: pointer; }
+.admin-tool-selection input { width: 16px; height: 16px; accent-color: var(--conversation-focus, #4a7d22); cursor: pointer; }
+.admin-tool-diff { margin: 0; display: grid; gap: 8px; }
+.admin-tool-diff > div { display: grid; grid-template-columns: minmax(72px, 1fr) minmax(0, 2fr); gap: 10px; }
+.admin-tool-diff dt { font-size: 11px; color: var(--conversation-muted, #687267); }
+.admin-tool-diff dd { margin: 0; min-width: 0; font-size: 12px; }
+.admin-tool-before { color: var(--conversation-muted, #687267); text-decoration: line-through; }
+.admin-tool-after { font-weight: 600; }
+.admin-tool-warnings { padding-left: 16px; margin: 0; font-size: 12px; }
+.admin-tool-receipt { flex-wrap: wrap; font-size: 11px; color: var(--conversation-muted, #687267); }
+.is-recorded > .admin-tool-receipt { font-weight: 650; color: var(--conversation-focus, #4a7d22); }
+.admin-tool-error { font-size: 12px; color: var(--conversation-ink, #182018); }
+.admin-tool-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@container (max-width: 300px) {
+  .admin-tool-head, .admin-tool-footer, .admin-tool-rows > li { padding-inline: 12px; }
+  .admin-tool-head { flex-wrap: wrap; }
+  .admin-tool-diff > div { grid-template-columns: 1fr; gap: 2px; }
+  .admin-tool-footer > button { flex: 1 1 auto; }
+}
+@media (pointer: coarse) {
+  .admin-tool-card button, .admin-tool-selection, .admin-tool-coverage summary { min-height: 40px; }
+  .admin-tool-card a { display: inline-block; padding-block: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-tool-card *, .admin-tool-card *::before, .admin-tool-card *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

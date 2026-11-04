@@ -2444,6 +2444,18 @@ header.
   for accounts with a personal workday; the device, display, guides, and
   diagnostics half always shows.
 
+**Admin Otto tools.** The administration chat uses one thread-native card family
+for reads, proposals, and receipts: a paper frame, a clear header and lifecycle
+marker, flat rows, and one action region. Tasks, work records/EODs, reviewed
+recaps, workdays, person resolution, and every task change each get their own
+layout; a proposal never prints raw ids, an unchanged field, or a meaningless
+empty value. Independent changes group into one review card with per-item
+selection and receipts; a dependent change waits for its prerequisite and is
+reviewed again before it can run. An uncertain result is never retried blindly:
+the card checks its authoritative status first. `New chat` is explicit in the
+sheet header, discards the thread, draft, and unconfirmed previews after the
+server fences them, and never reverts recorded work.
+
 **Recap follows.** The account's own settings include one shared two-column
 Recap follows group even when no personal workday is mapped. All active
 employees is the default and includes later hires; Selected saves exactly the

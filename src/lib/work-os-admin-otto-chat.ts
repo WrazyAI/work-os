@@ -24,8 +24,11 @@ import {
 } from "@/lib/work-os-admin-otto-conversation";
 import { summarizeAdminOttoRead } from "@/lib/work-os-admin-otto-summary";
 import { executeAdminOttoOperation } from "@/lib/work-os-admin-otto-actions";
+import { startOttoWorkflow, loadOttoWorkflow, abandonOttoWorkflow, currentOttoAction, type OttoWorkflowDeps } from "@/lib/work-os-admin-otto-workflows";
 import type {
   AdminRead,
+  AdminOttoPendingAction,
+  AdminOttoWorkflowView,
   ChatRequest,
   ChatResult,
   LocalWindow,
@@ -78,6 +81,8 @@ export type AdminOttoThreadTurn = {
   role: "user" | "assistant";
   text: string;
   createdAt: string;
+  pendingAction?: AdminOttoPendingAction;
+  workflow?: AdminOttoWorkflowView;
 };
 
 export type AdminOttoThreadView = {
@@ -135,6 +140,8 @@ type ResultSnapshot = {
 };
 
 type StoredReadRefs =
+  | { v: 1; kind: "action"; action: AdminOttoPendingAction }
+  | { v: 1; kind: "workflow"; workflowId: string }
   | {
       v: 1;
       kind: "read";
@@ -163,6 +170,7 @@ type ExecutedRead = {
   reply: string;
   errorCode?: ChatResult["errorCode"];
   pendingAction?: ChatResult["pendingAction"];
+  workflow?: AdminOttoWorkflowView;
   stale?: boolean;
 };
 
@@ -844,7 +852,7 @@ async function executeRead(
     windows,
     ...(sources ? { sources } : {}),
   });
-  const read: AdminRead = { kind: "records", page, windows };
+  const read: AdminRead = { kind: "records", page, windows, people };
   const reply = replyFor(read, intent, people);
   return {
     read,
@@ -918,6 +926,14 @@ function refsValue(value: unknown): StoredReadRefs | null {
   if (row.v !== 1) return null;
   if (row.kind === "unsupported") return { v: 1, kind: "unsupported" };
   if (row.kind === "message") return readAdminOttoMessageRef(row);
+  if (row.kind === "workflow" && typeof row.workflowId === "string" && UUID.test(row.workflowId)) {
+    return { v: 1, kind: "workflow", workflowId: row.workflowId };
+  }
+  if (row.kind === "action" && row.action && typeof row.action === "object") {
+    const action = row.action as AdminOttoPendingAction;
+    if (typeof action.previewId === "string" && UUID.test(action.previewId)) return { v: 1, kind: "action", action };
+    return null;
+  }
   let intent: ReadIntent;
   try {
     intent = requireAdminOttoIntent(row.intent);
@@ -1045,6 +1061,13 @@ async function validateReadRefs(access: WorkOsAccess, refs: Extract<StoredReadRe
 }
 
 async function executeStoredRead(access: WorkOsAccess, refs: StoredReadRefs, now: Date): Promise<ExecutedRead> {
+  if (refs.kind === "workflow") {
+    const workflow = await loadOttoWorkflow(access, refs.workflowId, adminOttoWorkflowDeps(access, now));
+    return { read: null, refs, reply: "", workflow };
+  }
+  if (refs.kind === "action") {
+    return { read: null, refs, reply: refs.action.summary, pendingAction: await currentOttoAction(access, refs.action) };
+  }
   if (refs.kind === "unsupported") {
     return { read: null, refs, reply: UNSUPPORTED_REPLY, errorCode: "unsupported" };
   }
@@ -1291,6 +1314,8 @@ async function replay(
     turnId: turn.id,
     reply: turn.text,
     result,
+    ...(executed.pendingAction ? { pendingAction: executed.pendingAction } : {}),
+    ...(executed.workflow ? { workflow: executed.workflow } : {}),
     contextVersion: Number(thread.context_version),
     ...(executed.errorCode ? { errorCode: executed.errorCode } : {}),
   };
@@ -1458,6 +1483,11 @@ async function commitOrReplay(
 ): Promise<ChatResult | null> {
   const duplicate = await transaction(async (client) => {
     await assertCurrentAccess(client, access);
+    const fence = await client.query<{ abandoned: boolean }>(`insert into work_admin_otto_request_fences
+      (organization_id,membership_id,user_id,request_id) values ($1,$2,$3,$4)
+      on conflict (organization_id,membership_id,user_id,request_id) do update set request_id=excluded.request_id
+      returning abandoned`, [access.organizationId, access.membershipId, access.ctx.user.id, request.requestId]);
+    if (fence.rows[0]?.abandoned) throw new WorkOsConflictError("This chat was discarded. Start a new request.", "conversation_unavailable");
     const { rows } = await client.query(`insert into work_admin_otto_chat_requests
       (organization_id,membership_id,user_id,request_id,request_hash,requested_conversation_id,thread_id,turn_id)
       values ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -1475,6 +1505,11 @@ async function commitOrReplay(
     }
     if (thread) await appendThreadTurn(client, access, thread, write);
     else await writeNewThread(client, access, write);
+    if (write.refs.kind === "workflow") {
+      await client.query(`update work_admin_otto_workflows set thread_id=$2 where id=$1
+        and organization_id=$3 and membership_id=$4 and user_id=$5 and abandoned_at is null`,
+      [write.refs.workflowId, write.threadId, access.organizationId, access.membershipId, access.ctx.user.id]);
+    }
     return null;
   });
   return duplicate ? replayCommittedRequest(access, duplicate, deps, now) : null;
@@ -1490,7 +1525,13 @@ async function persistExecution(
   newId: () => string,
 ): Promise<ChatResult> {
   const write = prepareWrite(thread, executed, request, newId);
-  const replayed = await commitOrReplay(access, thread, request, write, deps, now);
+  let replayed: ChatResult | null;
+  try {
+    replayed = await commitOrReplay(access, thread, request, write, deps, now);
+  } catch (error) {
+    if (executed.workflow) await abandonOttoWorkflow(access, executed.workflow.id).catch(() => undefined);
+    throw error;
+  }
   if (replayed) return replayed;
   const read = executed.read
     ? withContinuation(executed.read, executed.refs, access, write.threadId, write.version, write.turnId)
@@ -1501,6 +1542,7 @@ async function persistExecution(
     reply: executed.reply,
     result: read,
     ...(executed.pendingAction ? { pendingAction: executed.pendingAction } : {}),
+    ...(executed.workflow ? { workflow: executed.workflow } : {}),
     contextVersion: write.version,
     ...(executed.errorCode ? { errorCode: executed.errorCode } : {}),
   };
@@ -1520,6 +1562,10 @@ export async function executeAdminOttoChat(
 ): Promise<ChatResult> {
   requireAdmin(access);
   const request = normalizeRequest(input);
+  const fence = await getPool().query<{ abandoned: boolean }>(`select abandoned from work_admin_otto_request_fences
+    where organization_id=$1 and membership_id=$2 and user_id=$3 and request_id=$4`,
+  [access.organizationId, access.membershipId, access.ctx.user.id, request.requestId]);
+  if (fence.rows[0]?.abandoned) throw new WorkOsConflictError("This chat was discarded. Start a new request.", "conversation_unavailable");
   const now = deps.now?.() ?? new Date();
   const newId = deps.newId ?? randomUUID;
 
@@ -1626,6 +1672,33 @@ export async function executeAdminOttoChat(
       ? { reply: "", intent: await deps.parseIntent(request.text, context) }
       : await parseAdminOttoInterpretation(request.text, context);
 
+  if (interpretation.steps?.length) {
+    for (const step of interpretation.steps) {
+      const names = step.operation?.person_names ?? (step.intent?.target.kind === "names" ? step.intent.target.names : []);
+      if (names.some((name) => !nameAuthorizedByText(name, request.text))) {
+        throw new WorkOsValidationError("Name the people you want included in this request.");
+      }
+      if (step.intent?.target.kind === "team" && !explicitTeam(request.text)) {
+        throw new WorkOsValidationError("Name the people or explicitly request the whole team.");
+      }
+      if (step.intent?.target.kind === "ids" && step.intent.target.ids.some((id) => !allowedModelIds(context, thread, pending).has(id))) {
+        throw new WorkOsValidationError("Name the people rather than supplying unresolved IDs.");
+      }
+      if (step.intent?.target.kind === "context") {
+        const ids = thread?.resolved_person_ids ?? [];
+        if (!ids.length) throw new WorkOsValidationError("Name the people for this request.");
+        step.intent = { ...step.intent, target: { kind: "ids", ids } };
+      }
+    }
+    const workflow = await startOttoWorkflow(access, request.requestId, request.text, interpretation.steps,
+      adminOttoWorkflowDeps(access, now, deps));
+    await recheckAfterRead(access, deps);
+    return persistExecution(access, thread, request, {
+      read: null, refs: { v: 1, kind: "workflow", workflowId: workflow.id }, workflow,
+      reply: "Here is the result of each request. Task changes await your approval.",
+    }, deps, now, newId);
+  }
+
   if (interpretation.operation) {
     const unauthorized = interpretation.operation.person_names.find((name) => !nameAuthorizedByText(name, request.text));
     if (unauthorized) {
@@ -1636,11 +1709,13 @@ export async function executeAdminOttoChat(
       };
       return persistExecution(access, thread, request, executed, deps, now, newId);
     }
-    const action = await (deps.executeOperation ?? executeAdminOttoOperation)(access, interpretation.operation);
+    const action = await (deps.executeOperation ?? executeAdminOttoOperation)(
+      access, interpretation.operation, `otto-request:${request.requestId}`,
+    );
     await recheckAfterRead(access, deps);
     const executed: ExecutedRead = {
       read: null,
-      refs: adminOttoMessageRef(action.reply),
+      refs: action.pendingAction ? { v: 1, kind: "action", action: action.pendingAction } : adminOttoMessageRef(action.reply),
       reply: action.reply,
       ...(action.pendingAction ? { pendingAction: action.pendingAction } : {}),
     };
@@ -1809,6 +1884,15 @@ export async function loadAdminOttoThread(
   const thread = await loadThread(access, id);
   if (!thread) throw new WorkOsConflictError("This conversation is no longer available.", "conversation_unavailable");
   const rows = await loadTurns(access, id);
+  const turnActions = new Map<string, Pick<AdminOttoThreadTurn, "pendingAction" | "workflow">>();
+  for (const turn of rows) {
+    if (turn.role !== "assistant") continue;
+    const refs = refsValue(turn.source_refs);
+    if (refs?.kind === "action" || refs?.kind === "workflow") {
+      const executed = await executeStoredRead(access, refs, deps.now?.() ?? new Date());
+      turnActions.set(turn.id, { pendingAction: executed.pendingAction, workflow: executed.workflow });
+    }
+  }
   const latestAssistant = [...rows].reverse().find((row) => row.role === "assistant");
   let result: AdminRead | null = null;
   let resultStatus: AdminOttoThreadView["resultStatus"] = "unavailable";
@@ -1835,9 +1919,87 @@ export async function loadAdminOttoThread(
       role: row.role,
       text: row.text,
       createdAt: safeIso(row.created_at),
+      ...turnActions.get(row.id),
     })),
     result,
     resultStatus,
+  };
+}
+
+/** Reuses the existing authorized typed readers. Only source references, not
+ * entire team result sets, are saved in workflow progress. */
+export async function discardAdminOttoConversation(access: WorkOsAccess, input: { conversationId: string | null; requestId?: string | null }) {
+  requireAdmin(access);
+  const conversationId = input.conversationId ? uuid(input.conversationId, "conversationId") : null;
+  const requestId = input.requestId ? uuid(input.requestId, "requestId") : null;
+  if (conversationId && !await loadThread(access, conversationId)) {
+    throw new WorkOsConflictError("This conversation is no longer available.", "conversation_unavailable");
+  }
+  await transaction(async (client) => {
+    await assertCurrentAccess(client, access);
+    const fenceRequest = async (id: string) => client.query(`insert into work_admin_otto_request_fences
+      (organization_id,membership_id,user_id,request_id,abandoned) values ($1,$2,$3,$4,true)
+      on conflict (organization_id,membership_id,user_id,request_id) do update set abandoned=true`,
+    [access.organizationId, access.membershipId, access.ctx.user.id, id]);
+    if (requestId) await fenceRequest(requestId);
+    // A first send may have committed while the client still knew no thread.
+    // Resolve that thread inside the same transaction so its legacy single
+    // preview is abandoned and its turns stop being reachable.
+    const committedThread = requestId
+      ? (await client.query<{ thread_id: string }>(`select thread_id from work_admin_otto_chat_requests
+          where organization_id=$1 and membership_id=$2 and user_id=$3 and request_id=$4 for update`,
+        [access.organizationId, access.membershipId, access.ctx.user.id, requestId])).rows[0]?.thread_id
+      : null;
+    const targets = [...new Set([conversationId, committedThread].filter((id): id is string => !!id))];
+    for (const target of targets) {
+      const requests = await client.query<{ request_id: string }>(`select request_id from work_admin_otto_chat_requests
+        where organization_id=$1 and membership_id=$2 and user_id=$3 and thread_id=$4 order by request_id`,
+      [access.organizationId, access.membershipId, access.ctx.user.id, target]);
+      for (const request of requests.rows) await fenceRequest(request.request_id);
+    }
+    const workflows = await client.query<{ id: string }>(`update work_admin_otto_workflows set abandoned_at=now()
+      where organization_id=$1 and membership_id=$2 and user_id=$3 and
+        (($4::uuid is not null and thread_id=$4) or ($5::uuid is not null and request_id=$5)
+          or ($6::uuid[] is not null and thread_id = any($6::uuid[]))) returning id`,
+    [access.organizationId, access.membershipId, access.ctx.user.id, conversationId, requestId, targets.length ? targets : null]);
+    for (const workflow of workflows.rows) {
+      await client.query(`update work_admin_action_previews set expires_at=least(expires_at,now())
+        where organization_id=$1 and user_id=$2 and source='otto' and token_id is null
+          and idempotency_key like $3 and confirmed_at is null`,
+      [access.organizationId, access.ctx.user.id, `otto-workflow:${workflow.id}:%`]);
+    }
+    for (const target of targets) {
+      const actions = await client.query<{ source_refs: unknown }>(`select source_refs from work_admin_otto_turns
+        where organization_id=$1 and membership_id=$2 and thread_id=$3 and role='assistant'`,
+      [access.organizationId, access.membershipId, target]);
+      for (const action of actions.rows) {
+        const refs = refsValue(action.source_refs);
+        if (refs?.kind !== "action") continue;
+        await client.query(`update work_admin_action_previews set expires_at=least(expires_at,now())
+          where id=$1 and organization_id=$2 and user_id=$3 and source='otto' and token_id is null and confirmed_at is null`,
+        [refs.action.previewId, access.organizationId, access.ctx.user.id]);
+      }
+      await client.query(`delete from work_admin_otto_threads where id=$1 and organization_id=$2 and membership_id=$3`,
+      [target, access.organizationId, access.membershipId]);
+    }
+  });
+}
+
+export function adminOttoWorkflowDeps(access: WorkOsAccess, now = new Date(), deps: AdminOttoChatDeps = {}): OttoWorkflowDeps {
+  return {
+    read: async (raw) => {
+      const intent = requireAdminOttoIntent(raw);
+      const resolution = await resolveTargetRequest(access, intent.target);
+      const executed = await executeTargetResolution(access, intent, resolution, now);
+      return { result: executed.read, refs: executed.refs, reply: executed.reply };
+    },
+    replayRead: async (raw) => {
+      const refs = refsValue(raw);
+      if (!refs || refs.kind === "workflow" || refs.kind === "action") throw new WorkOsValidationError("Stored read is unavailable.");
+      const executed = await executeStoredRead(access, refs, now);
+      return { result: executed.read, reply: executed.reply };
+    },
+    operation: (current, operation, key, taskId) => (deps.executeOperation ?? executeAdminOttoOperation)(current, operation, key, taskId),
   };
 }
 

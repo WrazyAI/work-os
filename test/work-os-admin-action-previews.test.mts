@@ -55,7 +55,9 @@ const input: Omit<CreateAdminPreviewInput, "state"> = {
   targetId: "t1",
   request: {},
   preview: { action: "task.assign", summary: "Assign", changes: [], warnings: [], state: {}, expiresAt: "" },
-  expiresAt: new Date(Date.now() + 60_000),
+  // A non-expiry fixture must outlive a loaded full-suite run; the dedicated
+  // expired-preview test below still exercises expiry with a past timestamp.
+  expiresAt: new Date(Date.now() + 10 * 60_000),
 };
 
 const state = { updatedAt: "a", status: "open" };

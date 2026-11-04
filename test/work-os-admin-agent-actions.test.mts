@@ -137,6 +137,16 @@ const token = {
  * is self-review checked even when the token itself is unmapped. */
 const reviewerToken = { ...token, reviewerPersonId: personA };
 
+test("session task creation keeps preview idempotency without fabricating a token actor", async () => {
+  const { services, calls } = fakeServices(task, { people: [ada, grace] });
+  await applyAdminAction(adminAccess, "task.create", {
+    name: "Session-created task", assignee_person_ids: [personA],
+  }, services, { ...token, tokenId: null, tokenName: "Admin Otto" });
+  assert.equal(calls.createTask[0].options?.actor, undefined,
+    "a session must not write a fabricated identity into work_tasks.agent_token_id (UUID)");
+  assert.equal(calls.createTask[0].options?.idempotencyKey, token.previewId);
+});
+
 let f: Awaited<ReturnType<typeof fixture>>;
 before(async () => { f = await fixture(); });
 after(async () => { await f.close(); });

@@ -5053,6 +5053,11 @@ export default function App() {
             mode: "admin",
           }}
           conversationId={adminOttoConversationId}
+          onNewChat={() => {
+            setAdminOttoConversationId(null);
+            setAdminOttoDraft("");
+            setAdminOttoResetToken((value) => value + 1);
+          }}
           initialTab={adminOttoInitialTab}
           tabRequest={adminOttoTabRequest}
           initialRecap={adminOttoRequestedRecap}

@@ -6,7 +6,8 @@ import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
 import { adminPreviewNotifications, seedAdminFixtures } from "./adminFixtures";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
-import { ADMIN_FIXTURE_TRANSPORT, ADMIN_OTTO_FOLLOW_SCENARIOS, adminFixtureSpeak, createAdminOttoFollowFixture, fixtureInboxPage, FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "../adminOtto/fixtures";
+import type { AdminOttoPendingAction } from "../../../../src/modules/work-os/admin-otto/contracts";
+import { ADMIN_FIXTURE_TRANSPORT, ADMIN_OTTO_FOLLOW_SCENARIOS, FIXTURE_ACTIONS, adminFixtureSpeak, createAdminOttoFollowFixture, fixtureInboxPage, FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "../adminOtto/fixtures";
 import type { AdminOttoFollowFixtureScenario } from "../adminOtto/fixtures";
 import { AdminOttoSpeechChangedError } from "../adminOtto/api";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester } from "../adminOtto/audioOwner";
@@ -68,6 +69,11 @@ export default function AdminPreview() {
   const [ottoTabRequest, setOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [ottoConversation, setOttoConversation] = useState<string | null>(null);
   const [ottoResetToken, setOttoResetToken] = useState(0);
+  const [fixtureActions, setFixtureActions] = useState<AdminOttoPendingAction[]>(() => FIXTURE_ACTIONS.map((action) => ({ ...action })));
+  const fixtureWorkflow = {
+    id: "admin-fixture-workflow",
+    steps: fixtureActions.map((pendingAction, index) => ({ index, label: pendingAction.display?.title ?? pendingAction.summary, status: "ready" as const, pendingAction })),
+  };
   const inboxFixture = async (input: { cursor?: string; limit?: number } = {}) => {
     if (ottoState === "loading") return new Promise<never>(() => undefined);
     if (ottoState === "error") throw new Error("The reviewed-recap inbox could not be reached.");
@@ -81,6 +87,43 @@ export default function AdminPreview() {
       offset: input.cursor ? 2 : 0,
     });
   };
+  const fixtureTransport = {
+    ...ADMIN_FIXTURE_TRANSPORT,
+    send: ottoState === "cards" || ottoState === "partial"
+      ? async (input: { conversationId: string | null; text: string }) => ({
+          conversationId: input.conversationId ?? "admin-fixture-conversation",
+          turnId: `admin-fixture-cards-${input.text.length}`,
+          reply: ottoState === "partial" ? "Example Task 1 was created. Example Task 2 still needs attention." : "Both tasks are ready to review.",
+          result: null,
+          workflow: { ...fixtureWorkflow, steps: ottoState === "partial"
+            ? [{ ...fixtureWorkflow.steps[0], status: "recorded" as const, pendingAction: { ...fixtureWorkflow.steps[0].pendingAction!, status: "recorded" as const }, message: "Task created" },
+              { ...fixtureWorkflow.steps[1], pendingAction: { ...fixtureWorkflow.steps[1].pendingAction!, status: "unknown" as const } }]
+            : fixtureWorkflow.steps },
+          contextVersion: 1,
+        })
+      : ottoState === "mixed"
+        ? async (input: { conversationId: string | null; text: string }) => ({
+            conversationId: input.conversationId ?? "admin-fixture-conversation",
+            turnId: "admin-fixture-mixed",
+            reply: "I found the team's open tasks and prepared one change.",
+            result: null,
+            workflow: { id: "admin-fixture-mixed", steps: [
+              { index: 0, label: "Tasks", status: "recorded" as const, result: { kind: "tasks" as const, page: { items: [{ id: "fixture-task", title: "Review onboarding copy", assignees: [FIXTURE_REVIEWED_RECAP.person], parentId: null, createdDate: "2026-10-20", effectiveDueDate: "2026-11-05", status: "open" as const, recordUrl: `/work-os/admin/tasks?task=fixture-task` }], nextCursor: null, total: 1, asOf: "2026-11-04T12:00:00Z", coverage: ["Open tasks"] }, people: [FIXTURE_REVIEWED_RECAP.person] } },
+              { index: 1, label: "Example Task 1", status: "ready" as const, pendingAction: fixtureActions[0] },
+            ] },
+            contextVersion: 1,
+          })
+        : ADMIN_FIXTURE_TRANSPORT.send,
+    confirm: async (action: AdminOttoPendingAction) => {
+      const next: AdminOttoPendingAction = { ...action, status: "recorded", recordUrl: "/work-os/admin/tasks?task=fixture-task" };
+      setFixtureActions((current) => current.map((entry) => entry.previewId === action.previewId ? { ...entry, status: "recorded" } : entry));
+      return next;
+    },
+    status: async (action: AdminOttoPendingAction) => action,
+    inbox: inboxFixture,
+  };
+  const [ottoConversation, setOttoConversation] = useState<string | null>(null);
+  const [ottoResetToken, setOttoResetToken] = useState(0);
   const staleOnce = useRef(true);
   const fixtureSpeak = ottoState === "stale"
     ? async (input: { intervalId: string; reviewKey: string; voice?: string }) => {
@@ -195,7 +238,7 @@ export default function AdminPreview() {
           transcriptionEnabled
           transcribe={async () => ({ text: "This preview has no microphone transcription; the draft was not sent." })}
           transport={{
-            ...ADMIN_FIXTURE_TRANSPORT,
+            ...fixtureTransport,
             inbox: inboxFixture,
           }}
           onConversation={setOttoConversation}

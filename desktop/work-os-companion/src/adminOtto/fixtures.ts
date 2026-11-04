@@ -1,5 +1,6 @@
 import type {
   AdminRead,
+  AdminOttoPendingAction,
   FollowSettings,
   InboxItem,
   InboxPage,
@@ -157,14 +158,47 @@ export function fixtureRecordsResult(): AdminRead {
 
 /** A local answer for the administration chat. No provider or workspace
  * request leaves the preview. */
+/** Two local changes for rendered approval QA. The create carries a human
+ * title and assignee, not the server's owner-ID diff. */
+export const FIXTURE_ACTIONS = [{
+  previewId: "88888888-8888-4888-8888-888888888881", action: "task.create", summary: "Create Example Task 1",
+  changes: [{ field: "owners", from: [], to: [FIXTURE_REVIEWED_RECAP.person.id] }], warnings: [],
+  expiresAt: "2099-11-04T12:00:00.000Z", status: "pending" as const,
+  display: { title: "Example Task 1", assignees: [FIXTURE_REVIEWED_RECAP.person],
+    changes: [{ label: "Due date", before: null, after: "2026-11-06" }] },
+}, {
+  previewId: "88888888-8888-4888-8888-888888888882", action: "task.create", summary: "Create Example Task 2",
+  changes: [], warnings: [], expiresAt: "2099-11-04T12:00:00.000Z", status: "pending" as const,
+  display: { title: "Example Task 2", assignees: [FIXTURE_REVIEWED_RECAP.person], changes: [] },
+}];
+
 export const ADMIN_FIXTURE_TRANSPORT = {
-  send: async (input: { conversationId: string | null; requestId?: string; text: string }) => ({
+  send: async (input: { conversationId: string | null; requestId?: string; text: string }) => input.text.trim().toLowerCase() === "new chat fixture" ? {
+    conversationId: input.conversationId ?? "admin-fixture-conversation",
+    turnId: "admin-fixture-workflow-turn",
+    reply: "Both changes are ready for review.",
+    result: null,
+    workflow: { id: "admin-fixture-workflow", steps: FIXTURE_ACTIONS.map((pendingAction, index) => ({
+      index, label: pendingAction.display.title, status: "ready" as const, pendingAction,
+    })) },
+    contextVersion: 1,
+  } : input.text.trim().toLowerCase() === "mixed fixture" ? {
+    conversationId: input.conversationId ?? "admin-fixture-conversation",
+    turnId: "admin-fixture-mixed-turn",
+    reply: "I found the team's open tasks and prepared one change.",
+    result: null,
+    workflow: { id: "admin-fixture-mixed", steps: [
+      { index: 0, label: "Tasks", status: "recorded" as const, result: fixtureTaskResult() },
+      { index: 1, label: "Example Task 1", status: "ready" as const, pendingAction: FIXTURE_ACTIONS[0] },
+    ] },
+    contextVersion: 1,
+  } : {
     conversationId: input.conversationId ?? "admin-fixture-conversation",
     turnId: `admin-fixture-turn-${input.text.length}`,
     reply: "This local fixture answers without contacting the workspace. It shows the read-only task result below.",
     result: fixtureTaskResult(),
     contextVersion: 1,
-  }),
+  },
   load: async (conversationId: string) => ({
     conversationId,
     contextVersion: 1,
@@ -172,6 +206,12 @@ export const ADMIN_FIXTURE_TRANSPORT = {
     result: null,
     resultStatus: "unavailable" as const,
   }),
+  /** The preview owns no server thread, so discarding is a local no-op. */
+  discard: async () => undefined,
+  /** Browser QA states for the new cards. Nothing is applied; the fixture only
+   * models the persisted statuses the real confirm/status routes return. */
+  confirm: async (action: AdminOttoPendingAction) => action,
+  status: async (action: AdminOttoPendingAction) => action,
   inbox: async () => fixtureInboxPage({ count: 2, total: 25, nextCursor: "fixture-next-page", unread: 2 }),
 };
 

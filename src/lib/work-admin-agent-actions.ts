@@ -88,7 +88,8 @@ export type AdminActionPreview = Omit<AdminPreview, "id" | "expiresAt"> & {
  * self-review rule depends on it because an admin token may have no person
  * mapping of its own. */
 export type AdminActionActor = {
-  tokenId: string;
+  /** Null for an explicitly confirmed session action; never invent a token. */
+  tokenId: string | null;
   tokenName: string;
   previewId: string;
   reviewerPersonId: string | null;
@@ -567,7 +568,7 @@ async function planCreate(
     run: async (actor) => {
       const created = await services.createTask(access, input, {
         idempotencyKey: actor?.previewId,
-        actor: actor ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : undefined,
+        actor: actor?.tokenId ? { tokenId: actor.tokenId, tokenName: actor.tokenName } : undefined,
       });
       const row = taskRow(created);
       return { status: 201, body: taskBody(created), targetId: auditTargetId(row, null) };
@@ -1027,23 +1028,30 @@ export const defaultAdminAgentActionServices: AdminAgentActionServices = {
     };
   },
   createTask: async (access, payload, options = {}) => {
+    const reconcile = async () => {
+      if (!options.idempotencyKey) return null;
+      let query = db().from("work_tasks").select("*")
+        .eq("organization_id", access.organizationId)
+        .eq("agent_idempotency_key", options.idempotencyKey);
+      query = options.actor
+        ? query.eq("agent_token_id", options.actor.tokenId)
+        : query.is("agent_token_id", null);
+      const { data, error: loadError } = await query.maybeSingle();
+      if (loadError) throw new Error(`reconcile admin task create: ${loadError.message}`);
+      return (data as Json | null) ?? null;
+    };
+    // A create can succeed and still throw during a follow-up write. Reconcile
+    // before deciding the outcome, so a retry cannot insert a second row with
+    // the same preview key.
+    const recovered = await reconcile();
+    if (recovered) return recovered;
     try {
       return await createWorkOsEmployeeTask(access, payload, options.actor, options.idempotencyKey) as Json;
     } catch (error) {
-      // A retry after a successful create with a failed follow-up write hits
-      // the (organization, token, key) unique index; return the row the first
-      // attempt created instead of surfacing a duplicate-key failure.
-      if (!options.actor || !options.idempotencyKey) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/duplicate key|unique constraint|already exists/i.test(message)) throw error;
-      const { data, error: loadError } = await db().from("work_tasks").select("*")
-        .eq("organization_id", access.organizationId)
-        .eq("agent_token_id", options.actor.tokenId)
-        .eq("agent_idempotency_key", options.idempotencyKey)
-        .maybeSingle();
-      if (loadError) throw new Error(`reconcile admin task create: ${loadError.message}`);
-      if (!data) throw error;
-      return data as Json;
+      // A concurrent retry that lost the insert race owns the row already there.
+      const reconciled = await reconcile();
+      if (reconciled) return reconciled;
+      throw error;
     }
   },
   updateTask: (access, taskId, payload) => updateWorkOsAdminTask(access, taskId, payload),

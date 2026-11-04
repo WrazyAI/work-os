@@ -271,6 +271,15 @@ export async function createAdminPreview(input: CreateAdminPreviewInput): Promis
     throw new WorkOsValidationError("Otto previews are session-scoped and cannot carry a token id");
   }
   const key = normalizeKey(input.idempotencyKey);
+  const sessionStep = !tokenId && input.source === "otto" && key?.startsWith("otto-workflow:");
+  const findSessionStep = async () => {
+    const { rows } = await getPool().query<PreviewRow>(
+      `select ${COLUMNS} from work_admin_action_previews where organization_id=$1 and user_id=$2
+       and token_id is null and source='otto' and idempotency_key=$3`,
+      [input.organizationId, input.userId, key],
+    );
+    return rows[0];
+  };
   if (key && key.length > PREVIEW_IDEMPOTENCY_KEY_MAX) {
     throw new WorkOsValidationError(`Idempotency-Key must be ${PREVIEW_IDEMPOTENCY_KEY_MAX} characters or fewer`);
   }
@@ -287,6 +296,10 @@ export async function createAdminPreview(input: CreateAdminPreviewInput): Promis
 
   if (tokenId && key) {
     const existing = await findByIdempotencyKey(tokenId, key);
+    if (existing) return replayOrConflict(existing, input);
+  }
+  if (sessionStep) {
+    const existing = await findSessionStep();
     if (existing) return replayOrConflict(existing, input);
   }
 
@@ -314,6 +327,10 @@ export async function createAdminPreview(input: CreateAdminPreviewInput): Promis
     );
     return toAdminPreview(rows[0]);
   } catch (error) {
+    if (isUniqueViolation(error) && sessionStep) {
+      const existing = await findSessionStep();
+      if (existing) return replayOrConflict(existing, input);
+    }
     // Two retries of the same create can race past the select above; the index
     // is the tie-breaker, so resolve the duplicate instead of surfacing 500.
     if (isUniqueViolation(error) && tokenId && key) {
@@ -347,6 +364,10 @@ export type AdminPreviewRecord = {
   request: Json;
   targetType: string;
   targetId: string | null;
+  source?: "api" | "otto";
+  result?: { status: number; body: Json } | null;
+  confirmedAt?: string | null;
+  idempotencyKey?: string | null;
 };
 
 /** The confirm path must execute the request the preview resolved, not a
@@ -372,6 +393,10 @@ export async function getAdminPreviewRecord(
     request: row.request,
     targetType: row.target_type,
     targetId: row.target_id,
+    source: row.source,
+    result: row.result_status !== null ? { status: Number(row.result_status), body: row.result_body ?? {} } : null,
+    confirmedAt: timestamp(row.confirmed_at),
+    idempotencyKey: row.idempotency_key,
   };
 }
 
