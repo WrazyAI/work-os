@@ -69,7 +69,22 @@ test("finishing rejects silent speech scenes and derives chapter starts from act
   const url = new URL("../scripts/tutorial-film/otto-finish.mjs", import.meta.url);
   assert.ok(existsSync(url), "missing extended-film finalizer");
   const { buildOttoTimeline } = await import(url.href);
-  const parts = ["workday","unfinished","agenda","listen","confirm","next-steps","history","eod"].map(id=>({id,title:id,preflight:false,backendCalls:[],errors:[],scenes:["floating","app"].map(surface=>({surface,videoDuration:10,actions:[{type:"click",label:"Actual control"}],speech:id==="listen"?[{at:1,duration:3,source:"voices/warm.mp3"}]:[]}))}));
+  const { ottoParts } = await import(storyUrl.href);
+  const parts = ottoParts.map((part: any) => ({
+    id: part.id, title: part.title, preflight: false, backendCalls: [], errors: [],
+    scenes: part.scenes.map((scene: any) => ({
+      surface: scene.surface,
+      videoDuration: 10,
+      speech: part.id === "listen" ? [{ at: 1, duration: 3, source: "voices/warm.mp3" }] : [],
+      actions: scene.actions.flatMap((action: any) => action.type === "assert"
+        ? [{ type: "assert", text: action.text }]
+        : action.type === "suggestions"
+          ? ["Mark done", "Edit new task", "Save title / Add task", "Add task", "Skip remaining suggestion"].map((label) => ({ type: "click", label }))
+          : action.type === "olderReview"
+            ? ["Earlier recap: Extra notes", "Earlier recap: close notes", "Earlier recap: Looks right"].map((label) => ({ type: "click", label }))
+            : [{ type: action.type, label: action.name ?? action.selector ?? action.type }]),
+    })),
+  }));
   const timeline = buildOttoTimeline(parts);
   assert.equal(timeline.duration,160);
   assert.deepEqual(timeline.chapters.map((c:any)=>c.start),[0,20,40,60,80,100,120,140]);
