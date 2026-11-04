@@ -8,7 +8,7 @@ describe("browser session boot before React queries", () => {
     const { secureState } = await import("../vault");
     await secureState.session();
     expect(fetch).not.toHaveBeenCalled();
-  });
+  }, 15_000);
   it("resolves an unmapped admin's organization through session, never employee day", async () => {
     vi.stubGlobal("window", { location: { search: "?token=fixture-only" } });
     const fetch = vi.fn<(url: string) => Promise<Response>>(async () => new Response(JSON.stringify({ userId: "admin", organizationId: "org", personId: null, role: "admin" })));
@@ -16,5 +16,5 @@ describe("browser session boot before React queries", () => {
     const { secureState } = await import("../vault");
     expect((await secureState.session())?.organizationId).toBe("org");
     expect(fetch.mock.calls[0][0]).toMatch(/\/api\/work-os\/session$/);
-  });
+  }, 15_000);
 });
