@@ -47,6 +47,7 @@ try{
   evidence={id:part.id,title:part.title,preflight:dry,buildFingerprint,fixtureRequests:[],backendCalls:[],errors:[],scenes:[]};
   try{
    for(const scene of part.scenes){
+    recordingStart=0;activeSpeech=null;
     api=createOttoFilmApi({phase:part.phase,seed});
     sceneEvidence={surface:scene.surface,actions:[],speech:[],alternate:!!scene.alternate};evidence.scenes.push(sceneEvidence);
     const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1});
@@ -68,6 +69,7 @@ try{
      AudioBufferSourceNode.prototype.stop=function(...args){finish(this);return nativeStop.apply(this,args);};
     },{now:FILM_NOW,seedNextSteps:scene.seedNextSteps?{...api.handle('GET','/api/work-os/me/activity-intervals/film-recap/next-steps'),states:{},failures:{},error:null}:null});
     await context.exposeBinding('filmMediaEvent',(_source,event)=>{
+     if(!recordingStart)return;
      if(event.event==='playing'){activeSpeech={at:((event.at-recordingStart)/1000),source:'voices/warm.mp3',duration:0,mediaDuration:event.duration};}
      else if(activeSpeech){activeSpeech.duration=event.currentTime;sceneEvidence.speech.push(activeSpeech);activeSpeech=null;}
     });

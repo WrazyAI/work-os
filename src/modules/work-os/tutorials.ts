@@ -3,6 +3,7 @@
 export type TutorialStatus = "published" | "in-production";
 
 export interface Tutorial {
+  chapters?: readonly { title: string; start: number }[];
   slug: string;
   title: string;
   summary: string;
@@ -141,7 +142,7 @@ export const TUTORIALS: readonly Tutorial[] = [
     platformNote: "Appearance preferences apply immediately and stay on this device.",
   },
   {
-    slug: "companion-chat", title: "Use the floating companion",
+    slug: "companion-chat", title: "Use Otto, the floating companion",
     summary: "Open and collapse the mascot, expand a task card and select work for review.",
     status: "published", duration: 43.95,
     poster: `${BASE}/companion-chat.jpg`, video: `${BASE}/companion-chat.mp4`, captions: `${BASE}/companion-chat.vtt`,
@@ -153,6 +154,33 @@ export const TUTORIALS: readonly Tutorial[] = [
       "Collapse the companion when you return to your other work.",
     ],
     platformNote: "The floating window is part of the desktop app, not the browser workspace.",
+  },
+  {
+    slug: "otto-extended", title: "A workday with Otto — an extended look",
+    summary: "Ask about your day, plan with Otto, hear and confirm recaps, decide next steps, and submit your EOD.",
+    status: "published", duration: 199.684,
+    poster: `${BASE}/otto-extended.jpg`, video: `${BASE}/otto-extended.mp4`, captions: `${BASE}/otto-extended.vtt`,
+    chapters: [
+      { title: "Ask about your workday", start: 0 },
+      { title: "Find what is still unfinished", start: 22.516666 },
+      { title: "Start with a clear plan", start: 47.666666 },
+      { title: "Listen to your recap", start: 73.4 },
+      { title: "Confirm without opening chat", start: 109.2 },
+      { title: "Decide what comes next", start: 128.033333 },
+      { title: "Catch an earlier recap", start: 151.599999 },
+      { title: "Close the day with your EOD", start: 178.649999 },
+    ],
+    steps: [
+      "Ask Otto to summarize your workday in the floating conversation, then ask in the in-app conversation. The film uses prepared demonstration facts, not an employee account.",
+      "Ask which tasks are unfinished. Inspect the pending-task tool on both surfaces; a question does not complete work.",
+      "Follow Set today's goal from the floating reminder into Plan your day. Build, review and confirm, or open the same flow from in-app Focus.",
+      "Choose Listen on the compact recap and hear it read aloud. In the app, open Focus and use the recap's listening control.",
+      "After listening, confirm the recap in the compact bubble without opening chat. The alternate in-app route lets you inspect notes before confirming.",
+      "Review next-step suggestions individually: mark a task done, edit and add new work, or skip a suggestion. The in-app conversation has the same decisions.",
+      "For an earlier recap, open floating Tasks and scroll Recent activity. View in app opens the corresponding Focus stream, not the main Tasks workspace.",
+      "Follow Open EOD review into the main app, read the report and submit deliberately. You can also open EOD Review directly. Submitted means sent for review, not approved by a manager.",
+    ],
+    platformNote: "Floating Otto belongs to the desktop companion. Day summaries use Work Memory when enabled. This film demonstrates existing controls with fictional data; it does not promise a historical EOD-status lookup in chat.",
   },
 ] as const;
 

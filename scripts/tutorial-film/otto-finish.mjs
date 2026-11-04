@@ -18,6 +18,9 @@ export function buildOttoTimeline(parts) {
    assert.ok(Number.isFinite(scene.videoDuration)&&scene.videoDuration>0,'Measured scene duration');
    result.segments.push({...scene,id:part.id,start:result.duration});
    for(const voice of scene.speech??[]){
+    // Older capture observers also logged the explicitly documented listening
+    // preparation before this take's recorder began. It is not film audio.
+    if(scene.preparation && voice.at>=scene.videoDuration)continue;
     assert.ok(voice.at>=0&&voice.duration>0&&voice.at+voice.duration<=scene.videoDuration+.35,'Speech stays inside its scene');
     result.speech.push({...voice,at:result.duration+voice.at,duration:Math.min(voice.duration,scene.videoDuration-voice.at)});
    }
@@ -35,7 +38,9 @@ function main(){
  const timeline=buildOttoTimeline(parts);
  writeFileSync(resolve(out,'timeline.json'),JSON.stringify(timeline,null,2));
  writeFileSync(resolve(out,'concat.txt'),timeline.segments.map(s=>`file '${s.file.replaceAll("'","'\\''")}'`).join('\n'));
- execFileSync('ffmpeg',['-y','-v','error','-f','concat','-safe','0','-i',resolve(out,'concat.txt'),'-c','copy',resolve(out,'silent.mp4')],{stdio:'inherit'});
+ // X11's content-origin estimate retains a two-pixel top/four-pixel right
+ // window edge. Remove only that border and normalize the delivery canvas.
+ execFileSync('ffmpeg',['-y','-v','error','-f','concat','-safe','0','-i',resolve(out,'concat.txt'),'-vf','crop=1436:898:0:2,scale=1440:900,setsar=1','-r','60','-c:v','libx264','-preset','fast','-threads','2','-crf','20','-pix_fmt','yuv420p','-an',resolve(out,'silent.mp4')],{stdio:'inherit'});
  execFileSync(process.env.FILM_PYTHON||'python3',[fileURLToPath(new URL('./compose-desktop-music.py',import.meta.url)),resolve(out,'music.wav'),String(timeline.duration)],{stdio:'inherit'});
  const voiceFile=resolve(process.env.FILM_APP||'/tmp/work-os-render/otto/app','voices/warm.mp3');
  const inputs=['-i',resolve(out,'silent.mp4'),'-i',resolve(out,'music.wav')];
@@ -51,7 +56,7 @@ function main(){
  for(const segment of timeline.segments){
   const p=ottoParts.find(p=>p.id===segment.id),scene=p.scenes.find(s=>s.surface===segment.surface),top=segment.surface==='app';
   let from=segment.start+(segment.surface==='floating'?3.4:.8);const end=segment.start+segment.videoDuration;
-  for(const voice of segment.speech??[]){
+   for(const voice of (segment.speech??[]).filter(v=>!segment.preparation||v.at<segment.videoDuration)){
    const at=segment.start+voice.at;
    cue(from,at,scene.caption+'\n'+scene.copy,top);
    const weights=speechLines.map(l=>l.text.split(/\s+/).length),total=weights.reduce((a,b)=>a+b,0);let elapsed=0;

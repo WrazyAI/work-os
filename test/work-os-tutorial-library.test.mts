@@ -7,13 +7,21 @@ import { TUTORIALS, tutorialBySlug } from "../src/modules/work-os/tutorials.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("the library has ten separate scenarios with unique slugs", () => {
-  assert.equal(TUTORIALS.length, 10);
+test("the library keeps the ten scenarios and adds one separate extended Otto lesson", () => {
+  assert.equal(TUTORIALS.length, 11);
   assert.equal(new Set(TUTORIALS.map((tutorial) => tutorial.slug)).size, TUTORIALS.length);
   for (const tutorial of TUTORIALS) {
     assert.ok(tutorial.steps.length >= 3, `${tutorial.slug} needs written steps`);
     assert.match(tutorial.summary, /\w/);
   }
+});
+
+test("the quick companion lesson and extended lesson cannot be confused", () => {
+  assert.equal(tutorialBySlug("companion-chat")?.title, "Use Otto, the floating companion");
+  const extended=tutorialBySlug("otto-extended");
+  assert.ok(extended);
+  assert.match(extended.title,/extended look/i);
+  assert.ok(extended.steps.length>=8);
 });
 
 test("every published tutorial has its film, poster and captions on disk", () => {

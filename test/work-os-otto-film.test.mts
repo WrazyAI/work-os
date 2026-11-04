@@ -78,6 +78,10 @@ test("finishing rejects silent speech scenes and derives chapter starts from act
   assert.throws(()=>buildOttoTimeline(silent),/audible/);
   const preflight=structuredClone(parts);preflight[0].preflight=true;
   assert.throws(()=>buildOttoTimeline(preflight),/preflight/);
+  const prepared=structuredClone(parts) as Array<(typeof parts)[number] & {scenes: Array<(typeof parts)[number]["scenes"][number] & {preparation?: string}>}>;
+  prepared[4].scenes[0].preparation='The prior part already read this recap.';
+  prepared[4].scenes[0].speech=[{at:12,duration:18,source:'voices/warm.mp3'}];
+  assert.equal(buildOttoTimeline(prepared).speech.length,2,'pre-capture preparation speech is not mixed into the film');
 });
 
 test("the filming fingerprint changes when styling or the spoken bytes change", async () => {
