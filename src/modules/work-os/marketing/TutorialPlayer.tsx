@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Tutorial } from "@/modules/work-os/tutorials";
-import { formatTutorialDuration } from "@/modules/work-os/tutorial-duration";
+import { formatChapterTime, formatTutorialDuration } from "@/modules/work-os/tutorial-duration";
 import { seekTutorialChapter } from "@/modules/work-os/tutorial-chapters";
 import styles from "./tutorials.module.css";
 
@@ -39,7 +39,7 @@ export default function TutorialPlayer({ tutorial }: { tutorial: Tutorial }) {
                 }}>
                   <span>{String(index + 1).padStart(2, "0")}</span>
                   <strong>{chapter.title}</strong>
-                  <time>{formatTutorialDuration(chapter.start)}</time>
+                  <time>{formatChapterTime(chapter.start)}</time>
                 </button>
               </li>
             ))}

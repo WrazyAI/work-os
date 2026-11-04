@@ -23,10 +23,15 @@ test("long film durations read as minutes rather than a rounded 200 seconds", as
   assert.equal(formatTutorialDuration(55.4), "55s");
   assert.equal(formatTutorialDuration(60), "1:00");
   assert.equal(formatTutorialDuration(null), "25s");
+  const { formatChapterTime } = await import(url.href);
+  assert.equal(formatChapterTime(0), "0:00");
+  assert.equal(formatChapterTime(22.516666), "0:22");
+  assert.equal(formatChapterTime(73.4), "1:13");
   const library = read("src/modules/work-os/marketing/TutorialLibrary.tsx");
   const player = read("src/modules/work-os/marketing/TutorialPlayer.tsx");
   assert.match(library, /formatTutorialDuration/);
-  assert.match(player, /formatTutorialDuration/);
+  assert.match(player, /formatChapterTime/);
+  assert.doesNotMatch(player, /<time>\{formatTutorialDuration/);
 });
 
 test("spoken captions use the shipped voice's measured line starts, including a cut-off in-app read", async () => {
