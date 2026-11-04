@@ -188,6 +188,16 @@ export function tutorialBySlug(slug: string): Tutorial | null {
   return TUTORIALS.find((tutorial) => tutorial.slug === slug) ?? null;
 }
 
+/** The lesson before and after this one in the library's reading order. */
+export function adjacentTutorials(slug: string): { previous: Tutorial | null; next: Tutorial | null } {
+  const index = TUTORIALS.findIndex((tutorial) => tutorial.slug === slug);
+  if (index === -1) return { previous: null, next: null };
+  return {
+    previous: TUTORIALS[index - 1] ?? null,
+    next: TUTORIALS[index + 1] ?? null,
+  };
+}
+
 export function publishedTutorials(): Tutorial[] {
   return TUTORIALS.filter((tutorial) => tutorial.status === "published");
 }

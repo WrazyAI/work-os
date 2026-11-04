@@ -42,7 +42,7 @@
   font-size: 14px;
 }
 
-.skip:focus {
+.skip:focus-visible {
   top: 16px;
 }
 

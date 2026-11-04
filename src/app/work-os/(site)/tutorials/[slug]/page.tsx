@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { tutorialBySlug, TUTORIALS } from "@/modules/work-os/tutorials";
+import { adjacentTutorials, tutorialBySlug, TUTORIALS } from "@/modules/work-os/tutorials";
 import { SiteFooter, SiteHeader } from "@/modules/work-os/marketing/SiteChrome";
 import TutorialPlayer from "@/modules/work-os/marketing/TutorialPlayer";
 import styles from "@/modules/work-os/marketing/tutorials.module.css";
@@ -24,6 +24,7 @@ export default async function TutorialPage({ params }: { params: Promise<{ slug:
   const tutorial = tutorialBySlug((await params).slug);
   if (!tutorial) notFound();
   const published = tutorial.status === "published";
+  const { previous, next } = adjacentTutorials(tutorial.slug);
 
   return (
     <>
@@ -54,6 +55,29 @@ export default async function TutorialPage({ params }: { params: Promise<{ slug:
         </section>
 
         <p className={styles.provenance}>Actual desktop app · Demonstration data. Nothing here uses a live employee record.</p>
+
+        <nav className={styles.lessonNav} aria-label="More tutorials">
+          {previous ? (
+            <Link
+              className={styles.lessonLink}
+              href={`/work-os/tutorials/${previous.slug}`}
+              aria-label={`Previous tutorial: ${previous.title}`}
+            >
+              <span>Previous</span>
+              <strong>{previous.title}</strong>
+            </Link>
+          ) : <span aria-hidden="true" />}
+          {next ? (
+            <Link
+              className={`${styles.lessonLink} ${styles.next}`}
+              href={`/work-os/tutorials/${next.slug}`}
+              aria-label={`Next tutorial: ${next.title}`}
+            >
+              <span>Next</span>
+              <strong>{next.title}</strong>
+            </Link>
+          ) : <span aria-hidden="true" />}
+        </nav>
       </main>
       <SiteFooter />
     </>

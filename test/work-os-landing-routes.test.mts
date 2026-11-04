@@ -25,6 +25,8 @@ const exists = (relative: string) => existsSync(path.join(root, relative));
 const CANONICAL_SITE_ROUTES = [
   "/work-os",
   "/work-os/downloads",
+  "/work-os/downloads/thank-you/windows",
+  "/work-os/downloads/thank-you/macos",
   "/work-os/tutorials",
   "/work-os/tutorials/eod-draft",
 ] as const;
@@ -62,7 +64,7 @@ test("the former /welcome links stay compatible without becoming the canonical U
 });
 
 test("canonical site routes also survive a trailing slash normalization", async () => {
-  for (const route of ["/work-os/", "/work-os/downloads/", "/work-os/tutorials/", "/work-os/tutorials/eod-draft/", "/work-os/welcome/"]) {
+  for (const route of ["/work-os/", "/work-os/downloads/", "/work-os/downloads/thank-you/windows/", "/work-os/tutorials/", "/work-os/tutorials/eod-draft/", "/work-os/welcome/"]) {
     assert.equal(isWorkOsSitePath(route), true, `${route} must reach the canonical redirect`);
     const response = await proxy(new NextRequest(`https://app.wrazyos.com${route}`));
     assert.equal(response.status, 200, `${route} must not be sent to /login`);
@@ -76,6 +78,8 @@ test("the public landing never opens the protected workspace or an adjacent path
     "/work-os/review",
     "/work-os/admin",
     "/work-os/downloads/internal",
+    "/work-os/downloads/thank-you/linux",
+    "/work-os/downloads/thank-you/windows/private",
     "/work-os/tutorials/eod-draft/private",
     "/work-os/welcome/internal",
     "/api/work-os/me/day",
@@ -91,6 +95,7 @@ test("the landing, downloads and tutorials are real standalone site routes", () 
   for (const relative of [
     "src/app/work-os/(site)/page.tsx",
     "src/app/work-os/(site)/downloads/page.tsx",
+    "src/app/work-os/(site)/downloads/thank-you/[platform]/page.tsx",
     "src/app/work-os/(site)/tutorials/page.tsx",
     "src/app/work-os/(site)/tutorials/[slug]/page.tsx",
     "src/app/work-os/(site)/layout.tsx",

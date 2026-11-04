@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { detectPlatform, type DetectedPlatform } from "@/lib/work-os-installers";
+import DownloadLink from "./DownloadLink";
 import styles from "./downloads.module.css";
 
 const LABELS: Record<DetectedPlatform, string> = {
@@ -25,9 +26,7 @@ export default function DownloadChooser() {
     setReady(true);
   }, []);
 
-  const href = detected === "windows" ? "/downloads/work-os/windows"
-    : detected === "macos" ? "/downloads/work-os/macos"
-      : null;
+  const detectedGuide = detected === "windows" || detected === "macos" ? detected : null;
   const label = detected === "windows" ? "Download for Windows"
     : detected === "macos" ? "Download for macOS"
       : "Choose your computer";
@@ -52,12 +51,12 @@ export default function DownloadChooser() {
         ) : (
           <>
             <p className={styles.lede}>
-              {ready && href
+              {ready && detectedGuide
                 ? "The installer is ready. Sign in to Work OS after installing to connect your workspace."
                 : "Choose Windows or macOS below. Linux is coming later."}
             </p>
-            {href ? (
-              <a className={styles.action} href={href} download>{label}</a>
+            {detectedGuide ? (
+              <DownloadLink className={styles.action} platform={detectedGuide}>{label}</DownloadLink>
             ) : (
               <a className={styles.action} href="#other-platforms">Choose a version</a>
             )}
@@ -76,14 +75,14 @@ export default function DownloadChooser() {
             <strong>Windows</strong>
             <small>NSIS installer · unsigned internal build</small>
           </div>
-          <a href="/downloads/work-os/windows" download>Download</a>
+          <DownloadLink platform="windows">Download</DownloadLink>
         </div>
         <div className={styles.option}>
           <div>
             <strong>macOS</strong>
             <small>Universal DMG for Intel and Apple Silicon</small>
           </div>
-          <a href="/downloads/work-os/macos" download>Download</a>
+          <DownloadLink platform="macos">Download</DownloadLink>
         </div>
         <div className={`${styles.option} ${styles.unavailable}`}>
           <div>

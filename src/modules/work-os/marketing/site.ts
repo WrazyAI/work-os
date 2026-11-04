@@ -1,5 +1,7 @@
 /** Public Work OS employee site: one source for navigation, sections and the
  * recurring provenance line. Server-safe; no browser imports. */
+import { DOWNLOAD_GUIDES } from "./download-guides";
+
 export const WORK_OS_SITE = {
   product: "Work OS",
   byline: "by Wrazy",
@@ -57,5 +59,9 @@ export function isWorkOsSitePath(pathname: string | null | undefined): boolean {
   const legacy = `${WORK_OS_LEGACY_SITE.tutorials}/`;
   if (candidate.startsWith(canonical)) return TUTORIAL_SLUG.test(candidate.slice(canonical.length));
   if (candidate.startsWith(legacy)) return TUTORIAL_SLUG.test(candidate.slice(legacy.length));
+
+  // The post-download install guide is part of the public site, but only the
+  // two real platform guides. A deeper or unknown path stays protected.
+  if (DOWNLOAD_GUIDES.some((guide) => candidate === `/work-os/downloads/thank-you/${guide.platform}`)) return true;
   return false;
 }
