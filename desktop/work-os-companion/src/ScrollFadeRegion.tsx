@@ -43,11 +43,12 @@ export function ScrollFadeRegion({ label, className = "", maxHeight, scrollAxis 
   children: React.ReactNode;
 }) {
   const { ref, edges } = useScrollEdges<HTMLDivElement>("y");
+  const scrollable = edges.start || edges.end;
   return (
     <div className={`scroll-fade-shell${edgeClasses(edges, "fade-start", "fade-end")}${className ? ` ${className}` : ""}`}>
       <div
         ref={ref}
-        className={`scroll-fade-region${scrollAxis === "both" ? " scroll-both" : ""}`}
+        className={`scroll-fade-region${scrollAxis === "both" ? " scroll-both" : ""}${scrollable ? " is-scrollable" : ""}`}
         role="region"
         aria-label={label}
         tabIndex={0}

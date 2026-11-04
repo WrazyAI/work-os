@@ -374,6 +374,10 @@ export type AdminOttoChatProps = {
   onListen: (recap: ReviewedRecap) => void;
   /** Shared chat surface options. */
   initialTab?: AdminTab;
+  /** An explicit "open this tab" request. The token is monotonic so clicking
+   * the same destination twice still moves a surface that was switched away
+   * from that tab in between. */
+  tabRequest?: { tab: AdminTab; token: number } | null;
   initialRecap?: ReviewedRecap | null;
   initialInbox?: InboxPage | null;
   arrival?: AdminArrivalView | null;
@@ -409,6 +413,7 @@ export function AdminOttoChat({
   onOpenRecord,
   onListen,
   initialTab = "chat",
+  tabRequest = null,
   initialRecap = null,
   initialInbox = null,
   arrival = null,
@@ -435,6 +440,13 @@ export function AdminOttoChat({
   const state = useSyncExternalStore(surface.subscribe, surface.snapshot, surface.snapshot);
   const reducedMotion = useReducedMotion();
   const [selectedRecap, setSelectedRecap] = useState<ReviewedRecap | null>(initialRecap);
+  const lastTabRequest = useRef(tabRequest?.token ?? 0);
+  useEffect(() => {
+    if (!tabRequest || tabRequest.token === lastTabRequest.current) return;
+    lastTabRequest.current = tabRequest.token;
+    surface.selectTab(tabRequest.tab);
+    if (tabRequest.tab === "chat") setSelectedRecap(null);
+  }, [surface, tabRequest]);
   const [unread, setUnread] = useState(initialInbox?.unread ?? arrival?.unread ?? 0);
   const [inboxRevision, setInboxRevision] = useState(0);
   const lastArrival = useRef<string>("");

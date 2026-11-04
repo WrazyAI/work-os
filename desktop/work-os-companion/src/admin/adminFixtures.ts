@@ -57,6 +57,34 @@ function timeSeries(): AdminTimeSeriesPoint[] {
 }
 
 function overview(): AdminOverview {
+  const people: AdminOverview["people"] = PEOPLE.map((person, index) => ({
+    personId: person.id,
+    displayName: person.name,
+    email: person.email,
+    roleProfile: person.role,
+    timezone: "Europe/Berlin",
+    schedule: { start: "09:00", end: "17:30", daysOfWeek: [1, 2, 3, 4, 5], timezone: "Europe/Berlin" },
+    attendance: {
+      state: (["active", "active", "paused", "active", "off_shift", "off_shift", "unknown", "active"] as const)[index],
+      source: index === 6 ? "none" : "worktivity",
+      observedAt: `${DATES[DATES.length - 1]}T09:${String(30 + index).padStart(2, "0")}:00.000Z`,
+      freshness: index === 6 ? "unknown" : index === 5 ? "stale" : "fresh",
+      clockedInAt: index === 6 ? null : `${DATES[DATES.length - 1]}T07:5${index % 10}:00.000Z`,
+      clockedOutAt: null,
+    },
+    session: index === 6 ? null : { state: index === 2 ? "paused" : "active", clockedInAt: `${DATES[DATES.length - 1]}T07:55:00.000Z`, pausedSeconds: index * 120, observedSeconds: 5400 + index * 900, correctionStatus: index === 5 ? "needs_correction" : "ok" },
+    updatesToday: index % 4 === 0 ? 3 : index % 3,
+    substantiveUpdatesToday: index % 4 === 0 ? 2 : index % 2,
+    recapsToday: index % 3 === 0 ? 2 : index % 2,
+    recapsReviewedToday: index % 3 === 0 ? 1 : 0,
+    lastRecapAt: index % 4 === 0 ? `${DATES[DATES.length - 1]}T08:${String(15 + index * 2).padStart(2, "0")}:00.000Z` : null,
+    evidenceToday: (index * 5) % 7,
+    tasksCompletedToday: index % 3 === 0 ? 2 : index % 2,
+    lastUpdateAt: `${DATES[DATES.length - 1]}T08:${String(10 + index * 3).padStart(2, "0")}:00.000Z`,
+    lastUpdateKind: index % 2 === 0 ? "progress" : "completion_claim",
+    eodToday: index === 1 ? "pending_review" : index === 2 ? "approved" : null,
+    eodOutstanding: index === 4 || index === 5 ? { days: 2, latest: null } : null,
+  }));
   return {
     date: DATES[DATES.length - 1],
     generatedAt: `${DATES[DATES.length - 1]}T09:42:00.000Z`,
@@ -68,6 +96,8 @@ function overview(): AdminOverview {
       unknown: 1,
       updatesToday: 11,
       substantiveUpdatesToday: 7,
+      recapsToday: people.reduce((sum, person) => sum + person.recapsToday, 0),
+      recapsReviewedToday: people.reduce((sum, person) => sum + person.recapsReviewedToday, 0),
       tasksCompletedToday: 6,
       tasksOpen: 43,
       tasksOverdue: 5,
@@ -82,31 +112,7 @@ function overview(): AdminOverview {
       eodOutstandingDays: 3,
       disputedEvidence: 1,
     },
-    people: PEOPLE.map((person, index) => ({
-      personId: person.id,
-      displayName: person.name,
-      email: person.email,
-      roleProfile: person.role,
-      timezone: "Europe/Berlin",
-      schedule: { start: "09:00", end: "17:30", daysOfWeek: [1, 2, 3, 4, 5], timezone: "Europe/Berlin" },
-      attendance: {
-        state: (["active", "active", "paused", "active", "off_shift", "off_shift", "unknown", "active"] as const)[index],
-        source: index === 6 ? "none" : "worktivity",
-        observedAt: `${DATES[DATES.length - 1]}T09:${String(30 + index).padStart(2, "0")}:00.000Z`,
-        freshness: index === 6 ? "unknown" : index === 5 ? "stale" : "fresh",
-        clockedInAt: index === 6 ? null : `${DATES[DATES.length - 1]}T07:5${index % 10}:00.000Z`,
-        clockedOutAt: null,
-      },
-      session: index === 6 ? null : { state: index === 2 ? "paused" : "active", clockedInAt: `${DATES[DATES.length - 1]}T07:55:00.000Z`, pausedSeconds: index * 120, observedSeconds: 5400 + index * 900, correctionStatus: index === 5 ? "needs_correction" : "ok" },
-      updatesToday: index % 4 === 0 ? 3 : index % 3,
-      substantiveUpdatesToday: index % 4 === 0 ? 2 : index % 2,
-      evidenceToday: (index * 5) % 7,
-      tasksCompletedToday: index % 3 === 0 ? 2 : index % 2,
-      lastUpdateAt: `${DATES[DATES.length - 1]}T08:${String(10 + index * 3).padStart(2, "0")}:00.000Z`,
-      lastUpdateKind: index % 2 === 0 ? "progress" : "completion_claim",
-      eodToday: index === 1 ? "pending_review" : index === 2 ? "approved" : null,
-      eodOutstanding: index === 4 || index === 5 ? { days: 2, latest: null } : null,
-    })),
+    people,
     recentActivity: [
       { id: "a-1", kind: "task_completed", at: `${DATES[DATES.length - 1]}T09:12:00.000Z`, personId: "p-2", personName: "Ben Sato", title: "Shipped the billing webhook retry", detail: "Task completed", provenance: "nifty" },
       { id: "a-2", kind: "update", at: `${DATES[DATES.length - 1]}T09:05:00.000Z`, personId: "p-1", personName: "Amara Okafor", title: "Progress update", detail: "Drafted the settings information architecture", provenance: "employee" },
@@ -121,7 +127,7 @@ function overview(): AdminOverview {
       { code: "tasks_overdue", severity: "info", count: 5, message: "5 open tasks are past their due date.", href: "/work-os/admin/tasks" },
       { code: "disputed_evidence", severity: "error", count: 1, message: "1 evidence item is disputed and needs a decision.", href: "/work-os/admin/evidence" },
     ],
-    series: DATES.map((date, index) => ({ date, completed: (index * 3) % 7, updates: 4 + ((index * 5) % 9), evidence: 12 + ((index * 7) % 18) })),
+    series: DATES.map((date, index) => ({ date, completed: (index * 3) % 7, updates: 4 + ((index * 5) % 9), recaps: 2 + ((index * 4) % 7), evidence: 12 + ((index * 7) % 18) })),
     timeSeries: timeSeries(),
     freshness: {
       niftySyncedAt: `${DATES[DATES.length - 1]}T09:35:00.000Z`,
@@ -305,11 +311,11 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   if (state === "empty") {
     queryClient.setQueryData(adminKeys.overview(today), {
       ...overview(),
-      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
+      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
       people: [],
       recentActivity: [],
       attention: [],
-      series: DATES.map((date) => ({ date, completed: 0, updates: 0, evidence: 0 })),
+      series: DATES.map((date) => ({ date, completed: 0, updates: 0, recaps: 0, evidence: 0 })),
       timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
     } satisfies AdminOverview);
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);

@@ -52,6 +52,10 @@ export interface AdminOverviewPerson {
   session: { state: string; clockedInAt: string | null; pausedSeconds: number; observedSeconds: number; correctionStatus: string | null } | null;
   updatesToday: number;
   substantiveUpdatesToday: number;
+  /** Recaps the workspace generated for this person today, reviewed or not. */
+  recapsToday: number;
+  recapsReviewedToday: number;
+  lastRecapAt: string | null;
   evidenceToday: number;
   tasksCompletedToday: number;
   lastUpdateAt: string | null;
@@ -96,6 +100,9 @@ export interface AdminOverview {
     unknown: number;
     updatesToday: number;
     substantiveUpdatesToday: number;
+    /** Ready interval recaps generated today, including not-yet-reviewed ones. */
+    recapsToday: number;
+    recapsReviewedToday: number;
     tasksCompletedToday: number;
     tasksOpen: number;
     tasksOverdue: number;
@@ -113,7 +120,7 @@ export interface AdminOverview {
   people: AdminOverviewPerson[];
   recentActivity: AdminOverviewActivity[];
   attention: AdminOverviewAttention[];
-  series: Array<{ date: string; completed: number; updates: number; evidence: number }>;
+  series: Array<{ date: string; completed: number; updates: number; recaps: number; evidence: number }>;
   timeSeries: AdminTimeSeriesPoint[];
   freshness: {
     niftySyncedAt: string | null;

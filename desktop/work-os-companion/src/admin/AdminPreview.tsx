@@ -64,6 +64,8 @@ export default function AdminPreview() {
   const [focus, setFocus] = useState<AdminSectionFocus>({});
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [ottoOpen, setOttoOpen] = useState(!!ottoState);
+  const [ottoTab, setOttoTab] = useState<"chat" | "recaps">(ottoState && ottoState !== "chat" ? "recaps" : "chat");
+  const [ottoTabRequest, setOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [ottoConversation, setOttoConversation] = useState<string | null>(null);
   const [ottoResetToken, setOttoResetToken] = useState(0);
   const inboxFixture = async (input: { cursor?: string; limit?: number } = {}) => {
@@ -149,7 +151,8 @@ export default function AdminPreview() {
         focus={focus}
         onNavigate={(next, nextFocus) => { setSection(next); setFocus(nextFocus ?? {}); }}
         onSwitchToEmployee={() => undefined}
-        onNewChat={() => { setOttoConversation(null); setOttoResetToken((value) => value + 1); setOttoOpen(true); }}
+        onNewChat={() => { setOttoConversation(null); setOttoResetToken((value) => value + 1); setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
+        onOpenRecaps={() => { setOttoTab("recaps"); setOttoTabRequest((current) => ({ tab: "recaps", token: current.token + 1 })); setOttoOpen(true); }}
         onSignOut={() => undefined}
         personalSettings={(
           <AdminOttoSettings
@@ -163,7 +166,8 @@ export default function AdminPreview() {
         <AdminOttoChat
           scope={SCOPE}
           conversationId={ottoConversation}
-          initialTab={ottoState && ottoState !== "chat" ? "recaps" : "chat"}
+          initialTab={ottoTab}
+          tabRequest={ottoTabRequest}
           initialRecap={ottoState === "single" ? FIXTURE_REVIEWED_RECAP : null}
           resetToken={ottoResetToken}
           initialInbox={ottoState === "loading" || ottoState === "error" ? null : fixtureInboxPage({

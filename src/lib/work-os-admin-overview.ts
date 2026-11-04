@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPool } from "@/lib/db/pool";
 import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate, type OutstandingEodDay } from "@/lib/work-os-eod";
@@ -29,6 +30,11 @@ export interface AdminOverviewPerson {
   session: { state: string; clockedInAt: string | null; pausedSeconds: number; observedSeconds: number; correctionStatus: string | null } | null;
   updatesToday: number;
   substantiveUpdatesToday: number;
+  /** Recaps the workspace generated for this person today, whether or not the
+   * employee has reviewed them. */
+  recapsToday: number;
+  recapsReviewedToday: number;
+  lastRecapAt: string | null;
   evidenceToday: number;
   tasksCompletedToday: number;
   lastUpdateAt: string | null;
@@ -67,6 +73,9 @@ export interface AdminOverview {
     unknown: number;
     updatesToday: number;
     substantiveUpdatesToday: number;
+    /** Ready interval recaps generated today, including not-yet-reviewed ones. */
+    recapsToday: number;
+    recapsReviewedToday: number;
     tasksCompletedToday: number;
     tasksOpen: number;
     tasksOverdue: number;
@@ -85,7 +94,7 @@ export interface AdminOverview {
   recentActivity: AdminOverviewActivity[];
   attention: AdminOverviewAttention[];
   /** Fourteen-day daily counts for the overview trend chart. */
-  series: Array<{ date: string; completed: number; updates: number; evidence: number }>;
+  series: Array<{ date: string; completed: number; updates: number; recaps: number; evidence: number }>;
   /** Fourteen-day observed work time split by teammate for the stacked time chart. */
   timeSeries: AdminTimeSeriesPoint[];
   /** When each source last delivered data, so "is it syncing?" is answerable
@@ -129,6 +138,7 @@ function timeValue(value: unknown): string | null {
 
 function isoOrNull(value: unknown): string | null {
   if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
@@ -149,6 +159,47 @@ export function classifyOutstandingByPerson(candidates: Array<OutstandingEodCand
     if (days.length) result.set(personId, days);
   }
   return result;
+}
+
+export interface RecapRollupEntry {
+  /** Recaps whose generation finished, whether or not the employee reviewed them. */
+  total: number;
+  /** Of those, the recaps the employee confirmed or corrected. */
+  reviewed: number;
+  /** The latest recap window end, or null when there is no finished recap. */
+  lastAt: string | null;
+}
+
+/** Exact per-person recap groups, counted by the database so a busy day can
+ * never truncate a person's total to an arbitrary list cap. */
+export interface RecapGroupRow {
+  person_id: string;
+  total: number | string;
+  reviewed: number | string;
+  last_at: Date | string | null;
+}
+
+export function summarizeRecapGroups(rows: RecapGroupRow[]): RecapRollupEntry & { byPerson: Map<string, RecapRollupEntry> } {
+  const rollup: RecapRollupEntry & { byPerson: Map<string, RecapRollupEntry> } = {
+    total: 0,
+    reviewed: 0,
+    lastAt: null,
+    byPerson: new Map(),
+  };
+  for (const row of rows) {
+    const personId = String(row.person_id ?? "");
+    if (!personId) continue;
+    const entry: RecapRollupEntry = {
+      total: Number(row.total ?? 0),
+      reviewed: Number(row.reviewed ?? 0),
+      lastAt: isoOrNull(row.last_at),
+    };
+    rollup.total += entry.total;
+    rollup.reviewed += entry.reviewed;
+    if (entry.lastAt && (!rollup.lastAt || entry.lastAt > rollup.lastAt)) rollup.lastAt = entry.lastAt;
+    rollup.byPerson.set(personId, entry);
+  }
+  return rollup;
 }
 
 export async function getAdminOverview(access: WorkOsAccess, options: { date?: string; now?: Date } = {}): Promise<AdminOverview> {
@@ -174,12 +225,14 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     overdueTasksResult,
     checkInsTodayCountResult,
     substantiveCheckInsTodayCountResult,
+    recapGroupsResult,
     evidenceTodayCountResult,
     evidenceActivityTodayCountResult,
     completedEventsTodayCountResult,
     pendingReportsCountResult,
     seriesEventsResult,
     seriesCheckInsResult,
+    seriesRecapsResult,
     seriesEvidenceResult,
     timeSeriesSessionsResult,
     freshnessNiftyResult,
@@ -238,6 +291,20 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .eq("organization_id", organizationId).eq("shift_date", date),
     db.from("work_check_ins").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("shift_date", date).eq("substantive", true),
+    // One exact grouped read for the recap measure and per-person rows. The
+    // activity list below is capped for display; deriving counts from it would
+    // silently drop a busy person's earlier recaps.
+    getPool().query<RecapGroupRow>(`
+      SELECT i.person_id,
+        count(*)::int AS total,
+        count(*) FILTER (WHERE i.review_status IN ('confirmed', 'amended'))::int AS reviewed,
+        max(i.window_end) AS last_at
+      FROM work_activity_intervals i
+      JOIN work_people p
+        ON p.id = i.person_id AND p.organization_id = i.organization_id AND p.active = true
+      WHERE i.organization_id = $1 AND i.local_date = $2 AND i.generation_status = 'ready'
+      GROUP BY i.person_id
+    `, [organizationId, date]),
     db.from("work_evidence").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("evidence_date", date),
     db.from("work_evidence").select("id", { count: "exact", head: true })
@@ -254,6 +321,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     db.from("work_check_ins").select("shift_date")
       .eq("organization_id", organizationId)
       .gte("shift_date", addDaysIso(date, -13)).lte("shift_date", date).limit(2000),
+    db.from("work_activity_intervals").select("local_date,person_id")
+      .eq("organization_id", organizationId).eq("generation_status", "ready")
+      .gte("local_date", addDaysIso(date, -13)).lte("local_date", date).limit(2000),
     db.from("work_evidence").select("evidence_date")
       .eq("organization_id", organizationId)
       .gte("evidence_date", addDaysIso(date, -13)).lte("evidence_date", date).limit(2000),
@@ -308,7 +378,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["check-in counts", checkInsTodayCountResult], ["substantive check-in counts", substantiveCheckInsTodayCountResult],
     ["evidence counts", evidenceTodayCountResult], ["activity evidence counts", evidenceActivityTodayCountResult],
     ["completed event counts", completedEventsTodayCountResult], ["pending report counts", pendingReportsCountResult],
-    ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult], ["series evidence", seriesEvidenceResult],
+    ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult],
+    ["series recaps", seriesRecapsResult], ["series evidence", seriesEvidenceResult],
     ["time series sessions", timeSeriesSessionsResult],
     ["task freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
     ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
@@ -324,6 +395,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   const observations = (observationsResult.data ?? []) as Json[];
   const checkIns = (checkInsResult.data ?? []) as Json[];
   const intervals = (intervalsResult.data ?? []) as Json[];
+  const recapRollup = summarizeRecapGroups(recapGroupsResult.rows);
   const evidence = (evidenceResult.data ?? []) as Json[];
   const reportsToday = (reportsTodayResult.data ?? []) as Json[];
   const pendingReports = (pendingReportsResult.data ?? []) as Json[];
@@ -464,6 +536,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
         : null,
       updatesToday: personUpdates.length,
       substantiveUpdatesToday: substantive.length,
+      recapsToday: recapRollup.byPerson.get(personId)?.total ?? 0,
+      recapsReviewedToday: recapRollup.byPerson.get(personId)?.reviewed ?? 0,
+      lastRecapAt: recapRollup.byPerson.get(personId)?.lastAt ?? null,
       evidenceToday: evidenceByPerson.get(personId) ?? 0,
       tasksCompletedToday: completedByPerson.get(personId) ?? 0,
       lastUpdateAt: isoOrNull(latestUpdate?.occurred_at ?? latestUpdate?.created_at),
@@ -554,6 +629,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     unknown: personRows.filter((person) => person.attendance.state === "unknown").length,
     updatesToday: checkInsTodayCountResult.count ?? checkIns.length,
     substantiveUpdatesToday: substantiveCheckInsTodayCountResult.count ?? checkIns.filter((row) => row.substantive === true).length,
+    recapsToday: recapRollup.total,
+    recapsReviewedToday: recapRollup.reviewed,
     tasksCompletedToday: completedEventsTodayCountResult.count ?? completedEvents.length,
     tasksOpen: openTasksResult.count ?? 0,
     tasksOverdue: overdueTasksResult.count ?? 0,
@@ -573,7 +650,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   };
 
   const seriesDates = Array.from({ length: 14 }, (_, index) => addDaysIso(date, index - 13));
-  const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, evidence: 0 }]));
+  const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, recaps: 0, evidence: 0 }]));
   for (const row of (seriesEventsResult.data ?? []) as Json[]) {
     const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");
     if (bucket) bucket.completed += 1;
@@ -581,6 +658,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   for (const row of (seriesCheckInsResult.data ?? []) as Json[]) {
     const bucket = seriesBuckets.get(dateOnly(row.shift_date) ?? "");
     if (bucket) bucket.updates += 1;
+  }
+  for (const row of (seriesRecapsResult.data ?? []) as Json[]) {
+    // Keep the sparkline on the same population as the card: active people.
+    if (!personName.has(String(row.person_id ?? ""))) continue;
+    const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");
+    if (bucket) bucket.recaps += 1;
   }
   for (const row of (seriesEvidenceResult.data ?? []) as Json[]) {
     const bucket = seriesBuckets.get(dateOnly(row.evidence_date) ?? "");

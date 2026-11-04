@@ -35,7 +35,7 @@ function overviewFixture(state: PreviewState) {
     return {
       date: TODAY,
       generatedAt: NOW,
-      counts: { people: 0, onShift: 0, paused: 0, offShift: 0, unknown: 0, updatesToday: 0, substantiveUpdatesToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
+      counts: { people: 0, onShift: 0, paused: 0, offShift: 0, unknown: 0, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
       people: [],
       recentActivity: [],
       attention: [],
@@ -64,6 +64,9 @@ function overviewFixture(state: PreviewState) {
     session: index < 2 ? { state: index === 1 ? "paused" : "active", clockedInAt: `${TODAY}T09:0${index}:00.000Z`, pausedSeconds: index === 1 ? 1800 : 0, observedSeconds: 3600 * 5 + index * 600, correctionStatus: null } : null,
     updatesToday: index === 0 ? 3 : index === 1 ? 1 : 0,
     substantiveUpdatesToday: index === 0 ? 2 : 0,
+    recapsToday: index === 0 ? 4 : index === 1 ? 2 : 0,
+    recapsReviewedToday: index === 0 ? 3 : index === 1 ? 1 : 0,
+    lastRecapAt: index < 2 ? `${TODAY}T14:2${index}:00.000Z` : null,
     evidenceToday: index === 0 ? 12 : index === 1 ? 6 : 0,
     tasksCompletedToday: index === 0 ? 3 : index === 1 ? 1 : 0,
     lastUpdateAt: index < 2 ? `${TODAY}T14:4${index}:00.000Z` : null,
@@ -74,7 +77,7 @@ function overviewFixture(state: PreviewState) {
   return {
     date: TODAY,
     generatedAt: NOW,
-    counts: { people: 4, onShift: 2, paused: 1, offShift: 1, unknown: 1, updatesToday: 5, substantiveUpdatesToday: 3, tasksCompletedToday: 6, tasksOpen: 41, tasksOverdue: 7, evidenceToday: 19, evidenceActivityToday: 14, evidenceOutputToday: 5, reportsDraftedToday: 1, reportsSubmittedToday: 2, reportsPendingReview: 2, pendingReviewOldestAt: `${TODAY}T11:00:00.000Z`, eodOutstandingPeople: 2, eodOutstandingDays: 3, disputedEvidence: 1 },
+    counts: { people: 4, onShift: 2, paused: 1, offShift: 1, unknown: 1, updatesToday: 5, substantiveUpdatesToday: 3, recapsToday: 6, recapsReviewedToday: 4, tasksCompletedToday: 6, tasksOpen: 41, tasksOverdue: 7, evidenceToday: 19, evidenceActivityToday: 14, evidenceOutputToday: 5, reportsDraftedToday: 1, reportsSubmittedToday: 2, reportsPendingReview: 2, pendingReviewOldestAt: `${TODAY}T11:00:00.000Z`, eodOutstandingPeople: 2, eodOutstandingDays: 3, disputedEvidence: 1 },
     people,
     recentActivity: [
       { id: "a1", kind: "update", at: `${TODAY}T14:48:00.000Z`, personId: "p-ada", personName: "Ada Okafor", title: "Progress update", detail: "Finished the settlement reconciliation and moved to the payout edge cases.", provenance: "material progress" },
@@ -122,6 +125,7 @@ function overviewSeries(scale: number) {
       date: date.toISOString().slice(0, 10),
       completed: scale === 0 ? 0 : 2 + (index % 5),
       updates: scale === 0 ? 0 : 1 + (index % 3),
+      recaps: scale === 0 ? 0 : 1 + (index % 4),
       evidence: scale === 0 ? 0 : 4 + (index % 6),
     };
   });

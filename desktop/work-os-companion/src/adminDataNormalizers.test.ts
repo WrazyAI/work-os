@@ -53,6 +53,8 @@ describe("administration response normalizers", () => {
     expect(overview.series).toEqual([]);
     expect(overview.timeSeries).toEqual([]);
     expect(overview.counts.tasksOpen).toBe(0);
+    expect(overview.counts.recapsToday).toBe(0);
+    expect(overview.counts.recapsReviewedToday).toBe(0);
     expect(overview.counts.pendingReviewOldestAt).toBeNull();
     expect(overview.freshness).toEqual({
       niftySyncedAt: null, niftyTasksToday: 0, worktivityObservedAt: null,
@@ -66,6 +68,8 @@ describe("administration response normalizers", () => {
     expect(overview.people[0].attendance.state).toBe("unknown");
     expect(overview.people[0].attendance.source).toBe("none");
     expect(overview.people[0].eodOutstanding).toBeNull();
+    expect(overview.people[0].recapsToday).toBe(0);
+    expect(overview.people[0].lastRecapAt).toBeNull();
     expectNoLeaks(overview);
   });
 
@@ -96,7 +100,7 @@ describe("administration response normalizers", () => {
     });
     expect(overview.recentActivity[0]).toMatchObject({ kind: "update", title: "Activity", personName: null });
     expect(overview.attention[0]).toMatchObject({ code: "tasks_overdue", severity: "info", count: 0, message: "Tasks overdue" });
-    expect(overview.series[0]).toEqual({ date: "2026-10-15", completed: 0, updates: 0, evidence: 0 });
+    expect(overview.series[0]).toEqual({ date: "2026-10-15", completed: 0, updates: 0, recaps: 0, evidence: 0 });
     expectNoLeaks(overview);
   });
 

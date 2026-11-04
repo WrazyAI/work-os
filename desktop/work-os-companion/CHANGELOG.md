@@ -23,6 +23,12 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Click a measure on the admin Overview to open the record it shows.
+- The admin Overview now counts recaps, with reviewed and waiting totals.
+- Scrolling the page now keeps working while the pointer is over a table.
+
 ## 0.5.20 — 2026-11-04
 
 - Shift times now fit compact windows; use the small question marks for Worktivity observation and next check-in details.

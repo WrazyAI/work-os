@@ -139,4 +139,11 @@ describe("admin Otto design contract", () => {
     expect(settings).not.toContain("settings-follow-option");
     expect(settings).not.toContain("settings-follow-list-wrap");
   });
+
+  it("applies an explicit tab request only after mount", () => {
+    // A remount must honor its initialTab, not replay the last request that
+    // opened Chat; only a request that arrives after mount moves the surface.
+    expect(chat).toContain("useRef(tabRequest?.token ?? 0)");
+    expect(chat).toContain("surface.selectTab(tabRequest.tab)");
+  });
 });

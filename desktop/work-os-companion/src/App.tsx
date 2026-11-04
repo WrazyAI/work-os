@@ -379,6 +379,7 @@ export default function App() {
   const [adminOttoConversationId, setAdminOttoConversationId] = useState<string | null>(null);
   const [adminOttoDraft, setAdminOttoDraft] = useState("");
   const [adminOttoInitialTab, setAdminOttoInitialTab] = useState<"chat" | "recaps">(ADMIN_SHELL_OTTO === "recaps" || ADMIN_SHELL_OTTO === "single" || ADMIN_SHELL_OTTO === "multiple" || ADMIN_SHELL_OTTO === "empty" ? "recaps" : "chat");
+  const [adminOttoTabRequest, setAdminOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [adminOttoRequestedRecap, setAdminOttoRequestedRecap] = useState<ReviewedRecap | null>(ADMIN_SHELL_OTTO === "single" ? FIXTURE_REVIEWED_RECAP : null);
   const [adminOttoResetToken, setAdminOttoResetToken] = useState(0);
   const [adminOttoArrival, setAdminOttoArrival] = useState<AdminArrivalView | null>(ADMIN_SHELL_OTTO === "single"
@@ -864,7 +865,9 @@ export default function App() {
    * opening it on its own; only the person's explicit Listen/View action does. */
   const openAdminOttoSurface = useCallback((options: { tab?: "chat" | "recaps"; recap?: ReviewedRecap | null; listen?: boolean; newChat?: boolean } = {}) => {
     const newChat = options.newChat === true;
-    setAdminOttoInitialTab(newChat ? "chat" : options.tab ?? "chat");
+    const requestedTab = newChat ? "chat" : options.tab ?? "chat";
+    setAdminOttoInitialTab(requestedTab);
+    setAdminOttoTabRequest((current) => ({ tab: requestedTab, token: current.token + 1 }));
     setAdminOttoRequestedRecap(newChat ? null : options.recap ?? null);
     if (newChat) {
       setAdminOttoConversationId(null);
@@ -5029,6 +5032,7 @@ export default function App() {
         guideView={pageGuideView}
         onOpenGuide={openGuide}
         onNewChat={openAdminOtto}
+        onOpenRecaps={() => openAdminOttoSurface({ tab: "recaps" })}
         ottoNotice={adminContextState?.status === "failed"
           ? "Admin Otto could not load its administration context. Retry from New chat; the workspace record remains available."
           : adminContextState?.status === "loading"
@@ -5042,7 +5046,7 @@ export default function App() {
       />
       {adminOttoEntryOpen && (adminOttoContextQuery.data || ADMIN_SHELL_BOOT) ? (
         <AdminOttoChat
-          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoInitialTab}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}`}
+          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}`}
           scope={adminOttoContextQuery.data?.scope ?? {
             userId: ADMIN_SHELL_SESSION.userId,
             organizationId: ADMIN_SHELL_SESSION.organizationId,
@@ -5050,6 +5054,7 @@ export default function App() {
           }}
           conversationId={adminOttoConversationId}
           initialTab={adminOttoInitialTab}
+          tabRequest={adminOttoTabRequest}
           initialRecap={adminOttoRequestedRecap}
           arrival={adminOttoArrival}
           arrivalRevision={adminOttoArrivalRevision}

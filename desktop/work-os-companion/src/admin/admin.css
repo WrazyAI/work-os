@@ -164,6 +164,18 @@ body:has(.admin-workspace) .notifications-card {
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
 }
 
+/* The On shift card scrolls here; leave the card's title clear of the masthead
+ * when the page lands. */
+.admin-band-roster,
+.admin-scroll-target {
+  scroll-margin-top: 18px;
+}
+
+.admin-scroll-target:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1150px) {
   .admin-kpi-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));

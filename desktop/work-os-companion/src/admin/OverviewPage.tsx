@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -43,11 +43,14 @@ function activityTone(kind: string): "ok" | "observed" | "neutral" | "warn" {
   return "neutral";
 }
 
-export default function OverviewPage({ onOpenSection, onOpenPerson }: {
+export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps }: {
   onOpenSection: (section: AdminSection, focus?: AdminSectionFocus) => void;
   onOpenPerson: (personId: string) => void;
+  onOpenRecaps: () => void;
 }) {
   const [activity, setActivity] = useState<ActivityDetailRecord | null>(null);
+  const rightNowRef = useRef<HTMLDivElement | null>(null);
+  const rightNowTableRef = useRef<HTMLDivElement | null>(null);
   const notifications = useNotifications();
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(todayIso()),
@@ -107,40 +110,67 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
     });
   const hasTime = data.timeSeries.some((point) => point.totalMinutes > 0);
   const pendingOldest = counts.pendingReviewOldestAt ? relativeTime(counts.pendingReviewOldestAt, Date.parse(data.generatedAt)) : null;
+  const recapsWaiting = Math.max(0, counts.recapsToday - counts.recapsReviewedToday);
+  const recapDetail = counts.recapsToday === 0
+    ? "no recaps yet"
+    : recapsWaiting === 0
+      ? `${counts.recapsReviewedToday} reviewed`
+      : `${counts.recapsReviewedToday} reviewed · ${recapsWaiting} waiting`;
+  const onShiftDetail = counts.paused > 0
+    ? `${counts.paused} paused · ${counts.people} teammate${counts.people === 1 ? "" : "s"}`
+    : `of ${counts.people} teammate${counts.people === 1 ? "" : "s"}`;
+  const outcomesDetail = `${counts.tasksOpen} open · ${counts.tasksOverdue} overdue`;
+  const reviewDetail = counts.reportsPendingReview > 0 && pendingOldest ? `oldest ${pendingOldest}` : "queue is clear";
+  const evidenceDetail = `${counts.evidenceOutputToday} output · ${counts.evidenceActivityToday} activity`;
+  const showRightNow = () => {
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    rightNowRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    rightNowTableRef.current?.focus({ preventScroll: true });
+  };
 
   return (
     <div className="admin-grid">
-      <div className="admin-kpi-strip" aria-label="Today at a glance">
+      <div className="admin-kpi-strip" role="group" aria-label="Today at a glance">
         <KpiCard
           label="On shift now"
           value={String(counts.onShift)}
-          detail={counts.paused > 0 ? `${counts.paused} paused · ${counts.people} teammate${counts.people === 1 ? "" : "s"}` : `of ${counts.people} teammate${counts.people === 1 ? "" : "s"}`}
+          detail={onShiftDetail}
+          onSelect={showRightNow}
+          actionLabel={`On shift now: ${counts.onShift}, ${onShiftDetail}. Show the Right now table`}
         />
         <KpiCard
-          label="Updates today"
-          value={String(counts.updatesToday)}
-          detail={`${counts.substantiveUpdatesToday} substantive`}
-          spark={data.series.map((point) => point.updates)}
-          sparkLabel="Recorded updates per day over the last 14 days"
+          label="Recaps today"
+          value={String(counts.recapsToday)}
+          detail={recapDetail}
+          spark={data.series.map((point) => point.recaps)}
+          sparkLabel="Recaps per day over the last 14 days"
+          onSelect={onOpenRecaps}
+          actionLabel={`Recaps today: ${counts.recapsToday}, ${recapDetail}. Open Admin Otto recaps`}
         />
         <KpiCard
           label="Outcomes today"
           value={String(counts.tasksCompletedToday)}
-          detail={`${counts.tasksOpen} open · ${counts.tasksOverdue} overdue`}
+          detail={outcomesDetail}
           spark={data.series.map((point) => point.completed)}
           sparkLabel="Completed outcomes per day over the last 14 days"
+          onSelect={() => onOpenSection("tasks")}
+          actionLabel={`Outcomes today: ${counts.tasksCompletedToday}, ${outcomesDetail}. Open Tasks`}
         />
         <KpiCard
           label="Awaiting review"
           value={String(counts.reportsPendingReview)}
-          detail={counts.reportsPendingReview > 0 && pendingOldest ? `oldest ${pendingOldest}` : "queue is clear"}
+          detail={reviewDetail}
+          onSelect={() => onOpenSection("review")}
+          actionLabel={`Awaiting review: ${counts.reportsPendingReview}, ${reviewDetail}. Open EOD Review`}
         />
         <KpiCard
           label="Evidence today"
           value={String(counts.evidenceToday)}
-          detail={`${counts.evidenceOutputToday} output · ${counts.evidenceActivityToday} activity`}
+          detail={evidenceDetail}
           spark={data.series.map((point) => point.evidence)}
           sparkLabel="Evidence items per day over the last 14 days"
+          onSelect={() => onOpenSection("evidence")}
+          actionLabel={`Evidence today: ${counts.evidenceToday}, ${evidenceDetail}. Open Evidence`}
         />
       </div>
 
@@ -185,7 +215,7 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
         </AdminCard>
       </div>
 
-      <div className="admin-band admin-band-roster">
+      <div className="admin-band admin-band-roster" ref={rightNowRef}>
         <AdminCard
           icon={Users}
           title="Right now"
@@ -194,10 +224,16 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
           padded={false}
         >
           {people.length ? (
-            <div className="admin-table-wrap">
+            <div
+              className="admin-table-wrap admin-scroll-target"
+              ref={rightNowTableRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Right now: teammates and their status"
+            >
               <table className="admin-table">
                 <thead>
-                  <tr><th>Person</th><th>Status now</th><th>Today</th><th>EOD</th><th>Last update</th></tr>
+                  <tr><th>Person</th><th>Status now</th><th>Today</th><th>EOD</th><th>Last recap</th></tr>
                 </thead>
                 <tbody>
                   {people.slice(0, 8).map((person) => (
@@ -217,14 +253,14 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
                         </Pill>
                       </td>
                       <td className="admin-numeric">
-                        {person.updatesToday} update{person.updatesToday === 1 ? "" : "s"} · {person.tasksCompletedToday} done{person.evidenceToday ? ` · ${person.evidenceToday} evidence` : ""}
+                        {person.recapsToday} recap{person.recapsToday === 1 ? "" : "s"} · {person.tasksCompletedToday} done{person.evidenceToday ? ` · ${person.evidenceToday} evidence` : ""}
                       </td>
                       <td>
                         {person.eodToday
                           ? <Pill tone={person.eodToday === "approved" ? "ok" : person.eodToday === "pending_review" ? "info" : "neutral"}>{statusLabel(person.eodToday)}</Pill>
                           : person.eodOutstanding ? <Pill tone="warn">Outstanding</Pill> : <span className="admin-quiet">—</span>}
                       </td>
-                      <td className="admin-quiet">{person.lastUpdateAt ? relativeTime(person.lastUpdateAt, Date.parse(data.generatedAt)) : "—"}</td>
+                      <td className="admin-quiet">{person.lastRecapAt ? relativeTime(person.lastRecapAt, Date.parse(data.generatedAt)) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

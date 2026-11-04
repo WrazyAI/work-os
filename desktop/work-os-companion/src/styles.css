@@ -25,9 +25,26 @@ body {
   overscroll-behavior: none;
 }
 /* Reaching the edge of any inner scroller must stop there — no chaining to
-   the page, no rubber-band jump. */
+   the page, no rubber-band jump. Horizontal-only wrappers are the exception:
+   CSS forces their other axis to auto, so containment would swallow the wheel
+   over a table that has no vertical range. They opt out on the Y axis and keep
+   containment on the X axis. */
 * {
   overscroll-behavior: contain;
+}
+.admin-table-wrap,
+.insight-table-wrap,
+.scroll-fade-region,
+.heatmap-scroll,
+.chat-markdown-table-wrap,
+.chat-markdown-code,
+.chat-task-filters,
+.chat-task-list,
+.work-queue-tabs,
+.workos-chat-tabs,
+.eod-shot-carousel {
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 button,
 input,

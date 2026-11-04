@@ -134,6 +134,8 @@ export default function AdminOverviewPage() {
   const onShift = people.filter((person) => person.attendance.state === "active" || person.attendance.state === "paused");
   const readiness = data.readiness;
   const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
+  const recapsToday = data.counts.recapsToday ?? 0;
+  const recapsReviewedToday = data.counts.recapsReviewedToday ?? 0;
   const digest = activityDigest(data.recentActivity);
 
   return (
@@ -164,7 +166,7 @@ export default function AdminOverviewPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] tabular-nums text-[var(--text-secondary)]">
                     <span>{formatDuration(elapsed)}</span>
-                    <span>{person.updatesToday} update{person.updatesToday === 1 ? "" : "s"}</span>
+                    <span>{person.recapsToday ?? 0} recap{(person.recapsToday ?? 0) === 1 ? "" : "s"}</span>
                     <span>{person.tasksCompletedToday} done</span>
                   </div>
                   <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
@@ -176,7 +178,7 @@ export default function AdminOverviewPage() {
                       <StateMark tone="warn">EOD outstanding</StateMark>
                     ) : null}
                     <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
-                      {person.lastUpdateAt ? `last update ${relativeTime(person.lastUpdateAt)}` : "no update today"}
+                      {person.lastRecapAt ? `last recap ${relativeTime(person.lastRecapAt)}` : "no recap today"}
                     </span>
                   </div>
                 </div>
@@ -234,7 +236,7 @@ export default function AdminOverviewPage() {
       <Group label="Today" detail="Recorded across the workspace so far.">
         <Record columns={4}>
           <Fact label="Completed" value={data.counts.tasksCompletedToday} detail="Task outcomes" tone="signal" lead />
-          <Fact label="Updates" value={data.counts.updatesToday} detail={`${data.counts.substantiveUpdatesToday} substantive`} />
+          <Fact label="Recaps" value={recapsToday} detail={recapsToday === 0 ? "No recaps yet" : `${recapsReviewedToday} reviewed${recapsToday > recapsReviewedToday ? ` · ${recapsToday - recapsReviewedToday} waiting` : ""}`} />
           <Fact label="Evidence" value={data.counts.evidenceToday} detail={`${data.counts.evidenceActivityToday} activity · ${data.counts.evidenceOutputToday} output`} tone="observed" />
           <Fact label="EOD submitted" value={data.counts.reportsSubmittedToday} detail={`${data.counts.reportsPendingReview} awaiting review`} />
         </Record>
