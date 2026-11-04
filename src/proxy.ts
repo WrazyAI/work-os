@@ -4,6 +4,7 @@
 // validation happens in requireUser()/requireUserProfile() on routes.
 // See WEB-PLATFORM-SPEC.md §6 and docs/NEON-MIGRATION-PLAN.md.
 import { NextResponse, type NextRequest } from "next/server";
+import { isWorkOsSitePath } from "./modules/work-os/marketing/site";
 
 // Paths reachable without a session.
 const PUBLIC_PREFIXES = [
@@ -52,6 +53,17 @@ function isPublic(pathname: string): boolean {
   // Public landing destinations and its explicitly published film must work
   // without a session. Keep this exact so no adjacent private route is opened.
   if (pathname === "/privacy" || pathname === "/terms") return true;
+  // Public Work OS site and its published assets. The helper is exact: the
+  // landing at /work-os is public, while the workspace dispatcher
+  // (/work-os/workspace) and every employee route stay behind the session gate.
+  if (isWorkOsSitePath(pathname)) return true;
+  // Public installer bytes. The route resolves the newest published release and
+  // fails closed; updater grants and the release API stay private.
+  if (/^\/downloads\/work-os\/(windows|macos|linux)(\/checksums)?$/.test(pathname)) return true;
+  // Static public site media. Scoped to its own prefix so no employee route or
+  // protected asset can inherit a prefix-wide exemption.
+  if (pathname.startsWith("/site/work-os/")) return true;
+  if (pathname === "/fonts/InterVariable.woff2") return true;
   if (pathname === "/landing/task-workflow.mp4" || pathname === "/landing/task-workflow.vtt") return true;
   // Dev-only fixture surface for rendered QA; NODE_ENV is inlined at build
   // time, so this branch cannot exist in a production bundle.

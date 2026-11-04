@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import WorkOsHome from "@/modules/work-os/WorkOsHome";
-import WorkOsProviders from "./providers";
+import WorkOsProviders from "../providers";
 import { employeeDestinationForLegacyTab } from "@/modules/work-os/employee-routes";
 import { resolveWorkOsPageAccess } from "@/lib/work-os-page-access";
 import { resolveWorkOsViewModeFor } from "@/lib/work-os-view-mode";
@@ -27,10 +27,14 @@ const LEGACY_ADMIN_TAB_ROUTES: Record<string, string> = {
 };
 
 /**
- * The Work OS dispatcher. Employees live in the nested workspace routes
- * (/work-os/today, /work-os/tasks, …) and administrators live in the
- * administration workspace (/work-os/admin/…). Managers keep the console
- * rendered by WorkOsHome.
+ * The signed-in Work OS workspace dispatcher.
+ *
+ * The public landing owns `/work-os`; this explicit route is the destination
+ * for "Open workspace" links and for every server-side redirect that used to
+ * point at the old dispatcher. Employees land in their nested workspace routes
+ * (/work-os/today, /work-os/tasks, …), administrators in the administration
+ * workspace (/work-os/admin/…), and managers keep the console rendered by
+ * WorkOsHome.
  */
 export default async function WorkOsRoute({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;

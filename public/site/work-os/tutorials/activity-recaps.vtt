@@ -1,0 +1,29 @@
+WEBVTT
+
+00:00:02.767 --> 00:00:09.333 line:15% position:3% align:start size:30%
+Open the interval recap.
+View more brings the current recap into the companion conversation.
+
+00:00:09.333 --> 00:00:14.900 line:75% position:3% align:start size:30%
+Read the whole interval.
+The headline, activity bullets, and flow describe the observed work.
+
+00:00:14.900 --> 00:00:21.167 line:15% position:3% align:start size:30%
+Check the limits.
+Extra notes keeps uncertainty and missing context visible.
+
+00:00:21.167 --> 00:00:29.633 line:75% position:3% align:start size:30%
+Inspect the source evidence.
+Screenshots and GitHub events keep their source and relationship labels.
+
+00:00:29.633 --> 00:00:35.200 line:15% position:3% align:start size:30%
+Read the GitHub relationships.
+You marks your own action. Your work labels a consequence, such as CI.
+
+00:00:35.200 --> 00:00:40.467 line:15% position:3% align:start size:30%
+Return to the summary.
+Close the evidence before deciding whether the recap sounds right.
+
+00:00:40.467 --> 00:00:50.417 line:75% position:3% align:start size:30%
+Confirm the recap yourself.
+Looks good records your review. It does not complete a task automatically.

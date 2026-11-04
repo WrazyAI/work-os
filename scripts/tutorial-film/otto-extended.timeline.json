@@ -1,0 +1,37 @@
+{
+  "duration": 200.684,
+  "chapters": [
+    {
+      "title": "Ask about your workday",
+      "start": 0
+    },
+    {
+      "title": "Find what is still unfinished",
+      "start": 22.516666
+    },
+    {
+      "title": "Start with a clear plan",
+      "start": 47.666666000000006
+    },
+    {
+      "title": "Listen to your recap",
+      "start": 73.4
+    },
+    {
+      "title": "Confirm without opening chat",
+      "start": 109.2
+    },
+    {
+      "title": "Decide what comes next",
+      "start": 128.033333
+    },
+    {
+      "title": "Catch an earlier recap",
+      "start": 151.599999
+    },
+    {
+      "title": "Close the day with your EOD",
+      "start": 178.649999
+    }
+  ]
+}

@@ -42,6 +42,17 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run work-os:test
 
+      # The public field guide, its media and the production build are part of
+      # the employee surface. `work-os:test` does not include them, so a broken
+      # film or an unbuildable Next app would otherwise merge silently.
+      - name: Site, film and publication checks
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run work-os:test:site
+
+      - name: Production build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
 
   companion:
     runs-on: ubuntu-latest

@@ -14,6 +14,7 @@
     "db:apply:work-os": "node scripts/apply-work-os-migration.mjs",
     "work-os:pilot-audit": "node --import tsx scripts/work-os-pilot-audit.ts",
     "work-os:typecheck": "tsc --noEmit -p tsconfig.work-os.json",
+    "work-os:test:site": "node --import tsx --test test/landing-public-routes.test.mts test/work-os-landing-routes.test.mts test/work-os-welcome-routes.test.mts test/work-os-welcome-page.test.mts test/work-os-companion-site.test.mts test/work-os-installer-downloads.test.mts test/work-os-download-guides.test.mts test/work-os-tutorial-library.test.mts test/work-os-film-production.test.mts test/work-os-offline-clock.test.mts test/work-os-offline-filming-boot.test.mts test/work-os-otto-film.test.mts test/work-os-tutorial-chapters.test.mts test/work-os-tutorial-player-focus.test.mts test/work-os-otto-publication.test.mts test/work-os-tutorial-media.test.mts",
     "companion:release:status": "node scripts/work-os-companion-release-gate.mjs status",
     "prework-os:test": "node --test test/work-os-companion-release-gate.test.mjs",
     "lint": "eslint src",

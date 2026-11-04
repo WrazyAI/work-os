@@ -58,7 +58,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
       router.replace("/work-os/select-workspace");
       return;
     }
-    if (session.data && session.data.role !== "admin") router.replace("/work-os");
+    if (session.data && session.data.role !== "admin") router.replace("/work-os/workspace");
   }, [session.data, router]);
 
   const sessionData = session.data && !session.data.requiresWorkspaceSelection ? session.data : null;

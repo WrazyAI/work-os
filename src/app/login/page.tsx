@@ -39,7 +39,7 @@ export default function LoginPage() {
         return;
       }
       const requested = new URLSearchParams(window.location.search).get("redirect");
-      let destination = "/work-os";
+      let destination = "/work-os/workspace";
       if (requested && requested.startsWith("/") && !requested.startsWith("//") && !requested.includes("\\")) {
         try {
           const target = new URL(requested, window.location.origin);

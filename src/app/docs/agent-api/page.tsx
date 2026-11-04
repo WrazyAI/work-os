@@ -38,7 +38,7 @@ export default async function AgentApiDocsPage() {
           </Link>
           <nav aria-label="Public documentation navigation" className="flex items-center gap-4">
             <span className="hidden text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] sm:inline">Developer docs</span>
-            <Link href={signedIn ? "/work-os" : "/login"} className="inline-flex min-h-10 items-center rounded-[10px] border px-3.5 py-2 text-[12px] font-semibold text-[var(--text-primary)] no-underline transition hover:border-[var(--border-hot)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <Link href={signedIn ? "/work-os/workspace" : "/login"} className="inline-flex min-h-10 items-center rounded-[10px] border px-3.5 py-2 text-[12px] font-semibold text-[var(--text-primary)] no-underline transition hover:border-[var(--border-hot)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
               {signedIn ? "Dashboard" : "Sign in"}
             </Link>
           </nav>

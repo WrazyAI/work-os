@@ -225,7 +225,7 @@ test("the approved screen attempts the companion handoff automatically, once", (
   const openCompanionStart = connect.indexOf("const openCompanion");
   const openCompanion = connect.slice(openCompanionStart, connect.indexOf("useEffect(", openCompanionStart));
   assert.match(openCompanion, /window\.location\.assign\(callbackUrl\)/);
-  assert.match(connect, /function returnToWorkOs[\s\S]*window\.location\.assign\("\/work-os"\)/);
+  assert.match(connect, /function returnToWorkOs[\s\S]*window\.location\.assign\("\/work-os\/workspace"\)/);
   assert.doesNotMatch(connect, /window\.close\(\)/);
   assert.match(connect, /onClick=\{onOpenCompanion\}/);
 });

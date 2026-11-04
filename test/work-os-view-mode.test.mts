@@ -66,7 +66,8 @@ test("the switch stores the preference before asking for a workspace", () => {
 test("switch destinations cannot escape the view being entered", () => {
   assert.equal(safeWorkOsViewNext("employee", "/work-os/tasks"), "/work-os/tasks");
   assert.equal(safeWorkOsViewNext("employee", "/work-os/review?tab=evidence"), "/work-os/review?tab=evidence");
-  assert.equal(safeWorkOsViewNext("employee", "/work-os"), "/work-os");
+  assert.equal(safeWorkOsViewNext("employee", "/work-os/workspace"), "/work-os/workspace");
+  assert.equal(safeWorkOsViewNext("employee", "/work-os"), "/work-os/today");
   assert.equal(safeWorkOsViewNext("employee", "/work-os/admin/people"), "/work-os/today");
   assert.equal(safeWorkOsViewNext("employee", "https://evil.example/work-os/today"), "/work-os/today");
   assert.equal(safeWorkOsViewNext("employee", "//evil.example/work-os/today"), "/work-os/today");
@@ -92,7 +93,7 @@ test("employee and administration routes gate on the active view", () => {
   const adminLayout = source("src/app/work-os/admin/layout.tsx");
   assert.match(adminLayout, /resolveWorkOsViewModeFor\(resolved\.access\) === "employee"\) redirect\("\/work-os\/today"\)/);
 
-  const dispatcher = source("src/app/work-os/page.tsx");
+  const dispatcher = source("src/app/work-os/workspace/page.tsx");
   assert.match(dispatcher, /const viewMode = await resolveWorkOsViewModeFor\(resolved\.access\)/);
   assert.match(dispatcher, /if \(viewMode === "employee"\) redirect\(employeeDestinationForLegacyTab\(tab\)\)/);
 });

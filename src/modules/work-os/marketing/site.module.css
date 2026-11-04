@@ -1,0 +1,210 @@
+@font-face {
+  font-family: "Work OS Inter";
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+.shell {
+  --paper: #fafaf6;
+  --canvas: #f5f6f1;
+  --sage: #e6ece1;
+  --ink: #182018;
+  --muted: #536052;
+  --line: #d9ded5;
+  --signal: #a8f15b;
+  --signal-deep: #5e9d27;
+  --graphite: #1c1d21;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Work OS Inter", Inter, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell *,
+.shell *::before,
+.shell *::after {
+  box-sizing: border-box;
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -80px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 14px;
+}
+
+.skip:focus-visible {
+  top: 16px;
+}
+
+.header {
+  width: min(1240px, calc(100% - 64px));
+  margin: 0 auto;
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+.mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--signal);
+  font-size: 22px;
+  letter-spacing: -0.12em;
+  padding-right: 4px;
+}
+
+.byline {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.nav a {
+  color: inherit;
+  text-decoration: none;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.back {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.workspace {
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+}
+
+.workspace:hover {
+  color: var(--signal-deep);
+}
+
+.main {
+  width: min(1240px, calc(100% - 64px));
+  margin: 0 auto;
+}
+
+.footer {
+  width: min(1240px, calc(100% - 64px));
+  margin: 80px auto 0;
+  border-top: 1px solid var(--line);
+  padding: 28px 0 40px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.footer a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.footerLinks {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .header,
+  .main,
+  .footer {
+    width: calc(100% - 40px);
+  }
+
+  .header {
+    min-height: 76px;
+    gap: 16px;
+  }
+
+  .byline,
+  .back {
+    display: none;
+  }
+
+  .nav .workspace {
+    display: none;
+  }
+
+  .nav {
+    gap: 16px;
+    font-size: 13px;
+  }
+
+  .nav a:first-child {
+    display: none;
+  }
+
+  .nav .back {
+    display: none;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell *,
+  .shell *::before,
+  .shell *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
