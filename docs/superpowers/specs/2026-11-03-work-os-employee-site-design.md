@@ -1,8 +1,9 @@
 # Work OS employee site and tutorial library — design
 
 Date: 2026-11-03
-Status: proposed, awaiting approval
-Worktree: `codex/work-os-employee-landing`
+Status: implemented; canonical routing and all ten interactive films corrected on 2026-11-04
+Worktree: `codex/work-os-tutorial-recuts`
+Current acceptance: `docs/work-os-employee-site-verification-2026-11-04.md`
 Visual study: `.superpowers/brainstorm/26584-1793724040/content/work-os-desktop-pilot.html`
 Approved pilot: `pilot-eod-desktop-60.mp4` (actual desktop app, 60 fps, Inter, music, captions)
 
