@@ -49,7 +49,8 @@ rename. Worktree `codex/work-os-otto-extended`; ledger
   voice's measured pauses (`3.686 s`, `6.531 s`, `10.912 s`, `14.381 s`), so they
   do not double the burned-in instructional copy. Music ducks under the voice.
 - Chapter jumps seek the single paused player and load metadata once; an explicit
-  play control is still required. The committed
+  play control is still required, and part 01 reads `0:00` rather than a fallback
+  duration. The committed
   `scripts/tutorial-film/otto-extended.timeline.json` is the measured render
   timeline, and tests fail if the manifest duration or offsets drift from it.
   Wide layout is two columns, narrow is one column, with no horizontal overflow.
@@ -58,6 +59,8 @@ rename. Worktree `codex/work-os-otto-extended`; ledger
   also passed. The generated tests store no per-step receipts, so those verdicts
   are supported by direct browser checks of heading, controls, seek time, and
   real playback.
+- Final TestSprite chapter run `2f1228d0-74bd-4b16-a948-21c00d8c5227` passed on
+  the final cut. Live deployment `ee2d38ab` is verified below.
 - CodeRabbit CLI 0.9.2 is authenticated but its review endpoint rejected the
   session (“could not be authenticated”). A separate independent review covered
   the branch. Its findings were addressed: the production-build gate, the
@@ -65,3 +68,16 @@ rename. Worktree `codex/work-os-otto-extended`; ledger
   keyboard focus, metadata drift, decision-protecting tests, and CI coverage.
 - Full Work OS suite: 1,244 passed, 11 skipped, 0 failed. Site/publication suite:
   all checks pass, including the 200.684-second media probe.
+
+## Live acceptance
+
+- Agent OS `2974e7d53` deployed the film; `ee2d38ab` added the `0:00` label fix.
+- All 11 lesson pages return 200; every MP4 returns 206 for byte ranges; every
+  poster and caption file is byte-identical to the repository copy.
+- Extended film live SHA-256 `b0d57e58491f235e609d3556adb4aed9f588af950ace5683c6d7290989186f77`,
+  11,712,916 bytes.
+- Live page title and library cards show **A workday with Otto — an extended look**
+  and **Use Otto, the floating companion**; the field guide says eleven lessons.
+- Live chapter 07 seek stops paused at 151.600 s of 200.683 s; explicit play then
+  advances, 1440×900, no media error. Wide layout uses two columns, narrow one,
+  with no horizontal overflow.
