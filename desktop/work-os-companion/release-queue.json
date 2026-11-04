@@ -54,7 +54,18 @@
       "type": "feature",
       "summary": "Admin Otto can preview task changes and applies them only after you confirm.",
       "verification": "3cba41f9: Work OS admin Otto action/chat tests 56 passed, 2 opt-in PostgreSQL skipped; companion AdminOttoChat render tests 13 passed."
+    },
+    {
+      "id": "compact-dashboard-time-and-help",
+      "type": "fix",
+      "summary": "Shift times fit compact windows, with observation and check-in details behind small help controls.",
+      "verification": "Ledger 333fc4ba-74de-48fc-8d32-d9fe717eeb57: 57 focused render/visual tests passed; typecheck and companion build passed; browser checks at 1440/1024/930/720/390 including click, keyboard, Escape, outside dismissal and details-dialog isolation."
     }
   ],
-  "emergency": null
+  "emergency": {
+    "version": "0.5.20",
+    "updateId": "compact-dashboard-time-and-help",
+    "brokenBehavior": "The compact employee dashboard overflows its remaining-shift-time reading and crowds attendance controls with secondary metadata.",
+    "restoredBehavior": "Shift times stay inside the compact dashboard with a trailing inset and usable attendance controls; secondary details remain accessible through small help controls. Emergency release explicitly requested by the user."
+  }
 }
