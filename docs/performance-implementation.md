@@ -131,8 +131,11 @@ was the only source used for the verification commands below.
 
 ### G. Startup bundles and debugger lifecycle
 
-- `main.tsx` lazy-loads the main employee App, AvatarApp, dev previews, and
-  admin previews behind explicit root branches with a boot fallback.
+- `main.tsx` keeps the employee App eager (the connect screen and workspace are
+  inside it) but lazy-loads AvatarApp, dev previews, and admin previews behind
+  explicit root branches with a boot fallback. Deferring the App shell itself
+  only moved the same bytes behind a fallback and fragmented startup into many
+  icon chunks, so it was deliberately not kept.
 - `App.tsx` lazy-loads AdminWorkspace, AdminOttoChat, and AdminOttoSettings with
   local Suspense boundaries, so opening chat/settings does not blank the shell.
 - The hidden debugger window was removed from packaged startup configuration.
@@ -259,19 +262,21 @@ Baseline production frontend build (Vite, uncompressed module sizes):
 
 | Asset | Fixed size |
 | --- | ---: |
-| `main-*.js` | 78.88 kB |
-| `App-*.js` (lazy) | 354.52 kB |
-| `AvatarApp-*.js` (lazy branch) | 91.18 kB |
-| `AdminWorkspace-*.js` (lazy) | 121.13 kB |
-| `useDayMonitor-*.js` | 42.00 kB |
-| shared `styles-*.js` | 218.26 kB |
+| `main-*.js` (employee shell) | 1,066.18 kB |
+| `AvatarApp-*.js` (lazy branch) | 90.03 kB |
+| `AdminWorkspace-*.js` (lazy) | 119.42 kB |
+| shared `styles-*.js` | 257.78 kB |
+| `main-*.css` | 555.96 kB |
+| shared `styles-*.css` | 107.43 kB |
 
 A Chromium production-preview measurement of the actual startup network graph
-recorded **251,325 bytes JS / 114,956 bytes CSS** for the fixed main employee
+recorded **301,075 bytes JS / 111,177 bytes CSS** for the fixed main employee
 window vs **357,947 bytes JS / 116,187 bytes CSS** for the baseline build. That
-is a **29.8% reduction in startup JavaScript transfer** and **22.8% less total
-startup transfer**. These are local Vite production preview transfers, not
-native Tauri memory or CPU.
+is a **15.9% reduction in startup JavaScript transfer** and **13.0% less total
+startup transfer**; it uses one JS request rather than fragmenting the employee
+graph into many icon chunks. Uncompressed emitted assets are **1,323.96 kB JS /
+663.39 kB CSS** vs the baseline build's 1,537.45 kB JS / 696.83 kB CSS. These are
+local Vite production preview transfers, not native Tauri memory or CPU.
 
 ### Cross-window native arbitration
 
@@ -346,16 +351,18 @@ Observed results in this environment:
 - `work-os:typecheck`: passed after the final code changes.
 - Focused new employee backend suite: 4/4 passed; compact 4,699,379 →
   15,217 bytes; summary 8 queries / 28 rows / 1,104 bytes vs full 24 queries /
-  5,230 rows.
+  5,230 rows. A combined final backend/targeted gate (employee performance,
+  Admin Overview/readiness, Admin Otto context, desktop static, packaged-window
+  config) passed 26/26.
 - Focused browser lifecycle: 5/5 passed in the final run (Admin cold start,
   Admin return, unmapped Admin, employee startup, idle heartbeats). The first
   run was cold-Vite flaky and one assertion expected the retained Tasks page
   heading after returning; the test was corrected, not the production behavior.
 - Desktop Vitest: **1,642/1,642 passed** (182 files) after the lazy/import,
   ownership, persistence-retry, carry-over-count, and lightweight-count changes.
-- Desktop production build: passed (`tsc --noEmit && vite build`); initial main
-  chunk 78.88 kB, App 354.52 kB lazy, AdminWorkspace 121.13 kB lazy, AvatarApp
-  91.18 kB lazy.
+- Desktop production build: passed (`tsc --noEmit && vite build`); employee
+  main chunk 1,066.18 kB, AdminWorkspace 119.42 kB lazy, AvatarApp 90.03 kB
+  lazy; startup preview 301,075 bytes JS / 111,177 bytes CSS.
 - Web focused route/surface/insights/pagination/attribution/static: 85 passed,
   0 failed after updating source-shape expectations for the intentional lazy
   imports and new gates.
@@ -364,13 +371,12 @@ Observed results in this environment:
   routes compiled. Default `npm run build` (Turbopack) is blocked by the
   environment's Next 16.2.6 installation requesting the nonexistent
   `@vercel/turbopack/postcss`; the same failure occurs on the untouched baseline.
-- `npm run work-os:test` full run: 1,232 passed / 12 failed / 11 skipped. All
-  failures were the time-sensitive preview-expiry tests (11) plus the expected
-  source-shape static test that was then updated; preview expiry fails because
-  the full suite exceeded its 15-minute preview TTL under concurrent local work.
-  The same preview file passes alone (22/22), and the static file passes after
-  updating its intentional-lazy assertions. The full command is still listed as
-  a gate because the aggregate run was not green under this load.
+- `npm run work-os:test` full run: **1,244 passed / 0 failed / 11 skipped**
+  (1,255 tests; exit 0). An earlier aggregate run under concurrent local agent
+  load had 12 time-sensitive failures (11 preview-expiry assertions and one
+  stale source-shape assertion); the preview file passes alone and the final
+  full run above is green. The final Work OS aggregate run completed in 435
+  seconds (1,255 tests); the separate 27-test release-gate prework also passed.
 - Companion release gate: `npm run companion:release:status` fails on the
   untouched baseline with `Release queue is append-only; published outcome
   admin-overview-measures-open-records is immutable`. The published 0.5.20
@@ -413,6 +419,11 @@ Observed results in this environment:
 
 ## Commit and tested-source identity
 
-Checkpoint commits and the exact tested implementation commit are updated below
-after the final verification run. The worktree remained the source for every
-command; no test was run against a different checkout.
+- Implementation commit: `6b385ab2bd69586334c8a8667acd65192fbd54d7`
+  (`perf(work-os): scope employee reads and bound background work`).
+- Branch: `codex/work-os-performance`, based on
+  `ecb61fdc7fa996a2474b28796bbef95893849f39`.
+- Every final check below was run in
+  `/home/maigreeks/projects/.worktrees/work-os-performance` against this
+  implementation commit (or the docs-only follow-up commit that records these
+  results). No test was run against a different checkout.
