@@ -1,97 +1,22 @@
 WEBVTT
 
-00:00:03.400 --> 00:00:12.583 line:75% position:3% align:start size:30%
-Ask about the day you are having.
-Your focus, recorded updates and task context shape the answer.
-
-00:00:13.383 --> 00:00:22.517 line:15% position:3% align:start size:30%
-The same conversation, inside the app.
-Open Otto in your workspace. A question does not change your work.
-
-00:00:25.917 --> 00:00:36.000 line:75% position:3% align:start size:30%
-Ask for the unfinished work.
-Otto can show a real task list, not just describe one.
-
-00:00:36.800 --> 00:00:47.667 line:15% position:3% align:start size:30%
-Review the same work in-app.
-The pending-task tool is available here too. Looking does not mark anything done.
-
-00:00:51.067 --> 00:01:02.233 line:75% position:3% align:start size:30%
-A timely nudge, with a direct route.
-Set today’s goal opens the real planning workflow in the main app.
-
-00:01:03.033 --> 00:01:13.400 line:15% position:3% align:start size:30%
-Start the plan directly in-app.
-Open the same planning session, review the draft, then confirm it yourself.
-
-00:01:16.800 --> 00:01:17.910 line:75% position:3% align:start size:30%
-Listen while Otto stays compact.
-The spoken words and the highlighted recap match. The chat panel stays closed.
-
-00:01:17.910 --> 00:01:20.896 line:75% position:3% align:start size:30%
+00:01:17.910 --> 00:01:22.254 line:85% position:3% align:start size:80%
 Software-development review across three repositories.
 
-00:01:20.896 --> 00:01:23.286 line:75% position:3% align:start size:30%
+00:01:22.254 --> 00:01:25.184 line:85% position:3% align:start size:80%
 Reviewed the cursor-pagination code
 
-00:01:23.286 --> 00:01:28.662 line:75% position:3% align:start size:30%
+00:01:25.184 --> 00:01:29.857 line:85% position:3% align:start size:80%
 Read the blocker notes and an admin work-dashboard request
 
-00:01:28.662 --> 00:01:32.843 line:75% position:3% align:start size:30%
+00:01:29.857 --> 00:01:32.926 line:85% position:3% align:start size:80%
 Checked the review queue for pending reports
 
-00:01:32.843 --> 00:01:35.830 line:75% position:3% align:start size:30%
+00:01:32.926 --> 00:01:35.830 line:85% position:3% align:start size:80%
 Opened the connect-screen implementation notes
 
-00:01:35.830 --> 00:01:37.783 line:75% position:3% align:start size:30%
-Listen while Otto stays compact.
-The spoken words and the highlighted recap match. The chat panel stays closed.
-
-00:01:38.583 --> 00:01:41.741 line:15% position:3% align:start size:30%
-Prefer to listen inside the app?
-Open Focus and play the same recap. Stop it whenever you need to.
-
-00:01:41.741 --> 00:01:44.728 line:15% position:3% align:start size:30%
+00:01:41.741 --> 00:01:46.085 line:85% position:3% align:start size:80%
 Software-development review across three repositories.
 
-00:01:44.728 --> 00:01:47.117 line:15% position:3% align:start size:30%
+00:01:46.085 --> 00:01:47.683 line:85% position:3% align:start size:80%
 Reviewed the cursor-pagination code
-
-00:01:47.117 --> 00:01:47.683 line:15% position:3% align:start size:30%
-Read the blocker notes and an admin work-dashboard request
-
-00:01:47.683 --> 00:01:49.200 line:15% position:3% align:start size:30%
-Prefer to listen inside the app?
-Open Focus and play the same recap. Stop it whenever you need to.
-
-00:01:52.600 --> 00:01:58.083 line:75% position:3% align:start size:30%
-Confirm the recap in place.
-Confirm records your review. It does not approve a task change.
-
-00:01:58.883 --> 00:02:08.033 line:15% position:3% align:start size:30%
-Or review it in the app.
-Read the source notes, then confirm the interval yourself.
-
-00:02:11.433 --> 00:02:20.667 line:75% position:3% align:start size:30%
-Make the decisions in the bubble.
-Accept one change, edit new work, and skip what you do not need.
-
-00:02:21.467 --> 00:02:31.600 line:15% position:3% align:start size:30%
-The same decisions are available in-app.
-Each suggestion has its own accept, edit and skip controls.
-
-00:02:35.000 --> 00:02:46.617 line:75% position:3% align:start size:30%
-Earlier recaps live in floating Tasks.
-Scroll through Recent activity and review an older Not reviewed interval.
-
-00:02:47.417 --> 00:02:58.650 line:15% position:3% align:start size:30%
-In-app, look under Focus.
-The same Recent activity stream sits below your daily goal.
-
-00:03:02.050 --> 00:03:11.483 line:75% position:3% align:start size:30%
-Follow the EOD reminder.
-Open EOD review takes you to the main app—not a submission from the orb.
-
-00:03:12.283 --> 00:03:19.683 line:15% position:3% align:start size:30%
-Open the report directly in-app.
-Review it, submit deliberately, and keep the recorded status distinct from manager approval.

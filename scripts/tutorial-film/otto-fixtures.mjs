@@ -35,7 +35,7 @@ export function createOttoFilmApi({phase='workday',seed={}}={}) {
  let report={id:'film-eod',report_date:FILM_DATE,status:'draft',submitted_at:null,markdown:'# End-of-day report\n\n## Summary\nReviewed recovery states and prepared the employee checklist.\n\n## Completed today\n- Verify the sign-in handoff.\n\n## In progress\n- Publish the employee checklist.\n\n## Next\n- Finish the publication check.\n\n<details>\n<summary>Full record</summary>\n\n## Activity recaps\nReviewed recovery-state notes. Activity context is not proof of task completion.\n\n</details>'};
  const session={id:'film-session',state:phase==='eod'?'eod_due':'active',scheduled_starts_at:FILM_DATE+'T14:00:00Z',scheduled_ends_at:phase==='eod'?FILM_DATE+'T20:25:00Z':FILM_DATE+'T22:00:00Z',clocked_in_at:FILM_DATE+'T14:00:00Z',clocked_out_at:null,paused_seconds:1800,last_substantive_update_at:FILM_DATE+'T19:17:00Z',first_follow_up_at:FILM_DATE+'T15:15:00Z',next_fallback_at:FILM_DATE+'T20:17:00Z'};
  const day=()=>({...copy(seed.day??{}),at:FILM_NOW,shiftDate:FILM_DATE,shift:{startsAt:session.scheduled_starts_at,endsAt:session.scheduled_ends_at,timezone:'UTC',breaks:[]},dayShift:{startsAt:session.scheduled_starts_at,endsAt:session.scheduled_ends_at},session:copy(session),plan:copy(plan),tasks:copy(tasks),taskHistory:copy(tasks),evidence:[],proposals:[],report:phase==='eod'?copy(report):null,niftySync:{fresh:true,syncedAt:FILM_NOW},signals:{employeeUpdates:2,completedTasks:tasks.filter(t=>t.completed).length,openTasks:tasks.filter(t=>!t.completed).length,activityContext:2,outputEvidence:0},prompt:{kind:phase==='agenda'&&!plan?'plan':phase==='eod'&&!report.submitted_at?'eod':['recap','next-steps','history'].includes(phase)?'hourly_fallback':null,nextPromptAt:FILM_DATE+'T15:17:00Z',required:['agenda','recap','next-steps'].includes(phase),reason:'Demonstration workday'},access:{personId:'film-person',displayName:'Alex Morgan',role:'employee',featureFlags:{voice_input:true,work_memory:true,activity_intervals:true},capabilities:{voice_input:true}},attendance:{source:'worktivity',state:'active',status:'working',observedAt:FILM_NOW,clockedInAt:session.clocked_in_at,clockedOutAt:null,stale:false,fallbackAllowed:false}});
- const nextSteps=()=>({intervalId:'film-recap',label:'7:17–8:17 PM',status:'ready',items:suggestions.map(i=>({...i,status:proposalStates[i.proposalId]}))});
+ const nextSteps=(intervalId='film-recap')=>{const recap=recaps.find(r=>r.id===intervalId)??recaps[0];return {intervalId:recap.id,label:recap.label,status:'ready',items:suggestions.map(i=>({...i,status:proposalStates[i.proposalId]}))};};
  return {
   snapshot:()=>copy({tasks,recaps,plan,report,proposals:proposalStates}),
   handle(method,rawPath,body={}) {
@@ -44,14 +44,14 @@ export function createOttoFilmApi({phase='workday',seed={}}={}) {
    if(p==='/api/work-os/me/day'&&method==='GET'){
     const d=day();d.prompt.nextPromptAt=FILM_DATE+(phase==='agenda'?'T20:50:00Z':'T20:17:00Z');
     if(phase==='agenda'){d.session.first_follow_up_at=d.prompt.nextPromptAt;d.prompt.kind=plan?.status==='confirmed'?null:'plan';}
-    if(url.searchParams.get('date')==='2026-11-03'){d.shiftDate='2026-11-03';d.report={...copy(report),id:'film-yesterday',report_date:'2026-11-03',status:'pending_review',submitted_at:'2026-11-03T17:05:00Z'};}
+    if(url.searchParams.get('date')==='2026-11-03'){d.shiftDate='2026-11-03';d.report={...copy(report),id:'film-yesterday',report_date:'2026-11-03',status:'rejected',submitted_at:'2026-11-03T17:05:00Z',reviewed_at:'2026-11-04T09:00:00Z'};}
     return d;
    }
    if(p==='/api/work-os/me/onboarding'&&method==='GET')return {...copy(seed.onboarding??{}),onboardingRequired:false,employeeComplete:true,status:'complete',profile:{...copy(seed.onboarding?.profile??{}),displayName:'Alex Morgan',email:'alex@example.test',timezone:'UTC'}};
    if(p==='/api/work-os/me/guides')return {autoOpen:false,seen:{today:true,tasks:true,review:true,insights:true,settings:true},seenPages:['today','tasks','review','insights','settings']};
    if(p==='/api/work-os/me/memory'&&method==='GET')return {facts:[],candidates:[],items:[],remembered:[],recent:[]};
    if(p==='/api/work-os/me/proposals'&&method==='GET')return {proposals:[]};
-   if(p==='/api/work-os/me/eod/outstanding'&&method==='GET')return {from:'2026-10-22',through:FILM_DATE,count:0,days:[]};
+   if(p==='/api/work-os/me/eod/outstanding'&&method==='GET')return {from:'2026-10-22',through:FILM_DATE,count:phase==='eod'?1:0,days:phase==='eod'?[{date:'2026-11-03',status:'changes_requested',reportId:'film-yesterday',observedMinutes:390,completedTasks:2,hasPlan:true}]:[]};
    if(p==='/api/work-os/me/insights'&&method==='GET')return {...copy(seed.insights??{}),freshness:{niftySyncedAt:FILM_NOW,worktivityObservedAt:FILM_NOW,stale:false}};
    if(p==='/api/work-os/attendance/observe'&&method==='POST')return {changed:false,attendance:day().attendance};
    if(p==='/api/work-os/me/prompt-delivery'&&method==='POST')return {delivered:true};
@@ -75,7 +75,7 @@ export function createOttoFilmApi({phase='workday',seed={}}={}) {
     const row=recaps.find(r=>r.id===p.split('/').at(-2));if(!row)throw Error('Unknown demo recap');
     row.reviewStatus=body.action==='amend'?'amended':'confirmed';row.employeeFeedback=body.feedback??null;row.reviewVersion++;row.reviewedAt=FILM_NOW;return {interval:copy(row)};
    }
-   if(/\/activity-intervals\/[^/]+\/next-steps$/.test(p))return method==='POST'?{dismissed:0}:nextSteps();
+   if(/\/activity-intervals\/[^/]+\/next-steps$/.test(p))return method==='POST'?{dismissed:0}:nextSteps(p.split('/').at(-2));
    if(p.startsWith('/api/work-os/proposals/')) {
     const id=p.split('/').at(-1);if(!(id in proposalStates))throw Error('Unknown demo proposal');
     if(method==='GET')return {proposal:{status:proposalStates[id]}};

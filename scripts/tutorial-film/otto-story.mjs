@@ -36,9 +36,21 @@ export const ottoParts=[
  ]},
  {id:'eod',title:'Close the day with your EOD',subtitle:'From the reminder to the report you actually submit.',phase:'eod',scenes:[
   {surface:'floating',caption:'Follow the EOD reminder.',copy:'Open EOD review takes you to the main app—not a submission from the orb.',actions:[{type:'wait',seconds:2},click('Open EOD review'),{type:'handoff',event:'work-os://avatar-open-eod'},see('Submit EOD'),click('Submit EOD'),{type:'assertSelector',selector:'.eod-submitted'}],hold:4},
-  {surface:'app',alternate:true,caption:'Open the report directly in-app.',copy:'Review it, submit deliberately, and keep the recorded status distinct from manager approval.',actions:[click('EOD Review'),see('Submit EOD'),click('Submit EOD'),{type:'assertSelector',selector:'.eod-submitted'},click('All EODs')],hold:4},
+  {surface:'app',alternate:true,caption:'Open the report directly in-app.',copy:'Submit it deliberately, then check an earlier day and its recorded status.',actions:[click('EOD Review'),see('Submit EOD'),click('Submit EOD'),{type:'assertSelector',selector:'.eod-submitted'},click('All EODs'),see('Earlier days'),see('Changes requested')],hold:5},
  ]},
 ];
+export const REQUIRED_OTTO_ACTIONS={
+ workday:['Send update','Review update type'],
+ unfinished:['Pending tasks: show task list'],
+ agenda:["Set today's goal",'Build my plan','Confirm my day'],
+ listen:['avatar-bubble-listen','Listen to'],
+ confirm:['avatar-bubble-confirm','Looks right'],
+ 'next-steps':['Mark done','Add task','Skip remaining suggestion'],
+ history:['View in app','Earlier recap: Looks right'],
+ eod:['Open EOD review','Submit EOD','All EODs'],
+};
+export const REQUIRED_OTTO_ASSERTIONS={eod:['Earlier days','Changes requested']};
+
 export function validateOttoTake(take) {
  if(take.preflight)throw Error('Cannot publish a preflight');
  if(take.parts?.length!==8)throw Error('The film needs all eight parts');
@@ -46,6 +58,10 @@ export function validateOttoTake(take) {
  for(const part of take.parts){
   if(part.scenes?.length!==2||part.scenes[0].surface!=='floating'||part.scenes[1].surface!=='app')throw Error('Missing paired surface: '+part.id);
   if(!part.scenes.every(s=>s.actions.some(a=>a.type==='click')))throw Error('Missing real click: '+part.id);
+  const labels=part.scenes.flatMap(s=>s.actions.map(a=>String(a.label??'')));
+  for(const required of REQUIRED_OTTO_ACTIONS[part.id]??[])if(!labels.some(label=>label.includes(required)))throw Error(`Missing approved action ${required}: ${part.id}`);
+  const texts=part.scenes.flatMap(s=>s.actions.filter(a=>a.type==='assert').map(a=>String(a.text??'')));
+  for(const required of REQUIRED_OTTO_ASSERTIONS[part.id]??[])if(!texts.includes(required))throw Error(`Missing approved outcome ${required}: ${part.id}`);
  }
  const voice=take.parts.find(p=>p.id==='listen');
  if(!voice.scenes.every(s=>s.speech?.some(a=>a.duration>1)))throw Error('Missing audible paired recap speech');

@@ -7,6 +7,23 @@ import assert from 'node:assert/strict';
 import {validateOttoTake,ottoParts} from './otto-story.mjs';
 import {speechLines} from './otto-fixtures.mjs';
 
+/** Measured speech starts in the shipped warm.mp3 (silencedetect at -35 dB).
+ * Captions follow the voice's real pauses instead of proportional word guesses. */
+export const SPOKEN_STARTS=[0,4.344,7.274,11.947,15.016,17.92];
+
+/** Spoken-word cues for one played clip. A clip cut short (the in-app listen
+ * stops after a few seconds) only keeps the lines it actually reaches. */
+export function spokenCues({at,duration}) {
+ const cues=[];
+ for(let i=0;i<speechLines.length;i++){
+  const start=SPOKEN_STARTS[i],rawEnd=SPOKEN_STARTS[i+1];
+  if(!Number.isFinite(start)||start>=duration-.02)break;
+  const end=Math.min(rawEnd,duration);
+  if(end-start>.05)cues.push({text:speechLines[i].text,start:at+start,end:at+end});
+ }
+ return cues;
+}
+
 export function buildOttoTimeline(parts) {
  for(const part of parts)if(part.preflight)throw Error('Cannot finish a preflight');
  validateOttoTake({preflight:false,parts,backendCalls:parts.flatMap(p=>p.backendCalls??[]),errors:parts.flatMap(p=>p.errors??[])});
@@ -52,22 +69,8 @@ function main(){
  execFileSync('ffmpeg',['-y','-v','error',...inputs,'-filter_complex',filters.join(';'),'-map','0:v:0','-map','[audio]','-c:v','copy','-c:a','aac','-b:a','160k','-t',String(timeline.duration),'-movflags','+faststart',resolve(out,'otto-extended.mp4')],{stdio:'inherit'});
  execFileSync('ffmpeg',['-y','-v','error','-ss','1','-i',resolve(out,'otto-extended.mp4'),'-frames:v','1','-q:v','3',resolve(out,'otto-extended.jpg')],{stdio:'inherit'});
  const cues=[];
- const cue=(from,to,text,top)=>{if(to>from+.02)cues.push(`${stamp(from)} --> ${stamp(to)} line:${top?'15%':'75%'} position:3% align:start size:30%\n${text}`);};
- for(const segment of timeline.segments){
-  const p=ottoParts.find(p=>p.id===segment.id),scene=p.scenes.find(s=>s.surface===segment.surface),top=segment.surface==='app';
-  let from=segment.start+(segment.surface==='floating'?3.4:.8);const end=segment.start+segment.videoDuration;
-   for(const voice of (segment.speech??[]).filter(v=>!segment.preparation||v.at<segment.videoDuration)){
-   const at=segment.start+voice.at;
-   cue(from,at,scene.caption+'\n'+scene.copy,top);
-   const weights=speechLines.map(l=>l.text.split(/\s+/).length),total=weights.reduce((a,b)=>a+b,0);let elapsed=0;
-   for(let i=0;i<speechLines.length;i++){
-    const next=elapsed+(voice.mediaDuration??17.976)*weights[i]/total;
-    cue(at+elapsed,at+Math.min(next,voice.duration),speechLines[i].text,top);
-    elapsed=next;if(elapsed>=voice.duration)break;
-   }
-   from=at+voice.duration;
-  }
-  cue(from,end,scene.caption+'\n'+scene.copy,top);
+ for(const voice of timeline.speech){
+  for(const cue of spokenCues(voice))cues.push(`${stamp(cue.start)} --> ${stamp(cue.end)} line:85% position:3% align:start size:80%\n${cue.text}`);
  }
  writeFileSync(resolve(out,'otto-extended.vtt'),'WEBVTT\n\n'+cues.join('\n\n')+'\n');
  writeFileSync(resolve(out,'chapters.json'),JSON.stringify({duration:Number(probe(resolve(out,'otto-extended.mp4')).format.duration),chapters:timeline.chapters},null,2));

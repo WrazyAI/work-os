@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TUTORIALS } from "@/modules/work-os/tutorials";
+import { formatTutorialDuration } from "@/modules/work-os/tutorial-duration";
 import styles from "./tutorials.module.css";
 
 export default function TutorialLibrary() {
@@ -21,7 +22,7 @@ export default function TutorialLibrary() {
             </span>
             <span className={styles.cardBody}>
               <span className={styles.cardMeta}>
-                {published ? `Watch · ${tutorial.duration ? Math.round(tutorial.duration) : 25}s` : "In production"}
+                {published ? `Watch · ${formatTutorialDuration(tutorial.duration)}` : "In production"}
               </span>
               <strong>{tutorial.title}</strong>
               <span className={styles.cardSummary}>{tutorial.summary}</span>

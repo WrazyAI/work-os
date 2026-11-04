@@ -10,7 +10,10 @@ import {createOttoFilmApi,speechLines,FILM_NOW} from './otto-fixtures.mjs';
 import {ottoParts} from './otto-story.mjs';
 import {fingerprintBuild} from './otto-provenance.mjs';
 
-const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_PATH||'/home/maigreeks/projects/work-os/node_modules/playwright');
+const require=createRequire(import.meta.url);
+const playwrightPath=process.env.PLAYWRIGHT_PATH;
+if(!playwrightPath)throw Error('Set PLAYWRIGHT_PATH to the render worker\'s Playwright module');
+const {chromium}=require(playwrightPath);
 const dry=process.argv.includes('--preflight'),serve=process.argv.includes('--serve');
 const only=process.argv.includes('--part')?process.argv[process.argv.indexOf('--part')+1]:null;
 const appRoot=resolve(process.env.FILM_APP||'desktop/work-os-companion/dist-otto-film');
@@ -36,7 +39,7 @@ const server=createServer(async(req,res)=>{
   res.setHeader('Content-Type',({'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.woff2':'font/woff2','.png':'image/png','.wasm':'application/wasm','.html':'text/html','.mp3':'audio/mpeg'})[extname(file)]||'application/octet-stream');res.end(readFileSync(file));
  }catch(error){evidence?.errors.push(error.message);res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
 });
-await new Promise((ok,no)=>{server.once('error',no);server.listen(1455,'127.0.0.1',ok)});
+await new Promise((ok,no)=>{server.once('error',error=>no(error.code==='EADDRINUSE'?Error('Another capture is already using 127.0.0.1:1455; stop it before retrying'):error));server.listen(1455,'127.0.0.1',ok)});
 if(serve){console.log('Otto offline film fixture: http://127.0.0.1:1455/?token=demonstration-only');await new Promise(()=>{});}
 let browser,xvfb,encoder,encoderExit;
 try{

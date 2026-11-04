@@ -158,7 +158,7 @@ export const TUTORIALS: readonly Tutorial[] = [
   {
     slug: "otto-extended", title: "A workday with Otto — an extended look",
     summary: "Ask about your day, plan with Otto, hear and confirm recaps, decide next steps, and submit your EOD.",
-    status: "published", duration: 199.684,
+    status: "published", duration: 200.684,
     poster: `${BASE}/otto-extended.jpg`, video: `${BASE}/otto-extended.mp4`, captions: `${BASE}/otto-extended.vtt`,
     chapters: [
       { title: "Ask about your workday", start: 0 },

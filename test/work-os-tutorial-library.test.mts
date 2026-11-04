@@ -7,7 +7,7 @@ import { TUTORIALS, tutorialBySlug } from "../src/modules/work-os/tutorials.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("the library keeps the ten scenarios and adds one separate extended Otto lesson", () => {
+test("the library keeps the ten short films and adds one extended Otto lesson", () => {
   assert.equal(TUTORIALS.length, 11);
   assert.equal(new Set(TUTORIALS.map((tutorial) => tutorial.slug)).size, TUTORIALS.length);
   for (const tutorial of TUTORIALS) {

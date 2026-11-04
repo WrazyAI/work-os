@@ -30,7 +30,16 @@ test("all eleven published tutorials carry their complete interactive film", () 
     const captions = readFileSync(`public${lesson.captions}`, "utf8");
     assert.match(captions, /^WEBVTT/);
     const positions = new Set([...captions.matchAll(/line:([^ ]+) position:([^ ]+)/g)].map((match) => `${match[1]}:${match[2]}`));
-    assert.ok(positions.size >= 2, `${lesson.slug}: scene-aware captions`);
+    if (lesson.slug === "otto-extended") {
+      // The extended film burns its instructional copy into the picture; the
+      // caption track carries only the spoken recap, so it never doubles text.
+      assert.deepEqual([...positions], ["85%:3%"], "spoken captions sit on one clear baseline");
+      assert.doesNotMatch(captions, /Actual desktop app|Ask about the day|Make the decisions/);
+      const cues = [...captions.matchAll(/(\d\d:\d\d:\d\d\.\d{3}) --> (\d\d:\d\d:\d\d\.\d{3})/g)];
+      assert.equal(cues.length, 7, "five floating lines and the two lines the in-app read reaches");
+    } else {
+      assert.ok(positions.size >= 2, `${lesson.slug}: scene-aware captions`);
+    }
     assert.ok(lesson.steps.length >= 3, lesson.slug);
     if (lesson.slug === "otto-extended") {
       assert.equal(lesson.chapters?.length, 8);

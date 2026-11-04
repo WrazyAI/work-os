@@ -5,7 +5,7 @@ import styles from "@/modules/work-os/marketing/tutorials.module.css";
 
 export const metadata: Metadata = {
   title: "Work OS tutorials",
-  description: "Short, task-specific walkthroughs of the Work OS desktop companion.",
+  description: "Task-specific walkthroughs and one extended look at the Work OS desktop companion.",
   robots: { index: false, follow: false },
 };
 
@@ -19,10 +19,10 @@ export default function TutorialsPage() {
           <h1>See it.<br />Do it. Back to work.</h1>
           <p>
             Short videos. One task at a time. Real controls, clear closeups, and no need to watch everything.
-            Every film starts on the dashboard and shows the route.
+            Each lesson starts where its work begins, and the extended Otto walkthrough moves through a whole day.
           </p>
           <p className={styles.small}>
-            Ten short films. Every lesson is online now, and each page carries the written steps as well.
+            Eleven lessons: ten short films and one extended walkthrough. Every lesson is online now, and each page carries the written steps as well.
           </p>
         </header>
         <TutorialLibrary />
