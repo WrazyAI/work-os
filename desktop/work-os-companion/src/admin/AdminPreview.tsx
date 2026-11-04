@@ -122,8 +122,6 @@ export default function AdminPreview() {
     status: async (action: AdminOttoPendingAction) => action,
     inbox: inboxFixture,
   };
-  const [ottoConversation, setOttoConversation] = useState<string | null>(null);
-  const [ottoResetToken, setOttoResetToken] = useState(0);
   const staleOnce = useRef(true);
   const fixtureSpeak = ottoState === "stale"
     ? async (input: { intervalId: string; reviewKey: string; voice?: string }) => {
