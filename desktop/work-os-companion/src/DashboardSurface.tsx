@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Pencil, Plus, RefreshCw, Target, X } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
@@ -83,6 +83,43 @@ function elapsedDuration(label: string) {
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+/** Small, explicit reveals keep secondary facts out of the command row. */
+function DashboardHelp({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const root = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: globalThis.PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") { event.stopPropagation(); setOpen(false); button.current?.focus(); }
+    };
+    const hide = () => setOpen(false);
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape, true);
+    window.addEventListener("resize", hide);
+    window.addEventListener("scroll", hide, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape, true);
+      window.removeEventListener("resize", hide);
+      window.removeEventListener("scroll", hide, true);
+    };
+  }, [open]);
+  return <span ref={root} className="dashboard-help" onClick={(event) => event.stopPropagation()}>
+    <button ref={button} type="button" aria-label={label} title={label} aria-expanded={open} aria-controls={id} aria-describedby={open ? id : undefined} onBlur={() => setOpen(false)} onClick={() => {
+      const rect = button.current?.getBoundingClientRect();
+      if (rect) setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - 272)), top: Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 88)) });
+      setOpen((value) => !value);
+    }}><span aria-hidden="true">?</span></button>
+    <span id={id} className="dashboard-help-tip" role="tooltip" hidden={!open} style={position}>{children}</span>
+  </span>;
 }
 
 /** One count in the workday band. A zero has nowhere useful to go, so it is a
@@ -378,7 +415,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
           <Pencil size={12} aria-hidden="true" />
         </button>
-        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? ` · Next check-in ${nextCheckIn}${nextCheckInRequired ? " (required)" : ""}` : ""}</small>
+        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? <DashboardHelp label="Next check-in details">Next check-in {nextCheckIn}{nextCheckInRequired ? " (required)" : ""}</DashboardHelp> : null}</small>
       </section>
       {(model.activityWatch === "clock-in" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-in" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.</small>}
@@ -441,9 +478,8 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
       <div className="workday-band-status">
         <MascotPet className="dashboard-otto-band" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} />
         <div className="workday-band-state">
-          <span className="workday-band-label"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" />{observedOnly ? "Worktivity status" : model.stateLabel}</span>
+          <span className="workday-band-label"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" />{observedOnly ? "Worktivity status" : model.stateLabel}{confirmed && attendanceControlsSupported && model.attendance?.observedAt ? <DashboardHelp label="Worktivity observation details">Last observed {formatWorkOsTime(model.attendance.observedAt, model.schedule.timezone ?? undefined)} by Worktivity.</DashboardHelp> : null}</span>
           {(!confirmed || !attendanceControlsSupported) && <p className={`workday-band-detail ${syncClass(model.stateTone)}`}>{attendanceControlsSupported ? model.stateDetail : "Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status."}</p>}
-          {confirmed && attendanceControlsSupported && model.attendance?.observedAt ? <p className="workday-band-detail">Last observed {formatWorkOsTime(model.attendance.observedAt, model.schedule.timezone ?? undefined)} by Worktivity.</p> : null}
         </div>
         <div className="workday-band-actions">
           {attendanceControlsSupported && canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} aria-hidden="true" /> : <CirclePause size={14} aria-hidden="true" />}{model.state === "paused" ? "Resume" : "Pause"}</button>}
@@ -474,7 +510,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
           <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{model.focus.text}</OverflowPanText>
           <Pencil size={12} aria-hidden="true" />
         </button>
-        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? ` · Next check-in ${nextCheckIn}${nextCheckInRequired ? " (required)" : ""}` : ""}</small>
+        <small className="day-focus-source">{model.focus.source}{nextCheckIn ? <DashboardHelp label="Next check-in details">Next check-in {nextCheckIn}{nextCheckInRequired ? " (required)" : ""}</DashboardHelp> : null}</small>
       </section>
       {(model.activityWatch === "clock-out" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}

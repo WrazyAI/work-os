@@ -461,8 +461,8 @@ start attendance.
 The active dashboard is organized around one command surface, the same
 composition the web Today page uses:
 
-1. Attendance row: the state line (On shift, Paused, or Worktivity status), one
-   quiet provider-observation line when Worktivity has confirmed the session, and
+1. Attendance row: the state line (On shift, Paused, or Worktivity status), a small
+   question-mark control revealing the confirmed provider-observation time, and
    Pause/Resume and Clock out in the connected Windows Companion. Worktivity owns
    the state and confirms each change before Work OS mirrors it. The surface has
    no permanent footer: one exists only while it carries a pending activity
@@ -472,13 +472,17 @@ composition the web Today page uses:
    bar; hovering or focusing the line reveals its scheduled start and end, and
    the detailed dialog carries the full axis. The position marker carries the
    present without restating the reader's own clock. It is a calm instrument,
-   not a gamified score.
+   not a gamified score. Whitespace, not a divider, separates it from attendance;
+   the timeline yields width before either time reading loses its trailing inset.
 3. Counts: completed, open today, overdue, and carried over sit on a full-width
    hairline row with their plain-language detail. Each has a single owner on the
    page and opens the view it measures; a zero is stated quietly and is not a
    control.
-4. Focus line: today's focus as one line with its provenance, save state, and
-   the next check-in, under the shared pan contract (§6.2). It is the command
+4. Focus line: today's focus as one line with its provenance and save state;
+   a small question-mark control beside provenance reveals the next check-in on
+   click. Both help controls support keyboard activation, Escape, and outside
+   dismissal without opening workday details. The focus follows the shared pan
+   contract (§6.2). It is the command
    surface's last row, not a second card.
 5. Task queue: Today, Yesterday, Older tabs with live counts, Add task, and a
    direct full-workspace path. The tabs are the panel's title; no eyebrow or

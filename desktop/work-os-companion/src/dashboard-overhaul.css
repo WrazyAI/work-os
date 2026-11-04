@@ -1414,7 +1414,7 @@ body {
 /* One command surface. */
 .workday-band {
   display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   grid-template-areas:
     "status instrument"
     "facts facts"
@@ -1429,29 +1429,30 @@ body {
 }
 .workday-band-status {
   grid-area: status;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 22px 26px;
 }
 .workday-band-state { gap: 4px; }
-.workday-band-label { font-size: 14px; font-weight: 640; }
+.workday-band-label { font-size: 14px; font-weight: 640; white-space: nowrap; }
 .workday-band-detail { max-width: 52ch; font-size: 12px; line-height: 1.55; }
 .workday-band-actions { padding-top: 2px; }
 
 .workday-band-instrument {
   grid-area: instrument;
-  grid-template-columns: auto minmax(120px, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-content: center;
-  gap: 18px;
+  gap: 14px;
   padding: 22px 26px;
-  border-left: 1px solid var(--dash-line);
+  border-left: 0;
 }
 .band-reading small {
   color: var(--dash-muted);
   font-size: 10.5px;
   font-weight: 500;
 }
-.band-reading strong { font-size: 25px; font-weight: 590; letter-spacing: -0.035em; }
+.band-reading strong { font-size: 25px; font-weight: 590; letter-spacing: -0.035em; white-space: nowrap; }
 .workday-band-instrument .dashboard-pulse-line { height: 4px; background: #e7ece2; }
 .workday-band-instrument .dashboard-pulse-line b {
   width: 9px;
@@ -1511,7 +1512,17 @@ body {
   text-transform: uppercase;
 }
 .day-focus-copy { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
-.day-focus-source { font-size: 10.5px; }
+.day-focus-source { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; }
+.dashboard-help { display: inline-flex; align-items: center; vertical-align: middle; }
+.dashboard-help > button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dash-muted); cursor: pointer; }
+.dashboard-help > button > span { display: grid; place-items: center; width: 13px; height: 13px; border: 1px solid currentColor; border-radius: 50%; font-size: 9px; font-weight: 600; line-height: 1; }
+.dashboard-help > button:hover { background: var(--dash-inset); color: var(--dash-ink); }
+.dashboard-help > button:focus-visible { outline: 2px solid var(--dash-ink-soft); outline-offset: 2px; }
+.dashboard-help-tip { position: fixed; z-index: 1000; box-sizing: border-box; width: min(260px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid var(--dash-line); border-radius: 9px; background: var(--dash-card-solid); box-shadow: 0 8px 24px rgba(20, 30, 18, .12); color: var(--dash-ink-soft); font-size: 12px; font-weight: 400; line-height: 1.5; letter-spacing: normal; white-space: normal; }
+.dashboard-help-tip[hidden] { display: none; }
+@media (pointer: coarse), (max-width: 520px) {
+  .dashboard-help > button { width: 40px; height: 40px; }
+}
 .workday-band-footer { margin: 0; padding: 10px 26px; }
 .workday-details-trigger:focus-visible { right: 20px; bottom: 12px; }
 .workday-band:has(.workday-band-footer) .workday-details-trigger { top: 4px; bottom: auto; }
@@ -1735,7 +1746,7 @@ body {
   }
   .workday-band-status { padding: 18px 20px; }
   .workday-band-actions { width: 100%; margin-left: 0; }
-  .workday-band-instrument { padding: 18px 20px; border-left: 0; border-top: 1px solid var(--dash-line); }
+  .workday-band-instrument { padding: 18px 20px; border-left: 0; border-top: 0; }
   .band-reading strong { font-size: 23px; }
   .workday-band-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .band-fact { padding: 13px 20px 15px; }

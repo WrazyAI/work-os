@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.20 — 2026-11-04
+
+- Shift times now fit compact windows; use the small question marks for Worktivity observation and next check-in details.
+
 ## 0.5.19 — 2026-11-04
 
 - Open the focus band on Tasks to read the full goal for the selected day.
