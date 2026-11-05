@@ -33,7 +33,7 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`.
 ## Automated evidence
 
 - `cd desktop/work-os-companion && npx vitest run`:
-  **198 files / 1,794 tests passed**, including the new view-state, conversation
+  **198 files / 1,796 tests passed**, including the new view-state, conversation
   coordination, switch, lifecycle, fixture, full-view, and mascot attire suites.
 - `cd desktop/work-os-companion && npx tsc --noEmit`: passed.
 - `cd desktop/work-os-companion && npm run build`: passed (Vite production
@@ -53,7 +53,33 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`.
   `3295ed40-b4be-408b-b354-7d3b81b8932a`:
   run `48e5a480-fae6-468d-a1a7-d47fafeb5be3` **passed** the real Avatar
   Employee/Admin switch, Admin cards/New chat flow through a local tunnel.
-- CodeRabbit review over `831c7ee8...HEAD`: completed. Findings fixed:
+  A final local Playwright pass after the live-coordination fixes confirmed
+  the same switch/Employee/Admin/New chat path with no `/api` calls or console
+  errors.
+- Independent whole-branch review over `831c7ee8...HEAD` was run and its
+  live-coordination findings were addressed before the final gate:
+  - the Tauri event envelope is unwrapped by the floating conversation
+    transport;
+  - Main forwards conversation requests to the owner and publishes correlated
+    results;
+  - Sidebar New chat always fences an unresolved first send;
+  - concurrent New chat cannot report success after a failed discard;
+  - conversation generation/revision scopes reset the hosts and recovery;
+  - a retained request can reacquire a current-epoch ticket;
+  - switching settles employee busy/thinking state and fences agenda, recap,
+    next-step, approval, retry, and settle continuations;
+  - context loss/session replacement advances the epoch and owner boundary;
+  - known-admin boot and unavailable-state heartbeats no longer fall back to
+    Employee;
+  - non-admin snapshots are identity- and epoch-validated;
+  - an authoritative null person mapping is preserved;
+  - view ordering includes conversation generation/revision;
+  - the menu remains visible through pending/refusal and retry;
+  - Main Administration hold-to-talk routes to the admin recorder;
+  - record navigation reveals Main;
+  - thread refresh defers across pending/confirmation work and drains later.
+
+  CodeRabbit review over `831c7ee8...HEAD`: completed twice. Findings fixed:
   - live main now forwards `OTTO_CONVERSATION_REQUEST_EVENT` to the owner and
     emits the correlated result;
   - main no longer rewrites the owner conversation id from stale local state;
@@ -63,6 +89,9 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`.
   - stale Escape handlers cannot close the current surface.
   The mascot transition replay concern was verified by the controller's
   clearing signal and a new no-replay test; no code change needed.
+  Remaining minor gap: admin turns do not display recorded message times or
+  session dividers because the admin thread contract carries no timestamps;
+  no timestamps are invented.
 
 ## Rendered evidence
 
@@ -109,9 +138,10 @@ and reduced motion.
   `0.5.24` snapshot from another release: its `shift-progress-pill` verification
   is 527 characters, above the gate's 500-character limit. That published entry
   is immutable; this branch does not rewrite it. The local queue entry is
-  253 characters and valid. Eligibility cannot be evaluated until the published
-  snapshot/tooling is reconciled by its owner. This feature is not being
-  released below the five-outcome threshold.
+  232 characters and valid. Comparing ids against the published 0.5.24
+  snapshot leaves one pending outcome (this one); the gate itself cannot run
+  until the published snapshot/tooling is reconciled by its owner. This feature
+  is not being released below the five-outcome threshold.
 - Native Tauri two-window acceptance with a live admin session was not run in
   this environment. The browser/TestSprite fixture proves the actual rendered
   Avatar branch and no-API fixture path; the runtime suite proves the ids-only

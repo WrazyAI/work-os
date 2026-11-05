@@ -125,7 +125,7 @@
       "id": "floating-otto-view-switch",
       "type": "feature",
       "summary": "Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.",
-      "verification": "Companion suite 1794 passed/198 files; production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; 400/420/390 checks for menu, draft retention, failed/loading/unmapped, no API calls/errors; in-app 480/390; CodeRabbit fixed."
+      "verification": "Companion suite 1796 passed/198 files; production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; final 400/420/390 and in-app 480/390 rendered checks; CodeRabbit and whole-branch review findings fixed."
     }
   ],
   "emergency": null
