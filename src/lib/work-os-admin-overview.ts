@@ -221,7 +221,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     getPool().query(`select
       count(*) filter (where completed = false and status not in ('archived','deleted'))::int as open,
       count(*) filter (where completed = false and status not in ('archived','deleted') and due_date < $2::date)::int as overdue,
-      count(*) filter (where created_at >= $2::date::timestamp at time zone 'UTC')::int as created,
+      count(*) filter (where created_at >= $2::date::timestamp at time zone 'UTC'
+        and created_at < ($2::date + 1)::timestamp at time zone 'UTC')::int as created,
       max(updated_at) as updated_at from work_tasks where organization_id = $1`, [organizationId, date]),
     getPool().query(`select shift_date::text as shift_date, person_id, count(*)::int as total,
       count(*) filter (where substantive = true)::int as substantive,
@@ -249,7 +250,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     getPool().query(`select max(occurred_at) as occurred_at,
       (select max(observed_at) from work_attendance_observations where organization_id = $1) as attendance_at,
       (select max(updated_at) from work_daily_plans where organization_id = $1) as plan_at,
-      count(*) filter (where occurred_at >= $2::date::timestamp at time zone 'UTC')::int as total
+      count(*) filter (where occurred_at >= $2::date::timestamp at time zone 'UTC'
+        and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC')::int as total
       from work_evidence_events where organization_id = $1 and provider = 'github'`, [organizationId, date]),
   ]);
 

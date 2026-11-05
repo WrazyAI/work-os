@@ -307,11 +307,10 @@ export async function getPersonalInsightSummary(access: WorkOsAccess, throughVal
     day.tasksCompleted = projected.completed;
     day.outcomesOnTime = timing.onTime;
     day.outcomesLate = timing.late;
-    for (const item of Array.isArray(plan?.items) ? plan.items as Json[] : []) {
-      if (item.disposition === "removed") continue;
-      day.planned += 1;
-      if (item.completion_state === "completed") day.plannedCompleted += 1;
-    }
+    // Commitment totals use the same resolved projection as the full report,
+    // so deferred/removed plan items cannot make the two surfaces disagree.
+    day.planned = projected.commitmentTotal;
+    day.plannedCompleted = projected.commitmentCompleted;
     day.updates = (checkInsByDate.get(date) ?? []).length;
   }
   const days = [...byDate.values()];

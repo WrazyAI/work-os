@@ -116,6 +116,9 @@ test("dashboard summary reads bounded person event aggregates, never task projec
     await f.database.query(`insert into work_task_day_events(id,organization_id,person_id,task_id,local_date,event_type,observed_at)
       select ('51000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,$1,$2,('50000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,'2026-11-03','completed','2026-11-03T12:00Z'
       from generate_series(1,8) n`, [org, person]);
+    // A task completed in the window and reopened afterwards still belongs to
+    // that window's historical record.
+    await f.database.query(`update work_tasks set completed = false where provider_task_id = 'done-1'`);
     await f.database.query(`insert into work_check_ins(id,organization_id,person_id,shift_date,substantive,input_text) values
       ('60000000-0000-4000-8000-000000000001',$1,$2,'2026-11-04',true,'update')`, [org, person]);
     const full = await getPersonalInsights(access, "7d", "2026-11-04", now);

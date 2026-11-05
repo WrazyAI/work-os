@@ -34,22 +34,21 @@ export async function loadEmployeeWorkspaceTasks(
               and p.shift_date between $5::date and $6::date and i.disposition <> 'removed'
               and i.task_id = t.id)
         )
-        and (not $7::boolean or (
-          t.completed = true
-          and (
+        and (not $7::boolean
+          or exists (select 1 from work_task_day_events e
+            where e.organization_id = $1::uuid and e.person_id = $3::uuid and e.task_id = t.id
+              and e.event_type = 'completed' and e.local_date between $5::date and $6::date)
+          or exists (select 1 from work_daily_plans p join work_daily_plan_items i on i.plan_id = p.id
+            where p.organization_id = $1::uuid and p.person_id = $3::uuid
+              and p.shift_date between $5::date and $6::date and i.disposition <> 'removed'
+              and i.completion_state = 'completed' and i.task_id = t.id)
+          or (t.completed = true and (
             t.due_date between $5::date and $6::date
             or t.created_at >= $5::date and t.created_at < $6::date + 1
             or t.provider_created_at >= $5::date and t.provider_created_at < $6::date + 1
             or t.completed_at >= $5::date and t.completed_at < $6::date + 1
-            or exists (select 1 from work_task_day_events e
-              where e.organization_id = $1::uuid and e.person_id = $3::uuid and e.task_id = t.id
-                and e.event_type = 'completed' and e.local_date between $5::date and $6::date)
-            or exists (select 1 from work_daily_plans p join work_daily_plan_items i on i.plan_id = p.id
-              where p.organization_id = $1::uuid and p.person_id = $3::uuid
-                and p.shift_date between $5::date and $6::date and i.disposition <> 'removed'
-                and i.task_id = t.id)
-          )
-        ))
+          ))
+        )
     ), family as (
       select id from eligible
       union
@@ -90,10 +89,13 @@ export function employeeWorkspaceTasksForDay(
   }
   const own = tasks.filter((task) => isTaskAssignedToPerson(task, personId, niftyMemberId)
     || recorded.has(String(task.id)) || recorded.has(String(task.provider_task_id)));
-  const ownIds = new Set(own.map((task) => String(task.id)));
-  const ownProviderIds = new Set(own.map((task) => String(task.provider_task_id)));
-  const parentIds = new Set(own.map((task) => String(task.parent_task_id ?? "")));
-  const parentProviderIds = new Set(own.map((task) => String(task.parent_provider_task_id ?? "")));
+  const ids = (values: unknown[]) => new Set(values
+    .filter((value) => value !== null && value !== undefined && value !== "")
+    .map(String));
+  const ownIds = ids(own.map((task) => task.id));
+  const ownProviderIds = ids(own.map((task) => task.provider_task_id));
+  const parentIds = ids(own.map((task) => task.parent_task_id));
+  const parentProviderIds = ids(own.map((task) => task.parent_provider_task_id));
   return tasks.filter((task) => ownIds.has(String(task.id))
     || parentIds.has(String(task.id)) || parentProviderIds.has(String(task.provider_task_id))
     || ((!task.assignee_person_ids?.length && !task.assignee_provider_ids?.length)
