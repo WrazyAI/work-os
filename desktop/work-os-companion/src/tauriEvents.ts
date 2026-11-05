@@ -11,6 +11,9 @@ const PREVIEW_EVENTS = new Set([
   "work-os://otto-audio-grant", "work-os://otto-audio-deny", "work-os://otto-audio-release",
   // Follow changes carry only scope, mode, opaque person ids, and revision.
   "work-os://admin-otto-follow-changed",
+  // View coordination carries only scoped modes, epochs/revisions, and
+  // capability flags. Conversation content stays server-side.
+  "work-os://otto-view-state", "work-os://otto-view-request", "work-os://otto-view-result",
 ]);
 const handlers = new Map<string, Set<(payload: unknown) => void>>();
 let channel: BroadcastChannel | null = null;
