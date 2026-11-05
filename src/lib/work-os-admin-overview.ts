@@ -4,6 +4,8 @@ import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate, type OutstandingEodDay } from "@/lib/work-os-eod";
 import { observedSecondsForSession, timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
+import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import type { WorkOsReadinessReport } from "@/lib/work-os-readiness";
 
@@ -30,6 +32,11 @@ export interface AdminOverviewPerson {
   session: { state: string; clockedInAt: string | null; pausedSeconds: number; observedSeconds: number; correctionStatus: string | null } | null;
   updatesToday: number;
   substantiveUpdatesToday: number;
+  /** Recaps the workspace generated for this person today, whether or not the
+   * employee has reviewed them. */
+  recapsToday: number;
+  recapsReviewedToday: number;
+  lastRecapAt: string | null;
   evidenceToday: number;
   tasksCompletedToday: number;
   lastUpdateAt: string | null;
@@ -68,6 +75,9 @@ export interface AdminOverview {
     unknown: number;
     updatesToday: number;
     substantiveUpdatesToday: number;
+    /** Ready interval recaps generated today, including not-yet-reviewed ones. */
+    recapsToday: number;
+    recapsReviewedToday: number;
     tasksCompletedToday: number;
     tasksOpen: number;
     tasksOverdue: number;
@@ -86,7 +96,7 @@ export interface AdminOverview {
   recentActivity: AdminOverviewActivity[];
   attention: AdminOverviewAttention[];
   /** Fourteen-day daily counts for the overview trend chart. */
-  series: Array<{ date: string; completed: number; updates: number; evidence: number }>;
+  series: Array<{ date: string; completed: number; updates: number; recaps: number; evidence: number }>;
   /** Fourteen-day observed work time split by teammate for the stacked time chart. */
   timeSeries: AdminTimeSeriesPoint[];
   /** When each source last delivered data, so "is it syncing?" is answerable
@@ -132,8 +142,50 @@ function timeValue(value: unknown): string | null {
 
 function isoOrNull(value: unknown): string | null {
   if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+export interface RecapRollupEntry {
+  /** Recaps whose generation finished, whether or not the employee reviewed them. */
+  total: number;
+  /** Of those, the recaps the employee confirmed or corrected. */
+  reviewed: number;
+  /** The latest recap window end, or null when there is no finished recap. */
+  lastAt: string | null;
+}
+
+/** Exact per-person recap groups, counted by the database so a busy day can
+ * never truncate a person's total to an arbitrary list cap. */
+export interface RecapGroupRow {
+  person_id: string;
+  total: number | string;
+  reviewed: number | string;
+  last_at: Date | string | null;
+}
+
+export function summarizeRecapGroups(rows: RecapGroupRow[]): RecapRollupEntry & { byPerson: Map<string, RecapRollupEntry> } {
+  const rollup: RecapRollupEntry & { byPerson: Map<string, RecapRollupEntry> } = {
+    total: 0,
+    reviewed: 0,
+    lastAt: null,
+    byPerson: new Map(),
+  };
+  for (const row of rows) {
+    const personId = String(row.person_id ?? "");
+    if (!personId) continue;
+    const entry: RecapRollupEntry = {
+      total: Number(row.total ?? 0),
+      reviewed: Number(row.reviewed ?? 0),
+      lastAt: isoOrNull(row.last_at),
+    };
+    rollup.total += entry.total;
+    rollup.reviewed += entry.reviewed;
+    if (entry.lastAt && (!rollup.lastAt || entry.lastAt > rollup.lastAt)) rollup.lastAt = entry.lastAt;
+    rollup.byPerson.set(personId, entry);
+  }
+  return rollup;
 }
 
 /** Groups outstanding-EOD candidates per person and classifies each day with
@@ -171,13 +223,16 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     evidenceResult,
     reportsTodayResult,
     completedEventsResult,
+    recapGroupsResult,
     timeSeriesSessionsResult,
     windowPlansResult,
     windowReportsResult,
+    windowExceptionsResult,
     taskStatsResult,
     checkInStatsResult,
     evidenceStatsResult,
     eventStatsResult,
+    recapSeriesResult,
     reportStatsResult,
     githubStatsResult,
   ] = await Promise.all([
@@ -206,6 +261,19 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("id,person_id,local_date,event_type,exact_at,observed_at,task_snapshot")
       .eq("organization_id", organizationId).eq("local_date", date).eq("event_type", "completed")
       .order("observed_at", { ascending: false }).limit(300),
+    // Exact grouped recap measure; the capped activity list below is display
+    // only and cannot under-report a busy person's recap count.
+    getPool().query<RecapGroupRow>(`
+      SELECT i.person_id,
+        count(*)::int AS total,
+        count(*) FILTER (WHERE i.review_status IN ('confirmed', 'amended'))::int AS reviewed,
+        max(i.window_end) AS last_at
+      FROM work_activity_intervals i
+      JOIN work_people p
+        ON p.id = i.person_id AND p.organization_id = i.organization_id AND p.active = true
+      WHERE i.organization_id = $1 AND i.local_date = $2 AND i.generation_status = 'ready'
+      GROUP BY i.person_id
+    `, [organizationId, date]),
     // Fourteen-day observed work time per person for the stacked time chart.
     db.from("work_sessions")
       .select("id,person_id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,attendance_status,attendance_observed_at,correction_status")
@@ -217,6 +285,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     db.from("work_reports")
       .select("id,person_id,report_date,status,submitted_at")
       .eq("organization_id", organizationId).gte("report_date", outstandingFrom).lte("report_date", outstandingThrough),
+    db.from("work_schedule_exceptions").select("*")
+      .eq("organization_id", organizationId)
+      .gte("exception_date", outstandingFrom).lte("exception_date", outstandingThrough),
     // Counts and source freshness share a scan; detail caps never bound totals.
     getPool().query(`select
       count(*) filter (where completed = false and status not in ('archived','deleted'))::int as open,
@@ -240,6 +311,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     getPool().query(`select local_date::text as local_date, person_id, count(*)::int as total from work_task_day_events
       where organization_id = $1 and event_type = 'completed' and local_date between $2::date and $3::date
       group by local_date, person_id`, [organizationId, addDaysIso(date, -13), date]),
+    getPool().query(`select local_date::text as local_date, person_id, count(*)::int as total from work_activity_intervals
+      where organization_id = $1 and generation_status = 'ready' and local_date between $2::date and $3::date
+      group by local_date, person_id`, [organizationId, addDaysIso(date, -13), date]),
     getPool().query(`select
       count(*) filter (where report_date = $2::date and status = 'draft')::int as drafted,
       count(*) filter (where report_date = $2::date and status in ('pending_review','approved'))::int as submitted,
@@ -261,6 +335,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["reports", reportsTodayResult], ["completed events", completedEventsResult],
     ["time series sessions", timeSeriesSessionsResult],
     ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult],
+    ["outstanding schedule exceptions", windowExceptionsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
   }
@@ -274,6 +349,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   const evidence = (evidenceResult.data ?? []) as Json[];
   const reportsToday = (reportsTodayResult.data ?? []) as Json[];
   const completedEvents = (completedEventsResult.data ?? []) as Json[];
+  const recapRollup = summarizeRecapGroups(recapGroupsResult.rows);
 
   const personName = new Map(people.map((person) => [String(person.id), String(person.display_name)]));
   const latestObservation = new Map<string, Json>();
@@ -318,6 +394,22 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   const reportStats = reportStatsResult.rows[0];
 
   // Outstanding EOD days across the lookback window.
+  const scheduleRulesByPerson = new Map<string, WorkOsScheduleRule[]>();
+  for (const schedule of schedules as unknown as Array<WorkOsScheduleRule & { person_id?: string }>) {
+    const personId = String(schedule.person_id ?? "");
+    if (!personId) continue;
+    const list = scheduleRulesByPerson.get(personId) ?? [];
+    list.push(schedule);
+    scheduleRulesByPerson.set(personId, list);
+  }
+  const scheduleExceptionsByPerson = new Map<string, WorkOsScheduleException[]>();
+  for (const exception of (windowExceptionsResult.data ?? []) as unknown as Array<WorkOsScheduleException & { person_id?: string }>) {
+    const personId = String(exception.person_id ?? "");
+    if (!personId) continue;
+    const list = scheduleExceptionsByPerson.get(personId) ?? [];
+    list.push(exception);
+    scheduleExceptionsByPerson.set(personId, list);
+  }
   const outstandingCandidates: Array<OutstandingEodCandidate & { personId: string }> = [];
   const plansByPersonDate = new Map<string, number>();
   for (const plan of (windowPlansResult.data ?? []) as Json[]) {
@@ -350,6 +442,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       hasPlan: plansByPersonDate.has(key),
       completedTasks: completedByPersonDate.get(key) ?? 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+      scheduledDay: hasScheduledShiftOnDate(
+        scheduleRulesByPerson.get(String(session.person_id)) ?? [],
+        scheduleExceptionsByPerson.get(String(session.person_id)) ?? [],
+        sessionDate,
+      ),
     });
   }
   // A plan without a session still represents a day of intent.
@@ -365,6 +462,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       hasPlan: true,
       completedTasks: completedByPersonDate.get(key) ?? 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+      scheduledDay: hasScheduledShiftOnDate(
+        scheduleRulesByPerson.get(personId) ?? [],
+        scheduleExceptionsByPerson.get(personId) ?? [],
+        planDate,
+      ),
     });
   }
   const outstandingByPerson = classifyOutstandingByPerson(outstandingCandidates);
@@ -413,6 +515,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
         : null,
       updatesToday: Number(personUpdates?.total ?? 0),
       substantiveUpdatesToday: Number(personUpdates?.substantive ?? 0),
+      recapsToday: recapRollup.byPerson.get(personId)?.total ?? 0,
+      recapsReviewedToday: recapRollup.byPerson.get(personId)?.reviewed ?? 0,
+      lastRecapAt: recapRollup.byPerson.get(personId)?.lastAt ?? null,
       evidenceToday: evidenceByPerson.get(personId) ?? 0,
       tasksCompletedToday: completedByPerson.get(personId) ?? 0,
       lastUpdateAt: isoOrNull(personUpdates?.last_at),
@@ -503,6 +608,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     unknown: personRows.filter((person) => person.attendance.state === "unknown").length,
     updatesToday: sum(todayCheckIns, "total"),
     substantiveUpdatesToday: sum(todayCheckIns, "substantive"),
+    recapsToday: recapRollup.total,
+    recapsReviewedToday: recapRollup.reviewed,
     tasksCompletedToday: sum(todayEvents, "total"),
     tasksOpen: Number(taskStats.open),
     tasksOverdue: Number(taskStats.overdue),
@@ -518,8 +625,10 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     disputedEvidence: sum(todayEvidence, "disputed"),
   };
 
-  const seriesDates = Array.from({ length: 14 }, (_, index) => addDaysIso(date, index - 13));
-  const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, evidence: 0 }]));
+  // Keep weekends and holidays on the same workday axis as the rest of the
+  // overview (the Agent OS calendar convergence owns this rule).
+  const seriesDates = workdayDates(addDaysIso(date, -13), date);
+  const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, recaps: 0, evidence: 0 }]));
   for (const row of eventStatsResult.rows) {
     const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");
     if (bucket) bucket.completed += Number(row.total);
@@ -527,6 +636,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   for (const row of checkInStatsResult.rows) {
     const bucket = seriesBuckets.get(dateOnly(row.shift_date) ?? "");
     if (bucket) bucket.updates += Number(row.total);
+  }
+  for (const row of recapSeriesResult.rows) {
+    if (!personName.has(String(row.person_id ?? ""))) continue;
+    const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");
+    if (bucket) bucket.recaps += Number(row.total);
   }
   for (const row of evidenceStatsResult.rows) {
     const bucket = seriesBuckets.get(dateOnly(row.evidence_date) ?? "");

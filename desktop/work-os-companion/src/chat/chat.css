@@ -486,7 +486,7 @@
 .chat-task-review:hover { border-color: var(--signal-strong, #7cc936) !important; color: var(--ink, #182018); }
 
 .chat-task-body { display: flex; min-height: 0; flex-direction: column; }
-.chat-task-list { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
+.chat-task-list { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
 
 .chat-task-loading { display: grid; gap: 10px; padding: 12px; }
 .chat-task-loading-row { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--ink, #182018); font-size: 13px; font-weight: 650; }

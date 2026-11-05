@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildEodReportMarkdown, rankEodCompleted, type EodReportFacts } from "../src/lib/work-os-eod-report";
-import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
+import { eodSectionIconKind, parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow } from "../src/modules/work-os/eod-document";
 import { eodSnippet } from "../src/modules/work-os/admin/eod";
 import { buildEodFactBlock, preservesEodStructure, splitEodBrief } from "../src/lib/aiEod";
 import { eodLineItems } from "../src/lib/work-os-eod";
@@ -116,6 +116,25 @@ test("an outside label after a time keeps the time track", () => {
     outside: "outside shift",
     count: 1,
   });
+});
+
+test("each report label has one semantic icon kind", () => {
+  assert.equal(eodSectionIconKind("Completed today (6)"), "completed");
+  assert.equal(eodSectionIconKind("In progress"), "progress");
+  assert.equal(eodSectionIconKind("Blocked"), "blocked");
+  assert.equal(eodSectionIconKind("Next"), "next");
+  assert.equal(eodSectionIconKind("Plan check"), "plan");
+  assert.equal(eodSectionIconKind("Evidence"), "evidence");
+  assert.equal(eodSectionIconKind("Work completed (6)"), "completed");
+  assert.equal(eodSectionIconKind("Recorded updates (2)"), "updates");
+  assert.equal(eodSectionIconKind("Carried and deferred (2)"), "carried");
+  assert.equal(eodSectionIconKind("Routine runs"), "automation");
+  assert.equal(eodSectionIconKind("Other tasks (2)"), "other");
+  assert.equal(eodSectionIconKind("Activity context (2)"), "activity");
+  assert.equal(eodSectionIconKind("Hourly activity (2)"), "hourly");
+  assert.equal(eodSectionIconKind("Output evidence (1)"), "output");
+  assert.equal(eodSectionIconKind("Recorded Loom updates (1)"), "loom");
+  assert.equal(eodSectionIconKind("Summary"), null);
 });
 
 test("a bare URL keeps its trailing punctuation as text", () => {

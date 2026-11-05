@@ -115,6 +115,19 @@ export function eodDraftBlocked(input: {
   return !eodDraftWindowOpen(input);
 }
 
+/** Whether a day is still too early to describe, even when no shift is open
+ * yet. A closed day is finished; a day before its scheduled EOD window is
+ * not. This stops an early-morning click from creating a report that claims a
+ * workday that has not happened. */
+export function eodDraftDateBlocked(input: {
+  closed?: boolean;
+  scheduledEndsAt?: unknown;
+  now?: number;
+}): boolean {
+  if (input.closed) return false;
+  return !eodDraftWindowOpen({ scheduledEndsAt: input.scheduledEndsAt, now: input.now });
+}
+
 /** The shared prompt for a shift that has not ended. The link label is inline
  * text in both surfaces; each surface finishes the sentence for its own
  * clock-out path (the companion drives Worktivity, the web points at it). */

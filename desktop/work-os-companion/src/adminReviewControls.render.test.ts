@@ -37,10 +37,12 @@ function report(id: string, overrides: Partial<WorkOsReportRow> = {}): WorkOsRep
 function renderQueue(rows: WorkOsReportRow[], options: { status?: string; initialReportId?: string } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const status = options.status ?? "pending_review";
-  client.setQueryData(
-    adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: isoDaysAgo(30), to: todayIso() }),
-    { reports: rows, counts: { draft: 0, pending_review: rows.length, approved: 0, rejected: 0, total: rows.length } } satisfies ReportsResponse,
-  );
+  const response = { reports: rows, counts: { draft: 0, pending_review: rows.length, approved: 0, rejected: 0, total: rows.length } } satisfies ReportsResponse;
+  // A deep link opens the year-wide filtered queue so an older report cannot
+  // fall outside the default thirty-day window.
+  for (const from of [isoDaysAgo(30), isoDaysAgo(365)]) {
+    client.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from, to: todayIso() }), response);
+  }
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(NotificationProvider, null, createElement(ReviewPage, { initialReportId: options.initialReportId }))),
   );

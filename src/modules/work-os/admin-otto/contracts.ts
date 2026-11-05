@@ -42,7 +42,7 @@ export type ReadIntent = { action: "unfinished" | AdminRecordAction | "recaps" |
   relativeDay: "today" | "yesterday" | "this_week" | "last_week" | null;
   overdueOnly: boolean; latest: boolean };
 export type AdminRead = { kind: "tasks"; page: Page<TaskCard>; people: PersonRef[] }
-  | { kind: "records"; page: Page<WorkRecord>; windows: LocalWindow[] }
+  | { kind: "records"; page: Page<WorkRecord>; windows: LocalWindow[]; people?: PersonRef[] }
   | { kind: "recaps"; page: Page<ReviewedRecap> }
   | { kind: "recap"; recap: ReviewedRecap }
   | { kind: "resolution"; resolution: Exclude<Resolution, { kind: "resolved" }> };
@@ -73,10 +73,30 @@ export type AdminOttoPendingAction = {
   changes: Array<{ field: string; from: unknown; to: unknown }>;
   warnings: string[];
   expiresAt: string;
+  display?: { title: string; assignees: PersonRef[]; changes: Array<{ label: string; before: string | null; after: string | null }> };
+  status?: "pending" | "recorded" | "expired" | "in_flight" | "abandoned" | "unknown";
+  recordUrl?: string;
 };
+
+export type AdminOttoPlanStep = {
+  intent: ReadIntent | null;
+  operation: AdminOttoOperation | null;
+  /** Zero-based index of an earlier prerequisite, never a model-created ID. */
+  depends_on: number | null;
+};
+export type AdminOttoStepView = {
+  index: number;
+  label: string;
+  status: "ready" | "blocked" | "failed" | "recorded";
+  result?: AdminRead | null;
+  pendingAction?: AdminOttoPendingAction;
+  message?: string;
+};
+export type AdminOttoWorkflowView = { id: string; steps: AdminOttoStepView[] };
 
 export type ChatRequest = { conversationId: string | null; requestId: string; text: string;
   choicePersonId?: string; continuation?: string };
 export type ChatResult = { conversationId: string; turnId: string; reply: string; result: AdminRead | null;
   pendingAction?: AdminOttoPendingAction;
+  workflow?: AdminOttoWorkflowView;
   contextVersion: number; errorCode?: "unsupported" | "ambiguous" | "missing" };

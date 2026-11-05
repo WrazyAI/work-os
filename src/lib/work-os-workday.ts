@@ -6,7 +6,7 @@ import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
-import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
+import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, promptInstant, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-local-config";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
@@ -83,6 +83,24 @@ export async function shiftFor(access: WorkOsAccess, at: Date, mode: "upcoming" 
     ? resolveStartableShiftWindow(rules, (exceptions ?? []) as WorkOsScheduleException[], at, 30)
     : resolveUpcomingShiftWindow(rules, (exceptions ?? []) as WorkOsScheduleException[], at);
   return await worktivityAuthoritativeBreaks(access.organizationId) && window ? { ...window, breaks: [] } : window;
+}
+
+/** Whether the employee's active schedule treats this local date as a working
+ * day. An employee with no active schedule keeps the legacy record (every day
+ * is eligible); a scheduled employee's weekend or leave day is not. */
+export async function isScheduledWorkday(access: WorkOsAccess, date: string) {
+  const personId = access.personId as string;
+  const { data: schedules, error: scheduleError } = await db().from("work_schedules").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true)
+    .order("effective_from", { ascending: false });
+  if (scheduleError) throw new Error(`load work schedule: ${scheduleError.message}`);
+  const rules = (schedules ?? []) as WorkOsScheduleRule[];
+  if (!rules.length) return true;
+  const { data: exceptions, error: exceptionError } = await db().from("work_schedule_exceptions").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", personId)
+    .eq("exception_date", date);
+  if (exceptionError) throw new Error(`load work schedule exceptions: ${exceptionError.message}`);
+  return hasScheduledShiftOnDate(rules, (exceptions ?? []) as WorkOsScheduleException[], date);
 }
 
 export async function activeSession(access: WorkOsAccess) {
@@ -258,7 +276,9 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
   const shift = context.shift;
   const plan = session
     ? await ensureDailyPlan(access, session)
-    : await ensureDailyPlanForDate(access, context.shiftDate);
+    : await isScheduledWorkday(access, context.shiftDate)
+      ? await ensureDailyPlanForDate(access, context.shiftDate)
+      : null;
   const promptDecision = decideWorkdayPrompt({
     session: session ? {
       state: session.state as WorkSessionState,
@@ -666,10 +686,11 @@ function planDate(input: unknown) {
 export async function getDailyPlan(access: WorkOsAccess, requestedDate?: string | null, at = new Date()) {
   const { shiftDate: currentDate } = await localWorkDate(access, at);
   const shiftDate = planDate(requestedDate) ?? currentDate;
-  const plan = shiftDate === currentDate
+  const scheduled = shiftDate === currentDate ? await isScheduledWorkday(access, shiftDate) : false;
+  const plan = shiftDate === currentDate && scheduled
     ? await ensureDailyPlanForDate(access, shiftDate, await activeSession(access))
     : await loadPlanByDate(access, shiftDate);
-  return { plan, currentDate, editable: shiftDate === currentDate && plan?.status !== "closed" };
+  return { plan, currentDate, editable: shiftDate === currentDate && scheduled && plan?.status !== "closed" };
 }
 
 type DraftItem = {

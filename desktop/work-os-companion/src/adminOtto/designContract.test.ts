@@ -56,7 +56,7 @@ describe("admin Otto design contract", () => {
     expect(chat).toContain("workos-chat-head admin-otto-head");
     expect(chat).toContain("conversation-pane-title");
     expect(chat).toContain("progress-header-actions");
-    expect(chat).toContain("Administration, confirmed changes");
+    expect(chat).toContain("Administration");
     expect(chat).not.toContain("admin-otto-tabs-row");
     expect(chat).not.toContain("admin-otto-eyebrow");
     expect(chat).not.toContain("admin-otto-readonly-note");
@@ -138,5 +138,12 @@ describe("admin Otto design contract", () => {
     expect(settings).toContain("settings-follow-state");
     expect(settings).not.toContain("settings-follow-option");
     expect(settings).not.toContain("settings-follow-list-wrap");
+  });
+
+  it("applies an explicit tab request only after mount", () => {
+    // A remount must honor its initialTab, not replay the last request that
+    // opened Chat; only a request that arrives after mount moves the surface.
+    expect(chat).toContain("useRef(tabRequest?.token ?? 0)");
+    expect(chat).toContain("surface.selectTab(tabRequest.tab)");
   });
 });

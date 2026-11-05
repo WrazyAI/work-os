@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
+      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -62,16 +62,71 @@
       "verification": "Ledger 333fc4ba-74de-48fc-8d32-d9fe717eeb57: 57 focused render/visual tests passed; typecheck and companion build passed; browser checks at 1440/1024/930/720/390 including click, keyboard, Escape, outside dismissal and details-dialog isolation."
     },
     {
+      "id": "admin-overview-measures-open-records",
+      "type": "feature",
+      "summary": "Every measure on the admin Overview opens the record it shows.",
+      "verification": "60ae7238: companion OverviewCards render tests 4 passed; browser checks at 1000/760/420 for all five destinations, keyboard activation, Right now focus, and the Admin Otto Recaps second-click; typecheck and build passed."
+    },
+    {
+      "id": "admin-overview-recap-measure",
+      "type": "fix",
+      "summary": "The admin Overview counts generated recaps, with reviewed and waiting totals, instead of check-ins.",
+      "verification": "60ae7238, 8e36916b: live admin agent overview returned recapsToday 5, recapsReviewedToday 5, updatesToday 0, and 5 per-person recaps; grouped rollup tests, typecheck and production builds passed."
+    },
+    {
+      "id": "page-scroll-over-tables",
+      "type": "fix",
+      "summary": "Scrolling the page keeps working while the pointer is over a table.",
+      "verification": "60ae7238: browser wheel measurement over .admin-table-wrap moved page scroll 0 to 154 and the heatmap 0 to 500; ordinary surfaces kept containment; companion suite 1632 passed; typecheck and build passed."
+    },
+    {
+      "id": "eod-section-icons",
+      "type": "feature",
+      "summary": "Each end-of-day report section now carries a small, quiet icon.",
+      "verification": "fdf0a563, bc65bda4: EOD document and preview tests 52 passed; companion EOD render tests 19 passed; rendered 1440, 1024, and 390 checks; no console errors."
+    },
+    {
+      "id": "recap-waits-for-slow-analysis",
+      "type": "fix",
+      "summary": "A recap that takes longer to analyse screenshots now waits instead of being replaced by a generic check-in.",
+      "verification": "Ledger f873eaca-ff1b-4e92-9d2a-d9bcebe6c3fa: companion workOsQueries test 7 passed; focused Work OS workday/EOD/route tests 78 passed; live ensure completed 109s after the old 90s client cutoff on 2026-11-04; 180s timeout regression assertion added."
+    },
+    {
+      "id": "admin-person-record-drilldowns",
+      "type": "feature",
+      "summary": "A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records with one-click drill-downs.",
+      "verification": "Ledger 438014c3-9084-405d-b241-6e914d5269d8: companion suite 1639 passed; 27 focused record/date/review tests and 15 task-action tests passed; typecheck and production build passed; rendered 1440/1024/930/720/390 checks for Updates to Admin Otto recaps, Outcomes to Tasks Completed, Evidence to the filtered Evidence page, EOD and report rows to the specific report, View all recaps, and View all reports; TestSprite fdcf733b passed 4/4 for the drawer record and Evidence drill-down."
+    },
+    {
+      "id": "weekend-eod-and-chart-days",
+      "type": "fix",
+      "summary": "Weekends no longer ask for an EOD report, and daily charts skip weekend days.",
+      "verification": "5022b3ab: Work OS suite 1252 passed / 0 failed / 11 skipped; focused EOD/chart/route tests 79 passed; companion suite 1641 passed; typecheck and webpack production builds passed; rendered admin overview/insights and employee 30-day insights with no weekend chart labels."
+    },
+    {
+      "id": "admin-otto-multi-step-tool-cards",
+      "type": "feature",
+      "summary": "Admin Otto handles several requests at once, shows readable change cards, and New chat starts a clean conversation.",
+      "verification": "Branch codex/admin-otto-redesign: focused admin action/intent/workflow/confirm suites 52 passed; companion admin tests 319 passed; typechecks passed; Playwright preview-admin wide 1440 and narrow 449 verified grouped creates, selection, per-item receipt, and New chat."
+    },
+    {
+      "id": "task-attachment-markers",
+      "type": "feature",
+      "summary": "Task rows mark completion files beside the status, and the task details list the actual attachments.",
+      "verification": "Ledger 199ac08f-2219-4b39-ab5f-b5710684e7d3: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1672 passed; focused attachment/normalizer/task tests 53 passed; focused root desktop/route/evidence tests 84 passed; typecheck and production build passed; rendered 1440/930/720/390 hover, tooltip, keyboard, Escape, reduced-motion, drawer list, preview, and no-overflow checks; TestSprite a299b733 passed 8/8 for the attachment tooltip, drawer list, and image preview."
+    },
+    {
+      "id": "admin-notification-center",
+      "type": "feature",
+      "summary": "The notifications bell switches between personal reminders and the workspace's decision queue, pulse, and recent team activity.",
+      "verification": "Ledger 08faace9-600a-4699-9d63-eda9aabba66b: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1685 passed; focused bell/model tests 35 passed; typecheck and production build passed; rendered 1440/1024/930/720/560/390 admin, employee, empty, loading, and error states plus tab reset, keyboard tabs/rows, Escape, scroll reset, decision and activity drill-downs, and no panel overflow; TestSprite ec7f241c passed 10/10."
+    },
+    {
       "id": "background-work-lightening",
       "type": "fix",
       "summary": "Administration and the floating companion stop repeating hidden employee page work, cache saves, and recap checks.",
-      "verification": "Branch codex/work-os-performance on 2026-11-04: real Chromium App checks 5/5 cover Admin cold start, returning from heavy employee tabs, unmapped Admin, lazy startup, and idle mascot heartbeats; companion Vitest 1642/1642; backend performance/static checks 9/9; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
+      "verification": "Branch codex/work-os-performance on 2026-11-05: real Chromium App checks 5/5; companion Vitest 1644/1644; Work OS full suite 1244/0/11; backend performance/static checks and Agent OS reconciliation passed; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
     }
   ],
-  "emergency": {
-    "version": "0.5.20",
-    "updateId": "compact-dashboard-time-and-help",
-    "brokenBehavior": "The compact employee dashboard overflows its remaining-shift-time reading and crowds attendance controls with secondary metadata.",
-    "restoredBehavior": "Shift times stay inside the compact dashboard with a trailing inset and usable attendance controls; secondary details remain accessible through small help controls. Emergency release explicitly requested by the user."
-  }
+  "emergency": null
 }

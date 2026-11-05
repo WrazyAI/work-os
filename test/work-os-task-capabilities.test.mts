@@ -76,7 +76,7 @@ test("all employee lists, creations and details decorate task rows", () => {
 });
 test("admin contracts preserve payload shapes and expose lifecycle routes", () => {
   const list = read("src/app/api/work-os/tasks/route.ts");
-  assert.match(list, /tasks: withTaskCapabilities\(tasks,/);
+  assert.match(list, /tasks: withTaskCapabilities\(tasksWithEvidence,/);
   assert.match(list, /task: withTaskCapabilities\(\[task\]/);
   const detail = read("src/app/api/work-os/tasks/[taskId]/route.ts");
   assert.match(detail, /task: withTaskCapabilities/);
@@ -232,6 +232,7 @@ function adminRouteHarness(overrides: Record<string, unknown> = {}) {
       return { open: 0, overdue: 0, overdueRecorded: 0, completedWeek: 0 };
     },
     createAdminClient: () => ({ from: () => query }),
+    loadTaskCompletionEvidence: async () => [],
     getTaskByLocalOrProviderId: async () => null,
     createLocalWorkOsTask: async () => { throw new Error("not used"); },
     defaultWorkOsTaskProjectId: async () => null,

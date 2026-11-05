@@ -1,4 +1,4 @@
-import type { AdminOttoPendingAction, AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminOttoWorkflowView, AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
 import type { AdminOttoThreadView } from "./api";
 
 export type AdminOttoEntryTurn = {
@@ -7,6 +7,7 @@ export type AdminOttoEntryTurn = {
   text: string;
   result?: AdminRead | null;
   pendingAction?: AdminOttoPendingAction;
+  workflow?: AdminOttoWorkflowView;
 };
 
 export type AdminOttoEntrySnapshot = {
@@ -27,6 +28,7 @@ export type AdminOttoEntryDeps = {
   initialDraft?: string;
   initialRequestId?: string | null;
   initialConversationId?: string | null;
+  discard?: (input: { conversationId: string | null; requestId: string | null }) => Promise<void>;
 };
 
 export type AdminOttoEntryRecovery = { draft: string; requestId: string | null };
@@ -34,6 +36,9 @@ export type AdminOttoEntryRecovery = { draft: string; requestId: string | null }
 export type AdminOttoEntryTransport = {
   send?: (input: ChatRequest, signal?: AbortSignal) => Promise<ChatResult>;
   load?: (conversationId: string, signal?: AbortSignal) => Promise<AdminOttoThreadView>;
+  discard?: AdminOttoEntryDeps["discard"];
+  confirm?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
+  status?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
 };
 
 export type AdminOttoEntryController = {
@@ -44,6 +49,9 @@ export type AdminOttoEntryController = {
   setDraft: (draft: string) => void;
   submit: () => Promise<void>;
   cancel: () => void;
+  newChat: () => Promise<void>;
+  updateWorkflow: (workflow: AdminOttoWorkflowView) => void;
+  updateAction: (action: AdminOttoPendingAction) => void;
   reset: (scope: OttoScope, conversationId?: string | null) => void;
   dispose: () => void;
 };
@@ -136,6 +144,8 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
             role: turn.role,
             text: turn.text,
             result: turn.role === "assistant" && turn.turnId === lastAssistant ? view.result : null,
+            ...(turn.pendingAction ? { pendingAction: turn.pendingAction } : {}),
+            ...(turn.workflow ? { workflow: turn.workflow } : {}),
           })),
           error: null,
           hydration: "idle",
@@ -189,6 +199,7 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
             text: result.reply || "No readable result was returned.",
             result: result.result,
             ...(result.pendingAction ? { pendingAction: result.pendingAction } : {}),
+            ...(result.workflow ? { workflow: result.workflow } : {}),
           }],
           draft: "",
           busy: false,
@@ -212,6 +223,34 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
     cancel() {
       cancelAttempt();
       if (state.hydration !== "failed") set({ error: null });
+    },
+
+    async newChat() {
+      const identity = { conversationId: state.conversationId, requestId: pendingRequest?.requestId ?? null };
+      cancelAttempt();
+      const id = ++sequence;
+      set({ busy: true, error: null });
+      try {
+        if (deps.discard && (identity.conversationId || identity.requestId)) await deps.discard(identity);
+        if (id !== sequence) return;
+        controller.reset(state.scope, null);
+      } catch (error) {
+        if (id === sequence) set({ busy: false, error: messageOf(error) });
+        throw error;
+      }
+    },
+
+    updateWorkflow(workflow) {
+      set({ turns: state.turns.map((turn) => turn.workflow?.id === workflow.id ? { ...turn, workflow } : turn) });
+    },
+
+    updateAction(action) {
+      set({ turns: state.turns.map((turn) => {
+        if (turn.pendingAction?.previewId === action.previewId) return { ...turn, pendingAction: action };
+        if (!turn.workflow?.steps.some((step) => step.pendingAction?.previewId === action.previewId)) return turn;
+        return { ...turn, workflow: { ...turn.workflow, steps: turn.workflow.steps.map((step) =>
+          step.pendingAction?.previewId === action.previewId ? { ...step, pendingAction: action } : step) } };
+      }) });
     },
 
     reset(scope, conversationId = null) {

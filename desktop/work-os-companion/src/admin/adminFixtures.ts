@@ -40,10 +40,48 @@ const PEOPLE = [
   { id: "p-8", name: "Hugo Berg", role: "Engineering", email: "hugo@example.com" },
 ] as const;
 
-const DATES = Array.from({ length: 14 }, (_, index) => {
-  const date = new Date(Date.UTC(2026, 9, 14 - (13 - index)));
-  return date.toISOString().slice(0, 10);
-});
+// The preview is a working record, not a historical snapshot: its fourteen-day
+// window follows the machine's current day so "today" measures, recaps, and
+// report links exercise the same paths a live drawer does. Weekend days are
+// skipped so the trend charts match the API's working-day series.
+const DATES = (() => {
+  const dates: string[] = [];
+  for (let offset = 0; dates.length < 14; offset += 1) {
+    const date = isoDaysAgo(offset);
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    dates.unshift(date);
+  }
+  return dates;
+})();
+
+/** A deterministic, self-contained frame used by the admin fixture. It is a
+ * data URI so rendered QA never fetches an external image or needs a session. */
+const PREVIEW_SHOT_URL = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#1d211c"/><rect x="20" y="20" width="440" height="260" rx="10" fill="#f7f7f2"/><rect x="20" y="20" width="440" height="34" rx="10" fill="#e7e9e2"/><circle cx="38" cy="37" r="4" fill="#c94e43"/><circle cx="52" cy="37" r="4" fill="#c88918"/><circle cx="66" cy="37" r="4" fill="#5e9d27"/><text x="88" y="42" font-family="sans-serif" font-size="11" fill="#304033">app.wrazyos.com/work-os/review</text><text x="40" y="86" font-family="sans-serif" font-size="16" font-weight="700" fill="#182018">Billing retry suite</text><rect x="40" y="104" width="210" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="122" width="300" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="150" width="180" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="168" width="260" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="204" width="120" height="26" rx="6" fill="#a8f15b"/><text x="56" y="221" font-family="sans-serif" font-size="11" font-weight="700" fill="#182018">Run tests</text></svg>`)}`;
+const PREVIEW_TEXT_URL = `data:text/plain,${encodeURIComponent("Retry verification\n\nStaging retries completed after backoff.\n")}`;
+
+const PREVIEW_ATTACHMENTS = [
+  {
+    id: "evidence-t-1-image",
+    title: "Retry handling for failed billing webhooks — completion evidence",
+    note: "The retry dashboard after the staging run.",
+    fileName: "retry-dashboard.png",
+    contentType: "image/png",
+    sizeBytes: 28_400,
+    createdAt: `${DATES[DATES.length - 1]}T08:36:00.000Z`,
+    url: PREVIEW_SHOT_URL,
+  },
+  {
+    id: "evidence-t-1-file",
+    title: "Retry handling for failed billing webhooks — completion evidence",
+    note: "Retry logs from the staging verification.",
+    fileName: "retry-verification.txt",
+    contentType: "text/plain",
+    sizeBytes: 2_048,
+    createdAt: `${DATES[DATES.length - 1]}T08:34:00.000Z`,
+    url: PREVIEW_TEXT_URL,
+  },
+] as const;
 
 function timeSeries(): AdminTimeSeriesPoint[] {
   return DATES.map((date, index) => {
@@ -57,6 +95,34 @@ function timeSeries(): AdminTimeSeriesPoint[] {
 }
 
 function overview(): AdminOverview {
+  const people: AdminOverview["people"] = PEOPLE.map((person, index) => ({
+    personId: person.id,
+    displayName: person.name,
+    email: person.email,
+    roleProfile: person.role,
+    timezone: "Europe/Berlin",
+    schedule: { start: "09:00", end: "17:30", daysOfWeek: [1, 2, 3, 4, 5], timezone: "Europe/Berlin" },
+    attendance: {
+      state: (["active", "active", "paused", "active", "off_shift", "off_shift", "unknown", "active"] as const)[index],
+      source: index === 6 ? "none" : "worktivity",
+      observedAt: `${DATES[DATES.length - 1]}T09:${String(30 + index).padStart(2, "0")}:00.000Z`,
+      freshness: index === 6 ? "unknown" : index === 5 ? "stale" : "fresh",
+      clockedInAt: index === 6 ? null : `${DATES[DATES.length - 1]}T07:5${index % 10}:00.000Z`,
+      clockedOutAt: null,
+    },
+    session: index === 6 ? null : { state: index === 2 ? "paused" : "active", clockedInAt: `${DATES[DATES.length - 1]}T07:55:00.000Z`, pausedSeconds: index * 120, observedSeconds: 5400 + index * 900, correctionStatus: index === 5 ? "needs_correction" : "ok" },
+    updatesToday: index % 4 === 0 ? 3 : index % 3,
+    substantiveUpdatesToday: index % 4 === 0 ? 2 : index % 2,
+    recapsToday: 3,
+    recapsReviewedToday: 2,
+    lastRecapAt: `${DATES[DATES.length - 1]}T09:${String(10 + index).padStart(2, "0")}:00.000Z`,
+    evidenceToday: (index * 5) % 7,
+    tasksCompletedToday: index % 3 === 0 ? 2 : index % 2,
+    lastUpdateAt: `${DATES[DATES.length - 1]}T08:${String(10 + index * 3).padStart(2, "0")}:00.000Z`,
+    lastUpdateKind: index % 2 === 0 ? "progress" : "completion_claim",
+    eodToday: index === 1 ? "pending_review" : index === 2 ? "approved" : null,
+    eodOutstanding: index === 4 || index === 5 ? { days: 2, latest: null } : null,
+  }));
   return {
     date: DATES[DATES.length - 1],
     generatedAt: `${DATES[DATES.length - 1]}T09:42:00.000Z`,
@@ -68,6 +134,8 @@ function overview(): AdminOverview {
       unknown: 1,
       updatesToday: 11,
       substantiveUpdatesToday: 7,
+      recapsToday: people.reduce((sum, person) => sum + person.recapsToday, 0),
+      recapsReviewedToday: people.reduce((sum, person) => sum + person.recapsReviewedToday, 0),
       tasksCompletedToday: 6,
       tasksOpen: 43,
       tasksOverdue: 5,
@@ -82,31 +150,7 @@ function overview(): AdminOverview {
       eodOutstandingDays: 3,
       disputedEvidence: 1,
     },
-    people: PEOPLE.map((person, index) => ({
-      personId: person.id,
-      displayName: person.name,
-      email: person.email,
-      roleProfile: person.role,
-      timezone: "Europe/Berlin",
-      schedule: { start: "09:00", end: "17:30", daysOfWeek: [1, 2, 3, 4, 5], timezone: "Europe/Berlin" },
-      attendance: {
-        state: (["active", "active", "paused", "active", "off_shift", "off_shift", "unknown", "active"] as const)[index],
-        source: index === 6 ? "none" : "worktivity",
-        observedAt: `${DATES[DATES.length - 1]}T09:${String(30 + index).padStart(2, "0")}:00.000Z`,
-        freshness: index === 6 ? "unknown" : index === 5 ? "stale" : "fresh",
-        clockedInAt: index === 6 ? null : `${DATES[DATES.length - 1]}T07:5${index % 10}:00.000Z`,
-        clockedOutAt: null,
-      },
-      session: index === 6 ? null : { state: index === 2 ? "paused" : "active", clockedInAt: `${DATES[DATES.length - 1]}T07:55:00.000Z`, pausedSeconds: index * 120, observedSeconds: 5400 + index * 900, correctionStatus: index === 5 ? "needs_correction" : "ok" },
-      updatesToday: index % 4 === 0 ? 3 : index % 3,
-      substantiveUpdatesToday: index % 4 === 0 ? 2 : index % 2,
-      evidenceToday: (index * 5) % 7,
-      tasksCompletedToday: index % 3 === 0 ? 2 : index % 2,
-      lastUpdateAt: `${DATES[DATES.length - 1]}T08:${String(10 + index * 3).padStart(2, "0")}:00.000Z`,
-      lastUpdateKind: index % 2 === 0 ? "progress" : "completion_claim",
-      eodToday: index === 1 ? "pending_review" : index === 2 ? "approved" : null,
-      eodOutstanding: index === 4 || index === 5 ? { days: 2, latest: null } : null,
-    })),
+    people,
     recentActivity: [
       { id: "a-1", kind: "task_completed", at: `${DATES[DATES.length - 1]}T09:12:00.000Z`, personId: "p-2", personName: "Ben Sato", title: "Shipped the billing webhook retry", detail: "Task completed", provenance: "nifty" },
       { id: "a-2", kind: "update", at: `${DATES[DATES.length - 1]}T09:05:00.000Z`, personId: "p-1", personName: "Amara Okafor", title: "Progress update", detail: "Drafted the settings information architecture", provenance: "employee" },
@@ -116,12 +160,12 @@ function overview(): AdminOverview {
       { id: "a-6", kind: "update", at: `${DATES[DATES.length - 1]}T07:50:00.000Z`, personId: "p-6", personName: "Farid Haddad", title: "Blocker raised", detail: "Waiting on staging credentials", provenance: "employee" },
     ],
     attention: [
-      { code: "reports_pending", severity: "warn", count: 2, message: "2 EOD reports are waiting for review.", href: "/work-os/admin/review" },
+      { code: "reports_pending_review", severity: "warn", count: 2, message: "2 EOD reports are waiting for review.", href: "/work-os/admin/review" },
       { code: "eod_outstanding", severity: "warn", count: 3, message: "3 workdays still have an unsubmitted EOD report.", href: "/work-os/admin/review" },
       { code: "tasks_overdue", severity: "info", count: 5, message: "5 open tasks are past their due date.", href: "/work-os/admin/tasks" },
-      { code: "disputed_evidence", severity: "error", count: 1, message: "1 evidence item is disputed and needs a decision.", href: "/work-os/admin/evidence" },
+      { code: "evidence_disputed", severity: "error", count: 1, message: "1 evidence item is disputed and needs a decision.", href: "/work-os/admin/evidence" },
     ],
-    series: DATES.map((date, index) => ({ date, completed: (index * 3) % 7, updates: 4 + ((index * 5) % 9), evidence: 12 + ((index * 7) % 18) })),
+    series: DATES.map((date, index) => ({ date, completed: (index * 3) % 7, updates: 4 + ((index * 5) % 9), recaps: 2 + ((index * 4) % 7), evidence: 12 + ((index * 7) % 18) })),
     timeSeries: timeSeries(),
     freshness: {
       niftySyncedAt: `${DATES[DATES.length - 1]}T09:35:00.000Z`,
@@ -133,6 +177,25 @@ function overview(): AdminOverview {
       lastReportSubmittedAt: `${DATES[DATES.length - 1]}T08:40:00.000Z`,
     },
   };
+}
+
+/** The overview record the notification preview reads. It mirrors the record
+ * seeded for the page, so the Admin tab and the Overview never disagree in a
+ * rendered check. Sparse deliberately reuses the empty record: the panel must
+ * render honest zeros rather than invent decisions the partial payload omits. */
+export function adminPreviewOverview(state: "dense" | "empty" | "sparse"): AdminOverview {
+  if (state !== "dense") {
+    return {
+      ...overview(),
+      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
+      people: [],
+      recentActivity: [],
+      attention: [],
+      series: DATES.map((date) => ({ date, completed: 0, updates: 0, recaps: 0, evidence: 0 })),
+      timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
+    };
+  }
+  return overview();
 }
 
 function peopleResponse(): PeopleResponse {
@@ -158,10 +221,6 @@ function peopleResponse(): PeopleResponse {
 
 function personDetail(personId: string): PersonDetailResponse {
   const person = PEOPLE.find((entry) => entry.id === personId) ?? PEOPLE[0];
-  // The day's report id matches reportsResponse for mapped people, so a
-  // People update's "Open EOD review" action opens the same report the
-  // Review queue serves.
-  const personReportIds: Record<string, string> = { "p-1": "r-2", "p-2": "r-1" };
   return {
     person: {
       id: person.id,
@@ -177,11 +236,14 @@ function personDetail(personId: string): PersonDetailResponse {
     schedules: [{ start: "09:00", end: "17:30", timezone: "Europe/Berlin", effective_from: DATES[0] }],
     exceptions: [{ date: DATES[3], kind: "adjusted" }],
     sessions: DATES.slice(-5).reverse().map((date, index) => ({ shift_date: date, state: "closed", observed_seconds: 21600 + index * 600, updates: 2 + (index % 3) })),
-    reports: DATES.slice(-4).reverse().map((date, index) => {
-      const id = index === 0 ? personReportIds[personId] ?? `report-${personId}-${date}` : `report-${personId}-${date}`;
-      const status = index === 0 && personReportIds[personId] ? "pending_review" : ["approved", "pending_review", "rejected", "draft"][index];
-      return { id, report_date: date, status };
-    }),
+    recapDays: DATES.slice(-5).reverse().map((date, index) => ({
+      date,
+      total: [3, 2, 1, 0, 2][index] ?? 0,
+      reviewed: [2, 1, 0, 0, 1][index] ?? 0,
+    })),
+    // The drawer and the Review queue read the same fixture reports, so every
+    // report row can open the record the queue serves.
+    reports: reportsResponse("").reports.filter((report) => report.person?.id === personId).slice(0, 6),
     // `work_check_ins` shape: the live column is `input_text`, with the kind,
     // substance flag, and workday beside it.
     updates: Array.from({ length: 4 }, (_, index) => ({
@@ -193,7 +255,50 @@ function personDetail(personId: string): PersonDetailResponse {
       update_kind: ["progress", "completion_claim", "progress", "blocked"][index],
       occurred_at: `${DATES[DATES.length - 1]}T0${8 - index}:10:00.000Z`,
     })),
-    intervals: [],
+    intervals: [
+      {
+        id: `int-${personId}-1`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T08:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T09:00:00.000Z`,
+        prompt_kind: "follow_up",
+        generation_status: "ready",
+        review_status: "confirmed",
+        headline: "Reviewed the settings IA and consolidated the mapping states.",
+        ai_detail: "The interval covered the settings layout, mapping copy, and the first pass at the empty state.",
+        final_detail: null,
+        employee_feedback: null,
+        timezone: "Europe/Berlin",
+      },
+      {
+        id: `int-${personId}-2`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T07:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T08:00:00.000Z`,
+        prompt_kind: "hourly_fallback",
+        generation_status: "ready",
+        review_status: "inferred",
+        headline: "Worked through the provider mapping review and the schedule exception copy.",
+        ai_detail: "Observed the mapping review, the schedule exception note, and the workspace roster.",
+        final_detail: null,
+        employee_feedback: null,
+        timezone: "Europe/Berlin",
+      },
+      {
+        id: `int-${personId}-3`,
+        local_date: DATES[DATES.length - 1],
+        window_start: `${DATES[DATES.length - 1]}T06:00:00.000Z`,
+        window_end: `${DATES[DATES.length - 1]}T07:00:00.000Z`,
+        prompt_kind: "follow_up",
+        generation_status: "ready",
+        review_status: "amended",
+        headline: "Confirmed the Worktivity employee mapping and the role profile.",
+        ai_detail: "The interval covered the mapping form and the role profile selector.",
+        final_detail: "Confirmed the mapping and added the missing team note.",
+        employee_feedback: "The team note was missing.",
+        timezone: "Europe/Berlin",
+      },
+    ],
     evidenceSummary: { total: 42, activity: 37, output: 5, disputed: personId === "p-5" ? 1 : 0 },
   };
 }
@@ -206,6 +311,9 @@ function reportsResponse(status: string): ReportsResponse {
     { id: "r-4", person: "p-6", date: DATES[DATES.length - 2], status: "rejected", title: "EOD · Staging access" },
     { id: "r-5", person: "p-4", date: DATES[DATES.length - 3], status: "draft", title: "EOD · Vendor review" },
     { id: "r-6", person: "p-8", date: DATES[DATES.length - 3], status: "approved", title: "EOD · Search indexing" },
+    { id: "r-7", person: "p-1", date: DATES[DATES.length - 2], status: "approved", title: "EOD · Settings IA follow-up" },
+    { id: "r-8", person: "p-1", date: DATES[DATES.length - 3], status: "rejected", title: "EOD · Settings copy review" },
+    { id: "r-9", person: "p-1", date: DATES[DATES.length - 4], status: "draft", title: "EOD · Mapping cleanup" },
   ] as const;
   const rows = (status ? all.filter((row) => row.status === status) : all).map((row) => {
     const person = PEOPLE.find((entry) => entry.id === row.person)!;
@@ -213,16 +321,36 @@ function reportsResponse(status: string): ReportsResponse {
       `# ${row.title}`,
       `Role profile: ${person.role}`,
       "Goal: keep the week's outcomes moving",
+      "Goal source: Employee",
+      "Session: 9:00 AM – 5:00 PM",
       "",
-      "## Completed work",
-      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]}`,
-      "- Reviewed two pull requests and left substantive comments",
+      "## Summary",
+      "Completed 4 work tasks today, including the billing retry handoff and the settings review.",
+      "",
+      "## Completed today",
+      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]} [Billing · 3:30 PM]`,
+      "- Reviewed two pull requests and left substantive comments [Engineering · 4:10 PM]",
       "",
       "## In progress",
-      "- Migration dry-run against the staging snapshot",
+      "- 10:00–11:00 — Confirmed: Worked through the webhook retry test suite and left review comments.",
       "",
-      "## Activity context",
+      "## Evidence",
+      "- 4 work deliverables · 1 recorded recap.",
+      "",
       "Activity context is descriptive and never proves attendance, productivity, or task completion.",
+      "",
+      "## Full record",
+      "",
+      "### Work completed (2)",
+      `- ${["Shipped retry handling for failed billing webhooks", "Confirmed the settings information architecture", "Resolved the flaky upload test"][row.id.length % 3]} [Billing · 3:30 PM]`,
+      "- Reviewed two pull requests and left substantive comments [Engineering · 4:10 PM]",
+      "",
+      "### Other tasks (1)",
+      "- Align the staging checklist — Personal task",
+      "",
+      "### Activity context (1)",
+      "- 10:00–11:00 — Confirmed: Worked through the webhook retry test suite and left review comments.",
+      "  The window shows one drafting block and one review pass; the record does not establish completion.",
     ].join("\n");
     return {
       id: row.id,
@@ -241,7 +369,13 @@ function reportsResponse(status: string): ReportsResponse {
       versions: [{ id: `${row.id}-v1`, version_kind: "generated", created_at: `${row.date}T08:00:00.000Z` }],
     };
   });
-  const counts = { draft: 1, pending_review: 2, approved: 2, rejected: 1, total: 6 };
+  const counts = { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: rows.length };
+  for (const row of rows) {
+    if (row.status === "draft") counts.draft += 1;
+    else if (row.status === "pending_review") counts.pending_review += 1;
+    else if (row.status === "approved") counts.approved += 1;
+    else if (row.status === "rejected") counts.rejected += 1;
+  }
   return { reports: rows, counts };
 }
 
@@ -253,6 +387,9 @@ function evidenceResponse(): EvidenceResponse {
     { id: "e-4", person: "p-5", date: DATES[DATES.length - 2], source: "worktivity", title: "Observed research block", summary: "Long browsing block; flagged for review", disputed: true, shot: true },
     { id: "e-5", person: "p-4", date: DATES[DATES.length - 2], source: "nifty", title: "Task completed", summary: "Vendor comparison matrix", disputed: false },
     { id: "e-6", person: "p-8", date: DATES[DATES.length - 3], source: "github", title: "Workflow run passed", summary: "wrazy/agent-os main · lint and tests", disputed: false },
+    { id: "e-7", person: "p-2", date: DATES[DATES.length - 1], source: "worktivity", title: "Billing retry suite in the browser", summary: "VS Code beside a browser running the billing retry tests.", disputed: false, shot: true },
+    { id: "e-8", person: "p-2", date: DATES[DATES.length - 1], source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", disputed: false, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
+    { id: "e-9", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Settings IA review", summary: "Figma and Notion with the settings IA outline open.", disputed: false, shot: true },
   ];
   return {
     evidence: rows.map((row) => {
@@ -265,7 +402,7 @@ function evidenceResponse(): EvidenceResponse {
         source: row.source,
         title: row.title,
         summary: row.summary,
-        url: row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null,
+        url: (row as { url?: string }).url ?? (row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null),
         metrics: null,
         created_at: `${row.date}T09:30:00.000Z`,
         person: { id: person.id, display_name: person.name },
@@ -274,7 +411,7 @@ function evidenceResponse(): EvidenceResponse {
           evidence_class: row.source === "worktivity" ? "activity" : "output",
           metadata: {},
           screenshot: (row as { shot?: boolean }).shot
-            ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", deleted_at: null }
+            ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", previewUrl: PREVIEW_SHOT_URL, deleted_at: null }
             : null,
         },
       };
@@ -303,15 +440,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     return;
   }
   if (state === "empty") {
-    queryClient.setQueryData(adminKeys.overview(today), {
-      ...overview(),
-      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
-      people: [],
-      recentActivity: [],
-      attention: [],
-      series: DATES.map((date) => ({ date, completed: 0, updates: 0, evidence: 0 })),
-      timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
-    } satisfies AdminOverview);
+    queryClient.setQueryData(adminKeys.overview(today), adminPreviewOverview("empty"));
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
@@ -395,31 +524,65 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   for (const status of ["pending_review", "draft", "rejected", "approved", "all"]) {
     queryClient.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: reportFrom, to: today }), reportsResponse(status === "all" ? "" : status));
   }
-  queryClient.setQueryData(adminKeys.reportEvidence("p-2", today), evidenceResponse());
-  queryClient.setQueryData(adminKeys.reportEvidence("p-1", today), evidenceResponse());
-  queryClient.setQueryData(adminKeys.reportIntervals("p-2", today), { intervals: [] });
+  const reportDate = DATES[DATES.length - 1];
+  const reportEvidence = evidenceResponse();
+  const evidenceForPerson = (personId: string) => {
+    const evidence = reportEvidence.evidence.filter((item) => item.person_id === personId);
+    const sources = [...evidence.reduce((counts, row) => {
+      counts.set(row.source, (counts.get(row.source) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries()].map(([source, count]) => ({ source, count }));
+    const days = [...evidence.reduce((counts, row) => {
+      counts.set(row.evidence_date, (counts.get(row.evidence_date) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries()].map(([date, count]) => ({ date, count }));
+    return { ...reportEvidence, evidence, summary: { sources, days } };
+  };
+  queryClient.setQueryData(adminKeys.reportEvidence("p-2", reportDate), evidenceForPerson("p-2"));
+  queryClient.setQueryData(adminKeys.reportEvidence("p-1", reportDate), evidenceForPerson("p-1"));
+  // The person drawer's report links open the year-wide filtered queue so a
+  // record the drawer listed can never fall outside the Review page's default
+  // thirty-day window.
+  for (const person of PEOPLE) {
+    const reports = reportsResponse("").reports.filter((report) => report.person?.id === person.id);
+    const counts = reports.reduce((total, report) => {
+      total[report.status] += 1;
+      total.total += 1;
+      return total;
+    }, { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 });
+    queryClient.setQueryData(adminKeys.reports({ status: "", personId: person.id, from: isoDaysAgo(365), to: today }), { reports, counts });
+  }
   const seedIntervals = [
     { id: "i-1", person: "p-2", label: "10:00–11:00", reviewStatus: "confirmed", headline: "Worked through the webhook retry test suite and left review comments.", evidenceCount: 6, recordedActivity: [{ description: "Pushed commits to wrazy/agent-os", relation: "performed" as const, url: null }, { description: "CI run on wrazy/agent-os passed", relation: "triggered" as const, url: null }] },
     { id: "i-2", person: "p-1", label: "11:00–12:00", reviewStatus: "inferred", headline: "Drafted the settings IA in Figma with a Notion outline open.", evidenceCount: 5, recordedActivity: [] },
   ];
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), evidenceResponse());
+  const intervalRows = seedIntervals.map((entry) => ({
+    ...entry,
+    windowStart: `${reportDate}T10:00:00.000Z`,
+    windowEnd: `${reportDate}T11:00:00.000Z`,
+    promptKind: "follow_up" as const,
+    generationStatus: "ready",
+    detail: "The window shows one drafting block and one review pass; the record does not establish completion.",
+    employeeFeedback: null,
+    failureReason: null,
+    generatedAt: `${reportDate}T11:05:00.000Z`,
+    reviewedAt: entry.reviewStatus === "confirmed" ? `${reportDate}T11:10:00.000Z` : null,
+    evidenceExpired: false,
+    evidence: [],
+    personId: entry.person,
+    personName: PEOPLE.find((person) => person.id === entry.person)?.name ?? null,
+  }));
+  queryClient.setQueryData(adminKeys.reportIntervals("p-2", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-2") });
+  queryClient.setQueryData(adminKeys.reportIntervals("p-1", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-1") });
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), reportEvidence);
+  for (const personId of ["p-1", "p-2"]) {
+    queryClient.setQueryData(adminKeys.evidence({ personId, source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), evidenceForPerson(personId));
+    queryClient.setQueryData(adminKeys.intervals({ personId, from: evidenceFrom, to: today, limit: "60" }), {
+      intervals: intervalRows.filter((entry) => entry.personId === personId),
+    });
+  }
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
-    intervals: seedIntervals.map((entry) => ({
-      ...entry,
-      windowStart: `${today}T10:00:00.000Z`,
-      windowEnd: `${today}T11:00:00.000Z`,
-      promptKind: "follow_up" as const,
-      generationStatus: "ready",
-      detail: "The window shows one drafting block and one review pass; the record does not establish completion.",
-      employeeFeedback: null,
-      failureReason: null,
-      generatedAt: `${today}T11:05:00.000Z`,
-      reviewedAt: entry.reviewStatus === "confirmed" ? `${today}T11:10:00.000Z` : null,
-      evidenceExpired: false,
-      evidence: [],
-      personId: entry.person,
-      personName: PEOPLE.find((person) => person.id === entry.person)?.name ?? null,
-    })),
+    intervals: intervalRows,
   });
   queryClient.setQueryData(adminKeys.githubActors(), {
     actors: [{ key: "gh-1", id: "66123", login: "chloe-m", events: 12, firstSeen: `${DATES[2]}T10:00:00.000Z`, lastSeen: `${today}T08:58:00.000Z`, titles: ["chore: bump runners"], suggestion: null }],
@@ -510,6 +673,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
         assigned_by_person_id: index === 0 ? "p-2" : "p-1",
         assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],
         updated_at: `${DATES[DATES.length - 1]}T08:${String(40 - index).padStart(2, "0")}:00.000Z`,
+        completion_evidence: index === 0 ? PREVIEW_ATTACHMENTS : [],
       };
       // The API attaches capabilities to every administration read; computing
       // them here with the same pure helper keeps the fixture's menu truthful.
@@ -530,6 +694,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     workflow_status: "pending",
     assignee_person_ids: ["p-1"],
     assigned_by_person_id: "p-2",
+    completion_evidence: PREVIEW_ATTACHMENTS,
   };
   queryClient.setQueryData(adminKeys.taskDetails("t-1"), {
     task: { ...detailTask, capabilities: taskCapabilities(detailTask, { role: "admin", personId: "p-1" }, today) },

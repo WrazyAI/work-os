@@ -375,8 +375,14 @@ export function useActivityIntervalsQuery(options: { enabled: boolean; date: str
 
 /** Ensures the recap for the prompt the companion is about to show. The server
  * owns the window and evidence; the client only identifies the prompt slot. */
+/** A recap can spend a minute analysing a backlog of screenshots before the
+ * synthesis call starts. The old 90-second cutoff abandoned requests that
+ * finished seconds later, so the companion delivered a generic check-in even
+ * though the recap was ready. Leave room for the full pipeline. */
+export const ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS = 180_000;
+
 export function ensureActivityIntervalReview(promptDueAt: string | null, signal?: AbortSignal) {
-  const timeout = AbortSignal.timeout(90_000);
+  const timeout = AbortSignal.timeout(ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS);
   return apiRequest<ActivityIntervalEnsureResult>("/api/work-os/me/activity-intervals/ensure", {
     method: "POST",
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,

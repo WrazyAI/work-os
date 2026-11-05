@@ -23,6 +23,7 @@ import type {
   WorkOsReportRow,
 } from "./types";
 import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {
@@ -83,6 +84,9 @@ export interface AdminTaskRow {
   provider_created_at?: string | null;
   project?: { id?: string; name?: string | null } | null;
   assignees?: Array<Record<string, any>> | null;
+  /** Employee-attached completion evidence for this task. Empty or absent on
+   * older payloads and on tasks completed without a file. */
+  completion_evidence?: TaskEvidenceRecord[];
   [key: string]: any;
 }
 
@@ -326,6 +330,9 @@ function normalizeOverviewPerson(row: Loose): AdminOverviewPerson {
       : null,
     updatesToday: asNumber(row.updatesToday),
     substantiveUpdatesToday: asNumber(row.substantiveUpdatesToday),
+    recapsToday: asNumber(row.recapsToday),
+    recapsReviewedToday: asNumber(row.recapsReviewedToday),
+    lastRecapAt: asIsoOrNull(row.lastRecapAt),
     evidenceToday: asNumber(row.evidenceToday),
     tasksCompletedToday: asNumber(row.tasksCompletedToday),
     lastUpdateAt: asIsoOrNull(row.lastUpdateAt),
@@ -350,6 +357,8 @@ export function normalizeAdminOverview(raw: unknown): AdminOverview {
       unknown: asNumber(counts.unknown),
       updatesToday: asNumber(counts.updatesToday),
       substantiveUpdatesToday: asNumber(counts.substantiveUpdatesToday),
+      recapsToday: asNumber(counts.recapsToday),
+      recapsReviewedToday: asNumber(counts.recapsReviewedToday),
       tasksCompletedToday: asNumber(counts.tasksCompletedToday),
       tasksOpen: asNumber(counts.tasksOpen),
       tasksOverdue: asNumber(counts.tasksOverdue),
@@ -388,6 +397,7 @@ export function normalizeAdminOverview(raw: unknown): AdminOverview {
       date: asText(point.date),
       completed: asNumber(point.completed),
       updates: asNumber(point.updates),
+      recaps: asNumber(point.recaps),
       evidence: asNumber(point.evidence),
     })),
     timeSeries: normalizeTimeSeries(source.timeSeries),
@@ -522,6 +532,11 @@ export function normalizePersonDetail(raw: unknown): PersonDetailResponse {
     reports: asRows(source.reports),
     updates: asRows(source.updates),
     intervals: asRows(source.intervals),
+    recapDays: asRows(source.recapDays).map((day) => ({
+      date: asText(day.date),
+      total: asNumber(day.total),
+      reviewed: asNumber(day.reviewed),
+    })),
     evidenceSummary: {
       total: asNumber(evidenceSummary.total),
       activity: asNumber(evidenceSummary.activity),
@@ -680,6 +695,19 @@ export interface AdminTaskListResponse {
   summary?: { open: number; overdue: number; completedWeek: number };
 }
 
+function normalizeTaskEvidence(row: Loose): TaskEvidenceRecord {
+  return {
+    id: asText(row.id),
+    title: asText(row.title, "Completion evidence"),
+    note: asText(row.note),
+    fileName: asText(row.fileName, "completion-evidence"),
+    contentType: asText(row.contentType, "application/octet-stream"),
+    sizeBytes: asNumber(row.sizeBytes),
+    createdAt: asText(row.createdAt),
+    url: asText(row.url),
+  };
+}
+
 function normalizeTaskRow(row: Loose): AdminTaskRow {
   const project = row.project && typeof row.project === "object" ? asRecord(row.project) : null;
   return {
@@ -703,6 +731,7 @@ function normalizeTaskRow(row: Loose): AdminTaskRow {
     // Assignee rows are rendered by name; a sparse embed must not hand the
     // page a null it would dereference.
     assignees: asRows(row.assignees).map((assignee) => ({ ...assignee, displayName: asText(assignee.displayName ?? assignee.display_name, "Unassigned") })),
+    completion_evidence: asRows(row.completion_evidence).map(normalizeTaskEvidence).filter((evidence) => evidence.id),
   };
 }
 

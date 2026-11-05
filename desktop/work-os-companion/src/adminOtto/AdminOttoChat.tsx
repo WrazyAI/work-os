@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { X, SquarePen } from "lucide-react";
 import type {
   AdminOttoPendingAction,
   AdminRead,
+  ChatRequest,
+  ChatResult,
   InboxPage,
   OttoScope,
   ReviewedRecap,
@@ -16,7 +18,9 @@ import { createAdminAudioInterlock } from "./audioInterlock";
 import { onOttoAudioStop, requestOttoAudio, type OttoAudioLease } from "./audioOwner";
 import { sameOttoScope } from "./mode";
 import { adminEscapeAction, adminRecapOpenFocus, chooseAdminRecapReturnFocus, type AdminFocusTarget } from "./adminFocus";
-import { confirmAdminOttoAction, fetchAdminOttoInbox, fetchAdminOttoThread, sendAdminOttoChat } from "./api";
+import { confirmAdminOttoAction, fetchAdminOttoAction, refreshAdminOttoWorkflow, discardAdminOttoChat, fetchAdminOttoInbox, fetchAdminOttoThread, sendAdminOttoChat, type AdminOttoThreadView } from "./api";
+import { AdminActionBatch, AdminReadCard } from "./AdminToolCards";
+import { AdminWorkflowCard } from "./AdminWorkflowCard";
 import { createAdminOttoEntryController, type AdminOttoEntryController, type AdminOttoEntryRecovery, type AdminOttoEntryTransport } from "./chatEntry";import { AdminRecapInbox } from "./AdminRecapInbox";
 import { AdminRecapView, useReducedMotion, type AdminRecapPlayback } from "./AdminRecapView";
 import { RecapPrompter } from "../RecapPrompter";
@@ -154,212 +158,14 @@ function RecordLink({ url, children, onOpenRecord }: { url: string; children: Re
   );
 }
 
-function TaskResults({ result, onOpenRecord }: { result: Extract<AdminRead, { kind: "tasks" }>; onOpenRecord: (url: string) => void }) {
-  const { page } = result;
-  return (
-    <section className="admin-otto-result-card" aria-label="Task results">
-      <header className="admin-otto-result-head">
-        <h4>Tasks</h4>
-        <p>Showing {page.items.length} of {safeCount(page.total)}</p>
-      </header>
-      {page.items.length ? (
-        <ol className="admin-otto-result-list">
-          {page.items.map((task) => (
-            <li key={task.id}>
-              <div className="admin-otto-result-row">
-                <div>
-                  <RecordLink url={task.recordUrl} onOpenRecord={onOpenRecord}>{task.title}</RecordLink>
-                  <p className="admin-otto-result-meta">
-                    <span>{assigneeNames(task)}</span>
-                    {task.parentTitle ? <span className="admin-otto-parent">Subtask of {task.parentTitle}</span> : task.parentId ? <span className="admin-otto-parent">Subtask of a parent task</span> : null}
-                    {task.effectiveDueDate ? <span>Due {adminCalendarDate(task.effectiveDueDate)}</span> : null}
-                  </p>
-                </div>
-                <span className={`admin-otto-task-status is-${task.status}`}>{task.status === "overdue" ? "Overdue" : "Open"}</span>
-              </div>
-            </li>
-          ))}
-        </ol>
-      ) : <p className="admin-otto-empty-line">No tasks matched that request.</p>}
-    </section>
-  );
-}
-
-const RECORD_SOURCE_LABEL: Record<WorkRecord["source"], string> = {
-  update: "Update",
-  submitted_eod: "EOD report",
-  task: "Task",
-  reviewed_recap: "Reviewed recap",
-  workday: "Workday",
-};
-
-function RecordResults({ result, onOpenRecord }: { result: Extract<AdminRead, { kind: "records" }>; onOpenRecord: (url: string) => void }) {
-  const { page } = result;
-  return (
-    <section className="admin-otto-result-card" aria-label="Record results">
-      <header className="admin-otto-result-head">
-        <h4>Records</h4>
-        <p>Showing {page.items.length} of {safeCount(page.total)}</p>
-      </header>
-      {page.items.length ? (
-        <ol className="admin-otto-result-list">
-          {page.items.map((record) => (
-            <li key={record.id}>
-              <div className="admin-otto-result-row">
-                <div>
-                  <RecordLink url={record.recordUrl} onOpenRecord={onOpenRecord}>{record.text || RECORD_SOURCE_LABEL[record.source]}</RecordLink>
-                  <p className="admin-otto-result-meta">
-                    <span>{RECORD_SOURCE_LABEL[record.source]}</span>
-                    <span>{adminCalendarDate(record.localDate)}</span>
-                  </p>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      ) : <p className="admin-otto-empty-line">No records matched that request.</p>}
-    </section>
-  );
-}
-
-function RecapResults({ result, onOpenRecap, onListen }: { result: Extract<AdminRead, { kind: "recaps" }>; onOpenRecap: (recap: ReviewedRecap) => void; onListen: (recap: ReviewedRecap) => void }) {
-  const { page } = result;
-  return (
-    <section className="admin-otto-result-card" aria-label="Reviewed recap results">
-      <header className="admin-otto-result-head">
-        <h4>Reviewed recaps</h4>
-        <p>Showing {page.items.length} of {safeCount(page.total)}</p>
-      </header>
-      {page.items.length ? (
-        <ol className="admin-otto-result-list">
-          {page.items.map((recap) => (
-            <li key={recap.intervalId}>
-              <div className="admin-otto-result-row">
-                <div>
-                  <strong>{recap.person.displayName}</strong>
-                  <p className="admin-otto-result-meta">
-                    <span>{adminReviewStatusLabel(recap.reviewStatus)}</span>
-                    <span>{adminRecapDate(recap.reviewedAt, recap.timezone)}</span>
-                  </p>
-                  {recap.original.headline ? <p className="admin-otto-result-summary">{recap.original.headline}</p> : null}
-                </div>
-                <div className="admin-otto-result-actions">
-                  <button type="button" className="admin-otto-secondary" data-admin-recap-id={recap.intervalId} data-admin-recap-action="view" onClick={() => onOpenRecap(recap)}>View recap</button>
-                  <button type="button" className="admin-otto-listen" aria-label={`Listen to the recap for ${recap.person.displayName}`} onClick={() => onListen(recap)}>Listen</button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      ) : <p className="admin-otto-empty-line">No reviewed recaps matched that request.</p>}
-    </section>
-  );
-}
-
-function ResolutionResult({ result }: { result: Extract<AdminRead, { kind: "resolution" }> }) {
-  const resolution = result.resolution;
-  return (
-    <section className="admin-otto-result-card" aria-label="Unresolved person">
-      <header className="admin-otto-result-head"><h4>Person needed</h4></header>
-      <p>{resolution.kind === "ambiguous"
-        ? `More than one person matches ${resolution.name}. Choose one in the request.`
-        : `No employee named ${resolution.name} was found.`}</p>
-      {resolution.kind === "ambiguous" ? (
-        <ul className="admin-otto-result-list">
-          {resolution.choices.map((person) => <li key={person.id}>{person.displayName}</li>)}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
-function changeValue(value: unknown): string {
-  if (value === null || value === undefined) return "none";
-  if (Array.isArray(value)) return value.length ? value.map((entry) => String(entry)).join(", ") : "none";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-/** One server-stored preview. The model cannot confirm it; only this button
- * calls the session-bound confirm route. */
 export function AdminPendingActionCard({ action }: { action: AdminOttoPendingAction }) {
-  const [status, setStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const confirm = async () => {
-    setStatus("busy");
-    setError(null);
-    try {
-      await confirmAdminOttoAction(action.previewId);
-      setStatus("done");
-    } catch (cause) {
-      setStatus("error");
-      setError(cause instanceof Error ? cause.message : "The change could not be confirmed.");
-    }
-  };
-  return (
-    <section className="admin-otto-result-card admin-otto-action-card" aria-label="Confirm change">
-      <header className="admin-otto-result-head">
-        <h4>{action.summary}</h4>
-      </header>
-      {action.changes.length ? (
-        <ul className="admin-otto-result-list">
-          {action.changes.map((change) => (
-            <li key={change.field}>
-              <div className="admin-otto-result-row">
-                <p className="admin-otto-result-meta">
-                  {change.field}: {changeValue(change.from)} → {changeValue(change.to)}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {action.warnings.map((warning) => (
-        <p key={warning} className="admin-otto-quiet">{warning}</p>
-      ))}
-      {status === "done" ? (
-        <p className="admin-otto-status" role="status">Change applied.</p>
-      ) : (
-        <div className="admin-otto-result-actions">
-          <button
-            type="button"
-            className="admin-otto-secondary"
-            data-admin-action-confirm={action.previewId}
-            disabled={status === "busy"}
-            onClick={() => void confirm()}
-          >
-            {status === "busy" ? "Applying…" : "Confirm change"}
-          </button>
-          <span className="admin-otto-quiet">Expires {new Date(action.expiresAt).toLocaleTimeString()}</span>
-        </div>
-      )}
-      {error ? <p className="admin-otto-error" role="alert">{error}</p> : null}
-    </section>
-  );
+  return <AdminActionBatch actions={[action]} onConfirm={async (current) => {
+    const result = await confirmAdminOttoAction(current.previewId);
+    return { ...current, ...result.action, status: result.action?.status ?? "recorded" };
+  }} onRefresh={async (current) => ({ ...current, ...await fetchAdminOttoAction(current.previewId) })} />;
 }
 
-export function AdminResultCard({
-  result,
-  onOpenRecord,
-  onOpenRecap,
-  onListen,
-  playback = null,
-}: {
-  result: AdminRead;
-  onOpenRecord: (url: string) => void;
-  onOpenRecap: (recap: ReviewedRecap) => void;
-  onListen: (recap: ReviewedRecap) => void;
-  playback?: AdminRecapPlayback | null;
-}) {
-  switch (result.kind) {
-    case "tasks": return <TaskResults result={result} onOpenRecord={onOpenRecord} />;
-    case "records": return <RecordResults result={result} onOpenRecord={onOpenRecord} />;
-    case "recaps": return <RecapResults result={result} onOpenRecap={onOpenRecap} onListen={onListen} />;
-    case "recap":
-      return <AdminRecapView recap={result.recap} onListen={onListen} onOpenRecord={onOpenRecord} playback={playback} />;
-    case "resolution": return <ResolutionResult result={result} />;
-    default: return null;
-  }
+export function AdminResultCard({ result, onOpenRecord, onOpenRecap, onListen, playback = null }: Parameters<typeof AdminReadCard>[0]) {  return <AdminReadCard result={result} onOpenRecord={onOpenRecord} onOpenRecap={onOpenRecap} onListen={onListen} playback={playback} />;
 }
 
 function arrivalLabel(arrival: AdminArrivalView): string {
@@ -374,6 +180,10 @@ export type AdminOttoChatProps = {
   onListen: (recap: ReviewedRecap) => void;
   /** Shared chat surface options. */
   initialTab?: AdminTab;
+  /** An explicit "open this tab" request. The token is monotonic so clicking
+   * the same destination twice still moves a surface that was switched away
+   * from that tab in between. */
+  tabRequest?: { tab: AdminTab; token: number } | null;
   initialRecap?: ReviewedRecap | null;
   initialInbox?: InboxPage | null;
   arrival?: AdminArrivalView | null;
@@ -394,9 +204,17 @@ export type AdminOttoChatProps = {
   initialRequestId?: string | null;
   resetToken?: number;
   onConversation?: (conversationId: string) => void;
+  onNewChat?: () => void;
   onRecoveryChange?: (recovery: AdminOttoEntryRecovery) => void;
   onClose?: () => void;
-  transport?: AdminOttoEntryTransport & { inbox?: typeof fetchAdminOttoInbox };
+  transport?: {
+    send?: (input: ChatRequest, signal?: AbortSignal) => Promise<ChatResult>;
+    load?: (conversationId: string, signal?: AbortSignal) => Promise<AdminOttoThreadView>;
+    discard?: (input: { conversationId: string | null; requestId: string | null }) => Promise<void>;
+    confirm?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
+    status?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
+    inbox?: typeof fetchAdminOttoInbox;
+  };
   /** Tests and the local preview render a supplied snapshot rather than
    * fetching from the workspace. */
   previewOnly?: boolean;
@@ -409,6 +227,7 @@ export function AdminOttoChat({
   onOpenRecord,
   onListen,
   initialTab = "chat",
+  tabRequest = null,
   initialRecap = null,
   initialInbox = null,
   arrival = null,
@@ -425,6 +244,7 @@ export function AdminOttoChat({
   initialRequestId = null,
   resetToken = 0,
   onConversation,
+  onNewChat,
   onRecoveryChange,
   onClose,
   transport,
@@ -435,6 +255,13 @@ export function AdminOttoChat({
   const state = useSyncExternalStore(surface.subscribe, surface.snapshot, surface.snapshot);
   const reducedMotion = useReducedMotion();
   const [selectedRecap, setSelectedRecap] = useState<ReviewedRecap | null>(initialRecap);
+  const lastTabRequest = useRef(tabRequest?.token ?? 0);
+  useEffect(() => {
+    if (!tabRequest || tabRequest.token === lastTabRequest.current) return;
+    lastTabRequest.current = tabRequest.token;
+    surface.selectTab(tabRequest.tab);
+    if (tabRequest.tab === "chat") setSelectedRecap(null);
+  }, [surface, tabRequest]);
   const [unread, setUnread] = useState(initialInbox?.unread ?? arrival?.unread ?? 0);
   const [inboxRevision, setInboxRevision] = useState(0);
   const lastArrival = useRef<string>("");
@@ -457,6 +284,7 @@ export function AdminOttoChat({
     scope,
     send: transport?.send ?? sendAdminOttoChat,
     load: transport?.load ?? fetchAdminOttoThread,
+    discard: transport?.discard ?? discardAdminOttoChat,
     initialDraft,
     initialRequestId,
     initialConversationId: conversationId,
@@ -662,6 +490,24 @@ export function AdminOttoChat({
   const send = () => {
     void controller.submit();
   };
+  const [resetting, setResetting] = useState(false);
+  const newChat = async () => {
+    if (resetting) return;
+    setResetting(true);
+    onStopListening?.();
+    adminVoice.cancel();
+    try {
+      await controller.newChat();
+      conversationRef.current = null;
+      previousConversationProp.current = null;
+      surface.selectTab("chat");
+      surface.closeRecap();
+      setSelectedRecap(null);
+      onNewChat?.();
+      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".admin-otto-composer textarea")?.focus());
+    } catch { /* The controller preserves the conversation and its inline error. */ }
+    finally { setResetting(false); }
+  };
 
   return (
     <ConversationSurface surface="in-app" open ariaLabel="Admin Otto" className="admin-otto-surface">
@@ -669,7 +515,7 @@ export function AdminOttoChat({
         <header className="workos-chat-head admin-otto-head">
           <span className="admin-otto-head-title">
             <span className="conversation-pane-title">Otto</span>
-            <span className="admin-otto-head-sub">Administration, confirmed changes</span>
+            <span className="admin-otto-head-sub">Administration</span>
           </span>
           <ChatTabs
             tabs={tabs}
@@ -682,6 +528,9 @@ export function AdminOttoChat({
             ariaLabel="Admin Otto views"
           />
           <span className="progress-header-actions">
+            <button type="button" className="admin-otto-secondary" aria-label="New chat" title="Start a fresh chat and discard this conversation" disabled={resetting} onClick={() => void newChat()}>
+              <SquarePen size={14} aria-hidden="true" />{resetting ? "Clearing…" : "New chat"}
+            </button>
             {onClose ? (
               <button type="button" className="admin-otto-close" aria-label="Close admin Otto" title="Close" onClick={onClose}>
                 <X size={16} aria-hidden="true" />
@@ -727,7 +576,23 @@ export function AdminOttoChat({
                           playback={playback}
                         />
                       ) : null}
-                      {turn.pendingAction ? <AdminPendingActionCard action={turn.pendingAction} /> : null}
+                      {turn.pendingAction ? <AdminActionBatch actions={[turn.pendingAction]}
+                        onConfirm={async (current) => {
+                          const confirmed = transport?.confirm ? await transport.confirm(current) : { ...current, ...(await confirmAdminOttoAction(current.previewId)).action } as AdminOttoPendingAction;
+                          const action = { ...current, ...confirmed, status: confirmed.status ?? "recorded" as const };
+                          controller.updateAction(action);
+                          return action;
+                        }}
+                        onRefresh={async (current) => {
+                          const action = transport?.status ? await transport.status(current) : { ...current, ...await fetchAdminOttoAction(current.previewId) };
+                          controller.updateAction(action);
+                          return action;
+                        }} /> : null}
+                      {turn.workflow ? <AdminWorkflowCard workflow={turn.workflow}
+                        onUpdate={(workflow) => controller.updateWorkflow(workflow)}
+                        onAction={(action) => controller.updateAction(action)}
+                        confirm={transport?.confirm} status={transport?.status}
+                        onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} /> : null}
                     </>
                   )}
                 </ChatTurn>

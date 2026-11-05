@@ -56,6 +56,64 @@
   background: var(--surface-raised, #fbfcf8);
 }
 
+/* A KPI that opens the record it measures is a real control: same surface,
+ * larger hit target, a quiet open affordance, and a focus ring. */
+.insight-kpi.is-action {
+  position: relative;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 160ms var(--ease-product), background-color 160ms var(--ease-product), transform 160ms var(--ease-product);
+}
+
+.insight-kpi.is-action > small {
+  padding-right: 24px;
+}
+
+.insight-kpi.is-action:hover {
+  border-color: var(--line-strong, #c5cec1);
+  background: color-mix(in srgb, var(--surface-raised, #fbfcf8) 94%, var(--ink) 6%);
+  transform: translateY(-1px);
+}
+
+.insight-kpi.is-action:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.insight-kpi-open {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  color: var(--muted);
+  opacity: 0.55;
+  transition: color 160ms var(--ease-product), opacity 160ms var(--ease-product), transform 160ms var(--ease-product);
+}
+
+.insight-kpi.is-action:hover .insight-kpi-open,
+.insight-kpi.is-action:focus-visible .insight-kpi-open {
+  color: var(--ink);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-kpi.is-action,
+  .insight-kpi-open {
+    transition: none;
+  }
+  .insight-kpi.is-action:hover {
+    transform: none;
+  }
+  .insight-kpi.is-action:hover .insight-kpi-open,
+  .insight-kpi.is-action:focus-visible .insight-kpi-open {
+    transform: none;
+  }
+}
+
 .insight-kpi > small {
   color: var(--muted);
   font-size: 10.5px;

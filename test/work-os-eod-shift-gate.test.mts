@@ -9,6 +9,7 @@ import {
   EOD_SHIFT_OPEN_SERVER_MESSAGE,
   EOD_SHIFT_OPEN_SUFFIX,
   eodDraftBlocked,
+  eodDraftDateBlocked,
   eodDraftWindowOpen,
   sessionStillOpen,
   shiftStillOpen,
@@ -107,6 +108,16 @@ test("today's EOD opens in the final ten minutes before the scheduled clock-out"
   }), false);
   // No open shift at all is never blocked.
   assert.equal(eodDraftBlocked({ session: null, now: at("2026-10-19T19:50:00.000Z") }), false);
+});
+
+test("a day before its EOD window is not describable, even before clock-in", () => {
+  const scheduledEnd = "2026-10-19T20:00:00.000Z";
+  const at = (iso: string) => Date.parse(iso);
+  assert.equal(eodDraftDateBlocked({ scheduledEndsAt: scheduledEnd, now: at("2026-10-19T08:17:00.000Z") }), true);
+  assert.equal(eodDraftDateBlocked({ scheduledEndsAt: scheduledEnd, now: at("2026-10-19T19:49:59.000Z") }), true);
+  assert.equal(eodDraftDateBlocked({ scheduledEndsAt: scheduledEnd, now: at("2026-10-19T19:50:00.000Z") }), false);
+  assert.equal(eodDraftDateBlocked({ closed: true, scheduledEndsAt: scheduledEnd, now: at("2026-10-19T08:17:00.000Z") }), false);
+  assert.equal(eodDraftDateBlocked({ scheduledEndsAt: null, now: at("2026-10-19T20:05:00.000Z") }), true);
 });
 
 test("the prompt is one sentence with an inline clock-out link", () => {

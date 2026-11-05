@@ -20,6 +20,21 @@ assert.doesNotMatch(debugHost, /\?debug=1/);
 const frontend = read("src/main.tsx");
 assert.doesNotMatch(frontend, /getCurrentWindow\(\)\.label === "debug"/);
 
+const adminReview = read("src/admin/ReviewPage.tsx");
+assert.match(adminReview, /EodSectionIcon/);
+assert.match(adminReview, /document\.appendix/);
+assert.match(adminReview, /AdminAccordion/);
+assert.match(adminReview, /ReportEvidencePanel/);
+assert.match(adminReview, /ReportRecapsPanel/);
+assert.match(adminReview, /More Evidence/);
+assert.match(adminReview, /See all recaps/);
+assert.match(adminReview, /mounted \? children : null/, "evidence and recap panels mount only when opened");
+assert.match(read("src/admin/admin.css"), /grid-template-rows 220ms/, "the drawer accordions animate");
+assert.match(read("src/admin/admin.css"), /admin-shot-modal/, "evidence images expand in a dialog");
+assert.match(read("src/admin/AdminWorkspace.tsx"), /initialPersonId=\{focus\.personId\}/);
+assert.match(read("src/admin/EvidencePage.tsx"), /initialPersonId/);
+assert.match(read("src/admin/adminFixtures.ts"), /previewUrl/);
+
 const onboarding = read("src/Onboarding.tsx");
 assert.match(onboarding, /aria-busy=\{busy\}/);
 assert.match(onboarding, /onNotify\("error"/);
@@ -42,6 +57,22 @@ assert.match(onboarding, /I accept Work OS tracking and the sampled screenshot-a
 assert.doesNotMatch(onboarding, /Allow neutral screenshot summaries/);
 const styles = read("src/styles.css");
 assert.match(styles, /prefers-reduced-motion/);
+// Page-level rubber-banding stays off and inner scrollers keep their
+// containment, except the horizontal-only wrappers that would otherwise
+// swallow the vertical wheel over a zero-range table.
+assert.match(styles, /(^|\n)\*\s*\{\s*overscroll-behavior:\s*contain/);
+assert.match(styles, /\.admin-table-wrap[\s\S]*?overscroll-behavior-y:\s*auto/);
+assert.match(styles, /\.chat-markdown-code[\s\S]*?overscroll-behavior-y:\s*auto/);
+assert.match(styles, /html\s*\{[^}]*overscroll-behavior:\s*none/);
+const adminStyles = read("src/admin/admin.css");
+assert.match(adminStyles, /\.admin-table-wrap\s*\{[^}]*overflow-x:\s*auto/);
+const insightCharts = read("src/insight-charts.css");
+assert.doesNotMatch(insightCharts, /\.scroll-fade-region\s*\{[^}]*overscroll-behavior:\s*contain/);
+assert.match(insightCharts, /\.scroll-fade-region\.is-scrollable\s*\{[^}]*overscroll-behavior:\s*contain/);
+const scrollRegion = read("src/ScrollFadeRegion.tsx");
+assert.match(scrollRegion, /const scrollable = edges\.start \|\| edges\.end/);
+assert.match(scrollRegion, /\$\{scrollable \? " is-scrollable" : ""\}/);
+assert.match(read("src/chat/tool-surfaces.css"), /data-workos-tool-surface="task-selection"[\s\S]*?overscroll-behavior-y:\s*auto/);
 const redesignStyles = read("src/workspace-redesign.css");
 assert.match(redesignStyles, /\.goal-composer-panel/);
 assert.match(redesignStyles, /\.goal-card-edit/);

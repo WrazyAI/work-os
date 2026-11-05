@@ -25,7 +25,29 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## Unreleased
+
 - Work OS now does less background work while you use Administration or leave the companion open, so switching views stays lighter.
+
+## 0.5.23 — 2026-11-05
+
+- A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.
+- The notifications bell now switches between your own reminders and the workspace's review queue, pulse, and recent team activity.
+- Tasks with completion files now show a small attachment marker beside their status, and the task details list the files.
+- Weekends no longer ask you for an EOD report, and the daily charts skip weekend days.
+- Admin Otto can handle several task requests in one message, show each result separately, and keep every change unapplied until you approve it.
+- Admin Otto's change cards now use real names and only the fields that actually change; New chat starts a clean conversation.
+
+## 0.5.22 — 2026-11-04
+
+- Each end-of-day report section now carries a small, quiet icon.
+- Recaps that take longer to analyse your screenshots now wait for the result instead of showing a generic check-in.
+
+## 0.5.21 — 2026-11-04
+
+- Click a measure on the admin Overview to open the record it shows.
+- The admin Overview now counts recaps, with reviewed and waiting totals.
+- Scrolling the page now keeps working while the pointer is over a table.
 
 ## 0.5.20 — 2026-11-04
 

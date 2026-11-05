@@ -1,5 +1,6 @@
 import type {
   AdminOttoPendingAction,
+  AdminOttoWorkflowView,
   AdminRead,
   ChatRequest,
   ChatResult,
@@ -33,6 +34,8 @@ export type AdminOttoThreadTurn = {
   role: "user" | "assistant";
   text: string;
   createdAt: string;
+  pendingAction?: AdminOttoPendingAction;
+  workflow?: AdminOttoWorkflowView;
 };
 
 export type AdminOttoThreadView = {
@@ -182,7 +185,25 @@ function pendingAction(value: unknown): AdminOttoPendingAction | undefined {
     changes: record.changes as AdminOttoPendingAction["changes"],
     warnings: record.warnings.filter((entry): entry is string => typeof entry === "string"),
     expiresAt: text(record.expiresAt, "Admin Otto preview expiry"),
+    ...(record.display && typeof record.display === "object" ? { display: record.display as AdminOttoPendingAction["display"] } : {}),
+    ...(typeof record.status === "string" && ["pending", "recorded", "expired", "in_flight", "abandoned", "unknown"].includes(record.status)
+      ? { status: record.status as AdminOttoPendingAction["status"] } : {}),
+    ...(typeof record.recordUrl === "string" ? { recordUrl: record.recordUrl } : {}),
   };
+}
+
+function workflowValue(value: unknown): AdminOttoWorkflowView | undefined {
+  if (value === null || value === undefined) return undefined;
+  const workflow = object(value, "Admin Otto requests");
+  if (!Array.isArray(workflow.steps) || workflow.steps.length > 8) throw new Error("Admin Otto request steps are invalid.");
+  return { id: text(workflow.id, "Admin Otto request identity"), steps: workflow.steps.map((value) => {
+    const step = object(value, "Admin Otto step");
+    if (!["ready", "blocked", "failed", "recorded"].includes(String(step.status))) throw new Error("Admin Otto step status is invalid.");
+    return { index: number(step.index, "Admin Otto step index"), label: text(step.label, "Admin Otto step label"),
+      status: step.status as AdminOttoWorkflowView["steps"][number]["status"], result: adminRead(step.result),
+      pendingAction: pendingAction(step.pendingAction), ...(typeof step.message === "string" ? { message: step.message } : {}),
+    };
+  }) };
 }
 
 function pageShell(value: Record<string, unknown>) {
@@ -236,7 +257,7 @@ async function errorFrom(response: Response): Promise<AdminOttoApiError> {
   const message = typeof body?.error === "string" && body.error
     ? body.error
     : `Admin Otto request failed (${response.status}).`;
-  const reason = typeof body?.reason === "string" ? body.reason : null;
+  const reason = typeof body?.reason === "string" ? body.reason : typeof body?.code === "string" ? body.code : null;
   return new AdminOttoApiError(message, response.status, reason);
 }
 
@@ -369,6 +390,7 @@ export async function sendAdminOttoChat(input: ChatRequest, signal?: AbortSignal
       reply: typeof body.reply === "string" ? body.reply : "",
       result: adminRead(body.result),
       ...(action ? { pendingAction: action } : {}),
+      ...(body.workflow ? { workflow: workflowValue(body.workflow) } : {}),
       contextVersion: number(body.contextVersion, "Admin Otto context version"),
       ...(body.errorCode === "unsupported" || body.errorCode === "ambiguous" || body.errorCode === "missing"
         ? { errorCode: body.errorCode }
@@ -377,12 +399,32 @@ export async function sendAdminOttoChat(input: ChatRequest, signal?: AbortSignal
   }, ADMIN_OTTO_CHAT_TIMEOUT_MS);
 }
 
-export async function confirmAdminOttoAction(previewId: string): Promise<{ result: unknown; replayed: boolean }> {
+export async function confirmAdminOttoAction(previewId: string): Promise<{ result: unknown; replayed: boolean; action?: AdminOttoPendingAction }> {
   return requestJson(
     `${ADMIN_OTTO}/actions/${encodeURIComponent(previewId)}/confirm`,
     { method: "POST" },
-    (body) => ({ result: body.result, replayed: body.replayed === true }),
+    (body) => ({ result: body.result, replayed: body.replayed === true, action: pendingAction(body.action) }),
   );
+}
+
+export async function fetchAdminOttoAction(previewId: string): Promise<AdminOttoPendingAction> {
+  return requestJson(`${ADMIN_OTTO}/actions/${encodeURIComponent(previewId)}/confirm`, { method: "GET" }, (body) => {
+    const action = pendingAction(body.action);
+    if (!action) throw new Error("This change is no longer available.");
+    return action;
+  });
+}
+
+export async function refreshAdminOttoWorkflow(id: string, refreshIndex?: number): Promise<AdminOttoWorkflowView> {
+  return requestJson(`${ADMIN_OTTO}/workflows/${encodeURIComponent(id)}`, jsonBody(refreshIndex === undefined ? {} : { refreshIndex }), (body) => {
+    const workflow = workflowValue(body.workflow);
+    if (!workflow) throw new Error("These requests are no longer available.");
+    return workflow;
+  }, ADMIN_OTTO_CHAT_TIMEOUT_MS);
+}
+
+export async function discardAdminOttoChat(input: { conversationId: string | null; requestId: string | null }): Promise<void> {
+  return requestJson(`${ADMIN_OTTO}/chat`, { method: "DELETE", body: JSON.stringify(input) }, () => undefined);
 }
 
 export async function fetchAdminOttoThread(conversationId: string, signal?: AbortSignal): Promise<AdminOttoThreadView> {
@@ -398,7 +440,9 @@ export async function fetchAdminOttoThread(conversationId: string, signal?: Abor
           turnId: text(turn.turnId, "Admin Otto thread turn id"),
           role: turn.role,
           text: turn.text,
-          createdAt: typeof turn.createdAt === "string" ? turn.createdAt : "",
+            createdAt: typeof turn.createdAt === "string" ? turn.createdAt : "",
+            pendingAction: pendingAction(turn.pendingAction),
+            workflow: workflowValue(turn.workflow),
         }];
       }),
       result: adminRead(body.result),

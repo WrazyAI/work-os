@@ -55,6 +55,7 @@ describe("EodReportDocument", () => {
     expect(markup).toContain("eod-doc-appendix");
     expect(markup).toContain("eod-doc-title");
     expect(markup).toContain("eod-doc-project");
+    expect((markup.match(/<svg/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 
   it("renders a recap continuation as a quiet note, not another fact", () => {

@@ -193,7 +193,8 @@
 [data-workos-tool-surface="task-selection"] .chat-task-list {
   max-height: min(var(--chat-task-list-max-height, 320px), 360px);
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   scrollbar-color: var(--tool-line-strong) transparent;
 }
 

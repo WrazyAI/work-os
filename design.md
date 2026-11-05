@@ -1397,6 +1397,30 @@ lists what needs the employee right now, and the badge counts all of it —
 memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
 days — in the amber recoverable-attention tone.
 
+- **Audiences** — an administrator's bell carries two tabs under its title:
+  Employee (the signed-in account's own reminders, unchanged) and Admin (the
+  live workspace record). The tab that belongs to the current workspace is
+  selected whenever the panel opens, so opening the bell in Administration
+  never lands on a personal reminder first; closing and reopening resets the
+  tab to the workspace even if the last visit ended on the other audience.
+  Each tab names its own count, and the closed bell's badge names the audience
+  its next open will show. The tablist is reachable through its selected tab;
+  ←/→ move and activate, Home/End jump to the ends. A non-administrator sees
+  the single Employee list and no tablist.
+- **Admin rows** — the Admin tab reads the same live overview as the Overview
+  page. `Needs your decision` carries every attention record the record
+  reports — EOD reports awaiting review, teammates with unsubmitted EOD days,
+  overdue tasks, disputed evidence, and configuration blockers — with its real
+  count, severity tile, and the action that resolves it. Each row opens the
+  exact surface: Review, the filtered Tasks record, Evidence, or Settings. A
+  clear queue states that no decisions are waiting instead of hiding the
+  section. `Today across the workspace` is one quiet pulse line (on shift,
+  recaps, outcomes, evidence), never a second KPI board. `Recent team
+  activity` is the overview's own newest-first timeline of updates, recaps,
+  completed tasks, evidence, and EOD submissions; a completion opens that
+  person's Completed tasks, a report opens their EOD review, evidence opens
+  their evidence, and an update or recap opens their People record. The footer
+  opens the overview that owns the full record.
 - **Rows** — agent-authored reminders wear the configured mascot mark, the
   same identity the chat window uses, never a generic tone glyph. The memory
   row reads `This is what Otto remembers about you so far` with its proposed
@@ -2311,12 +2335,17 @@ controls use 8–9px; there is no resting shadow. Signal green stays on state an
 the one forward action.
 
 **Notifications.** The masthead carries the same notifications bell and panel
-as the employee workspace (§8.12), reading the signed-in administrator's own
-notifications: the memory row opens the memory modal in place, while recap and
-outstanding EOD rows switch to the employee view first and then open the exact
-surface they name. While the panel is open it owns the layer above the receipt
-stack, whose cards keep their position underneath. Administration also uses
-the shared in-app flyouts: every confirmed write leaves one transient receipt
+as the employee workspace (§8.12). Its Employee tab reads the signed-in
+administrator's own notifications: the memory row opens the memory modal in
+place, while recap and outstanding EOD rows switch to the employee view first
+and then open the exact surface they name. Its Admin tab reads the live
+workspace overview — the decision queue, today's pulse, and recent team
+activity — and opens the exact administration section each row names. The bell
+defaults to Admin while Administration is the current workspace and to
+Employee in the personal workday. While the panel is open it owns the layer
+above the receipt stack, whose cards keep their position underneath.
+Administration also uses the shared in-app flyouts: every confirmed write
+leaves one transient receipt
 naming the persisted outcome, failures keep the page's own inline notice and
 offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.
@@ -2352,12 +2381,28 @@ header.
 - **Overview** reads in the operator's order as six gutter groups: **Now**
   (only the people on shift, then a quiet line for everyone else), **Decisions**
   (one ranked queue with the verb inline — Review, Open queue, Open tasks,
-  Inspect, Fix setup), **Today** (one four-fact record), **Record** (activity
-  grouped by person, with a count line and an expandable list of every record),
-  **Time** (observed minutes per day), and **Setup** (configuration gaps beside
-  source freshness). The stream never repeats a dozen near-identical rows: one
-  person's CI runs and pushes are one line with counts, and expanding it still
-  shows each record. Readiness is context, never the lead.
+  Inspect, Fix setup), **Today** (one four-fact record: completed outcomes,
+  recaps, evidence, and EOD submitted), **Record** (activity grouped by person,
+  with a count line and an expandable list of every record), **Time** (observed
+  minutes per day), and **Setup** (configuration gaps beside source freshness).
+  The stream never repeats a dozen near-identical rows: one person's CI runs and
+  pushes are one line with counts, and expanding it still shows each record.
+  Readiness is context, never the lead.
+
+  **Overview measures.** The companion's Overview opens with one strip of five
+  measures: On shift now, Recaps today, Outcomes today, Awaiting review, and
+  Evidence today. Each is a real control that opens the record it measures —
+  On shift now scrolls to the Right now table and moves focus there, Recaps
+  opens Admin Otto on its Recaps tab, Outcomes opens Tasks, Awaiting review
+  opens EOD Review, and Evidence opens Evidence — so a measure is never a tile
+  without a destination. Recaps today counts every finished interval recap
+  generated that day, reviewed or not; its detail separates the recaps the
+  employee confirmed or corrected from the ones still waiting, so a generated
+  recap is never mistaken for a reviewed one. The Right now table reports each
+  person's generated recap count and latest recap time, not their check-in
+  count, and every card keeps hover and focus-visible states without shifting
+  its geometry.
+
 - **EOD Review** renders the report as a structured document — meta lines,
   sections, and the activity-context disclaimer — beside its sourced evidence
   and interval recaps. The decision record keeps manager notes and an optional
@@ -2377,12 +2422,26 @@ header.
   with a labeled volume chart and a bounded list (first 60 items, then Show
   more). The detail drawer exposes provenance and, for flagged or disputed items
   only, restricted screenshot access with a recorded reason and audit entry.
-- **People** is a coverage board with a person drawer: mappings, schedule and
-  exceptions, recent workdays, reports, updates and recaps, and a seven-day
-  evidence summary. The board groups people into On shift, Needs setup (those
-  missing a role profile or a schedule), and Other people, with search, a
-  needs-setup filter, and the missing item named in the row. The drawer is where
-  a mapping or role is set.
+- **People** is a coverage table with a person drawer: mappings, today's
+  record, schedule and exceptions, recent workdays, reports, updates, and a
+  seven-day evidence summary. The roster names each person's recap count,
+  completed-task count, evidence count, and latest recap; EOD shows the report
+  status or a dash, never an invented state. Search, role, and attendance
+  filters sit in one controls row. The drawer is where a mapping or role is set.
+  **Person record.** The drawer's Today record reads status now, observed time,
+  Updates (ready interval recaps recorded today), Outcomes (tasks completed
+  today), Evidence (today's evidence), and EOD (the day's report status, or a
+  dash when no report exists). Updates opens Admin Otto on its Recaps tab,
+  Outcomes opens Tasks filtered to the person in the Completed view, Evidence
+  opens Evidence filtered to the person, and EOD opens that day's report in EOD
+  Review. Recent workdays is one row per day with that day's observed session
+  time and recap count. Updates lists that day's recaps with `View all recaps`;
+  every report row opens its report in EOD Review with the person filtered, and
+  `View all reports` opens the same filtered queue. A value with no record stays
+  a dash, and an outstanding EOD is never turned into a second status. Today's
+  measures sit in a three-column grid at the wide drawer class and two columns
+  at narrow widths; a measure with a destination underlines its value, while a
+  value with no record stays a quiet fact.
 - **Tasks** is the organization task record with the primary Add task action in
   the card title row, bounded filters on one compact controls row beneath it,
   and the local add-task flow: one flat table, never grouped or ordered by
@@ -2393,7 +2452,13 @@ header.
   more control. Each row shows the task's description on its own line
   beneath the title — clipped with the shared fade and never a pan — and the
   assignee cell resolves the recorded assignee ids through the roster, so a task
-  with a real assignee is never displayed as Unassigned.
+  with a real assignee is never displayed as Unassigned. A row with
+  employee-attached completion evidence carries a small stack of slanted file
+  and image cards beside its status pill; hover or focus lifts the cards and
+  reveals one sentence naming the file and image counts. The task drawer lists
+  the actual files under Completion evidence with preview and download. A task
+  without evidence shows no indicator, and the indicator never substitutes for
+  the employee-attached provenance in the drawer.
   Each row carries the same trailing ellipsis action menu as the companion task
   lists (§6.2): its status actions, Edit task, Assign, Archive (reversible), and
   Delete permanently, each present only when the task's capability payload
@@ -2413,6 +2478,18 @@ header.
   employee surface. The record-dependent groups appear only
   for accounts with a personal workday; the device, display, guides, and
   diagnostics half always shows.
+
+**Admin Otto tools.** The administration chat uses one thread-native card family
+for reads, proposals, and receipts: a paper frame, a clear header and lifecycle
+marker, flat rows, and one action region. Tasks, work records/EODs, reviewed
+recaps, workdays, person resolution, and every task change each get their own
+layout; a proposal never prints raw ids, an unchanged field, or a meaningless
+empty value. Independent changes group into one review card with per-item
+selection and receipts; a dependent change waits for its prerequisite and is
+reviewed again before it can run. An uncertain result is never retried blindly:
+the card checks its authoritative status first. `New chat` is explicit in the
+sheet header, discards the thread, draft, and unconfirmed previews after the
+server fences them, and never reverts recorded work.
 
 **Recap follows.** The account's own settings include one shared two-column
 Recap follows group even when no personal workday is mapped. All active

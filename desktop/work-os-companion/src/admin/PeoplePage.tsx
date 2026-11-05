@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
-import { ActivityDetailDrawer, activityRecordFromUpdate, updateText, type ActivityDetailRecord } from "./ActivityDetail";
-import { formatWorkOsFullDate } from "../dateFormat";
+import { formatWorkOsFullDate, formatWorkOsTime } from "../dateFormat";
+import { buildPersonWorkdays, recapReviewLabel, recapsForDay, reportForDay } from "./adminPersonRecord";
 import {
   adminKeys,
   ADMIN_DETAIL_STALE_MS,
@@ -23,23 +23,27 @@ import {
   todayIso,
   updateAdminPerson,
 } from "./data";
-import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
-import type { AdminOverview, PersonDetailResponse } from "./types";
+import { AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
+import type { AdminOverview, AdminSection, AdminSectionFocus, PersonDetailResponse } from "./types";
 
 type AttendanceFilter = "all" | "active" | "paused" | "off_shift" | "unknown";
 
 /** The roster: every mapped person with today's recorded state, and a drawer
- * that carries the person's own record — mappings, schedule, workdays,
- * reports, updates, and the evidence summary behind their row. A recorded
- * update opens its own full-record drawer above the person record. */
-export default function PeoplePage({ initialPersonId, onOpenReport }: { initialPersonId?: string; onOpenReport?: (reportId: string) => void }) {
+ * that carries the person's own record — mappings, today's measures, schedule,
+ * workdays, today's recaps, reports, and the evidence summary behind their row.
+ * Every measure whose record has a destination opens it. */
+export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSection, onOpenRecaps }: {
+  initialPersonId?: string;
+  onOpenReport?: (reportId: string) => void;
+  onOpenSection?: (section: AdminSection, focus?: AdminSectionFocus) => void;
+  onOpenRecaps?: () => void;
+}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [attendance, setAttendance] = useState<AttendanceFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(initialPersonId ?? null);
-  const [updateRecord, setUpdateRecord] = useState<ActivityDetailRecord | null>(null);
   const [receipt, setReceipt] = useState<string | null>(null);
 
   const overview = useQuery<AdminOverview>({
@@ -109,17 +113,19 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
 
   const selectedStatus = selectedId ? statusById.get(selectedId) ?? null : null;
 
-  // A recorded update can point at its workday's EOD report when one is on
-  // file, so the update drawer can offer a real "Open EOD review" action.
-  const reportIdByDate = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const report of detail.data?.reports ?? []) {
-      const date = String(report.report_date ?? "");
-      const id = String(report.id ?? "");
-      if (date && id) map.set(date, id);
-    }
-    return map;
-  }, [detail.data]);
+  const today = todayIso();
+  const personRecord = detail.data;
+  const todayReport = personRecord ? reportForDay(personRecord.reports, today) : null;
+  const todayRecaps = personRecord ? recapsForDay(personRecord.intervals, today) : [];
+  const workdays = personRecord ? buildPersonWorkdays(personRecord.sessions, personRecord.recapDays ?? [], 8) : [];
+  const todayWorkday = workdays.find((workday) => workday.date === today) ?? null;
+  const observedSeconds = todayWorkday?.observedSeconds ?? selectedStatus?.session?.observedSeconds ?? 0;
+  const personTimezone = String(personRecord?.schedules?.[0]?.timezone ?? "UTC");
+  const openSection = (section: AdminSection, focus?: AdminSectionFocus) => onOpenSection?.(section, focus);
+  const openReport = (reportId: string) => {
+    if (onOpenSection && personRecord?.person.id) openSection("review", { reportId, personId: personRecord.person.id });
+    else onOpenReport?.(reportId);
+  };
 
   return (
     <div className="admin-grid">
@@ -160,7 +166,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
-                <tr><th>Person</th><th>Role profile</th><th>Schedule</th><th>Status now</th><th>Today</th><th>EOD</th><th>Last update</th></tr>
+                <tr><th>Person</th><th>Role profile</th><th>Schedule</th><th>Status now</th><th>Today</th><th>EOD</th><th>Last recap</th></tr>
               </thead>
               <tbody>
                 {people.map((person) => {
@@ -185,14 +191,14 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
                         </Pill>
                       </td>
                       <td className="admin-numeric">
-                        {status ? `${status.updatesToday} update${status.updatesToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
+                        {status ? `${status.recapsToday} recap${status.recapsToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
                       </td>
                       <td>
                         {status?.eodToday
                           ? <Pill tone={reportTone(status.eodToday)}>{statusLabel(status.eodToday)}</Pill>
-                          : status?.eodOutstanding ? <Pill tone="warn">Outstanding</Pill> : <span className="admin-quiet">—</span>}
+                          : <span className="admin-quiet">—</span>}
                       </td>
-                      <td className="admin-quiet">{status?.lastUpdateAt ? relativeTime(status.lastUpdateAt) : "—"}</td>
+                      <td className="admin-quiet">{status?.lastRecapAt ? relativeTime(status.lastRecapAt) : "—"}</td>
                     </tr>
                   );
                 })}
@@ -211,17 +217,17 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
 
       <Drawer
         open={!!selectedId}
-        onClose={() => { setSelectedId(null); setUpdateRecord(null); setReceipt(null); }}
+        onClose={() => { setSelectedId(null); setReceipt(null); }}
         title={detail.data?.person?.display_name ?? selectedStatus?.displayName ?? "Person"}
         subtitle={detail.data?.person?.email ?? selectedStatus?.email ?? undefined}
-        width={600}
+        width={640}
       >
         {detail.isLoading ? (
           <div className="admin-grid"><Skeleton className="h-24" /><Skeleton className="h-48" /></div>
         ) : detail.error || !detail.data?.person ? (
           <Notice tone="err">{((detail.error as Error | null)?.message) ?? "The person record could not be loaded."}</Notice>
         ) : (
-          <div className="admin-grid admin-drawer-grid">
+          <div className="admin-grid admin-drawer-grid admin-person-record">
             <section className="admin-block">
               <h3><ShieldCheck size={14} aria-hidden /> Mappings</h3>
               <div className="admin-kv-grid">
@@ -261,13 +267,39 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
 
             <section className="admin-block">
               <h3><CalendarClock size={14} aria-hidden /> Today</h3>
-              <div className="admin-kv-grid">
-                <KeyValue label="Status now" value={selectedStatus ? `${attendanceLabel(selectedStatus.attendance.state)}${selectedStatus.attendance.freshness === "stale" ? " · stale" : ""}` : "Not observed"} />
-                <KeyValue label="Observed time" value={selectedStatus?.session ? formatDuration(selectedStatus.session.observedSeconds) : "No session"} />
-                <KeyValue label="Updates" value={String(selectedStatus?.updatesToday ?? 0)} />
-                <KeyValue label="Outcomes" value={String(selectedStatus?.tasksCompletedToday ?? 0)} />
-                <KeyValue label="Evidence" value={String(selectedStatus?.evidenceToday ?? 0)} />
-                <KeyValue label="EOD" value={selectedStatus?.eodToday ? statusLabel(selectedStatus.eodToday) : selectedStatus?.eodOutstanding ? "Outstanding" : "—"} />
+              <div className="admin-today-grid">
+                <div className="admin-kv">
+                  <span>Status now</span>
+                  <b>{selectedStatus ? `${attendanceLabel(selectedStatus.attendance.state)}${selectedStatus.attendance.freshness === "stale" ? " · stale" : ""}` : "Not observed"}</b>
+                </div>
+                <div className="admin-kv">
+                  <span>Observed time</span>
+                  <b>{selectedStatus?.session || todayWorkday ? formatDuration(observedSeconds) : "No session"}</b>
+                </div>
+                <Measure
+                  label="Updates"
+                  value={String(Math.max(selectedStatus?.recapsToday ?? 0, todayRecaps.length))}
+                  onOpen={onOpenRecaps}
+                  actionLabel="Open recaps in Admin Otto"
+                />
+                <Measure
+                  label="Outcomes"
+                  value={selectedStatus ? String(selectedStatus.tasksCompletedToday) : "—"}
+                  onOpen={personRecord?.person.id ? () => openSection("tasks", { personId: personRecord.person.id, taskView: "completed" }) : undefined}
+                  actionLabel="Open completed tasks for this person"
+                />
+                <Measure
+                  label="Evidence"
+                  value={selectedStatus ? String(selectedStatus.evidenceToday) : "—"}
+                  onOpen={personRecord?.person.id ? () => openSection("evidence", { personId: personRecord.person.id }) : undefined}
+                  actionLabel="Open evidence for this person"
+                />
+                <Measure
+                  label="EOD"
+                  value={todayReport ? statusLabel(String(todayReport.status ?? "draft")) : "—"}
+                  onOpen={todayReport ? () => openReport(String(todayReport.id)) : undefined}
+                  actionLabel="Open today's EOD report"
+                />
               </div>
             </section>
 
@@ -277,7 +309,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
                 <ul className="admin-rows">
                   {detail.data.schedules.slice(0, 4).map((schedule, index) => (
                     <li key={index}>
-                      <span>{String(schedule.start ?? "")}–{String(schedule.end ?? "")}</span>
+                      <span>{String(schedule.shift_start ?? schedule.start ?? "").slice(0, 5)}–{String(schedule.shift_end ?? schedule.end ?? "").slice(0, 5)}</span>
                       <small>{String(schedule.timezone ?? "")} · from {formatWorkOsFullDate(String(schedule.effective_from ?? ""))}</small>
                     </li>
                   ))}
@@ -291,18 +323,20 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
             </section>
 
             <section className="admin-block">
-              <h3><MessageSquareText size={14} aria-hidden /> Recent workdays</h3>
-              {detail.data.sessions.length ? (
+              <h3><CalendarClock size={14} aria-hidden /> Recent workdays</h3>
+              {workdays.length ? (
                 <div className="admin-table-wrap">
                   <table className="admin-table compact">
                     <thead><tr><th>Day</th><th>State</th><th>Observed</th><th>Updates</th></tr></thead>
                     <tbody>
-                      {detail.data.sessions.slice(0, 6).map((session, index) => (
-                        <tr key={index} className="static">
-                          <td>{formatWorkOsFullDate(String(session.shift_date ?? ""))}</td>
-                          <td>{statusLabel(String(session.state ?? "unknown"))}</td>
-                          <td className="admin-numeric">{Number(session.observed_seconds ?? 0) ? formatDuration(Number(session.observed_seconds ?? 0)) : "—"}</td>
-                          <td className="admin-numeric">{String(session.updates ?? session.update_count ?? "—")}</td>
+                      {workdays.map((workday) => (
+                        <tr key={workday.date} className="static">
+                          <td>{formatWorkOsFullDate(workday.date)}</td>
+                          <td>{statusLabel(workday.state)}</td>
+                          <td className="admin-numeric">{workday.observedSeconds ? formatDuration(workday.observedSeconds) : "—"}</td>
+                          <td className="admin-numeric" title={workday.recapCount ? `${workday.recapCount} recap${workday.recapCount === 1 ? "" : "s"} · ${workday.recapReviewed} reviewed` : "No recaps"}>
+                            {workday.recapCount ? String(workday.recapCount) : "—"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -315,48 +349,73 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
 
             <section className="admin-block">
               <h3><MessageSquareText size={14} aria-hidden /> Updates</h3>
-              {detail.data.updates.length ? (
-                <ul className="admin-rows">
-                  {detail.data.updates.slice(0, 6).map((update, index) => {
-                    const at = String(update.occurred_at ?? update.created_at ?? "");
-                    const reportId = reportIdByDate.get(String(update.shift_date ?? at).slice(0, 10)) ?? null;
+              <p className="admin-quiet">Interval recaps recorded today. Open Admin Otto to confirm or correct one.</p>
+              {todayRecaps.length ? (
+                <ul className="admin-recap-items">
+                  {todayRecaps.slice(0, 4).map((recap, index) => {
+                    const timezone = String(recap.timezone ?? personTimezone);
+                    const start = formatWorkOsTime(String(recap.window_start ?? ""), timezone, "");
+                    const end = formatWorkOsTime(String(recap.window_end ?? ""), timezone, "");
+                    const timeLabel = start && end ? `${start}–${end}` : end || start || "Recap";
+                    const detailText = String(recap.headline ?? recap.final_detail ?? recap.ai_detail ?? "").trim() || "No recap detail recorded.";
+                    const reviewStatus = String(recap.review_status ?? "inferred");
                     return (
-                      <li key={String(update.id ?? index)}>
+                      <li key={String(recap.id ?? index)}>
+                        <div className="admin-recap-head">
+                          <b>{timeLabel}</b>
+                          <Pill tone={reviewStatus === "confirmed" ? "ok" : reviewStatus === "amended" ? "info" : "neutral"}>{recapReviewLabel(recap.review_status)}</Pill>
+                        </div>
+                        <p title={detailText}>{detailText}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="admin-empty-note">No recaps recorded today.</p>
+              )}
+              {onOpenRecaps ? <button type="button" className="admin-block-action" onClick={onOpenRecaps}>View all recaps</button> : null}
+            </section>
+
+            <section className="admin-block">
+              <h3><FileCheck2 size={14} aria-hidden /> Reports</h3>
+              {detail.data.reports.length ? (
+                <ul className="admin-rows spaced admin-report-list">
+                  {detail.data.reports.slice(0, 6).map((report, index) => {
+                    const reportId = String(report.id ?? "");
+                    const reportDate = formatWorkOsFullDate(String(report.report_date ?? ""), "Report");
+                    const status = String(report.status ?? "draft");
+                    return (
+                      <li key={reportId || index}>
                         <button
                           type="button"
-                          onClick={() => setUpdateRecord(activityRecordFromUpdate(update, { id: detail.data!.person.id, name: detail.data!.person.display_name }, reportId))}
+                          className="admin-report-row"
+                          aria-label={`Open EOD report for ${reportDate}: ${statusLabel(status)}`}
+                          onClick={() => reportId && openReport(reportId)}
                         >
-                          <span>{updateText(update) ?? "Update"}</span>
-                          <small>{statusLabel(String(update.update_kind ?? update.kind ?? "update"))} · {relativeTime(at)}</small>
+                          <span>{reportDate}</span>
+                          <span className="admin-report-meta">
+                            <small>{report.submitted_at ? `submitted ${relativeTime(String(report.submitted_at))}` : "not submitted"}</small>
+                            <Pill tone={reportTone(status)}>{statusLabel(status)}</Pill>
+                          </span>
                         </button>
                       </li>
                     );
                   })}
                 </ul>
               ) : (
-                <p className="admin-empty-note">No recorded updates for this person yet.</p>
-              )}
-            </section>
-
-            <section className="admin-block">
-              <h3><FileCheck2 size={14} aria-hidden /> Reports</h3>
-              {detail.data.reports.length ? (
-                <ul className="admin-rows">
-                  {detail.data.reports.slice(0, 6).map((report, index) => (
-                    <li key={index}>
-                      <span>{formatWorkOsFullDate(String(report.report_date ?? ""), "Report")}</span>
-                      <Pill tone={reportTone(String(report.status ?? "draft"))}>{statusLabel(String(report.status ?? "draft"))}</Pill>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
                 <p className="admin-empty-note">No EOD reports for this person yet.</p>
               )}
-              <p className="admin-quiet">Review reports from the EOD Review section.</p>
+              <button
+                type="button"
+                className="admin-block-action"
+                onClick={() => personRecord?.person.id && openSection("review", { personId: personRecord.person.id })}
+              >
+                View all reports
+              </button>
             </section>
 
             <section className="admin-block">
-              <h3><ShieldCheck size={14} aria-hidden /> Evidence summary</h3>
+              <h3><ShieldCheck size={14} aria-hidden /> Evidence (7 days)</h3>
               <div className="admin-kv-grid">
                 <KeyValue label="Total" value={String(detail.data.evidenceSummary.total)} />
                 <KeyValue label="Activity" value={String(detail.data.evidenceSummary.activity)} />
@@ -368,12 +427,15 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
           </div>
         )}
       </Drawer>
-
-      <ActivityDetailDrawer
-        record={updateRecord}
-        onClose={() => setUpdateRecord(null)}
-        onOpenReport={onOpenReport}
-      />
     </div>
   );
+}
+
+/** One Today measure. A value the drawer can open is a real underlined control;
+ * a value with no honest destination stays a quiet fact. */
+function Measure({ label, value, onOpen, actionLabel }: { label: string; value: string; onOpen?: () => void; actionLabel?: string }) {
+  const body = <><span>{label}</span><b>{value}</b></>;
+  return onOpen
+    ? <button type="button" className="admin-kv admin-kv-link" aria-label={`${actionLabel ?? label}: ${value}`} onClick={onOpen}>{body}</button>
+    : <div className="admin-kv">{body}</div>;
 }

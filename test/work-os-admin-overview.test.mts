@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { attendanceFreshness, classifyOutstandingByPerson, currentScheduleForDate } from "../src/lib/work-os-admin-overview";
+import { readFileSync } from "node:fs";
+import { attendanceFreshness, classifyOutstandingByPerson, currentScheduleForDate, summarizeRecapGroups } from "../src/lib/work-os-admin-overview";
 
 test("attendance freshness uses the ten-minute observation boundary", () => {
   const now = new Date("2026-09-30T15:00:00Z");
@@ -41,4 +42,35 @@ test("a day with no recorded session or plan never counts as outstanding", () =>
     { personId: "p1", date: "2026-09-29", hasSession: false, observedMinutes: 0, hasPlan: false, completedTasks: 0, report: null },
   ]);
   assert.equal(result.size, 0);
+});
+
+test("recap groups keep the returned totals and review state exact", () => {
+  const rollup = summarizeRecapGroups([
+    { person_id: "p1", total: 2, reviewed: 1, last_at: "2026-11-04T11:00:00.000Z" },
+    { person_id: "p2", total: 1, reviewed: 1, last_at: "2026-11-04T09:30:00.000Z" },
+  ]);
+  assert.equal(rollup.total, 3);
+  assert.equal(rollup.reviewed, 2);
+  assert.equal(rollup.lastAt, "2026-11-04T11:00:00.000Z");
+  assert.deepEqual(rollup.byPerson.get("p1"), { total: 2, reviewed: 1, lastAt: "2026-11-04T11:00:00.000Z" });
+  assert.deepEqual(rollup.byPerson.get("p2"), { total: 1, reviewed: 1, lastAt: "2026-11-04T09:30:00.000Z" });
+  assert.equal(rollup.byPerson.get("p3"), undefined);
+});
+
+test("recap groups accept database strings, dates, and an absent last recap", () => {
+  const rollup = summarizeRecapGroups([
+    { person_id: "p1", total: "4", reviewed: "2", last_at: new Date("2026-11-04T08:15:00.000Z") },
+    { person_id: "p2", total: 0, reviewed: 0, last_at: null },
+  ]);
+  assert.equal(rollup.total, 4);
+  assert.equal(rollup.reviewed, 2);
+  assert.equal(rollup.byPerson.get("p1")?.lastAt, "2026-11-04T08:15:00.000Z");
+  assert.equal(rollup.byPerson.get("p2")?.lastAt, null);
+});
+
+test("the recap rollup read stays org-scoped, ready-only, and active-only", () => {
+  const source = readFileSync(new URL("../src/lib/work-os-admin-overview.ts", import.meta.url), "utf8");
+  assert.match(source, /JOIN work_people p[\s\S]*p\.active = true/);
+  assert.match(source, /i\.organization_id = \$1 AND i\.local_date = \$2 AND i\.generation_status = 'ready'/);
+  assert.match(source, /count\(\*\) FILTER \(WHERE i\.review_status IN \('confirmed', 'amended'\)\)/);
 });

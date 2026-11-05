@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow, type EodDocument, type EodSection, type EodSectionLine } from "@/modules/work-os/eod-document";
+import EodSectionIcon from "@/modules/work-os/eod-section-icon";
 import styles from "./EodReportDocument.module.css";
 
 function Inline({ text }: { text: string }) {
@@ -133,7 +134,10 @@ function Section({ section }: { section: EodSection }) {
   return (
     <section className={styles.section} aria-labelledby={headingId}>
       <div className={styles.sectionLabel}>
-        <h3 id={headingId}>{label}</h3>
+        <h3 id={headingId}>
+          <EodSectionIcon heading={section.heading} className={styles.sectionIcon} />
+          <span>{label}</span>
+        </h3>
         {section.key !== "evidence" ? <span className={styles.sectionCount}>{count}</span> : null}
       </div>
       <div className={styles.sectionBody}>

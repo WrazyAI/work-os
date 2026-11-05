@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from "react";
+import { createElement, type ComponentType } from "react";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,11 +18,17 @@ const OPEN_FILTERS = { filter: "open", personId: "", projectId: "", limit: "200"
 const EMPTY_FORM = { name: "", description: "", dueDate: "", priority: "", assignee: "" };
 const tasksPageSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "TasksPage.tsx"), "utf8");
 
-function renderWith(state: "dense" | "sparse", props: Parameters<typeof TasksPage>[0] = {}, seed?: (client: QueryClient) => void) {
+type TasksPageProps = {
+  initialTaskId?: string;
+  initialPersonId?: string;
+  initialFilter?: "open" | "completed" | "all";
+};
+
+function renderWith(state: "dense" | "sparse", props: TasksPageProps = {}, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   seedAdminFixtures(client, state);
   seed?.(client);
-  const Component = TasksPage as (input: Parameters<typeof TasksPage>[0]) => ReactNode;
+  const Component: ComponentType<TasksPageProps> = TasksPage;
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client },
       createElement(NotificationProvider, null, createElement(Component, props))),

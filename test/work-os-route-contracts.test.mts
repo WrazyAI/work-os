@@ -161,6 +161,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(outstandingEod, /employee_companion/);
   assert.match(outstandingEod, /listOutstandingEods/);
   assert.match(outstandingEod, /days must be between 1 and 31/);
+  assert.match(eodService, /scheduledDay/, "a scheduled person's day off is never an EOD debt");
+  assert.match(workdayService, /isScheduledWorkday\(access, context\.shiftDate\)/, "the workday cannot seed a plan on a day off");
+  assert.match(await source("src/lib/work-os-admin-insights.ts"), /workdayDates\(current\.from/, "insight charts skip weekend dates");
+  assert.match(await source("src/lib/work-os-admin-overview.ts"), /workdayDates\(addDaysIso/, "overview charts skip weekend dates");
   assert.match(day, /date must be a valid calendar date/);
   assert.match(day, /localDate/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);
@@ -441,6 +445,11 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(review, /Rebuild from record/);
   assert.match(review, /EodReportDocument/);
   assert.match(review, /editingReport/);
+  assert.match(await source("src/modules/work-os/employee/EodReportDocument.tsx"), /EodSectionIcon/);
+  assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EodSectionIcon/);
+  assert.match(await source("src/modules/work-os/employee/EmployeeEodEvidence.tsx"), /EvidenceImageDialog/);
+  assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EvidenceImageDialog/);
+  assert.match(await source("src/modules/work-os/evidence-image-dialog.tsx"), /evidenceScreenshotUrl/);
 });
 
 test("proposal application is lease-fenced and reports explicit outcomes", async () => {
@@ -725,6 +734,8 @@ test("an unfinished day can be drafted in its final ten minutes, and a draft can
   const eodService = await source("src/lib/work-os-eod.ts");
   assert.match(eodService, /eodDraftShiftGate/, "the draft refuses a day whose shift is still open");
   assert.match(eodService, /EOD_SHIFT_OPEN_REASON/, "the refusal names the shift_open reason");
+  assert.match(eodService, /export async function submitWorkOsEod[\s\S]{0,1800}eodDraftShiftGate/, "submission uses the same EOD window gate");
+  assert.match(gate, /export function eodDraftDateBlocked/, "a day before its EOD window is not describable");
   assert.match(eodService, /export async function deleteWorkOsEodDraft/, "an unsubmitted EOD draft can be deleted");
   assert.match(eodService, /\["draft", "rejected"\]/, "only a draft or rejected report can be deleted");
   assert.match(eodService, /report\.deleted/, "the deletion is written to the audit log");

@@ -78,7 +78,7 @@ export function DeltaBadge({ stat }: { stat: DeltaStat }) {
 /** One tile in the insights KPI strip: the recorded value leads, the equal-
  * period pill and an optional per-day sparkline give it context. The value
  * always renders as text — a chart never carries the only copy of a number. */
-export function KpiCard({ label, value, delta, detail, spark, sparkLabel, attention = false }: {
+export function KpiCard({ label, value, delta, detail, spark, sparkLabel, attention = false, onSelect, actionLabel }: {
   label: string;
   value: string;
   delta?: DeltaStat | null;
@@ -86,17 +86,37 @@ export function KpiCard({ label, value, delta, detail, spark, sparkLabel, attent
   spark?: number[];
   sparkLabel?: string;
   attention?: boolean;
+  /** When supplied the card is a real control that opens the record it
+   * measures; a measure without a destination stays a static article. */
+  onSelect?: () => void;
+  /** The control's accessible name; defaults to the measure and its value. */
+  actionLabel?: string;
 }) {
-  return (
-    <article className={`insight-kpi${attention ? " attention" : ""}`}>
+  const body = (
+    <>
       <small>{label}</small>
       <strong>{value}</strong>
-      <div className="insight-kpi-foot">
+      <span className="insight-kpi-foot">
         {delta ? <DeltaBadge stat={delta} /> : detail ? <span className="insight-kpi-detail">{detail}</span> : null}
-      </div>
+      </span>
       {spark && spark.length > 1 ? <Sparkline values={spark} label={sparkLabel ?? `${label} per day`} /> : null}
-    </article>
+    </>
   );
+  const className = `insight-kpi${attention ? " attention" : ""}${onSelect ? " is-action" : ""}`;
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={onSelect}
+        aria-label={actionLabel ?? `${label}: ${value}${detail ? `. ${detail}` : ""}`}
+      >
+        {body}
+        <ArrowUpRight className="insight-kpi-open" size={14} aria-hidden />
+      </button>
+    );
+  }
+  return <article className={className}>{body}</article>;
 }
 
 export interface ReliabilityRow {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
+import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
 
 describe("activityIntervalDecisionBody", () => {
   it("echoes the review version, including zero for an unreviewed recap", () => {
@@ -44,6 +44,10 @@ describe("dashboardInsightsUrl", () => {
 });
 
 describe("activityIntervalsUrl", () => {
+  it("waits long enough for a recap that is still analysing screenshots", () => {
+    expect(ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS).toBe(180_000);
+  });
+
   it("asks for one bounded page on the first request", () => {
     expect(activityIntervalsUrl("2026-09-28", null))
       .toBe(`/api/work-os/me/activity-intervals?date=2026-09-28&days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}`);

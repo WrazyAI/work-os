@@ -51,15 +51,16 @@ export type AdminProfileEntry = {
  * record and never changes the signed-in admin's own employee state. The
  * switch back to the personal workday is a view change, not a role change.
  * The masthead carries the same notifications bell the employee workspace
- * mounts — the account's own notifications — and the app supplies its data,
- * alongside the account's own profile avatar.
+ * mounts: its Employee tab is the account's own notifications, its Admin tab
+ * the workspace decision queue, and the app supplies both records alongside
+ * the account's own profile avatar.
  *
  * The current section is a prop rather than local state: the app's page-guide
  * seam keys its first-visit flags by section, and the workspace tour drives
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -78,6 +79,9 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The administration New chat entry. It starts the shared admin Otto
    * thread; it is never a dead sidebar control. */
   onNewChat?: (() => void) | undefined;
+  /** Opens Admin Otto on its Recaps tab: the Overview's recap measure and the
+   * EOD report's See all recaps both lead to the recaps they name. */
+  onOpenRecaps: () => void;
   /** A truthful blocked/loading line for the admin Otto context. */
   ottoNotice?: string | null;
   onSignOut: () => void;
@@ -102,17 +106,33 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   const fetching = useIsFetching({ predicate: (query) => adminSectionQueryMatches(section, query.queryKey) });
 
   const content = section === "overview"
-    ? <OverviewPage onOpenSection={(next, focus) => navigate(next, focus)} onOpenPerson={(personId) => navigate("people", { personId })} />
+    ? <OverviewPage onOpenSection={(next, focus) => navigate(next, focus)} onOpenPerson={(personId) => navigate("people", { personId })} onOpenRecaps={onOpenRecaps} />
     : section === "people"
-      ? <PeoplePage key={focus.personId ?? "people"} initialPersonId={focus.personId} onOpenReport={(reportId) => navigate("review", { reportId })} />
+      ? <PeoplePage
+          key={focus.personId ?? "people"}
+          initialPersonId={focus.personId}
+          onOpenReport={(reportId) => navigate("review", { reportId, personId: focus.personId })}
+          onOpenSection={(next, nextFocus) => navigate(next, nextFocus)}
+          onOpenRecaps={onOpenRecaps}
+        />
       : section === "tasks"
-        ? <TasksPage key={focus.taskId ?? "tasks"} initialTaskId={focus.taskId} />
+        ? <TasksPage key={`tasks-${focus.taskId ?? ""}-${focus.personId ?? ""}-${focus.taskView ?? ""}`} initialTaskId={focus.taskId} initialPersonId={focus.personId} initialFilter={focus.taskView} />
         : section === "review"
-          ? <ReviewPage key={focus.reportId ?? "review"} initialReportId={focus.reportId} />
+          ? <ReviewPage
+              key={`review-${focus.reportId ?? ""}-${focus.personId ?? ""}`}
+              initialReportId={focus.reportId}
+              initialPersonId={focus.personId}
+              onOpenEvidence={(personId) => navigate("evidence", { personId })}
+              onOpenRecaps={onOpenRecaps}
+            />
           : section === "insights"
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
-              ? <EvidencePage key={focus.evidenceTab ?? "evidence"} initialTab={focus.evidenceTab} />
+              ? <EvidencePage
+                  key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}`}
+                  initialTab={focus.evidenceTab}
+                  initialPersonId={focus.personId}
+                />
               : <SettingsPage personalSettings={personalSettings} />;
 
   return (

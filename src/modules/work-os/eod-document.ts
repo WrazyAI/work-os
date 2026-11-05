@@ -125,6 +125,48 @@ export function parseEodInline(value: string): EodInlineSegment[] {
   return segments.length ? segments : [{ text, href: null }];
 }
 
+export type EodSectionIconKind =
+  | "completed"
+  | "progress"
+  | "blocked"
+  | "next"
+  | "plan"
+  | "evidence"
+  | "updates"
+  | "carried"
+  | "automation"
+  | "other"
+  | "activity"
+  | "hourly"
+  | "output"
+  | "loom";
+
+/** One semantic icon per section label. The renderers map these kinds to
+ * their own icon family; the parser stays pure. */
+export function eodSectionIconKind(heading: string): EodSectionIconKind | null {
+  const key = heading.replace(/\s*\(\d+\)\s*$/, "").trim().toLowerCase();
+  const icons: Record<string, EodSectionIconKind> = {
+    "completed today": "completed",
+    "work completed": "completed",
+    "in progress": "progress",
+    "blocked": "blocked",
+    "more blockers": "blocked",
+    "next": "next",
+    "plan check": "plan",
+    "more plan discrepancies": "plan",
+    "evidence": "evidence",
+    "recorded updates": "updates",
+    "carried and deferred": "carried",
+    "routine runs": "automation",
+    "other tasks": "other",
+    "activity context": "activity",
+    "hourly activity": "hourly",
+    "output evidence": "output",
+    "recorded loom updates": "loom",
+  };
+  return icons[key] ?? null;
+}
+
 export interface EodTaskRowParts {
   title: string;
   project: string | null;

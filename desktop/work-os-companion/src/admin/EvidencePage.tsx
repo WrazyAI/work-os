@@ -48,11 +48,11 @@ function screenshotOf(row: EvidenceRow) {
  * apart; the raw-frame preview stays inside the flagged/disputed rule and
  * records a reason with every view. A caller can land directly on the
  * activity-recap tab (the Overview recap action does). */
-export default function EvidencePage({ initialTab = "evidence" }: { initialTab?: EvidenceTab } = {}) {
+export default function EvidencePage({ initialTab = "evidence", initialPersonId = "" }: { initialTab?: EvidenceTab; initialPersonId?: string } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [tab, setTab] = useState<EvidenceTab>(initialTab);
-  const [personId, setPersonId] = useState("");
+  const [personId, setPersonId] = useState(initialPersonId);
   const [source, setSource] = useState("");
   const [disputedOnly, setDisputedOnly] = useState(false);
   const [from, setFrom] = useState(() => isoDaysAgo(13));

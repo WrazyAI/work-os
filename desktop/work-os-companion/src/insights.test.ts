@@ -54,6 +54,16 @@ describe("insight chart builders", () => {
     expect(series.every((point) => Number.isFinite(point.observedMinutes))).toBe(true);
   });
 
+  it("leaves weekend calendar days out of the daily chart", () => {
+    const series = insightSeries([
+      day({ date: "2026-08-14" }),
+      day({ date: "2026-08-15" }),
+      day({ date: "2026-08-16" }),
+      day({ date: "2026-08-17" }),
+    ]);
+    expect(series.map((point) => point.date)).toEqual(["2026-08-14", "2026-08-17"]);
+  });
+
   it("rounds axis maxima to readable values", () => {
     expect(niceCeil(0)).toBe(0);
     expect(niceCeil(1.4)).toBe(2);

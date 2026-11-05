@@ -969,8 +969,14 @@
 .scroll-fade-region {
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+/* Contain the wheel only while there is really content past an edge; a short
+ * region that cannot scroll must let the gesture reach the page instead of
+ * swallowing it. */
+.scroll-fade-region.is-scrollable {
+  overscroll-behavior: contain;
 }
 
 .scroll-fade-region.scroll-both {

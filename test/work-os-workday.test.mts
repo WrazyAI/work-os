@@ -179,9 +179,12 @@ test("the first follow-up interval is deployment-configurable and bounded", () =
   }
 });
 
-test("a submitted EOD suppresses any remaining workday prompt", () => {
-  const due = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, hasGoal: true, at: "2026-08-12T16:51:00.000Z" });
-  assert.deepEqual(suppressPromptForSubmittedEod(due, "2026-08-12T16:55:00.000Z"), {
+test("a submitted EOD suppresses only the EOD prompt", () => {
+  const progress = decideWorkdayPrompt({ session, breaks: [], hasGoal: true, at: "2026-08-12T09:05:00.000Z" });
+  const eod = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, hasGoal: true, at: "2026-08-12T16:51:00.000Z" });
+  assert.equal(progress.kind, "follow_up");
+  assert.deepEqual(suppressPromptForSubmittedEod(progress, "2026-08-12T16:55:00.000Z"), progress);
+  assert.deepEqual(suppressPromptForSubmittedEod(eod, "2026-08-12T16:55:00.000Z"), {
     kind: null,
     nextPromptAt: null,
     required: false,
