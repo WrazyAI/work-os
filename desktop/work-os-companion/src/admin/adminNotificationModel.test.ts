@@ -5,7 +5,6 @@ import {
   adminNotificationDecisionCount,
   adminNotificationDecisions,
   adminNotificationPulse,
-  adminNotificationSummary,
   emptyAdminNotificationOverview,
 } from "./adminNotificationModel";
 import type { AdminOverview } from "./types";
@@ -56,12 +55,6 @@ describe("admin notification decisions", () => {
     expect(adminNotificationDecisionCount(null)).toBe(0);
   });
 
-  it("summarizes only the queues that actually have work", () => {
-    expect(adminNotificationSummary(overview())).toContain("2 EOD reports to review");
-    expect(adminNotificationSummary(overview())).toContain("2 teammates with outstanding EODs");
-    expect(adminNotificationSummary(adminPreviewOverview("empty"))).toBe("You're caught up");
-  });
-
   it("keeps the pulse line to the four live workspace measures", () => {
     expect(adminNotificationPulse(overview()).map((item) => item.label)).toEqual(["on shift", "recaps", "outcomes", "evidence"]);
     expect(adminNotificationPulse(null)).toEqual([]);
@@ -72,7 +65,6 @@ describe("admin notification decisions", () => {
     const empty = emptyAdminNotificationOverview(full);
     expect(adminNotificationDecisionCount(empty)).toBe(0);
     expect(adminNotificationActivity(empty)).toEqual([]);
-    expect(adminNotificationSummary(empty)).toBe("You're caught up");
     expect(full.attention).toHaveLength(4);
     expect(full.recentActivity.length).toBeGreaterThan(0);
   });

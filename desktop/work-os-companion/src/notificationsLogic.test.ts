@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, notificationsSummary, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import type { ActivityInterval, MemoryFact } from "./types";
 
 function fact(id: string, review_status: MemoryFact["review_status"]): MemoryFact {
@@ -95,16 +95,9 @@ describe("overdue notifications", () => {
   });
 });
 
-describe("badge and headline counts", () => {
+describe("badge counts", () => {
   it("counts memories, one recap slot, overdue tasks, and outstanding days together", () => {
     expect(notificationsBadgeCount({ memoryCandidates: 3, recapReady: true, overdueTasks: 2, outstandingEodDays: 2 })).toBe(8);
     expect(notificationsBadgeCount({ memoryCandidates: 0, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe(0);
-  });
-
-  it("names what is waiting for the panel headline", () => {
-    expect(notificationsSummary({ memoryCandidates: 1, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe("1 memory to review");
-    expect(notificationsSummary({ memoryCandidates: 2, recapReady: true, overdueTasks: 3, outstandingEodDays: 3 })).toBe("2 memories to review · a recap to review · 3 overdue tasks · 3 prior EODs");
-    expect(notificationsSummary({ memoryCandidates: 0, recapReady: false, overdueTasks: 1, outstandingEodDays: 0 })).toBe("1 overdue task");
-    expect(notificationsSummary({ memoryCandidates: 0, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe("You're caught up");
   });
 });

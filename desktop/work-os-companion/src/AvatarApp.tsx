@@ -2516,7 +2516,8 @@ export default function AvatarApp(): React.ReactElement {
   const showShiftTime = hasOpenShiftSession(facts);
   const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
   const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
-  const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable";
+  const progressPercent = Math.round(fraction * 100);
+  const progressText = progressAvailable ? `${progressPercent}% of shift complete` : "Shift progress unavailable";
   const shiftLabel = showShiftTime
     ? facts.sessionState === "paused" ? (label ? `Paused · ${label}` : "Paused") : `On shift · ${label}`
     : "Off shift";
@@ -2810,7 +2811,17 @@ export default function AvatarApp(): React.ReactElement {
               as a stray wedge beside the figure. */}
           {showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
-        {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
+        {showShiftTime && <span
+          className={`avatar-day-time${progressAvailable ? "" : " is-unavailable"}`}
+          data-progress={progressPercent}
+          aria-hidden="true"
+        >
+          <i
+            className="avatar-day-time-fill"
+            style={{ clipPath: `inset(0 ${progressAvailable ? 100 - progressPercent : 100}% 0 0)` }}
+          />
+          <span className="avatar-day-time-label">{elapsedText}</span>
+        </span>}
         </div>
       )}
       {expanded && (
