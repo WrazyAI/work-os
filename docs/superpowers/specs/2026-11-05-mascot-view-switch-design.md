@@ -186,6 +186,7 @@ changes, and on the existing visibility heartbeat:
 type OttoViewState = {
   scope: OttoScope;              // current actor/org/mode, or the selected mode
   epoch: number;
+  revision: number;              // monotonic presentation ordering
   workspace: "employee" | "admin";
   role: "admin" | "manager" | "employee";
   adminStatus: "loading" | "ready" | "failed" | "absent";
@@ -195,26 +196,43 @@ type OttoViewState = {
   voiceAvailable: boolean;
   transcriptionAvailable: boolean;
   adminConversationId: string | null;
+  adminConversationGeneration: number;
+  adminConversationRevision: number;
+  adminConversationBusy: boolean;
+};
+
+type OttoViewRequest = {
+  requestId: string; scope: OttoScope; epoch: number;
+  action: "switch" | "retry-context"; mode: OttoMode;
+};
+
+type OttoViewResult = {
+  requestId: string; scope: OttoScope; epoch: number;
+  action: OttoViewRequest["action"]; mode: OttoMode;
+  accepted: boolean; reason: OttoViewFailure | null;
 };
 ```
 
 `OTTO_VIEW_STATE_EVENT` carries this snapshot. It is emitted even while the
 administration context is loading or failed, so the floating window can follow
-the main workspace and say what is unavailable instead of falling back to the
-wrong view. It carries no conversation text, token, record, or provider data.
+the effective shell and say what is unavailable instead of falling back to the
+wrong view. The effective shell comes from `planAdminOttoBootstrap`, not the
+saved workspace preference alone. It carries no conversation text, token,
+record, or provider data.
 
-`src/adminOtto/mode.ts` also gains a request/result pair:
+`viewSwitch.ts` owns the request/result pair:
 
-- `OTTO_VIEW_REQUEST_EVENT` — `{ requestId, scope, mode }`
-- `OTTO_VIEW_RESULT_EVENT` — `{ requestId, scope, mode, accepted, reason? }`
+- `OTTO_VIEW_REQUEST_EVENT` — the scoped request above.
+- `OTTO_VIEW_RESULT_EVENT` — the correlated result above.
 
-The request carries the sender's adopted scope so main can reject a stale
-account/organization, not just a stale mode. Main also validates the mode
+The request carries the sender's adopted scope and epoch so main can reject a
+stale account, organization, or round-trip mode. Main validates the mode
 against the current session and administration context, calls the same
 workspace switch used by the shell, and republishes the view/context events on
 success. The result is only for the initiating window's pending/error state.
 Browser DEV may bridge these non-secret events through the existing preview
-allow-list.
+allow-list. `retry-context` reuses the existing context recovery query and does
+not discard the conversation.
 
 A small pure module owns the availability and pending-state decisions so both
 windows and tests use one rule:
@@ -233,30 +251,35 @@ windows and tests use one rule:
 
 ### Main window
 
-Refactor the existing `setWorkspaceMode` validation into a callable
-`requestWorkspaceMode(next): { ok: true } | { ok: false; reason }` and keep the
-current UI call sites as thin wrappers. This returns the same
-no-person/administration-context refusals the shell already shows.
+Refactor the existing `setWorkspaceMode` validation into an awaitable
+`requestWorkspaceMode(next): Promise<{ ok: true } | { ok: false; reason }>` and
+keep the current UI call sites as thin wrappers. This returns the same
+no-person/administration-context refusals the shell already shows, awaits the
+mode controller, rechecks the actor, and persists only after the destination is
+confirmed. Concurrent transitions serialize; same-mode is a no-op.
 
 Add one listener for `OTTO_VIEW_REQUEST_EVENT` that:
 
-1. verifies the request scope matches the current account/organization and that
-   the mode is known;
-2. calls `requestWorkspaceMode`;
+1. verifies the request scope and epoch match the current account/organization
+   and controller generation, and that the mode is known;
+2. calls `requestWorkspaceMode` or the existing context recovery for
+   `retry-context`;
 3. emits `OTTO_VIEW_RESULT_EVENT` with the accepted/current mode or reason.
 
-Publish `OTTO_VIEW_STATE_EVENT` from an effect that depends on the live
-workspace, role, admin context status, session person mapping, voice and
-transcription capabilities, retained admin conversation id, and view epoch.
-Publish it directly on each change and on the existing 30-second late-listener
-heartbeat; do not derive it from `adminOttoSnapshot` alone, because the shell
-must still describe an Administration view whose Otto context failed.
+Publish `OTTO_VIEW_STATE_EVENT` from an effect that depends on the effective
+shell, role, admin context status, session person mapping, voice and
+transcription capabilities, retained admin conversation identity/revision, and
+view epoch/revision. Publish it directly on each change, immediately after
+listener registration, and on the existing 30-second late-listener heartbeat.
+Do not derive it from `adminOttoSnapshot` alone, because the shell must still
+describe an Administration view whose Otto context failed or is loading.
 
 Change the existing mode-switch cleanup so it closes the visible admin sheet but
-keeps the retained conversation id and draft on an Employee switch. Disposal for
-sign-out, account replacement, or unmount still clears them. Add one listener
-for the admin record navigation event; validate through the existing parsed
-record seam and navigate in main.
+keeps the retained conversation id, draft, and retry request id on an Employee
+switch. Disposal for sign-out, account replacement, or unmount still clears
+them. Add one listener for the admin record navigation event; validate through
+the existing parsed record seam and navigate in main. Navigation carries only a
+same-app record URL and a current scope/epoch/generation; never an external URL.
 
 ### Floating window
 
@@ -283,17 +306,24 @@ The floating variant overrides only geometry, drag, and close behavior (collapse
 the window); behavior, cards, composer, recaps, confirmation, audio, and New
 chat stay one implementation.
 
-Admin conversation identity is synchronized in two ways:
+Admin conversation identity is synchronized by a small ids-only coordination
+module, not by unsequenced id writes:
 
-- `OttoViewState.adminConversationId` is a full snapshot, so a window entering
-  Administration learns the current id even if it ignored change events while
-  in Employee mode.
-- `OTTO_CONVERSATION_EVENT` — `{ scope, epoch, conversationId }` announces a
-  change while both windows are on Administration.
+- `OttoViewState` embeds the owner's conversation id, generation, revision, and
+  busy/resetting flag, so a window entering Administration learns the current
+  identity even if it ignored change events while in Employee mode.
+- `OTTO_CONVERSATION_EVENT` carries owner-committed identity snapshots.
+- Begin/finish/cancel-send and discard requests are correlated, epoch-bound,
+  and registered **before** an HTTP send can start. This prevents two windows
+  from forking a null first thread and lets New chat fence a pending first send
+  even when no conversation id exists yet.
+- A successful reset is acknowledged only after the existing server discard
+  succeeds. A failed reset retains identity, draft, and recovery.
 
-Both windows ignore an event whose scope/epoch is not current. The server thread
-is fetched by `AdminOttoChat`; message bodies never travel over the bus. On
-window focus, an open admin conversation refreshes its thread.
+Both windows ignore an event whose scope/epoch/generation is not current, and
+an older revision cannot overwrite a newer one. The server thread is fetched by
+`AdminOttoChat`; message bodies never travel over the bus. On window focus, an
+open admin conversation refreshes its thread.
 
 Switching views preserves the administration conversation id and the in-app
 draft. It closes the visible sheet but never discards recorded work or a prepared
@@ -301,6 +331,8 @@ message; only New chat, sign-out, or an account change clears them. The floating
 window keeps its own draft locally across collapse/expand and view changes; the
 two windows share the conversation identity, not in-progress composer text. A
 fresh epoch republishes the retained id so the returning surface can hydrate it.
+A switch cancels local presentation only; it never claims an already accepted
+server write was rolled back.
 
 ### Mascot renderer
 
@@ -315,12 +347,17 @@ short-lived `data-attire-transition` state:
 - the renderer does not own timers; `MascotPet` gives it the transition state.
 
 `MascotPet` detects a runtime mode change, sets the transitioning flag for one
-bounded interval, and passes the mode through. Its existing reduced-motion state
-turns the transition off. `MascotMark` accepts the mode and renders the final
-state, so chat marks and notifications are correct without motion.
+bounded interval, and passes the mode through. Only the still-mounted collapsed
+pet enables the one-shot transition; opening or collapsing never replays it. Its
+existing reduced-motion state turns the transition off. `MascotMark` accepts the
+mode and renders the final state, so header marks, chat marks, and notifications
+are correct without motion. A mode change while the window is expanded appears
+dressed immediately and does not replay later when collapsed.
 
 All surfaces receive mode from one source: the adopted view/scope in the shell,
-not from individual cards.
+not from individual cards. Shared assistant turns accept one optional mascot
+mode so Administration cards carry the Administration mark without a second
+mark implementation.
 
 ## States and edge cases
 
@@ -364,35 +401,41 @@ not from individual cards.
 
 Render and inspect:
 
+- the real `AvatarApp` branch at its native 400×620 window, plus 420px and
+  390px acceptance widths;
 - floating employee header, popover closed/open, pending, admin unavailable;
 - floating Administration unavailable state when the admin context failed;
-- floating admin header with the switch and shared cards at 420px;
+- floating admin header with the switch and shared cards at 400px, 420px, and
+  390px;
 - in-app Admin Otto header with the switch at 480px and 700px;
 - collapsed employee orb, collapsed admin orb, both costume directions, and
   reduced motion;
-- every existing mascot pose in admin attire, full and head crop;
+- every existing mascot pose in admin attire, full and head crop, light/dark;
 - conversation swap in both directions with drafts and pending previews;
-- New chat in both windows;
+- New chat in both windows, including a pending first send in the peer;
 - keyboard focus order, Escape, and outside dismiss;
 - 1440/1024/720/390 checks for the in-app Admin Otto sheet;
 - no horizontal overflow, clipped popover, or covered close/new-chat controls.
 
 ## Verification
 
-- Pure tests for availability, request/result fencing, mode adoption, costume
-  direction, and conversation-id sync.
+- Executable tests for availability, request/result fencing, effective-shell
+  adoption, deferred cross-window first-send/discard races, mode retention,
+  costume direction, and conversation identity sync.
 - Render tests for the switch, admin floating shell, New chat, and mascot
   accessories in each pose/crop.
 - Focused companion tests, then the full companion/Work OS gates required by
   `AGENTS.md`.
-- Rendered screenshots and TestSprite for the companion where a reusable
-  fixture exists.
+- Real `AvatarApp` browser fixture checks plus TestSprite for the companion
+  where a reusable fixture exists. Native window/ACL/audio acceptance is
+  required for release; browser fixtures do not replace it.
 - Update `design.md`, the companion changelog, and `release-queue.json` with one
   verified outcome for this feature.
 - At plan time `companion:release:status` reports four pending outcomes, so this
-  verified feature would be the fifth. Re-run the status after landing; if it is
-  still the fifth, prepare the next patch release per
-  `docs/companion-release-policy.md` (synchronized version metadata, dated
-  changelog section, free Linux gate before packaging, and published-release
-  verification). If another outcome landed first, queue this outcome and do not
-  bump the version.
+  verified feature would be the fifth. Re-run the status after landing; if the
+  latest published snapshot still has five or more pending, prepare the next
+  patch release per `docs/companion-release-policy.md` (synchronized version
+  metadata, dated changelog section, free Linux gate before packaging, and
+  published-release verification). Preparation and publication are separate
+  gates; if another outcome landed first, recompute against the new published
+  snapshot rather than bumping twice.
