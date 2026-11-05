@@ -2281,3 +2281,33 @@ test("an action operation returns a pending preview and no read", async () => {
     assert.equal(result.pendingAction?.action, "task.assign");
   } finally { await f.close(); }
 });
+
+test("a malformed structured answer is retried once before failing", async () => {
+  const mod = await intentModule();
+  const valid = {
+    reply: "Two tasks are ready to review.",
+    action: null,
+    target: { kind: "team", names: null, ids: null },
+    date: null, from: null, through: null, relativeDay: null, overdueOnly: false, latest: false,
+    operation: null,
+    steps: [
+      { intent: null, operation: { action: "create_task", task_query: null, person_names: ["David"], title: "A", due_date: null }, depends_on: null },
+      { intent: null, operation: { action: "create_task", task_query: null, person_names: ["Aden"], title: "B", due_date: null }, depends_on: null },
+    ],
+  };
+  const bodies: string[] = [];
+  let calls = 0;
+  const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1;
+    bodies.push(String(init?.body ?? ""));
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: calls === 1 ? "not json" : JSON.stringify(valid) } }],
+    }), { status: 200 });
+  };
+  const parsed = await mod.parseAdminOttoInterpretation("Create two tasks.", { people: [], lastIntent: null }, {
+    fetch: fetchImpl, env: { OPENROUTER_API_KEY: "test-key" }, now: NOW,
+  });
+  assert.equal(calls, 2);
+  assert.equal(parsed.steps?.length, 2);
+  assert.equal(bodies[0], bodies[1], "the retry sends the same bounded request");
+});

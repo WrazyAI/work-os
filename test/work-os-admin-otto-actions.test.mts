@@ -97,11 +97,17 @@ test("two requested creations remain two ordered operations", () => {
   assert.deepEqual(parsed.steps?.map((step) => step.operation?.title), ["Example Task 1", "Example Task 2"]);
 });
 
-test("plans reject forward dependencies, excess work, and mixed legacy actions", () => {
+test("plans reject forward dependencies and excess work", () => {
   const step = { intent: null, operation: create("Example", "David"), depends_on: null };
   assert.throws(() => validateAdminOttoInterpretation(response({ steps: [{ ...step, depends_on: 1 }] })), /depend/i);
   assert.throws(() => validateAdminOttoInterpretation(response({ steps: Array(9).fill(step) })), /8/i);
-  assert.throws(() => validateAdminOttoInterpretation(response({ steps: [step], operation: create("Other", "David") })), /mix/i);
+});
+
+test("an explicit multi-step plan wins over an accidental legacy field", () => {
+  const step = { intent: null, operation: create("Example", "David"), depends_on: null };
+  const parsed = validateAdminOttoInterpretation(response({ steps: [step], operation: create("Other", "David") }));
+  assert.equal(parsed.steps?.length, 1);
+  assert.equal(parsed.operation, undefined);
 });
 
 test("a read cannot depend on a write and a dependency must follow a write", () => {
