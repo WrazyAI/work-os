@@ -21,6 +21,7 @@ import type {
   WorkOsReportRow,
 } from "./types";
 import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {
@@ -81,6 +82,9 @@ export interface AdminTaskRow {
   provider_created_at?: string | null;
   project?: { id?: string; name?: string | null } | null;
   assignees?: Array<Record<string, any>> | null;
+  /** Employee-attached completion evidence for this task. Empty or absent on
+   * older payloads and on tasks completed without a file. */
+  completion_evidence?: TaskEvidenceRecord[];
   [key: string]: any;
 }
 
@@ -680,6 +684,19 @@ export interface AdminTaskListResponse {
   summary?: { open: number; overdue: number; completedWeek: number };
 }
 
+function normalizeTaskEvidence(row: Loose): TaskEvidenceRecord {
+  return {
+    id: asText(row.id),
+    title: asText(row.title, "Completion evidence"),
+    note: asText(row.note),
+    fileName: asText(row.fileName, "completion-evidence"),
+    contentType: asText(row.contentType, "application/octet-stream"),
+    sizeBytes: asNumber(row.sizeBytes),
+    createdAt: asText(row.createdAt),
+    url: asText(row.url),
+  };
+}
+
 function normalizeTaskRow(row: Loose): AdminTaskRow {
   const project = row.project && typeof row.project === "object" ? asRecord(row.project) : null;
   return {
@@ -703,6 +720,7 @@ function normalizeTaskRow(row: Loose): AdminTaskRow {
     // Assignee rows are rendered by name; a sparse embed must not hand the
     // page a null it would dereference.
     assignees: asRows(row.assignees).map((assignee) => ({ ...assignee, displayName: asText(assignee.displayName ?? assignee.display_name, "Unassigned") })),
+    completion_evidence: asRows(row.completion_evidence).map(normalizeTaskEvidence).filter((evidence) => evidence.id),
   };
 }
 

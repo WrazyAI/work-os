@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { apiRequestBlob } from "../api";
+import { TaskEvidenceList } from "../CompletionEvidence";
+import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
 import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
@@ -34,6 +37,7 @@ import { OverflowPanText } from "../OverflowPan";
 import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } from "../taskActions";
 import { EllipsisMenu, TaskActionMenuItems, toggleAssigneeIds } from "../taskSurfaces";
 import { isCalendarDate, type TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import { TaskAttachmentIndicator } from "./TaskAttachmentIndicator";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
@@ -338,11 +342,39 @@ export function AdminTaskMenuItems({ task, today, busy, onStatus, onComplete, on
   />;
 }
 
+/** Completion evidence is read through the authenticated file route. The
+ * preview fixtures use data URLs so rendered QA can open the same preview
+ * without a live session. Kept outside the page so thumbnails do not reload on
+ * every filter or menu render. */
+async function loadTaskEvidenceFile(evidence: TaskEvidenceRecord) {
+  if (evidence.url.startsWith("data:")) {
+    const response = await fetch(evidence.url);
+    if (!response.ok) throw new Error(`The evidence file failed (${response.status}).`);
+    return response.blob();
+  }
+  return apiRequestBlob(evidence.url, "Evidence file");
+}
+
 /** The organization task record: bounded filters, the flat list, and a drawer
  * that opens one task's detail with its subtasks. */
 export default function TasksPage({ initialTaskId, initialPersonId, initialFilter }: { initialTaskId?: string; initialPersonId?: string; initialFilter?: TaskFilter } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
+  const downloadTaskEvidence = async (evidence: TaskEvidenceRecord) => {
+    try {
+      const blob = await loadTaskEvidenceFile(evidence);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = evidence.fileName || "completion-evidence";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : "The evidence file could not be downloaded.", "Download unavailable");
+    }
+  };
   const [filter, setFilter] = useState<TaskFilter>(initialFilter ?? "open");
   const [personId, setPersonId] = useState(initialPersonId ?? "");
   const [projectId, setProjectId] = useState("");
@@ -521,6 +553,7 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
   const sortedRows = useMemo(() => sortTaskRows(rows, sort, today), [rows, sort, today]);
   const summary = tasks.data?.summary;
   const drawerTask = detail.data?.task ?? null;
+  const drawerEvidence = drawerTask?.completion_evidence ?? [];
   // The drawer and the row menu read the same derived status record, so an
   // Overdue pill can never open into a drawer that calls the task Pending.
   const drawerStatusTask = drawerTask ? adminTaskStatusRecord(drawerTask, today) : null;
@@ -649,7 +682,12 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
                       </td>
                       <td className="admin-numeric">{formatWorkOsFullDate(created)}</td>
                       <td className={overdue ? "admin-numeric warn" : "admin-numeric"}>{formatWorkOsFullDate(due)}</td>
-                      <td><Pill tone={taskStateTone(state)}>{taskStatusLabel(state)}</Pill></td>
+                      <td>
+                        <span className="admin-status-cell">
+                          <Pill tone={taskStateTone(state)}>{taskStatusLabel(state)}</Pill>
+                          <TaskAttachmentIndicator attachments={task.completion_evidence ?? []} />
+                        </span>
+                      </td>
                       {/* One trailing cell carries the row's actions: the
                           completion control stays where it was and the ellipsis
                           sits beside it, so the row keeps its height and the
@@ -732,6 +770,14 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
               </div>
               {drawerTask.description ? <p className="admin-quiet">{String(drawerTask.description)}</p> : null}
             </section>
+            <TaskEvidenceList
+              evidence={drawerEvidence}
+              loadEvidence={loadTaskEvidenceFile}
+              readOnly
+              busy={detail.isFetching}
+              completed={drawerTask.completed === true}
+              onDownload={(evidence) => void downloadTaskEvidence(evidence)}
+            />
             {/* The status control is the same permission payload the row menu
                 reads. An overdue task keeps the control, disabled with the
                 due-date note; a completed task has no status path at all. */}

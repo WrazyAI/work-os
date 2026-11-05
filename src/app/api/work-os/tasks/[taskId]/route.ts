@@ -4,6 +4,7 @@ import { getTaskByLocalOrProviderId } from "@/lib/work-os";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { employeeTaskToday } from "@/lib/work-os-employee-tasks";
 import { withTaskCapabilities } from "@/lib/work-os-task-capabilities";
+import { loadTaskCompletionEvidence } from "@/lib/work-os-task-evidence";
 import { removeWorkOsAdminTask, updateWorkOsAdminTask } from "@/lib/work-os-task-admin";
 
 export const runtime = "nodejs";
@@ -34,14 +35,25 @@ export async function GET(req: Request, { params }: { params: Promise<{ taskId: 
       .not("status", "in", "(archived,deleted)")
       .order("completed", { ascending: true })
       .limit(100);
-    const { data: subtasks, error } = task.provider === "local"
-      ? await subtasksQuery.eq("parent_task_id", task.id as string)
-      : await subtasksQuery.eq("parent_provider_task_id", providerTaskId);
+    const [subtasksResult, completionEvidence] = await Promise.all([
+      task.provider === "local"
+        ? subtasksQuery.eq("parent_task_id", task.id as string)
+        : subtasksQuery.eq("parent_provider_task_id", providerTaskId),
+      loadTaskCompletionEvidence(auth.access.organizationId, [String(task.id)]),
+    ]);
+    const { data: subtasks, error } = subtasksResult;
     if (error) throw new Error(`load task subtasks: ${error.message}`);
     const actor = { role: auth.access.role, personId: auth.access.personId };
     // The row and its children read the actor's workday, not UTC.
     const today = await employeeTaskToday(auth.access);
-    return NextResponse.json({ task: withTaskCapabilities([{ ...task, project: project.data ?? null }], actor, today)[0], subtasks: withTaskCapabilities(subtasks ?? [], actor, today) });
+    return NextResponse.json({
+      task: withTaskCapabilities([{
+        ...task,
+        project: project.data ?? null,
+        completion_evidence: completionEvidence.map((row) => row.evidence),
+      }], actor, today)[0],
+      subtasks: withTaskCapabilities(subtasks ?? [], actor, today),
+    });
   } catch (err) {
     return jsonError(err);
   }

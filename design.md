@@ -2423,7 +2423,13 @@ header.
   more control. Each row shows the task's description on its own line
   beneath the title — clipped with the shared fade and never a pan — and the
   assignee cell resolves the recorded assignee ids through the roster, so a task
-  with a real assignee is never displayed as Unassigned.
+  with a real assignee is never displayed as Unassigned. A row with
+  employee-attached completion evidence carries a small stack of slanted file
+  and image cards beside its status pill; hover or focus lifts the cards and
+  reveals one sentence naming the file and image counts. The task drawer lists
+  the actual files under Completion evidence with preview and download. A task
+  without evidence shows no indicator, and the indicator never substitutes for
+  the employee-attached provenance in the drawer.
   Each row carries the same trailing ellipsis action menu as the companion task
   lists (§6.2): its status actions, Edit task, Assign, Archive (reversible), and
   Delete permanently, each present only when the task's capability payload

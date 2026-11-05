@@ -58,6 +58,30 @@ const DATES = (() => {
 /** A deterministic, self-contained frame used by the admin fixture. It is a
  * data URI so rendered QA never fetches an external image or needs a session. */
 const PREVIEW_SHOT_URL = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#1d211c"/><rect x="20" y="20" width="440" height="260" rx="10" fill="#f7f7f2"/><rect x="20" y="20" width="440" height="34" rx="10" fill="#e7e9e2"/><circle cx="38" cy="37" r="4" fill="#c94e43"/><circle cx="52" cy="37" r="4" fill="#c88918"/><circle cx="66" cy="37" r="4" fill="#5e9d27"/><text x="88" y="42" font-family="sans-serif" font-size="11" fill="#304033">app.wrazyos.com/work-os/review</text><text x="40" y="86" font-family="sans-serif" font-size="16" font-weight="700" fill="#182018">Billing retry suite</text><rect x="40" y="104" width="210" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="122" width="300" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="150" width="180" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="168" width="260" height="9" rx="4" fill="#d9ded5"/><rect x="40" y="204" width="120" height="26" rx="6" fill="#a8f15b"/><text x="56" y="221" font-family="sans-serif" font-size="11" font-weight="700" fill="#182018">Run tests</text></svg>`)}`;
+const PREVIEW_TEXT_URL = `data:text/plain,${encodeURIComponent("Retry verification\n\nStaging retries completed after backoff.\n")}`;
+
+const PREVIEW_ATTACHMENTS = [
+  {
+    id: "evidence-t-1-image",
+    title: "Retry handling for failed billing webhooks — completion evidence",
+    note: "The retry dashboard after the staging run.",
+    fileName: "retry-dashboard.png",
+    contentType: "image/png",
+    sizeBytes: 28_400,
+    createdAt: `${DATES[DATES.length - 1]}T08:36:00.000Z`,
+    url: PREVIEW_SHOT_URL,
+  },
+  {
+    id: "evidence-t-1-file",
+    title: "Retry handling for failed billing webhooks — completion evidence",
+    note: "Retry logs from the staging verification.",
+    fileName: "retry-verification.txt",
+    contentType: "text/plain",
+    sizeBytes: 2_048,
+    createdAt: `${DATES[DATES.length - 1]}T08:34:00.000Z`,
+    url: PREVIEW_TEXT_URL,
+  },
+] as const;
 
 function timeSeries(): AdminTimeSeriesPoint[] {
   return DATES.map((date, index) => {
@@ -638,6 +662,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
         assigned_by_person_id: index === 0 ? "p-2" : "p-1",
         assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],
         updated_at: `${DATES[DATES.length - 1]}T08:${String(40 - index).padStart(2, "0")}:00.000Z`,
+        completion_evidence: index === 0 ? PREVIEW_ATTACHMENTS : [],
       };
       // The API attaches capabilities to every administration read; computing
       // them here with the same pure helper keeps the fixture's menu truthful.
@@ -658,6 +683,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     workflow_status: "pending",
     assignee_person_ids: ["p-1"],
     assigned_by_person_id: "p-2",
+    completion_evidence: PREVIEW_ATTACHMENTS,
   };
   queryClient.setQueryData(adminKeys.taskDetails("t-1"), {
     task: { ...detailTask, capabilities: taskCapabilities(detailTask, { role: "admin", personId: "p-1" }, today) },

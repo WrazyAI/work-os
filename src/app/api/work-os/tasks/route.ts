@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { countAdminTaskRecord } from "@/lib/work-os-admin-otto-reads";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
 import { createLocalWorkOsTask, defaultWorkOsTaskProjectId } from "@/lib/work-os-local-tasks";
+import { loadTaskCompletionEvidence } from "@/lib/work-os-task-evidence";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId, WorkOsValidationError } from "@/lib/work-os-api";
 import { employeeTaskToday } from "@/lib/work-os-employee-tasks";
 import { isCalendarDate } from "@/lib/work-os-task-permissions";
@@ -34,6 +35,20 @@ export async function GET(req: Request) {
     const tasks = (personId
       ? await listPersonTasks(ownerId, personId, options)
       : await listTasks(ownerId, options)) ?? [];
+    // The row's attachment indicator and the drawer's evidence list read the
+    // same employee-attached records. One bounded query groups them by task so
+    // a busy record never fans out one request per row.
+    const completionEvidence = await loadTaskCompletionEvidence(auth.access.organizationId, tasks.map((task) => String(task.id)));
+    const evidenceByTask = new Map<string, Array<(typeof completionEvidence)[number]["evidence"]>>();
+    for (const { taskId, evidence } of completionEvidence) {
+      const list = evidenceByTask.get(taskId) ?? [];
+      list.push(evidence);
+      evidenceByTask.set(taskId, list);
+    }
+    const tasksWithEvidence = tasks.map((task) => ({
+      ...task,
+      completion_evidence: evidenceByTask.get(String(task.id)) ?? [],
+    }));
     // Exact workload counts share the row attribution and effective-due rule:
     // a task with no recorded due date is due one day after it was created, and
     // the same stated day drives the visible overdue status.
@@ -43,7 +58,7 @@ export async function GET(req: Request) {
       : await employeeTaskToday(auth.access);
     const summary = await countAdminTaskRecord(auth.access, { ownerId, personId, today });
     return NextResponse.json({
-      tasks: withTaskCapabilities(tasks, { role: auth.access.role, personId: auth.access.personId }, today),
+      tasks: withTaskCapabilities(tasksWithEvidence, { role: auth.access.role, personId: auth.access.personId }, today),
       nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null,
       summary,
     });

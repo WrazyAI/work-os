@@ -108,6 +108,12 @@
       "type": "feature",
       "summary": "Admin Otto handles several requests at once, shows readable change cards, and New chat starts a clean conversation.",
       "verification": "Branch codex/admin-otto-redesign: focused admin action/intent/workflow/confirm suites 52 passed; companion admin tests 319 passed; typechecks passed; Playwright preview-admin wide 1440 and narrow 449 verified grouped creates, selection, per-item receipt, and New chat."
+    },
+    {
+      "id": "task-attachment-markers",
+      "type": "feature",
+      "summary": "Task rows mark completion files beside the status, and the task details list the actual attachments.",
+      "verification": "Ledger 199ac08f-2219-4b39-ab5f-b5710684e7d3: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1672 passed; focused attachment/normalizer/task tests 53 passed; focused root desktop/route/evidence tests 84 passed; typecheck and production build passed; rendered 1440/930/720/390 hover, tooltip, keyboard, Escape, reduced-motion, drawer list, preview, and no-overflow checks; TestSprite a299b733 passed 8/8 for the attachment tooltip, drawer list, and image preview."
     }
   ],
   "emergency": {

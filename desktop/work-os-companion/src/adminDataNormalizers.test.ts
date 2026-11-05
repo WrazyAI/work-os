@@ -263,7 +263,11 @@ describe("administration response normalizers", () => {
     const stamped = normalizeAdminTaskList({ tasks: [{ id: "t-3", created_at: "2026-10-01T08:00:00.000Z", provider_created_at: "2026-09-30" }] });
     expect(stamped.tasks[0].created_at).toBe("2026-10-01T08:00:00.000Z");
     expect(stamped.tasks[0].provider_created_at).toBe("2026-09-30");
-    expectNoLeaks([list, details, named, stamped]);
+    // Completion evidence keeps the file fields the row and drawer share.
+    const attached = normalizeAdminTaskList({ tasks: [{ id: "t-4", completion_evidence: [{ id: "e-1", fileName: "a.txt", contentType: "text/plain", sizeBytes: 10, url: "/api/work-os/evidence/e-1/file" }] }] });
+    expect(attached.tasks[0].completion_evidence?.[0]).toMatchObject({ id: "e-1", fileName: "a.txt", contentType: "text/plain", sizeBytes: 10 });
+    expect(list.tasks[0].completion_evidence).toEqual([]);
+    expectNoLeaks([list, details, named, stamped, attached]);
   });
 
   it("normalizes organization, connections, and GitHub payloads without their collections", () => {
