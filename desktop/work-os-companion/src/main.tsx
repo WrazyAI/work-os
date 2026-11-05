@@ -28,7 +28,7 @@ import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { installBootTrace } from "./bootTrace";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { restoreWorkOsQueryCache, startWorkOsQueryPersistence, workOsQueryClient } from "./queryClient";
+import { startWorkOsQueryPersistence, workOsQueryClient } from "./queryClient";
 import "./styles.css";
 import "./sessionGate.css";
 import "./workspace-redesign.css";
@@ -82,9 +82,6 @@ const Root = params.get("window") === "avatar" ? AvatarApp
 
 if (params.get("window") !== "avatar") {
   startWorkOsQueryPersistence(workOsQueryClient);
-// Restore runs in parallel with boot: the vault gate keeps screens hidden
-// until session/vault reads settle, so hydration lands before real data use.
-  void restoreWorkOsQueryCache(workOsQueryClient);
 }
 /* DEV-only: `?frame=320x430` renders the surface at a fixed size, so a surface
  * that lives in a resized desktop window (the companion's grown reading bubble,

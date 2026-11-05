@@ -65,7 +65,7 @@ import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, 
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
-import { clearWorkOsAccountCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
+import { clearWorkOsAccountCache, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalNotificationQuery, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
@@ -487,6 +487,8 @@ export default function App() {
     : { status: updateFlow.status };
   const [vaultGate, setVaultGate] = useState<VaultGateState>({ status: "pending" });
   const vaultAttemptRef = useRef<VaultAttempt | null>(null);
+  /** The query cache hydrates only after the gate has opened the vault. */
+  const queryCacheRestoredRef = useRef(false);
   // The latest vault opener, kept behind a ref so the boot effect's starter can
   // stay identity-stable across the state churn of an ordinary session. It
   // rejects until the first render supplies the real opener, so an ordering
@@ -2194,8 +2196,18 @@ export default function App() {
       { probeTrouble: async () => isTauri() && await invoke<boolean>("vault_open_trouble").catch(() => false) },
     );
     vaultAttemptRef.current = attempt;
-    void attempt.result.then((outcome: VaultGateSettled) => { vaultAttemptRef.current = null; setVaultGate(outcome); });
-  }, []);
+    void attempt.result.then(async (outcome: VaultGateSettled) => {
+      vaultAttemptRef.current = null;
+      // Hydrate from the vault only after its first open has settled. Starting
+      // this restore at module load raced the gate's first open on a fresh
+      // device and left the gate reporting ClientDataNotPresent.
+      if (outcome.status === "ready" && !queryCacheRestoredRef.current) {
+        queryCacheRestoredRef.current = true;
+        await restoreWorkOsQueryCache(queryClient);
+      }
+      setVaultGate(outcome);
+    });
+  }, [queryClient]);
 
   // A retry must let go of the previous attempt's promise too: the one waiting
   // on a system dialog would otherwise be reused and wait forever. Raising the

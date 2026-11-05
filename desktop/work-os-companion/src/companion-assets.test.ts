@@ -320,6 +320,16 @@ describe("floating companion integration", () => {
     expect(startup).toMatch(/run_scenario "fresh device" usable/);
   });
 
+  it("hydrates the query cache only after the vault gate opens the vault", () => {
+    const main = readFileSync(resolve(root, "src/main.tsx"), "utf8");
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    // A module-load restore raced the gate's first open on a fresh device and
+    // left the gate reporting ClientDataNotPresent while later reads succeeded.
+    expect(main).not.toContain("restoreWorkOsQueryCache");
+    expect(app).toContain("restoreWorkOsQueryCache");
+    expect(app).toMatch(/outcome\.status === "ready"[\s\S]{0,240}?restoreWorkOsQueryCache/);
+  });
+
   // A first launch on a fresh Mac had no app data directory, so the Stronghold
   // plugin's salt write panicked ("Failed to write salt for Stronghold", Os
   // code 2) and the vault never opened — on that machine, forever.
