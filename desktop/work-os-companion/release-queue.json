@@ -114,12 +114,13 @@
       "type": "feature",
       "summary": "Task rows mark completion files beside the status, and the task details list the actual attachments.",
       "verification": "Ledger 199ac08f-2219-4b39-ab5f-b5710684e7d3: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1672 passed; focused attachment/normalizer/task tests 53 passed; focused root desktop/route/evidence tests 84 passed; typecheck and production build passed; rendered 1440/930/720/390 hover, tooltip, keyboard, Escape, reduced-motion, drawer list, preview, and no-overflow checks; TestSprite a299b733 passed 8/8 for the attachment tooltip, drawer list, and image preview."
+    },
+    {
+      "id": "admin-notification-center",
+      "type": "feature",
+      "summary": "The notifications bell switches between personal reminders and the workspace's decision queue, pulse, and recent team activity.",
+      "verification": "Ledger 08faace9-600a-4699-9d63-eda9aabba66b: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1685 passed; focused bell/model tests 35 passed; typecheck and production build passed; rendered 1440/1024/930/720/560/390 admin, employee, empty, loading, and error states plus tab reset, keyboard tabs/rows, Escape, scroll reset, decision and activity drill-downs, and no panel overflow; TestSprite ec7f241c passed 10/10."
     }
   ],
-  "emergency": {
-    "version": "0.5.22",
-    "updateId": "recap-waits-for-slow-analysis",
-    "brokenBehavior": "A recap that analyses a backlog of screenshots for more than 90 seconds is abandoned by the companion, which then shows a generic check-in even though the recap finishes seconds later.",
-    "restoredBehavior": "The companion waits up to 180 seconds for the recap, so slow analysis returns the evidence-backed recap instead of a generic check-in."
-  }
+  "emergency": null
 }

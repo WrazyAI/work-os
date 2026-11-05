@@ -94,10 +94,11 @@ import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./Pro
 import { PersonalInsights } from "./InsightsView";
 import AdminWorkspace from "./admin/AdminWorkspace";
 import type { AdminNotifications } from "./admin/AdminWorkspace";
+import { emptyAdminNotificationOverview } from "./admin/adminNotificationModel";
 import { bootSurface } from "./bootSurface";
 import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFixtures";
-import { adminKeys, fetchSession } from "./admin/data";
-import type { AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
+import { adminKeys, fetchAdminOverview, fetchSession, normalizeAdminOverview, todayIso } from "./admin/data";
+import type { AdminOverview, AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
 import { AdminOttoChat, type AdminArrivalView } from "./adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "./adminOtto/AdminOttoSettings";
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
@@ -1854,6 +1855,43 @@ export default function App() {
   const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.pages[0]?.intervals), [notificationIntervalsQuery.data]);
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0, [memoryQuery.data]);
+  // The Admin tab reads the same live overview the administration pages use.
+  // Its query key is shared, so opening the bell never starts a second record;
+  // in the administration workspace it also keeps the closed bell's badge
+  // current. The dev-only shell harness seeds the same key and stays offline.
+  const adminNotificationReadsEnabled = notificationReadsEnabled
+    && workSessionQuery.data?.role === "admin"
+    && (adminWorkspaceBranch || notificationsOpen);
+  const adminNotificationQuery = useQuery<AdminOverview>({
+    queryKey: adminKeys.overview(todayIso()),
+    queryFn: () => fetchAdminOverview(),
+    select: normalizeAdminOverview,
+    enabled: adminNotificationReadsEnabled && !ADMIN_SHELL_BOOT,
+    staleTime: 30_000,
+    refetchInterval: adminWorkspaceBranch && !ADMIN_SHELL_BOOT ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const adminShellNotificationPin = ADMIN_SHELL_BOOT ? ADMIN_SHELL_NOTIFICATIONS : null;
+  const adminNotificationFeed = workSessionQuery.data?.role === "admin" ? {
+    overview: adminShellNotificationPin === "empty" && adminNotificationQuery.data
+      ? emptyAdminNotificationOverview(adminNotificationQuery.data)
+      : adminShellNotificationPin === "loading" || adminShellNotificationPin === "error"
+        ? null
+        : adminNotificationQuery.data ?? null,
+    loading: adminShellNotificationPin === "loading"
+      || (adminNotificationQuery.isFetching && !adminNotificationQuery.data),
+    error: adminShellNotificationPin === "error"
+      ? "Workspace notifications could not be loaded."
+      : adminNotificationQuery.error
+        ? errorMessage(adminNotificationQuery.error, "Workspace notifications could not be loaded.")
+        : null,
+    onRetry: () => void adminNotificationQuery.refetch(),
+    onNavigate: (section: AdminSection, focus?: AdminSectionFocus) => {
+      setNotificationsOpen(false);
+      setWorkspaceMode("admin");
+      navigateAdmin(section, focus);
+    },
+  } : undefined;
   const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
   const screenshotGalleryQuery = useEodScreenshotsQuery({
     enabled: employeeBootstrapEnabled,
@@ -5018,9 +5056,10 @@ export default function App() {
     // cannot narrow that for TypeScript.
     if (!workSessionQuery.data) return null;
     /* The administration masthead's bell is the same surface the employee
-     * masthead mounts, reading the signed-in account's own notifications. The
-     * loading/error pins exist only in the dev-only shell harness, which has no
-     * backend to answer the bell's reads (see adminShell.ts). */
+     * masthead mounts: its Employee tab reads the signed-in account's own
+     * notifications, its Admin tab the live workspace record. The loading and
+     * error pins exist only in the dev-only shell harness, which has no backend
+     * to answer the bell's reads (see adminShell.ts). */
     const adminNotifications: AdminNotifications = {
       memoryCandidates: memoryCandidateCount,
       recap: recapSummary,
@@ -5035,8 +5074,11 @@ export default function App() {
         const next = !notificationsOpen;
         setNotificationsOpen(next);
         // The harness has no backend to refetch from; the live path re-reads
-        // the outstanding days whenever the panel opens.
-        if (next && !ADMIN_SHELL_BOOT) void outstandingQuery.refetch();
+        // the outstanding days and the workspace record whenever the panel opens.
+        if (next && !ADMIN_SHELL_BOOT) {
+          void outstandingQuery.refetch();
+          void adminNotificationQuery.refetch();
+        }
       },
       onClose: () => setNotificationsOpen(false),
       onSelect: openEodDayInEmployeeView,
@@ -5044,6 +5086,8 @@ export default function App() {
       onOpenRecap: openRecapInEmployeeView,
       onOpenOverdue: openOverdueInEmployeeView,
       onRetry: () => void outstandingQuery.refetch(),
+      admin: adminNotificationFeed,
+      defaultTab: "admin",
     };
     const openAdminOtto = () => openAdminOttoSurface({ newChat: true });
     return <>
@@ -5168,6 +5212,8 @@ export default function App() {
         onOpenRecap={() => { setNotificationsOpen(false); openGoalComposer(); }}
         onOpenOverdue={openOverdueTasks}
         onRetry={() => void outstandingQuery.refetch()}
+        admin={adminNotificationFeed}
+        defaultTab="employee"
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {worktivityPending && <WorktivityControlNotice state={{ status: "pending", message: worktivityPending.message }} busy={busy} onCheckStatus={retryWorktivityStatus} />}

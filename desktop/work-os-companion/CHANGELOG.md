@@ -25,7 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.23 — 2026-11-05
+
 - A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.
+- The notifications bell now switches between your own reminders and the workspace's review queue, pulse, and recent team activity.
 - Tasks with completion files now show a small attachment marker beside their status, and the task details list the files.
 - Weekends no longer ask you for an EOD report, and the daily charts skip weekend days.
 - Admin Otto can handle several task requests in one message, show each result separately, and keep every change unapplied until you approve it.

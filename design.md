@@ -1397,6 +1397,30 @@ lists what needs the employee right now, and the badge counts all of it —
 memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
 days — in the amber recoverable-attention tone.
 
+- **Audiences** — an administrator's bell carries two tabs under its title:
+  Employee (the signed-in account's own reminders, unchanged) and Admin (the
+  live workspace record). The tab that belongs to the current workspace is
+  selected whenever the panel opens, so opening the bell in Administration
+  never lands on a personal reminder first; closing and reopening resets the
+  tab to the workspace even if the last visit ended on the other audience.
+  Each tab names its own count, and the closed bell's badge names the audience
+  its next open will show. The tablist is reachable through its selected tab;
+  ←/→ move and activate, Home/End jump to the ends. A non-administrator sees
+  the single Employee list and no tablist.
+- **Admin rows** — the Admin tab reads the same live overview as the Overview
+  page. `Needs your decision` carries every attention record the record
+  reports — EOD reports awaiting review, teammates with unsubmitted EOD days,
+  overdue tasks, disputed evidence, and configuration blockers — with its real
+  count, severity tile, and the action that resolves it. Each row opens the
+  exact surface: Review, the filtered Tasks record, Evidence, or Settings. A
+  clear queue states that no decisions are waiting instead of hiding the
+  section. `Today across the workspace` is one quiet pulse line (on shift,
+  recaps, outcomes, evidence), never a second KPI board. `Recent team
+  activity` is the overview's own newest-first timeline of updates, recaps,
+  completed tasks, evidence, and EOD submissions; a completion opens that
+  person's Completed tasks, a report opens their EOD review, evidence opens
+  their evidence, and an update or recap opens their People record. The footer
+  opens the overview that owns the full record.
 - **Rows** — agent-authored reminders wear the configured mascot mark, the
   same identity the chat window uses, never a generic tone glyph. The memory
   row reads `This is what Otto remembers about you so far` with its proposed
@@ -2311,12 +2335,17 @@ controls use 8–9px; there is no resting shadow. Signal green stays on state an
 the one forward action.
 
 **Notifications.** The masthead carries the same notifications bell and panel
-as the employee workspace (§8.12), reading the signed-in administrator's own
-notifications: the memory row opens the memory modal in place, while recap and
-outstanding EOD rows switch to the employee view first and then open the exact
-surface they name. While the panel is open it owns the layer above the receipt
-stack, whose cards keep their position underneath. Administration also uses
-the shared in-app flyouts: every confirmed write leaves one transient receipt
+as the employee workspace (§8.12). Its Employee tab reads the signed-in
+administrator's own notifications: the memory row opens the memory modal in
+place, while recap and outstanding EOD rows switch to the employee view first
+and then open the exact surface they name. Its Admin tab reads the live
+workspace overview — the decision queue, today's pulse, and recent team
+activity — and opens the exact administration section each row names. The bell
+defaults to Admin while Administration is the current workspace and to
+Employee in the personal workday. While the panel is open it owns the layer
+above the receipt stack, whose cards keep their position underneath.
+Administration also uses the shared in-app flyouts: every confirmed write
+leaves one transient receipt
 naming the persisted outcome, failures keep the page's own inline notice and
 offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.

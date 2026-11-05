@@ -51,8 +51,9 @@ export type AdminProfileEntry = {
  * record and never changes the signed-in admin's own employee state. The
  * switch back to the personal workday is a view change, not a role change.
  * The masthead carries the same notifications bell the employee workspace
- * mounts — the account's own notifications — and the app supplies its data,
- * alongside the account's own profile avatar.
+ * mounts: its Employee tab is the account's own notifications, its Admin tab
+ * the workspace decision queue, and the app supplies both records alongside
+ * the account's own profile avatar.
  *
  * The current section is a prop rather than local state: the app's page-guide
  * seam keys its first-visit flags by section, and the workspace tour drives

@@ -6858,6 +6858,8 @@ button:not(:disabled):active {
 .notifications-body {
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-color: #c9d1c1 transparent;
+  scrollbar-width: thin;
 }
 
 .notifications-section + .notifications-section {
@@ -6987,6 +6989,216 @@ button:not(:disabled):active {
   background: transparent;
 }
 
+/* --- Notification audiences --------------------------------------------- */
+
+/* The admin panel carries a queue and a timeline; it needs a little more room
+   than the employee list without becoming a second dashboard. */
+.notifications-card.is-admin {
+  width: min(448px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 96px));
+}
+
+.notifications-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 10px 14px 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f1f4ec;
+}
+
+.notifications-tab {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: 750 11px/1 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+
+.notifications-tab svg {
+  color: #84907f;
+}
+
+.notifications-tab[aria-selected="true"] {
+  background: var(--white, #fff);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.08), inset 0 0 0 1px rgba(20, 30, 18, 0.05);
+  color: var(--ink);
+}
+
+.notifications-tab[aria-selected="true"] svg {
+  color: #5c8a2e;
+}
+
+.notifications-tab:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+}
+
+.notifications-tab-count {
+  display: grid;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e4e9dd;
+  color: #5a6754;
+  font: 750 9px/1 Inter, sans-serif;
+  font-style: normal;
+}
+
+.notifications-tab[aria-selected="true"] .notifications-tab-count {
+  background: #263026;
+  color: #f7fbf5;
+}
+
+.notifications-row.admin-notification-decision {
+  min-height: 66px;
+}
+
+.notifications-lead.is-warn {
+  border-color: #ead9ae;
+  background: #fff8e8;
+  color: #8a5a00;
+}
+
+.notifications-lead.is-info {
+  border-color: #dfe6d6;
+  background: #f4f7ef;
+  color: #5c8a2e;
+}
+
+.notifications-lead.is-error {
+  border-color: #f0d9d4;
+  background: #fdf3f1;
+  color: var(--color-danger, #c94e43);
+}
+
+.notifications-all-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.notifications-all-clear svg {
+  flex: 0 0 auto;
+  color: #5c8a2e;
+}
+
+.notifications-pulse {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px 16px 13px;
+}
+
+.notifications-pulse > span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 12px;
+  border-left: 1px solid #e4e9de;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.notifications-pulse > span:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.notifications-pulse b {
+  color: var(--ink);
+  font: 750 15px/1 Manrope, Inter, sans-serif;
+}
+
+.notifications-row.admin-notification-activity {
+  min-height: 53px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.notifications-activity-tile {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 1px solid #e0e6d8;
+  border-radius: 8px;
+  background: #f5f7f1;
+  color: #6c7a64;
+}
+
+.notifications-activity-tile.is-task_completed {
+  border-color: #d5e7c7;
+  background: #eef7e7;
+  color: #5c8a2e;
+}
+
+.notifications-activity-tile.is-eod_submitted {
+  border-color: #dce3ea;
+  background: #f3f6f9;
+  color: #496176;
+}
+
+.notifications-activity-tile.is-evidence {
+  border-color: #ead9ae;
+  background: #fff8e8;
+  color: #8a5a00;
+}
+
+.notifications-row.admin-notification-activity .notifications-row-title,
+.notifications-row.admin-notification-activity .notifications-row-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.notifications-activity-time {
+  color: #8b9586;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.notifications-admin-foot {
+  margin-top: 3px;
+  padding: 9px 16px 13px;
+  border-top: 1px solid #e8ebe4;
+}
+
+.notifications-admin-foot button {
+  border: 0;
+  background: none;
+  color: #5c8a2e;
+  font: 750 10.5px/1.2 Manrope, Inter, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.notifications-admin-foot button:hover {
+  color: #3f6b1c;
+}
+
+.notifications-admin-foot button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 2px;
+}
+
 .eod-pill {
   padding: 4px 8px;
   border-radius: 999px;
@@ -7085,6 +7297,27 @@ button:not(:disabled):active {
   .notifications-row,
   .notifications-bell-count {
     transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .notifications-tabs {
+    margin-right: 10px;
+    margin-left: 10px;
+  }
+
+  .notifications-tab {
+    gap: 5px;
+    font-size: 10.5px;
+  }
+
+  .notifications-pulse > span {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .notifications-activity-time {
+    font-size: 9px;
   }
 }
 
