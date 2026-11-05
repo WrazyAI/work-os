@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Open a submitted or approved EOD to read your report and its confirmation, without being asked to prepare it again.
+
 ## 0.5.24 — 2026-11-05
 
 - Switch between your own notifications and the workspace's notifications at the top of the panel, without a repeated summary line.

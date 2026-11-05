@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, FileCheck2 } from "lucide-react";
 import { EodComposer, EodLoadingState, EodShiftOpenNotice } from "./taskSurfaces";
 import { CheckedMoment } from "./CheckedMoment";
+import { EodSubmittedReport } from "./EodSubmittedReport";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery } from "./types";
 
@@ -180,8 +181,19 @@ export default function EodPreview() {
   const waitingPreview = pendingPreview && !draftedAnyway;
   const loomPreview = params.has("loom");
   const loadingPreview = params.has("loading");
+  const recordedStatus = params.has("approved") ? "approved" : params.has("submitted") ? "submitted" : null;
+  const [recordedOpen, setRecordedOpen] = useState(Boolean(recordedStatus));
   const [markdown, setMarkdown] = useState(draft);
   const [submitted, setSubmitted] = useState(false);
+  if (recordedStatus && recordedOpen) return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 14</p><h1>EOD review</h1></div></header><main className="page">
+    <EodSubmittedReport status={recordedStatus} markdown={params.has("no-content") ? null : markdown} date="2026-09-14" onAllEods={() => setRecordedOpen(false)} onToday={() => setRecordedOpen(false)} />
+  </main></section></div>;
+  if (recordedStatus) return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 14</p><h1>EOD review</h1></div></header><main className="page">
+    <section className="panel eod-start">
+      <header className="eod-start-head"><FileCheck2 size={20} /><div><h2>Your EODs</h2><p>Read your submitted report or finish an earlier day’s EOD.</p></div></header>
+      <div className="eod-start-earlier"><ul><li><button type="button" onClick={() => setRecordedOpen(true)}><span className="eod-start-earlier-main"><strong>September 14</strong><small>Read submitted report</small></span><span className={`eod-pill ${recordedStatus}`}>{recordedStatus === "approved" ? "Approved" : "Submitted"}</span></button></li></ul></div>
+    </section>
+  </main></section></div>;
   if (loadingPreview) return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
     <EodLoadingState title="Preparing Worktivity analysis…" detail="Checking today’s screenshots." progress="23 of 117 frames analyzed — 40 still analyzing." onDraftAnyway={() => undefined} />
   </main></section></div>;

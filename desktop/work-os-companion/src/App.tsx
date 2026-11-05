@@ -73,6 +73,7 @@ import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "
 import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
+import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
 import { BootOverlay, useBootRise } from "./BootHandoff";
 import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
@@ -3544,6 +3545,7 @@ export default function App() {
   useListShift(dashboardGridRef);
   const openTasks = visibleTodayTasks.filter((task) => !task.completed);
   const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
+  const reviewSubmittedStatus = submittedEodStatus(reviewDay?.report);
   /* Today's report opens in the final ten minutes before its scheduled
      clock-out. The server and the web use the same predicate; this prompt
      explains the wait before the employee reaches for the button. */
@@ -5469,9 +5471,16 @@ export default function App() {
         onRetryGoalSave={() => setPlanDirty(true)}
       />}
       {view === "review" && <main className="page">
-        {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
+        {eodDate && !eodSubmitted && !reviewSubmittedStatus && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
           : eodDate && reportDayQuery.error ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={() => void reportDayQuery.refetch()}>Try again</button></div></section>
+            : reviewSubmittedStatus && !eodSubmitted && !eodLanding ? <EodSubmittedReport
+                status={reviewSubmittedStatus}
+                markdown={reviewDay?.report?.markdown}
+                date={reviewDay?.shiftDate ?? ""}
+                onAllEods={() => { setEodDate(null); setEodLanding(true); }}
+                onToday={() => { setEodDate(null); setView("day"); }}
+              />
             : eodGate && !eodSubmitted ? <section className="panel"><Empty
                 title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
                 body={eodGate.detail}
@@ -5519,10 +5528,14 @@ export default function App() {
                         <header className="eod-start-head">
                           <FileCheck2 size={20} />
                           <div>
-                            <h2>{eodDate ? `Draft the EOD for ${formatWorkOsDate(eodDate)}` : "Prepare today’s EOD"}</h2>
-                            <p>{eodDate ? "Build the report from that day’s recorded work, review every line, then submit it. Drafting does not submit anything." : "Build the report from today’s recorded work, review every line, then submit it. Drafting does not submit anything."}</p>
+                            <h2>{reviewSubmittedStatus ? "Your EODs" : eodDate ? `Draft the EOD for ${formatWorkOsDate(eodDate)}` : "Prepare today’s EOD"}</h2>
+                            <p>{reviewSubmittedStatus ? "Read your submitted report or finish an earlier day’s EOD." : eodDate ? "Build the report from that day’s recorded work, review every line, then submit it. Drafting does not submit anything." : "Build the report from today’s recorded work, review every line, then submit it. Drafting does not submit anything."}</p>
                           </div>
                         </header>
+                        {reviewSubmittedStatus ? <div className="eod-start-earlier"><ul><li><button type="button" onClick={() => setEodLanding(false)}>
+                          <span className="eod-start-earlier-main"><strong>{formatWorkOsDate(reviewDay?.shiftDate)}</strong><small>Read submitted report</small></span>
+                          <span className={`eod-pill ${reviewSubmittedStatus}`}>{reviewSubmittedStatus === "approved" ? "Approved" : "Submitted"}</span><ChevronRight size={14} aria-hidden="true" />
+                        </button></li></ul></div> : null}
                         {!eodDate && outstandingDays.length > 0 ? <section className="eod-start-earlier" aria-label="Earlier days without a submitted EOD">
                           <header><strong>Earlier days</strong><small>{outstandingDays.length} still need an EOD</small></header>
                           <ul>{outstandingDays.slice(0, 5).map((day) => {
@@ -5535,10 +5548,10 @@ export default function App() {
                           })}</ul>
                           {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setNotificationsOpen(true)}>Show all {outstandingDays.length} days</button> : null}
                         </section> : null}
-                        {reviewShiftOpen ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companion} onClockOut={() => setView("day")} /> : null}
+                        {reviewShiftOpen && !reviewSubmittedStatus ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companion} onClockOut={() => setView("day")} /> : null}
                         <div className="eod-start-actions">
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
-                          {reviewShiftOpen ? null
+                          {reviewShiftOpen || reviewSubmittedStatus ? null
                             : reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
                               ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
                               : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Draft today’s EOD"}</button>}
