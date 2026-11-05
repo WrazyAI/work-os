@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Switch between your own notifications and the workspace's notifications at the top of the panel.
+
 ## 0.5.23 — 2026-11-05
 
 - A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.

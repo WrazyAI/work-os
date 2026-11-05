@@ -112,6 +112,28 @@ describe("NotificationsBell audiences", () => {
     expect(markup).toContain("This is what Otto remembers about you so far");
   });
 
+  it("puts the audience switcher in the header and the summary beneath it", () => {
+    const markup = render({ admin, defaultTab: "admin", open: true });
+    const headerStart = markup.indexOf('class="notifications-head has-tabs"');
+    const tablist = markup.indexOf('role="tablist"');
+    const headerEnd = markup.indexOf("</header>");
+    const summary = markup.indexOf('class="notifications-summary"');
+    expect(markup).not.toContain("<strong>Notifications</strong>");
+    expect(headerStart).toBeGreaterThan(-1);
+    expect(tablist).toBeGreaterThan(headerStart);
+    expect(tablist).toBeLessThan(headerEnd);
+    expect(summary).toBeGreaterThan(headerEnd);
+    expect(markup).toContain("2 EOD reports to review");
+  });
+
+  it("keeps the summary in the header when there is no audience switcher", () => {
+    const markup = render({ memoryCandidates: 2, open: true });
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain("<strong>Notifications</strong>");
+    expect(markup).toContain('class="notifications-headline"');
+    expect(markup).toContain("2 memories to review");
+  });
+
   it("opens on the admin tab when the administration workspace is current", () => {
     const markup = render({ admin, defaultTab: "admin", open: true });
     expect(markup).toContain('role="tablist"');

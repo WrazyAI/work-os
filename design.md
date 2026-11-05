@@ -1397,16 +1397,20 @@ lists what needs the employee right now, and the badge counts all of it —
 memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
 days — in the amber recoverable-attention tone.
 
-- **Audiences** — an administrator's bell carries two tabs under its title:
+- **Audiences** — an administrator's bell carries two tabs in the panel
+  header, in the place the visible `Notifications` title used to occupy:
   Employee (the signed-in account's own reminders, unchanged) and Admin (the
-  live workspace record). The tab that belongs to the current workspace is
-  selected whenever the panel opens, so opening the bell in Administration
-  never lands on a personal reminder first; closing and reopening resets the
-  tab to the workspace even if the last visit ended on the other audience.
-  Each tab names its own count, and the closed bell's badge names the audience
-  its next open will show. The tablist is reachable through its selected tab;
-  ←/→ move and activate, Home/End jump to the ends. A non-administrator sees
-  the single Employee list and no tablist.
+  live workspace record). The active tab's summary sits in the strip beneath
+  the header, where the switcher used to sit. The visible title is removed;
+  the dialog keeps `Notifications` as its accessible name. The tab that
+  belongs to the current workspace is selected whenever the panel opens, so
+  opening the bell in Administration never lands on a personal reminder first;
+  closing and reopening resets the tab to the workspace even if the last visit
+  ended on the other audience. Each tab names its own count, and the closed
+  bell's badge names the audience its next open will show. The tablist is
+  reachable through its selected tab; ←/→ move and activate, Home/End jump to
+  the ends. A non-administrator sees the single Employee list and no tablist,
+  with the summary in the header instead.
 - **Admin rows** — the Admin tab reads the same live overview as the Overview
   page. `Needs your decision` carries every attention record the record
   reports — EOD reports awaiting review, teammates with unsubmitted EOD days,

@@ -379,45 +379,42 @@ export function NotificationsBell({ memoryCandidates, recap, overdueTasks, days,
         style={style}
         onKeyDown={moveRowFocus}
       >
-        <header className="notifications-head">
-          <div>
-            <strong>Notifications</strong>
-            <small>{headline}</small>
-          </div>
+        <header className={`notifications-head${showTabs ? " has-tabs" : ""}`}>
+          {showTabs ? <div className="notifications-tabs" role="tablist" aria-label="Notification audience" onKeyDown={moveTabFocus}>
+            <button
+              type="button"
+              role="tab"
+              id={`${baseId}-employee-tab`}
+              data-tab="employee"
+              className="notifications-tab"
+              aria-selected={activeTab === "employee"}
+              aria-controls={panelId}
+              tabIndex={activeTab === "employee" ? 0 : -1}
+              onClick={() => setTab("employee")}
+            >
+              <UserRound size={13} aria-hidden="true" />
+              <span>Employee</span>
+              {employeeCount > 0 && <em className="notifications-tab-count">{employeeCount > 99 ? "99+" : employeeCount}</em>}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`${baseId}-admin-tab`}
+              data-tab="admin"
+              className="notifications-tab"
+              aria-selected={activeTab === "admin"}
+              aria-controls={panelId}
+              tabIndex={activeTab === "admin" ? 0 : -1}
+              onClick={() => setTab("admin")}
+            >
+              <LayoutDashboard size={13} aria-hidden="true" />
+              <span>Admin</span>
+              {adminCount > 0 && <em className="notifications-tab-count">{adminCount > 99 ? "99+" : adminCount}</em>}
+            </button>
+          </div> : <p className="notifications-headline">{headline}</p>}
           <button type="button" className="icon notifications-close" aria-label="Close notifications" onClick={onClose}><X size={15} /></button>
         </header>
-        {showTabs && <div className="notifications-tabs" role="tablist" aria-label="Notification audience" onKeyDown={moveTabFocus}>
-          <button
-            type="button"
-            role="tab"
-            id={`${baseId}-employee-tab`}
-            data-tab="employee"
-            className="notifications-tab"
-            aria-selected={activeTab === "employee"}
-            aria-controls={panelId}
-            tabIndex={activeTab === "employee" ? 0 : -1}
-            onClick={() => setTab("employee")}
-          >
-            <UserRound size={13} aria-hidden="true" />
-            <span>Employee</span>
-            {employeeCount > 0 && <em className="notifications-tab-count">{employeeCount > 99 ? "99+" : employeeCount}</em>}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id={`${baseId}-admin-tab`}
-            data-tab="admin"
-            className="notifications-tab"
-            aria-selected={activeTab === "admin"}
-            aria-controls={panelId}
-            tabIndex={activeTab === "admin" ? 0 : -1}
-            onClick={() => setTab("admin")}
-          >
-            <LayoutDashboard size={13} aria-hidden="true" />
-            <span>Admin</span>
-            {adminCount > 0 && <em className="notifications-tab-count">{adminCount > 99 ? "99+" : adminCount}</em>}
-          </button>
-        </div>}
+        {showTabs && <p className="notifications-summary" aria-live="polite">{headline}</p>}
         <div
           className="notifications-body"
           ref={bodyRef}
