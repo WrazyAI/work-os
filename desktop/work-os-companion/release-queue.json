@@ -132,6 +132,30 @@
       "type": "feature",
       "summary": "The floating companion's elapsed-time pill now fills as the shift progresses.",
       "verification": "Ledger 1fdb52e0-3dc8-42c7-8657-996464ba3f45: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1702 passed; focused bell/model/asset tests 74 passed; mascot sync browser 172 checks passed; typecheck and production build passed; rendered 0/50/100% pill states with bold elapsed text, a pale-to-deep lemon-green fill, reduced motion, and no clipping; notification header checked at 1440/1024/930/720/560/390/320 with no subtitle and no panel overflow; TestSprite 8ada0e0f passed 5/5 and 9a3a990a passed 9/9."
+    },
+    {
+      "id": "admin-notification-header-switcher",
+      "type": "fix",
+      "summary": "The notifications panel switches between personal reminders and workspace activity in its header.",
+      "verification": "fdd886e7; TestSprite ec7f241c 9/9 in run e03efdac-4e81-40fd-8f55-1983f1f8b6da; Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1702 passed."
+    },
+    {
+      "id": "admin-workspace-isolation",
+      "type": "fix",
+      "summary": "Administration stops loading hidden employee screens while keeping personal reminders and settings available.",
+      "verification": "Branch codex/work-os-performance: real Chromium App lifecycle checks 5/5; Admin cold start hidden page reads 8 to 0; full suite 1269/0/11; companion 1702/0."
+    },
+    {
+      "id": "bounded-employee-day-and-insights",
+      "type": "fix",
+      "summary": "Employee day and Today's weekly record use bounded summaries, so large backlogs no longer load whole screens.",
+      "verification": "Branch codex/work-os-performance: compact day 4,699,379 to 15,217 bytes; Today summary 8 queries/28 rows vs full 24/5,230; >2,500 eligible task and pagination regressions pass."
+    },
+    {
+      "id": "admin-overview-readiness-performance",
+      "type": "fix",
+      "summary": "Admin Overview uses less database work and refreshes setup checks separately from the minute-by-minute dashboard.",
+      "verification": "Branch codex/work-os-performance: Work OS Overview 45 to 17 queries; deployed Agent OS version 20 queries with recap/exception measures; readiness 2,507 to 5 rows; exact aggregate tests pass."
     }
   ],
   "emergency": null

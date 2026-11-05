@@ -23,10 +23,14 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.24 — 2026-11-05
 
 - Switch between your own notifications and the workspace's notifications at the top of the panel, without a repeated summary line.
 - The elapsed-time pill under Otto now fills as your shift progresses, so you can see how much of the day has passed at a glance.
+- Administration no longer loads hidden employee screens, while your reminders and settings stay available.
+- The task backlog loads as you need it, and recap alerts no longer reload history you already opened.
+- Employee day and the weekly record now load a smaller summary, so large backlogs stay out of the way.
+- Admin Overview does less database work, and setup checks refresh separately from the live dashboard.
 - Work OS now does less background work while you use Administration or leave the companion open, so switching views stays lighter.
 
 ## 0.5.23 — 2026-11-05

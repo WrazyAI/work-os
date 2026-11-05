@@ -38,7 +38,7 @@ function validateQueue(queue) {
   const summaries = new Set();
   for (const entry of queue.updates) {
     if (!entry || !text(entry.id, 100) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id)
-      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification)) {
+      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification, 800)) {
       throw new Error("Each update needs a stable ID, feature/fix type, outcome summary and verification");
     }
     const summary = entry.summary.trim().toLowerCase();
