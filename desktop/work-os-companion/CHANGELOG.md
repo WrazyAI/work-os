@@ -25,8 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
-## Unreleased
-
+- Switch between your own notifications and the workspace's notifications at the top of the panel.
 - Work OS now does less background work while you use Administration or leave the companion open, so switching views stays lighter.
 
 ## 0.5.23 — 2026-11-05
