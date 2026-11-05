@@ -13,7 +13,8 @@
   ported by content, merged and deployed through Agent OS `77a46c87c` (see
   "Backend deployment" below). The Work OS web/desktop repository was not
   merged or released, and no desktop installer/version bump was made.
-- No Work OS PR merge, desktop release, or installer publication was performed.
+- Work OS PR #149 was merged as `72a5e2b572727e828db77b079e9c580ab12c5746`.
+  No desktop installer release or publication was performed.
 
 The tested implementation commit is recorded in the section
 "Commit and tested-source identity" at the end of this document. The worktree
@@ -290,8 +291,10 @@ local Vite production preview transfers, not native Tauri memory or CPU.
   ignored, and stop releases the listener.
 
 Native Tauri `cargo test --lib` could not complete in this Linux environment:
-`libsoup-3.0` and `javascriptcoregtk-4.1` development packages are absent. No
-claim is made that the packaged Windows/macOS app was built or profiled here.
+`libsoup-3.0` and `javascriptcoregtk-4.1` development packages are absent.
+The macOS packaged build workflow passed on the merged commit; no Windows
+package was built because the five-outcome release gate skipped it. No native
+CPU/memory profile was produced.
 
 ## Finding dispositions
 
@@ -384,19 +387,19 @@ Observed results in this environment:
   routes compiled. Default `npm run build` (Turbopack) is blocked by the
   environment's Next 16.2.6 installation requesting the nonexistent
   `@vercel/turbopack/postcss`; the same failure occurs on the untouched baseline.
-- `npm run work-os:test` full run: **1,244 passed / 0 failed / 11 skipped**
-  (1,255 tests; exit 0). An earlier aggregate run under concurrent local agent
-  load had 12 time-sensitive failures (11 preview-expiry assertions and one
-  stale source-shape assertion); the preview file passes alone and the final
-  full run above is green. The final Work OS aggregate run completed in 435
-  seconds (1,255 tests); the separate 27-test release-gate prework also passed.
-- Companion release gate: `npm run companion:release:status` fails on the
-  untouched baseline with `Release queue is append-only; published outcome
-  admin-overview-measures-open-records is immutable`. The published 0.5.20
-  snapshot references an outcome absent from the checked-out queue. This is a
-  pre-existing repository/history inconsistency, not caused by this branch.
-  The new admin-observability queue entry is append-only and does not bump a
-  version or dispatch a release.
+- `npm run work-os:test` after merging current `main`: **1,269 passed / 0
+  failed / 11 skipped** (1,280 tests; exit 0). The pre-merge branch run was
+  1,244 passed; the difference is current-main tests merged into the branch.
+- Companion Vitest after merging current `main`: **1,702 passed / 0 failed**
+  (189 files).
+- The mascot browser CI check passed on the merged commit after updating its
+  stale compact-dashboard selectors and pinning the available Playwright
+  version.
+- Companion release gate: after 0.5.23, the only pending outcome is
+  `background-work-lightening`; the five-outcome gate therefore skipped paid
+  packaging. The CI release-policy check passed, but no version bump, emergency
+  exception, tag, or release was created. This is the remaining release
+  blocker.
 
 ## Backend deployment
 
@@ -431,20 +434,30 @@ commit; do not roll back only one route or client.
 
 ## Remaining risks and native verification
 
-- Cross-window ownership needs packaged Windows/macOS verification with real
-  window visibility, sleep/resume, avatar destruction/recreation, and system
-  notifications. Rust code compiles only as a standalone core test here; Tauri
-  native build is blocked by missing Linux WebKit/GTK dev libraries.
+- The native macOS packaged build workflow passed on merged commit `72a5e2b5`
+  (run 42092471319). It verifies packaged startup and native layout, not live
+  cross-window ownership handoff. Windows packaging was correctly skipped by
+  the five-outcome gate; the Linux environment cannot build a native Tauri app
+  because WebKit/GTK development libraries are absent.
+- Cross-window ownership still needs an interactive packaged Windows/macOS
+  run covering real window visibility, sleep/resume, avatar destruction and
+  recreation, and system notifications. Rust core tests pass, but they are not
+  a substitute for that run.
 - PGlite proves SQL semantics and row/byte counts, not PostgreSQL query plans,
   pool wait, provider timing, or production CPU/memory. No native release
   profile was produced.
-- TestSprite was not run for this backend/desktop performance change; the
-  existing browser checks are synthetic transport fixtures. If the release gate
-  requires it, run the stored Companion plan against `https://app.wrazyos.com`
-  now that the Agent OS backend is deployed.
-- The companion release cadence remains below five pending outcomes; no version
-  files were changed. The pre-existing release-gate history failure must be
-  resolved by the release owner before any future release.
+- TestSprite acceptance passed: stored Companion test
+  `ec7f241c-4360-4bd8-90e4-d52c4604b997` passed **9/9** in run
+  `e03efdac-4e81-40fd-8f55-1983f1f8b6da` against the local packaged admin
+  preview on port 4184. The first live-target attempt was blocked because the
+  stored plan pins `127.0.0.1:4184`; the retry used TestSprite's local tunnel.
+- The companion release gate blocks packaging: after 0.5.23 only
+  `background-work-lightening` is pending, below the mandatory five distinct
+  outcomes. No version bump or emergency exception was fabricated, so no
+  desktop release was published. The queue entry remains for the next batch.
+- The mascot browser CI check was updated for the compact dashboard's current
+  DOM and the current available Playwright version; it passes on the merged
+  commit.
 
 ## Commit and tested-source identity
 
@@ -452,6 +465,9 @@ commit; do not roll back only one route or client.
   (`fix(work-os): align summary and historical bounds`). Earlier implementation
   commits were `6b385ab2bd69586334c8a8667acd65192fbd54d7` and review-hardening
   `51de0bddfce6a1142c2ca5646cd814dffb4add84`.
+- Merge commit on `main`: `72a5e2b572727e828db77b079e9c580ab12c5746`
+  (PR #149). CI browser, companion, verify, CodeQL, and release-policy checks
+  passed before merge.
 - Branch: `codex/work-os-performance`, based on
   `ecb61fdc7fa996a2474b28796bbef95893849f39`.
 - Every final check below was run in
