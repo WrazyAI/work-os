@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.
+
 ## 0.5.23 — 2026-11-05
 
 - A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.

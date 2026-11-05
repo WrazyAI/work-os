@@ -120,6 +120,12 @@
       "type": "feature",
       "summary": "The notifications bell switches between personal reminders and the workspace's decision queue, pulse, and recent team activity.",
       "verification": "Ledger 08faace9-600a-4699-9d63-eda9aabba66b: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1685 passed; focused bell/model tests 35 passed; typecheck and production build passed; rendered 1440/1024/930/720/560/390 admin, employee, empty, loading, and error states plus tab reset, keyboard tabs/rows, Escape, scroll reset, decision and activity drill-downs, and no panel overflow; TestSprite ec7f241c passed 10/10."
+    },
+    {
+      "id": "floating-otto-view-switch",
+      "type": "feature",
+      "summary": "Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.",
+      "verification": "Companion suite 1794 passed/198 files; production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; 400/420/390 checks for menu, draft retention, failed/loading/unmapped, no API calls/errors; in-app 480/390; CodeRabbit fixed."
     }
   ],
   "emergency": null
