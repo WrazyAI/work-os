@@ -199,7 +199,9 @@ export function useTaskBacklogQuery(options: { enabled: boolean; sortDate?: stri
  * rows enter only the first page; removed rows do not reset the reader. */
 export function updateTaskBacklogCaches(client: QueryClient, update: (value: TaskBacklog | undefined) => TaskBacklog | undefined) {
   client.setQueriesData<InfiniteData<TaskBacklog>>({ queryKey: workOsKeys.taskBacklog() }, (current) => {
-    if (!current?.pages.length) return current;
+    // A cache restored from the previous build can hold the old plain object
+    // at this key; never throw inside an optimistic task update because of it.
+    if (!current || !Array.isArray(current.pages) || !current.pages.length) return current;
     const flat = { tasks: current.pages.flatMap((page) => page.tasks), counts: current.pages[0].counts };
     const next = update(flat);
     if (!next) return current;
@@ -243,7 +245,9 @@ export function dashboardInsightsUrl(through: string) {
 
 export function useDashboardInsightsQuery(options: { enabled: boolean; through: string }) {
   return useQuery({
-    queryKey: ["work-os", "dashboard-insights", options.through],
+    // Nest under the full insights prefix so task writes that invalidate
+    // ["work-os","insights"] mark the weekly widget stale as well.
+    queryKey: [...workOsKeys.insights("7d", options.through).slice(0, 2), "dashboard", options.through],
     enabled: options.enabled && !!options.through,
     staleTime: INSIGHTS_STALE_MS,
     queryFn: ({ signal }) => apiRequest<DashboardWeekData>(dashboardInsightsUrl(options.through), { signal }),

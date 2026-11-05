@@ -6,7 +6,7 @@ import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
-import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule, type WorkOsShiftWindow } from "@/modules/work-os/companion";
+import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, promptInstant, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-local-config";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
@@ -250,16 +250,11 @@ export function workOsCadenceFor(access: WorkOsAccess): ResolvedWorkOsCadence {
   );
 }
 
-/** Optional request-scoped shift inputs. Day reads already resolved the same
- * employee/date/schedule context; reusing it here avoids duplicate reads while
- * preserving every session/plan transition in this function. */
-export type WorkdayContext = { shiftDate: string; shift: WorkOsShiftWindow | null };
-
-export async function getWorkday(access: WorkOsAccess, at = new Date(), knownContext?: WorkdayContext | null) {
+export async function getWorkday(access: WorkOsAccess, at = new Date()) {
   const cadence = workOsCadenceFor(access);
   const loadedSession = await activeSession(access);
   const session = loadedSession ? await transitionToEodIfDue(access, loadedSession, at) : null;
-  const context = knownContext ?? await localWorkDate(access, at);
+  const context = await localWorkDate(access, at);
   const shift = context.shift;
   const plan = session
     ? await ensureDailyPlan(access, session)

@@ -30,7 +30,7 @@ export function useDayMonitor(input: {
       const scope = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
       if (stopped) return;
       current = createDayMonitorClient({ scope, window: input.window,
-        onOwner: (value) => { if (!stopped) setOwns(value); },
+        onOwner: (value) => { if (!stopped) { setOwns(value); if (value) setSharedDay(null); } },
         onSnapshot: (day) => { if (!stopped) { setSharedDay(day); latest.current.onSnapshot(day); } },
         transport: {
           claim: async () => invoke<boolean>("claim_day_monitor", { scope, activePage: latest.current.activePage, visible: await getCurrentWindow().isVisible().catch(() => false) }),

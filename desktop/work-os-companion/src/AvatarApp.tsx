@@ -1197,6 +1197,14 @@ export default function AvatarApp(): React.ReactElement {
     return () => clearInterval(poll);
   }, [avatarFixture, loadDay]);
 
+  // The monitor client is created asynchronously after the saved session is
+  // read. A first load can arrive before ownership exists, so claim completion
+  // retries immediately instead of leaving the avatar on Loading today… for a
+  // full poll interval.
+  useEffect(() => {
+    if (dayMonitor.owns && !avatarFixture) void loadDay(true);
+  }, [avatarFixture, dayMonitor.owns, loadDay]);
+
   // Worktivity can clock the employee in or out from activity alone. Watch on
   // the shared adaptive cadence, reload only when something actually moved,
   // and tell the main window so every surface converges together.

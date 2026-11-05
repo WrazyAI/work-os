@@ -36,6 +36,19 @@ it("uses host arbitration and passes scoped snapshots between independent client
   expect(listeners.size).toBe(0);
 });
 
+it("surfaces an unavailable host on the first claim so the caller can fall back", async () => {
+  const client = createDayMonitorClient({
+    scope: "scope", window: "main", onOwner: () => undefined, onSnapshot: () => undefined,
+    transport: {
+      claim: async () => { throw new Error("monitor command unavailable"); },
+      read: async () => null, publish: async () => false, release: async () => undefined,
+      listen: async () => () => undefined,
+    },
+  });
+  await expect(client.start()).rejects.toThrow("monitor command unavailable");
+  await client.stop();
+});
+
 it("never applies late snapshots after a scope retires", async () => {
   let resolve!: (value: string) => void;
   const onSnapshot = vi.fn();

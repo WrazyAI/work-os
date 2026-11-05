@@ -70,9 +70,10 @@ export async function getWorkOsDay(
   ]);
   if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
   if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);
-  // Current-day reads share the shift inputs already resolved above. A
-  // requested historical date must not change the live workday/prompt context.
-  const workday = await getWorkday(access, at, options.localDate ? null : { shiftDate, shift });
+  // Keep the workday's own timezone/schedule/break resolution. The day view's
+  // schedule inputs serve task attribution, but must not replace the live
+  // workday context that drives plan creation and break-aware prompts.
+  const workday = await getWorkday(access, at);
   const actor = { role: access.role, personId: access.personId };
   const taskRows = withTaskCapabilities(workspace.tasks, actor, shiftDate);
   const historyRows = withTaskCapabilities(taskHistory ?? [], actor, shiftDate);

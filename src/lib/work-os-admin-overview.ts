@@ -223,20 +223,20 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       count(*) filter (where completed = false and status not in ('archived','deleted') and due_date < $2::date)::int as overdue,
       count(*) filter (where created_at >= $2::date::timestamp at time zone 'UTC')::int as created,
       max(updated_at) as updated_at from work_tasks where organization_id = $1`, [organizationId, date]),
-    getPool().query(`select shift_date, person_id, count(*)::int as total,
+    getPool().query(`select shift_date::text as shift_date, person_id, count(*)::int as total,
       count(*) filter (where substantive = true)::int as substantive,
       (array_agg(coalesce(occurred_at, created_at) order by occurred_at desc))[1] as last_at,
       (array_agg(coalesce(nullif(update_kind, ''), kind) order by occurred_at desc))[1] as last_kind
       from work_check_ins where organization_id = $1 and shift_date between $2::date and $3::date
       group by shift_date, person_id`, [organizationId, addDaysIso(date, -13), date]),
-    getPool().query(`select e.evidence_date, e.person_id, count(*)::int as total,
+    getPool().query(`select e.evidence_date::text as evidence_date, e.person_id, count(*)::int as total,
       count(*) filter (where e.source = 'worktivity')::int as activity,
       count(*) filter (where exists (select 1 from work_evidence_events event
         where event.id = e.evidence_event_id and event.organization_id = e.organization_id
           and event.correction_status = 'disputed'))::int as disputed
       from work_evidence e where e.organization_id = $1 and e.evidence_date between $2::date and $3::date
       group by e.evidence_date, e.person_id`, [organizationId, addDaysIso(date, -13), date]),
-    getPool().query(`select local_date, person_id, count(*)::int as total from work_task_day_events
+    getPool().query(`select local_date::text as local_date, person_id, count(*)::int as total from work_task_day_events
       where organization_id = $1 and event_type = 'completed' and local_date between $2::date and $3::date
       group by local_date, person_id`, [organizationId, addDaysIso(date, -13), date]),
     getPool().query(`select

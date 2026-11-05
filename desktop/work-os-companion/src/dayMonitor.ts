@@ -26,9 +26,9 @@ export function createDayMonitorClient(input: {
   let off: (() => void) | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   let owns = false;
-  const isOwner = async () => {
+  const isOwner = async (strict = false) => {
     if (stopped) return false;
-    const next = await input.transport.claim().catch(() => false);
+    const next = strict ? await input.transport.claim() : await input.transport.claim().catch(() => false);
     if (stopped) {
       // A late claim must not leave the host lease pointing at a window that
       // has already retired its scope.
@@ -39,6 +39,9 @@ export function createDayMonitorClient(input: {
     return next;
   };
   const read = async () => {
+    // The owner already holds the freshest day; re-reading its own snapshot
+    // only re-renders and re-publishes.
+    if (owns) return;
     const snapshot = await input.transport.read().catch(() => null);
     if (stopped || !snapshot) return;
     try { input.onSnapshot(JSON.parse(snapshot)); } catch { /* next refresh recovers */ }
@@ -49,7 +52,7 @@ export function createDayMonitorClient(input: {
       const unsubscribe = await input.transport.listen((scope) => { if (scope === input.scope) void read(); });
       if (stopped) { unsubscribe(); return; }
       off = unsubscribe;
-      await isOwner();
+      await isOwner(true);
       await read();
       if (!stopped) timer = setInterval(() => { void isOwner().then(() => read()); }, 10_000);
     },

@@ -22,6 +22,15 @@ it("loads one backlog page, leaving further work behind an explicit cursor", asy
   expect(first.nextCursor).toBe("50");
 });
 
+it("ignores a legacy plain backlog object restored from the persisted cache", () => {
+  const client = createWorkOsQueryClient();
+  const key = [...workOsKeys.taskBacklog(), "2026-11-04"];
+  client.setQueryData(key, { tasks: [{ id: "legacy" }], counts: null });
+  expect(() => updateTaskBacklogCaches(client, (current) => current)).not.toThrow();
+  expect(client.getQueryData<any>(key)).toEqual({ tasks: [{ id: "legacy" }], counts: null });
+  client.clear();
+});
+
 it("keeps loaded page boundaries when an optimistic task enters or leaves", () => {
   const client = createWorkOsQueryClient();
   const key = [...workOsKeys.taskBacklog(), "2026-11-04"];
