@@ -7038,7 +7038,7 @@ button:not(:disabled):active {
 }
 
 .notifications-tab:focus-visible {
-  outline: 2px solid var(--signal-strong, #7cc936);
+  outline: 2px solid var(--conversation-focus, #4a7d22);
   outline-offset: 1px;
 }
 
@@ -7168,7 +7168,7 @@ button:not(:disabled):active {
 }
 
 .notifications-activity-time {
-  color: #8b9586;
+  color: #5a6754;
   font-size: 9.5px;
   white-space: nowrap;
 }
@@ -7195,7 +7195,7 @@ button:not(:disabled):active {
 
 .notifications-admin-foot button:focus-visible {
   border-radius: 4px;
-  outline: 2px solid var(--signal-strong, #7cc936);
+  outline: 2px solid var(--conversation-focus, #4a7d22);
   outline-offset: 2px;
 }
 
