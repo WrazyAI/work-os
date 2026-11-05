@@ -1304,7 +1304,10 @@ that scrolls away:
   `OK`, Escape, or a press outside the card dismisses it.
 - The EOD keeps the page. The submitted state embeds the same animation where
   the report was, with the outcome copy and `All EODs` at the top-left returning
-  to the EOD list; it stays until the employee leaves it.
+  to the EOD list; it stays until the employee leaves it. Reopening a submitted
+  or approved report later shows the same confirmation above the read-only day
+  edition, with `All EODs` and `Return to today`; the report is never presented
+  as an editable draft again.
 - The animation plays exactly once and parks on the completed check. The source
   art fades its check out over the final frames, so the completed state is the
   held frame — never the faded tail. Under reduced motion the completed frame

@@ -156,6 +156,12 @@
       "type": "fix",
       "summary": "Admin Overview uses less database work and refreshes setup checks separately from the minute-by-minute dashboard.",
       "verification": "Branch codex/work-os-performance: Work OS Overview 45 to 17 queries; deployed Agent OS version 20 queries with recap/exception measures; readiness 2,507 to 5 rows; exact aggregate tests pass."
+    },
+    {
+      "id": "eod-submitted-read-only",
+      "type": "fix",
+      "summary": "Opening a submitted or approved EOD shows the report read-only instead of asking you to prepare it again.",
+      "verification": "Worktree codex/eod-review-submitted-state: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1717 passed; focused EOD/composer/document/asset tests 59 passed; typecheck and production build passed; Playwright submitted/approved/draft/rejected/no-report at 1440/1024/720/390 with keyboard, reduced motion, and no overflow; TestSprite 0f5741c7 passed."
     }
   ],
   "emergency": null

@@ -7242,6 +7242,16 @@ button:not(:disabled):active {
   color: #a03a30;
 }
 
+.eod-pill.submitted {
+  background: #edf3e6;
+  color: #49613b;
+}
+
+.eod-pill.approved {
+  background: #e6f5d9;
+  color: #3f6b1c;
+}
+
 .notifications-empty,
 .notifications-notice {
   display: flex;
