@@ -58,6 +58,14 @@
 .otto-view-switch-chevron { transition: transform 160ms cubic-bezier(.2,.8,.2,1); }
 
 .otto-view-menu {
+  --conversation-paper: #fafaf6;
+  --conversation-surface: #f5f6f1;
+  --conversation-ink: #182018;
+  --conversation-muted: #687267;
+  --conversation-line: #d9ded5;
+  --conversation-focus: #4a7d22;
+  --conversation-signal-deep: #5e9d27;
+  --color-danger-soft: #f9e5e1;
   position: fixed;
   z-index: 6200;
   display: grid;

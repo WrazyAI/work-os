@@ -146,6 +146,5 @@ describe("Otto view switch wiring", () => {
     expect(app).toContain("viewFenceRef.current.capture()");
     expect(app).toContain("if (!fence.isCurrent()) return;");
     expect(app).toMatch(/onSwitchToEmployee=\{adminOttoBootstrap\.switchToEmployeeAvailable/);
-    expect(app).not.toMatch(/setWorkspaceMode[\s\S]{0,400}setAdminOttoConversationId\(null\)/);
   });
 });

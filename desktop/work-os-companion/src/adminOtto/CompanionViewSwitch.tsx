@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from "react";
 import { Check, ChevronDown, RotateCcw } from "lucide-react";
 import { createPortal } from "react-dom";
-import { MASCOT } from "../mascot";
+import { MASCOT, type MascotPose, type MascotTone } from "../mascot";
 import { MascotMark } from "../chat/MascotMark";
 import type { OttoMode } from "./mode";
 import { placeViewPopover } from "./viewPopover";
@@ -19,6 +19,8 @@ export type CompanionViewSwitchProps = {
   onSwitch: (mode: OttoMode) => void;
   onRetry?: () => void;
   className?: string;
+  pose?: MascotPose;
+  tone?: MascotTone;
 };
 
 type MenuProps = {
@@ -175,7 +177,7 @@ export function CompanionViewMenu({ open, ...props }: MenuProps): ReactElement |
 
 export function CompanionViewSwitch({
   mode, employeeAvailable, adminAvailable, employeeReason, adminReason,
-  switchable = true, pending = null, error = null, onSwitch, onRetry, className,
+  switchable = true, pending = null, error = null, onSwitch, onRetry, className, pose, tone,
 }: CompanionViewSwitchProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null);
@@ -198,7 +200,7 @@ export function CompanionViewSwitch({
 
   if (!switchable) {
     return <span className={`otto-view-switch-static${className ? ` ${className}` : ""}`} aria-hidden="true" data-view-switch-static>
-      <MascotMark mode={mode} />
+      <MascotMark mode={mode} pose={pose} tone={tone} />
     </span>;
   }
 
@@ -227,7 +229,7 @@ export function CompanionViewSwitch({
       title={`${MASCOT.name} view: ${current}`}
       onClick={toggle}
     >
-      <span className="otto-view-switch-mark"><MascotMark mode={mode} /></span>
+      <span className="otto-view-switch-mark"><MascotMark mode={mode} pose={pose} tone={tone} /></span>
       <span className="otto-view-switch-live" aria-hidden="true">{current}</span>
       <ChevronDown className="otto-view-switch-chevron" size={12} aria-hidden="true" />
     </button>

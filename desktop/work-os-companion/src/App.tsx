@@ -100,6 +100,7 @@ import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFix
 import { adminKeys, fetchAdminOverview, fetchSession, normalizeAdminOverview, todayIso } from "./admin/data";
 import type { AdminOverview, AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
 import { AdminOttoChat, type AdminArrivalView } from "./adminOtto/AdminOttoChat";
+import { CompanionViewSwitch } from "./adminOtto/CompanionViewSwitch";
 import { AdminOttoSettings } from "./adminOtto/AdminOttoSettings";
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
 import type { ChatRequest, ChatResult, OttoScope, ReviewedRecap } from "../../../src/modules/work-os/admin-otto/contracts";
@@ -5457,6 +5458,15 @@ export default function App() {
             mode: "admin",
           }}
           conversationId={adminOttoConversationId}
+          headerLeading={viewState ? <CompanionViewSwitch
+            mode={viewState.workspace}
+            employeeAvailable={viewState.employeeAvailable}
+            adminAvailable={viewState.adminAvailable}
+            employeeReason={viewState.employeeAvailable ? null : viewState.adminStatus === "loading" ? "Loading your workspace…" : viewState.adminStatus === "failed" ? "Your workspace is unavailable until Administration connects." : "No personal workday is mapped."}
+            adminReason={viewState.adminAvailable ? null : viewState.adminStatus === "loading" ? "Loading Administration…" : "Administration is unavailable."}
+            switchable={viewState.role === "admin"}
+            onSwitch={(next) => { void setWorkspaceMode(next); }}
+          /> : undefined}
           onNewChat={() => {
             setAdminOttoConversationId(null);
             setAdminOttoDraft("");
@@ -5508,7 +5518,7 @@ export default function App() {
             setAdminOttoArrival(null);
           }}
           onConversation={handleAdminOttoConversation}
-          onClose={() => { adminAudio.stop(); setAdminOttoEntryOpen(false); }}
+          onClose={() => { adminChatLifecycleRef.current?.suspend(); adminAudio.stop(); setAdminOttoEntryOpen(false); }}
         />
       ) : null}
       {renderGlobalOverlays()}

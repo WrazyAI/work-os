@@ -597,7 +597,10 @@ export function AdminOttoChat({
         <header className="workos-chat-head admin-otto-head" onMouseDown={onHeaderMouseDown}>
           {headerLeading}
           <span className="admin-otto-head-title" {...(presentationSurface === "floating" ? { "data-tauri-drag-region": true } : {})}>
-            <span className="conversation-pane-title">Otto</span>
+            <span className="admin-otto-head-name">
+              <span className="conversation-pane-title">Otto</span>
+              <span className="admin-otto-mode-chip">Admin</span>
+            </span>
             <span className="admin-otto-head-sub">Administration</span>
           </span>
           <ChatTabs
@@ -645,6 +648,7 @@ export function AdminOttoChat({
                   key={turn.id}
                   role={turn.role}
                   showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
+                  mascotMode="admin"
                   copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
                 >
                   {turn.role === "user" ? <AdminReplyText text={turn.text} className="is-user" /> : (

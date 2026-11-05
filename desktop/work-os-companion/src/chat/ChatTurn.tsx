@@ -5,6 +5,7 @@ import { CopyMessageButton } from "./CopyMessageButton";
 import { MascotMark } from "./MascotMark";
 import { cx } from "./cx";
 import { StreamingText } from "./StreamingText";
+import type { MascotMode } from "../mascotTypes";
 import { formatChatClock, formatChatDividerLabel, formatChatTimeTitle } from "./timeNotes";
 import { turnCopyText, type CopyableTurn } from "./turnCopy";
 
@@ -26,6 +27,7 @@ export function ChatTurn({
   copySource,
   actions,
   timestamp,
+  mascotMode = "employee",
 }: {
   role: ChatTurnRole;
   text?: string;
@@ -50,6 +52,7 @@ export function ChatTurn({
    * hover row; employee bubbles never do (their sent time is the session
    * divider's job), and a missing value shows nothing rather than a guess. */
   timestamp?: string | null;
+  mascotMode?: MascotMode;
 }) {
   const copyText = turnCopyText(copySource ?? { role, text });
   // The hover clock follows the actions, so the row reads `Copy`, any
@@ -88,7 +91,7 @@ export function ChatTurn({
     <div className={cx("chat-turn-shell", variant === "tool" && "is-tool", "chat-enter", className)}>
       <div className={receipt ? "chat-receipt" : "chat-turn assistant"}>
         <span className={cx("chat-turn-mark", !showTurnMark && "is-hidden")} aria-hidden="true">
-          {showTurnMark ? (receipt ? <CheckCircle2 size={14} /> : <MascotMark />) : null}
+          {showTurnMark ? (receipt ? <CheckCircle2 size={14} /> : <MascotMark mode={mascotMode} />) : null}
         </span>
         <div className="chat-turn-body">
           {meta ? <small className="chat-turn-note">{meta}</small> : null}

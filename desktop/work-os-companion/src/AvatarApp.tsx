@@ -19,11 +19,21 @@ import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appear
 import { apiRequest, ApiRequestError } from "./api";
 import { avatarPlaybackAllowed } from "./avatarSpeech";
 import { avatarDayAccess } from "./avatarDay";
-import { claimAdminOttoDelivery, fetchAdminOttoInbox, updateAdminOttoDelivery } from "./adminOtto/api";
+import { claimAdminOttoDelivery, discardAdminOttoChat, fetchAdminOttoInbox, sendAdminOttoChat, transcribeAdminOttoAudio, updateAdminOttoDelivery } from "./adminOtto/api";
 import { OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, adminOttoChangedEvent, parseAdminOttoChangedEvent, parseOttoContextEvent, sameOttoScope, type OttoContextEvent } from "./adminOtto/mode";
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
 import { createAvatarContextController, type AvatarSessionIdentity } from "./adminOtto/avatarContext";
+import { AdminOttoChat, suspendAdminOttoChat } from "./adminOtto/AdminOttoChat";
+import { CompanionViewSwitch } from "./adminOtto/CompanionViewSwitch";
+import { createAdminConversationClient, createAdminConversationEventTransport, type AdminConversationClient } from "./adminOtto/conversationSync";
+import { OTTO_RECORD_NAV_EVENT, OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT, OTTO_VIEW_STATE_EVENT, parseOttoViewResult, parseOttoViewState, resolveViewAvailability, type OttoViewState } from "./adminOtto/viewSwitch";
+import { createViewWorkFence } from "./adminOtto/viewWorkFence";
+import { useAdminOttoRecapAudio } from "./adminOtto/useAdminOttoRecapAudio";
+import { ADMIN_FIXTURE_TRANSPORT, FIXTURE_REVIEWED_RECAP, adminFixtureSpeak, fixtureInboxPage } from "./adminOtto/fixtures";
+import { avatarViewFixtureRequested, createAvatarViewFixture } from "./adminOtto/viewFixture";
 import type { OttoScope } from "../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoMode } from "./adminOtto/mode";
+import type { AdminOttoEntryRecovery } from "./adminOtto/chatEntry";
 import { PLAN_INTERPRET_TIMEOUT_MS } from "../../../src/modules/work-os/plan-timeouts";
 import { personalBootstrapAccess, type PersonalBootstrapRole } from "./adminOtto/personalBootstrap";
 import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
@@ -224,9 +234,33 @@ export default function AvatarApp(): React.ReactElement {
   const nextStepsFixtureMoment = avatarNextStepsFixture ? avatarNextStepsFixtureMomentFor(avatarNextStepsPhase) : null;
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
-  const avatarFixture = avatarFixtureRequested(window.location.search);
+  const avatarAdminViewFixtureRequested = avatarViewFixtureRequested(window.location.search);
+  const avatarViewFixture = useMemo(
+    () => avatarAdminViewFixtureRequested ? createAvatarViewFixture(window.location.search) : null,
+    [avatarAdminViewFixtureRequested],
+  );
+  const avatarFixture = avatarFixtureRequested(window.location.search) || avatarAdminViewFixtureRequested;
   const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapNoVoiceFixture && !avatarRecapReadingFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
+  const [avatarViewState, setAvatarViewState] = useState<OttoViewState | null>(() => avatarViewFixture?.initial ?? null);
+  const avatarViewStateRef = useRef<OttoViewState | null>(avatarViewState);
+  avatarViewStateRef.current = avatarViewState;
+  const [viewPending, setViewPending] = useState<OttoMode | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+  const viewRequestRef = useRef<{ requestId: string; target: OttoMode; scope: OttoScope; epoch: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const lastViewTargetRef = useRef<OttoMode | null>(null);
+  const avatarViewFenceRef = useRef(createViewWorkFence());
+  const adminLifecycleRef = useRef<{ suspend: () => AdminOttoEntryRecovery; voice: { start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } } | null>(null);
+  const adminConversationClientRef = useRef<AdminConversationClient | null>(null);
+  const adminConversationTransportRef = useRef<{ dispose: () => void } | null>(null);
+  const adminAudioRef = useRef<{ stop: () => void } | null>(null);
+  const adminPendingVoiceStartRef = useRef(false);
+  const adminVoiceStartedRef = useRef(false);
+  const adminVoiceRecorderRef = useRef<{ start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } | null>(null);
+  const toggleExpandedRef = useRef<(open: boolean) => Promise<void>>(async () => undefined);
+  const [adminRecovery, setAdminRecovery] = useState<AdminOttoEntryRecovery | null>(null);
+  const [adminConversationOverride, setAdminConversationOverride] = useState<string | null | undefined>(undefined);
+  const [adminInboxRevision, setAdminInboxRevision] = useState(0);
   // Reading a recap aloud: the words come from the route, the clock from the
   // audio's own progress, and one player owns this window's only audio element.
   const avatarRecapReadingStillFixture = avatarRecapReadingStillFixtureRequested(window.location.search);
@@ -475,6 +509,8 @@ export default function AvatarApp(): React.ReactElement {
     recordingLease.current?.release();
     recordingLease.current = null;
     voiceCancelRef.current?.();
+    adminLifecycleRef.current?.voice.cancel();
+    adminAudioRef.current?.stop();
   }), []);
   useEffect(() => {
     const requester = createOttoAudioRequester({
@@ -487,10 +523,12 @@ export default function AvatarApp(): React.ReactElement {
           recordingLease.current?.release();
           recordingLease.current = null;
           voiceCancelRef.current?.();
+          adminLifecycleRef.current?.voice.cancel();
           return;
         }
         stopRecapRead();
         stopNextStepsRead();
+        adminAudioRef.current?.stop();
       },
     });
     const uninstall = installOttoAudioRequester(requester);
@@ -519,13 +557,39 @@ export default function AvatarApp(): React.ReactElement {
       adminOttoContextRef.current = next;
       setAdminOttoContext(next);
     },
+    onView: (next) => {
+      if (!next && avatarViewFixture) return;
+      const previous = avatarViewStateRef.current;
+      if (previous?.workspace === "admin" && next?.workspace === "employee") {
+        adminLifecycleRef.current?.suspend();
+        adminAudioRef.current?.stop();
+      }
+      avatarViewStateRef.current = next;
+      setAvatarViewState(next);
+      const pending = viewRequestRef.current;
+      if (next && pending && pending.target === next.workspace) {
+        clearTimeout(pending.timer);
+        viewRequestRef.current = null;
+        setViewPending(null);
+        setViewError(null);
+      }
+      if (!next || !previous || previous.scope.userId !== next.scope.userId
+        || previous.scope.organizationId !== next.scope.organizationId
+        || previous.workspace !== next.workspace
+        || previous.epoch !== next.epoch) {
+        avatarViewFenceRef.current.invalidate();
+      }
+    },
     stopActiveWork: () => {
+      avatarViewFenceRef.current.invalidate();
       stopRecapRead();
       stopNextStepsRead();
       recordingLease.current?.release();
       recordingLease.current = null;
       avatarIdentityRef.current = null;
       voiceRef.current.cancel();
+      adminLifecycleRef.current?.voice.cancel();
+      adminAudioRef.current?.stop();
       void adminDeliveryRef.current?.stop();
     },
   }));
@@ -535,12 +599,221 @@ export default function AvatarApp(): React.ReactElement {
      same-organization account change at epoch 1. The session route returns the
      user/org; /me/day and onboarding still belong only to the employee shell. */
   useEffect(() => {
+    if (avatarViewFixture) return;
     void avatarContextController.sessionChanged(() => avatarSessionPresent
       ? apiRequest<AvatarSessionIdentity>("/api/work-os/session") : Promise.resolve(null)).then(() => {
         avatarIdentityRef.current = avatarContextController.identity();
       });
     return () => avatarContextController.clear();
   }, [avatarSessionPresent, desktopSession?.token, desktopSession?.organizationId, avatarContextController]);
+
+  const clearViewRequest = useCallback(() => {
+    const pending = viewRequestRef.current;
+    if (pending) clearTimeout(pending.timer);
+    viewRequestRef.current = null;
+  }, []);
+
+  useEffect(() => () => clearViewRequest(), [clearViewRequest]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_VIEW_STATE_EVENT, (event) => {
+      const next = parseOttoViewState(event.payload);
+      if (!next) return;
+      const identity = avatarContextController.identity();
+      if (!identity) {
+        avatarContextController.receiveView(next);
+        return;
+      }
+      if (identity.role === "admin") {
+        avatarContextController.receiveView(next);
+        return;
+      }
+      avatarViewStateRef.current = next;
+      setAvatarViewState(next);
+      const pending = viewRequestRef.current;
+      if (pending && pending.target === next.workspace) {
+        clearViewRequest();
+        setViewPending(null);
+        setViewError(null);
+      }
+    }).then((cleanup) => {
+      if (cancelled) cleanup(); else off = cleanup;
+    }).catch(() => undefined);
+    return () => { cancelled = true; off?.(); };
+  }, [avatarContextController, clearViewRequest]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_VIEW_RESULT_EVENT, (event) => {
+      const result = parseOttoViewResult(event.payload);
+      const pending = viewRequestRef.current;
+      if (!result || !pending || result.requestId !== pending.requestId
+        || !sameOttoScope(result.scope, pending.scope) || result.epoch !== pending.epoch) return;
+      if (result.accepted) return;
+      clearViewRequest();
+      setViewPending(null);
+      const copy: Record<string, string> = {
+        employee_unavailable: "No personal workday is mapped.",
+        admin_loading: "Administration is still loading.",
+        admin_failed: "Administration is unavailable.",
+        admin_unavailable: "Administration is unavailable.",
+        offline: "Connect to the workspace and try again.",
+        new_chat_pending: "A new chat is still being prepared.",
+        stale_scope: "This view changed in another window.",
+        switch_failed: "The view did not open.",
+      };
+      setViewError(copy[result.reason ?? "switch_failed"] ?? "The view did not open.");
+    }).then((cleanup) => {
+      if (cancelled) cleanup(); else off = cleanup;
+    }).catch(() => undefined);
+    return () => { cancelled = true; off?.(); };
+  }, [clearViewRequest]);
+
+  const requestView = useCallback(async (target: OttoMode) => {
+    const current = avatarViewStateRef.current;
+    if (!current || target === current.workspace) return;
+    if (viewRequestRef.current) return;
+    setViewError(null);
+    setViewPending(target);
+    lastViewTargetRef.current = target;
+    if (avatarViewFixture) {
+      if (current.workspace === "admin" && target === "employee") {
+        adminLifecycleRef.current?.suspend();
+        adminAudioRef.current?.stop();
+      }
+      const result = await avatarViewFixture.request(target);
+      setViewPending(null);
+      if (!result.ok) {
+        setViewError(result.reason === "employee_unavailable" ? "No personal workday is mapped." : "The view did not open.");
+        return;
+      }
+      avatarViewStateRef.current = result.state;
+      setAvatarViewState(result.state);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      clearViewRequest();
+      setViewPending(null);
+      setViewError("The view did not open. Try again.");
+    }, 5_000);
+    viewRequestRef.current = { requestId, target, scope: current.scope, epoch: current.epoch, timer };
+    await emit(OTTO_VIEW_REQUEST_EVENT, {
+      requestId,
+      scope: current.scope,
+      epoch: current.epoch,
+      action: "switch",
+      mode: target,
+    }).catch(() => {
+      clearViewRequest();
+      setViewPending(null);
+      setViewError("The view did not open. Try again.");
+    });
+  }, [avatarViewFixture, clearViewRequest]);
+
+  const requestViewRetry = useCallback(async () => {
+    const current = avatarViewStateRef.current;
+    if (!current || viewRequestRef.current) return;
+    setViewError(null);
+    setViewPending(current.workspace);
+    lastViewTargetRef.current = current.workspace;
+    if (avatarViewFixture) {
+      const state = avatarViewFixture.retry();
+      avatarViewStateRef.current = state;
+      setAvatarViewState(state);
+      setViewPending(null);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      clearViewRequest();
+      setViewPending(null);
+      setViewError("The view did not open. Try again.");
+    }, 5_000);
+    viewRequestRef.current = { requestId, target: current.workspace, scope: current.scope, epoch: current.epoch, timer };
+    await emit(OTTO_VIEW_REQUEST_EVENT, {
+      requestId,
+      scope: current.scope,
+      epoch: current.epoch,
+      action: "retry-context",
+      mode: current.workspace,
+    }).catch(() => {
+      clearViewRequest();
+      setViewPending(null);
+      setViewError("The view did not open. Try again.");
+    });
+  }, [avatarViewFixture, clearViewRequest]);
+
+  const adminScope = avatarViewState?.scope.mode === "admin"
+    ? avatarViewState.scope
+    : adminOttoContext?.scope.mode === "admin" ? adminOttoContext.scope : null;
+  const adminEpoch = avatarViewState?.epoch ?? adminOttoContext?.epoch ?? 1;
+  const adminReady = avatarViewState?.adminStatus === "ready" && !!adminScope;
+  const workspaceView: OttoMode = avatarViewState?.workspace
+    ?? (adminOttoContext?.scope.mode === "admin" ? "admin" : "employee");
+  const adminAudio = useAdminOttoRecapAudio({
+    scope: adminScope,
+    epoch: adminEpoch,
+    voice: recapVoice,
+    enabled: adminReady,
+    speak: avatarAdminViewFixtureRequested ? adminFixtureSpeak : undefined,
+    onListened: async (eventId) => {
+      const current = avatarViewStateRef.current;
+      if (!current || current.workspace !== "admin" || current.adminStatus !== "ready") return;
+      if (avatarAdminViewFixtureRequested) return;
+      await updateAdminOttoDelivery({ eventIds: [eventId], action: "listened" });
+      if (avatarViewStateRef.current?.adminStatus === "ready") setAdminInboxRevision((value) => value + 1);
+    },
+  });
+  adminAudioRef.current = adminAudio;
+
+  useEffect(() => {
+    if (avatarAdminViewFixtureRequested) return;
+    let cancelled = false;
+    let transport: { dispose: () => void } | null = null;
+    void createAdminConversationEventTransport({ bus: { emit, listen } }).then((created) => {
+      if (cancelled) { created.dispose(); return; }
+      transport = created;
+      adminConversationTransportRef.current = created;
+      adminConversationClientRef.current = createAdminConversationClient({
+        windowId: "avatar",
+        getFence: () => {
+          const view = avatarViewStateRef.current;
+          if (!view || view.scope.mode !== "admin") return null;
+          return { scope: view.scope, epoch: view.epoch, generation: view.adminConversationGeneration };
+        },
+        transport: created.transport,
+      });
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      adminConversationClientRef.current = null;
+      transport?.dispose();
+      adminConversationTransportRef.current = null;
+    };
+  }, [avatarAdminViewFixtureRequested]);
+
+  const coordinatedAdminSend = useCallback(async (input: { requestId: string; conversationId: string | null; text: string }, signal?: AbortSignal) => {
+    const client = adminConversationClientRef.current;
+    if (!client) return sendAdminOttoChat(input, signal);
+    const ticket = await client.beginSend({ requestId: input.requestId, conversationId: input.conversationId });
+    try {
+      const result = await sendAdminOttoChat(input, signal);
+      await client.finishSend(ticket, result.conversationId);
+      return result;
+    } catch (error) {
+      client.cancelSend(ticket);
+      throw error;
+    }
+  }, []);
+  const coordinatedAdminDiscard = useCallback(async (input: { conversationId: string | null; requestId: string | null }) => {
+    const client = adminConversationClientRef.current;
+    if (client) return client.discard(input);
+    return discardAdminOttoChat(input);
+  }, []);
 
   /* Main broadcasts the one shared actor/organization/mode epoch. The avatar
      adopts it only for its own user, stops old audio/mic/network on a real
@@ -1240,21 +1513,45 @@ export default function AvatarApp(): React.ReactElement {
     const unlisteners: Array<() => void> = [];
     void listen<{ target?: string }>("work-os://voice/start", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (workspaceView === "admin") {
+        const recorder = adminLifecycleRef.current;
+        if (recorder) {
+          adminVoiceRecorderRef.current = recorder.voice;
+          adminVoiceStartedRef.current = true;
+          recorder.voice.start("hotkey");
+        } else {
+          adminPendingVoiceStartRef.current = true;
+          void toggleExpandedRef.current(true);
+        }
+        return;
+      }
       voiceRef.current.start("hotkey");
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/stop", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminPendingVoiceStartRef.current) { adminPendingVoiceStartRef.current = false; return; }
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.stop();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.stop();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/cancel", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminPendingVoiceStartRef.current) { adminPendingVoiceStartRef.current = false; return; }
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.cancel();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.cancel();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     return () => unlisteners.forEach((fn) => fn());
-  }, []);
+  }, [workspaceView]);
 
   const avatarConversationScope = desktopSession?.organizationId && facts.personId && facts.shiftDate
     ? `workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}`
@@ -1561,6 +1858,10 @@ export default function AvatarApp(): React.ReactElement {
   // ── Expanded/collapsed window sizing ──
   const toggleExpanded = useCallback(async (open: boolean): Promise<void> => {
     if (!open) {
+      if (workspaceView === "admin") {
+        adminLifecycleRef.current?.suspend();
+        adminAudioRef.current?.stop();
+      }
       clearRecapAutoCollapse();
       // Closing the chat hands undecided suggestions back to the bubble instead
       // of dismissing them; only a fully decided moment ends with the panel.
@@ -1608,6 +1909,7 @@ export default function AvatarApp(): React.ReactElement {
       await win.setPosition(new LogicalPosition(x, y));
     } catch { /* sizing is cosmetic */ }
   }, [clearRecapAutoCollapse, endNextStepsMoment, nextStepsPlayer, win]);
+  toggleExpandedRef.current = toggleExpanded;
 
   /** After the moment is decided, the panel returns to the orb after a settle
    * beat unless the employee interacts again. */
@@ -1966,6 +2268,7 @@ export default function AvatarApp(): React.ReactElement {
   const sendUpdate = useCallback(async () => {
     const text = input.trim();
     if (!text || thinkingTrace || filing) return;
+    const fence = avatarViewFenceRef.current.capture();
     setInput("");
     const startedAt = Date.now();
     const stages: AvatarThinkingStage[] = [
@@ -1988,6 +2291,7 @@ export default function AvatarApp(): React.ReactElement {
         signal: AbortSignal.timeout(60_000),
         body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: stripPromptReminderTurns(history).slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
+      if (!fence.isCurrent()) return;
       setThinkingTrace({ stages, active: 1, startedAt });
       const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
@@ -2002,6 +2306,7 @@ export default function AvatarApp(): React.ReactElement {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit, tasks: op.tasks ?? null })) }),
       }) : { proposals: [] as FiledProposalRow[] };
+      if (!fence.isCurrent()) return;
       // A filed check-in clears the recorded-update prompt immediately so the
       // banner and the task-context card disappear without waiting for the poll.
       if (review.operations.some((operation) => operation.op === "record_progress" || operation.op === "record_blocker")) {
@@ -2021,18 +2326,21 @@ export default function AvatarApp(): React.ReactElement {
           displayResults.push({ op, status: "failed", message: value instanceof Error ? value.message : "The task list could not be loaded." });
         }
       }
+      if (!fence.isCurrent()) return;
       const trace = settle(stages.map((stage) => stage.label), mutating.length ? `${mutating.length} proposal${mutating.length === 1 ? "" : "s"} to review` : "Shown inline");
       const reviewId = crypto.randomUUID();
       const assistantEntry: ChatEntry = { id: reviewId, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined, createdAt: new Date().toISOString() };
       setChat((current) => [...current, assistantEntry]);
+      if (!fence.isCurrent()) return;
       void shareAvatarTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions: [] });
     } catch (value) {
+      if (!fence.isCurrent()) return;
       setChat((current) => [...current, {
         id: `e-${Date.now()}`, role: "system",
         text: value instanceof Error ? value.message : "The assistant is unavailable — file this one from the main window.",
       }]);
     } finally {
-      setThinkingTrace(null);
+      if (fence.isCurrent()) setThinkingTrace(null);
     }
   }, [input, thinkingTrace, filing, facts.planIntent, facts.shiftDate, chat]);
 
@@ -2051,6 +2359,7 @@ export default function AvatarApp(): React.ReactElement {
 
   const approveOperations = useCallback(async (entryId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => {
     if ((!approved.length && !rejected.length) || filing) return;
+    const fence = avatarViewFenceRef.current.capture();
     setFiling(true);
     try {
       const [outcome, rejectionResults] = await Promise.all([
@@ -2070,6 +2379,7 @@ export default function AvatarApp(): React.ReactElement {
           }
         })),
       ]);
+      if (!fence.isCurrent()) return;
       const results = [...outcome.results, ...rejectionResults];
       if (outcome.recorded > 0 && !results.some((result) => result.status !== "recorded" && result.status !== "denied")) setMascotReceipt({});
       const decided = [...approved, ...rejected];
@@ -2103,15 +2413,18 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
       setMissed(false);
+      if (!fence.isCurrent()) return;
       await loadDay(true);
+      if (!fence.isCurrent()) return;
       void emit("work-os://avatar-day-changed");
     } catch (value) {
+      if (!fence.isCurrent()) return;
       setChat((current) => [...current, {
         id: `e-${Date.now()}`, role: "system",
         text: value instanceof Error ? value.message : "Filing failed — try again from the main window.",
       }]);
     } finally {
-      setFiling(false);
+      if (fence.isCurrent()) setFiling(false);
     }
   }, [filing, loadDay, shareAvatarTools]);
 
@@ -2679,12 +2992,109 @@ export default function AvatarApp(): React.ReactElement {
     );
   }
 
+  const viewAvailability = avatarViewState
+    ? resolveViewAvailability({ role: avatarViewState.role, adminStatus: avatarViewState.adminStatus, personId: avatarViewState.personId })
+    : null;
+  const viewSwitch = <CompanionViewSwitch
+    mode={workspaceView}
+    employeeAvailable={viewAvailability?.employee.available ?? false}
+    adminAvailable={viewAvailability?.admin.available ?? false}
+    employeeReason={viewAvailability?.employee.reason ?? null}
+    adminReason={viewAvailability?.admin.reason ?? null}
+    switchable={avatarViewState?.role === "admin"}
+    pending={viewPending}
+    error={viewError}
+    onSwitch={(mode) => { void requestView(mode); }}
+    onRetry={viewError ? () => { const target = lastViewTargetRef.current; if (target) void requestView(target); } : undefined}
+    pose={workspaceView === "employee" ? mascotVisual.pose : undefined}
+    tone={workspaceView === "employee" ? mascotVisual.tone : undefined}
+    className="avatar-head-switch"
+  />;
+
+  if (workspaceView === "admin" && expanded) {
+    const unavailable = !avatarViewState || avatarViewState.adminStatus !== "ready" || !adminScope;
+    if (unavailable) {
+      return <div className="avatar-shell expanded avatar-admin-shell">
+        <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} Administration`} className="avatar-panel avatar-admin-panel">
+          <header className="avatar-head">
+            <div className="avatar-head-row">
+              <div className="avatar-title">{viewSwitch}<div className="avatar-head-copy"><strong>Administration</strong><small>{avatarViewState?.adminStatus === "loading" ? "Loading Otto…" : "Otto is unavailable"}</small></div></div>
+              <div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button></div>
+            </div>
+          </header>
+          <div className="avatar-admin-unavailable" role="status">
+            <strong>{avatarViewState?.adminStatus === "loading" ? "Loading Administration…" : "Administration Otto is unavailable"}</strong>
+            <p>{avatarViewState?.adminStatus === "loading" ? "The administration context is still loading." : "Retry from here. Your current conversation will stay server-side."}</p>
+            <button type="button" onClick={() => void requestViewRetry()} disabled={avatarViewState?.adminStatus === "loading"}>Retry</button>
+          </div>
+        </ConversationSurface>
+      </div>;
+    }
+    return <div className="avatar-shell expanded avatar-admin-shell">
+      <AdminOttoChat
+        surface="floating"
+        scope={avatarViewState!.scope}
+        conversationId={avatarAdminViewFixtureRequested ? (adminConversationOverride ?? avatarViewState!.adminConversationId) : avatarViewState!.adminConversationId}
+        headerLeading={viewSwitch}
+        onHeaderMouseDown={(event) => {
+          if (!isHeaderDragStart(event.button, event.target)) return;
+          if (!isTauri()) return;
+          void getCurrentWindow().startDragging().catch(() => undefined);
+        }}
+        initialTab="chat"
+        initialDraft={adminRecovery?.draft ?? ""}
+        initialRequestId={adminRecovery?.requestId ?? null}
+        refreshRevision={avatarViewState!.adminConversationRevision + avatarViewState!.adminConversationGeneration}
+        followRevision={adminInboxRevision}
+        onRecoveryChange={setAdminRecovery}
+        onConversation={avatarAdminViewFixtureRequested ? setAdminConversationOverride : undefined}
+        onNewChat={() => { setAdminRecovery(null); if (avatarAdminViewFixtureRequested) setAdminConversationOverride(null); }}
+        onLifecycle={(handle) => {
+          adminLifecycleRef.current = handle;
+          if (handle && adminPendingVoiceStartRef.current) {
+            adminPendingVoiceStartRef.current = false;
+            adminVoiceRecorderRef.current = handle.voice;
+            adminVoiceStartedRef.current = true;
+            handle.voice.start("hotkey");
+          }
+        }}
+        isCurrent={() => {
+          const current = avatarViewStateRef.current;
+          return !!current && current.workspace === "admin" && current.epoch === avatarViewState!.epoch
+            && current.adminConversationGeneration === avatarViewState!.adminConversationGeneration;
+        }}
+        playback={adminAudio.playback}
+        recapUpdates={adminAudio.recapUpdates}
+        onListen={(recap) => void adminAudio.listen(recap)}
+        onStopListening={adminAudio.stop}
+        onOpenRecord={(url) => {
+          const current = avatarViewStateRef.current;
+          if (!current) return;
+          void emit(OTTO_RECORD_NAV_EVENT, { scope: current.scope, epoch: current.epoch, generation: current.adminConversationGeneration, url });
+        }}
+        transcriptionEnabled={avatarViewState!.transcriptionAvailable}
+        audioEpoch={adminEpoch}
+        transcribe={avatarAdminViewFixtureRequested
+          ? async () => ({ text: "This preview has no microphone transcription; the draft was not sent." })
+          : (clip, _mime, language) => transcribeAdminOttoAudio(clip, language)}
+        transport={avatarAdminViewFixtureRequested ? {
+          ...ADMIN_FIXTURE_TRANSPORT,
+          inbox: async () => fixtureInboxPage({ count: 1, total: 1, nextCursor: null, unread: 1 }),
+        } : { send: coordinatedAdminSend, discard: coordinatedAdminDiscard }}
+        initialInbox={avatarAdminViewFixtureRequested ? fixtureInboxPage({ count: 1, total: 1, nextCursor: null, unread: 1 }) : null}
+        initialRecap={avatarAdminViewFixtureRequested ? FIXTURE_REVIEWED_RECAP : null}
+        previewOnly={false}
+        onClose={() => void toggleExpanded(false)}
+      />
+    </div>;
+  }
+
   return (
-    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" || recapSpeech.retryIntervalId !== null ? "true" : undefined} data-next-steps={nextStepsMoment ? nextStepsMoment.status : undefined}>
+    <div className={`avatar-shell ${expanded ? "expanded" : ""}${workspaceView === "admin" ? " avatar-admin-shell" : ""}`} data-recap-reading={recapSpeech.status !== "idle" || recapSpeech.retryIntervalId !== null ? "true" : undefined} data-next-steps={nextStepsMoment ? nextStepsMoment.status : undefined}>
       {!expanded && (
         <div className="avatar-compact">
-        {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
-        {bubble === "recap" && pendingRecap && (
+        {workspaceView === "employee" && bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
+        {workspaceView === "employee" && bubble === "recap" && pendingRecap && (
           <div className="avatar-prompt-bubble avatar-recap-bubble">
             {recapSpeech.status === "idle" ? <>
               <strong>{pendingRecap.headline ?? "Your activity recap is ready"}</strong>
@@ -2751,7 +3161,7 @@ export default function AvatarApp(): React.ReactElement {
             </>}
           </div>
         )}
-        {bubble === "next-steps" && nextStepsMoment && nextStepsBubbleEntry && (
+        {workspaceView === "employee" && bubble === "next-steps" && nextStepsMoment && nextStepsBubbleEntry && (
           <NextStepsBubble
             moment={nextStepsMoment}
             busy={nextStepsBusyId === nextStepsBubbleEntry.id}
@@ -2769,7 +3179,7 @@ export default function AvatarApp(): React.ReactElement {
             }}
           />
         )}
-        {bubble === "prompt" && (
+        {workspaceView === "employee" && bubble === "prompt" && (
           <AvatarPromptBubble
             kind={contextualPrompt.kind}
             heading={contextualPrompt.heading}
@@ -2782,16 +3192,26 @@ export default function AvatarApp(): React.ReactElement {
         <button
           className="avatar-orb"
           onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}
-          title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
-          aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
+          title={workspaceView === "admin" ? `${MASCOT.name} · Admin` : showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
+          aria-label={workspaceView === "admin" ? `Open ${MASCOT.name} Administration` : showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
-          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} speaking={recapSpeech.status === "playing"} />
+          <MascotPet
+            agent={workspaceView === "admin" ? "idle" : agentActivity}
+            workday={workspaceView === "admin" ? "active" : workdayState}
+            isolated={workspaceView === "admin"}
+            mode={workspaceView}
+            animateAttire
+            className="avatar-pet"
+            artClassName="avatar-pet-art"
+            replayKey={snoozeReplayId}
+            speaking={workspaceView === "employee" && recapSpeech.status === "playing"}
+          />
           {/* One marker, one meaning: it appears when Otto needs attention.
               Shift progress lives in the elapsed pill; the old pie marker read
               as a stray wedge beside the figure. */}
           {showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
-        {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
+        {workspaceView === "admin" ? <span className="avatar-admin-label">Admin</span> : showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>
       )}
       {expanded && (
@@ -2802,13 +3222,14 @@ export default function AvatarApp(): React.ReactElement {
             void getCurrentWindow().startDragging().catch(() => undefined);
           }}>
             <div className="avatar-head-row">
-              <div className="avatar-drag-zone" data-tauri-drag-region>
+              <div className="avatar-drag-zone">
                 <div className="avatar-title">
-                  <span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={mascotVisual.pose} tone={mascotVisual.tone} /></span>
+                  {viewSwitch}
                   <div className="avatar-head-copy">
                     <strong title={statusText}>
                       <span className="avatar-head-shift">{shiftLabel}</span>
                     </strong>
+                    <span className="avatar-head-mode">Employee</span>
                     <span className="sr-only" aria-live="polite">{statusText}</span>
                   </div>
                 </div>
