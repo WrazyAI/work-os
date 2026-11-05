@@ -358,15 +358,22 @@ Observed results in this environment:
   Admin return, unmapped Admin, employee startup, idle heartbeats). The first
   run was cold-Vite flaky and one assertion expected the retained Tasks page
   heading after returning; the test was corrected, not the production behavior.
-- Desktop Vitest: **1,642/1,642 passed** (182 files) after the lazy/import,
-  ownership, persistence-retry, carry-over-count, and lightweight-count changes.
+- Desktop Vitest: **1,644/1,644 passed** (182 files) after the lazy/import,
+  ownership, persistence-retry, carry-over-count, lightweight-count, and
+  review-hardening changes.
 - Desktop production build: passed (`tsc --noEmit && vite build`); employee
   main chunk 1,066.18 kB, AdminWorkspace 119.42 kB lazy, AvatarApp 90.03 kB
   lazy; startup preview 301,075 bytes JS / 111,177 bytes CSS.
-- Web focused route/surface/insights/pagination/attribution/static: 85 passed,
-  0 failed after updating source-shape expectations for the intentional lazy
-  imports and new gates.
+- Web focused route/surface/insights/pagination/attribution/static after the
+  review fixes and Agent OS reconciliation: **97 passed / 0 failed**.
 - `work-os:test:site`: 59/59 passed.
+- CodeRabbit review was re-run successfully after authentication was restored:
+  **7 findings (1 major, 6 minor)**, all addressed or verified:
+  initial-monitor claim failures now fall back; dashboard insights keys nest
+  under the shared invalidation prefix; the unsafe reused shift context was
+  reverted; avatar ownership changes reload immediately; owners no longer
+  re-read their own snapshot; raw `pg` dates are cast to text; and legacy
+  plain-backlog cache entries no longer throw.
 - `npx next build --webpack`: passed; `/work-os/today`, admin routes, and API
   routes compiled. Default `npm run build` (Turbopack) is blocked by the
   environment's Next 16.2.6 installation requesting the nonexistent
@@ -385,23 +392,36 @@ Observed results in this environment:
   The new admin-observability queue entry is append-only and does not bump a
   version or dispatch a release.
 
-## Remaining risks / backend coordination
+## Backend deployment
 
-- **Backend port required.** `src/lib/work-os-daily-workspace.ts`,
-  `src/lib/work-os-employee-task-selection.ts`, `src/lib/work-os-insights.ts`,
-  `src/lib/work-os-workday.ts`, `src/lib/work-os-admin-overview.ts`,
-  `src/lib/work-os-readiness-report.ts`, `src/lib/work-os-readiness.ts`,
-  `src/modules/work-os/admin-readiness.ts`, the two `me` route changes, and the
-  web admin client changes must be ported by content to Agent OS and deployed
-  before the desktop fixes can be observed in production. The desktop companion
-  changes alone do not deploy the backend. No deployment was performed.
-- The new `workday` response must deploy before the companion uses it; during a
-  rolling deploy, an older response falls back to `normalizeDay` defaults for
-  missing task arrays and the shared attendance status still works. A full
-  frontend/backend release order needs operator confirmation.
-- Readiness now returns `null` in the admin Overview payload for compatibility;
-  old clients that depend on embedded readiness need the separately deployed
-  client change. The web Overview/People modules must ship with the backend.
+The backend was ported to Agent OS by content, preserving Agent OS-only recap
+and schedule-exception behavior, then merged and deployed through the required
+atomic path:
+
+- Agent OS PR: https://github.com/WrazyAI/agent-os/pull/78
+- Merged commit: `420f6786dd31e1f35286d878f7fb0124f66e228f`
+- VPS checkout: `/home/dev/agent-os`, deployed marker `420f6786d`
+- `scripts/redeploy.sh` preflight passed, production build completed, asset
+  checks passed, and the build swapped into place.
+- `agentos-web.service`: active; `agentos-runner.service`: active and restarted
+  with the new code after confirming no child job was in flight.
+- Live read-only probes: `GET https://app.wrazyos.com/work-os` returned 200 with
+  its static JS/CSS assets served successfully; unauthenticated Work OS API
+  probes returned the expected auth redirect rather than a server error.
+- The deployed server bundle contains the new `load insight summary` and
+  `summary=1` path, and `.deployed-commit` matches `420f6786d`.
+- Agent OS's existing recap and schedule-exception measures add three exact
+  reads to Admin Overview: the deployed version measures **20** statements
+  versus the report's **45**. The Work OS-only baseline (without those newer
+  Agent OS features) measures 17.
+
+The `workday` response and the web Overview/People readiness client shipped in
+the same Agent OS deployment, so there is no old-client/`readiness: null`
+mismatch on the production host. A rollback must revert the whole Agent OS
+commit; do not roll back only one route or client.
+
+## Remaining risks and native verification
+
 - Cross-window ownership needs packaged Windows/macOS verification with real
   window visibility, sleep/resume, avatar destruction/recreation, and system
   notifications. Rust code compiles only as a standalone core test here; Tauri
@@ -410,17 +430,19 @@ Observed results in this environment:
   pool wait, provider timing, or production CPU/memory. No native release
   profile was produced.
 - TestSprite was not run for this backend/desktop performance change; the
-  existing browser checks are synthetic transport fixtures. If a reusable
-  TestSprite fixture is required by release acceptance, run the Companion
-  project against a deployment containing the ported backend.
+  existing browser checks are synthetic transport fixtures. If the release gate
+  requires it, run the stored Companion plan against `https://app.wrazyos.com`
+  now that the Agent OS backend is deployed.
 - The companion release cadence remains below five pending outcomes; no version
   files were changed. The pre-existing release-gate history failure must be
   resolved by the release owner before any future release.
 
 ## Commit and tested-source identity
 
-- Implementation commit: `6b385ab2bd69586334c8a8667acd65192fbd54d7`
-  (`perf(work-os): scope employee reads and bound background work`).
+- Implementation commit: `51de0bddfce6a1142c2ca5646cd814dffb4add84`
+  (`fix(work-os): harden performance lifecycles after review`). The main
+  implementation commit before review hardening was
+  `6b385ab2bd69586334c8a8667acd65192fbd54d7`.
 - Branch: `codex/work-os-performance`, based on
   `ecb61fdc7fa996a2474b28796bbef95893849f39`.
 - Every final check below was run in
