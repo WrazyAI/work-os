@@ -506,7 +506,7 @@ export function AdminOttoChat({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || !isCurrentRef.current()) return;
       const action = adminEscapeAction({
         key: event.key,
         recapOpen: selectedRecap !== null,
@@ -556,14 +556,16 @@ export function AdminOttoChat({
     adminVoice.cancel();
     try {
       const committed = await controller.newChat();
-      if (!committed || !isCurrentRef.current()) return false;
+      if (!committed) return false;
       conversationRef.current = null;
       previousConversationProp.current = null;
-      surface.selectTab("chat");
-      surface.closeRecap();
-      setSelectedRecap(null);
       onNewChat?.();
-      window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLTextAreaElement>(".admin-otto-composer textarea")?.focus());
+      if (isCurrentRef.current()) {
+        surface.selectTab("chat");
+        surface.closeRecap();
+        setSelectedRecap(null);
+        window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLTextAreaElement>(".admin-otto-composer textarea")?.focus());
+      }
       return true;
     } catch {
       // The controller preserves the conversation and its inline error.

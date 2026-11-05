@@ -135,6 +135,8 @@ describe("Otto view switch wiring", () => {
     expect(app).toContain("coordinatedSend");
     expect(app).toContain("coordinatedDiscard");
     expect(app).toContain("OTTO_CONVERSATION_EVENT");
+    expect(app).toContain("OTTO_CONVERSATION_REQUEST_EVENT");
+    expect(app).toContain("parseAdminConversationRequest");
     expect(app).toContain("onLifecycle={(handle) => { adminChatLifecycleRef.current = handle; }}");
     expect(app).toContain("refreshRevision={conversationState?.revision ?? 0}");
     expect(conversationSync).toContain("OTTO_CONVERSATION_REQUEST_EVENT");

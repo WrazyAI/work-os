@@ -118,7 +118,7 @@ import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/owners
 import { createAdminOttoContextRetry } from "./adminOtto/context";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { clearAdminOttoSurface } from "./adminOtto/modeSurface";
-import { createAdminConversationClient, createAdminConversationOwner, createLocalAdminConversationTransport, OTTO_CONVERSATION_EVENT, type AdminConversationClient, type AdminConversationOwner, type AdminConversationState } from "./adminOtto/conversationSync";
+import { createAdminConversationClient, createAdminConversationOwner, createLocalAdminConversationTransport, OTTO_CONVERSATION_EVENT, OTTO_CONVERSATION_REQUEST_EVENT, OTTO_CONVERSATION_RESULT_EVENT, parseAdminConversationRequest, type AdminConversationClient, type AdminConversationOwner, type AdminConversationState } from "./adminOtto/conversationSync";
 import { buildOttoViewState, OTTO_RECORD_NAV_EVENT, OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT, OTTO_VIEW_STATE_EVENT, parseOttoRecordNavigationEvent, parseOttoViewRequest, type OttoViewState } from "./adminOtto/viewSwitch";
 import { createWorkspaceOwner, effectiveWorkspaceMode, type WorkspaceOwner } from "./adminOtto/workspaceOwner";
 import { createViewWorkFence } from "./adminOtto/viewWorkFence";
@@ -817,6 +817,16 @@ export default function App() {
       },
     });
     conversationOwnerRef.current = owner;
+    let ownerDisposed = false;
+    let stopRequests: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_CONVERSATION_REQUEST_EVENT, (event) => {
+      const request = parseAdminConversationRequest(event.payload);
+      if (!request || ownerDisposed) return;
+      void owner.handle(request).then((result) => emit(OTTO_CONVERSATION_RESULT_EVENT, result)).catch(() => undefined);
+    }).then((off) => {
+      if (ownerDisposed) off();
+      else stopRequests = off;
+    }).catch(() => undefined);
     conversationClientRef.current = createAdminConversationClient({
       windowId: "main",
       getFence: () => {
@@ -839,6 +849,8 @@ export default function App() {
     conversationStateRef.current = initial;
     setConversationState(initial);
     return () => {
+      ownerDisposed = true;
+      stopRequests?.();
       if (conversationOwnerRef.current === owner) {
         owner.dispose();
         conversationOwnerRef.current = null;
@@ -858,12 +870,16 @@ export default function App() {
         mode: effectiveWorkspace,
       },
       epoch: Math.max(1, adminOttoSnapshot?.epoch ?? adminOttoEpochRef.current),
-      conversationId: adminOttoConversationId,
     });
     const next = owner.snapshot();
     conversationStateRef.current = next;
     setConversationState(next);
-  }, [adminOttoSnapshot?.epoch, adminOttoSnapshot?.scope.mode, adminOttoConversationId, effectiveWorkspace, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId]);
+  }, [adminOttoSnapshot?.epoch, adminOttoSnapshot?.scope.mode, effectiveWorkspace, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId]);
+
+  useEffect(() => {
+    const id = conversationState?.conversationId;
+    if (id !== undefined && id !== adminOttoConversationId) setAdminOttoConversationId(id);
+  }, [conversationState?.conversationId, adminOttoConversationId]);
 
   useEffect(() => {
     const sessionData = workSessionQuery.data;

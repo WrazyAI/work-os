@@ -37,6 +37,7 @@ type MenuProps = {
   onClose: () => void;
   anchor?: { left: number; right: number; top: number; bottom: number } | null;
   labelledBy?: string;
+  menuId?: string;
 };
 
 const LABELS: Record<OttoMode, string> = { employee: "Employee", admin: "Admin" };
@@ -52,7 +53,7 @@ function optionFor(mode: OttoMode, employeeAvailable: boolean, adminAvailable: b
 
 function MenuMarkup({
   mode, employeeAvailable, adminAvailable, employeeReason, adminReason,
-  pending, error, onSwitch, onRetry, onClose, anchor, labelledBy,
+  pending, error, onSwitch, onRetry, onClose, anchor, labelledBy, menuId,
 }: Omit<MenuProps, "open">): ReactElement {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const options = [
@@ -122,6 +123,7 @@ function MenuMarkup({
   return <div
     ref={menuRef}
     className="otto-view-menu"
+    id={menuId}
     role="menu"
     aria-label={`${MASCOT.name} view`}
     aria-labelledby={labelledBy}
@@ -182,7 +184,8 @@ export function CompanionViewSwitch({
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuId = useId();
+  const triggerId = useId();
+  const menuId = `${triggerId}-menu`;
   const current = LABELS[mode];
 
   useEffect(() => {
@@ -217,14 +220,14 @@ export function CompanionViewSwitch({
   return <>
     <button
       ref={triggerRef}
-      id={menuId}
+      id={triggerId}
       type="button"
       className={`otto-view-switch${open ? " is-open" : ""}${className ? ` ${className}` : ""}`}
       data-view-switch
       data-mode={mode}
       aria-haspopup="menu"
       aria-expanded={open}
-      aria-controls={menuId}
+      aria-controls={open ? menuId : undefined}
       aria-label={`${MASCOT.name} view: ${current}. Change view`}
       title={`${MASCOT.name} view: ${current}`}
       onClick={toggle}
@@ -251,7 +254,8 @@ export function CompanionViewSwitch({
         });
       }}
       anchor={anchor}
-      labelledBy={menuId}
+      labelledBy={triggerId}
+      menuId={menuId}
     />
   </>;
 }

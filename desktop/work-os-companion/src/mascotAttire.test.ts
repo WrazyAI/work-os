@@ -67,6 +67,17 @@ describe("mascot attire", () => {
     }
   });
 
+  it("toggling animation back on does not replay a finished or disabled flourish", () => {
+    const controller = createMascotAttireController("employee", () => undefined);
+    controller.update("admin", true, false);
+    vi.advanceTimersByTime(400);
+    expect(controller.transition()).toBeNull();
+    controller.update("admin", false, false);
+    controller.update("admin", true, false);
+    expect(controller.transition()).toBeNull();
+    controller.dispose();
+  });
+
   it("unmount_clears_timer", () => {
     const changes: unknown[] = [];
     const controller = createMascotAttireController("employee", (value) => changes.push(value));

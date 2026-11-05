@@ -97,3 +97,42 @@ describe("admin conversation runtime coordination", () => {
     expect(h.owner.snapshot()).toMatchObject({ conversationId: "conversation-1", generation: 1, resetting: false });
   });
 });
+
+describe("admin conversation event transport", () => {
+  it("round-trips begin and finish through an owner request listener", async () => {
+    const handlers = new Map<string, Set<(payload: unknown) => void>>();
+    const bus = {
+      emit(event: string, payload: unknown) {
+        for (const handler of handlers.get(event) ?? []) handler(payload);
+      },
+      listen(event: string, handler: (payload: unknown) => void) {
+        const group = handlers.get(event) ?? new Set();
+        group.add(handler);
+        handlers.set(event, group);
+        return () => group.delete(handler);
+      },
+    };
+    const h = setup();
+    const { createAdminConversationEventTransport, parseAdminConversationRequest, OTTO_CONVERSATION_REQUEST_EVENT, OTTO_CONVERSATION_RESULT_EVENT } = await import("./conversationSync");
+    const stopRequests = bus.listen(OTTO_CONVERSATION_REQUEST_EVENT, (payload) => {
+      const request = parseAdminConversationRequest(payload);
+      if (!request) return;
+      void h.owner.handle(request).then((result) => bus.emit(OTTO_CONVERSATION_RESULT_EVENT, result));
+    });
+    const transport = await createAdminConversationEventTransport({ bus });
+    const client = (await import("./conversationSync")).createAdminConversationClient({
+      windowId: "avatar",
+      getFence: () => {
+        const snapshot = h.owner.snapshot();
+        return { scope: snapshot.scope, epoch: snapshot.epoch, generation: snapshot.generation };
+      },
+      transport: transport.transport,
+    });
+    const ticket = await client.beginSend({ requestId: "request-remote", conversationId: null });
+    expect(h.owner.snapshot().busy).toBe(true);
+    await client.finishSend(ticket, "conversation-remote");
+    expect(h.owner.snapshot().conversationId).toBe("conversation-remote");
+    stopRequests();
+    transport.dispose();
+  });
+});

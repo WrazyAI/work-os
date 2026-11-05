@@ -1908,7 +1908,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       await win.setPosition(new LogicalPosition(x, y));
     } catch { /* sizing is cosmetic */ }
-  }, [clearRecapAutoCollapse, endNextStepsMoment, nextStepsPlayer, win]);
+  }, [clearRecapAutoCollapse, endNextStepsMoment, nextStepsPlayer, win, workspaceView]);
   toggleExpandedRef.current = toggleExpanded;
 
   /** After the moment is decided, the panel returns to the orb after a settle

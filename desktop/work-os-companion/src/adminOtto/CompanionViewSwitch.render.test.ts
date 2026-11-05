@@ -38,6 +38,14 @@ describe("CompanionViewSwitch", () => {
     expect(html).toContain("Admin");
   });
 
+  it("separates the trigger id from the menu id", () => {
+    const html = renderToStaticMarkup(createElement(CompanionViewMenu, {
+      ...base, onClose: () => undefined, open: true, menuId: "view-menu-1", labelledBy: "view-trigger-1",
+    }));
+    expect(html).toContain('id="view-menu-1"');
+    expect(html).toContain('aria-labelledby="view-trigger-1"');
+  });
+
   it("disabled_destination_explains_reason", () => {
     const html = renderToStaticMarkup(createElement(CompanionViewMenu, {
       ...base, onClose: () => undefined, open: true, employeeAvailable: false, employeeReason: "No personal workday is mapped.",
