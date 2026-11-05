@@ -334,13 +334,28 @@ export function createAdminConversationOwner(deps: AdminConversationOwnerDeps): 
     const existing = [...entries.values()].find((entry) => entry.ticket.requestId === request.requestId);
     if (existing) {
       if (existing.ticket.windowId !== request.windowId) return resultFor(request, false, "busy");
-      if (existing.status === "cancelled") {
-        existing.status = "active";
-        state.busy = true;
-        state.revision += 1;
-        publish();
+      if (existing.ticket.operationId === request.operationId
+        && existing.ticket.epoch === state.epoch
+        && existing.ticket.generation === state.generation) {
+        return resultFor(request, true, null, { ticket: existing.ticket });
       }
-      return resultFor(request, true, null, { ticket: existing.ticket });
+      // A view round trip keeps the durable request id but must reacquire a
+      // ticket on the current fence; the old completion stays rejected.
+      const retryTicket: AdminConversationTicket = {
+        scope: copyScope(state.scope),
+        epoch: state.epoch,
+        generation: state.generation,
+        operationId: request.operationId,
+        requestId: request.requestId,
+        windowId: request.windowId,
+        conversationId: state.conversationId,
+      };
+      entries.delete(existing.ticket.operationId);
+      entries.set(retryTicket.operationId, { ticket: retryTicket, status: "active" });
+      state.busy = true;
+      state.revision += 1;
+      publish();
+      return resultFor(request, true, null, { ticket: retryTicket });
     }
     if (state.busy || entries.size > 0) {
       return resultFor(request, false, state.busy ? "busy" : "pending_other_window");
@@ -405,8 +420,12 @@ export function createAdminConversationOwner(deps: AdminConversationOwnerDeps): 
   const handleDiscard = async (request: Extract<AdminConversationRequest, { type: "discard" }>) => {
     if (!state) return resultFor(request, false, "stale_scope");
     if (state.resetting && resetPromise) {
-      try { await resetPromise; } catch { /* the retry below sees the retained state */ }
-      return resultFor(request, !!state && !state.resetting, state?.resetting ? "new_chat_pending" : null);
+      try {
+        await resetPromise;
+        return resultFor(request, true, null);
+      } catch {
+        return resultFor(request, false, "discard_failed");
+      }
     }
     if (!state) return resultFor(request, false, "stale_scope");
     state.resetting = true;
@@ -634,7 +653,12 @@ export async function createAdminConversationEventTransport(deps: {
   timeoutMs?: number;
 }): Promise<{ transport: AdminConversationTransport; dispose: () => void }> {
   const pending = new Map<string, { resolve: (result: AdminConversationResult) => void; reject: (error: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
-  const off = await Promise.resolve(deps.bus.listen(OTTO_CONVERSATION_RESULT_EVENT, (payload) => {
+  const off = await Promise.resolve(deps.bus.listen(OTTO_CONVERSATION_RESULT_EVENT, (message) => {
+    // Tauri listeners receive an event envelope; test and local buses may pass
+    // the raw payload. Accept both without changing the wire contract.
+    const payload = message && typeof message === "object" && "payload" in message
+      ? (message as { payload: unknown }).payload
+      : message;
     const result = parseAdminConversationResult(payload);
     if (!result) return;
     const waiter = pending.get(result.operationId);

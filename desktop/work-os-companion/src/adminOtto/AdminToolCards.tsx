@@ -206,9 +206,10 @@ export type AdminActionBatchProps = {
   onConfirm: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
   onRefresh?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
   onOpenRecord?: (url: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 };
 
-export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord }: AdminActionBatchProps) {
+export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord, onBusyChange }: AdminActionBatchProps) {
   const sessionRef = useRef<ReturnType<typeof createAdminActionSession> | null>(null);
   if (!sessionRef.current) sessionRef.current = createAdminActionSession(actions);
   const session = sessionRef.current;
@@ -219,6 +220,7 @@ export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord }
   const pending = rows.filter((row) => statusOf(row.action) === "pending");
   const selected = pending.filter((row) => row.selected);
   const busy = rows.some((row) => row.busy);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   const allCreates = selected.length > 0 && selected.every((row) => ["create_task", "task.create"].includes(row.action.action));
   const standalone = rows.length === 1;
   const uniformAction = new Set(rows.map((row) => row.action.action)).size === 1;

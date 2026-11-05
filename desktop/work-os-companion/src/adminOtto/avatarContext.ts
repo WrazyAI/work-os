@@ -116,6 +116,9 @@ export function adoptAvatarView(
       revisionChanged: current.revision !== next.revision,
     };
   }
+  if (next.adminConversationGeneration < current.adminConversationGeneration) return null;
+  if (next.adminConversationGeneration === current.adminConversationGeneration
+    && next.adminConversationRevision < current.adminConversationRevision) return null;
   if (next.epoch < current.epoch) return null;
   if (next.epoch === current.epoch) {
     if (next.scope.mode !== current.scope.mode) return null;
@@ -276,8 +279,21 @@ export function createAvatarContextController(deps: AvatarContextControllerDeps)
     publishContext({ ...currentContext, scope: { ...currentContext.scope } });
   };
 
+  const newerContext = (current: OttoContextEvent | null, next: OttoContextEvent) => !current
+    || next.epoch > current.epoch
+    || (next.epoch === current.epoch && next.scope.mode === current.scope.mode);
+  const newerView = (current: OttoViewState | null, next: OttoViewState) => !current
+    || next.epoch > current.epoch
+    || (next.epoch === current.epoch && (next.revision > current.revision
+      || next.adminConversationGeneration > current.adminConversationGeneration
+      || (next.adminConversationGeneration === current.adminConversationGeneration
+        && next.adminConversationRevision > current.adminConversationRevision)));
+
   const receive = (next: OttoContextEvent) => {
-    if (resolving) { pendingContext = next; return; }
+    if (resolving) {
+      if (newerContext(pendingContext, next)) pendingContext = next;
+      return;
+    }
     if (!identity || identity.role !== "admin") return;
     if (next.scope.userId !== identity.userId || next.scope.organizationId !== identity.organizationId) return;
     if (next.epoch < floorEpoch) return;
@@ -285,7 +301,10 @@ export function createAvatarContextController(deps: AvatarContextControllerDeps)
   };
 
   const receiveView = (next: OttoViewState) => {
-    if (resolving) { pendingView = next; return; }
+    if (resolving) {
+      if (newerView(pendingView, next)) pendingView = next;
+      return;
+    }
     if (!identity || identity.role !== "admin") return;
     if (next.scope.userId !== identity.userId || next.scope.organizationId !== identity.organizationId) return;
     if (next.epoch < floorEpoch) return;

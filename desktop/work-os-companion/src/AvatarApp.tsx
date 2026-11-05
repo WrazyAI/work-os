@@ -243,6 +243,7 @@ export default function AvatarApp(): React.ReactElement {
   const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapNoVoiceFixture && !avatarRecapReadingFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [avatarViewState, setAvatarViewState] = useState<OttoViewState | null>(() => avatarViewFixture?.initial ?? null);
+  const [avatarRole, setAvatarRole] = useState<string | null>(() => avatarViewFixture ? "admin" : null);
   const avatarViewStateRef = useRef<OttoViewState | null>(avatarViewState);
   avatarViewStateRef.current = avatarViewState;
   const [viewPending, setViewPending] = useState<OttoMode | null>(null);
@@ -259,6 +260,7 @@ export default function AvatarApp(): React.ReactElement {
   const adminVoiceRecorderRef = useRef<{ start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } | null>(null);
   const toggleExpandedRef = useRef<(open: boolean) => Promise<void>>(async () => undefined);
   const [adminRecovery, setAdminRecovery] = useState<AdminOttoEntryRecovery | null>(null);
+  const adminRecoveryBoundaryRef = useRef<string | null>(null);
   const [adminConversationOverride, setAdminConversationOverride] = useState<string | null | undefined>(undefined);
   const [adminInboxRevision, setAdminInboxRevision] = useState(0);
   // Reading a recap aloud: the words come from the route, the clock from the
@@ -582,6 +584,11 @@ export default function AvatarApp(): React.ReactElement {
     },
     stopActiveWork: () => {
       avatarViewFenceRef.current.invalidate();
+      setThinkingTrace(null);
+      setFiling(false);
+      setNextStepsBusyId(null);
+      setDecidingIntervalId(null);
+      setActivityPreparing(false);
       stopRecapRead();
       stopNextStepsRead();
       recordingLease.current?.release();
@@ -603,6 +610,7 @@ export default function AvatarApp(): React.ReactElement {
     void avatarContextController.sessionChanged(() => avatarSessionPresent
       ? apiRequest<AvatarSessionIdentity>("/api/work-os/session") : Promise.resolve(null)).then(() => {
         avatarIdentityRef.current = avatarContextController.identity();
+        setAvatarRole(avatarContextController.identity()?.role ?? null);
       });
     return () => avatarContextController.clear();
   }, [avatarSessionPresent, desktopSession?.token, desktopSession?.organizationId, avatarContextController]);
@@ -630,6 +638,11 @@ export default function AvatarApp(): React.ReactElement {
         avatarContextController.receiveView(next);
         return;
       }
+      if (next.role === "admin") return;
+      if (next.scope.userId !== identity.userId || next.scope.organizationId !== identity.organizationId) return;
+      const currentView = avatarViewStateRef.current;
+      if (currentView && (next.epoch < currentView.epoch
+        || (next.epoch === currentView.epoch && next.revision <= currentView.revision))) return;
       avatarViewStateRef.current = next;
       setAvatarViewState(next);
       const pending = viewRequestRef.current;
@@ -753,7 +766,9 @@ export default function AvatarApp(): React.ReactElement {
   const adminEpoch = avatarViewState?.epoch ?? adminOttoContext?.epoch ?? 1;
   const adminReady = avatarViewState?.adminStatus === "ready" && !!adminScope;
   const workspaceView: OttoMode = avatarViewState?.workspace
-    ?? (adminOttoContext?.scope.mode === "admin" ? "admin" : "employee");
+    ?? (avatarRole === "admin" ? "admin" : adminOttoContext?.scope.mode === "admin" ? "admin" : "employee");
+  const workspaceViewRef = useRef(workspaceView);
+  workspaceViewRef.current = workspaceView;
   const adminAudio = useAdminOttoRecapAudio({
     scope: adminScope,
     epoch: adminEpoch,
@@ -769,6 +784,16 @@ export default function AvatarApp(): React.ReactElement {
     },
   });
   adminAudioRef.current = adminAudio;
+
+  useEffect(() => {
+    const current = avatarViewState;
+    if (!current) return;
+    const boundary = `${current.scope.userId}:${current.scope.organizationId}:${current.adminConversationGeneration}`;
+    if (adminRecoveryBoundaryRef.current !== null && adminRecoveryBoundaryRef.current !== boundary) {
+      setAdminRecovery(null);
+    }
+    adminRecoveryBoundaryRef.current = boundary;
+  }, [avatarViewState?.scope.userId, avatarViewState?.scope.organizationId, avatarViewState?.adminConversationGeneration]);
 
   useEffect(() => {
     if (avatarAdminViewFixtureRequested) return;
@@ -1918,7 +1943,7 @@ export default function AvatarApp(): React.ReactElement {
     if (recapAutoCollapse.current !== null) window.clearTimeout(recapAutoCollapse.current);
     recapAutoCollapse.current = window.setTimeout(() => {
       recapAutoCollapse.current = null;
-      void toggleExpanded(false);
+      if (workspaceViewRef.current === "employee") void toggleExpanded(false);
     }, nextStepsSettleMs());
   }, [toggleExpanded]);
 
@@ -1930,6 +1955,9 @@ export default function AvatarApp(): React.ReactElement {
     existingEntryId?: string,
     options?: { bubble?: boolean },
   ): Promise<void> => {
+    const isAdminView = () => workspaceViewRef.current === "admin";
+    if (isAdminView()) return;
+    const fence = avatarViewFenceRef.current.capture();
     const entryId = existingEntryId ?? `next-steps-${intervalId}`;
     // A new moment takes over: a settle timer left by an earlier, already
     // finished moment must never collapse the panel and dismiss the fresh
@@ -1961,6 +1989,7 @@ export default function AvatarApp(): React.ReactElement {
     if (avatarNextStepsFixture || avatarNextStepsRecoveryLike) {
       // DEV-only: the recovery fixtures resolve their poll locally.
       await new Promise((resolve) => window.setTimeout(resolve, 350));
+      if (!fence.isCurrent() || isAdminView()) return;
       if (avatarNextStepsEmptyFixture) {
         updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
         setScrollToLatest((signal) => signal + 1);
@@ -1974,6 +2003,7 @@ export default function AvatarApp(): React.ReactElement {
     }
     for (let attempt = 0; attempt < 20; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 900 : 1_500));
+      if (!fence.isCurrent() || isAdminView()) return;
       let view: Awaited<ReturnType<typeof fetchRecapNextSteps>> | null = null;
       try {
         view = await fetchRecapNextSteps(intervalId);
@@ -2007,7 +2037,7 @@ export default function AvatarApp(): React.ReactElement {
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
     setScrollToLatest((signal) => signal + 1);
     scheduleNextStepsSettle();
-  }, [avatarNextStepsEmptyFixture, avatarNextStepsFixture, avatarNextStepsRecoveryLike, clearRecapAutoCollapse, scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
+  }, [avatarNextStepsEmptyFixture, avatarNextStepsFixture, avatarNextStepsRecoveryLike, clearRecapAutoCollapse, scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry, workspaceView]);
 
   // A moment whose card was lost to an older sync (or an older build) still has
   // its entry id — `next-steps-<intervalId>` — so its suggestions can be
@@ -2038,6 +2068,9 @@ export default function AvatarApp(): React.ReactElement {
    * apply is still running — or whose accept response was lost — is reconciled
    * against the server so the card can never sit on Saving forever. */
   const decideNextStep = useCallback(async (entryId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }): Promise<void> => {
+    const isAdminView = () => workspaceViewRef.current === "admin";
+    if (isAdminView()) return;
+    const fence = avatarViewFenceRef.current.capture();
     nextStepsPlayer.stop();
     setNextStepsBusyId(entryId);
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
@@ -2048,6 +2081,7 @@ export default function AvatarApp(): React.ReactElement {
         // DEV-only fixture: the decision is simulated so the card's states can
         // be exercised without a live session.
         await new Promise((resolve) => window.setTimeout(resolve, 250));
+        if (!fence.isCurrent() || isAdminView()) return;
         const fixtureState: RecapNextStepState = decision === "skip" ? "skipped" : "applied";
         updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: fixtureState } }));
         return;
@@ -2065,6 +2099,7 @@ export default function AvatarApp(): React.ReactElement {
         await reconcileNextStepDecision(entryId, item, failure);
         return;
       }
+      if (!fence.isCurrent() || isAdminView()) return;
       updateNextStepsEntry(entryId, (moment) => ({
         ...moment,
         states: { ...moment.states, [item.proposalId]: state },
@@ -2074,13 +2109,14 @@ export default function AvatarApp(): React.ReactElement {
       }));
       if (state === "applied" || state === "skipped") void loadDay();
     } catch (value) {
+      if (!fence.isCurrent() || isAdminView()) return;
       updateNextStepsEntry(entryId, (moment) => ({
         ...moment,
         states: { ...moment.states, [item.proposalId]: "failed" },
         failures: { ...moment.failures, [item.proposalId]: value instanceof Error ? value.message : "The change could not be applied." },
       }));
     } finally {
-      setNextStepsBusyId(null);
+      if (fence.isCurrent()) setNextStepsBusyId(null);
     }
   }, [avatarNextStepsFixture, avatarNextStepsRecoveryLike, loadDay, nextStepsPlayer, reconcileNextStepDecision, updateNextStepsEntry]);
 
@@ -2177,11 +2213,13 @@ export default function AvatarApp(): React.ReactElement {
       return;
     }
     setDecidingIntervalId(id);
+    const fence = avatarViewFenceRef.current.capture();
     try {
       if (avatarNextStepsFixture) {
         // DEV-only fixture: the decision and its moment are simulated so the
         // flow can be exercised without a live session.
         await new Promise((resolve) => window.setTimeout(resolve, 250));
+        if (!fence.isCurrent()) return;
         setActivityPrompt(null);
         setRecapEditMode(false);
         setChat((current) => [...current.map((entry) => entry.activityInterval?.id === id
@@ -2196,6 +2234,7 @@ export default function AvatarApp(): React.ReactElement {
         return;
       }
       await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
+      if (!fence.isCurrent()) return;
       const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
       setActivityPrompt(null);
       setRecapEditMode(false);
@@ -2209,14 +2248,16 @@ export default function AvatarApp(): React.ReactElement {
       // celebration here: the payoff is the finished decision list, not the
       // confirmation itself.
       clearRecapAutoCollapse();
+      if (!fence.isCurrent()) return;
       void startNextStepsMoment(id, recapLabel);
     } catch (value) {
+      if (!fence.isCurrent()) return;
       setChat((current) => [...current, {
         id: `activity-decision-error-${Date.now()}`, role: "system",
         text: value instanceof Error ? value.message : "The recap decision could not be saved.",
       }]);
     } finally {
-      setDecidingIntervalId(null);
+      if (fence.isCurrent()) setDecidingIntervalId(null);
     }
   }, [activityPrompt, clearRecapAutoCollapse, facts.shiftDate, loadDay, startNextStepsMoment]);
 
@@ -2431,8 +2472,10 @@ export default function AvatarApp(): React.ReactElement {
   const retryOperation = useCallback((entryId: string, result: ToolCallResult) => {
     const op = { ...result.op, enabled: true };
     if ((!op.proposalId && !op.batchId) || filing) return;
+    const fence = avatarViewFenceRef.current.capture();
     setFiling(true);
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
+      if (!fence.isCurrent()) return;
       const entry = chatRef.current.find((candidate) => candidate.id === entryId);
       const mergedResults = mergeToolResults(entry?.toolResults ?? [], outcome.results);
       setChat((current) => current.map((candidate) => candidate.id === entryId
@@ -2458,10 +2501,13 @@ export default function AvatarApp(): React.ReactElement {
         void loadDay(true);
         void emit("work-os://avatar-day-changed");
       }
-    }).catch((value) => setChat((current) => [...current, {
+    }).catch((value) => {
+      if (!fence.isCurrent()) return;
+      setChat((current) => [...current, {
       id: `retry-error-${Date.now()}`, role: "system",
       text: value instanceof Error ? value.message : "The retry could not be filed.",
-    }])).finally(() => setFiling(false));
+      }]);
+    }).finally(() => { if (fence.isCurrent()) setFiling(false); });
   }, [filing, loadDay, shareAvatarTools]);
 
   const loadTaskSubtasks = useCallback(async (taskId: string) => {
@@ -2553,6 +2599,7 @@ export default function AvatarApp(): React.ReactElement {
     answers: AgendaAnswers,
     review: { rounds: number; answered: number; asked: number; reviewed: boolean },
   ) => {
+    const fence = avatarViewFenceRef.current.capture();
     setFiling(true);
     let receiptText = "";
     try {
@@ -2580,6 +2627,7 @@ export default function AvatarApp(): React.ReactElement {
             items,
           }),
         });
+        if (!fence.isCurrent()) return;
         const materialized = confirmation?.taskCreation;
         const createdTasks = materialized?.tasks ?? 0;
         const createdSubtasks = materialized?.subtasks ?? 0;
@@ -2597,6 +2645,7 @@ export default function AvatarApp(): React.ReactElement {
             : "";
         receiptText = `${agendaReceipt(review)}${materializeCopy}`;
       } else throw new Error("Planning assistance must build a plan before it can be confirmed.");
+      if (!fence.isCurrent()) return;
       setInput("");
       setAgendaReview(null);
       setChat((current) => [...current, {
@@ -2606,8 +2655,10 @@ export default function AvatarApp(): React.ReactElement {
         createdAt: new Date().toISOString(),
       }]);
       await loadDay(true);
+      if (!fence.isCurrent()) return;
       void emit("work-os://avatar-day-changed");
     } catch (value) {
+      if (!fence.isCurrent()) return;
       const message = value instanceof Error ? value.message : "Your agenda could not be confirmed.";
       setChat((current) => [...current, {
         id: `agenda-error-${Date.now()}`, role: "system",
@@ -2617,7 +2668,7 @@ export default function AvatarApp(): React.ReactElement {
             ? "The AI plan build expired. Send your agenda again to rebuild it."
             : message,
       }]);
-    } finally { setFiling(false); }
+    } finally { if (fence.isCurrent()) setFiling(false); }
   }, [facts.planItems, facts.shiftDate, loadDay]);
   /** Agenda entry: the assistant reviews the goal first and asks up to two
    * follow-up questions before anything is persisted. */
@@ -2631,6 +2682,7 @@ export default function AvatarApp(): React.ReactElement {
       { label: "Confirming your plan" },
     ];
     setThinkingTrace({ stages, active: 0, startedAt });
+    const fence = avatarViewFenceRef.current.capture();
     try {
       const conversation = stripPromptReminderTurns(
         chat.filter((entry) => entry.role === "user" || entry.role === "assistant"),
@@ -2640,6 +2692,7 @@ export default function AvatarApp(): React.ReactElement {
         signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS),
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
+      if (!fence.isCurrent()) return;
       const interpretation = { ...result.interpretation, buildId: result.build_id };
       setThinkingTrace({ stages, active: 1, startedAt });
       if (interpretation.clarifications.length > 0) {
@@ -2652,15 +2705,17 @@ export default function AvatarApp(): React.ReactElement {
         return;
       }
       setThinkingTrace({ stages, active: 2, startedAt });
+      if (!fence.isCurrent()) return;
       await confirmAgenda(goal, interpretation, {}, { rounds: 1, answered: 0, asked: 0, reviewed: true });
     } catch (value) {
+      if (!fence.isCurrent()) return;
       setChat((current) => [...current, {
         id: `agenda-error-${Date.now()}`, role: "system",
         text: value instanceof ApiRequestError && (value.status === 501 || value.status === 503 || value.status === null)
           ? "Planning assistance is unavailable. Try building your plan again before confirming it."
           : value instanceof Error ? value.message : "Your agenda could not be reviewed.",
       }]);
-    } finally { setThinkingTrace(null); }
+    } finally { if (fence.isCurrent()) setThinkingTrace(null); }
   }, [agendaReview, chat, confirmAgenda, facts.shiftDate, filing, input, thinkingTrace]);
   const answerAgendaReview = useCallback(async () => {
     if (!agendaReview || filing || thinkingTrace) return;
@@ -2672,6 +2727,7 @@ export default function AvatarApp(): React.ReactElement {
       { label: "Confirming your plan" },
     ];
     setThinkingTrace({ stages, active: 0, startedAt });
+    const fence = avatarViewFenceRef.current.capture();
     try {
       const conversation = withAnswerRound(
         stripPromptReminderTurns(chat.filter((entry) => entry.role === "user" || entry.role === "assistant"))
@@ -2684,6 +2740,7 @@ export default function AvatarApp(): React.ReactElement {
         signal: AbortSignal.timeout(PLAN_INTERPRET_TIMEOUT_MS),
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
+      if (!fence.isCurrent()) return;
       const next = { ...result.interpretation, buildId: result.build_id };
       setThinkingTrace({ stages, active: 1, startedAt });
       const stillOpen = unansweredQuestions(next.clarifications, answers);
@@ -2699,8 +2756,10 @@ export default function AvatarApp(): React.ReactElement {
       setThinkingTrace({ stages, active: 2, startedAt });
       const applicable = applicableAnswers(next.clarifications, answers);
       const answeredCount = Object.keys(applicable).length;
+      if (!fence.isCurrent()) return;
       await confirmAgenda(goal, next, applicable, { rounds: round + 1, answered: answeredCount, asked: interpretation.clarifications.length, reviewed: true });
     } catch (value) {
+      if (!fence.isCurrent()) return;
       setChat((current) => [...current, {
         id: `agenda-error-${Date.now()}`, role: "system",
         text: value instanceof Error ? value.message : "Your answers could not be reviewed.",
@@ -3005,7 +3064,12 @@ export default function AvatarApp(): React.ReactElement {
     pending={viewPending}
     error={viewError}
     onSwitch={(mode) => { void requestView(mode); }}
-    onRetry={viewError ? () => { const target = lastViewTargetRef.current; if (target) void requestView(target); } : undefined}
+    onRetry={viewError ? () => {
+      const target = lastViewTargetRef.current;
+      const current = avatarViewStateRef.current;
+      if (current && (current.adminStatus === "failed" || current.adminStatus === "loading")) { void requestViewRetry(); return; }
+      if (target) void requestView(target);
+    } : undefined}
     pose={workspaceView === "employee" ? mascotVisual.pose : undefined}
     tone={workspaceView === "employee" ? mascotVisual.tone : undefined}
     className="avatar-head-switch"
@@ -3032,6 +3096,7 @@ export default function AvatarApp(): React.ReactElement {
     }
     return <div className="avatar-shell expanded avatar-admin-shell">
       <AdminOttoChat
+        key={`${avatarViewState!.scope.userId}:${avatarViewState!.scope.organizationId}:${avatarViewState!.epoch}:${avatarViewState!.adminConversationGeneration}`}
         surface="floating"
         scope={avatarViewState!.scope}
         conversationId={avatarAdminViewFixtureRequested ? (adminConversationOverride ?? avatarViewState!.adminConversationId) : avatarViewState!.adminConversationId}
@@ -3209,7 +3274,7 @@ export default function AvatarApp(): React.ReactElement {
           {/* One marker, one meaning: it appears when Otto needs attention.
               Shift progress lives in the elapsed pill; the old pie marker read
               as a stray wedge beside the figure. */}
-          {showBadge && <span className="avatar-badge" aria-hidden="true" />}
+          {workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
         {workspaceView === "admin" ? <span className="avatar-admin-label">Admin</span> : showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>

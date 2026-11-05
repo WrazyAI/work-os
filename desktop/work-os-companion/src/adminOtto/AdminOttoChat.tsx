@@ -549,6 +549,7 @@ export function AdminOttoChat({
     void controller.submit();
   };
   const [resetting, setResetting] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const newChat = async () => {
     if (resetting) return false;
     setResetting(true);
@@ -575,18 +576,34 @@ export function AdminOttoChat({
     }
   };
 
+  const pendingRefresh = useRef<number | null>(null);
+  const hasPendingDecision = (turns: typeof chat.turns) => turns.some((turn) =>
+    turn.pendingAction?.status === "pending"
+    || turn.workflow?.steps.some((step) => step.status === "ready" || step.status === "blocked"));
   const refreshThread = useCallback(() => {
     if (!isCurrentRef.current()) return;
     const current = controller.snapshot();
-    if (!current.conversationId || current.hydration === "loading" || current.busy || resetting) return;
+    if (!current.conversationId) return;
+    if (current.hydration === "loading" || current.busy || resetting || actionBusy || hasPendingDecision(current.turns)) {
+      pendingRefresh.current = refreshRevision;
+      return;
+    }
+    pendingRefresh.current = null;
     void controller.open(current.conversationId);
-  }, [controller, resetting]);
+  }, [actionBusy, controller, refreshRevision, resetting]);
   const lastRefreshRevision = useRef(refreshRevision);
   useEffect(() => {
     if (refreshRevision === lastRefreshRevision.current) return;
     lastRefreshRevision.current = refreshRevision;
     refreshThread();
   }, [refreshRevision, refreshThread]);
+  useEffect(() => {
+    if (pendingRefresh.current === null) return;
+    if (chat.busy || chat.hydration === "loading" || resetting || actionBusy || hasPendingDecision(chat.turns)) return;
+    const target = pendingRefresh.current;
+    pendingRefresh.current = null;
+    if (target === refreshRevision) refreshThread();
+  }, [actionBusy, chat.busy, chat.hydration, chat.turns, refreshRevision, refreshThread, resetting]);
   useEffect(() => {
     const refresh = () => refreshThread();
     window.addEventListener("focus", refresh);
@@ -665,7 +682,7 @@ export function AdminOttoChat({
                           playback={playback}
                         />
                       ) : null}
-                      {turn.pendingAction ? <AdminActionBatch actions={[turn.pendingAction]}
+                      {turn.pendingAction ? <AdminActionBatch actions={[turn.pendingAction]} onBusyChange={setActionBusy}
                         onConfirm={async (current) => {
                           const confirmed = transport?.confirm ? await transport.confirm(current) : { ...current, ...(await confirmAdminOttoAction(current.previewId)).action } as AdminOttoPendingAction;
                           const action = { ...current, ...confirmed, status: confirmed.status ?? "recorded" as const };
@@ -681,7 +698,7 @@ export function AdminOttoChat({
                         onUpdate={(workflow) => { if (isCurrentRef.current()) controller.updateWorkflow(workflow); }}
                         onAction={(action) => { if (isCurrentRef.current()) controller.updateAction(action); }}
                         confirm={transport?.confirm} status={transport?.status}
-                        onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} /> : null}
+                        onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} onBusyChange={setActionBusy} /> : null}
                     </>
                   )}
                 </ChatTurn>

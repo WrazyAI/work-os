@@ -431,7 +431,9 @@ export default function App() {
   const adminOttoOpenAttemptRef = useRef(0);
   const adminOttoDeviceId = useRef<string>(crypto.randomUUID());
   const viewFenceRef = useRef(createViewWorkFence());
-  const adminChatLifecycleRef = useRef<{ suspend: () => AdminOttoEntryRecovery } | null>(null);
+  const adminChatLifecycleRef = useRef<{ suspend: () => AdminOttoEntryRecovery; voice: { start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } } | null>(null);
+  const adminVoiceStartedRef = useRef(false);
+  const adminVoiceRecorderRef = useRef<{ start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } | null>(null);
   const conversationOwnerRef = useRef<AdminConversationOwner | null>(null);
   const conversationClientRef = useRef<AdminConversationClient | null>(null);
   const conversationStateRef = useRef<AdminConversationState | null>(null);
@@ -441,6 +443,8 @@ export default function App() {
   const effectiveWorkspaceRef = useRef<"employee" | "admin">("employee");
   const [viewRevision, setViewRevision] = useState(1);
   const lastViewFingerprint = useRef("");
+  const lastConversationGeneration = useRef<number | null>(null);
+  const lastOwnerToken = useRef<string | null>(null);
   const lastPresentationMode = useRef<"employee" | "admin" | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -803,6 +807,8 @@ export default function App() {
     if (existing && existingScope?.userId === sessionData.userId
       && existingScope.organizationId === sessionData.organizationId) return;
     existing?.dispose();
+    const tokenChanged = lastOwnerToken.current !== null && lastOwnerToken.current !== session?.token;
+    lastOwnerToken.current = session?.token ?? null;
     let owner!: AdminConversationOwner;
     owner = createAdminConversationOwner({
       getLiveFence: () => {
@@ -842,8 +848,8 @@ export default function App() {
     };
     owner.setContext({
       scope: initialScope,
-      epoch: Math.max(1, adminOttoSnapshotRef.current?.epoch ?? adminOttoEpochRef.current),
-      conversationId: adminOttoConversationId,
+      epoch: Math.max(1, adminOttoSnapshotRef.current?.epoch ?? 0, adminOttoEpochRef.current),
+      conversationId: tokenChanged ? null : adminOttoConversationId,
     });
     const initial = owner.snapshot();
     conversationStateRef.current = initial;
@@ -857,7 +863,7 @@ export default function App() {
         conversationClientRef.current = null;
       }
     };
-  }, [signedIn, syncBypass, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId, workSessionQuery.data?.role]);
+  }, [signedIn, syncBypass, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId, workSessionQuery.data?.role, session?.token]);
 
   useEffect(() => {
     const owner = conversationOwnerRef.current;
@@ -869,7 +875,7 @@ export default function App() {
         organizationId: sessionData.organizationId,
         mode: effectiveWorkspace,
       },
-      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? adminOttoEpochRef.current),
+      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
     });
     const next = owner.snapshot();
     conversationStateRef.current = next;
@@ -880,6 +886,17 @@ export default function App() {
     const id = conversationState?.conversationId;
     if (id !== undefined && id !== adminOttoConversationId) setAdminOttoConversationId(id);
   }, [conversationState?.conversationId, adminOttoConversationId]);
+
+  useEffect(() => {
+    const generation = conversationState?.generation;
+    if (generation === undefined) return;
+    if (lastConversationGeneration.current !== null && lastConversationGeneration.current !== generation) {
+      setAdminOttoDraft("");
+      adminOttoRetryRequestId.current = null;
+      setAdminOttoConversationId(null);
+    }
+    lastConversationGeneration.current = generation;
+  }, [conversationState?.generation]);
 
   useEffect(() => {
     const sessionData = workSessionQuery.data;
@@ -908,13 +925,15 @@ export default function App() {
 
   const adminViewRole = (workSessionQuery.data?.role ?? "employee") as "admin" | "manager" | "employee";
   const adminViewStatus = adminViewRole === "admin" ? adminContextState?.status ?? "loading" : "absent";
-  const adminViewPersonId = adminContextState?.personId ?? workSessionQuery.data?.personId ?? null;
+  const adminViewPersonId = adminContextState?.status === "ready"
+    ? adminContextState.personId
+    : workSessionQuery.data?.personId ?? null;
   const adminViewVoice = adminViewRole === "admin" && adminViewStatus === "ready" && adminOttoContextQuery.data?.voiceAvailable === true;
   const adminViewTranscription = adminViewRole === "admin" && adminViewStatus === "ready" && adminOttoContextQuery.data?.transcriptionAvailable === true;
-  const adminViewConversationId = conversationState?.conversationId ?? adminOttoConversationId;
+  const adminViewConversationId = conversationState ? conversationState.conversationId : adminOttoConversationId;
   const viewFingerprint = JSON.stringify([
     activeViewScope?.userId, activeViewScope?.organizationId, effectiveWorkspace,
-    Math.max(1, adminOttoSnapshot?.epoch ?? adminOttoEpochRef.current),
+    Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
     adminViewRole, adminViewStatus, adminViewPersonId, adminViewVoice, adminViewTranscription,
     adminViewConversationId, conversationState?.generation ?? 1, conversationState?.revision ?? 1,
     conversationState?.busy ?? false,
@@ -929,7 +948,7 @@ export default function App() {
     if (!activeViewScope) return null;
     return buildOttoViewState({
       scope: { ...activeViewScope, mode: effectiveWorkspace },
-      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? adminOttoEpochRef.current),
+      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
       revision: viewRevision,
       workspace: effectiveWorkspace,
       role: adminViewRole,
@@ -1100,7 +1119,7 @@ export default function App() {
     // previews confirmable behind it.
     const conversationId = adminOttoConversationId;
     const requestId = adminOttoRetryRequestId.current;
-    if (ADMIN_SHELL_BOOT || (!conversationId && !requestId)) {
+    if (ADMIN_SHELL_BOOT || (!conversationId && !requestId && !conversationClientRef.current)) {
       setAdminOttoDraft("");
       setAdminOttoResetToken((value) => value + 1);
       reveal();
@@ -1132,6 +1151,7 @@ export default function App() {
       notifications.error("That record link is not available in this workspace.", "Record unavailable");
       return;
     }
+    if (isTauri()) void invoke("focus_main").catch(() => undefined);
     const requestedSnapshot = adminOttoModeRef.current?.snapshot() ?? null;
     const requestedToken = session?.token;
     const stillCurrent = () => {
@@ -1625,6 +1645,9 @@ export default function App() {
         adminChatLifecycleRef.current?.suspend();
         requestOttoAudioStop();
         voiceRef.current.cancel();
+        setBusy(false);
+        setComposerThinking(null);
+        setInterpretation(null);
         setAdminOttoEntryOpen(false);
       },
       switchController: async (next) => {
@@ -1829,7 +1852,11 @@ export default function App() {
       // an employee-scope controller underneath a loading/failed admin shell.
       void adminOttoDeliveryRef.current?.stop();
       adminOttoDeliveryRef.current = null;
-      if (adminOttoSnapshot) void emit(OTTO_CONTEXT_CLEARED_EVENT, ottoContextEvent(adminOttoSnapshot));
+      if (adminOttoSnapshot) {
+        void emit(OTTO_CONTEXT_CLEARED_EVENT, ottoContextEvent(adminOttoSnapshot));
+        adminOttoEpochRef.current = Math.max(adminOttoEpochRef.current, adminOttoSnapshot.epoch) + 1;
+        setViewRevision((value) => value + 1);
+      }
       adminOttoModeRef.current?.dispose();
       adminOttoModeRef.current = null;
       requestOttoAudioStop();
@@ -1931,6 +1958,8 @@ export default function App() {
 
   useEffect(() => {
     viewFenceRef.current.invalidate();
+    adminOttoEpochRef.current += 1;
+    setViewRevision((value) => value + 1);
     adminOttoOpenAttemptRef.current++;
     adminOttoRetryRequestId.current = null;
     setAdminOttoEntryOpen(false);
@@ -1952,6 +1981,14 @@ export default function App() {
     const timer = window.setInterval(publish, 30_000);
     return () => window.clearInterval(timer);
   }, [avatarWindowVisible, adminOttoSnapshot]);
+
+  useEffect(() => {
+    if (!isTauri() || avatarWindowVisible !== true || !viewState) return;
+    const publish = () => { void emit(OTTO_VIEW_STATE_EVENT, viewState); };
+    publish();
+    const timer = window.setInterval(publish, 30_000);
+    return () => window.clearInterval(timer);
+  }, [avatarWindowVisible, viewState]);
 
   /* Heartbeats belong to a stable subscription, not the poll effect. Renewing
      a remote lease must not tear down and restart the local delivery loop. */
@@ -2821,16 +2858,35 @@ export default function App() {
     const unlisteners: Array<() => void> = [];
     void listen<{ target?: string }>("work-os://voice/start", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (effectiveWorkspaceRef.current === "admin") {
+        const handle = adminChatLifecycleRef.current;
+        if (handle) {
+          adminVoiceRecorderRef.current = handle.voice;
+          adminVoiceStartedRef.current = true;
+          handle.voice.start("hotkey");
+        }
+        return;
+      }
       voiceRef.current.start("hotkey");
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/stop", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.stop();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.stop();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/cancel", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.cancel();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.cancel();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
@@ -5467,7 +5523,7 @@ export default function App() {
       />
       {adminOttoEntryOpen && (adminOttoContextQuery.data || ADMIN_SHELL_BOOT) ? (
         <AdminOttoChat
-          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}`}
+          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}:${conversationState?.generation ?? 1}`}
           scope={adminOttoContextQuery.data?.scope ?? {
             userId: ADMIN_SHELL_SESSION.userId,
             organizationId: ADMIN_SHELL_SESSION.organizationId,

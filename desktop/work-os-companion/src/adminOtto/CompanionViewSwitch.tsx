@@ -150,7 +150,6 @@ function MenuMarkup({
         onClick={() => {
           if (disabled) return;
           onSwitch(option.mode);
-          onClose();
         }}
       >
         <span className="otto-view-option-mark" aria-hidden="true">{current ? <Check size={14} /> : null}</span>

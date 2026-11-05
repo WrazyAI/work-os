@@ -93,5 +93,7 @@ describe("avatar full view adoption", () => {
     });
     expect(adoptAvatarView(current, view({ epoch: 2, scope: { ...current.scope, mode: "employee" }, workspace: "employee" }), identity)).toBeNull();
     expect(adoptAvatarView(current, view({ scope: { userId: "other", organizationId: "org-1", mode: "admin" } }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ revision: 3, adminConversationGeneration: 0 }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ revision: 3, adminConversationGeneration: 1, adminConversationRevision: 0 }), identity)).toBeNull();
   });
 });

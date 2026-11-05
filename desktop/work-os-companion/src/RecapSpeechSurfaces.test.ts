@@ -107,7 +107,7 @@ describe("the grown bubble stays inside its window", () => {
     const css = read("./avatar.css");
     expect(css).not.toContain("avatar-badge-progress");
     const avatar = read("./AvatarApp.tsx");
-    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).toContain('{workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}');
   });
 });
 

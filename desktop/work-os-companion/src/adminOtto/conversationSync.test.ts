@@ -160,3 +160,33 @@ describe("admin conversation coordination", () => {
 });
 
 function h() { return setup(); }
+
+describe("concurrent admin conversation resets", () => {
+  it("a second reset cannot report success when the shared discard fails", async () => {
+    let reject!: (error: Error) => void;
+    const h = setup({
+      conversationId: "conversation-1",
+      discard: () => new Promise<void>((_, fail) => { reject = fail; }),
+    });
+    const first = h.main.discard({ conversationId: "conversation-1", requestId: null });
+    const second = h.main.discard({ conversationId: "conversation-1", requestId: null });
+    reject(new Error("discard unavailable"));
+    await expect(first).rejects.toMatchObject({ reason: "discard_failed" });
+    await expect(second).rejects.toMatchObject({ reason: "discard_failed" });
+    expect(h.owner.snapshot().conversationId).toBe("conversation-1");
+  });
+});
+
+describe("admin conversation retry across a view round trip", () => {
+  it("reacquires a current ticket for the same request id", async () => {
+    const h = setup();
+    const first = await h.main.beginSend({ requestId: "request-retry", conversationId: null });
+    h.owner.setContext({ scope: { ...scope, mode: "employee" }, epoch: 6 });
+    h.owner.setContext({ scope, epoch: 7 });
+    const second = await h.main.beginSend({ requestId: "request-retry", conversationId: null });
+    expect(second.operationId).not.toBe(first.operationId);
+    expect(second.epoch).toBe(7);
+    await h.main.finishSend(second, "conversation-retried");
+    expect(h.owner.snapshot().conversationId).toBe("conversation-retried");
+  });
+});

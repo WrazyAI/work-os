@@ -866,5 +866,7 @@ describe("floating Otto view switch", () => {
     expect(adminOttoChat).toContain('mascotMode="admin"');
     expect(avatarApp).toContain("adminConversationGeneration");
     expect(avatarApp).toContain("adminConversationRevision");
+    expect(avatarApp).toContain("adminRecoveryBoundaryRef");
+    expect(app).toContain("conversationState?.generation ?? 1");
   });
 });

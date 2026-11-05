@@ -103,9 +103,9 @@ describe("admin conversation event transport", () => {
     const handlers = new Map<string, Set<(payload: unknown) => void>>();
     const bus = {
       emit(event: string, payload: unknown) {
-        for (const handler of handlers.get(event) ?? []) handler(payload);
+        for (const handler of handlers.get(event) ?? []) handler({ event, id: 0, payload });
       },
-      listen(event: string, handler: (payload: unknown) => void) {
+      listen(event: string, handler: (message: unknown) => void) {
         const group = handlers.get(event) ?? new Set();
         group.add(handler);
         handlers.set(event, group);
@@ -114,8 +114,8 @@ describe("admin conversation event transport", () => {
     };
     const h = setup();
     const { createAdminConversationEventTransport, parseAdminConversationRequest, OTTO_CONVERSATION_REQUEST_EVENT, OTTO_CONVERSATION_RESULT_EVENT } = await import("./conversationSync");
-    const stopRequests = bus.listen(OTTO_CONVERSATION_REQUEST_EVENT, (payload) => {
-      const request = parseAdminConversationRequest(payload);
+    const stopRequests = bus.listen(OTTO_CONVERSATION_REQUEST_EVENT, (message) => {
+      const request = parseAdminConversationRequest((message as { payload?: unknown })?.payload);
       if (!request) return;
       void h.owner.handle(request).then((result) => bus.emit(OTTO_CONVERSATION_RESULT_EVENT, result));
     });
