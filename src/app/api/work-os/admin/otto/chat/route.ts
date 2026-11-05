@@ -3,6 +3,7 @@ import { requireAdminOttoAccess } from "@/lib/work-os-admin-otto-access";
 import {
   executeAdminOttoChat,
   loadAdminOttoThread,
+  discardAdminOttoConversation,
 } from "@/lib/work-os-admin-otto-chat";
 import { AdminOttoIntentUnavailableError } from "@/lib/work-os-admin-otto-intent";
 import { hasExpectedPublicOrigin } from "@/lib/request-origin";
@@ -108,6 +109,25 @@ export async function GET(req: Request) {
       },
     });
     return wired(NextResponse.json(view, { headers: { "Cache-Control": "no-store" } }));
+  } catch (error) {
+    if (error instanceof Response) return wired(error);
+    return safeError(error);
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const auth = await requireAdminOttoAccess(req, "read");
+    if (auth.response) return wired(auth.response);
+    if (!req.headers.get("authorization") && !hasExpectedPublicOrigin(req)) {
+      return wired(NextResponse.json({ error: "invalid origin" }, { status: 403 }));
+    }
+    const body = await req.json().catch(() => null);
+    if (!objectBody(body) || Object.keys(body).some((key) => key !== "conversationId" && key !== "requestId")) {
+      throw new WorkOsValidationError("Specify the conversation to discard.");
+    }
+    await discardAdminOttoConversation(auth.access, body as { conversationId: string | null; requestId?: string | null });
+    return wired(NextResponse.json({ discarded: true }));
   } catch (error) {
     if (error instanceof Response) return wired(error);
     return safeError(error);

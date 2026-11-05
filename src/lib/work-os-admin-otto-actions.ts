@@ -1,7 +1,7 @@
 import type { AdminOttoOperation, AdminOttoPendingAction } from "@/modules/work-os/admin-otto/contracts";
 import type { AdminAgentAccess } from "@/lib/work-admin-agent-auth";
 import { previewAdminAction, defaultAdminAgentActionServices } from "@/lib/work-admin-agent-actions";
-import { createAdminPreview } from "@/lib/work-admin-action-previews";
+import { createAdminPreview, stableStateJson } from "@/lib/work-admin-action-previews";
 import { listAdminAgentTasks } from "@/lib/work-admin-agent-tasks";
 import { resolveAdminOttoPeople } from "@/lib/work-os-admin-otto-reads";
 import { ADMIN_AGENT_TOKEN_SCOPES } from "@/lib/work-agent-tokens";
@@ -51,6 +51,9 @@ async function resolveTask(access: WorkOsAccess, query: string) {
 export async function executeAdminOttoOperation(
   access: WorkOsAccess,
   operation: AdminOttoOperation,
+  idempotencyKey?: string,
+  /** Server-owned ID from a recorded prerequisite; never accepted from model text. */
+  dependencyTaskId?: string,
 ): Promise<AdminOttoOperationResult> {
   if (access.featureFlags.admin_agent_api !== true) {
     return { reply: "Task actions are not enabled for this workspace yet." };
@@ -83,7 +86,9 @@ export async function executeAdminOttoOperation(
   } else {
     const query = operation.task_query?.trim();
     if (!query) throw new WorkOsValidationError("A task title is required");
-    const resolvedTask = await resolveTask(access, query);
+    const resolvedTask = dependencyTaskId
+      ? { task: await services.getTask(access, dependencyTaskId) }
+      : await resolveTask(access, query);
     if (!resolvedTask.task) return { reply: resolvedTask.reply ?? "I couldn't find that task." };
     const taskId = String(resolvedTask.task.id);
 
@@ -134,7 +139,32 @@ export async function executeAdminOttoOperation(
     },
     state: preview.state,
     expiresAt,
+    idempotencyKey,
   });
+  const directory = await services.listPeople?.(access) ?? [];
+  const byId = new Map(directory.map((person) => [person.id, person]));
+  const fieldLabel: Record<string, string> = { name: "Task", owners: "Assignees", assignees: "Assignees", due_date: "Due date", completed: "Completion", project: "Project" };
+  const displayValue = (field: string, value: unknown): string | null => {
+    if (value === null || value === undefined || Array.isArray(value) && value.length === 0) return null;
+    if (field === "owners" || field === "assignees") {
+      return Array.isArray(value) ? value.map((id) => byId.get(String(id))?.displayName ?? "Unavailable teammate").join(", ") : "Unavailable teammate";
+    }
+    if (field === "project") return "Selected project";
+    if (field === "completed") return value ? "Done" : "Open";
+    return typeof value === "string" || typeof value === "number" ? String(value) : null;
+  };
+  const ownerIds = preview.request.final_assignee_person_ids ?? preview.request.resolved_owner_person_ids ?? [];
+  const display = {
+    title: operation.title ?? preview.summary,
+    assignees: (Array.isArray(ownerIds) ? ownerIds : []).flatMap((id) => {
+      const person = byId.get(String(id));
+      return person ? [{ ...person, timezone: "UTC" }] : [];
+    }),
+    changes: preview.changes.filter((change) => stableStateJson(change.from) !== stableStateJson(change.to)).map((change) => ({
+      label: fieldLabel[change.field] ?? change.field.replaceAll("_", " "),
+      before: displayValue(change.field, change.from), after: displayValue(change.field, change.to),
+    })),
+  };
   return {
     reply: preview.summary,
     pendingAction: {
@@ -144,6 +174,8 @@ export async function executeAdminOttoOperation(
       changes: preview.changes,
       warnings: preview.warnings,
       expiresAt: created.expiresAt,
+      status: "pending",
+      display,
     },
   };
 }

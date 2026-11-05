@@ -52,6 +52,33 @@
   white-space: nowrap;
 }
 
+/* The explicit New chat control stays one compact label; it never wraps under
+ * the close control at narrow widths. */
+.admin-otto-head .admin-otto-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.admin-otto-head .admin-otto-secondary svg { flex-shrink: 0; }
+
+[data-conversation-surface="in-app"] .admin-otto-head .progress-header-actions .admin-otto-secondary {
+  display: inline-flex;
+  width: auto;
+  height: 34px;
+  padding: 0 9px;
+  place-items: initial;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border-color: var(--conversation-line);
+  white-space: nowrap;
+}
+
 .admin-otto-close {
   display: inline-grid;
   width: 34px;
@@ -723,6 +750,7 @@
     padding-left: 9px;
   }
   .admin-otto-head-sub { max-width: 122px; font-size: 10px; }
+  @media (max-width: 500px) { .admin-otto-head-sub { display: none; } }
   .admin-otto-thread,
   .admin-otto-recaps { padding: 20px 14px 14px; }
   .admin-otto-composer { margin: 10px 10px 12px; }

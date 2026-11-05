@@ -202,7 +202,10 @@ insert into work_org_members (id, organization_id, user_id, role, feature_flags,
   ('${otherAdminMembership}', '${otherOrg}', '40000000-0000-4000-8000-000000000013', 'admin', '{}', true);
 `;
 
-export const migration = () => readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8");
+export const migration = async () => (await Promise.all([
+  readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8"),
+  readFile(new URL("../../supabase/migrations/0072_work_admin_otto_workflows.sql", import.meta.url), "utf8"),
+])).join("\n");
 
 export async function fixture() {
   const db = new PGlite();

@@ -28,7 +28,7 @@ describe("admin Otto chat", () => {
     // presence dot, quiet admin subtitle, peer tabs, and close action.
     expect(html).toContain("workos-chat-head admin-otto-head");
     expect(html).toContain("conversation-pane-title");
-    expect(html).toContain("Administration, confirmed changes");
+    expect(html).toContain("Administration");
     expect(html).not.toContain("WORK OS · ADMINISTRATION");
     expect(html).not.toContain("admin-otto-tabs-row");
     expect(html).toContain("chat-composer");
@@ -300,15 +300,16 @@ describe("admin Otto chat", () => {
         action: "task.assign",
         summary: "Assign Checkout to Aden",
         changes: [{ field: "assignees", from: [], to: ["Aden Badon"] }],
+        display: { title: "Checkout", assignees: [{ id: "aden", displayName: "Aden Badon", active: true, timezone: "UTC" }], changes: [{ label: "Assignees", before: null, after: "Aden Badon" }] },
         warnings: ["This task has an expected outcome and needs completion evidence."],
-        expiresAt: "2026-11-03T18:00:00.000Z",
+        expiresAt: "2099-11-03T18:00:00.000Z",
       },
     }));
-    expect(html).toContain("Assign Checkout to Aden");
-    expect(html).toContain("assignees");
+    expect(html).toContain("Checkout");
+    expect(html).toContain("Assignees");
     expect(html).toContain("Aden Badon");
     expect(html).toContain("completion evidence");
-    expect(html).toContain("Confirm change");
-    expect(html).toContain('data-admin-action-confirm="11111111-1111-4111-8111-111111111111"');
+    expect(html).toContain("Assign task");
+    expect(html).toContain("Not applied until you approve.");
   });
 });

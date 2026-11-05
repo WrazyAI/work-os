@@ -102,7 +102,7 @@ import { AdminOttoChat, type AdminArrivalView } from "./adminOtto/AdminOttoChat"
 import { AdminOttoSettings } from "./adminOtto/AdminOttoSettings";
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
 import type { OttoScope, ReviewedRecap } from "../../../src/modules/work-os/admin-otto/contracts";
-import { fetchAdminOttoContext, claimAdminOttoDelivery, fetchAdminOttoInbox, fetchAdminOttoRecap, updateAdminOttoDelivery, transcribeAdminOttoAudio, type AdminOttoContextResponse } from "./adminOtto/api";
+import { fetchAdminOttoContext, claimAdminOttoDelivery, discardAdminOttoChat, fetchAdminOttoInbox, fetchAdminOttoRecap, updateAdminOttoDelivery, transcribeAdminOttoAudio, type AdminOttoContextResponse } from "./adminOtto/api";
 import { ADMIN_FIXTURE_TRANSPORT, adminFixtureSpeak, createAdminOttoFollowFixture, FIXTURE_REVIEWED_RECAP, fixtureInboxPage } from "./adminOtto/fixtures";
 import { parseAdminRecordHref } from "./adminOtto/recordLinks";
 import { useAdminOttoRecapAudio } from "./adminOtto/useAdminOttoRecapAudio";
@@ -390,6 +390,7 @@ export default function App() {
   const [adminOttoArrivalRevision, setAdminOttoArrivalRevision] = useState(0);
   const [adminOttoFollowRevision, setAdminOttoFollowRevision] = useState(0);
   const adminOttoRetryRequestId = useRef<string | null>(null);
+  const adminOttoNewChatPending = useRef(false);
   const rememberAdminOttoRecovery = useCallback((recovery: { draft: string; requestId: string | null }) => {
     setAdminOttoDraft(recovery.draft);
     adminOttoRetryRequestId.current = recovery.requestId;
@@ -869,38 +870,61 @@ export default function App() {
     setAdminOttoInitialTab(requestedTab);
     setAdminOttoTabRequest((current) => ({ tab: requestedTab, token: current.token + 1 }));
     setAdminOttoRequestedRecap(newChat ? null : options.recap ?? null);
-    if (newChat) {
-      setAdminOttoConversationId(null);
-      setAdminOttoDraft("");
-      setAdminOttoResetToken((value) => value + 1);
-    }
-    if (options.listen && options.recap) void adminAudioRef.current.listen(options.recap);
-    const attempt = ++adminOttoOpenAttemptRef.current;
-    if (ADMIN_SHELL_BOOT) {
-      setAdminOttoEntryOpen(true);
-      return;
-    }
-    if (adminOttoContextQuery.isSuccess && adminOttoContextQuery.data) {
-      setAdminOttoEntryOpen(true);
-      return;
-    }
-    const retry = createAdminOttoContextRetry(async () => {
-      const result = await adminOttoContextQuery.refetch();
-      return { data: result.data ?? null, error: result.error };
-    });
-    void retry.retry(null).then((result) => {
-      if (attempt !== adminOttoOpenAttemptRef.current || result.stale) return;
-      if (result.status !== "ready" || !result.context) {
-        notifications.info("Admin Otto could not load its administration context. Try again from New chat.", "Otto unavailable");
+    const reveal = () => {
+      if (options.listen && options.recap) void adminAudioRef.current.listen(options.recap);
+      const attempt = ++adminOttoOpenAttemptRef.current;
+      if (ADMIN_SHELL_BOOT) {
+        setAdminOttoEntryOpen(true);
         return;
       }
-      setAdminOttoEntryOpen(true);
-    }).catch(() => {
-      if (attempt === adminOttoOpenAttemptRef.current) {
-        notifications.info("Admin Otto could not load its administration context. Try again from New chat.", "Otto unavailable");
+      if (adminOttoContextQuery.isSuccess && adminOttoContextQuery.data) {
+        setAdminOttoEntryOpen(true);
+        return;
       }
-    });
-  }, [adminOttoContextQuery, notifications]);
+      const retry = createAdminOttoContextRetry(async () => {
+        const result = await adminOttoContextQuery.refetch();
+        return { data: result.data ?? null, error: result.error };
+      });
+      void retry.retry(null).then((result) => {
+        if (attempt !== adminOttoOpenAttemptRef.current || result.stale) return;
+        if (result.status !== "ready" || !result.context) {
+          notifications.info("Admin Otto could not load its administration context. Try again from New chat.", "Otto unavailable");
+          return;
+        }
+        setAdminOttoEntryOpen(true);
+      }).catch(() => {
+        if (attempt === adminOttoOpenAttemptRef.current) {
+          notifications.info("Admin Otto could not load its administration context. Try again from New chat.", "Otto unavailable");
+        }
+      });
+    };
+    if (!newChat) {
+      reveal();
+      return;
+    }
+    // The sidebar's New chat must reach the same durable boundary as the sheet
+    // header. Clearing local state first would leave the old thread and its
+    // previews confirmable behind it.
+    const conversationId = adminOttoConversationId;
+    const requestId = adminOttoRetryRequestId.current;
+    if (ADMIN_SHELL_BOOT || (!conversationId && !requestId)) {
+      setAdminOttoDraft("");
+      setAdminOttoResetToken((value) => value + 1);
+      reveal();
+      return;
+    }
+    if (adminOttoNewChatPending.current) return;
+    adminOttoNewChatPending.current = true;
+    void discardAdminOttoChat({ conversationId, requestId }).then(() => {
+      setAdminOttoConversationId(null);
+      setAdminOttoDraft("");
+      adminOttoRetryRequestId.current = null;
+      setAdminOttoResetToken((value) => value + 1);
+      reveal();
+    }).catch(() => {
+      notifications.error("The old chat could not be discarded. Nothing was cleared; try New chat again.", "New chat failed");
+    }).finally(() => { adminOttoNewChatPending.current = false; });
+  }, [adminOttoContextQuery, notifications, adminOttoConversationId]);
 
   /** A result card's record destination. Only a validated same-app admin URL
    * reaches this handler; a reviewed recap opens the real recap focus target,
@@ -5053,6 +5077,12 @@ export default function App() {
             mode: "admin",
           }}
           conversationId={adminOttoConversationId}
+          onNewChat={() => {
+            setAdminOttoConversationId(null);
+            setAdminOttoDraft("");
+            adminOttoRetryRequestId.current = null;
+            setAdminOttoResetToken((value) => value + 1);
+          }}
           initialTab={adminOttoInitialTab}
           tabRequest={adminOttoTabRequest}
           initialRecap={adminOttoRequestedRecap}

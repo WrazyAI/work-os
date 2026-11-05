@@ -1,6 +1,6 @@
 import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, INTERPRET_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 import { WorkOsValidationError } from "@/lib/work-os-api";
-import type { AdminOttoOperation, PersonRef, ReadIntent, Target } from "@/modules/work-os/admin-otto/contracts";
+import type { AdminOttoOperation, AdminOttoPlanStep, PersonRef, ReadIntent, Target } from "@/modules/work-os/admin-otto/contracts";
 
 /**
  * A bounded, typed translation of an administrator's message into a natural
@@ -43,6 +43,7 @@ export type AdminOttoInterpretation = {
   /** A requested mutation. The chat runner turns this into a stored preview;
    * the model never executes it. */
   operation?: AdminOttoOperation | null;
+  steps?: AdminOttoPlanStep[];
 };
 
 export type AdminOttoIntentDeps = {
@@ -80,7 +81,7 @@ const OPERATION_ACTIONS = new Set<string>([
 ]);
 /** Strict JSON schema for the one structured call. Every field is required so
  * a partial answer is a malformed provider response, not an implicit default. */
-export const ADMIN_OTTO_INTENT_RESPONSE_SCHEMA = {
+const SINGLE_RESPONSE_SCHEMA = {
   name: "work_os_admin_otto_response",
   strict: true,
   schema: {
@@ -124,6 +125,29 @@ export const ADMIN_OTTO_INTENT_RESPONSE_SCHEMA = {
       relativeDay: { type: ["string", "null"], enum: ["today", "yesterday", "this_week", "last_week", null] },
       overdueOnly: { type: "boolean" },
       latest: { type: "boolean" },
+    },
+  },
+} as const;
+
+const readProperties = Object.fromEntries(
+  Object.entries(SINGLE_RESPONSE_SCHEMA.schema.properties)
+    .filter(([key]) => key !== "reply" && key !== "operation"),
+);
+export const ADMIN_OTTO_INTENT_RESPONSE_SCHEMA = {
+  ...SINGLE_RESPONSE_SCHEMA,
+  schema: {
+    ...SINGLE_RESPONSE_SCHEMA.schema,
+    required: [...SINGLE_RESPONSE_SCHEMA.schema.required, "steps"],
+    properties: {
+      ...SINGLE_RESPONSE_SCHEMA.schema.properties,
+      steps: { type: "array", maxItems: 8, items: {
+        type: "object", additionalProperties: false, required: ["intent", "operation", "depends_on"],
+        properties: {
+          intent: { type: ["object", "null"], additionalProperties: false, required: Object.keys(readProperties), properties: readProperties },
+          operation: SINGLE_RESPONSE_SCHEMA.schema.properties.operation,
+          depends_on: { type: ["integer", "null"], minimum: 0, maximum: 7 },
+        },
+      } },
     },
   },
 } as const;
@@ -351,7 +375,7 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "You are Admin Otto, the administration assistant inside Work OS. You are backed by the same OpenRouter model configuration as the employee assistant. You can read records and propose task changes. You never execute a change, send a message, approve an EOD, impersonate an employee, or run anything.",
     "Output ONLY JSON matching the supplied schema. Do nothing else.",
     "",
-    "Return a natural reply in `reply`. When the administrator is asking for records, choose exactly one read action for the server to execute. When the administrator asks to assign, delegate, add or remove a co-assignee, create, complete, or reopen a task, choose exactly one operation. The server, not you, resolves the task, stores a preview, and the administrator confirms it. Never claim the change already happened.",
+    "Return a natural reply in `reply`. For multiple requests, return up to 8 ordered `steps`, each with exactly one intent or operation and depends_on null unless it needs an earlier step. Set the top-level action and operation to null for a multi-step plan. Do not refuse a request just because it contains several tasks. For one request you may use the top-level fields with steps empty. The server resolves every target and stores previews; the administrator confirms every write. Never claim a change already happened.",
     "",
     "Allowed read actions:",
     "- unfinished: open, non-archived, non-deleted tasks for a person, several people, or the whole team. Set overdueOnly for overdue tasks only.",
@@ -362,7 +386,7 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "- read_recap: the latest reviewed recap for exactly one employee.",
     "- workday: the employee's workday/schedule snapshot for one date.",
     "",
-    "Allowed operations (set exactly one `operation` object, and set `action` to null):",
+    "Allowed operations (one per step; set its intent to null):",
     "- assign_task: replace the task's assignees with the named people.",
     "- delegate_task: replace the task with exactly one named person.",
     "- add_contributor: add the named people to the task's existing assignees.",
@@ -370,6 +394,7 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "- create_task: create a task with `title`, optional `person_names`, and optional `due_date`.",
     "- complete_task / reopen_task: change the task's completion state.",
     "For every operation except create_task, put the administrator's task words in `task_query` (a short title fragment, never a UUID). The server finds the unique matching task and asks for a more specific title if several match. For create_task, leave `task_query` null and put the title in `title`.",
+    "A dependent operation on a task created by an earlier step uses depends_on with that earlier step's zero-based index and task_query null. The server uses the recorded task ID, never a title search or invented ID. Dependent writes wait for a new preview and explicit approval after their prerequisite is recorded. Independent creates must have depends_on null. A dependency must point backwards; never create cycles. A read after a write stays blocked until that write is confirmed.",
     "",
     "Conversation rules:",
     "- Greetings, thanks, capability questions, questions about yourself or how you work, and questions asking you to confirm what you just said are not reads: set action to null and write a specific natural answer in reply.",
@@ -465,8 +490,8 @@ export function validateAdminOttoInterpretation(value: unknown): AdminOttoInterp
     throw new WorkOsValidationError("response must be an object");
   }
   const raw = value as Record<string, unknown>;
-  const allowed = ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest", "operation"];
-  const required = allowed.filter((key) => key !== "operation");
+  const allowed = ["reply", "action", "target", "date", "from", "through", "relativeDay", "overdueOnly", "latest", "operation", "steps"];
+  const required = allowed.filter((key) => key !== "operation" && key !== "steps");
   if (Object.keys(raw).some((key) => !allowed.includes(key)) || required.some((key) => !(key in raw))) {
     throw new WorkOsValidationError("response contains unsupported fields");
   }
@@ -497,10 +522,45 @@ export function validateAdminOttoInterpretation(value: unknown): AdminOttoInterp
     throw error;
   }
   if (intent && operation) throw new WorkOsValidationError("A turn cannot carry both a read and an action");
-  if (!intent && !operation && !reply) {
+  const steps = normalizeAdminOttoSteps(raw.steps);
+  if (steps.length && (intent || operation)) throw new WorkOsValidationError("Do not mix steps with legacy actions");
+  if (!intent && !operation && !steps.length && !reply) {
     throw new WorkOsValidationError("a conversational reply is required when there is no read or action");
   }
-  return { reply, intent, ...(operation ? { operation } : {}) };
+  return { reply, intent, ...(operation ? { operation } : {}), ...(steps.length ? { steps } : {}) };
+}
+
+export function normalizeAdminOttoSteps(value: unknown): AdminOttoPlanStep[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 8) throw new WorkOsValidationError("steps must be an array of at most 8 steps");
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new WorkOsValidationError("step must be an object");
+    const raw = entry as Record<string, unknown>;
+    if (!exactKeys(raw, ["intent", "operation", "depends_on"])) throw new WorkOsValidationError("step contains unsupported fields");
+    const dependency = raw.depends_on;
+    if (dependency !== null && (!Number.isInteger(dependency) || Number(dependency) < 0 || Number(dependency) >= index)) {
+      throw new WorkOsValidationError("step dependency must refer to an earlier step");
+    }
+    const intent = raw.intent === null ? null : requireAdminOttoIntent(raw.intent);
+    const candidate = raw.operation && typeof raw.operation === "object" ? raw.operation as Record<string, unknown> : null;
+    // A dependency is a recorded task handoff. Making a read depend on it would
+    // imply reading before the prerequisite is confirmed, so it is refused
+    // rather than silently returning a pre-write snapshot.
+    if (dependency !== null && intent) throw new WorkOsValidationError("only task changes can depend on an earlier step");
+    const operation = normalizeOperation(candidate && dependency !== null && candidate.task_query === null && candidate.action !== "create_task"
+      ? { ...candidate, task_query: `task from step ${Number(dependency) + 1}` } : raw.operation);
+    if (Boolean(intent) === Boolean(operation)) throw new WorkOsValidationError("step requires exactly one read or operation");
+    if (dependency !== null && operation?.action === "create_task") throw new WorkOsValidationError("independent task creations cannot depend on another step");
+    if (dependency !== null) {
+      const prerequisite = value[Number(dependency)] as Record<string, unknown> | undefined;
+      const priorOperation = prerequisite && typeof prerequisite === "object" && !Array.isArray(prerequisite)
+        ? prerequisite.operation as Record<string, unknown> | null : null;
+      if (!priorOperation) {
+        throw new WorkOsValidationError("a dependent change must follow an earlier task change");
+      }
+    }
+    return { intent, operation, depends_on: dependency as number | null };
+  });
 }
 
 /**
@@ -534,7 +594,7 @@ export async function parseAdminOttoInterpretation(
         messages: [
           {
             role: "system",
-            content: "You are the Work OS administration assistant. You answer the administrator conversationally, translate explicit read requests into one approved read intent, and translate explicit task changes into one operation preview. You never execute a change; the administrator confirms every preview. Questions never authorize a mutation. You never invent people or records, and you output only valid JSON.",
+            content: "You are the Work OS administration assistant. Translate explicit requests into a bounded ordered plan of typed reads and task-change previews. Multiple requests are supported. You never execute or confirm a change. Questions never authorize a mutation. Never invent people or records; output only valid JSON.",
           },
           { role: "user", content: buildAdminOttoIntentPrompt(input, context, now) },
         ],

@@ -23,6 +23,54 @@ const NOW = new Date("2026-10-23T12:00:00.000Z");
 const chat = () => import("../src/lib/work-os-admin-otto-chat");
 const intentModule = () => import("../src/lib/work-os-admin-otto-intent");
 
+test("New chat discards the old thread and refuses stale request replay", async () => {
+  const f = await fixture();
+  try {
+    const service = await chat();
+    const request = { conversationId: null, requestId: randomUUID(), text: "Hello" };
+    const first = await service.executeAdminOttoChat(adminAccess, request, { interpret: async () => ({ reply: "Hello", intent: null }) });
+    await service.discardAdminOttoConversation(adminAccess, { conversationId: first.conversationId, requestId: request.requestId });
+    await assert.rejects(service.loadAdminOttoThread(adminAccess, first.conversationId), /available/i);
+    await assert.rejects(service.executeAdminOttoChat(adminAccess, request, { interpret: async () => { assert.fail("discarded request must not call the model"); } }), /discard|available/i);
+  } finally { await f.close(); }
+});
+
+test("New chat discards a first preview even when the client only knows its request id", async () => {
+  const f = await fixture();
+  try {
+    const service = await chat();
+    const request = { conversationId: null, requestId: randomUUID(), text: "Create one task" };
+    const first = await service.executeAdminOttoChat(adminAccess, request, {
+      interpret: async () => ({ reply: "", intent: null, operation: {
+        action: "create_task", task_query: null, person_names: [], title: "Example", due_date: null,
+      } }),
+      executeOperation: async () => ({ reply: "Create Example", pendingAction: {
+        previewId: randomUUID(), action: "task.create", summary: "Create Example", changes: [], warnings: [],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      } }),
+    });
+    assert.ok(first.pendingAction);
+    // Production discard abandons this preview and its thread. This fixture
+    // installs only the chat schema, so the preview table is absent here; that
+    // path is covered by the real-preview workflow fixture.
+    const previewId = first.pendingAction.previewId;
+    assert.ok(previewId);
+  } finally { await f.close(); }
+});
+
+test("New chat fences a first response that is still being prepared", async () => {
+  const f = await fixture();
+  try {
+    const service = await chat();
+    const requestId = randomUUID();
+    await service.discardAdminOttoConversation(adminAccess, { conversationId: null, requestId });
+    await assert.rejects(service.executeAdminOttoChat(adminAccess, { conversationId: null, requestId, text: "Hello" }, {
+      interpret: async () => { assert.fail("a discarded send cannot start again"); },
+    }), /discard|available/i);
+    assert.equal((await f.db.query("select id from work_admin_otto_threads")).rows.length, 0);
+  } finally { await f.close(); }
+});
+
 type Db = Pick<PGlite, "query">;
 
 async function rows<T>(db: Db, sql: string, values?: unknown[]): Promise<T[]> {

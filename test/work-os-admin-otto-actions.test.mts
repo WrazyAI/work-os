@@ -84,3 +84,41 @@ test("old conversational responses without an operation field remain valid", () 
   assert.equal(parsed.intent, null);
   assert.equal(parsed.operation, undefined);
 });
+
+const create = (title: string, person: string) => ({
+  action: "create_task", task_query: null, person_names: [person], title, due_date: null,
+});
+
+test("two requested creations remain two ordered operations", () => {
+  const parsed = validateAdminOttoInterpretation(response({ steps: [
+    { intent: null, operation: create("Example Task 1", "David"), depends_on: null },
+    { intent: null, operation: create("Example Task 2", "Aden"), depends_on: null },
+  ] }));
+  assert.deepEqual(parsed.steps?.map((step) => step.operation?.title), ["Example Task 1", "Example Task 2"]);
+});
+
+test("plans reject forward dependencies, excess work, and mixed legacy actions", () => {
+  const step = { intent: null, operation: create("Example", "David"), depends_on: null };
+  assert.throws(() => validateAdminOttoInterpretation(response({ steps: [{ ...step, depends_on: 1 }] })), /depend/i);
+  assert.throws(() => validateAdminOttoInterpretation(response({ steps: Array(9).fill(step) })), /8/i);
+  assert.throws(() => validateAdminOttoInterpretation(response({ steps: [step], operation: create("Other", "David") })), /mix/i);
+});
+
+test("a read cannot depend on a write and a dependency must follow a write", () => {
+  assert.throws(() => validateAdminOttoInterpretation(response({ steps: [
+    { intent: null, operation: create("Example", "David"), depends_on: null },
+    { intent: { action: "unfinished", target: { kind: "team", names: null, ids: null }, date: null, from: null, through: null, relativeDay: null, overdueOnly: false, latest: false }, operation: null, depends_on: 0 },
+  ] })), /only task changes/i);
+  assert.throws(() => validateAdminOttoInterpretation(response({ steps: [
+    { intent: { action: "unfinished", target: { kind: "team", names: null, ids: null }, date: null, from: null, through: null, relativeDay: null, overdueOnly: false, latest: false }, operation: null, depends_on: null },
+    { intent: null, operation: { action: "add_contributor", task_query: null, person_names: ["Aden"], title: null, due_date: null }, depends_on: 0 },
+  ] })), /earlier task change/i);
+});
+
+test("a dependent task operation references a prior step rather than inventing a UUID", () => {
+  const parsed = validateAdminOttoInterpretation(response({ steps: [
+    { intent: null, operation: create("Example", "David"), depends_on: null },
+    { intent: null, operation: { action: "add_contributor", task_query: null, person_names: ["Aden"], title: null, due_date: null }, depends_on: 0 },
+  ] }));
+  assert.equal(parsed.steps?.[1].depends_on, 0);
+});

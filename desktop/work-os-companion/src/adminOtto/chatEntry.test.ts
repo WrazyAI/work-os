@@ -24,6 +24,31 @@ const result = (turnId: string, conversationId = "conversation-1"): ChatResult =
 });
 
 describe("admin Otto entry controller", () => {
+  it("New chat aborts the pending reply and clears only after durable discard succeeds", async () => {
+    const pending = deferred<ChatResult>();
+    const discarded = deferred<void>();
+    const controller = createAdminOttoEntryController({ scope, initialConversationId: "old",
+      send: () => pending.promise, discard: () => discarded.promise,
+    });
+    controller.setDraft("old request");
+    const send = controller.submit();
+    const reset = controller.newChat();
+    pending.resolve(result("late", "old"));
+    await send;
+    discarded.resolve();
+    await reset;
+    expect(controller.snapshot()).toMatchObject({ conversationId: null, turns: [], draft: "", busy: false });
+    expect(controller.recovery().requestId).toBeNull();
+  });
+
+  it("failed durable discard keeps the old identity and does not claim a fresh chat", async () => {
+    const controller = createAdminOttoEntryController({ scope, initialConversationId: "old", send: async () => result("x"),
+      discard: async () => { throw new Error("Workspace unreachable"); },
+    });
+    await expect(controller.newChat()).rejects.toThrow("Workspace unreachable");
+    expect(controller.snapshot().conversationId).toBe("old");
+    expect(controller.snapshot().error).toContain("Workspace unreachable");
+  });
   it("binds a recovered conversation before hydration/effects and blocks sending until the GET succeeds", async () => {
     const load = deferred<AdminOttoThreadView>();
     const sent: Array<{ conversationId: string | null; requestId: string }> = [];
