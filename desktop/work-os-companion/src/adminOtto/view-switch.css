@@ -1,0 +1,160 @@
+/* The mascot at the left of either Otto header is the one view control. The
+ * menu is a detached portal; the header never clips it. */
+.otto-view-switch,
+.otto-view-switch-static {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--conversation-line);
+  border-radius: 11px;
+  background: var(--conversation-paper);
+  color: var(--conversation-ink);
+  position: relative;
+}
+.otto-view-switch { cursor: pointer; padding: 0; }
+.otto-view-switch:hover { background: var(--conversation-surface); }
+.otto-view-switch:focus-visible,
+.otto-view-menu button:focus-visible {
+  outline: 2px solid var(--conversation-focus, #4a7d22);
+  outline-offset: 2px;
+}
+.otto-view-switch[data-mode="admin"] {
+  border-color: #b08a42;
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 216, 0.42);
+}
+.otto-view-switch-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+}
+.otto-view-switch-mark .chat-mascot-mark,
+.otto-view-switch-mark .chat-mascot-art { display: block; width: 100%; height: 100%; }
+.otto-view-switch-chevron {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 14px;
+  height: 14px;
+  padding: 1px;
+  border: 1px solid var(--conversation-line);
+  border-radius: 50%;
+  background: var(--conversation-paper);
+  color: var(--conversation-muted);
+}
+.otto-view-switch.is-open .otto-view-switch-chevron { transform: rotate(180deg); }
+.otto-view-switch-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.otto-view-switch-chevron { transition: transform 160ms cubic-bezier(.2,.8,.2,1); }
+
+.otto-view-menu {
+  position: fixed;
+  z-index: 6200;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--conversation-line);
+  border-radius: 12px;
+  background: var(--conversation-paper);
+  box-shadow: 0 16px 48px rgba(18, 24, 17, 0.18);
+  color: var(--conversation-ink);
+  animation: otto-view-menu-in 160ms cubic-bezier(.2,.8,.2,1) both;
+}
+.otto-view-menu-heading {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--conversation-line);
+}
+.otto-view-menu-heading span { font-size: 12px; font-weight: 700; }
+.otto-view-menu-heading small { color: var(--conversation-muted); font-size: 10px; }
+.otto-view-option {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 7px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.otto-view-option:hover:not([aria-disabled="true"]) { background: var(--conversation-surface); }
+.otto-view-option[data-current="true"] { background: var(--conversation-surface); border-color: var(--conversation-line); }
+.otto-view-option[aria-disabled="true"] { cursor: default; opacity: 0.66; }
+.otto-view-option-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--conversation-signal-deep, #5e9d27);
+}
+.otto-view-option-copy { display: grid; gap: 2px; min-width: 0; }
+.otto-view-option-copy strong { font-size: 12px; font-weight: 700; }
+.otto-view-option-copy small { color: var(--conversation-muted); font-size: 10px; line-height: 1.35; }
+.otto-view-current {
+  align-self: center;
+  color: var(--conversation-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.otto-view-status,
+.otto-view-error p {
+  margin: 2px 6px 4px;
+  color: var(--conversation-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.otto-view-error {
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid #d6a59a;
+  border-radius: 9px;
+  background: var(--color-danger-soft, #f9e5e1);
+}
+.otto-view-error p { margin: 0; color: var(--conversation-ink); }
+.otto-view-error button {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--conversation-line);
+  border-radius: 7px;
+  background: var(--conversation-paper);
+  color: var(--conversation-ink);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+@keyframes otto-view-menu-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 700px) {
+  .otto-view-switch,
+  .otto-view-switch-static { width: 40px; height: 40px; }
+  .otto-view-switch-mark { width: 34px; height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .otto-view-menu { animation: none; }
+  .otto-view-switch-chevron { transition: none; }
+}
