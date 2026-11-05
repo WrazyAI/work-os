@@ -158,6 +158,22 @@ function RecordLink({ url, children, onOpenRecord }: { url: string; children: Re
   );
 }
 
+/** Capture the visible draft and request identity before a host unmounts or
+ * switches surfaces. This is the last synchronous recovery point. */
+export function suspendAdminOttoChat(input: {
+  controller: Pick<AdminOttoEntryController, "cancel" | "recovery">;
+  voice: Pick<VoiceInput, "cancel">;
+  onStopListening?: () => void;
+  onRecoveryChange?: (recovery: AdminOttoEntryRecovery) => void;
+}): AdminOttoEntryRecovery {
+  input.onStopListening?.();
+  input.voice.cancel();
+  input.controller.cancel();
+  const recovery = input.controller.recovery();
+  input.onRecoveryChange?.(recovery);
+  return recovery;
+}
+
 export function AdminPendingActionCard({ action }: { action: AdminOttoPendingAction }) {
   return <AdminActionBatch actions={[action]} onConfirm={async (current) => {
     const result = await confirmAdminOttoAction(current.previewId);
@@ -436,12 +452,8 @@ export function AdminOttoChat({
     const handle = {
       suspend: () => {
         const current = lifecycleRef.current;
-        current.onStopListening?.();
-        current.voice.cancel();
-        current.controller.cancel();
+        const recovery = suspendAdminOttoChat(current);
         releaseRecordingLease();
-        const recovery = current.controller.recovery();
-        current.onRecoveryChange?.(recovery);
         return recovery;
       },
       voice: {

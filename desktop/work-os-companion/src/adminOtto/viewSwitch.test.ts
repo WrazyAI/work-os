@@ -118,3 +118,16 @@ describe("Otto view wire contract", () => {
     expect(OTTO_VIEW_RESULT_EVENT).toBe("work-os://otto-view-result");
   });
 });
+
+describe("Otto record navigation", () => {
+  it("accepts only a same-app administration path", async () => {
+    const { parseOttoRecordNavigationEvent } = await import("./viewSwitch");
+    expect(parseOttoRecordNavigationEvent({ scope, epoch: 2, generation: 1, url: "/work-os/admin/tasks?task=t1" })).toEqual({
+      scope, epoch: 2, generation: 1, url: "/work-os/admin/tasks?task=t1",
+    });
+    for (const url of ["https://evil.example/", "//evil.example/x", "/work-os/admin/../x", "javascript:alert(1)", "work-os/admin/tasks", "/api/work-os/admin/tasks"]) {
+      expect(parseOttoRecordNavigationEvent({ scope, epoch: 2, generation: 1, url })).toBeNull();
+    }
+    expect(parseOttoRecordNavigationEvent({ scope, epoch: 0, generation: 1, url: "/work-os/admin/tasks" })).toBeNull();
+  });
+});

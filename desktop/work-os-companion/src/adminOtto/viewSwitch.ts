@@ -5,6 +5,7 @@ import { isOttoScope, type OttoMode } from "./mode";
 export const OTTO_VIEW_STATE_EVENT = "work-os://otto-view-state";
 export const OTTO_VIEW_REQUEST_EVENT = "work-os://otto-view-request";
 export const OTTO_VIEW_RESULT_EVENT = "work-os://otto-view-result";
+export const OTTO_RECORD_NAV_EVENT = "work-os://otto-record-navigation";
 
 export type OttoViewRole = AdminOttoRole;
 export type OttoAdminStatus = "loading" | "ready" | "failed" | "absent";
@@ -42,6 +43,13 @@ export type OttoViewRequest = {
   epoch: number;
   action: "switch" | "retry-context";
   mode: OttoMode;
+};
+
+export type OttoRecordNavigationEvent = {
+  scope: OttoScope;
+  epoch: number;
+  generation: number;
+  url: string;
 };
 
 export type OttoViewResult = {
@@ -257,4 +265,17 @@ export function parseOttoViewResult(value: unknown): OttoViewResult | null {
 
 export function copyOttoViewState(view: OttoViewState): OttoViewState {
   return buildOttoViewState({ ...view, scope: copyScope(view.scope) });
+}
+
+export function parseOttoRecordNavigationEvent(value: unknown): OttoRecordNavigationEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const scope = scopeFrom(raw.scope);
+  if (!scope || !safePositive(raw.epoch) || !safePositive(raw.generation)) return null;
+  if (typeof raw.url !== "string" || raw.url.length === 0 || raw.url.length > 2048) return null;
+  if (!raw.url.startsWith("/work-os/admin/")) return null;
+  if (raw.url.includes("\\") || raw.url.includes("://") || raw.url.startsWith("//")) return null;
+  const pathname = raw.url.split(/[?#]/, 1)[0] ?? "";
+  if (pathname.split("/").includes("..")) return null;
+  return { scope, epoch: raw.epoch, generation: raw.generation, url: raw.url };
 }

@@ -110,3 +110,42 @@ describe("admin Otto shell wiring", () => {
     expect(app).toContain("controller.pollNow(\"reconnect\")");
   });
 });
+
+describe("Otto view switch wiring", () => {
+  const app = read("../App.tsx");
+  const modeSurface = read("./modeSurface.ts");
+  const viewSwitch = read("./viewSwitch.ts");
+  const conversationSync = read("./conversationSync.ts");
+
+  it("publishes scoped view state and answers requests through the one owner", () => {
+    expect(app).toContain("OTTO_VIEW_STATE_EVENT");
+    expect(app).toContain("OTTO_VIEW_REQUEST_EVENT");
+    expect(app).toContain("OTTO_VIEW_RESULT_EVENT");
+    expect(app).toContain("parseOttoViewRequest");
+    expect(app).toContain("request.epoch !== current.epoch");
+    expect(app).toContain("stale_scope");
+    expect(app).toContain("createWorkspaceOwner(");
+    expect(app).toContain("effectiveWorkspaceMode");
+    expect(viewSwitch).toContain("parseOttoRecordNavigationEvent");
+  });
+
+  it("keeps one conversation owner and wraps the shared chat transport", () => {
+    expect(app).toContain("createAdminConversationOwner(");
+    expect(app).toContain("createAdminConversationClient(");
+    expect(app).toContain("coordinatedSend");
+    expect(app).toContain("coordinatedDiscard");
+    expect(app).toContain("OTTO_CONVERSATION_EVENT");
+    expect(app).toContain("onLifecycle={(handle) => { adminChatLifecycleRef.current = handle; }}");
+    expect(app).toContain("refreshRevision={conversationState?.revision ?? 0}");
+    expect(conversationSync).toContain("OTTO_CONVERSATION_REQUEST_EVENT");
+  });
+
+  it("retains the admin thread across view switches and fences employee continuations", () => {
+    expect(modeSurface).toContain("return { entryOpen: false, conversationId };");
+    expect(app).toContain("viewFenceRef.current.invalidate()");
+    expect(app).toContain("viewFenceRef.current.capture()");
+    expect(app).toContain("if (!fence.isCurrent()) return;");
+    expect(app).toMatch(/onSwitchToEmployee=\{adminOttoBootstrap\.switchToEmployeeAvailable/);
+    expect(app).not.toMatch(/setWorkspaceMode[\s\S]{0,400}setAdminOttoConversationId\(null\)/);
+  });
+});
