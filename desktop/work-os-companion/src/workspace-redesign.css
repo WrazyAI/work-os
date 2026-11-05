@@ -6837,27 +6837,10 @@ button:not(:disabled):active {
   border-bottom: 1px solid var(--line);
 }
 
-.notifications-head.has-tabs {
-  padding-bottom: 8px;
-  border-bottom: 0;
-}
-
-.notifications-headline {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.notifications-summary {
-  margin: 0;
-  padding: 0 16px 11px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
+.notifications-head:not(.has-tabs) {
+  justify-content: flex-end;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .notifications-head .icon {
@@ -7313,11 +7296,6 @@ button:not(:disabled):active {
 @media (max-width: 420px) {
   .notifications-head {
     padding-right: 10px;
-    padding-left: 12px;
-  }
-
-  .notifications-summary {
-    padding-right: 12px;
     padding-left: 12px;
   }
 

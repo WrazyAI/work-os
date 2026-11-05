@@ -58,7 +58,6 @@ describe("NotificationsBell panel", () => {
     expect(markup).toContain("3 proposed facts waiting for your review");
     expect(markup).toContain("notifications-mascot");
     expect(markup).toContain("Review");
-    expect(markup).toContain("3 memories to review");
   });
 
   it("lists the ready recap with its interval label", () => {
@@ -80,13 +79,11 @@ describe("NotificationsBell panel", () => {
     expect(markup).toContain("2 tasks are overdue");
     expect(markup).toContain("Unfinished work past its due date");
     expect(markup).toContain("notifications-lead");
-    expect(markup).toContain("2 overdue tasks");
   });
 
   it("says one task is overdue in the singular", () => {
     const markup = render({ overdueTasks: 1, open: true });
     expect(markup).toContain("1 task is overdue");
-    expect(markup).toContain("1 overdue task");
   });
 
   it("shows the caught-up empty state only when nothing is waiting", () => {
@@ -112,26 +109,29 @@ describe("NotificationsBell audiences", () => {
     expect(markup).toContain("This is what Otto remembers about you so far");
   });
 
-  it("puts the audience switcher in the header and the summary beneath it", () => {
+  it("puts the audience switcher in the header without repeating the list in a subtitle", () => {
     const markup = render({ admin, defaultTab: "admin", open: true });
     const headerStart = markup.indexOf('class="notifications-head has-tabs"');
     const tablist = markup.indexOf('role="tablist"');
     const headerEnd = markup.indexOf("</header>");
-    const summary = markup.indexOf('class="notifications-summary"');
     expect(markup).not.toContain("<strong>Notifications</strong>");
     expect(headerStart).toBeGreaterThan(-1);
     expect(tablist).toBeGreaterThan(headerStart);
     expect(tablist).toBeLessThan(headerEnd);
-    expect(summary).toBeGreaterThan(headerEnd);
-    expect(markup).toContain("2 EOD reports to review");
+    expect(markup).not.toContain("notifications-summary");
+    expect(markup).not.toContain("notifications-headline");
+    expect(markup).not.toContain("2 EOD reports to review");
+    expect(markup).toContain("2 EOD reports are waiting for review");
   });
 
-  it("keeps the summary in the header when there is no audience switcher", () => {
+  it("keeps the header quiet when there is no audience switcher", () => {
     const markup = render({ memoryCandidates: 2, open: true });
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain("<strong>Notifications</strong>");
-    expect(markup).toContain('class="notifications-headline"');
-    expect(markup).toContain("2 memories to review");
+    expect(markup).not.toContain("notifications-headline");
+    expect(markup).not.toContain("notifications-summary");
+    expect(markup).toContain('aria-label="Close notifications"');
+    expect(markup).toContain("2 proposed facts waiting for your review");
   });
 
   it("opens on the admin tab when the administration workspace is current", () => {
@@ -163,7 +163,6 @@ describe("NotificationsBell audiences", () => {
       defaultTab: "admin",
       open: true,
     });
-    expect(empty).toContain("caught up");
     expect(empty).toContain("No decisions are waiting.");
     expect(empty).toContain("No activity has been recorded today yet.");
     expect(empty).not.toContain("EOD reports are waiting for review");

@@ -1400,17 +1400,16 @@ days — in the amber recoverable-attention tone.
 - **Audiences** — an administrator's bell carries two tabs in the panel
   header, in the place the visible `Notifications` title used to occupy:
   Employee (the signed-in account's own reminders, unchanged) and Admin (the
-  live workspace record). The active tab's summary sits in the strip beneath
-  the header, where the switcher used to sit. The visible title is removed;
-  the dialog keeps `Notifications` as its accessible name. The tab that
-  belongs to the current workspace is selected whenever the panel opens, so
-  opening the bell in Administration never lands on a personal reminder first;
-  closing and reopening resets the tab to the workspace even if the last visit
-  ended on the other audience. Each tab names its own count, and the closed
-  bell's badge names the audience its next open will show. The tablist is
-  reachable through its selected tab; ←/→ move and activate, Home/End jump to
-  the ends. A non-administrator sees the single Employee list and no tablist,
-  with the summary in the header instead.
+  live workspace record). The visible title is removed and the rows are not
+  restated in a subtitle; the dialog keeps `Notifications` as its accessible
+  name. The tab that belongs to the current workspace is selected whenever the
+  panel opens, so opening the bell in Administration never lands on a personal
+  reminder first; closing and reopening resets the tab to the workspace even
+  if the last visit ended on the other audience. Each tab names its own count,
+  and the closed bell's badge names the audience its next open will show. The
+  tablist is reachable through its selected tab; ←/→ move and activate,
+  Home/End jump to the ends. A non-administrator sees the single Employee list
+  and no tablist; its header holds only the close control.
 - **Admin rows** — the Admin tab reads the same live overview as the Overview
   page. `Needs your decision` carries every attention record the record
   reports — EOD reports awaiting review, teammates with unsubmitted EOD days,
@@ -2184,11 +2183,14 @@ It may appear as:
 
 The compact floating companion has no circular halo or backdrop behind the
 mascot. Keep elapsed session time visible while a shift is open, including while
-paused; subtract completed breaks and freeze the timer at the current pause. A
-small orange corner marker remains: it shows alerts when input is needed and
-fills clockwise against the scheduled shift window when progress is available.
-The companion's accessible name gives the numeric percentage. The marker
-describes time only, never productivity or quality.
+paused; subtract completed breaks and freeze the timer at the current pause. The
+elapsed pill is also the shift-progress instrument: a lemon-green fill reveals
+the scheduled day from left to right, pale at the start and deeper as the shift
+completes, and reaches full at the scheduled end. The elapsed label stays bold
+and readable over the fill. A small orange corner marker remains for attention
+only; shift progress lives in the pill. The companion's accessible name gives
+the numeric percentage. The pill describes time only, never productivity or
+quality.
 
 When an actionable update needs the employee's input, use the shared `alert`
 pose rather than checking for one prompt kind. Repeat the familiar quick
@@ -2219,7 +2221,7 @@ the elapsed-time pill keep their default positions whether or not a bubble is
 showing: a bubble never pushes the figure down, so the pill can never land on
 it. The bubble's copy clamps to the space above the head — headline and
 supporting line stay legible, the action stays reachable — so a tall bubble may
-temporarily cover the drag handle and progress marker until it is resolved.
+temporarily cover the drag handle until it is resolved.
 
 ## 14. Deep module and seam rules
 

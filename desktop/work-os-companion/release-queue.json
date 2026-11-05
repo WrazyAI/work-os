@@ -128,6 +128,12 @@
       "verification": "Branch codex/work-os-performance on 2026-11-05: real Chromium App checks 5/5; companion Vitest 1644/1644; Work OS full suite 1244/0/11; backend performance/static checks and Agent OS reconciliation passed; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
     },
     {
+      "id": "shift-progress-pill",
+      "type": "feature",
+      "summary": "The floating companion's elapsed-time pill now fills as the shift progresses.",
+      "verification": "Ledger 1fdb52e0-3dc8-42c7-8657-996464ba3f45: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1702 passed; focused bell/model/asset tests 74 passed; mascot sync browser 172 checks passed; typecheck and production build passed; rendered 0/50/100% pill states with bold elapsed text, a pale-to-deep lemon-green fill, reduced motion, and no clipping; notification header checked at 1440/1024/930/720/560/390/320 with no subtitle and no panel overflow; TestSprite 8ada0e0f passed 5/5 and 9a3a990a passed 9/9."
+    },
+    {
       "id": "admin-notification-header-switcher",
       "type": "fix",
       "summary": "The notifications panel switches between personal reminders and workspace activity in its header.",
