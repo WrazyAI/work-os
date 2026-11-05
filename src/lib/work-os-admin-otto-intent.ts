@@ -521,13 +521,16 @@ export function validateAdminOttoInterpretation(value: unknown): AdminOttoInterp
     if (error instanceof WorkOsValidationError) malformed(error.message);
     throw error;
   }
-  if (intent && operation) throw new WorkOsValidationError("A turn cannot carry both a read and an action");
   const steps = normalizeAdminOttoSteps(raw.steps);
-  if (steps.length && (intent || operation)) throw new WorkOsValidationError("Do not mix steps with legacy actions");
-  if (!intent && !operation && !steps.length && !reply) {
+  // A model occasionally fills both the new plan and the legacy fields. The
+  // explicit ordered plan is the safer authority: dropping the extra legacy
+  // pair is better than failing a valid multi-request turn.
+  if (steps.length) return { reply, intent: null, steps };
+  if (intent && operation) throw new WorkOsValidationError("A turn cannot carry both a read and an action");
+  if (!intent && !operation && !reply) {
     throw new WorkOsValidationError("a conversational reply is required when there is no read or action");
   }
-  return { reply, intent, ...(operation ? { operation } : {}), ...(steps.length ? { steps } : {}) };
+  return { reply, intent, ...(operation ? { operation } : {}) };
 }
 
 export function normalizeAdminOttoSteps(value: unknown): AdminOttoPlanStep[] {
@@ -585,52 +588,70 @@ export async function parseAdminOttoInterpretation(
   }
   const now = deps.now instanceof Date && !Number.isNaN(deps.now.getTime()) ? deps.now : new Date();
   const fetchImpl = deps.fetch ?? fetch;
-  let payload: unknown;
-  try {
-    const response = await fetchImpl(OPENROUTER_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(aiRequestBody(INTERPRET_MODEL, {
-        messages: [
-          {
-            role: "system",
-            content: "You are the Work OS administration assistant. Translate explicit requests into a bounded ordered plan of typed reads and task-change previews. Multiple requests are supported. You never execute or confirm a change. Questions never authorize a mutation. Never invent people or records; output only valid JSON.",
-          },
-          { role: "user", content: buildAdminOttoIntentPrompt(input, context, now) },
-        ],
-        temperature: 0.2,
-        max_tokens: AI_TOKEN_BUDGETS.interpret,
-        response_format: { type: "json_schema", json_schema: ADMIN_OTTO_INTENT_RESPONSE_SCHEMA },
-      }, env)),
-      signal: AbortSignal.timeout(AI_TIMEOUTS.interpret),
-    });
-    if (!response.ok) {
-      throw new AdminOttoIntentUnavailableError("ai_unavailable", `provider responded ${response.status}`);
+  const request = async (): Promise<AdminOttoInterpretation> => {
+    let payload: unknown;
+    try {
+      const response = await fetchImpl(OPENROUTER_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(aiRequestBody(INTERPRET_MODEL, {
+          messages: [
+            {
+              role: "system",
+              content: "You are the Work OS administration assistant. Translate explicit requests into a bounded ordered plan of typed reads and task-change previews. Multiple requests are supported. You never execute or confirm a change. Questions never authorize a mutation. Never invent people or records; output only valid JSON.",
+            },
+            { role: "user", content: buildAdminOttoIntentPrompt(input, context, now) },
+          ],
+          temperature: 0.2,
+          max_tokens: AI_TOKEN_BUDGETS.interpret,
+          response_format: { type: "json_schema", json_schema: ADMIN_OTTO_INTENT_RESPONSE_SCHEMA },
+        }, env)),
+        signal: AbortSignal.timeout(AI_TIMEOUTS.interpret),
+      });
+      if (!response.ok) {
+        throw new AdminOttoIntentUnavailableError("ai_unavailable", `provider responded ${response.status}`);
+      }
+      payload = await response.json();
+    } catch (error) {
+      if (error instanceof AdminOttoIntentUnavailableError) throw error;
+      throw new AdminOttoIntentUnavailableError("ai_unavailable", error instanceof Error ? error.message : "provider call failed");
     }
-    payload = await response.json();
-  } catch (error) {
-    if (error instanceof AdminOttoIntentUnavailableError) throw error;
-    throw new AdminOttoIntentUnavailableError("ai_unavailable", error instanceof Error ? error.message : "provider call failed");
+    recordAiUsage("admin_otto", INTERPRET_MODEL, payload);
+    const content = (payload as { choices?: Array<{ message?: { content?: string } }> } | null)
+      ?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") malformed("no response from the model");
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+    if (start < 0 || end <= start) malformed("no JSON in the response");
+    let raw: unknown;
+    try {
+      raw = JSON.parse(content.slice(start, end + 1));
+    } catch {
+      malformed("invalid response JSON");
+    }
+    try {
+      return validateAdminOttoInterpretation(raw);
+    } catch (error) {
+      if (error instanceof WorkOsValidationError) malformed(error.message);
+      throw error;
+    }
+  };
+  // A malformed structured answer is a model failure, not a provider outage.
+  // One bounded retry absorbs ordinary sampling variance; a second failure
+  // still surfaces as the existing recoverable error.
+  let lastMalformed: AdminOttoIntentUnavailableError | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await request();
+    } catch (error) {
+      if (error instanceof AdminOttoIntentUnavailableError && error.reason === "ai_malformed" && attempt === 0) {
+        lastMalformed = error;
+        continue;
+      }
+      throw error;
+    }
   }
-  recordAiUsage("admin_otto", INTERPRET_MODEL, payload);
-  const content = (payload as { choices?: Array<{ message?: { content?: string } }> } | null)
-    ?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") malformed("no response from the model");
-  const start = content.indexOf("{");
-  const end = content.lastIndexOf("}");
-  if (start < 0 || end <= start) malformed("no JSON in the response");
-  let raw: unknown;
-  try {
-    raw = JSON.parse(content.slice(start, end + 1));
-  } catch {
-    malformed("invalid response JSON");
-  }
-  try {
-    return validateAdminOttoInterpretation(raw);
-  } catch (error) {
-    if (error instanceof WorkOsValidationError) malformed(error.message);
-    throw error;
-  }
+  throw lastMalformed ?? new AdminOttoIntentUnavailableError("ai_malformed", "Admin Otto returned no usable answer");
 }
 
 /** Backward-compatible intent-only helper for callers that need just the read. */
