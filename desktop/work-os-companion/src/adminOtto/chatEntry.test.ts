@@ -254,3 +254,27 @@ describe("admin Otto entry controller", () => {
     expect(turns[1].result).toMatchObject({ kind: "recap" });
   });
 });
+
+describe("admin Otto New chat coordination", () => {
+  it("empty_local_thread_still_invokes_coordinated_discard", async () => {
+    const discard = vi.fn(async () => undefined);
+    const controller = createAdminOttoEntryController({ scope, send: async () => result("turn-1"), discard });
+    expect(await controller.newChat()).toBe(true);
+    expect(discard).toHaveBeenCalledWith({ conversationId: null, requestId: null });
+  });
+
+  it("superseded_new_chat_does_not_report_success", async () => {
+    const discarded = deferred<void>();
+    const controller = createAdminOttoEntryController({
+      scope,
+      initialConversationId: "old",
+      send: async () => result("turn-1"),
+      discard: () => discarded.promise,
+    });
+    const reset = controller.newChat();
+    controller.reset(scope, null);
+    discarded.resolve();
+    await expect(reset).resolves.toBe(false);
+    expect(controller.snapshot().conversationId).toBeNull();
+  });
+});

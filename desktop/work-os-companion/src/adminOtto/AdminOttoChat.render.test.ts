@@ -39,6 +39,22 @@ describe("admin Otto chat", () => {
     expect(html).toMatch(/role="tab"[^>]*tabindex="-1"[^>]*>Recaps/);
   });
 
+  it("floating_variant_uses_same_tabs_composer_and_new_chat", () => {
+    const html = render({
+      surface: "floating",
+      headerLeading: createElement("span", { "data-test-leading": "true" }, "switch"),
+      onClose() {},
+    });
+    expect(html).toContain('data-conversation-surface="floating"');
+    expect(html).toContain('data-admin-otto-surface="floating"');
+    expect(html).toContain('data-test-leading="true"');
+    expect(html).toContain("Chat");
+    expect(html).toContain("Recaps");
+    expect(html.match(/aria-label="New chat"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Collapse companion"');
+    expect(html).not.toMatch(/Clock in|Clock out|Mark done|Approve/);
+  });
+
   it("single_arrival_offers_listen_and_view", () => {
     const page = fixtureInboxPage({ count: 1, total: 1, nextCursor: null });
     const html = render({

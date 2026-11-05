@@ -49,7 +49,7 @@ export type AdminOttoEntryController = {
   setDraft: (draft: string) => void;
   submit: () => Promise<void>;
   cancel: () => void;
-  newChat: () => Promise<void>;
+  newChat: () => Promise<boolean>;
   updateWorkflow: (workflow: AdminOttoWorkflowView) => void;
   updateAction: (action: AdminOttoPendingAction) => void;
   reset: (scope: OttoScope, conversationId?: string | null) => void;
@@ -231,9 +231,12 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
       const id = ++sequence;
       set({ busy: true, error: null });
       try {
-        if (deps.discard && (identity.conversationId || identity.requestId)) await deps.discard(identity);
-        if (id !== sequence) return;
+        // Even an empty local view may mask a first send registered by the
+        // peer window; the coordinated discard owns the null/null case.
+        if (deps.discard) await deps.discard(identity);
+        if (id !== sequence) return false;
         controller.reset(state.scope, null);
+        return true;
       } catch (error) {
         if (id === sequence) set({ busy: false, error: messageOf(error) });
         throw error;

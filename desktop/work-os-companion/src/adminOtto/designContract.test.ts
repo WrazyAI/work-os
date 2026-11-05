@@ -62,6 +62,20 @@ describe("admin Otto design contract", () => {
     expect(chat).not.toContain("admin-otto-readonly-note");
   });
 
+  it("fills the avatar surface with the one shared admin conversation", () => {
+    const floating = ruleBlock(css, '.admin-otto-surface[data-conversation-surface="floating"]');
+    expect(floating).toContain("position: fixed");
+    expect(floating).toContain("inset: 0");
+    expect(floating).toContain("max-height: none");
+    expect(css).toContain('.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head');
+    expect(css).toContain('.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .chat-tabs');
+    expect(chat).toContain('surface: presentationSurface = "in-app"');
+    expect(chat).toContain('data-admin-otto-surface={presentationSurface}');
+    expect(chat).toContain("headerLeading");
+    expect(chat).toContain("Collapse companion");
+    expect(chat).not.toContain("new AdminOttoChat");
+  });
+
   it("keeps the compact desktop sheet clear of the standing notification band", () => {
     const surface = ruleBlock(css, ".admin-otto-surface");
     expect(surface).toContain("height: min(680px, calc(100dvh - 160px))");
