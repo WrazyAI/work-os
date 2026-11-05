@@ -9,9 +9,11 @@
 - Ledger task: `cdb8611d-da41-4acb-aec2-282d755ff004` (`TASKS`)
 - Original report: `/home/maigreeks/projects/work-os/docs/performance-report.md`
   (left untouched; the investigation report was untracked in the original checkout)
-- Agent OS fetched at `fd60b6cb`; the named backend files were content-identical
-  to the Work OS baseline. Server changes in this branch are **not deployed**.
-- No merge, deployment, installer release, or version bump was performed.
+- Agent OS was fetched during investigation at `fd60b6cb`; the final backend was
+  ported by content, merged and deployed through Agent OS `77a46c87c` (see
+  "Backend deployment" below). The Work OS web/desktop repository was not
+  merged or released, and no desktop installer/version bump was made.
+- No Work OS PR merge, desktop release, or installer publication was performed.
 
 The tested implementation commit is recorded in the section
 "Commit and tested-source identity" at the end of this document. The worktree
@@ -374,6 +376,10 @@ Observed results in this environment:
   reverted; avatar ownership changes reload immediately; owners no longer
   re-read their own snapshot; raw `pg` dates are cast to text; and legacy
   plain-backlog cache entries no longer throw.
+- The Agent OS reconciliation review returned **5 findings (1 major, 4 minor)**:
+  workday context reuse, summary planned totals, reopened completions,
+  null-ID coercion, and historical volume bounds. All were fixed in Agent OS
+  PR #79, verified by 39 targeted tests and a production build, then redeployed.
 - `npx next build --webpack`: passed; `/work-os/today`, admin routes, and API
   routes compiled. Default `npm run build` (Turbopack) is blocked by the
   environment's Next 16.2.6 installation requesting the nonexistent
@@ -398,9 +404,11 @@ The backend was ported to Agent OS by content, preserving Agent OS-only recap
 and schedule-exception behavior, then merged and deployed through the required
 atomic path:
 
-- Agent OS PR: https://github.com/WrazyAI/agent-os/pull/78
-- Merged commit: `420f6786dd31e1f35286d878f7fb0124f66e228f`
-- VPS checkout: `/home/dev/agent-os`, deployed marker `420f6786d`
+- Agent OS PRs: https://github.com/WrazyAI/agent-os/pull/78 (initial) and
+  https://github.com/WrazyAI/agent-os/pull/79 (review follow-up)
+- Merged/deployed commit: `77a46c87c78d84871d2a0027e195070b1d65615b`
+  (`420f6786dd31e1f35286d878f7fb0124f66e228f` was the initial deployment)
+- VPS checkout: `/home/dev/agent-os`, deployed marker `77a46c87c`
 - `scripts/redeploy.sh` preflight passed, production build completed, asset
   checks passed, and the build swapped into place.
 - `agentos-web.service`: active; `agentos-runner.service`: active and restarted
@@ -409,7 +417,8 @@ atomic path:
   its static JS/CSS assets served successfully; unauthenticated Work OS API
   probes returned the expected auth redirect rather than a server error.
 - The deployed server bundle contains the new `load insight summary` and
-  `summary=1` path, and `.deployed-commit` matches `420f6786d`.
+  `summary=1` path, and `.deployed-commit` matches `77a46c87c`. The follow-up
+  deployment restored the workday's own timezone/schedule/break semantics.
 - Agent OS's existing recap and schedule-exception measures add three exact
   reads to Admin Overview: the deployed version measures **20** statements
   versus the report's **45**. The Work OS-only baseline (without those newer
@@ -439,10 +448,10 @@ commit; do not roll back only one route or client.
 
 ## Commit and tested-source identity
 
-- Implementation commit: `51de0bddfce6a1142c2ca5646cd814dffb4add84`
-  (`fix(work-os): harden performance lifecycles after review`). The main
-  implementation commit before review hardening was
-  `6b385ab2bd69586334c8a8667acd65192fbd54d7`.
+- Implementation commit: `6b4ae95f69d533fff986e40aa706594c49d714f7`
+  (`fix(work-os): align summary and historical bounds`). Earlier implementation
+  commits were `6b385ab2bd69586334c8a8667acd65192fbd54d7` and review-hardening
+  `51de0bddfce6a1142c2ca5646cd814dffb4add84`.
 - Branch: `codex/work-os-performance`, based on
   `ecb61fdc7fa996a2474b28796bbef95893849f39`.
 - Every final check below was run in
