@@ -15,6 +15,7 @@ export type PersonalBootstrapAccess = {
   reason:
     | "personal"
     | "admin_mapped"
+    | "admin_workspace"
     | "admin_unmapped"
     | "admin_context_pending"
     | "admin_context_failed"
@@ -51,6 +52,7 @@ export function personalBootstrapAccess(input: PersonalBootstrapInput): Personal
   if (context.personId === null) {
     return { onboarding: false, day: false, reason: "admin_unmapped" };
   }
+  if (input.workspace === "admin") return { onboarding: false, day: false, reason: "admin_workspace" };
   return { onboarding: true, day: true, reason: "admin_mapped" };
 }
 

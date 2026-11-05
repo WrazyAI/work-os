@@ -18,7 +18,8 @@ import { useNotifications } from "../NotificationFlyouts";
 import { ActivityDetailDrawer, activityRecordFromOverview, type ActivityDetailRecord } from "./ActivityDetail";
 import { ADMIN_OVERVIEW_STALE_KEY, overviewStaleMessage } from "./adminNotifications";
 import { StackedTimeBars } from "./charts";
-import { adminKeys, attendanceLabel, attendanceTone, fetchAdminOverview, formatDuration, normalizeAdminOverview, relativeTime, statusLabel, todayIso } from "./data";
+import { adminKeys, adminReadinessQueryOptions, attendanceLabel, attendanceTone, fetchAdminOverview, formatDuration, normalizeAdminOverview, relativeTime, statusLabel, todayIso } from "./data";
+import { readinessAttention } from "../../../../src/modules/work-os/admin-readiness";
 import { AdminButton, AdminCard, Avatar, Empty, Notice, Pill, Skeleton } from "./ui";
 import type { AdminOverview, AdminSection, AdminSectionFocus } from "./types";
 
@@ -52,6 +53,7 @@ export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps
   const rightNowRef = useRef<HTMLDivElement | null>(null);
   const rightNowTableRef = useRef<HTMLDivElement | null>(null);
   const notifications = useNotifications();
+  const readiness = useQuery(adminReadinessQueryOptions());
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(todayIso()),
     queryFn: () => fetchAdminOverview(),
@@ -102,6 +104,7 @@ export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps
   }
 
   const data = overview.data;
+  const attention = [...data.attention.filter((item) => item.code !== "readiness_blocked"), ...readinessAttention(readiness.data)];
   const counts = data.counts;
   const people = [...data.people]
     .sort((left, right) => {
@@ -191,12 +194,13 @@ export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps
         <AdminCard
           icon={AlertTriangle}
           title="Needs attention"
-          detail={data.attention.length ? "What the record says needs a decision" : undefined}
+          detail={attention.length ? "What the record says needs a decision" : undefined}
           action={<AdminButton variant="ghost" icon={FileCheck2} onClick={() => onOpenSection("review")}>Open review</AdminButton>}
         >
-          {data.attention.length ? (
+          {readiness.isError ? <Notice tone="warn">Setup checks could not be refreshed. <AdminButton variant="ghost" onClick={() => void readiness.refetch()}>Retry setup checks</AdminButton></Notice> : readiness.isPending ? <p className="admin-quiet">Checking workspace setup…</p> : null}
+          {attention.length ? (
             <ul className="admin-attention">
-              {data.attention.map((item) => (
+              {attention.map((item) => (
                 <li key={item.code}>
                   <button type="button" onClick={() => onOpenSection(sectionForHref(item.href))}>
                     <span className={`admin-dot ${item.severity}`} aria-hidden />

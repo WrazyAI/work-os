@@ -1,3 +1,5 @@
+mod day_monitor;
+mod day_monitor_core;
 mod debug_window;
 mod diagnostics;
 mod local_settings;
@@ -574,6 +576,7 @@ fn allow_microphone_capture(_window: &tauri::WebviewWindow) {}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(day_monitor::DayMonitorState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             show_main(app);
             if args.iter().any(|arg| arg.starts_with("wrazy-workos://")) {
@@ -642,6 +645,10 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            day_monitor::claim_day_monitor,
+            day_monitor::publish_day_monitor,
+            day_monitor::read_day_monitor,
+            day_monitor::release_day_monitor,
             vault_password::get_vault_password,
             vault_password::reset_local_vault,
             vault_password::vault_open_trouble,

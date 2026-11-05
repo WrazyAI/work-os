@@ -1,28 +1,29 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import AvatarApp from "./AvatarApp";
+const AvatarApp = lazy(() => import("./AvatarApp"));
 import ErrorBoundary from "./ErrorBoundary";
-import OnboardingPreview from "./OnboardingPreview";
-import ConnectPreview from "./ConnectPreview";
-import AvatarPreview from "./AvatarPreview";
-import ChatPreview from "./ChatPreview";
-import EodPreview from "./EodPreview";
-import InsightsSynthesisPreview from "./InsightsSynthesisPreview";
-import InsightsPreview from "./InsightsPreview";
-import AdminPreview from "./admin/AdminPreview";
-import EodOutstandingPreview from "./EodOutstandingPreview";
-import ActivityIntervalPreview from "./ActivityIntervalPreview";
-import TasksPreview from "./TasksPreview";
-import TaskDesignGallery from "./TaskDesignGallery";
-import TodayPreview from "./TodayPreview";
-import PlanningPreview from "./PlanningPreview";
-import LoadingPreview from "./LoadingPreview";
-import SkeletonsPreview from "./SkeletonsPreview";
-import OttoPreview from "./OttoPreview";
-import MemoryPreview from "./MemoryPreview";
-import SettingsPreview from "./SettingsPreview";
-import ProfilePreview from "./ProfilePreview";
+const OnboardingPreview = lazy(() => import("./OnboardingPreview"));
+const ConnectPreview = lazy(() => import("./ConnectPreview"));
+const AvatarPreview = lazy(() => import("./AvatarPreview"));
+const ChatPreview = lazy(() => import("./ChatPreview"));
+const EodPreview = lazy(() => import("./EodPreview"));
+const InsightsSynthesisPreview = lazy(() => import("./InsightsSynthesisPreview"));
+const InsightsPreview = lazy(() => import("./InsightsPreview"));
+const AdminPreview = lazy(() => import("./admin/AdminPreview"));
+const EodOutstandingPreview = lazy(() => import("./EodOutstandingPreview"));
+const ActivityIntervalPreview = lazy(() => import("./ActivityIntervalPreview"));
+const TasksPreview = lazy(() => import("./TasksPreview"));
+const TaskDesignGallery = lazy(() => import("./TaskDesignGallery"));
+const TodayPreview = lazy(() => import("./TodayPreview"));
+const PlanningPreview = lazy(() => import("./PlanningPreview"));
+const LoadingPreview = lazy(() => import("./LoadingPreview"));
+const SkeletonsPreview = lazy(() => import("./SkeletonsPreview"));
+const OttoPreview = lazy(() => import("./OttoPreview"));
+const MemoryPreview = lazy(() => import("./MemoryPreview"));
+const SettingsPreview = lazy(() => import("./SettingsPreview"));
+const ProfilePreview = lazy(() => import("./ProfilePreview"));
+import { FirstLightSurface } from "./BootHandoff";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { installBootTrace } from "./bootTrace";
 import { NotificationProvider } from "./NotificationFlyouts";
@@ -79,10 +80,12 @@ const Root = params.get("window") === "avatar" ? AvatarApp
                   : import.meta.env.DEV && params.has("preview-activity-intervals") ? ActivityIntervalPreview
               : App;
 
-if (params.get("window") !== "avatar") startWorkOsQueryPersistence(workOsQueryClient);
+if (params.get("window") !== "avatar") {
+  startWorkOsQueryPersistence(workOsQueryClient);
 // Restore runs in parallel with boot: the vault gate keeps screens hidden
 // until session/vault reads settle, so hydration lands before real data use.
-void restoreWorkOsQueryCache(workOsQueryClient);
+  void restoreWorkOsQueryCache(workOsQueryClient);
+}
 /* DEV-only: `?frame=320x430` renders the surface at a fixed size, so a surface
  * that lives in a resized desktop window (the companion's grown reading bubble,
  * for instance) can be reviewed at its true proportions in a browser. */
@@ -94,7 +97,7 @@ function frameFromSearch(): { width: number; height: number } | null {
 }
 const frame = frameFromSearch();
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={workOsQueryClient}><NotificationProvider><ErrorBoundary>{frame
+ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={workOsQueryClient}><NotificationProvider><ErrorBoundary><Suspense fallback={params.get("window") === "avatar" ? null : <FirstLightSurface stage="Opening Work OS" />}>{frame
   ? <div
       data-dev-frame={`${frame.width}x${frame.height}`}
       style={{
@@ -105,4 +108,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><
         outline: "1px dashed rgba(140,140,140,.6)",
       } as import("react").CSSProperties}
     ><Root /></div>
-  : <Root />}</ErrorBoundary></NotificationProvider></QueryClientProvider></React.StrictMode>);
+  : <Root />}</Suspense></ErrorBoundary></NotificationProvider></QueryClientProvider></React.StrictMode>);

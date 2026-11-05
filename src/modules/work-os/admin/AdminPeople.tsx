@@ -63,6 +63,7 @@ export default function AdminPeoplePage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["work-os", "people"] });
       void queryClient.invalidateQueries({ queryKey: adminKeys.person(selectedId ?? "") });
+      void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "overview", "readiness"] });
     },
   });
 

@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       schemaVersion: 1,
       scope,
       personId: access.personId,
+      displayName: access.ctx.profile.displayName,
+      avatarUrl: access.ctx.profile.avatarUrl,
       voiceAvailable: voiceEnabled && recapSpeechConfigured(),
       transcriptionAvailable: voiceEnabled && voiceInputConfigured(),
     }, { headers: { "Cache-Control": "no-store" } });

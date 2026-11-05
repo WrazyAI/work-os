@@ -1,7 +1,7 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
 import { TaskFocusDetails } from "./TaskFocusDetails";
 import { OverflowPanText } from "./OverflowPan";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { readStoredFlag, writeStoredFlag } from "./storedFlags";
@@ -65,8 +65,8 @@ import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, 
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
-import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { clearWorkOsAccountCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalNotificationQuery, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
@@ -92,15 +92,16 @@ import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } 
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
-import AdminWorkspace from "./admin/AdminWorkspace";
+const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));
 import type { AdminNotifications } from "./admin/AdminWorkspace";
 import { emptyAdminNotificationOverview } from "./admin/adminNotificationModel";
 import { bootSurface } from "./bootSurface";
 import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFixtures";
 import { adminKeys, fetchAdminOverview, fetchSession, normalizeAdminOverview, todayIso } from "./admin/data";
 import type { AdminOverview, AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
-import { AdminOttoChat, type AdminArrivalView } from "./adminOtto/AdminOttoChat";
-import { AdminOttoSettings } from "./adminOtto/AdminOttoSettings";
+import type { AdminArrivalView } from "./adminOtto/AdminOttoChat";
+const AdminOttoChat = lazy(() => import("./adminOtto/AdminOttoChat").then((module) => ({ default: module.AdminOttoChat })));
+const AdminOttoSettings = lazy(() => import("./adminOtto/AdminOttoSettings").then((module) => ({ default: module.AdminOttoSettings })));
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
 import type { OttoScope, ReviewedRecap } from "../../../src/modules/work-os/admin-otto/contracts";
 import { fetchAdminOttoContext, claimAdminOttoDelivery, discardAdminOttoChat, fetchAdminOttoInbox, fetchAdminOttoRecap, updateAdminOttoDelivery, transcribeAdminOttoAudio, type AdminOttoContextResponse } from "./adminOtto/api";
@@ -131,6 +132,7 @@ import { resolveDashboardShift } from "./dashboardModel";
 import { shouldAutoOpenPlanning, shouldCloseAutoOpenedPlanning } from "./planningGate";
 import { attendanceWatchExpectation, attendanceWatchInput } from "./attendanceWatch";
 import { useAttendanceWatch } from "./useAttendanceWatch";
+import { useDayMonitor } from "./useDayMonitor";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -647,7 +649,7 @@ export default function App() {
       ? { personalBootstrapEnabled: false, personalNotificationsEnabled: true }
       : adminOttoBootstrap,
   });
-  const employeeBootstrapEnabled = bootstrapEnabled.personal;
+  const employeeBootstrapEnabled = bootstrapEnabled.personal && !adminShellActive;
   const personalNotificationReadsEnabled = bootstrapEnabled.notifications;
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
@@ -863,6 +865,8 @@ export default function App() {
     setAdminSection(next);
     setAdminFocus(focus ?? {});
   }, []);
+  const adminContextQueryRef = useRef(adminOttoContextQuery);
+  adminContextQueryRef.current = adminOttoContextQuery;
   /** Open the shared admin surface. The grouped arrival uses this without
    * opening it on its own; only the person's explicit Listen/View action does. */
   const openAdminOttoSurface = useCallback((options: { tab?: "chat" | "recaps"; recap?: ReviewedRecap | null; listen?: boolean; newChat?: boolean } = {}) => {
@@ -878,12 +882,13 @@ export default function App() {
         setAdminOttoEntryOpen(true);
         return;
       }
-      if (adminOttoContextQuery.isSuccess && adminOttoContextQuery.data) {
+      const contextQuery = adminContextQueryRef.current;
+      if (contextQuery.isSuccess && contextQuery.data) {
         setAdminOttoEntryOpen(true);
         return;
       }
       const retry = createAdminOttoContextRetry(async () => {
-        const result = await adminOttoContextQuery.refetch();
+        const result = await contextQuery.refetch();
         return { data: result.data ?? null, error: result.error };
       });
       void retry.retry(null).then((result) => {
@@ -925,7 +930,7 @@ export default function App() {
     }).catch(() => {
       notifications.error("The old chat could not be discarded. Nothing was cleared; try New chat again.", "New chat failed");
     }).finally(() => { adminOttoNewChatPending.current = false; });
-  }, [adminOttoContextQuery, notifications, adminOttoConversationId]);
+  }, [notifications, adminOttoConversationId]);
 
   /** A result card's record destination. Only a validated same-app admin URL
    * reaches this handler; a reviewed recap opens the real recap focus target,
@@ -1287,7 +1292,7 @@ export default function App() {
     if (patch.completed === true) {
       // The backlog is open-only: completing a task removes it and shifts the
       // counts immediately, then a refetch confirms the server totals.
-      queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
+      updateTaskBacklogCaches(queryClient, (current) => {
         if (!current || !current.counts || !current.tasks.some((task) => taskRowId(task) === rowId)) return current;
         return {
           tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
@@ -1296,7 +1301,7 @@ export default function App() {
       });
       void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
     } else {
-      queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => current ? {
+      updateTaskBacklogCaches(queryClient, (current) => current ? {
         ...current,
         tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
       } : current);
@@ -1317,7 +1322,7 @@ export default function App() {
         tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
       } : current);
     }
-    queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
+    updateTaskBacklogCaches(queryClient, (current) => {
       if (!current) return current;
       const tasks = current.tasks.filter((task) => taskRowId(task) !== rowId);
       if (!current.counts) return { ...current, tasks };
@@ -1346,7 +1351,7 @@ export default function App() {
         tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
       } : current);
     }
-    queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => current ? {
+    updateTaskBacklogCaches(queryClient, (current) => current ? {
       ...current,
       tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
     } : current);
@@ -1369,7 +1374,7 @@ export default function App() {
         return { ...current, tasks: [task, ...current.tasks] };
       });
     }
-    queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
+    updateTaskBacklogCaches(queryClient, (current) => {
       if (!current || current.tasks.some((row) => taskRowId(row) === taskRowId(task))) return current;
       if (!current.counts) return { ...current, tasks: [task, ...current.tasks] };
       return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
@@ -1390,18 +1395,33 @@ export default function App() {
     });
   }, [insertTaskIntoCaches]);
 
-  const detailsViews = view === "tasks" || view === "review" || view === "evidence";
+  const detailsViews = view === "review" || view === "evidence";
   const selectedTaskDate = planHistoryDate || visibleDay?.shiftDate || "";
   const selectedTaskDateIsHistorical = !!visibleDay?.shiftDate && selectedTaskDate !== visibleDay.shiftDate;
+  const dayMonitor = useDayMonitor({ window: "main", session, enabled: personalNotificationReadsEnabled && !syncBypass,
+    activePage: employeeBootstrapEnabled, onSnapshot: () => undefined });
+  const sharedStatusQuery = useQuery({
+    queryKey: ["work-os", "shared-status"], enabled: personalNotificationReadsEnabled && !employeeBootstrapEnabled && dayMonitor.owns,
+    staleTime: 60_000, refetchInterval: 60_000,
+    queryFn: async ({ signal }) => normalizeDay(await apiRequest<DayData>("/api/work-os/me/workday", { signal })),
+  });
+  useEffect(() => {
+    if (sharedStatusQuery.data && dayMonitor.owns) void dayMonitor.publish(sharedStatusQuery.data);
+  }, [sharedStatusQuery.data, dayMonitor.owns]);
 
   // Reads are cached with TTLs and de-duplicated by react-query. The compact
   // snapshot refreshes every minute in the background; heavy details load only
   // when a workspace that needs them opens.
-  const compactDayQuery = useDayQuery({ enabled: employeeBootstrapEnabled, variant: "compact", pollMs: 60_000 });
-  const detailsDayQuery = useDayQuery({ enabled: employeeBootstrapEnabled && detailsViews, variant: "details" });
+  // Page reads belong to the one window that owns background monitoring. A
+  // hidden main window therefore never duplicates the avatar's day work; a
+  // focus/visibility change re-claims and enables them again.
+  const employeePageEnabled = employeeBootstrapEnabled && dayMonitor.owns;
+  const compactDayQuery = useDayQuery({ enabled: employeePageEnabled, variant: "compact", pollMs: 60_000 });
+  useEffect(() => { if (compactDayQuery.data && dayMonitor.owns) void dayMonitor.publish(compactDayQuery.data); }, [compactDayQuery.data, dayMonitor.owns]);
+  const detailsDayQuery = useDayQuery({ enabled: employeePageEnabled && detailsViews, variant: "details" });
   // Share the scoped options cache between the drawer and the composer.
-  const drawerAssigneeQuery = useTaskOptionsQuery({ enabled: employeeBootstrapEnabled && !!taskDetails && !taskDetailsReadOnly });
-  const onboardingQuery = useOnboardingQuery({ enabled: employeeBootstrapEnabled });
+  const drawerAssigneeQuery = useTaskOptionsQuery({ enabled: employeePageEnabled && !!taskDetails && !taskDetailsReadOnly });
+  const onboardingQuery = useOnboardingQuery({ enabled: bootstrapEnabled.personal && (!adminShellActive || adminSection === "settings" || profileOpen) });
   const setWorkspaceMode = (next: "employee" | "admin") => {
     if (next === workspace) return;
     if (next === "employee" && adminContextState?.status === "ready" && adminContextState.personId === null) {
@@ -1772,10 +1792,10 @@ export default function App() {
     openOverdueTasks();
   };
   const historyQuery = useTaskHistoryQuery({
-    enabled: employeeBootstrapEnabled,
+    enabled: employeePageEnabled && view === "evidence",
   });
   const workspaceHistoryQuery = useTaskHistoryQuery({
-    enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "all" && !!visibleDay?.shiftDate,
+    enabled: employeePageEnabled && view === "tasks" && taskView === "all" && !!visibleDay?.shiftDate,
     workspace: true,
     view: "history",
     sort: taskWorkspaceSort,
@@ -1785,7 +1805,7 @@ export default function App() {
     toDate: taskFilterTo,
   });
   const completedHistoryQuery = useTaskHistoryQuery({
-    enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "completed" && !!visibleDay?.shiftDate,
+    enabled: employeePageEnabled && view === "tasks" && taskView === "completed" && !!visibleDay?.shiftDate,
     workspace: true,
     view: "history",
     sort: taskWorkspaceSort,
@@ -1796,7 +1816,7 @@ export default function App() {
     toDate: taskFilterTo,
   });
   const unfinishedHistoryQuery = useTaskHistoryQuery({
-    enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "unfinished" && !!visibleDay?.shiftDate,
+    enabled: employeePageEnabled && view === "tasks" && taskView === "unfinished" && !!visibleDay?.shiftDate,
     workspace: true,
     view: "open",
     sort: taskWorkspaceSort,
@@ -1807,7 +1827,7 @@ export default function App() {
     excludeToday: true,
   });
   const todayTaskHistoryQuery = useTaskHistoryQuery({
-    enabled: employeeBootstrapEnabled && view === "tasks" && (taskView === "today" || selectedTaskDateIsHistorical) && !!selectedTaskDate,
+    enabled: employeePageEnabled && view === "tasks" && (taskView === "today" || selectedTaskDateIsHistorical) && !!selectedTaskDate,
     workspace: true,
     view: "day",
     sort: taskWorkspaceSort,
@@ -1831,13 +1851,17 @@ export default function App() {
       : taskView === "all" ? workspaceHistoryQuery
         : taskView === "unfinished" ? unfinishedHistoryQuery
           : todayTaskHistoryQuery;
-  const backlogQuery = useTaskBacklogQuery({ enabled: employeeBootstrapEnabled, sortDate: visibleDay?.shiftDate });
-  const insightsQuery = useInsightsQuery({ enabled: employeeBootstrapEnabled && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
+  const backlogQuery = useTaskBacklogQuery({ enabled: employeePageEnabled && (view === "day" || carryOverOpen), sortDate: visibleDay?.shiftDate });
+  const openTaskCountQuery = useOpenTaskCountQuery({
+    enabled: personalNotificationReadsEnabled && !employeePageEnabled,
+    date: sharedStatusQuery.data?.shiftDate ?? dayMonitor.sharedDay?.shiftDate,
+  });
+  const insightsQuery = useInsightsQuery({ enabled: employeePageEnabled && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   // The dashboard's margin rail reads the same seven-day record the web Today
   // page uses. It is a secondary instrument: a failed read leaves the command
   // center intact and the rail simply reports that the record is unavailable.
-  const dashboardInsightsQuery = useInsightsQuery({ enabled: employeeBootstrapEnabled && !debugScenario.enabled && view === "day", range: "7d", through: day?.shiftDate ?? "" });
-  const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
+  const dashboardInsightsQuery = useDashboardInsightsQuery({ enabled: employeePageEnabled && !compactDayQuery.isFetching && compactDayQuery.isSuccess && !debugScenario.enabled && view === "day", through: day?.shiftDate ?? "" });
+  const historicalQuery = useHistoricalDayQuery({ enabled: employeePageEnabled && view === "tasks", date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
   // The masthead bell's owner-scoped reads run in both workspaces — the
   // administration bell lists the signed-in account's own notifications — so
   // they follow the session, not the rendered workspace. The dev-only shell
@@ -1849,10 +1873,10 @@ export default function App() {
   // Review-notification sources: what Otto remembers waiting for review, and a
   // recap waiting to be confirmed. Both poll only while the app is open.
   const memoryQuery = useMemoryQuery({ enabled: notificationReadsEnabled, pollMs: NOTIFICATION_POLL_MS });
-  const notificationIntervalsQuery = useActivityIntervalsQuery({ enabled: notificationReadsEnabled, date: visibleDay?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
+  const notificationIntervalsQuery = useActivityIntervalNotificationQuery({ enabled: notificationReadsEnabled, date: day?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
   // The bell only needs the newest ready recap, which always lives on the
   // first page; later pages stay unloaded until the stream asks for them.
-  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.pages[0]?.intervals), [notificationIntervalsQuery.data]);
+  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0, [memoryQuery.data]);
   // The Admin tab reads the same live overview the administration pages use.
@@ -1892,9 +1916,9 @@ export default function App() {
       navigateAdmin(section, focus);
     },
   } : undefined;
-  const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
+  const reportDayQuery = useReportDayQuery({ enabled: employeePageEnabled && view === "review", date: eodDate, currentDate: day?.shiftDate ?? "" });
   const screenshotGalleryQuery = useEodScreenshotsQuery({
-    enabled: employeeBootstrapEnabled,
+    enabled: employeePageEnabled && view === "review" && !eodLanding,
     date: eodDate ?? day?.shiftDate ?? null,
     pollWhilePending: eodPreparing != null && eodPreparing.date === (eodDate ?? day?.shiftDate ?? null),
   });
@@ -1986,7 +2010,7 @@ export default function App() {
       source: options.source ?? "manual",
       access,
       dayOnly: options.dayOnly === true,
-      fetchOnboarding: () => queryClient.fetchQuery({ queryKey: workOsKeys.onboarding(), queryFn: fetchOnboarding, staleTime: 0 }),
+      fetchOnboarding: () => queryClient.fetchQuery({ queryKey: workOsKeys.onboarding(), queryFn: () => fetchOnboarding(), staleTime: 0 }),
       fetchDay: () => queryClient.fetchQuery({
         queryKey: workOsKeys.day(variant),
         queryFn: () => fetchDay({ variant, refreshProviders: options.refreshProviders, refreshAttendance: options.refreshAttendance }),
@@ -2044,7 +2068,10 @@ export default function App() {
     void refresh({ dayOnly: true, source: "attendance" }).catch(() => undefined);
     void emit("work-os://main-day-changed");
   }, [invalidateDayData, refresh]);
-  useAttendanceWatch({ enabled: employeeBootstrapEnabled, input: attendanceWatchInput(visibleDay), onChange: onAttendanceChange });
+  useAttendanceWatch({ enabled: personalNotificationReadsEnabled && dayMonitor.owns, input: attendanceWatchInput(dayMonitor.sharedDay ?? sharedStatusQuery.data ?? visibleDay), onChange: () => {
+    if (employeeBootstrapEnabled) onAttendanceChange();
+    else void sharedStatusQuery.refetch();
+  } });
 
   /** A conflicting write means the workspace holds an authoritative newer plan;
    * drop the rejected local draft and render the server record instead of
@@ -2383,7 +2410,7 @@ export default function App() {
       .map((task) => ({ id: String(task.id ?? task.provider_task_id ?? ""), title: safeTaskText(task.title, "Untitled task"), dueDate: String(task.due_date ?? "").slice(0, 10) }))
       .filter((task) => task.id);
   }, [backlogQuery.data?.tasks, visibleDay?.tasks, visibleDay?.shiftDate, planItems, taskHistory]);
-  const overdueTaskCount = overdueBacklog.length;
+  const overdueTaskCount = backlogQuery.data?.counts?.overdue ?? openTaskCountQuery.data?.counts?.overdue ?? overdueBacklog.length;
   const openOverdueTasks = useCallback(() => {
     setNotificationsOpen(false);
     // Restore the current workday and drop active filters — including the
@@ -3237,8 +3264,7 @@ export default function App() {
       void emit(OTTO_CONTEXT_CLEARED_EVENT, adminOttoSnapshot ? ottoContextEvent(adminOttoSnapshot) : null);
       requestOttoAudioStop();
       void adminOttoDeliveryRef.current?.stop();
-      await secureState.clearAccount();
-      queryClient.clear();
+      await clearWorkOsAccountCache(queryClient);
       setSession(null); setDay(null); setDayLive(false); planningAutoOpenedRef.current = false; setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }
@@ -3478,12 +3504,12 @@ export default function App() {
   const clockInLateProlonged = clockInConfirmation?.kind === "late" && !!visibleDay?.shift
     && Date.now() >= Date.parse(visibleDay.shift.startsAt) + PROLONGED_ABSENCE_MINUTES * 60_000;
   useEffect(() => {
-    if (!hasVisibleSession || (adminShellActive && !personalNotificationReadsEnabled) || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) {
+    if (!hasVisibleSession || !visibleDay || adminShellActive || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) {
       notifications.clearPersistent("work-os-session-gate");
       return;
     }
     notifications.persistent("work-os-session-gate", gate.persistentMessage, gate.persistentTitle, "info");
-  }, [adminShellActive, personalNotificationReadsEnabled, gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
+  }, [adminShellActive, visibleDay, gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
   const todayParentTasks = useMemo(
     () => dayScopedTasks(visibleDay?.tasks ?? [], planItems, visibleDay?.shiftDate ?? "", taskHistory),
     [visibleDay?.tasks, planItems, visibleDay?.shiftDate, taskHistory],
@@ -3532,11 +3558,15 @@ export default function App() {
   // the tabs are never silently empty.
   const openBacklog = useMemo(() => (backlogQuery.data ? parentTasks(uniqueTasks(backlogQuery.data.tasks)) : null), [backlogQuery.data]);
   const unfinishedCarryOver = useMemo(() => {
-    if (openBacklog) {
-      const todayIds = new Set(todayParentTasks.map((task) => taskRowId(task)));
-      return unfinishedBefore(openBacklog.filter((task) => !todayIds.has(taskRowId(task))), visibleDay?.shiftDate ?? "");
-    }
-    const computed = unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? "");
+    const computed = openBacklog
+      ? (() => {
+        const todayIds = new Set(todayParentTasks.map((task) => taskRowId(task)));
+        return unfinishedBefore(openBacklog.filter((task) => !todayIds.has(taskRowId(task))), visibleDay?.shiftDate ?? "");
+      })()
+      : unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? "");
+    // The compact day carries a bounded sample across every carry-over group
+    // with exact counts; merging it keeps Yesterday populated even when the
+    // first backlog page is all older work.
     const groups = visibleDay?.workspaceSummary?.carryOverGroups;
     if (!groups) return computed;
     const seen = new Set(computed.map(({ task }) => String(task.provider_task_id || task.id)));
@@ -3547,6 +3577,17 @@ export default function App() {
   }, [openBacklog, todayParentTasks, visibleDay?.shiftDate, visibleDay?.workspaceSummary, taskHistory]);
   const yesterdayDate = moveDate(visibleDay?.shiftDate ?? "", -1);
   const yesterdayDueTasks = unfinishedCarryOver.filter(({ task }) => !task.completed && task.due_date?.slice(0, 10) === yesterdayDate);
+  // The compact day returns exact carry-over counts with a bounded page. Tabs
+  // still state the complete set, while the visible rows remain the loaded window.
+  const carryOverTotals = useMemo(() => {
+    const groups = visibleDay?.workspaceSummary?.carryOverGroups;
+    if (!groups?.length) return undefined;
+    const count = (group: { tasks?: unknown[]; count?: number }) => group.count ?? group.tasks?.length ?? 0;
+    return {
+      yesterday: groups.filter((group: any) => group.key === "yesterday").reduce((sum: number, group: any) => sum + count(group), 0),
+      other: groups.filter((group: any) => group.key !== "yesterday").reduce((sum: number, group: any) => sum + count(group), 0),
+    };
+  }, [visibleDay?.workspaceSummary?.carryOverGroups]);
   const recencyOrder = (task: TaskRow) => {
     const value = task.updated_at ?? task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? "";
     const parsed = Date.parse(String(value));
@@ -4940,11 +4981,11 @@ export default function App() {
     <PersonalSettings
       hasPersonalRecord={!!visibleOnboarding}
       adminOttoSettings={surface === "admin" && followSettingsScope ? (
-        <AdminOttoSettings
+        <Suspense fallback={null}><AdminOttoSettings
           key={`admin-otto-follows:${followSettingsScope.userId}:${followSettingsScope.organizationId}`}
           scope={followSettingsScope}
           {...(adminOttoFollowFixture ? { transport: adminOttoFollowFixture.transport } : {})}
-        />
+        /></Suspense>
       ) : undefined}
       tourScope={surface}
       onReplayTour={() => setTourScope(surface)}
@@ -5091,7 +5132,7 @@ export default function App() {
     };
     const openAdminOtto = () => openAdminOttoSurface({ newChat: true });
     return <>
-      <AdminWorkspace
+      <Suspense fallback={<main className="loading" role="status"><p>Loading administration…</p></main>}><AdminWorkspace
         session={workSessionQuery.data}
         notifications={personalNotificationReadsEnabled ? adminNotifications : null}
         section={adminSection}
@@ -5107,13 +5148,17 @@ export default function App() {
             ? "Loading the administration context…"
             : null}
         personalSettings={renderPersonalSettings("admin")}
-        profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}
+        profile={visibleOnboarding
+          ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }
+          : adminOttoContextQuery.data?.displayName
+            ? { name: adminOttoContextQuery.data.displayName, avatarUrl: adminOttoContextQuery.data.avatarUrl, onOpen: openProfileFromAdmin }
+            : null}
         onOpenWhatsNew={openChangelogFromAdmin}
         onSwitchToEmployee={adminOttoBootstrap.switchToEmployeeAvailable ? () => setWorkspaceMode("employee") : undefined}
         onSignOut={() => { void logout(); }}
-      />
+      /></Suspense>
       {adminOttoEntryOpen && (adminOttoContextQuery.data || ADMIN_SHELL_BOOT) ? (
-        <AdminOttoChat
+        <Suspense fallback={null}><AdminOttoChat
           key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}`}
           scope={adminOttoContextQuery.data?.scope ?? {
             userId: ADMIN_SHELL_SESSION.userId,
@@ -5164,7 +5209,7 @@ export default function App() {
           }}
           onConversation={handleAdminOttoConversation}
           onClose={() => { adminAudio.stop(); setAdminOttoEntryOpen(false); }}
-        />
+        /></Suspense>
       ) : null}
       {renderGlobalOverlays()}
     </>;
@@ -5255,6 +5300,8 @@ export default function App() {
         tasks={visibleTodayTasks}
         previousTasks={unfinishedCarryOver.filter((item) => item.attribution.date === moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
+        backlogPaging={{ loaded: backlogQuery.data?.tasks.length ?? 0, total: backlogQuery.data?.counts?.open ?? 0, hasMore: backlogQuery.hasNextPage, loading: backlogQuery.isFetchingNextPage, error: backlogQuery.isFetchNextPageError, onLoadMore: () => { void backlogQuery.fetchNextPage(); } }}
+        carryOverTotals={carryOverTotals}
         currentDate={visibleDay.shiftDate}
         busy={busy || !!worktivityPending || !!worktivityControlPhase}
         attendanceControlsSupported={attendanceControlsSupported}

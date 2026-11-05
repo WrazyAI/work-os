@@ -23,6 +23,8 @@ export const ADMIN_OTTO_TRANSCRIPTION_TIMEOUT_MS = 25_000;
 export type AdminOttoContextResponse = {
   scope: OttoScope;
   personId: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
   voiceAvailable: boolean;
   transcriptionAvailable: boolean;
 };
@@ -286,6 +288,8 @@ export async function fetchAdminOttoContext(): Promise<AdminOttoContextResponse>
   return requestJson(`${ADMIN_OTTO}/context`, jsonBody({}), (body) => ({
     scope: scopeValue(body.scope),
     personId: typeof body.personId === "string" ? body.personId : null,
+    displayName: typeof body.displayName === "string" ? body.displayName : null,
+    avatarUrl: typeof body.avatarUrl === "string" ? body.avatarUrl : null,
     voiceAvailable: body.voiceAvailable === true,
     transcriptionAvailable: body.transcriptionAvailable === true,
   }));

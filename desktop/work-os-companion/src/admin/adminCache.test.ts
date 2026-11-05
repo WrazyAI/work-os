@@ -8,7 +8,7 @@ import {
   focusManager,
   hashKey,
 } from "@tanstack/react-query";
-import { ADMIN_DETAIL_STALE_MS, ADMIN_STALE_MS, adminKeys } from "./data";
+import { ADMIN_DETAIL_STALE_MS, ADMIN_STALE_MS, adminKeys, adminReadinessQueryOptions } from "./data";
 import { createWorkOsQueryClient, isPersistedQueryKey } from "../queryClient";
 
 /**
@@ -64,7 +64,11 @@ describe("administration source contract", () => {
     for (const { path, text } of adminPageSources()) {
       for (const call of useQueryCalls(text)) {
         queried += 1;
-        if (!/staleTime\s*:/.test(call)) missing.push(`${path}: ${call.slice(0, 80)}`);
+        // This shared builder is exercised with real browser-mode observers
+        // in adminReadiness.test.ts, rather than duplicating its TTL inline.
+        if (call === "useQuery(adminReadinessQueryOptions())") {
+          expect(adminReadinessQueryOptions().staleTime).toBeGreaterThan(0);
+        } else if (!/staleTime\s*:/.test(call)) missing.push(`${path}: ${call.slice(0, 80)}`);
       }
     }
     expect(queried).toBeGreaterThan(0);

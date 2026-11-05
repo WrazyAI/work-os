@@ -305,7 +305,7 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     firstFollowUpMinutes: cadence.firstFollowUpMinutes,
     storedCheckInIntervalMinutes: session?.check_in_interval_minutes as number | null,
   });
-  return { session, plan, prompt: promptDecision, cadence };
+  return { session, plan, prompt: promptDecision, cadence, shift, shiftDate: context.shiftDate, at: at.toISOString() };
 }
 
 /** Claims a due notification after a companion has decided to display it.

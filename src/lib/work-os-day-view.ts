@@ -66,10 +66,13 @@ export async function getWorkOsDay(
     options.compact ? Promise.resolve([]) : listEvidence(ownerId, { personId, date: shiftDate }),
     options.compact ? Promise.resolve({ data: [], error: null }) : db().from("work_task_proposals").select("*").eq("organization_id", access.organizationId).eq("person_id", personId).in("status", ["pending", "needs_review", "failed", "stale"]).order("created_at", { ascending: false }),
     db().from("work_reports").select(options.compact ? "submitted_at" : "*").eq("organization_id", access.organizationId).eq("person_id", personId).eq("report_date", shiftDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 50, now: at }),
+    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 50, now: at, compact: options.compact }),
   ]);
   if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
   if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);
+  // Keep the workday's own timezone/schedule/break resolution. The day view's
+  // schedule inputs serve task attribution, but must not replace the live
+  // workday context that drives plan creation and break-aware prompts.
   const workday = await getWorkday(access, at);
   const actor = { role: access.role, personId: access.personId };
   const taskRows = withTaskCapabilities(workspace.tasks, actor, shiftDate);

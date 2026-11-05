@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
+      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -120,6 +120,12 @@
       "type": "feature",
       "summary": "The notifications bell switches between personal reminders and the workspace's decision queue, pulse, and recent team activity.",
       "verification": "Ledger 08faace9-600a-4699-9d63-eda9aabba66b: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1685 passed; focused bell/model tests 35 passed; typecheck and production build passed; rendered 1440/1024/930/720/560/390 admin, employee, empty, loading, and error states plus tab reset, keyboard tabs/rows, Escape, scroll reset, decision and activity drill-downs, and no panel overflow; TestSprite ec7f241c passed 10/10."
+    },
+    {
+      "id": "background-work-lightening",
+      "type": "fix",
+      "summary": "Administration and the floating companion stop repeating hidden employee page work, cache saves, and recap checks.",
+      "verification": "Branch codex/work-os-performance on 2026-11-05: real Chromium App checks 5/5; companion Vitest 1644/1644; Work OS full suite 1244/0/11; backend performance/static checks and Agent OS reconciliation passed; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
     }
   ],
   "emergency": null
