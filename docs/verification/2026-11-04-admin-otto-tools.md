@@ -1,7 +1,8 @@
 # Admin Otto tools, multi-step actions, and New chat — verification
 
-Date: 2026-11-04.
-Branch: `codex/admin-otto-redesign` (base `7dbb8be4`).
+Date: 2026-11-04; live verification completed 2026-11-05.
+Branches: `codex/admin-otto-redesign`, follow-up `codex/admin-otto-model-retry`.
+Work OS main: `a065b54f`. Agent OS: `ba85ffbb`.
 Ledger: `1e70b015-5f62-4c6f-aca0-09834a93372e`.
 
 ## What changed
@@ -76,12 +77,38 @@ Screenshots: `/tmp/opencode/admin-otto-cards-wide-v3.png`,
 `/tmp/opencode/admin-otto-cards-narrow-v3.png`,
 `/tmp/opencode/admin-otto-read-v3.png`.
 
+## Live deployment verification
+
+Deployed Work OS server changes to Agent OS `ba85ffbb` after applying
+`0071_work_admin_otto_session_actions.sql` and
+`0072_work_admin_otto_workflows.sql` to
+`ep-delicate-firefly-b21oupgo.c-6.eu-central-1.aws.neon.tech`. The duplicate
+key pre-check returned none. A disposable desktop session and admin token drove
+the live flow, and both were revoked afterward.
+
+1. One message requested two named tasks for two different people.
+2. The response carried a two-step workflow and two durable previews.
+3. Both confirmations returned `schemaVersion: 1`, status `recorded`, and two
+   distinct task IDs.
+4. Repeating the first confirmation returned `replayed: true`.
+5. Database readback showed exactly two tasks with the requested assignees,
+   `agent_token_id` null on both, and preview-scoped idempotency keys.
+6. New chat returned `discarded: true`; the old thread then returned
+   `409 conversation_unavailable`; the workflow was abandoned.
+7. Disposable tasks were deleted through the admin preview/confirm path, with
+   zero visible leftovers.
+
+The first live attempt returned one transient `ai_malformed`. A focused
+follow-up adds one bounded retry for malformed structured answers and prefers an
+explicit `steps` plan over accidentally populated legacy fields. The final live
+retry completed the whole flow without error.
+
 ## Release state
 
 The queue outcome `admin-otto-multi-step-tool-cards` is pending. At the time of
 writing, `0.5.22` is the latest published companion release and this outcome is
-one of the five required for the next ordinary release. No version bump, tag,
-or packaging was performed by this branch.
+one of two pending outcomes toward the next ordinary release. No version bump,
+tag, or packaging was performed by this branch.
 
 ## Deferred
 
