@@ -84,6 +84,7 @@ export interface AdminOverview {
     evidenceToday: number;
     evidenceActivityToday: number;
     evidenceOutputToday: number;
+    ghlContextToday: number;
     reportsDraftedToday: number;
     reportsSubmittedToday: number;
     reportsPendingReview: number;
@@ -107,6 +108,8 @@ export interface AdminOverview {
     worktivityObservedAt: string | null;
     githubLastEventAt: string | null;
     githubEventsToday: number;
+    ghlLastEventAt: string | null;
+    ghlEventsToday: number;
     lastPlanAt: string | null;
     lastReportSubmittedAt: string | null;
   };
@@ -396,6 +399,20 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
   }
 
+  const ghlVolume = await getPool().query<{
+    last_at: string | null;
+    today: number;
+    context_today: number;
+  }>(
+    `select max(occurred_at) as last_at,
+            count(*) filter (where occurred_at >= $2)::int as today,
+            count(*) filter (where occurred_at >= $2 and person_id is null)::int as context_today
+       from work_evidence_events
+      where organization_id = $1 and provider = 'ghl'`,
+    [organizationId, `${date}T00:00:00.000Z`],
+  );
+  const ghl = ghlVolume.rows[0] ?? { last_at: null, today: 0, context_today: 0 };
+
   const people = (peopleResult.data ?? []) as Json[];
   const schedules = (schedulesResult.data ?? []) as Json[];
   const sessions = (sessionsResult.data ?? []) as Json[];
@@ -681,6 +698,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     tasksOpen: openTasksResult.count ?? 0,
     tasksOverdue: overdueTasksResult.count ?? 0,
     evidenceToday: evidenceTodayCountResult.count ?? evidence.length,
+    ghlContextToday: Number(ghl.context_today ?? 0),
     evidenceActivityToday: evidenceActivityTodayCountResult.count ?? evidence.filter((row) => String(row.source) === "worktivity").length,
     evidenceOutputToday: (evidenceTodayCountResult.count ?? evidence.length) - (evidenceActivityTodayCountResult.count ?? evidence.filter((row) => String(row.source) === "worktivity").length),
     reportsDraftedToday: reportsToday.filter((row) => String(row.status) === "draft").length,
@@ -728,6 +746,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     worktivityObservedAt: isoOrNull(freshnessAttendanceResult.data?.observed_at),
     githubLastEventAt: isoOrNull(freshnessGithubResult.data?.occurred_at),
     githubEventsToday: githubEventsTodayResult.count ?? 0,
+    ghlLastEventAt: isoOrNull(ghl.last_at),
+    ghlEventsToday: Number(ghl.today ?? 0),
     lastPlanAt: isoOrNull(freshnessPlanResult.data?.updated_at),
     lastReportSubmittedAt: isoOrNull(freshnessReportResult.data?.submitted_at),
   };

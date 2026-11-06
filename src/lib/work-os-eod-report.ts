@@ -59,6 +59,14 @@ export interface EodGithubFacts {
   pullRequests: string[];
 }
 
+export interface EodGhlFacts {
+  /** Counts of verified employee-performed actions by evidence kind. */
+  performed: Record<string, number>;
+  /** Shared, automation, assigned-only or unknown records kept as context. */
+  context: number;
+  coverage: Array<{ kind: string; state: string }>;
+}
+
 export interface EodMediaFact {
   title: string;
   url: string;
@@ -91,6 +99,7 @@ export interface EodReportFacts {
   recaps: EodRecap[];
   hourly: Array<{ label: string; summary: string }>;
   github: EodGithubFacts | null;
+  ghl: EodGhlFacts | null;
   media: EodMediaFact[];
   evidence: EodEvidenceFact[];
 }
@@ -363,6 +372,21 @@ function githubEvidenceLine(facts: EodReportFacts): string | null {
   return parts.length ? `- GitHub, provider-recorded — ${parts.join("; ")}.` : null;
 }
 
+function ghlEvidenceLine(facts: EodReportFacts): string | null {
+  const ghl = facts.ghl;
+  if (!ghl) return null;
+  const performed = Object.entries(ghl.performed)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${count} ${kind}${count === 1 ? "" : "s"}`);
+  const parts = [
+    performed.length ? `performed ${performed.join(" · ")}` : "",
+    ghl.context ? `${ghl.context} shared, automated, assigned or unknown context item${ghl.context === 1 ? "" : "s"} not credited to the employee` : "",
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  const partial = ghl.coverage.filter((coverage) => coverage.state === "partial" || coverage.state === "unavailable");
+  return `- GHL, provider-recorded — ${parts.join("; ")}${partial.length ? ` (${partial.map((coverage) => `${coverage.kind} ${coverage.state}`).join(", ")})` : ""}.`;
+}
+
 function fullText(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -442,8 +466,9 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
     "## Evidence",
     `- ${deliverables.length} work deliverable${deliverables.length === 1 ? "" : "s"} · ${facts.recaps.length} recorded recap${facts.recaps.length === 1 ? "" : "s"}${facts.media.length ? ` · ${facts.media.length} Loom recording${facts.media.length === 1 ? "" : "s"}` : ""}.`,
     ...(githubEvidenceLine(facts) ? [githubEvidenceLine(facts) as string] : []),
+    ...(ghlEvidenceLine(facts) ? [ghlEvidenceLine(facts) as string] : []),
     "",
-    "Activity context is descriptive; recorded GitHub activity is a provider fact and still does not prove attendance, productivity, or task completion.",
+    "Activity context is descriptive; recorded GitHub and GHL activity are provider facts and still do not prove attendance, productivity, or task completion.",
   ];
 
   const appendix: string[] = [

@@ -456,6 +456,9 @@ export interface RecordedActivityAllowlistEntry {
   description: string;
   relation: GithubActivityRelation;
   url: string | null;
+  /** Which provider recorded the item. Absent for legacy GitHub entries. */
+  source?: "github" | "ghl";
+  eventId?: string;
 }
 
 export function githubRecordedActivityAllowlist(activity: GithubActivity): RecordedActivityAllowlistEntry[] {

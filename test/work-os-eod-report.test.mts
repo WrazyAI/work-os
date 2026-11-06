@@ -67,6 +67,11 @@ const facts: EodReportFacts = {
     commits: 83,
     pullRequests: ["work-os#134", "agent-os#73", "launchloom#177"],
   },
+  ghl: {
+    performed: { call: 3, email: 2, note: 1 },
+    context: 4,
+    coverage: [{ kind: "appointment", state: "partial" }],
+  },
   media: [{ title: "Settlement walkthrough", url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6", durationSeconds: 326, digest: "Walked through the settlement reconciliation." }],
   evidence: [{ title: "Release notes", summary: "Documented the shipped changes.", url: "https://example.com/release", source: "manual", taskId: "1" }],
 };

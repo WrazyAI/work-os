@@ -22,6 +22,7 @@ import {
 import {
   buildEodReportMarkdown,
   type EodEvidenceFact,
+  type EodGhlFacts,
   type EodGithubFacts,
   type EodMediaFact,
   type EodPlanItem,
@@ -30,6 +31,7 @@ import {
   type EodTaskFact,
 } from "@/lib/work-os-eod-report";
 import { listGithubActivity } from "@/lib/work-os-github-activity";
+import { listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -296,6 +298,34 @@ export async function buildDailyWorkspaceEodContent(
     }
   }
 
+  let ghl: EodGhlFacts | null = null;
+  if (access.featureFlags.ghl_evidence === true) {
+    try {
+      const ghlScope = await resolveGhlScope(access.organizationId);
+      if (ghlScope) {
+        const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(reportDate, timezone);
+        const activity = await listGhlActivity({
+          scope: ghlScope,
+          personId,
+          from: bounds.startIso,
+          through: bounds.endIso,
+          includeOrganizationContext: false,
+        });
+        const performed: Record<string, number> = {};
+        for (const item of activity.items.filter((entry) => entry.relation === "performed")) {
+          performed[item.kind] = (performed[item.kind] ?? 0) + 1;
+        }
+        ghl = {
+          performed,
+          context: activity.items.filter((item) => item.relation !== "performed").length,
+          coverage: activity.coverage.map((entry) => ({ kind: entry.kind, state: entry.state })),
+        };
+      }
+    } catch {
+      ghl = null;
+    }
+  }
+
   const media: EodMediaFact[] = [];
   const mediaUrls = new Set<string>();
   for (const item of evidence) {
@@ -349,6 +379,7 @@ export async function buildDailyWorkspaceEodContent(
     recaps,
     hourly,
     github,
+    ghl,
     media,
     evidence: outputEvidence,
   };

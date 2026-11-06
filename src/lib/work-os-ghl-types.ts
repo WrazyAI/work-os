@@ -52,6 +52,20 @@ export interface GhlRecord {
   snapshot: boolean;
 }
 
+export interface GhlActivityItem extends GhlRecord {
+  eventId: string;
+  personId: string | null;
+  excerpt: string | null;
+  contentExpiresAt: string | null;
+}
+
+export interface GhlActivity {
+  items: GhlActivityItem[];
+  coverage: GhlCoverage[];
+  lastSyncedAt: string | null;
+  capped: boolean;
+}
+
 export interface GhlCoverage {
   kind: GhlKind;
   state: "pending" | "complete" | "partial" | "unavailable";
