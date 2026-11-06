@@ -124,6 +124,30 @@ create table work_team_members (
   person_id uuid not null,
   is_manager boolean not null default false
 );
+create table work_activity_intervals (
+  id uuid primary key,
+  organization_id uuid not null,
+  headline text,
+  ai_detail text,
+  final_detail text,
+  structured_summary jsonb,
+  review_status text not null default 'inferred',
+  updated_at timestamptz not null default now()
+);
+create table work_reports (
+  id uuid primary key,
+  organization_id uuid not null,
+  status text not null default 'draft',
+  generated_markdown text,
+  submitted_markdown text,
+  updated_at timestamptz not null default now()
+);
+create table work_report_versions (
+  id uuid primary key,
+  report_id uuid not null,
+  markdown text,
+  created_at timestamptz not null default now()
+);
 insert into work_organizations (id, name, legacy_owner_id, created_by) values
   ('${org}', 'Wrazy', 'aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001'),
   ('${otherOrg}', 'Other', 'aaaaaaaa-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000002');
