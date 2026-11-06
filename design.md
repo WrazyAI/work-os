@@ -999,6 +999,20 @@ Both chat surfaces use the configured mascot head crop through
 src/chat/MascotMark.tsx. Never hardcode mascot art, the mascot name, or a
 generic sparkle as agent identity. Global mascot changes belong in mascot.ts.
 
+The mascot at the far left of either Otto header is also the one Employee /
+Admin view control for an administrator. Its detached menu marks the current
+view and explains an unavailable destination; the floating window follows the
+main window's selected workspace and swaps to the matching real conversation.
+The in-app and floating Administration surfaces render the same Admin Otto
+chat engine and confirmation contract, never a second admin implementation.
+View changes retain the conversation identity, drafts, and unconfirmed
+previews; the Administration masthead's **Ask Otto** control reopens that
+retained conversation, while **New chat** remains the durable discard. Closing
+and reopening either Administration surface therefore rehydrates the same
+server thread, and assistant turns carry their recorded local time plus the
+same session dividers as the employee chat. A view switch is a presentation
+choice, never an authorization boundary.
+
 Prompt reminders — the plan question, a due check-in, the EOD nudge — are
 scaffolding for the prompt they announce. The companion may show one in the
 thread, but it is removed as soon as that prompt is answered or replaced, is
@@ -2184,6 +2198,16 @@ Otto is configured once in
 desktop/work-os-companion/src/mascot.ts: name, poses, art, and crop. Render
 the configured identity through Otto or MascotMark according to surface.
 
+Administration adds a charcoal open-front blazer, a signal pocket square, a
+brass lapel pin, and thin brass spectacles to the one configured Studio Otto
+renderer. The accessories belong to the mascot, so every pose and crop keeps
+them without a second art path. Only the still-mounted collapsed pet plays the
+one-shot dressing or undressing transition; header marks and chat marks render
+the final state without motion. Opening, collapsing, or replaying a pose never
+replays the outfit transition, and reduced motion renders the final dressed
+state immediately. The collapsed Administration orb carries a small `Admin`
+text label so the state never depends on costume alone.
+
 The mascot is a quiet guide, not a dashboard card and not a status replacement.
 It may appear as:
 
@@ -2505,7 +2529,8 @@ header.
 
 **Admin Otto tools.** The administration chat uses one thread-native card family
 for reads, proposals, and receipts: a paper frame, a clear header and lifecycle
-marker, flat rows, and one action region. Tasks, work records/EODs, reviewed
+marker, flat rows, and one action region. Its mascot/Admin chip opens the same
+Employee / Admin view switch as the floating companion. Tasks, work records/EODs, reviewed
 recaps, workdays, person resolution, and every task change each get their own
 layout; a proposal never prints raw ids, an unchanged field, or a meaningless
 empty value. Independent changes group into one review card with per-item

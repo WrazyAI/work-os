@@ -24,6 +24,7 @@ const insightDashboardStyles = readText(resolve(root, "src/insight-dashboard.css
 const adminWorkspace = readText(resolve(root, "src/admin/AdminWorkspace.tsx"));
 const adminData = readText(resolve(root, "src/admin/data.ts"));
 const adminShellSource = readText(resolve(root, "src/adminShell.ts"));
+const adminOttoChat = readText(resolve(root, "src/adminOtto/AdminOttoChat.tsx"));
 const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
@@ -842,5 +843,32 @@ describe("operational visualizations", () => {
     // row that disagree about which numbers the day is made of.
     expect(dashboardSurface).not.toContain("active-focus-panel");
     expect(dashboardSurface).toContain('aria-label="Workday counts"');
+  });
+});
+
+describe("floating Otto view switch", () => {
+  it("adopts the owner view and renders the shared admin surface", () => {
+    expect(avatarApp).toContain("OTTO_VIEW_STATE_EVENT");
+    expect(avatarApp).toContain("OTTO_VIEW_REQUEST_EVENT");
+    expect(avatarApp).toContain("CompanionViewSwitch");
+    expect(avatarApp).toContain("<AdminOttoChat");
+    expect(avatarApp).toContain('surface="floating"');
+    expect(avatarApp).toContain("OTTO_RECORD_NAV_EVENT");
+    expect(avatarApp).toContain("mode={workspaceView}");
+    expect(avatarApp).toContain("animateAttire");
+    expect(avatarApp).toContain("adminPendingVoiceStartRef");
+    expect(avatarApp).toContain("avatarViewFenceRef.current.capture()");
+    expect(avatarApp).toContain("if (!fence.isCurrent()) return;");
+    expect(avatarApp).toContain("adminAudioRef.current?.stop()");
+    expect(avatarApp).toContain("const AVATAR_EXPANDED = { width: 400, height: 620 };");
+  });
+
+  it("keeps the in-app admin header and assistant marks on the same mode", () => {
+    expect(app).toContain("headerLeading={viewState ? <CompanionViewSwitch");
+    expect(adminOttoChat).toContain('mascotMode="admin"');
+    expect(avatarApp).toContain("adminConversationGeneration");
+    expect(avatarApp).toContain("adminConversationRevision");
+    expect(avatarApp).toContain("adminRecoveryBoundaryRef");
+    expect(app).toContain("conversationState?.generation ?? 1");
   });
 });

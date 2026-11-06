@@ -378,10 +378,13 @@ assert.match(adminWorkspace, /aria-label=\{`Profile for \$\{profile\.name\}`\}/)
 assert.match(adminWorkspace, /title="Open profile settings"/);
 assert.match(adminWorkspace, /onOpenWhatsNew/);
 assert.match(adminWorkspace, /className="admin-switch admin-ask-otto"/);
-assert.match(adminWorkspace, /onClick=\{onNewChat\}/);
+assert.match(adminWorkspace, /const openOtto = onOpenOtto \?\? onNewChat;/);
+assert.match(adminWorkspace, /onClick=\{openOtto\}/);
 assert.match(adminWorkspace, /Ask Otto/);
 assert.match(app, /const openAdminOtto = \(\) => openAdminOttoSurface\(\{ newChat: true \}\);/);
+assert.match(app, /const resumeAdminOtto = \(\) => openAdminOttoSurface\(\);/);
 assert.match(app, /onNewChat=\{openAdminOtto\}/);
+assert.match(app, /onOpenOtto=\{resumeAdminOtto\}/);
 assert.equal((app.match(/onNewChat=\{openAdminOtto\}/g) ?? []).length, 1);
 const sidebarNav = read("src/SidebarNav.tsx");
 assert.match(sidebarNav, /What's new/);
@@ -654,7 +657,9 @@ assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/)
 assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
 assert.match(avatar, /const workdayState: MascotWorkdayState =/);
 assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);
-assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" replayKey=\{snoozeReplayId\} speaking=\{recapSpeech\.status === "playing"\} \/>/);
+assert.match(avatar, /<MascotPet[\s\S]*?agent=\{workspaceView === "admin" \? "idle" : agentActivity\}/);
+assert.match(avatar, /mode=\{workspaceView\}/);
+assert.match(avatar, /animateAttire/);
 assert.match(avatar, /Late start — add a reason/);
 
 assert.match(app, /const lateReasonMissing = lateReasonRequired\(visibleDay\?\.session\);/);

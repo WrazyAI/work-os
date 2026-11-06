@@ -4,7 +4,7 @@ import { AdminActionBatch, AdminReadCard } from "./AdminToolCards";
 import { confirmAdminOttoAction, fetchAdminOttoAction, refreshAdminOttoWorkflow } from "./api";
 import type { AdminRecapPlayback } from "./AdminRecapView";
 
-export function AdminWorkflowCard({ workflow, onUpdate, onAction, onOpenRecord, onOpenRecap, onListen, playback, confirm, status }: {
+export function AdminWorkflowCard({ workflow, onUpdate, onAction, onOpenRecord, onOpenRecap, onListen, playback, confirm, status, onBusyChange }: {
   workflow: AdminOttoWorkflowView;
   onUpdate: (workflow: AdminOttoWorkflowView) => void;
   onAction: (action: AdminOttoPendingAction) => void;
@@ -14,10 +14,12 @@ export function AdminWorkflowCard({ workflow, onUpdate, onAction, onOpenRecord, 
   onOpenRecap: (recap: ReviewedRecap) => void;
   onListen: (recap: ReviewedRecap) => void;
   playback?: AdminRecapPlayback | null;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const actions = workflow.steps.flatMap((step) => step.pendingAction ? [step.pendingAction] : []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const refresh = async (index?: number) => {

@@ -5,11 +5,15 @@ export const MASCOT_POSES = ["idle", "sleep", "focus", "alert", "rest", "think",
 export type MascotPose = (typeof MASCOT_POSES)[number];
 export type MascotTone = "signal" | "late";
 export type MascotCrop = "full" | "head";
+export type MascotMode = "employee" | "admin";
+export type MascotAttireTransition = "on" | "off" | null;
 
 export interface MascotRendererProps {
   pose?: MascotPose;
   tone?: MascotTone;
   crop?: MascotCrop;
+  mode?: MascotMode;
+  attireTransition?: MascotAttireTransition;
   className?: string;
   style?: CSSProperties;
   ariaLabel?: string;

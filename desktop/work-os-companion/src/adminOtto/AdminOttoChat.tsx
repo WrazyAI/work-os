@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from "react";
 import { X, SquarePen } from "lucide-react";
+import { FadeArc } from "../LoadingUi";
 import type {
   AdminOttoPendingAction,
   AdminRead,
@@ -11,7 +12,7 @@ import type {
   TaskCard,
   WorkRecord,
 } from "../../../../src/modules/work-os/admin-otto/contracts";
-import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, type ChatTab } from "../WorkOsChat";
+import { ChatTabs, ChatTimeDivider, ChatTurn, ConversationSurface, WorkOsPromptBar, shouldShowChatDivider, type ChatTab } from "../WorkOsChat";
 import type { VoiceInput } from "../chat/voiceInput";
 import { useVoiceInput } from "../chat/voiceInput";
 import { createAdminAudioInterlock } from "./audioInterlock";
@@ -158,6 +159,22 @@ function RecordLink({ url, children, onOpenRecord }: { url: string; children: Re
   );
 }
 
+/** Capture the visible draft and request identity before a host unmounts or
+ * switches surfaces. This is the last synchronous recovery point. */
+export function suspendAdminOttoChat(input: {
+  controller: Pick<AdminOttoEntryController, "cancel" | "recovery">;
+  voice: Pick<VoiceInput, "cancel">;
+  onStopListening?: () => void;
+  onRecoveryChange?: (recovery: AdminOttoEntryRecovery) => void;
+}): AdminOttoEntryRecovery {
+  input.onStopListening?.();
+  input.voice.cancel();
+  input.controller.cancel();
+  const recovery = input.controller.recovery();
+  input.onRecoveryChange?.(recovery);
+  return recovery;
+}
+
 export function AdminPendingActionCard({ action }: { action: AdminOttoPendingAction }) {
   return <AdminActionBatch actions={[action]} onConfirm={async (current) => {
     const result = await confirmAdminOttoAction(current.previewId);
@@ -176,6 +193,12 @@ function arrivalLabel(arrival: AdminArrivalView): string {
 export type AdminOttoChatProps = {
   scope: OttoScope;
   conversationId: string | null;
+  surface?: "in-app" | "floating";
+  headerLeading?: ReactNode;
+  onHeaderMouseDown?: MouseEventHandler<HTMLElement>;
+  onLifecycle?: (handle: { suspend: () => AdminOttoEntryRecovery; voice: Pick<VoiceInput, "start" | "stop" | "cancel"> } | null) => void;
+  isCurrent?: () => boolean;
+  refreshRevision?: number;
   onOpenRecord: (url: string) => void;
   onListen: (recap: ReviewedRecap) => void;
   /** Shared chat surface options. */
@@ -224,6 +247,12 @@ export type AdminOttoChatProps = {
 export function AdminOttoChat({
   scope,
   conversationId,
+  surface: presentationSurface = "in-app",
+  headerLeading,
+  onHeaderMouseDown,
+  onLifecycle,
+  isCurrent,
+  refreshRevision = 0,
   onOpenRecord,
   onListen,
   initialTab = "chat",
@@ -252,6 +281,9 @@ export function AdminOttoChat({
   onArrivalSeen,
 }: AdminOttoChatProps) {
   const [surface] = useState(() => createAdminOttoSurfaceController(initialTab));
+  const rootRef = useRef<HTMLElement | null>(null);
+  const isCurrentRef = useRef<() => boolean>(() => true);
+  isCurrentRef.current = isCurrent ?? (() => true);
   const state = useSyncExternalStore(surface.subscribe, surface.snapshot, surface.snapshot);
   const reducedMotion = useReducedMotion();
   const [selectedRecap, setSelectedRecap] = useState<ReviewedRecap | null>(initialRecap);
@@ -290,7 +322,10 @@ export function AdminOttoChat({
     initialConversationId: conversationId,
   }));
   const chat = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  const appliedReset = useRef(0);
+  // A fresh mount has already adopted the host's post-reset props (including a
+  // retained draft and conversation id). Replaying an older reset token would
+  // wipe them, so only an increment observed while mounted is applied.
+  const appliedReset = useRef(resetToken);
   const previousConversationProp = useRef<string | null>(conversationId);
   useEffect(() => {
     if (resetToken === 0 || appliedReset.current === resetToken) return;
@@ -368,6 +403,7 @@ export function AdminOttoChat({
     surface: "admin-otto",
     transcribe,
     onTranscript: (text) => {
+      if (!isCurrentRef.current()) return;
       const current = controller.snapshot().draft;
       controller.setDraft(current.trim() ? `${current.trimEnd()} ${text}` : text);
     },
@@ -397,6 +433,9 @@ export function AdminOttoChat({
     },
   });
   const composerVoice = voice ?? (transcriptionEnabled ? adminVoice : undefined);
+  const lifecycleVoice = composerVoice ?? adminVoice;
+  const lifecycleRef = useRef({ controller, voice: lifecycleVoice, onStopListening, onRecoveryChange });
+  lifecycleRef.current = { controller, voice: lifecycleVoice, onStopListening, onRecoveryChange };
   useEffect(() => {
     adminVoiceCancelRef.current = adminVoice.cancel;
     return () => { adminVoiceCancelRef.current = null; };
@@ -412,6 +451,25 @@ export function AdminOttoChat({
     adminVoiceCancelRef.current?.();
   }), []);
 
+  useEffect(() => {
+    if (!onLifecycle) return;
+    const handle = {
+      suspend: () => {
+        const current = lifecycleRef.current;
+        const recovery = suspendAdminOttoChat(current);
+        releaseRecordingLease();
+        return recovery;
+      },
+      voice: {
+        start: (source?: "button" | "hotkey") => lifecycleRef.current.voice.start(source),
+        stop: () => lifecycleRef.current.voice.stop(),
+        cancel: () => lifecycleRef.current.voice.cancel(),
+      },
+    };
+    onLifecycle(handle);
+    return () => onLifecycle(null);
+  }, [onLifecycle]);
+
 
   useEffect(() => {
     conversationRef.current = conversationId;
@@ -421,6 +479,7 @@ export function AdminOttoChat({
   }, [conversationId, controller]);
 
   useEffect(() => {
+    if (!isCurrentRef.current()) return;
     onRecoveryChange?.(controller.recovery());
   }, [chat, controller, onRecoveryChange]);
 
@@ -428,6 +487,7 @@ export function AdminOttoChat({
     // Triggered by the store change, but never sourced from the render
     // snapshot: New chat can run this effect with an old `chat.conversationId`
     // and a fresh host callback identity before the reset is observed.
+    if (!isCurrentRef.current()) return;
     syncAdminOttoConversation({
       controller,
       conversationRef,
@@ -450,6 +510,7 @@ export function AdminOttoChat({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isCurrentRef.current()) return;
       const action = adminEscapeAction({
         key: event.key,
         recapOpen: selectedRecap !== null,
@@ -488,33 +549,81 @@ export function AdminOttoChat({
   ];
 
   const send = () => {
+    if (!isCurrentRef.current()) return;
     void controller.submit();
   };
   const [resetting, setResetting] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const newChat = async () => {
-    if (resetting) return;
+    if (resetting) return false;
     setResetting(true);
     onStopListening?.();
     adminVoice.cancel();
     try {
-      await controller.newChat();
+      const committed = await controller.newChat();
+      if (!committed) return false;
       conversationRef.current = null;
       previousConversationProp.current = null;
-      surface.selectTab("chat");
-      surface.closeRecap();
-      setSelectedRecap(null);
       onNewChat?.();
-      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".admin-otto-composer textarea")?.focus());
-    } catch { /* The controller preserves the conversation and its inline error. */ }
-    finally { setResetting(false); }
+      if (isCurrentRef.current()) {
+        surface.selectTab("chat");
+        surface.closeRecap();
+        setSelectedRecap(null);
+        window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLTextAreaElement>(".admin-otto-composer textarea")?.focus());
+      }
+      return true;
+    } catch {
+      // The controller preserves the conversation and its inline error.
+      return false;
+    } finally {
+      setResetting(false);
+    }
   };
 
+  const pendingRefresh = useRef<number | null>(null);
+  const hasPendingDecision = (turns: typeof chat.turns) => turns.some((turn) =>
+    turn.pendingAction?.status === "pending"
+    || turn.workflow?.steps.some((step) => step.status === "ready" || step.status === "blocked"));
+  const refreshThread = useCallback(() => {
+    if (!isCurrentRef.current()) return;
+    const current = controller.snapshot();
+    if (!current.conversationId) return;
+    if (current.hydration === "loading" || current.busy || resetting || actionBusy || hasPendingDecision(current.turns)) {
+      pendingRefresh.current = refreshRevision;
+      return;
+    }
+    pendingRefresh.current = null;
+    void controller.open(current.conversationId);
+  }, [actionBusy, controller, refreshRevision, resetting]);
+  const lastRefreshRevision = useRef(refreshRevision);
+  useEffect(() => {
+    if (refreshRevision === lastRefreshRevision.current) return;
+    lastRefreshRevision.current = refreshRevision;
+    refreshThread();
+  }, [refreshRevision, refreshThread]);
+  useEffect(() => {
+    if (pendingRefresh.current === null) return;
+    if (chat.busy || chat.hydration === "loading" || resetting || actionBusy || hasPendingDecision(chat.turns)) return;
+    const target = pendingRefresh.current;
+    pendingRefresh.current = null;
+    if (target === refreshRevision) refreshThread();
+  }, [actionBusy, chat.busy, chat.hydration, chat.turns, refreshRevision, refreshThread, resetting]);
+  useEffect(() => {
+    const refresh = () => refreshThread();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refreshThread]);
+
   return (
-    <ConversationSurface surface="in-app" open ariaLabel="Admin Otto" className="admin-otto-surface">
-      <section className="chat-surface admin-otto-sheet" role="dialog" aria-label="Admin Otto" data-admin-otto-surface>
-        <header className="workos-chat-head admin-otto-head">
-          <span className="admin-otto-head-title">
-            <span className="conversation-pane-title">Otto</span>
+    <ConversationSurface surface={presentationSurface} open ariaLabel="Admin Otto" className="admin-otto-surface">
+      <section ref={rootRef} className="chat-surface admin-otto-sheet" role="dialog" aria-label="Admin Otto" data-admin-otto-surface={presentationSurface}>
+        <header className="workos-chat-head admin-otto-head" onMouseDown={onHeaderMouseDown}>
+          {headerLeading}
+          <span className="admin-otto-head-title" {...(presentationSurface === "floating" ? { "data-tauri-drag-region": true } : {})}>
+            <span className="admin-otto-head-name">
+              <span className="conversation-pane-title">Otto</span>
+              <span className="admin-otto-mode-chip">Admin</span>
+            </span>
             <span className="admin-otto-head-sub">Administration</span>
           </span>
           <ChatTabs
@@ -528,11 +637,19 @@ export function AdminOttoChat({
             ariaLabel="Admin Otto views"
           />
           <span className="progress-header-actions">
-            <button type="button" className="admin-otto-secondary" aria-label="New chat" title="Start a fresh chat and discard this conversation" disabled={resetting} onClick={() => void newChat()}>
-              <SquarePen size={14} aria-hidden="true" />{resetting ? "Clearing…" : "New chat"}
+            <button
+              type="button"
+              className="admin-otto-secondary admin-otto-new-chat"
+              aria-label={resetting ? "Clearing chat" : "New chat"}
+              title={resetting ? "Clearing chat…" : "New chat — discard this conversation"}
+              aria-busy={resetting || undefined}
+              disabled={resetting}
+              onClick={() => void newChat()}
+            >
+              {resetting ? <FadeArc size={15} aria-hidden="true" /> : <SquarePen size={15} aria-hidden="true" />}
             </button>
             {onClose ? (
-              <button type="button" className="admin-otto-close" aria-label="Close admin Otto" title="Close" onClick={onClose}>
+              <button type="button" className="admin-otto-close" aria-label={presentationSurface === "floating" ? "Collapse companion" : "Close admin Otto"} title={presentationSurface === "floating" ? "Collapse companion" : "Close"} onClick={onClose}>
                 <X size={16} aria-hidden="true" />
               </button>
             ) : null}
@@ -558,12 +675,15 @@ export function AdminOttoChat({
                 </div>
               ) : null}
               {chat.turns.map((turn, index) => (
-                <ChatTurn
-                  key={turn.id}
-                  role={turn.role}
-                  showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
-                  copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
-                >
+                <Fragment key={turn.id}>
+                  {shouldShowChatDivider(chat.turns, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
+                  <ChatTurn
+                    role={turn.role}
+                    showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
+                    mascotMode="admin"
+                    copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
+                    timestamp={turn.createdAt}
+                  >
                   {turn.role === "user" ? <AdminReplyText text={turn.text} className="is-user" /> : (
                     <>
                       {turn.text ? <AdminReplyText text={turn.text} /> : null}
@@ -576,26 +696,27 @@ export function AdminOttoChat({
                           playback={playback}
                         />
                       ) : null}
-                      {turn.pendingAction ? <AdminActionBatch actions={[turn.pendingAction]}
+                      {turn.pendingAction ? <AdminActionBatch actions={[turn.pendingAction]} onBusyChange={setActionBusy}
                         onConfirm={async (current) => {
                           const confirmed = transport?.confirm ? await transport.confirm(current) : { ...current, ...(await confirmAdminOttoAction(current.previewId)).action } as AdminOttoPendingAction;
                           const action = { ...current, ...confirmed, status: confirmed.status ?? "recorded" as const };
-                          controller.updateAction(action);
+                          if (isCurrentRef.current()) controller.updateAction(action);
                           return action;
                         }}
                         onRefresh={async (current) => {
                           const action = transport?.status ? await transport.status(current) : { ...current, ...await fetchAdminOttoAction(current.previewId) };
-                          controller.updateAction(action);
+                          if (isCurrentRef.current()) controller.updateAction(action);
                           return action;
                         }} /> : null}
                       {turn.workflow ? <AdminWorkflowCard workflow={turn.workflow}
-                        onUpdate={(workflow) => controller.updateWorkflow(workflow)}
-                        onAction={(action) => controller.updateAction(action)}
+                        onUpdate={(workflow) => { if (isCurrentRef.current()) controller.updateWorkflow(workflow); }}
+                        onAction={(action) => { if (isCurrentRef.current()) controller.updateAction(action); }}
                         confirm={transport?.confirm} status={transport?.status}
-                        onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} /> : null}
+                        onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} onBusyChange={setActionBusy} /> : null}
                     </>
                   )}
-                </ChatTurn>
+                  </ChatTurn>
+                </Fragment>
               ))}
               {chat.error && chat.hydration === "idle" ? <p className="admin-otto-error" role="alert">{chat.error}</p> : null}
               {chat.busy ? <p className="admin-otto-status" role="status">Otto is reading</p> : null}
@@ -607,8 +728,8 @@ export function AdminOttoChat({
                 onSend={send}
                 placeholder="Ask about work, people, or recaps…"
                 ariaLabel="Ask Otto about the team"
-                canSend={!!chat.draft.trim() && chat.hydration === "idle"}
-                busy={chat.busy}
+                canSend={!!chat.draft.trim() && chat.hydration === "idle" && !resetting}
+                busy={chat.busy || resetting}
                 voice={composerVoice}
                 sendLabel="Ask Otto"
               />

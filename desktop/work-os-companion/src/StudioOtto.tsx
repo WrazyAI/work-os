@@ -60,7 +60,8 @@ function TerminalFace({ pose, speaking }: { pose: MascotPose; speaking: boolean 
  * Local SVG renderer; no network, random values, timers, or animation runtime.
  * Full/head crops share identity but the mark omits props, filters, and motion. */
 export function StudioOtto({
-  pose = "idle", tone = "signal", crop = "full", className = "", style, ariaLabel, speaking = false,
+  pose = "idle", tone = "signal", crop = "full", mode = "employee", attireTransition = null,
+  className = "", style, ariaLabel, speaking = false,
 }: MascotRendererProps) {
   const uid = `studio-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const id = (part: string) => `${uid}-${part}`;
@@ -81,6 +82,7 @@ export function StudioOtto({
     className={`studio-otto${className ? ` ${className}` : ""}`}
     data-pose={pose} data-tone={tone} data-crop={crop} data-palette={palette}
     data-speaking={speaking ? "true" : undefined}
+    data-mode={mode} data-attire-transition={attireTransition ?? undefined}
     viewBox={VIEWBOX[crop]} style={artStyle} role="img" focusable="false"
     aria-label={ariaLabel ?? `Studio Otto, ${pose}${tone === "late" ? ", late start needs a reason" : ""}`}>
     <defs>
@@ -125,13 +127,36 @@ export function StudioOtto({
           <path d="M37 125Q48 124 48 133L45 146Q43 151 35 149Q28 148 30 142Z" fill={fill("shell")} />
           <ellipse cx="37" cy="149" rx="6" ry="6.5" fill={fill("metal")} />
           <path d="M34 128l11 4" stroke="#b5bab1" strokeWidth=".7" />
+          <g className="studio-admin-accessory studio-admin-sleeve" aria-hidden="true">
+            <path d="M51 113Q41 115 35 130L48 135 55 123Z" fill="#303438" stroke="#555b5d" strokeWidth=".8" />
+            <path d="m36 130 11 4" stroke="#777c7b" strokeWidth=".7" />
+          </g>
         </g>}
         {working && <g className="studio-working-arms">
           <path d="M55 115Q42 118 42 139L52 141L61 126Z" fill={fill("shell")} stroke="#a1a79f" strokeWidth=".7" />
           <path d="M103 115q15 5 15 23l-10 4-9-17Z" fill={fill("shell")} stroke="#a1a79f" strokeWidth=".7" />
+          <g className="studio-admin-accessory studio-admin-sleeve" aria-hidden="true">
+            <path d="M55 115Q44 118 43 133l11 2 7-9Zm48 0q12 4 14 17l-10 4-8-11Z" fill="#303438" stroke="#555b5d" strokeWidth=".8" />
+          </g>
         </g>}
         <path d="M60 109Q80 106 99 109Q109 115 111 137Q113 153 101 158Q81 164 58 157Q48 154 49 140Q50 117 60 109Z" fill={fill("shell")} stroke="#abb0a6" strokeWidth=".8" />
         <path d="M61 115Q79 112 99 115" stroke="#fffef7" strokeWidth="1.3" fill="none" />
+        {/* Nested tailoring transforms never replace the chassis/arm pose rig. */}
+        <g className="studio-admin-accessory studio-admin-blazer" aria-hidden="true">
+          <g className="studio-blazer-panel studio-blazer-left">
+            <path d="M59 108 72 110 64 122 60 153 53 158Q47 151 49 138L51 119Z" fill="#303438" stroke="#555b5d" strokeWidth=".8" />
+            <path className="studio-admin-lapel" d="m61 109 9 2-8 13-5-5 3-3-3-2Z" fill="#474e51" stroke="#777c7b" strokeWidth=".6" />
+            <path className="studio-admin-pocket" d="m52 139 1-6 3 2 4-3-1 7Z" fill="#a8f15b" />
+            <path d="m51 139 9 1" stroke="#171e22" strokeWidth="1.5" />
+            <circle className="studio-admin-pin" cx="58" cy="122" r="1.8" fill="#cfb675" stroke="#f0db9d" strokeWidth=".5" />
+            <path d="m52 146 6 1" stroke="#747a79" strokeWidth=".6" />
+          </g>
+          <g className="studio-blazer-panel studio-blazer-right">
+            <path d="m89 110 11-2 8 7q5 15 5 28l-3 13-6 2-2-35Z" fill="#303438" stroke="#555b5d" strokeWidth=".8" />
+            <path className="studio-admin-lapel" d="m98 109-9 2 12 13 4-5-4-3 3-2Z" fill="#474e51" stroke="#777c7b" strokeWidth=".6" />
+            <path d="m106 145 4-1" stroke="#747a79" strokeWidth=".6" />
+          </g>
+        </g>
         <g stroke="#46504f" strokeWidth="2.5" strokeLinecap="round">
           <path d="M62 127h17m-17 5h17m-17 5h17" />
         </g>
@@ -143,10 +168,17 @@ export function StudioOtto({
           <path d="M113 126Q120 124 124 134L128 143Q129 149 121 151Q114 153 112 145Z" fill={fill("shell")} />
           <ellipse cx="123" cy="150" rx="6" ry="6.5" fill={fill("metal")} />
           <path d="m115 130 9-3" stroke="#b5bab1" strokeWidth=".7" />
+          <g className="studio-admin-accessory studio-admin-sleeve" aria-hidden="true">
+            <path d="M105 113q11 4 16 16l-11 6-7-12Z" fill="#303438" stroke="#555b5d" strokeWidth=".8" />
+            <path d="m111 134 9-5" stroke="#777c7b" strokeWidth=".7" />
+          </g>
         </g>}
       </g>}
 
       <g className="studio-head">
+        {!full && <g className="studio-admin-accessory studio-admin-collar" aria-hidden="true">
+          <path d="m64 109 15 4-10 6-8-3Zm32 0-15 4 10 6 8-3Z" fill="#303438" stroke="#777c7b" strokeWidth=".7" />
+        </g>}
         <path d="M42 15Q79 8 119 15Q140 18 141 40L141 84Q139 108 119 111Q80 117 40 109Q21 106 20 86V43Q20 21 42 15Z" fill={fill("edge")} stroke="#adb2a9" strokeWidth=".8" />
         <path d="M43 16Q79 11 115 17Q136 20 137 41V85Q136 105 116 110Q80 115 44 109Q23 106 23 85V43Q23 23 43 16Z" fill={fill("shell")} />
         <path d="M38 27Q44 19 65 19L110 20Q122 21 127 26" stroke="#fffef9" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity=".9" />
@@ -170,6 +202,13 @@ export function StudioOtto({
           </g>
         </g>
         <path d="M48 103Q80 108 113 103" stroke="#fffef6" strokeWidth="1.3" fill="none" opacity=".8" />
+        <g className="studio-admin-accessory studio-admin-specs" aria-hidden="true" fill="none" stroke="#cfb675" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m39 49-11-3m93 3 11-3" />
+          <rect x="39" y="40" width="37" height="35" rx="10" />
+          <rect x="84" y="40" width="37" height="35" rx="10" />
+          <path d="M76 49q4-5 8 0" />
+          <path d="M44 44h12m33 0h12" stroke="#f0db9d" strokeWidth=".7" />
+        </g>
       </g>
 
       {full && resting && <g className="studio-sleep-zs" aria-hidden="true">

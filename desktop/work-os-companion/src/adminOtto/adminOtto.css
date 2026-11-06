@@ -31,6 +31,16 @@
   box-shadow: var(--conversation-shadow);
 }
 
+/* Entering Administration deserves the same entrance the employee chat gets.
+ * The floating sheet uses the companion's panel spring; the in-app sheet uses
+ * the shared conversation panel slide. */
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-sheet {
+  animation: panelIn 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+[data-conversation-surface="in-app"] .admin-otto-sheet {
+  animation: conversation-panel-in 180ms ease-out both;
+}
+
 /* One header row: the shared presence dot, Otto, the quiet administration
  * subtitle, peer tabs, and close. The employee header supplies the dot, type,
  * tab geometry, and action treatment; this block only adds the subtitle. */
@@ -77,6 +87,23 @@
   border-radius: 8px;
   border-color: var(--conversation-line);
   white-space: nowrap;
+}
+
+/* New chat is icon-only so the header can keep its tabs on the same row as the
+ * mascot, title, and close control, matching the employee companion. */
+.admin-otto-head .progress-header-actions .admin-otto-new-chat,
+[data-conversation-surface="in-app"] .admin-otto-head .progress-header-actions .admin-otto-secondary.admin-otto-new-chat {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+  border-color: transparent;
+}
+.admin-otto-head .progress-header-actions .admin-otto-new-chat:hover:not(:disabled),
+.admin-otto-head .progress-header-actions .admin-otto-new-chat:focus-visible {
+  border-color: var(--conversation-line);
 }
 
 .admin-otto-close {
@@ -751,6 +778,11 @@
   }
   .admin-otto-head-sub { max-width: 122px; font-size: 10px; }
   @media (max-width: 500px) { .admin-otto-head-sub { display: none; } }
+  .admin-otto-head .progress-header-actions .admin-otto-new-chat,
+  [data-conversation-surface="in-app"] .admin-otto-head .progress-header-actions .admin-otto-secondary.admin-otto-new-chat {
+    width: 40px;
+    height: 40px;
+  }
   .admin-otto-thread,
   .admin-otto-recaps { padding: 20px 14px 14px; }
   .admin-otto-composer { margin: 10px 10px 12px; }
@@ -781,5 +813,107 @@
     scroll-behavior: auto;
     transition-duration: 0.001ms !important;
     animation-duration: 0.001ms !important;
+  }
+}
+
+/* Floating presentation: the avatar window owns the geometry, drag, and
+ * collapse. The administration conversation keeps its one engine, header
+ * controls, cards, and composer. */
+.admin-otto-surface[data-conversation-surface="floating"] {
+  position: fixed;
+  inset: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  pointer-events: auto;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-sheet {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 16px;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px 8px;
+  border-bottom: 1px solid var(--conversation-line);
+  background: var(--conversation-surface);
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Match the employee header: title, tabs, and actions share one top row. */
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .chat-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .chat-tabs::-webkit-scrollbar {
+  display: none;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .progress-header-actions {
+  margin-left: auto;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-thread,
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-recaps {
+  padding: 18px 14px 14px;
+}
+.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-composer {
+  margin: 10px 10px 12px;
+}
+@media (max-width: 500px) {
+  .admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .admin-otto-secondary {
+    padding: 5px 7px;
+  }
+}
+
+.admin-otto-head-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.admin-otto-mode-chip {
+  display: inline-flex;
+  min-height: 17px;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid #b08a42;
+  border-radius: 999px;
+  background: rgba(250, 248, 239, .9);
+  color: #5f4a22;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* At phone widths the in-app header wraps its tabs beneath one top row rather
+ * than letting the Admin chip collide with Chat. */
+@media (max-width: 440px) {
+  [data-conversation-surface="in-app"] .admin-otto-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  [data-conversation-surface="in-app"] .admin-otto-head .chat-tabs {
+    order: 5;
+    flex: 1 1 100%;
+  }
+  [data-conversation-surface="in-app"] .admin-otto-head .progress-header-actions {
+    margin-left: auto;
   }
 }

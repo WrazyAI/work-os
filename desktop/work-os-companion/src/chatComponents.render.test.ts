@@ -193,6 +193,16 @@ describe("ChatTurn timing", () => {
     expect(markup).not.toContain("chat-turn-time");
   });
 
+  it("still reveals the recorded time when a tool card owns the turn", () => {
+    const markup = renderToStaticMarkup(createElement(ChatTurn, {
+      role: "assistant",
+      timestamp: "2026-10-12T17:48:00Z",
+      children: createElement("div", { className: "tool-card" }, "Result card"),
+    }));
+    expect(markup).toContain("chat-turn-time");
+    expect(markup).toContain("Result card");
+  });
+
   it("renders the centered session divider from the recorded time", () => {
     const markup = renderToStaticMarkup(createElement(ChatTimeDivider, { at: "2026-10-12T17:48:00Z", now: new Date("2026-10-12T20:00:00Z") }));
     expect(markup).toContain('class="chat-time-divider"');

@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - A plan whose session reopens after a false clock-out can be saved again, and a rejected save now explains the real reason instead of blaming your connection.
+- Administrators can switch the floating mascot between Employee and Admin views, keep each chat and its message times, and see Otto in his Admin outfit.
 
 ## 0.5.25 — 2026-11-06
 

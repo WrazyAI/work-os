@@ -1401,3 +1401,60 @@ body.avatar-window {
   width: 340px;
   height: 620px;
 }
+
+/* ── Employee / Administration view indication ───────────────────── */
+.avatar-head-switch { margin-right: 2px; }
+.avatar-head-mode {
+  color: #7b6b45;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.avatar-admin-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  margin: 0 auto 2px;
+  padding: 2px 8px;
+  border: 1px solid #b08a42;
+  border-radius: 999px;
+  background: rgba(250, 248, 239, .92);
+  color: #5f4a22;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.avatar-admin-shell .avatar-compact { position: relative; }
+.avatar-admin-shell .avatar-admin-label { position: absolute; left: 50%; bottom: 8px; margin: 0; transform: translateX(-50%); }
+.avatar-admin-panel { background: var(--conversation-paper, #fafaf6); }
+.avatar-admin-unavailable {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  justify-items: start;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 28px 22px;
+  background: var(--conversation-paper, #fafaf6);
+}
+.avatar-admin-unavailable strong { color: var(--conversation-ink, #182018); font-size: 14px; }
+.avatar-admin-unavailable p { max-width: 300px; margin: 0; color: var(--conversation-muted, #687267); font-size: 12px; line-height: 1.45; }
+.avatar-admin-unavailable button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--conversation-line, #d9ded5);
+  border-radius: 8px;
+  background: var(--conversation-surface, #fff);
+  color: var(--conversation-ink, #182018);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.avatar-admin-unavailable button:disabled { cursor: default; opacity: .55; }
+@media (max-width: 700px) {
+  .avatar-admin-unavailable button { min-height: 40px; }
+}

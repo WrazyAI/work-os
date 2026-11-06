@@ -216,6 +216,12 @@
       "type": "fix",
       "summary": "A plan whose session reopens after a false clock-out can be saved again, and a rejected save now shows the real reason instead of blaming the connection.",
       "verification": "Ledger 41bfc9e9-75cc-4469-b0f4-9d61a1bec7a4: full Work OS suite 1273 passed / 0 failed / 11 skipped; companion suite 1721 passed; focused plan/workday/route tests 64 passed; typecheck and production builds passed; rendered 1440 and 390 planner save errors show the server reason with no overflow."
+    },
+    {
+      "id": "floating-otto-view-switch",
+      "type": "feature",
+      "summary": "Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.",
+      "verification": "Companion suite 1805 passed/199 files; companion typecheck and production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; rendered 400/390/380/360 one-row headers, in-app 480/390, close/reopen history and draft retention, timestamps, attire dress/undress, and symmetric Admin entrance; CodeRabbit and whole-branch review findings fixed."
     }
   ],
   "emergency": null

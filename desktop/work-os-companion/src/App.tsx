@@ -102,11 +102,12 @@ import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFix
 import { adminKeys, fetchAdminOverview, fetchSession, normalizeAdminOverview, todayIso } from "./admin/data";
 import type { AdminOverview, AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
 import type { AdminArrivalView } from "./adminOtto/AdminOttoChat";
+import { CompanionViewSwitch } from "./adminOtto/CompanionViewSwitch";
 const AdminOttoChat = lazy(() => import("./adminOtto/AdminOttoChat").then((module) => ({ default: module.AdminOttoChat })));
 const AdminOttoSettings = lazy(() => import("./adminOtto/AdminOttoSettings").then((module) => ({ default: module.AdminOttoSettings })));
 import { adminOttoFollowChangedAppliesTo, listenAdminOttoFollowChanged } from "./adminOtto/followSignal";
-import type { OttoScope, ReviewedRecap } from "../../../src/modules/work-os/admin-otto/contracts";
-import { fetchAdminOttoContext, claimAdminOttoDelivery, discardAdminOttoChat, fetchAdminOttoInbox, fetchAdminOttoRecap, updateAdminOttoDelivery, transcribeAdminOttoAudio, type AdminOttoContextResponse } from "./adminOtto/api";
+import type { ChatRequest, ChatResult, OttoScope, ReviewedRecap } from "../../../src/modules/work-os/admin-otto/contracts";
+import { fetchAdminOttoContext, claimAdminOttoDelivery, discardAdminOttoChat, fetchAdminOttoInbox, fetchAdminOttoRecap, sendAdminOttoChat, updateAdminOttoDelivery, transcribeAdminOttoAudio, type AdminOttoContextResponse } from "./adminOtto/api";
 import { ADMIN_FIXTURE_TRANSPORT, adminFixtureSpeak, createAdminOttoFollowFixture, FIXTURE_REVIEWED_RECAP, fixtureInboxPage } from "./adminOtto/fixtures";
 import { parseAdminRecordHref } from "./adminOtto/recordLinks";
 import { useAdminOttoRecapAudio } from "./adminOtto/useAdminOttoRecapAudio";
@@ -120,6 +121,11 @@ import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/owners
 import { createAdminOttoContextRetry } from "./adminOtto/context";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { clearAdminOttoSurface } from "./adminOtto/modeSurface";
+import { createAdminConversationClient, createAdminConversationOwner, createLocalAdminConversationTransport, OTTO_CONVERSATION_EVENT, OTTO_CONVERSATION_REQUEST_EVENT, OTTO_CONVERSATION_RESULT_EVENT, parseAdminConversationRequest, type AdminConversationClient, type AdminConversationOwner, type AdminConversationState } from "./adminOtto/conversationSync";
+import { buildOttoViewState, OTTO_RECORD_NAV_EVENT, OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT, OTTO_VIEW_STATE_EVENT, parseOttoRecordNavigationEvent, parseOttoViewRequest, type OttoViewState } from "./adminOtto/viewSwitch";
+import { createWorkspaceOwner, effectiveWorkspaceMode, type WorkspaceOwner } from "./adminOtto/workspaceOwner";
+import { createViewWorkFence } from "./adminOtto/viewWorkFence";
+import type { AdminOttoEntryRecovery } from "./adminOtto/chatEntry";
 import { ADMIN_SHELL_SESSION, adminShellGuideStateFor, adminShellNotificationStateFor, adminShellOttoStateFor, adminShellOverlayFor, adminShellSettingsAccountFor, adminShellSettingsStateFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOttoState, type AdminShellOverlay, type AdminShellSettingsState } from "./adminShell";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
@@ -408,6 +414,9 @@ export default function App() {
   /** Stable across App renders, including the New chat state updates. The
    * callback still reads the latest published scope from the ref. */
   const handleAdminOttoConversation = useCallback((conversationId: string) => {
+    const owner = conversationOwnerRef.current;
+    const ownerSnapshot = owner?.snapshot();
+    if (ownerSnapshot && ownerSnapshot.conversationId !== conversationId) return;
     setAdminOttoConversationId(conversationId);
     const snapshot = adminOttoSnapshotRef.current;
     if (!snapshot) return;
@@ -425,6 +434,22 @@ export default function App() {
   const adminOttoDeliveryRef = useRef<AdminRecapDeliveryHandle | null>(null);
   const adminOttoOpenAttemptRef = useRef(0);
   const adminOttoDeviceId = useRef<string>(crypto.randomUUID());
+  const viewFenceRef = useRef(createViewWorkFence());
+  const adminChatLifecycleRef = useRef<{ suspend: () => AdminOttoEntryRecovery; voice: { start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } } | null>(null);
+  const adminVoiceStartedRef = useRef(false);
+  const adminVoiceRecorderRef = useRef<{ start: (source?: "button" | "hotkey") => void; stop: () => void; cancel: () => void } | null>(null);
+  const conversationOwnerRef = useRef<AdminConversationOwner | null>(null);
+  const conversationClientRef = useRef<AdminConversationClient | null>(null);
+  const conversationStateRef = useRef<AdminConversationState | null>(null);
+  const [conversationState, setConversationState] = useState<AdminConversationState | null>(null);
+  const viewStateRef = useRef<OttoViewState | null>(null);
+  const workspaceOwnerRef = useRef<WorkspaceOwner | null>(null);
+  const effectiveWorkspaceRef = useRef<"employee" | "admin">("employee");
+  const [viewRevision, setViewRevision] = useState(1);
+  const lastViewFingerprint = useRef("");
+  const lastConversationGeneration = useRef<number | null>(null);
+  const lastOwnerToken = useRef<string | null>(null);
+  const lastPresentationMode = useRef<"employee" | "admin" | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -647,6 +672,14 @@ export default function App() {
   const adminShellActive = ADMIN_SHELL_BOOT
     ? workspace === "admin"
     : adminOttoBootstrap.adminShell && !!session;
+  const effectiveWorkspace: "employee" | "admin" = ADMIN_SHELL_BOOT
+    ? "admin"
+    : effectiveWorkspaceMode({
+        selected: workspace,
+        adminShell: adminOttoBootstrap.adminShell,
+        waitingForContext: adminOttoBootstrap.waitingForAdminContext,
+      });
+  effectiveWorkspaceRef.current = effectiveWorkspace;
   const bootstrapEnabled = personalBootstrapFlags({
     syncBypass,
     plan: ADMIN_SHELL_BOOT
@@ -762,6 +795,184 @@ export default function App() {
    * exists, must also still be on the same mode/epoch. */
   const workSessionRef = useRef(workSessionQuery.data);
   workSessionRef.current = workSessionQuery.data;
+
+  useEffect(() => { conversationStateRef.current = conversationState; }, [conversationState]);
+
+  useEffect(() => {
+    const sessionData = workSessionQuery.data;
+    if (!signedIn || syncBypass || ADMIN_SHELL_BOOT || !sessionData || sessionData.role !== "admin") {
+      conversationOwnerRef.current?.dispose();
+      conversationOwnerRef.current = null;
+      conversationClientRef.current = null;
+      conversationStateRef.current = null;
+      setConversationState(null);
+      return;
+    }
+    const existing = conversationOwnerRef.current;
+    const existingScope = existing?.snapshot().scope;
+    if (existing && existingScope?.userId === sessionData.userId
+      && existingScope.organizationId === sessionData.organizationId) return;
+    existing?.dispose();
+    const tokenChanged = lastOwnerToken.current !== null && lastOwnerToken.current !== session?.token;
+    lastOwnerToken.current = session?.token ?? null;
+    let owner!: AdminConversationOwner;
+    owner = createAdminConversationOwner({
+      getLiveFence: () => {
+        const snapshot = owner.snapshot();
+        return { scope: snapshot.scope, epoch: snapshot.epoch, generation: snapshot.generation };
+      },
+      discard: (input) => discardAdminOttoChat(input),
+      publish: (state) => {
+        conversationStateRef.current = state;
+        setConversationState(state);
+        void emit(OTTO_CONVERSATION_EVENT, state);
+      },
+    });
+    conversationOwnerRef.current = owner;
+    let ownerDisposed = false;
+    let stopRequests: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_CONVERSATION_REQUEST_EVENT, (event) => {
+      const request = parseAdminConversationRequest(event.payload);
+      if (!request || ownerDisposed) return;
+      void owner.handle(request).then((result) => emit(OTTO_CONVERSATION_RESULT_EVENT, result)).catch(() => undefined);
+    }).then((off) => {
+      if (ownerDisposed) off();
+      else stopRequests = off;
+    }).catch(() => undefined);
+    conversationClientRef.current = createAdminConversationClient({
+      windowId: "main",
+      getFence: () => {
+        const snapshot = owner.snapshot();
+        return { scope: snapshot.scope, epoch: snapshot.epoch, generation: snapshot.generation };
+      },
+      transport: createLocalAdminConversationTransport(owner),
+    });
+    const initialScope = adminOttoSnapshotRef.current?.scope ?? {
+      userId: sessionData.userId,
+      organizationId: sessionData.organizationId,
+      mode: effectiveWorkspaceRef.current,
+    };
+    owner.setContext({
+      scope: initialScope,
+      epoch: Math.max(1, adminOttoSnapshotRef.current?.epoch ?? 0, adminOttoEpochRef.current),
+      conversationId: tokenChanged ? null : adminOttoConversationId,
+    });
+    const initial = owner.snapshot();
+    conversationStateRef.current = initial;
+    setConversationState(initial);
+    return () => {
+      ownerDisposed = true;
+      stopRequests?.();
+      if (conversationOwnerRef.current === owner) {
+        owner.dispose();
+        conversationOwnerRef.current = null;
+        conversationClientRef.current = null;
+      }
+    };
+  }, [signedIn, syncBypass, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId, workSessionQuery.data?.role, session?.token]);
+
+  useEffect(() => {
+    const owner = conversationOwnerRef.current;
+    const sessionData = workSessionQuery.data;
+    if (!owner || !sessionData) return;
+    owner.setContext({
+      scope: adminOttoSnapshot?.scope ?? {
+        userId: sessionData.userId,
+        organizationId: sessionData.organizationId,
+        mode: effectiveWorkspace,
+      },
+      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
+    });
+    const next = owner.snapshot();
+    conversationStateRef.current = next;
+    setConversationState(next);
+  }, [adminOttoSnapshot?.epoch, adminOttoSnapshot?.scope.mode, effectiveWorkspace, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId]);
+
+  useEffect(() => {
+    const id = conversationState?.conversationId;
+    if (id !== undefined && id !== adminOttoConversationId) setAdminOttoConversationId(id);
+  }, [conversationState?.conversationId, adminOttoConversationId]);
+
+  useEffect(() => {
+    const generation = conversationState?.generation;
+    if (generation === undefined) return;
+    if (lastConversationGeneration.current !== null && lastConversationGeneration.current !== generation) {
+      setAdminOttoDraft("");
+      adminOttoRetryRequestId.current = null;
+      setAdminOttoConversationId(null);
+    }
+    lastConversationGeneration.current = generation;
+  }, [conversationState?.generation]);
+
+  useEffect(() => {
+    const sessionData = workSessionQuery.data;
+    if (!sessionData || sessionData.role !== "admin" || adminOttoSnapshot) {
+      if (adminOttoSnapshot) lastPresentationMode.current = adminOttoSnapshot.scope.mode;
+      return;
+    }
+    if (lastPresentationMode.current === null) {
+      lastPresentationMode.current = effectiveWorkspace;
+      return;
+    }
+    if (lastPresentationMode.current === effectiveWorkspace) return;
+    lastPresentationMode.current = effectiveWorkspace;
+    adminOttoEpochRef.current += 1;
+    setViewRevision((value) => value + 1);
+  }, [effectiveWorkspace, adminOttoSnapshot, workSessionQuery.data?.role]);
+
+  const activeViewScope = useMemo(() => {
+    const sessionData = workSessionQuery.data;
+    return adminOttoSnapshot?.scope ?? (sessionData ? {
+      userId: sessionData.userId,
+      organizationId: sessionData.organizationId,
+      mode: effectiveWorkspace,
+    } : null);
+  }, [adminOttoSnapshot?.scope?.userId, adminOttoSnapshot?.scope?.organizationId, adminOttoSnapshot?.scope?.mode, effectiveWorkspace, workSessionQuery.data?.userId, workSessionQuery.data?.organizationId]);
+
+  const adminViewRole = (workSessionQuery.data?.role ?? "employee") as "admin" | "manager" | "employee";
+  const adminViewStatus = adminViewRole === "admin" ? adminContextState?.status ?? "loading" : "absent";
+  const adminViewPersonId = adminContextState?.status === "ready"
+    ? adminContextState.personId
+    : workSessionQuery.data?.personId ?? null;
+  const adminViewVoice = adminViewRole === "admin" && adminViewStatus === "ready" && adminOttoContextQuery.data?.voiceAvailable === true;
+  const adminViewTranscription = adminViewRole === "admin" && adminViewStatus === "ready" && adminOttoContextQuery.data?.transcriptionAvailable === true;
+  const adminViewConversationId = conversationState ? conversationState.conversationId : adminOttoConversationId;
+  const viewFingerprint = JSON.stringify([
+    activeViewScope?.userId, activeViewScope?.organizationId, effectiveWorkspace,
+    Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
+    adminViewRole, adminViewStatus, adminViewPersonId, adminViewVoice, adminViewTranscription,
+    adminViewConversationId, conversationState?.generation ?? 1, conversationState?.revision ?? 1,
+    conversationState?.busy ?? false,
+  ]);
+  useEffect(() => {
+    if (lastViewFingerprint.current === viewFingerprint) return;
+    lastViewFingerprint.current = viewFingerprint;
+    setViewRevision((value) => value + 1);
+  }, [viewFingerprint]);
+
+  const viewState = useMemo<OttoViewState | null>(() => {
+    if (!activeViewScope) return null;
+    return buildOttoViewState({
+      scope: { ...activeViewScope, mode: effectiveWorkspace },
+      epoch: Math.max(1, adminOttoSnapshot?.epoch ?? 0, adminOttoEpochRef.current),
+      revision: viewRevision,
+      workspace: effectiveWorkspace,
+      role: adminViewRole,
+      adminStatus: adminViewStatus,
+      personId: adminViewPersonId,
+      voiceAvailable: adminViewVoice,
+      transcriptionAvailable: adminViewTranscription,
+      adminConversationId: adminViewConversationId,
+      adminConversationGeneration: conversationState?.generation ?? 1,
+      adminConversationRevision: conversationState?.revision ?? 1,
+      adminConversationBusy: conversationState?.busy ?? false,
+    });
+  }, [activeViewScope, adminOttoSnapshot?.epoch, viewRevision, effectiveWorkspace, adminViewRole, adminViewStatus, adminViewPersonId, adminViewVoice, adminViewTranscription, adminViewConversationId, conversationState?.generation, conversationState?.revision, conversationState?.busy]);
+  viewStateRef.current = viewState;
+  useEffect(() => {
+    if (viewState) void emit(OTTO_VIEW_STATE_EVENT, viewState);
+  }, [viewState]);
+
   const voice = useVoiceInput({
     enabled: voiceAvailable,
     surface: "dock",
@@ -917,7 +1128,7 @@ export default function App() {
     // previews confirmable behind it.
     const conversationId = adminOttoConversationId;
     const requestId = adminOttoRetryRequestId.current;
-    if (ADMIN_SHELL_BOOT || (!conversationId && !requestId)) {
+    if (ADMIN_SHELL_BOOT || (!conversationId && !requestId && !conversationClientRef.current)) {
       setAdminOttoDraft("");
       setAdminOttoResetToken((value) => value + 1);
       reveal();
@@ -925,7 +1136,11 @@ export default function App() {
     }
     if (adminOttoNewChatPending.current) return;
     adminOttoNewChatPending.current = true;
-    void discardAdminOttoChat({ conversationId, requestId }).then(() => {
+    adminChatLifecycleRef.current?.suspend();
+    const discard = conversationClientRef.current
+      ? conversationClientRef.current.discard({ conversationId, requestId })
+      : discardAdminOttoChat({ conversationId, requestId });
+    void discard.then(() => {
       setAdminOttoConversationId(null);
       setAdminOttoDraft("");
       adminOttoRetryRequestId.current = null;
@@ -945,6 +1160,7 @@ export default function App() {
       notifications.error("That record link is not available in this workspace.", "Record unavailable");
       return;
     }
+    if (isTauri()) void invoke("focus_main").catch(() => undefined);
     const requestedSnapshot = adminOttoModeRef.current?.snapshot() ?? null;
     const requestedToken = session?.token;
     const stillCurrent = () => {
@@ -1426,34 +1642,171 @@ export default function App() {
   // Share the scoped options cache between the drawer and the composer.
   const drawerAssigneeQuery = useTaskOptionsQuery({ enabled: employeePageEnabled && !!taskDetails && !taskDetailsReadOnly });
   const onboardingQuery = useOnboardingQuery({ enabled: bootstrapEnabled.personal && (!adminShellActive || adminSection === "settings" || profileOpen) });
-  const setWorkspaceMode = (next: "employee" | "admin") => {
-    if (next === workspace) return;
-    if (next === "employee" && adminContextState?.status === "ready" && adminContextState.personId === null) {
-      notifications.info("This account has no personal workday mapped, so the administration workspace stays open.", "Employee view unavailable");
-      return;
-    }
-    // Cross the epoch before the shell swaps branches: the old mode's
-    // microphone, prepared audio and visible Otto results are fenced, while
-    // the employee prompt state remains its own store.
-    void adminOttoModeRef.current?.switchMode(next).catch(() => undefined);
-    if (next === "employee") {
-      setAdminOttoEntryOpen(false);
-      setAdminOttoConversationId(null);
-      setAdminOttoDraft("");
-    }
-    setWorkspace(next);
-    // Opening the administration workspace lands on Overview, the same way
-    // the shell did when it owned the section itself.
-    if (next === "admin") {
-      setAdminSection("overview");
-      setAdminFocus({});
-    }
+  if (!workspaceOwnerRef.current) {
+    workspaceOwnerRef.current = createWorkspaceOwner({
+      read: () => {
+        const sessionData = workSessionRef.current;
+        const controllerSnapshot = adminOttoSnapshotRef.current;
+        const adminState = adminContextStateRef.current;
+        const mode = effectiveWorkspaceRef.current;
+        return {
+          workspace: mode,
+          scope: controllerSnapshot?.scope ?? (sessionData ? {
+            userId: sessionData.userId,
+            organizationId: sessionData.organizationId,
+            mode,
+          } : null),
+          actor: sessionData ? { userId: sessionData.userId, organizationId: sessionData.organizationId } : null,
+          role: (sessionData?.role ?? null) as "admin" | "manager" | "employee" | null,
+          adminStatus: sessionData?.role === "admin" ? adminState?.status ?? "loading" : "absent",
+          personId: adminState?.personId ?? sessionData?.personId ?? null,
+          online: typeof navigator === "undefined" ? true : navigator.onLine,
+          resetting: conversationStateRef.current?.resetting ?? false,
+        };
+      },
+      suspend: () => {
+        viewFenceRef.current.invalidate();
+        adminChatLifecycleRef.current?.suspend();
+        requestOttoAudioStop();
+        voiceRef.current.cancel();
+        setBusy(false);
+        setComposerThinking(null);
+        setInterpretation(null);
+        setAdminOttoEntryOpen(false);
+      },
+      switchController: async (next) => {
+        const controller = adminOttoModeRef.current;
+        if (!controller) throw new Error("No administration mode controller is available.");
+        return controller.switchMode(next);
+      },
+      commit: (next) => {
+        setWorkspace(next);
+        try { localStorage.setItem(WORKSPACE_MODE_KEY, next); } catch { /* best effort */ }
+        setAdminOttoEntryOpen(false);
+        if (next === "admin") {
+          setAdminSection("overview");
+          setAdminFocus({});
+        }
+      },
+      retryContext: async () => {
+        const result = await adminOttoContextQuery.refetch();
+        return !result.error;
+      },
+    });
+  }
+
+  const requestWorkspaceMode = useCallback((next: "employee" | "admin") => {
+    const owner = workspaceOwnerRef.current;
+    return owner ? owner.request(next) : Promise.resolve({ ok: false as const, reason: "switch_failed" as const });
+  }, []);
+  const requestContextRetry = useCallback(() => {
+    const owner = workspaceOwnerRef.current;
+    return owner ? owner.retryContext() : Promise.resolve({ ok: false as const, reason: "admin_failed" as const });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_VIEW_REQUEST_EVENT, (event) => {
+      const request = parseOttoViewRequest(event.payload);
+      if (!request) return;
+      const current = viewStateRef.current;
+      if (!current || !sameOttoScope(request.scope, current.scope) || request.epoch !== current.epoch) {
+        void emit(OTTO_VIEW_RESULT_EVENT, {
+          requestId: request.requestId,
+          scope: request.scope,
+          epoch: request.epoch,
+          action: request.action,
+          mode: request.mode,
+          accepted: false,
+          reason: "stale_scope",
+        });
+        return;
+      }
+      const result = request.action === "retry-context"
+        ? requestContextRetry()
+        : requestWorkspaceMode(request.mode);
+      void result.then((outcome) => emit(OTTO_VIEW_RESULT_EVENT, {
+        requestId: request.requestId,
+        scope: request.scope,
+        epoch: request.epoch,
+        action: request.action,
+        mode: request.mode,
+        accepted: outcome.ok,
+        reason: outcome.ok ? null : outcome.reason,
+      })).catch(() => emit(OTTO_VIEW_RESULT_EVENT, {
+        requestId: request.requestId,
+        scope: request.scope,
+        epoch: request.epoch,
+        action: request.action,
+        mode: request.mode,
+        accepted: false,
+        reason: "switch_failed",
+      }));
+    }).then((cleanup) => {
+      if (cancelled) cleanup(); else off = cleanup;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, [requestContextRetry, requestWorkspaceMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_RECORD_NAV_EVENT, (event) => {
+      const navigation = parseOttoRecordNavigationEvent(event.payload);
+      if (!navigation) return;
+      const current = viewStateRef.current;
+      if (!current || !sameOttoScope(navigation.scope, current.scope)
+        || navigation.epoch !== current.epoch
+        || navigation.generation !== (conversationStateRef.current?.generation ?? 1)) return;
+      openAdminRecord(navigation.url);
+    }).then((cleanup) => {
+      if (cancelled) cleanup(); else off = cleanup;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, [openAdminRecord]);
+
+  const coordinatedSend = useCallback(async (input: ChatRequest, signal?: AbortSignal): Promise<ChatResult> => {
+    const client = conversationClientRef.current;
+    if (!client) return sendAdminOttoChat(input, signal);
+    const ticket = await client.beginSend({ requestId: input.requestId, conversationId: input.conversationId });
     try {
-      localStorage.setItem(WORKSPACE_MODE_KEY, next);
-    } catch {
-      // The preference is best-effort; the live state above still applies.
+      const result = await sendAdminOttoChat(input, signal);
+      await client.finishSend(ticket, result.conversationId);
+      return result;
+    } catch (error) {
+      client.cancelSend(ticket);
+      throw error;
     }
-  };
+  }, []);
+  const coordinatedDiscard = useCallback(async (input: { conversationId: string | null; requestId: string | null }) => {
+    const client = conversationClientRef.current;
+    if (client) return client.discard(input);
+    return discardAdminOttoChat(input);
+  }, []);
+
+  const setWorkspaceMode = (next: "employee" | "admin") => requestWorkspaceMode(next).then((result) => {
+    if (!result.ok) {
+      const copy: Record<string, string> = {
+        employee_unavailable: "This account has no personal workday mapped, so the administration workspace stays open.",
+        admin_loading: "Administration is still loading. Try again in a moment.",
+        admin_failed: "Administration could not load. Retry from Ask Otto in the Administration workspace.",
+        admin_unavailable: "Administration is not available for this account.",
+        offline: "You are offline. Connect and try again.",
+        new_chat_pending: "A new chat is still being prepared. Try again in a moment.",
+        switch_failed: "The view could not be changed. Try again.",
+        stale_scope: "This view changed in another window. Try again.",
+      };
+      notifications.info(copy[result.reason] ?? "The view could not be changed.", "View unavailable");
+    }
+    return result;
+  });
 
   /* The avatar window is the normal notification owner. Main only needs its
      visibility, checked on the same minute cadence as the delivery loop, so a
@@ -1523,7 +1876,11 @@ export default function App() {
       // an employee-scope controller underneath a loading/failed admin shell.
       void adminOttoDeliveryRef.current?.stop();
       adminOttoDeliveryRef.current = null;
-      if (adminOttoSnapshot) void emit(OTTO_CONTEXT_CLEARED_EVENT, ottoContextEvent(adminOttoSnapshot));
+      if (adminOttoSnapshot) {
+        void emit(OTTO_CONTEXT_CLEARED_EVENT, ottoContextEvent(adminOttoSnapshot));
+        adminOttoEpochRef.current = Math.max(adminOttoEpochRef.current, adminOttoSnapshot.epoch) + 1;
+        setViewRevision((value) => value + 1);
+      }
       adminOttoModeRef.current?.dispose();
       adminOttoModeRef.current = null;
       requestOttoAudioStop();
@@ -1624,6 +1981,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    viewFenceRef.current.invalidate();
+    adminOttoEpochRef.current += 1;
+    setViewRevision((value) => value + 1);
     adminOttoOpenAttemptRef.current++;
     adminOttoRetryRequestId.current = null;
     setAdminOttoEntryOpen(false);
@@ -1635,13 +1995,24 @@ export default function App() {
      avatar becomes visible, not only when this window crosses an epoch. */
   useEffect(() => {
     if (!isTauri() || avatarWindowVisible !== true || !adminOttoSnapshot) return;
-    const publish = () => { void emit(OTTO_CONTEXT_EVENT, ottoContextEvent(adminOttoSnapshot)); };
+    const publish = () => {
+      void emit(OTTO_CONTEXT_EVENT, ottoContextEvent(adminOttoSnapshot));
+      if (viewStateRef.current) void emit(OTTO_VIEW_STATE_EVENT, viewStateRef.current);
+    };
     publish();
     // A late avatar listener still adopts the current epoch even when this
     // main window has not crossed a boundary since it booted.
     const timer = window.setInterval(publish, 30_000);
     return () => window.clearInterval(timer);
   }, [avatarWindowVisible, adminOttoSnapshot]);
+
+  useEffect(() => {
+    if (!isTauri() || avatarWindowVisible !== true || !viewState) return;
+    const publish = () => { void emit(OTTO_VIEW_STATE_EVENT, viewState); };
+    publish();
+    const timer = window.setInterval(publish, 30_000);
+    return () => window.clearInterval(timer);
+  }, [avatarWindowVisible, viewState]);
 
   /* Heartbeats belong to a stable subscription, not the poll effect. Renewing
      a remote lease must not tear down and restart the local delivery loop. */
@@ -1780,20 +2151,20 @@ export default function App() {
    * switch is never the only visible effect. */
   const openRecapInEmployeeView = () => {
     setNotificationsOpen(false);
-    setWorkspaceMode("employee");
-    openGoalComposer();
+    void setWorkspaceMode("employee").then((result) => { if (result.ok) openGoalComposer(); });
   };
   const openEodDayInEmployeeView = (day: OutstandingEodDay) => {
     setNotificationsOpen(false);
-    setWorkspaceMode("employee");
-    setEodLanding(false);
-    setEodDate(day.date);
-    setView("review");
+    void setWorkspaceMode("employee").then((result) => {
+      if (!result.ok) return;
+      setEodLanding(false);
+      setEodDate(day.date);
+      setView("review");
+    });
   };
   const openOverdueInEmployeeView = () => {
     setNotificationsOpen(false);
-    setWorkspaceMode("employee");
-    openOverdueTasks();
+    void setWorkspaceMode("employee").then((result) => { if (result.ok) openOverdueTasks(); });
   };
   const historyQuery = useTaskHistoryQuery({
     enabled: employeePageEnabled && view === "evidence",
@@ -2528,16 +2899,35 @@ export default function App() {
     const unlisteners: Array<() => void> = [];
     void listen<{ target?: string }>("work-os://voice/start", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (effectiveWorkspaceRef.current === "admin") {
+        const handle = adminChatLifecycleRef.current;
+        if (handle) {
+          adminVoiceRecorderRef.current = handle.voice;
+          adminVoiceStartedRef.current = true;
+          handle.voice.start("hotkey");
+        }
+        return;
+      }
       voiceRef.current.start("hotkey");
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/stop", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.stop();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.stop();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     void listen<{ target?: string }>("work-os://voice/cancel", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
+      if (adminVoiceStartedRef.current) {
+        adminVoiceRecorderRef.current?.cancel();
+        adminVoiceStartedRef.current = false;
+        return;
+      }
       voiceRef.current.cancel();
     }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
@@ -4489,6 +4879,7 @@ export default function App() {
     setProgressComposerOpen(true);
     setInput("");
     if (syncBypassRef.current) { setInterpretation(null); setAiUnavailable("The assistant is unavailable in the offline playground."); return; }
+    const fence = viewFenceRef.current.capture();
     const taskOptions = interpretationTaskOptions();
     setInterpretation({ status: "loading", operations: [], taskOptions });
     setAiUnavailable(null);
@@ -4496,6 +4887,7 @@ export default function App() {
     const trace: AvatarThinkingStage[] = [{ label: "Sending your update" }];
     setComposerThinking({ stages: [...trace], active: 0, startedAt: traceStartedAt });
     const advanceTrace = (label: string) => {
+      if (!fence.isCurrent()) return;
       trace.push({ label });
       setComposerThinking({ stages: [...trace], active: trace.length - 1, startedAt: traceStartedAt });
     };
@@ -4504,6 +4896,7 @@ export default function App() {
       signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
     }).then(async (result) => {
+      if (!fence.isCurrent()) return;
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
       if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
       const mutating = review.operations.map((op, index) => ({ op, index })).filter(({ op }) => isMutatingToolOp(op));
@@ -4515,6 +4908,7 @@ export default function App() {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit, tasks: op.tasks ?? null })) }),
       }) : { proposals: [] as FiledProposalRow[], failures: [] as Array<{ client_operation_index: number; error: string }> };
+      if (!fence.isCurrent()) return;
       const filedByOriginal = filedProposalGroups(filing.proposals, (clientOperationIndex) => mutating[clientOperationIndex]?.index);
       const failureByOriginal = new Map((filing.failures ?? []).map((failure) => [mutating[failure.client_operation_index]?.index, failure.error]));
       if (failureByOriginal.size) notifications.error([...failureByOriginal.values()][0]!, "Some updates could not be filed");
@@ -4536,6 +4930,7 @@ export default function App() {
           displayResults.push({ op, status: "failed", message: value instanceof Error ? value.message : "The task list could not be loaded." });
         }
       }
+      if (!fence.isCurrent()) return;
       const reviewId = crypto.randomUUID();
       setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined, reviewId });
       setComposerThinking(null);
@@ -4544,8 +4939,10 @@ export default function App() {
       // would render the same reply (and cards) twice, and the persisted turn
       // is what survives a reload (design §25.11).
       setInterpretation(null);
+      if (!fence.isCurrent()) return;
       void sharePendingTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions });
     }).catch((value) => {
+      if (!fence.isCurrent()) return;
       setInterpretation(null);
       setComposerThinking(null);
       setAiUnavailable(interpretationFallbackReason(value));
@@ -4594,6 +4991,7 @@ export default function App() {
     }
     setBusy(true); setError("");
     diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
+    const fence = viewFenceRef.current.capture();
     (async () => {
       const [outcome, deniedResults] = await Promise.all([
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
@@ -4610,6 +5008,7 @@ export default function App() {
           }
         })),
       ]);
+      if (!fence.isCurrent()) return;
       if (outcome.recorded > 0 && !outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
       const parts: string[] = [];
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
@@ -4621,7 +5020,9 @@ export default function App() {
       if (skipped) parts.push(`${skipped} skipped`);
       if (skipFailures) parts.push(`${skipFailures} skip failed`);
       const reviewedResults = [...outcome.results, ...deniedResults];
+      if (!fence.isCurrent()) return;
       close(reviewedResults, parts.join(" · ") || "No actions were recorded");
+      if (!fence.isCurrent()) return;
       void sharePendingTools({
         reviewId: interpretation?.reviewId ?? crypto.randomUUID(),
         input: text,
@@ -4630,6 +5031,7 @@ export default function App() {
         results: mergeToolResults(interpretation?.results ?? [], reviewedResults),
         taskOptions: interpretation?.taskOptions ?? [],
       });
+      if (!fence.isCurrent()) return;
       if (outcome.failed.length || skipFailures) {
         const firstFailure = outcome.failed[0]?.message ?? deniedResults.find((result) => result.status === "failed")?.message ?? "A review decision failed.";
         notifications.error(`${parts.join(" · ")}. First failure: ${firstFailure}`, "Some updates did not file");
@@ -4640,8 +5042,9 @@ export default function App() {
       // workday payload is refetched — don't make the employee refresh by hand.
       if (enabled.length) void refresh();
     })().catch((value) => {
+      if (!fence.isCurrent()) return;
       showError(value, "Your approved updates could not be filed.", "Filing failed");
-    }).finally(() => setBusy(false));
+    }).finally(() => { if (fence.isCurrent()) setBusy(false); });
   }
 
   function retryInterpretationOperation(result: ToolCallResult) {
@@ -4649,7 +5052,9 @@ export default function App() {
     if ((!op.proposalId && !op.batchId) || busy) return;
     const review = interpretation;
     setBusy(true); setError("");
+    const fence = viewFenceRef.current.capture();
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
+      if (!fence.isCurrent()) return;
       const mergedResults = mergeToolResults(review?.results ?? [], outcome.results);
       setInterpretation((current) => current ? { ...current, results: mergeToolResults(current.results ?? [], outcome.results) } : current);
       // Mirror the normal approval path so the avatar window replaces the
@@ -4671,8 +5076,8 @@ export default function App() {
         return;
       }
       notifications.error(outcome.failed[0]?.message ?? outcome.results[0]?.message ?? "The retry did not record.", "Retry failed");
-    }).catch((value) => showError(value, "The retry could not be filed.", "Retry failed"))
-      .finally(() => setBusy(false));
+    }).catch((value) => { if (fence.isCurrent()) showError(value, "The retry could not be filed.", "Retry failed"); })
+      .finally(() => { if (fence.isCurrent()) setBusy(false); });
   }
 
   function turnText(turnId: string): string {
@@ -4695,6 +5100,7 @@ export default function App() {
     }
     setBusy(true); setError("");
     diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
+    const fence = viewFenceRef.current.capture();
     (async () => {
       const [outcome, denialResults] = await Promise.all([
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
@@ -4711,6 +5117,7 @@ export default function App() {
           }
         })),
       ]);
+      if (!fence.isCurrent()) return;
       if (outcome.recorded > 0 && !outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
       patchHistoryTurn(turnId, [...outcome.results, ...denialResults]);
       const parts: string[] = [];
@@ -4727,8 +5134,8 @@ export default function App() {
       } else if (outcome.failed.length || denialResults.some((result) => result.status === "failed")) {
         notifications.error(message, "Some actions failed");
       }
-    })().catch((value) => showError(value, "The review could not be filed.", "Review failed"))
-      .finally(() => setBusy(false));
+    })().catch((value) => { if (fence.isCurrent()) showError(value, "The review could not be filed.", "Review failed"); })
+      .finally(() => { if (fence.isCurrent()) setBusy(false); });
   }
 
   function patchHistoryTurn(turnId: string, results: ToolCallResult[]) {
@@ -4754,7 +5161,9 @@ export default function App() {
     const op = { ...result.op, enabled: true };
     if ((!op.proposalId && !op.batchId) || busy) return;
     setBusy(true); setError("");
+    const fence = viewFenceRef.current.capture();
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
+      if (!fence.isCurrent()) return;
       patchHistoryTurn(turnId, outcome.results);
       if (outcome.recorded > 0) {
         if (!outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
@@ -4763,8 +5172,8 @@ export default function App() {
         return;
       }
       notifications.error(outcome.failed[0]?.message ?? outcome.results[0]?.message ?? "The retry did not record.", "Retry failed");
-    }).catch((value) => showError(value, "The retry could not be filed.", "Retry failed"))
-      .finally(() => setBusy(false));
+    }).catch((value) => { if (fence.isCurrent()) showError(value, "The retry could not be filed.", "Retry failed"); })
+      .finally(() => { if (fence.isCurrent()) setBusy(false); });
   }
 
   const loadComposerSubtasks = async (taskId: string) => {
@@ -5145,6 +5554,9 @@ export default function App() {
       defaultTab: "admin",
     };
     const openAdminOtto = () => openAdminOttoSurface({ newChat: true });
+    // Ask Otto is the reopen control, not a second New chat: it hydrates the
+    // retained server conversation instead of discarding it.
+    const resumeAdminOtto = () => openAdminOttoSurface();
     return <>
       <Suspense fallback={<main className="loading" role="status"><p>Loading administration…</p></main>}><AdminWorkspace
         session={workSessionQuery.data}
@@ -5155,9 +5567,10 @@ export default function App() {
         guideView={pageGuideView}
         onOpenGuide={openGuide}
         onNewChat={openAdminOtto}
+        onOpenOtto={resumeAdminOtto}
         onOpenRecaps={() => openAdminOttoSurface({ tab: "recaps" })}
         ottoNotice={adminContextState?.status === "failed"
-          ? "Admin Otto could not load its administration context. Retry from New chat; the workspace record remains available."
+          ? "Admin Otto could not load its administration context. Retry from Ask Otto; the workspace record remains available."
           : adminContextState?.status === "loading"
             ? "Loading the administration context…"
             : null}
@@ -5173,13 +5586,22 @@ export default function App() {
       /></Suspense>
       {adminOttoEntryOpen && (adminOttoContextQuery.data || ADMIN_SHELL_BOOT) ? (
         <Suspense fallback={null}><AdminOttoChat
-          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}`}
+          key={`${JSON.stringify(adminOttoContextQuery.data?.scope ?? ADMIN_SHELL_SESSION.userId)}:${adminOttoRequestedRecap?.intervalId ?? "none"}:${adminOttoEpoch}:${conversationState?.generation ?? 1}`}
           scope={adminOttoContextQuery.data?.scope ?? {
             userId: ADMIN_SHELL_SESSION.userId,
             organizationId: ADMIN_SHELL_SESSION.organizationId,
             mode: "admin",
           }}
           conversationId={adminOttoConversationId}
+          headerLeading={viewState ? <CompanionViewSwitch
+            mode={viewState.workspace}
+            employeeAvailable={viewState.employeeAvailable}
+            adminAvailable={viewState.adminAvailable}
+            employeeReason={viewState.employeeAvailable ? null : viewState.adminStatus === "loading" ? "Loading your workspace…" : viewState.adminStatus === "failed" ? "Your workspace is unavailable until Administration connects." : "No personal workday is mapped."}
+            adminReason={viewState.adminAvailable ? null : viewState.adminStatus === "loading" ? "Loading Administration…" : "Administration is unavailable."}
+            switchable={viewState.role === "admin"}
+            onSwitch={(next) => { void setWorkspaceMode(next); }}
+          /> : undefined}
           onNewChat={() => {
             setAdminOttoConversationId(null);
             setAdminOttoDraft("");
@@ -5197,7 +5619,16 @@ export default function App() {
           initialDraft={adminOttoDraft}
           initialRequestId={adminOttoRetryRequestId.current}
           resetToken={adminOttoResetToken}
+          refreshRevision={conversationState?.revision ?? 0}
           onRecoveryChange={rememberAdminOttoRecovery}
+          onLifecycle={(handle) => { adminChatLifecycleRef.current = handle; }}
+          isCurrent={() => {
+            const current = adminOttoModeRef.current?.snapshot();
+            const expected = adminOttoSnapshotRef.current;
+            return !!current && !!expected
+              && current.epoch === expected.epoch
+              && sameOttoScope(current.scope, expected.scope);
+          }}
           onListen={(recap) => void adminAudio.listen(recap)}
           onStopListening={adminAudio.stop}
           onOpenRecord={openAdminRecord}
@@ -5215,14 +5646,14 @@ export default function App() {
               unread: ADMIN_SHELL_OTTO === "empty" ? 0 : 2,
               offset: input?.cursor ? 2 : 0,
             }),
-          } : undefined}
+          } : { send: coordinatedSend, discard: coordinatedDiscard }}
           previewOnly={false}
           onArrivalSeen={() => {
             notifications.clearPersistent("admin-otto-recap-arrival");
             setAdminOttoArrival(null);
           }}
           onConversation={handleAdminOttoConversation}
-          onClose={() => { adminAudio.stop(); setAdminOttoEntryOpen(false); }}
+          onClose={() => { adminChatLifecycleRef.current?.suspend(); adminAudio.stop(); setAdminOttoEntryOpen(false); }}
         /></Suspense>
       ) : null}
       {renderGlobalOverlays()}

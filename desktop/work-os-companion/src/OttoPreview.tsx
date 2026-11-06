@@ -3,7 +3,7 @@ import { Otto } from "./Otto";
 import { MascotPet } from "./MascotPet";
 import { MASCOT } from "./mascot";
 import type { MascotAgentActivity, MascotWorkdayState } from "./mascotState";
-import { MASCOT_POSES, type MascotPose } from "./mascotTypes";
+import { MASCOT_POSES, type MascotMode, type MascotPose } from "./mascotTypes";
 import SidebarNav from "./SidebarNav";
 
 const POSES: MascotPose[] = [...MASCOT_POSES];
@@ -22,6 +22,7 @@ export default function OttoPreview() {
   const [dark, setDark] = useState(false);
   const [scale, setScale] = useState<1 | 2>(1);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [mode, setMode] = useState<MascotMode>("employee");
   const timers = useRef<number[]>([]);
 
   /** Cancels any in-flight state sequence before a new preview starts. */
@@ -56,6 +57,13 @@ export default function OttoPreview() {
     schedule(900, "needs-input");
   };
 
+  /** Replay through an actual live-pet mode change, never by remounting it. */
+  const replayAttire = (next: MascotMode) => {
+    clearSequence();
+    setMode(next === "admin" ? "employee" : "admin");
+    timers.current.push(window.setTimeout(() => setMode(next), 450));
+  };
+
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
@@ -75,29 +83,50 @@ export default function OttoPreview() {
             <button onClick={runNotificationSequence}>Run notification</button>
             <button onClick={runInterruptionSequence}>Interrupt work</button>
           </div>
+          <div className="mascot-lab-controls" role="group" aria-label="Mascot view and attire">
+            {(["employee", "admin"] as const).map((view) => <button key={view} aria-pressed={mode === view} onClick={() => { clearSequence(); setMode(view); }}>{titleCase(view)}</button>)}
+            <button onClick={() => replayAttire("admin")}>Replay dress</button>
+            <button onClick={() => replayAttire("employee")}>Replay undress</button>
+          </div>
           <div className={`mascot-lab-live ${dark ? "dark" : ""} scale-${scale}`}>
-            <MascotPet isolated agent={agent} workday={workday} />
+            <MascotPet isolated agent={agent} workday={workday} mode={mode} animateAttire reducedMotion={reducedMotion} />
           </div>
         </section>
 
         <section className="panel otto-preview-panel">
           <div className="card-title"><span>Core lifecycle — light</span><small>White idle · yellow work/input · green ready · red blocked</small></div>
           <div className="mascot-lab-state-grid">
-            {CORE_STATES.map((state) => <div className="mascot-lab-state" key={state}><MascotPet isolated agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
+            {CORE_STATES.map((state) => <div className="mascot-lab-state" key={state}><MascotPet isolated agent={state} workday="active" mode={mode} reducedMotion={reducedMotion} /><small>{titleCase(state)}</small></div>)}
           </div>
         </section>
 
         <section className="panel otto-preview-panel otto-preview-dark">
           <div className="card-title"><span>Core lifecycle — dark</span><small>Contrast and silhouette check</small></div>
           <div className="mascot-lab-state-grid">
-            {CORE_STATES.map((state) => <div className="mascot-lab-state dark" key={state}><MascotPet isolated agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
+            {CORE_STATES.map((state) => <div className="mascot-lab-state dark" key={state}><MascotPet isolated agent={state} workday="active" mode={mode} reducedMotion={reducedMotion} /><small>{titleCase(state)}</small></div>)}
           </div>
         </section>
 
         <section className="panel otto-preview-panel">
           <div className="card-title"><span>Mark sizes</span><small>Studio Otto identity readability</small></div>
-          <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><MASCOT.Mark pose={MASCOT.idlePose} tone="signal" crop={MASCOT.chatCrop} style={{ width: size, height: size }} ariaLabel={`${MASCOT.name} mark`} /><small>{size}px</small></div>)}</div>
+          <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><MASCOT.Mark pose={MASCOT.idlePose} mode={mode} tone="signal" crop={MASCOT.chatCrop} style={{ width: size, height: size }} ariaLabel={`${MASCOT.name} mark`} /><small>{size}px</small></div>)}</div>
         </section>
+
+        {(["light", "dark"] as const).flatMap((surface) => (["employee", "admin"] as const).map((view) => <section className="panel otto-preview-panel" key={`${surface}-${view}`}>
+          <div className="card-title"><span>Studio validation — {titleCase(view)} · {surface}</span><small>Every pose · both crops · 16 / 24 / 36 / 64px · static final attire</small></div>
+          <div className={`studio-attire-gallery ${surface}`}>
+            {POSES.map((pose) => <article className="studio-attire-sample" key={pose}>
+              <h3>{titleCase(pose)}</h3>
+              {(["full", "head"] as const).map((crop) => <div className="studio-attire-crop" key={crop}>
+                <small>{titleCase(crop)}</small>
+                <div className="studio-attire-sizes">{SIZES.map((size) => <div className="studio-attire-size" key={size}>
+                  <MASCOT.Mark pose={pose} mode={view} crop={crop} style={{ width: size, height: crop === "full" ? size * 180 / 160 : size }} ariaLabel={`${MASCOT.name}, ${view}, ${pose}, ${crop}`} />
+                  <small>{size}px</small>
+                </div>)}</div>
+              </div>)}
+            </article>)}
+          </div>
+        </section>))}
 
         <section className="panel otto-preview-panel">
           <div className="card-title"><span>Legacy Otto comparison</span><small>Reference only — retained while the new Studio Otto is validated</small></div>

@@ -2,7 +2,9 @@ import { emit as tauriEmit, listen as tauriListen, type EventCallback, type Opti
 import { isTauri } from "@tauri-apps/api/core";
 
 // Only non-secret presentation/debug events are bridged in browser DEV fixtures.
-// Auth, conversation, queue and business mutation events remain native-only.
+// Auth, message bodies, queue and business mutation events remain native-only;
+// ids-only conversation coordination is allowed because the server remains the
+// source of every transcript and mutation.
 const PREVIEW_EVENTS = new Set([
   "work-os://debug-current", "work-os://debug-scenario", "work-os://debug-request",
   "work-os://debug-show-page-guide", "work-os://debug-page-guide-result",
@@ -11,6 +13,11 @@ const PREVIEW_EVENTS = new Set([
   "work-os://otto-audio-grant", "work-os://otto-audio-deny", "work-os://otto-audio-release",
   // Follow changes carry only scope, mode, opaque person ids, and revision.
   "work-os://admin-otto-follow-changed",
+  // View and conversation coordination carry only scoped modes,
+  // epochs/revisions, opaque ids, and capability flags. Conversation content
+  // stays server-side.
+  "work-os://otto-view-state", "work-os://otto-view-request", "work-os://otto-view-result",
+  "work-os://otto-conversation", "work-os://otto-conversation-request", "work-os://otto-conversation-result",
 ]);
 const handlers = new Map<string, Set<(payload: unknown) => void>>();
 let channel: BroadcastChannel | null = null;
