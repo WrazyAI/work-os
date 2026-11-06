@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- A plan whose session reopens after a false clock-out can be saved again, and a rejected save now explains the real reason instead of blaming your connection.
+
 ## 0.5.25 — 2026-11-06
 
 - Open a submitted or approved EOD to read your report and its confirmation, without being asked to prepare it again.

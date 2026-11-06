@@ -196,9 +196,37 @@ async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
   }]));
 }
 
+const LIVE_PLAN_SESSION_STATES = new Set(["clocked_in", "active", "paused", "eod_due"]);
+
+/** A closed plan belongs to an ended session. When that same session is live
+ * again — Worktivity can falsely infer a clock-out and then reopen the interval
+ * — the plan must reopen too. The revision stays put because the plan content
+ * is unchanged: an editor already holding that revision can still save. */
+async function reopenClosedPlanForLiveSession(access: WorkOsAccess, plan: Record<string, any>, session: Record<string, any> | null) {
+  if (!session || plan.status !== "closed" || !LIVE_PLAN_SESSION_STATES.has(String(session.state))) return plan;
+  const shiftDate = dateOnly(plan.shift_date);
+  const { data, error } = await db().from("work_daily_plans").update({
+    status: plan.confirmed_at ? "confirmed" : "draft",
+    updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("id", plan.id)
+    .eq("status", "closed")
+    .select("*, items:work_daily_plan_items(*)").maybeSingle();
+  if (error) throw new Error(`reopen daily plan: ${error.message}`);
+  if (!data) return shiftDate ? (await loadPlanByDate(access, shiftDate)) ?? plan : plan;
+  await auditPlan(access, "plan.workday_reopened", String(plan.id), {
+    sessionId: session.id,
+    previousSessionId: plan.session_id,
+    shiftDate,
+    previousStatus: "closed",
+    revision: Number(plan.revision ?? 1),
+    source: "live_session",
+  });
+  return data;
+}
+
 export async function ensureDailyPlan(access: WorkOsAccess, session: Record<string, any>) {
   const existing = await loadPlan(access, session.id as string);
-  if (existing) return existing;
+  if (existing) return reopenClosedPlanForLiveSession(access, existing, session);
   const shiftDate = dateOnly(session.shift_date);
   if (!shiftDate) throw new Error("Work session is missing its shift date");
   const dated = await loadPlanByDate(access, shiftDate);
@@ -222,7 +250,7 @@ export async function ensureDailyPlan(access: WorkOsAccess, session: Record<stri
 
 export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: string, session: Record<string, any> | null = null) {
   const existing = await loadPlanByDate(access, shiftDate);
-  if (existing) return existing;
+  if (existing) return reopenClosedPlanForLiveSession(access, existing, session);
   const carryOver = await loadCarryOverItems(access, shiftDate);
   const ownerId = workOsOrganizationOwnerId(access);
   const currentTasks = await listPersonTasks(ownerId, access.personId as string, {

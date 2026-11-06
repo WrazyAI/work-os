@@ -633,6 +633,7 @@ assert.ok(openTasksAt >= 0 && recapStreamAt >= 0 && openTasksAt < recapStreamAt,
 assert.match(avatar, /avatarTab === "tasks"\) return/);
 
 const planner = read("src/PlanningSession.tsx");
+const planningSave = read("src/planningSave.ts");
 assert.match(planner, /setInput\(seedInput\?\.trim\(\) \? seedInput : plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
 
 const planItemsModule = read("src/planItems.ts");
@@ -732,7 +733,8 @@ assert.match(interpretation, /const serverOutcome = typeof row\?\.outcome === "s
 assert.match(interpretation, /serverOutcome === "stale" \|\| serverOutcome === "rejected"/);
 assert.match(app, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
 assert.match(avatar, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
-assert.match(app, /if \(\/AI build\/i\.test\(message\)\)/);
+assert.match(planningSave, /if \(\/AI build\/i\.test\(message\)\) return "rebuild";/);
+assert.match(app, /classifyPlanSaveFailure\(value\)/);
 assert.match(planner, /if \(result === "rebuild"\)/);
 assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
 assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);

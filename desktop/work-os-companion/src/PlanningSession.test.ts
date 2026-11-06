@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningBuildState, planningPrimaryAction } from "./PlanningSession";
+import { classifyPlanSaveFailure, PLAN_SAVE_FALLBACK } from "./planningSave";
 
 const props = {
   open: true,
@@ -11,7 +12,7 @@ const props = {
   onClose: () => undefined,
   onInterpret: () => Promise.reject(new Error("no AI in tests")),
   onRefine: () => Promise.reject(new Error("no AI in tests")),
-  onConfirm: () => Promise.resolve("failed" as const),
+  onConfirm: () => Promise.resolve({ failed: "no save in tests" } as const),
 };
 
 describe("PlanningSession footer gating", () => {
@@ -87,6 +88,21 @@ describe("PlanningSession Loom source gating", () => {
   it("keeps the input requirement when there is no Loom source at all", () => {
     expect(planningBuildState("", "", "", null).canBuild).toBe(false);
     expect(planningBuildState("Focus on the release.", "", "", null).canBuild).toBe(true);
+  });
+});
+
+describe("plan save failures", () => {
+  it("keeps the server's actual reason instead of blaming the connection", () => {
+    expect(classifyPlanSaveFailure(new Error("This plan is read-only."))).toEqual({ failed: "This plan is read-only." });
+  });
+
+  it("keeps the dedicated conflict and expired-build recovery paths", () => {
+    expect(classifyPlanSaveFailure(new Error("This plan changed on another device. Refresh before saving again."))).toBe("conflict");
+    expect(classifyPlanSaveFailure(new Error("The AI build is invalid, expired, already used, or does not match this plan intent."))).toBe("rebuild");
+  });
+
+  it("falls back only when the failure has no usable message", () => {
+    expect(classifyPlanSaveFailure(null)).toEqual({ failed: PLAN_SAVE_FALLBACK });
   });
 });
 

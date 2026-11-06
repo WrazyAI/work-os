@@ -210,6 +210,12 @@
       "type": "feature",
       "summary": "The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.",
       "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "plan-save-live-session-recovery",
+      "type": "fix",
+      "summary": "A plan whose session reopens after a false clock-out can be saved again, and a rejected save now shows the real reason instead of blaming the connection.",
+      "verification": "Ledger 41bfc9e9-75cc-4469-b0f4-9d61a1bec7a4: full Work OS suite 1273 passed / 0 failed / 11 skipped; companion suite 1721 passed; focused plan/workday/route tests 64 passed; typecheck and production builds passed; rendered 1440 and 390 planner save errors show the server reason with no overflow."
     }
   ],
   "emergency": null
