@@ -1,0 +1,157 @@
+{
+  "locationId": "kIBcQo8BT0retpfdsHc7",
+  "identities": [
+    { "externalId": "VN13egA2TXXCZk90XewJ", "personId": "person-sam", "verified": true, "shared": false, "revision": "r1" },
+    { "externalId": "Z0hBqXq4ncN34D20H4W2", "personId": null, "verified": false, "shared": true, "revision": "r1" },
+    { "externalId": "8e3ZDBSm99xC3xG4HMdN", "personId": null, "verified": false, "shared": true, "revision": "r1" },
+    { "externalId": "iRVuCaXZPdlSXiROT6W1", "personId": "person-david", "verified": false, "shared": false, "revision": "r1" }
+  ],
+  "workflowEmail": {
+    "id": "msg-workflow-1",
+    "conversationId": "conv-1",
+    "type": "TYPE_EMAIL",
+    "direction": "outbound",
+    "source": "workflow",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T23:17:00.000Z",
+    "status": "delivered",
+    "emailDetail": {
+      "subject": "Reservation reminder",
+      "from": "Wrazy <hello@wrazy.example>",
+      "to": ["customer@example.invalid"],
+      "source": "workflow"
+    }
+  },
+  "manualEmail": {
+    "id": "msg-manual-1",
+    "conversationId": "conv-2",
+    "type": "TYPE_EMAIL",
+    "direction": "outbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T18:17:00.000Z",
+    "status": "delivered",
+    "emailDetail": {
+      "subject": "Proposal for your review",
+      "from": "Sam Adly <sam@wrazy.example>",
+      "to": ["customer@example.invalid"],
+      "source": "app"
+    }
+  },
+  "manualEmailWithWorkflowDetail": {
+    "id": "msg-manual-2",
+    "conversationId": "conv-3",
+    "type": "TYPE_EMAIL",
+    "direction": "outbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T19:17:00.000Z",
+    "emailDetail": { "subject": "Monthly recap", "source": "workflow" }
+  },
+  "emailWithoutSenderUserId": {
+    "id": "msg-manual-3",
+    "conversationId": "conv-4",
+    "type": "TYPE_EMAIL",
+    "direction": "outbound",
+    "source": "app",
+    "dateAdded": "2026-11-04T19:17:00.000Z"
+  },
+  "incomingCall": {
+    "id": "call-1",
+    "conversationId": "conv-5",
+    "type": "TYPE_CALL",
+    "direction": "inbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T20:48:00.000Z",
+    "status": "no-answer",
+    "call": { "duration": 5 }
+  },
+  "answeredIncomingCall": {
+    "id": "call-2",
+    "conversationId": "conv-6",
+    "type": "TYPE_CALL",
+    "direction": "inbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T21:00:00.000Z",
+    "status": "completed",
+    "call": { "duration": 90 }
+  },
+  "outboundCall": {
+    "id": "call-3",
+    "conversationId": "conv-7",
+    "type": "TYPE_CALL",
+    "direction": "outbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T21:30:00.000Z",
+    "status": "completed",
+    "call": { "duration": 120 }
+  },
+  "sharedAccountNote": {
+    "id": "note-1",
+    "contactId": "contact-1",
+    "userId": "Z0hBqXq4ncN34D20H4W2",
+    "body": "Customer asked for a follow-up.",
+    "dateAdded": "2026-11-03T20:00:00.000Z"
+  },
+  "unverifiedUserNote": {
+    "id": "note-2",
+    "contactId": "contact-1",
+    "userId": "iRVuCaXZPdlSXiROT6W1",
+    "body": "Checked in with the customer.",
+    "dateAdded": "2026-11-03T20:10:00.000Z"
+  },
+  "assignedOnlyAppointment": {
+    "id": "appt-1",
+    "calendarId": "cal-1",
+    "contactId": "contact-1",
+    "assignedUserId": "VN13egA2TXXCZk90XewJ",
+    "createdBy": { "source": "booking_widget" },
+    "startTime": "2027-03-15T14:00:00.000Z",
+    "endTime": "2027-03-15T14:30:00.000Z",
+    "dateAdded": "2026-11-03T22:00:00.000Z",
+    "dateUpdated": "2026-11-03T22:05:00.000Z",
+    "status": "confirmed"
+  },
+  "appointmentCreatedByUser": {
+    "id": "appt-2",
+    "calendarId": "cal-1",
+    "contactId": "contact-2",
+    "assignedUserId": "VN13egA2TXXCZk90XewJ",
+    "createdBy": { "userId": "VN13egA2TXXCZk90XewJ", "source": "app" },
+    "startTime": "2026-11-10T14:00:00.000Z",
+    "dateAdded": "2026-11-03T22:30:00.000Z",
+    "status": "confirmed"
+  },
+  "appointmentWithoutTimestamps": {
+    "id": "appt-3",
+    "calendarId": "cal-1",
+    "contactId": "contact-3",
+    "assignedUserId": "VN13egA2TXXCZk90XewJ",
+    "startTime": "2026-11-12T14:00:00.000Z",
+    "status": "confirmed"
+  },
+  "opportunity": {
+    "id": "opp-1",
+    "contactId": "contact-1",
+    "assignedTo": "VN13egA2TXXCZk90XewJ",
+    "name": "Kitchen remodel",
+    "status": "open",
+    "stageId": "stage-2",
+    "dateAdded": "2026-11-01T14:00:00.000Z",
+    "dateUpdated": "2026-11-03T15:00:00.000Z"
+  },
+  "sms": {
+    "id": "sms-1",
+    "conversationId": "conv-1",
+    "type": "TYPE_SMS",
+    "direction": "outbound",
+    "source": "app",
+    "userId": "VN13egA2TXXCZk90XewJ",
+    "dateAdded": "2026-11-03T16:00:00.000Z",
+    "status": "delivered",
+    "body": "See you tomorrow."
+  }
+}
