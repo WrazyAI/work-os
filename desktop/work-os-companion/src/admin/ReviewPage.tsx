@@ -312,19 +312,17 @@ export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvi
                     key={report.id}
                     className={selectedId === report.id ? "selected" : undefined}
                     onClick={() => { setSelectedId(report.id); setNotes(""); setReceipt(null); }}
-                    tabIndex={0}
-                    onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(report.id); }}
                   >
-                    <td>
+                    <td data-label="Person">
                       <span className="admin-person">
                         <Avatar name={report.person?.display_name ?? "Unmapped"} size={28} />
-                        <span className="min-w-0"><b>{report.person?.display_name ?? "Unmapped person"}</b><small>{report.title || `EOD · ${formatWorkOsFullDate(report.report_date)}`}</small></span>
+                        <span className="min-w-0"><b><button type="button" className="admin-record-open" aria-label={`Open ${report.person?.display_name ?? "unmapped person"} report`} onClick={(event) => { event.stopPropagation(); setSelectedId(report.id); setNotes(""); setReceipt(null); }}>{report.person?.display_name ?? "Unmapped person"}</button></b><small>{report.title || `EOD · ${formatWorkOsFullDate(report.report_date)}`}</small></span>
                       </span>
                     </td>
-                    <td className="admin-quiet">{eodSnippet(report.submitted_markdown ?? report.markdown) ?? "No facts recorded"}</td>
-                    <td>{formatWorkOsFullDate(report.report_date)}</td>
-                    <td><Pill tone={reportTone(report.status)}>{statusLabel(report.status)}</Pill></td>
-                    <td className="admin-quiet">{report.submitted_at ? relativeTime(report.submitted_at) : "not submitted"}</td>
+                    <td data-label="Report" className="admin-quiet">{eodSnippet(report.submitted_markdown ?? report.markdown) ?? "No facts recorded"}</td>
+                    <td data-label="Date">{formatWorkOsFullDate(report.report_date)}</td>
+                    <td data-label="Status"><Pill tone={reportTone(report.status)}>{statusLabel(report.status)}</Pill></td>
+                    <td data-label="Submitted" className="admin-quiet">{report.submitted_at ? relativeTime(report.submitted_at) : "not submitted"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -339,10 +337,11 @@ export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvi
         <div className="admin-inline-fields">
           <SelectField label="Person" ariaLabel="Draft report person" value={draftPerson} onChange={setDraftPerson} placeholder="Select a person" options={personOptions} />
           <TextField label="Date" type="date" value={draftDate} onChange={setDraftDate} ariaLabel="Draft report date" />
-          <AdminButton variant="primary" icon={FilePlus2} disabled={!draftPerson || draft.isPending} onClick={() => draft.mutate()}>
+          <AdminButton variant="primary" icon={FilePlus2} disabled={!draftPerson || draft.isPending} title={!draftPerson ? "Choose a teammate to enable drafting" : undefined} onClick={() => draft.mutate()}>
             {draft.isPending ? "Drafting…" : "Draft report"}
           </AdminButton>
         </div>
+        {!draftPerson ? <p className="admin-field-hint">Choose a teammate to enable drafting.</p> : null}
         {draft.error ? <Notice tone="err">{(draft.error as Error).message}</Notice> : null}
         {receipt ? <Notice tone="ok">{receipt}</Notice> : null}
       </AdminCard>

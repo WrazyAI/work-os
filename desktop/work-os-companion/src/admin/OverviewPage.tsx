@@ -241,30 +241,30 @@ export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps
                 </thead>
                 <tbody>
                   {people.slice(0, 8).map((person) => (
-                    <tr key={person.personId} onClick={() => onOpenPerson(person.personId)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") onOpenPerson(person.personId); }}>
-                      <td>
+                    <tr key={person.personId} onClick={() => onOpenPerson(person.personId)}>
+                      <td data-label="Person">
                         <span className="admin-person">
                           <Avatar name={person.displayName} size={28} />
                           <span className="min-w-0">
-                            <b>{person.displayName}</b>
+                            <b><button type="button" className="admin-record-open" aria-label={`Open ${person.displayName} record`} onClick={(event) => { event.stopPropagation(); onOpenPerson(person.personId); }}>{person.displayName}</button></b>
                             <small>{person.roleProfile ?? "Unmapped role"}{person.schedule ? ` · ${person.schedule.start}–${person.schedule.end}` : " · No schedule"}</small>
                           </span>
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Status now">
                         <Pill tone={attendanceTone(person.attendance.state)}>
                           {attendanceLabel(person.attendance.state)}{person.attendance.freshness === "stale" ? " · stale" : ""}
                         </Pill>
                       </td>
-                      <td className="admin-numeric">
+                      <td data-label="Today" className="admin-numeric">
                         {person.recapsToday} recap{person.recapsToday === 1 ? "" : "s"} · {person.tasksCompletedToday} done{person.evidenceToday ? ` · ${person.evidenceToday} evidence` : ""}
                       </td>
-                      <td>
+                      <td data-label="EOD">
                         {person.eodToday
                           ? <Pill tone={person.eodToday === "approved" ? "ok" : person.eodToday === "pending_review" ? "info" : "neutral"}>{statusLabel(person.eodToday)}</Pill>
                           : person.eodOutstanding ? <Pill tone="warn">Outstanding</Pill> : <span className="admin-quiet">—</span>}
                       </td>
-                      <td className="admin-quiet">{person.lastRecapAt ? relativeTime(person.lastRecapAt, Date.parse(data.generatedAt)) : "—"}</td>
+                      <td data-label="Last recap" className="admin-quiet">{person.lastRecapAt ? relativeTime(person.lastRecapAt, Date.parse(data.generatedAt)) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -76,6 +76,7 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
 
   return (
     <div className="admin-grid">
+      <h2 className="sr-only">Range brief</h2>
       <AdminCard
         icon={Gauge}
         title="Brief"
@@ -220,19 +221,19 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.personId} onClick={() => setSelectedRow(row)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedRow(row); }}>
-                      <td>
+                    <tr key={row.personId} onClick={() => setSelectedRow(row)}>
+                      <td data-label="Person">
                         <span className="admin-person">
                           <Avatar name={row.displayName} size={26} />
-                          <span className="min-w-0"><b>{row.displayName}</b><small>{row.roleProfile ?? "Unmapped role"}</small></span>
+                          <span className="min-w-0"><b><button type="button" className="admin-record-open" aria-label={`Open ${row.displayName} facts`} onClick={(event) => { event.stopPropagation(); setSelectedRow(row); }}>{row.displayName}</button></b><small>{row.roleProfile ?? "Unmapped role"}</small></span>
                         </span>
                       </td>
-                      <td className="admin-numeric">{row.outcomesCompleted}</td>
-                      <td className={row.outcomesLate ? "admin-numeric warn" : "admin-numeric"}>{row.outcomesLate}</td>
-                      <td className="admin-numeric">{row.updates}</td>
-                      <td className="admin-numeric">{row.commitmentRate != null ? `${row.commitmentRate}%` : "—"}</td>
-                      <td className="admin-numeric">{row.eodSubmitted}</td>
-                      <td className="admin-quiet">{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "—"}</td>
+                      <td data-label="Outcomes" className="admin-numeric">{row.outcomesCompleted}</td>
+                      <td data-label="Late" className={row.outcomesLate ? "admin-numeric warn" : "admin-numeric"}>{row.outcomesLate}</td>
+                      <td data-label="Updates" className="admin-numeric">{row.updates}</td>
+                      <td data-label="Commitment" className="admin-numeric">{row.commitmentRate != null ? `${row.commitmentRate}%` : "—"}</td>
+                      <td data-label="EOD" className="admin-numeric">{row.eodSubmitted}</td>
+                      <td data-label="Last activity" className="admin-quiet">{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

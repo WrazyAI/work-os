@@ -954,3 +954,12 @@
     transform: none;
   }
 }
+
+/* The small class moves navigation to a fixed bottom bar; the composer and
+   its open sheet rest above it instead of covering the destinations. */
+@media (max-width: 560px) {
+  [data-conversation-surface="in-app"].progress-dock,
+  [data-conversation-surface="in-app"].progress-dock.open {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}

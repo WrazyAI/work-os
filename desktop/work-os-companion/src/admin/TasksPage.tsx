@@ -219,7 +219,7 @@ export function TaskTableHead({ sort, onSort }: { sort: TaskSortState | null; on
             </th>
           );
         })}
-        <th scope="col" />
+        <th scope="col"><span className="sr-only">Actions</span></th>
       </tr>
     </thead>
   );
@@ -664,10 +664,10 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
                   const state = displayTaskState(statusTask, today);
                   const busy = complete.isPending || statusChange.isPending || removeTask.isPending;
                   return (
-                    <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} data-pan-row="true" onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
-                      <td>
+                    <tr key={id} onClick={() => setSelectedId(id)} data-pan-row="true">
+                      <td data-label="Task">
                         <span className="admin-record">
-                          <b className={task.completed ? "is-done" : undefined}><OverflowPanText>{String(task.title ?? task.name ?? "Task")}</OverflowPanText></b>
+                          <b className={task.completed ? "is-done" : undefined}><button type="button" className="admin-record-open" aria-label={`Open task ${String(task.title ?? task.name ?? "Task")}`} onClick={(event) => { event.stopPropagation(); setSelectedId(id); }}><OverflowPanText>{String(task.title ?? task.name ?? "Task")}</OverflowPanText></button></b>
                           {/* The description is the line an operator actually
                               reads; it fades at the clip edge and never pans,
                               so the title is the one line that reveals. */}
@@ -677,12 +677,12 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
                           <small>{task.project?.name ? String(task.project.name) : "No project"}{priority ? ` · ${statusLabel(priority)} priority` : ""}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>
                         </span>
                       </td>
-                      <td className="admin-quiet">
+                      <td data-label="Assignees" className="admin-quiet">
                         {Array.isArray(task.assignees) && task.assignees.length ? task.assignees.map((assignee: Record<string, any>) => assignee.displayName).join(", ") : "Unassigned"}
                       </td>
-                      <td className="admin-numeric">{formatWorkOsFullDate(created)}</td>
-                      <td className={overdue ? "admin-numeric warn" : "admin-numeric"}>{formatWorkOsFullDate(due)}</td>
-                      <td>
+                      <td data-label="Created" className="admin-numeric">{formatWorkOsFullDate(created)}</td>
+                      <td data-label="Due" className={overdue ? "admin-numeric warn" : "admin-numeric"}>{formatWorkOsFullDate(due)}</td>
+                      <td data-label="Status">
                         <span className="admin-status-cell">
                           <Pill tone={taskStateTone(state)}>{taskStatusLabel(state)}</Pill>
                           <TaskAttachmentIndicator attachments={task.completion_evidence ?? []} />
@@ -692,7 +692,7 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
                           completion control stays where it was and the ellipsis
                           sits beside it, so the row keeps its height and the
                           menu opens from its own trigger (design.md §16.2). */}
-                      <td className="admin-row-actions">
+                      <td data-label="Actions" className="admin-row-actions">
                         <span
                           className="admin-row-actions-inner"
                           onClick={(event) => event.stopPropagation()}

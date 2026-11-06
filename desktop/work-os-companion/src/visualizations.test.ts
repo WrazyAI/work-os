@@ -111,8 +111,9 @@ describe("operational visualizations", () => {
   it("uses the logo and non-navigation surface as the collapsed expand affordance", () => {
     expect(sidebar).toContain("data-sidebar-nav-option");
     expect(sidebar).toContain("data-sidebar-surface-hover");
-    expect(sidebar).toContain('if (collapsed) {\n                setCollapsedState(false);');
-    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).toContain("if (collapsed && !compactNav) {");
+    expect(sidebar).toContain("setCollapsedState(false);");
+    expect(sidebar).toContain('aria-label={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}');
     expect(sidebar).not.toContain("<PanelLeftOpen size={18}");
     expect(sidebarStyles).toContain(".sidebar-workspace-expand-icon");
     expect(sidebarStyles).toContain('[data-sidebar-surface-hover="true"]');

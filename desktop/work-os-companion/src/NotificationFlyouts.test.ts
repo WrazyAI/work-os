@@ -63,7 +63,7 @@ describe("application notification flyouts", () => {
     expect(sidebar).toContain("aria-label={label}");
     expect(sidebar).toContain('aria-current={active ? "page" : undefined}');
     expect(sidebar).toContain("title={hint ? `${label} (${hint})` : label}");
-    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).toContain('aria-label={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}');
     expect(sidebar).not.toContain('aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}');
   });
 

@@ -141,6 +141,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
 
   return (
     <div className="admin-grid">
+      <h2 className="sr-only">Evidence record</h2>
       <AdminCard
         icon={Camera}
         title="Record shape"

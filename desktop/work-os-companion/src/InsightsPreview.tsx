@@ -81,7 +81,7 @@ export default function InsightsPreview() {
     };
   }, [range, state]);
   return <div className="workspace preview-workspace">
-    <section className="stage">
+    <div className="stage">
       <header className="masthead">
         <div><p>Preview</p><h1>Employee insights</h1></div>
         <div className="mast-actions">
@@ -93,7 +93,7 @@ export default function InsightsPreview() {
           </div>
         </div>
       </header>
-      <PersonalInsights data={data} loading={false} range={range} onRange={setRange} onReference={() => undefined} onCorrect={() => undefined} />
-    </section>
+      <PersonalInsights data={data} loading={false} range={range} onRange={setRange} onOpenToday={() => undefined} onReference={() => undefined} onCorrect={() => undefined} />
+    </div>
   </div>;
 }

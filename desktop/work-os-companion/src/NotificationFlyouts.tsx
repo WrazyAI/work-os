@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Check, Info, Pin, X } from "lucide-react";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
@@ -137,10 +138,41 @@ export function useNotifications() {
   return value;
 }
 
+/** The in-flow slot the employee and administration shells render under their
+ * mastheads. Standing conditions (a stale record, a setup blocker) belong in
+ * the page's reading order; only transient receipts keep the floating stack
+ * design.md §16.1 pins to the top-right corner. */
+export const NOTIFICATION_REGION_ID = "work-os-notification-region";
+
 export function NotificationFlyouts({ notifications, onDismiss }: { notifications: AppNotification[]; onDismiss: (id: string) => void }) {
-  return <section className="notification-flyouts" aria-label="Application notifications">
-    {notifications.map((notification) => <NotificationCard key={notification.id} notification={notification} onDismiss={onDismiss} />)}
-  </section>;
+  const [region, setRegion] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const locate = () => {
+      const next = document.getElementById(NOTIFICATION_REGION_ID);
+      setRegion((current) => (current === next ? current : next));
+    };
+    locate();
+    // The shell can mount after the notification exists (boot, workspace
+    // switch), so watch the tree instead of sampling once.
+    const observer = new MutationObserver(locate);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+  const transient = notifications.filter((notification) => (notification.persistence ?? "transient") === "transient");
+  const persistent = notifications.filter((notification) => notification.persistence === "persistent");
+  const cards = (items: AppNotification[]) => items.map((notification) => <NotificationCard key={notification.id} notification={notification} onDismiss={onDismiss} />);
+  const fixedHasPersistent = !region && persistent.length > 0;
+  return <>
+    <section className={`notification-flyouts${fixedHasPersistent ? " has-persistent" : ""}`} aria-label="Application notifications">
+      {cards(transient)}
+      {!region ? cards(persistent) : null}
+    </section>
+    {region && persistent.length ? createPortal(
+      <section className="notification-region-list" aria-label="Workspace notices">{cards(persistent)}</section>,
+      region,
+    ) : null}
+  </>;
 }
 
 function NotificationCard({ notification, onDismiss }: { notification: AppNotification; onDismiss: (id: string) => void }) {
@@ -154,7 +186,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
   const actions = notification.actions ?? (notification.action ? [{ ...notification.action, kind: "primary" as const }] : []);
   const progress = notification.progress;
   const progressPercent = progress && progress.value !== null && progress.max > 0 ? Math.max(0, Math.min(100, Math.round((progress.value / progress.max) * 100))) : null;
-  return <article
+  return <div
     className={`notification-flyout ${notification.tone} ${notification.persistence ?? "transient"}${notification.locked ? " locked" : ""}`}
     role={notificationAriaRole(notification.tone)}
     aria-atomic="true"
@@ -182,5 +214,5 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
     </div>
     {!notification.locked && <button className="notification-dismiss" type="button" aria-label={`Dismiss ${notification.title}`} onClick={() => onDismiss(notification.id)}><X size={16} /></button>}
     {notification.persistence !== "persistent" && <i aria-hidden="true" />}
-  </article>;
+  </div>;
 }

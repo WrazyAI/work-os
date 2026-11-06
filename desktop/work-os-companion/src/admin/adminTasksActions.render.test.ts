@@ -111,7 +111,7 @@ describe("administration task row actions", () => {
     const row = markup.slice(markup.lastIndexOf("<tr", at), markup.indexOf("</tr>", at) + "</tr>".length);
     // One trailing cell carries both controls, so the row keeps its height.
     expect(row).toContain(">Complete<");
-    expect(row.match(/<td class="admin-row-actions"/g) ?? []).toHaveLength(1);
+    expect(row.match(/<td[^>]*class="admin-row-actions"/g) ?? []).toHaveLength(1);
     expect(row).toMatch(/admin-row-actions-inner[\s\S]*Complete[\s\S]*aria-label="Actions for /);
   });
 

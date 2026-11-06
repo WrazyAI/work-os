@@ -132,6 +132,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
 
   return (
     <div className="admin-grid">
+      <h2 className="sr-only">Workspace settings</h2>
       {personalSettings ? <div className="admin-personal-settings">{personalSettings}</div> : null}
       {error ? <Notice tone="err">{(error as Error).message}</Notice> : null}
 
@@ -196,14 +197,14 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
             <tbody>
               {memberships.map((member) => (
                 <tr key={member.id} className="static">
-                  <td>
+                  <td data-label="Member">
                     <span className="min-w-0">
                       <b>{member.person?.display_name ?? member.person?.email ?? "Unmapped member"}</b>
                       <small>{member.person?.email ?? member.user_id}</small>
                     </span>
                   </td>
-                  <td className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
-                  <td>
+                  <td data-label="Person" className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
+                  <td data-label="Role">
                     <SelectField
                       ariaLabel={`Role for ${member.person?.display_name ?? member.id}`}
                       value={member.role}
@@ -211,7 +212,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
                       options={[{ value: "employee", label: "Employee" }, { value: "manager", label: "Manager" }, { value: "admin", label: "Administrator" }]}
                     />
                   </td>
-                  <td>
+                  <td data-label="Active">
                     <label className="admin-toggle">
                       <input
                         type="checkbox"
@@ -317,9 +318,9 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
               <tbody>
                 {(blueprints.data?.blueprints ?? []).map((blueprint, index) => (
                   <tr key={String(blueprint.id ?? index)} className="static">
-                    <td>{String(blueprint.name ?? blueprint.title ?? "Blueprint")}</td>
-                    <td className="admin-quiet">{statusLabel(String(blueprint.kind ?? blueprint.source ?? "template"))}</td>
-                    <td className="admin-quiet">{blueprint.updated_at ? relativeTime(String(blueprint.updated_at)) : "—"}</td>
+                    <td data-label="Blueprint">{String(blueprint.name ?? blueprint.title ?? "Blueprint")}</td>
+                    <td data-label="Kind" className="admin-quiet">{statusLabel(String(blueprint.kind ?? blueprint.source ?? "template"))}</td>
+                    <td data-label="Updated" className="admin-quiet">{blueprint.updated_at ? relativeTime(String(blueprint.updated_at)) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

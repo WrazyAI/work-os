@@ -122,7 +122,7 @@ body {
   /* The in-app launcher floats over the page, so the dashboard keeps its own
      bottom clearance (§4.1, §11): the last row must be able to scroll clear of
      it instead of ending underneath it. */
-  padding-bottom: 88px;
+  padding-bottom: var(--dock-clearance, 112px);
 }
 
 .dashboard-panel {
