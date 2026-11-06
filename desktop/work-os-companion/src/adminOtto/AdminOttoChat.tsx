@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from "react";
 import { X, SquarePen } from "lucide-react";
+import { FadeArc } from "../LoadingUi";
 import type {
   AdminOttoPendingAction,
   AdminRead,
@@ -636,8 +637,16 @@ export function AdminOttoChat({
             ariaLabel="Admin Otto views"
           />
           <span className="progress-header-actions">
-            <button type="button" className="admin-otto-secondary" aria-label="New chat" title="Start a fresh chat and discard this conversation" disabled={resetting} onClick={() => void newChat()}>
-              <SquarePen size={14} aria-hidden="true" />{resetting ? "Clearing…" : "New chat"}
+            <button
+              type="button"
+              className="admin-otto-secondary admin-otto-new-chat"
+              aria-label={resetting ? "Clearing chat" : "New chat"}
+              title={resetting ? "Clearing chat…" : "New chat — discard this conversation"}
+              aria-busy={resetting || undefined}
+              disabled={resetting}
+              onClick={() => void newChat()}
+            >
+              {resetting ? <FadeArc size={15} aria-hidden="true" /> : <SquarePen size={15} aria-hidden="true" />}
             </button>
             {onClose ? (
               <button type="button" className="admin-otto-close" aria-label={presentationSurface === "floating" ? "Collapse companion" : "Close admin Otto"} title={presentationSurface === "floating" ? "Collapse companion" : "Close"} onClick={onClose}>

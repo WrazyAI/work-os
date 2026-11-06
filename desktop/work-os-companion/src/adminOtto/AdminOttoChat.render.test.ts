@@ -51,6 +51,10 @@ describe("admin Otto chat", () => {
     expect(html).toContain("Chat");
     expect(html).toContain("Recaps");
     expect(html.match(/aria-label="New chat"/g)).toHaveLength(1);
+    // The header keeps its tabs in the top row, so New chat is icon-only.
+    expect(html).toContain("admin-otto-new-chat");
+    expect(html).not.toContain(">New chat<");
+    expect(html).not.toContain(">Clearing…<");
     expect(html).toContain('aria-label="Collapse companion"');
     expect(html).not.toMatch(/Clock in|Clock out|Mark done|Approve/);
   });

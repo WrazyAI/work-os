@@ -114,9 +114,9 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`; follow-up
   collapse/expand and sheet close/reopen without contacting `/api`.
 - Focused tests: `chatEntry`, `conversationSync.runtime`, `fixtures`,
   `integration`, `AdminWorkspace.render`, `AdminPreview`, `AdminOttoChat.render`,
-  and `chatComponents.render` passed (80 tests). Full companion suite:
-  **199 files / 1,804 tests passed**. Companion typecheck and production build
-  passed; root `work-os:typecheck` passed.
+  and `chatComponents.render` passed (80 tests). Full companion suite after the
+  header/animation follow-up: **199 files / 1,805 tests passed**. Companion
+  typecheck and production build passed; root `work-os:typecheck` passed.
 - Rendered Playwright checks:
   - `?preview-admin`: send a message, close the in-app sheet with X, click
     **Ask Otto**, and the same conversation, divider (`Today 4:41 PM`), and
@@ -128,6 +128,29 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`; follow-up
     expand, and the same turns rehydrate with the divider and assistant clock.
   - Screenshots: `/tmp/opencode/inapp-after-reopen.png` and
     `/tmp/opencode/admin-history-after-reopen.png`.
+
+### 2026-11-06 follow-up: one-row admin header and symmetric entrance
+
+- The floating Administration header now keeps the mascot switch, title,
+  Chat/Recaps tabs, New chat, and close on one top row, matching the employee
+  companion header. The in-app header keeps the same single row at desktop
+  widths and retains its existing safe wrap below 440px.
+- **New chat** is icon-only at both widths. It keeps the accessible label
+  (`New chat` / `Clearing chat`) and tooltip, swaps to the shared `FadeArc`
+  while clearing, and keeps a 40px touch target under 700px.
+- Entering Administration now animates the sheet the same way the employee
+  chat does: the floating sheet uses the companion `panelIn` spring and the
+  in-app sheet uses the shared `conversation-panel-in` slide. Previously the
+  Employee direction animated but the Admin direction appeared instantly.
+- Browser measurements at 400×620: one 58px header row, tabs at y=15,
+  New chat 40×40, no horizontal overflow. The same header stayed one row with
+  zero overflow at 390, 380, and 360px. In-app desktop: one 68px row,
+  New chat 34×34, no overflow, with `conversation-panel-in` active.
+- Screenshots/GIFs: `/tmp/opencode/admin-one-row.png`,
+  `/tmp/opencode/inapp-one-row.png`,
+  `/tmp/opencode/view-transition/to-admin.gif`,
+  `/tmp/opencode/view-transition/to-employee.gif`, and
+  `/tmp/opencode/otto-transition/dress-and-undress-close.gif`.
 
 ## Rendered evidence
 

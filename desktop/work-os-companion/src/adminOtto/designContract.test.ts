@@ -76,6 +76,21 @@ describe("admin Otto design contract", () => {
     expect(chat).not.toContain("new AdminOttoChat");
   });
 
+  it("keeps the admin header on one row and mirrors the employee entrance", () => {
+    const head = ruleBlock(css, '.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head');
+    expect(head).toContain("flex-wrap: nowrap");
+    const tabs = ruleBlock(css, '.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-head .chat-tabs');
+    expect(tabs).toContain("flex: 0 1 auto");
+    expect(tabs).not.toContain("order: 5");
+    expect(tabs).not.toContain("flex: 1 1 100%");
+    const sheet = ruleBlock(css, '.admin-otto-surface[data-conversation-surface="floating"] .admin-otto-sheet');
+    expect(sheet).toContain("animation: panelIn");
+    const inAppSheet = ruleBlock(css, '[data-conversation-surface="in-app"] .admin-otto-sheet');
+    expect(inAppSheet).toContain("animation: conversation-panel-in");
+    expect(chat).toContain("admin-otto-new-chat");
+    expect(chat).not.toContain('resetting ? "Clearing…" : "New chat"');
+  });
+
   it("keeps the compact desktop sheet clear of the standing notification band", () => {
     const surface = ruleBlock(css, ".admin-otto-surface");
     expect(surface).toContain("height: min(680px, calc(100dvh - 160px))");
@@ -103,6 +118,7 @@ describe("admin Otto design contract", () => {
     }
     expect(narrow).toMatch(/min-height: 40px;/);
     expect(narrow).toMatch(/\[data-conversation-surface="in-app"\] \.admin-otto-head \.admin-otto-close \{ width: 40px; height: 40px; \}/);
+    expect(narrow).toMatch(/\.admin-otto-head \.progress-header-actions \.admin-otto-new-chat/);
     expect(narrow).toMatch(/\.admin-otto-head \.chat-tab \{\s*min-height: 40px;/);
     expect(narrow).toContain(".admin-otto-recap-actions .admin-otto-record-link");
 
