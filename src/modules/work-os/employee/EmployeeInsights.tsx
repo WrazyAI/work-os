@@ -115,7 +115,10 @@ export default function EmployeeInsights() {
     Number(data?.totals.observedSeconds ?? 0) > 0 ||
     Number(data?.totals.outputEvidence ?? 0) > 0 ||
     Number(data?.totals.planned ?? 0) > 0 ||
-    days.some((item) => Boolean(item.goal?.text?.trim()))
+    closingCarryOver > 0 ||
+    closingOverdue > 0 ||
+    blockers > 0 ||
+    days.some((item) => Boolean(item.goal?.text?.trim()) || item.sessionQuality?.status === "needs_correction")
   );
 
   return (

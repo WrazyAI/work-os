@@ -55,6 +55,7 @@ test("a finished window with an open session is called ended, not 100% complete"
   assert.equal(shiftWindowEndedWithOpenSession(pulse, session), true);
   assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "active", stale: false }), true);
   assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "clocked_out" }), false);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "clocked_out", stale: true }), true);
   assert.equal(shiftWindowEndedWithOpenSession(pulse, { ...session, state: "clocked_out" }), false);
   assert.equal(shiftWindowEndedWithOpenSession({ schedulePhase: "in_progress" }, session), false);
 });

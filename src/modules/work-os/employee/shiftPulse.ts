@@ -118,7 +118,9 @@ export function shiftWindowEndedWithOpenSession(
   const observed = attendance?.source === "worktivity";
   const observedOpen = observed && !attendance?.stale && (attendance?.state === "active" || attendance?.state === "paused");
   if (observedOpen) return true;
-  const observedClosed = observed && (attendance?.stale === true || attendance?.state === "clocked_out");
+  // A stale provider read is inconclusive, not a confirmed close: fall back
+  // to the mirrored session so the ended-window warning is never hidden.
+  const observedClosed = observed && attendance?.stale !== true && attendance?.state === "clocked_out";
   if (observedClosed) return false;
   return Boolean(session && session.state !== "clocked_out" && validTime(session.clocked_in_at) !== null);
 }

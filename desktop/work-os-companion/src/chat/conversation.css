@@ -962,4 +962,11 @@
   [data-conversation-surface="in-app"].progress-dock.open {
     bottom: calc(72px + env(safe-area-inset-bottom));
   }
+
+  /* The open sheet also loses the bar's height from its own bound, so its
+     header stays inside the viewport on a 667px-tall window. */
+  [data-conversation-surface="in-app"].progress-dock.open {
+    height: min(680px, calc(100dvh - 92px));
+    max-height: calc(100dvh - 92px);
+  }
 }

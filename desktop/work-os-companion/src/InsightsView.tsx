@@ -70,7 +70,20 @@ export function PersonalInsights({ data, loading, range, onRange, onOpenToday, o
   // earlier period; a missing comparison must never read as a drop against zero.
   const comparisonAvailable = Boolean(data?.comparison?.days?.length);
   const pillFor = (key: string) => (comparisonAvailable ? deltas.find((stat) => stat.key === key) ?? null : null);
-  const hasRecord = !!data?.days.some((day) => day.observedSeconds > 0 || day.tasksCompleted > 0 || day.updates > 0 || day.outputEvidence > 0 || (day.trackedMinutes ?? 0) > 0);
+  const hasRecord = !!data?.days.some((day) =>
+    day.observedSeconds > 0 ||
+    day.tasksCompleted > 0 ||
+    day.updates > 0 ||
+    day.outputEvidence > 0 ||
+    (day.trackedMinutes ?? 0) > 0 ||
+    (day.planned ?? 0) > 0 ||
+    Boolean(day.goal?.text) ||
+    // Open work and a session that needs correction are actionable records,
+    // not an empty range: keep their facts and controls visible.
+    Number(day.carried ?? day.carryOver ?? 0) > 0 ||
+    Number(day.overdue ?? 0) > 0 ||
+    day.sessionQuality?.status === "needs_correction",
+  );
   const blockedTotal = updateSlices.find((slice) => slice.key === "blocked")?.value ?? 0;
   const pausedTotal = data ? data.totals.pausedSeconds : 0;
   const observedTotal = data ? data.totals.observedSeconds : 0;
