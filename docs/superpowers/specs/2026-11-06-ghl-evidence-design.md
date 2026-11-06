@@ -1,6 +1,6 @@
 # GHL employee evidence integration
 
-Status: proposed design, awaiting user approval. No implementation, credentials, live API probes, deployment or companion release authorized by this document alone.
+Status: design and proposed defaults approved by the user on 2026-11-06 ("Sounds good"). Implementation plan review/execution choice is next. Credentials, live API probes, deployment and companion release remain separate authorization gates.
 
 Ledger: `ac79f5bc-89fb-4d36-a702-07b8a67afe8e`. Discovery baseline: `e99bfb44`. Supporting findings: [Work OS seams](../../research/2026-11-05-ghl-work-os-evidence-discovery.md), [official API research](../../research/2026-11-05-ghl-evidence-api.md). Follow repository `AGENTS.md` and canonical `design.md`; the latter was read completely for this proposal.
 
