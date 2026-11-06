@@ -88,8 +88,13 @@ async function probe(name: string, run: () => Promise<unknown>) {
   }
 }
 
+const through = new Date().toISOString();
+const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 await probe("location", () => client.read({ path: `/locations/${encodeURIComponent(locationId)}` }));
 await probe("users", () => client.read({ path: "/users/search", query: { locationId } }));
 await probe("calendars", () => client.read({ path: "/calendars", query: { locationId } }));
+await probe("calls", () => client.read({ path: "/conversations/messages/export", query: { locationId, channel: "Call", startDate: from, endDate: through, limit: 1 } }));
+await probe("email", () => client.read({ path: "/conversations/messages/export", query: { locationId, channel: "Email", startDate: from, endDate: through, limit: 1 } }));
+await probe("opportunities", () => client.read({ path: "/opportunities/search", query: { location_id: locationId, limit: 1 } }));
 
 console.log(JSON.stringify({ mode: "live_read_only", results, tokenPrinted: false, bodiesPrinted: false }, null, 2));

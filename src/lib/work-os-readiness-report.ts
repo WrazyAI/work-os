@@ -32,12 +32,21 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
   if (!organization.data) throw new Error("Work OS organization not found");
   const connectionRows = connections.data ?? [];
   const credentialRows = credentials.data ?? [];
+  let ghlStates: Array<{ state: string }> = [];
+  try {
+    const syncStates = await db.from("work_ghl_sync_state").select("state").eq("organization_id", organizationId).limit(200);
+    if (!syncStates.error) ghlStates = (syncStates.data ?? []) as Array<{ state: string }>;
+  } catch {
+    ghlStates = [];
+  }
   const providerReady = {
     worktivity: worktivityConfigured(),
     github: connectionRows.some((row: any) => row.provider === "github" && row.active !== false) && !!process.env.WORK_OS_GITHUB_WEBHOOK_SECRET,
     ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false)
       && credentialRows.some((row: any) => row.provider === "ghl")
-      && !!process.env.WORK_OS_PROVIDER_SECRET_KEY,
+      && !!process.env.WORK_OS_PROVIDER_SECRET_KEY
+      && ghlStates.length > 0
+      && !ghlStates.some((row) => row.state === "failed"),
   };
   return evaluateWorkOsReadiness({
     organization: {

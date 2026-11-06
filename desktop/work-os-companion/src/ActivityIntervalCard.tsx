@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
+import { Activity, Camera, Check, ChevronLeft, ChevronRight, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -215,7 +215,7 @@ export function ActivityIntervalCard({
   const coverage = coverageLabel(interval.coverage);
   const evidenceParts = [
     ...(evidenceKnown ? [`${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}`] : []),
-    ...(recordedActivity.length > 0 ? [`${recordedActivity.length} GitHub event${recordedActivity.length === 1 ? "" : "s"}`] : []),
+    ...(recordedActivity.length > 0 ? [`${recordedActivity.length} recorded event${recordedActivity.length === 1 ? "" : "s"}`] : []),
   ];
   const showScreenshotGroup = evidenceKnown && (screenshotCount > 0 || evidenceExpired);
   const showEvidence = showScreenshotGroup || recordedActivity.length > 0;
@@ -378,7 +378,7 @@ export function ActivityIntervalCard({
                 <span className="chat-activity-panel-metric"><Camera size={12} aria-hidden="true" /> {screenshotCount}</span>
               ) : null}
               {recordedActivity.length > 0 ? (
-                <span className="chat-activity-panel-metric"><Github size={12} aria-hidden="true" /> {recordedActivity.length}</span>
+                <span className="chat-activity-panel-metric"><Activity size={12} aria-hidden="true" /> {recordedActivity.length}</span>
               ) : null}
               {evidenceParts.length ? (
                 <span className="chat-activity-panel-tooltip" aria-hidden="true">{evidenceParts.join(" · ")}</span>
@@ -462,8 +462,8 @@ export function ActivityIntervalCard({
           {recordedActivity.length > 0 ? (
             <section className="chat-activity-panel-section">
               <header className="chat-activity-panel-head">
-                <Github size={11} aria-hidden="true" />
-                <span>GitHub activity</span>
+                <Activity size={11} aria-hidden="true" />
+                <span>Recorded activity</span>
                 <span className="chat-activity-panel-count">{recordedActivity.length}</span>
               </header>
               <div className="chat-activity-github">
@@ -472,7 +472,9 @@ export function ActivityIntervalCard({
                     <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
                       <span
                         className={`chat-activity-github-tag is-${item.relation}`}
-                        title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
+                        title={item.source === "ghl"
+                          ? "Recorded in GoHighLevel for your mapped account; ownership is not authorship"
+                          : item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
                       >
                         {item.relation === "performed" ? "You" : "Your work"}
                       </span>

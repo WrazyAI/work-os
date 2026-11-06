@@ -40,7 +40,7 @@ export default function GhlEvidenceDetail({ eventId, excerpt, sourceUrl }: { eve
       <p className="mt-0.5 text-[11px] leading-5 text-[var(--text-tertiary)]">
         The retained excerpt is available with the evidence. Opening the full email fetches it on demand and is recorded in the audit log.
       </p>
-      {excerpt ? <p className="mt-2 whitespace-pre-wrap text-[11.5px] leading-5 text-[var(--text-secondary)]">{excerpt}</p> : null}
+      {(email?.excerpt ?? excerpt) ? <p className="mt-2 whitespace-pre-wrap text-[11.5px] leading-5 text-[var(--text-secondary)]">{email?.excerpt ?? excerpt}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" disabled={loading} onClick={loadEmail}>
           {loading ? "Loading email…" : "Open full email"}
@@ -64,7 +64,7 @@ export default function GhlEvidenceDetail({ eventId, excerpt, sourceUrl }: { eve
           <div className="mt-3">
             <Notice tone="warn">
               {email.availability === "expired"
-                ? "Full email unavailable — the content retention window has expired. Only the permitted excerpt remains."
+                ? "Full email unavailable — the content retention window has expired, and any excerpt has been redacted."
                 : "Full email unavailable — the original source could not be loaded. The retained excerpt above is still available."}
             </Notice>
           </div>

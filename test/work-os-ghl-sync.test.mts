@@ -209,6 +209,41 @@ test("completed one-shot partitions and an unchanged recurring window are not fe
   }
 });
 
+test("the daily reconciliation and non-message snapshots run again after a day", async () => {
+  const f = await fixture();
+  try {
+    let calls = 0;
+    const source = fakeSource({
+      messages: async () => { calls += 1; return { items: [], nextCursor: null, capped: false }; },
+      contacts: async () => ({ items: [], nextCursor: null, capped: false }),
+    });
+    await runGhlSync({ scope, now, maxPages: 50, deadlineMs: 40_000, source });
+    calls = 0;
+    const tomorrow = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+    await runGhlSync({ scope, now: tomorrow, maxPages: 50, deadlineMs: 40_000, source });
+    assert.equal(calls, 6, "recent overlap plus the daily 30-day reconciliation");
+    const reconcile = (await rows(f.db, "select state from work_ghl_sync_state where partition_key = 'reconcile:Call'"))[0] as any;
+    assert.equal(reconcile.state, "complete");
+  } finally {
+    await f.close();
+  }
+});
+
+test("a stale mapping rejection does not advance the checkpoint", async () => {
+  const f = await fixture();
+  try {
+    await runGhlSync({
+      scope, now, maxPages: 1, deadlineMs: 40_000, source: fakeSource(),
+      persist: async () => ({ written: 0, rejectedStaleMapping: true }),
+    });
+    const state = (await rows(f.db, "select state, cursor_value from work_ghl_sync_state where partition_key = 'backfill:Call'"))[0] as any;
+    assert.equal(state.state, "pending");
+    assert.equal(state.cursor_value, null);
+  } finally {
+    await f.close();
+  }
+});
+
 test("contacts are paged in batches that match the notes and tasks actually read", async () => {
   const f = await fixture();
   try {

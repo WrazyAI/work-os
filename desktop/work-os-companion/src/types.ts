@@ -441,7 +441,7 @@ export interface ActivityInterval {
   uncertainties?: string[];
   /** Provider-recorded GitHub activity attributed to the employee (performed
    * by their accounts) or triggered by their work (CI, deployments, reviews). */
-  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl" }>;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;

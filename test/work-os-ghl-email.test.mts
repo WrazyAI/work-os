@@ -65,6 +65,24 @@ test("plain text keeps content but removes the quoted thread", () => {
   assert.equal(result.text, "Thanks for the call.");
 });
 
+test("HTML quoted and forwarded threads are removed before analysis", () => {
+  const quoted = emailBodyToText(
+    "<p>Thanks for the call.</p><p>On Tue, Nov 3, 2026 at 4:00 PM Customer &lt;customer@example.invalid&gt; wrote:</p><p>old customer thread</p>",
+    "text/html",
+  );
+  assert.equal(quoted.text, "Thanks for the call.");
+  const forwarded = emailBodyToText(
+    "<p>Please review.</p><p>---------- Forwarded message ----------</p><p>From: customer@example.invalid</p><p>secret customer detail</p>",
+    "text/html",
+  );
+  assert.equal(forwarded.text, "Please review.");
+});
+
+test("malformed and control entities cannot crash or poison analysis", () => {
+  assert.equal(emailBodyToText("Safe &#x110000; text", "text/html").text, "Safe text");
+  assert.equal(emailBodyToText("Safe &#0; text", "text/html").text.includes("\u0000"), false);
+});
+
 test("analysis input is capped with an explicit truncation flag", () => {
   const result = emailBodyToText("a".repeat(20_000), "text/plain");
   assert.equal(result.text.length, 12_000);

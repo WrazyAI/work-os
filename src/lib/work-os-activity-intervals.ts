@@ -4,6 +4,7 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
 import { decideReviewedRecap } from "@/lib/work-os-reviewed-recaps";
 import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, reviewVersionForRow } from "@/lib/work-os-activity-interval-projection";
 import { getPool } from "@/lib/db/pool";
+import { registerGhlContentReference } from "@/lib/work-os-ghl-retention";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { dailyPlanGoalText, getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
@@ -970,6 +971,23 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       updated_at: new Date().toISOString(),
     }).eq("id", row.id).eq("review_status", "inferred").select("*").single();
     if (saveError) throw new Error(`save activity interval: ${saveError.message}`);
+    for (const item of ghlActivity?.items ?? []) {
+      if (!item.contentId) continue;
+      for (const field of ["headline", "ai_detail", "structured_summary"]) {
+        try {
+          await registerGhlContentReference({
+            organizationId: access.organizationId,
+            contentId: item.contentId,
+            consumerTable: "work_activity_intervals",
+            consumerId: String(row.id),
+            consumerField: field,
+          });
+        } catch {
+          // A reference failure must not discard a generated recap; the content
+          // still expires and the next purge can be retried.
+        }
+      }
+    }
     await persistEvidence(String(row.id), access.organizationId, selection.selected);
     await auditInterval(access, "activity_interval.generated", String(row.id), {
       slotKey,

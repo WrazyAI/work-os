@@ -30,6 +30,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Weekends no longer ask you for an EOD report, and the daily charts skip weekend days.
 - Admin Otto can handle several task requests in one message, show each result separately, and keep every change unapplied until you approve it.
 - Admin Otto's change cards now use real names and only the fields that actually change; New chat starts a clean conversation.
+- Recaps now label recorded calls, emails, and CRM activity as GoHighLevel evidence instead of calling everything GitHub.
 
 ## 0.5.22 — 2026-11-04
 

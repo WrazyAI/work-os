@@ -40,7 +40,7 @@ const draft = [
   "- 6 work deliverables · 2 recorded recaps.",
   "- GitHub, provider-recorded — performed 53 pushes (83 commits) · 3 pull requests; triggered 105 workflow runs.",
   "",
-  "Activity context is descriptive; recorded GitHub activity is a provider fact and still does not prove attendance, productivity, or task completion.",
+  "Activity context is descriptive; recorded GitHub and GHL activity are provider facts and still do not prove attendance, productivity, or task completion.",
   "",
   "## Full record",
   "",

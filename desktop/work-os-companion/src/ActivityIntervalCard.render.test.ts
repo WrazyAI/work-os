@@ -104,7 +104,7 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
-    expect(markup).toContain("1 GitHub event");
+    expect(markup).toContain("1 recorded event");
     expect(markup).not.toContain("0 screenshots");
   });
 
@@ -114,7 +114,7 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain(String(baseInterval.detail));
   });
 
-  it("renders provider-recorded GitHub activity with distinct relation labels", () => {
+  it("renders provider-recorded activity with distinct relation labels", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: {
         ...baseInterval,
@@ -125,15 +125,15 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
-    expect(markup).toContain('aria-label="Evidence: 3 screenshots, 2 GitHub events"');
+    expect(markup).toContain('aria-label="Evidence: 3 screenshots, 2 recorded events"');
     expect(markup).toContain("chat-activity-panel-metric");
     expect(markup).toContain("chat-activity-panel-tooltip");
-    expect(markup).toContain("3 screenshots · 2 GitHub events");
+    expect(markup).toContain("3 screenshots · 2 recorded events");
     expect(markup).toContain("lucide-camera");
-    expect(markup).toContain("lucide-github");
+    expect(markup).toContain("lucide-activity");
     expect(markup).toContain("Screenshots</span>");
     expect(markup).toContain("chat-activity-panel-count\">3</span>");
-    expect(markup).toContain("GitHub activity</span>");
+    expect(markup).toContain("Recorded activity</span>");
     expect(markup).toContain("chat-activity-panel-count\">2</span>");
     expect(markup).toContain("Pushed 3 commits to WrazyAI/work-os");
     expect(markup).toContain("CI for your commit on main: Work OS CI");
@@ -145,7 +145,7 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/actions/runs/1"');
     const githubEventPosition = markup.indexOf("Pushed 3 commits to WrazyAI/work-os");
     const enclosingSection = markup.lastIndexOf("<section", githubEventPosition);
-    expect(markup.slice(enclosingSection, githubEventPosition)).toContain("GitHub activity");
+    expect(markup.slice(enclosingSection, githubEventPosition)).toContain("Recorded activity");
   });
 
   it("keeps GitHub evidence available when the recap has no screenshots", () => {
@@ -159,17 +159,17 @@ describe("ActivityIntervalCard", () => {
         ],
       },
     }));
-    expect(markup).toContain("0 screenshots, 1 GitHub event");
-    expect(markup).toContain("GitHub activity</span>");
+    expect(markup).toContain("0 screenshots, 1 recorded event");
+    expect(markup).toContain("Recorded activity</span>");
     expect(markup).not.toContain("Screenshots</span>");
     const eventPosition = markup.indexOf("Opened pull request #42");
     const enclosingSection = markup.lastIndexOf("<section", eventPosition);
-    expect(markup.slice(enclosingSection, eventPosition)).toContain("GitHub activity");
+    expect(markup.slice(enclosingSection, eventPosition)).toContain("Recorded activity");
   });
 
   it("omits the GitHub section when no recorded activity is present", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
-    expect(markup).not.toContain("GitHub activity");
+    expect(markup).not.toContain("Recorded activity");
   });
 
   it("renders the chat bubble with Looks good / Edit actions", () => {

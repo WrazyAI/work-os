@@ -48,18 +48,18 @@ export async function listGhlActivity(input: {
   if (!input.personId && !input.includeOrganizationContext) {
     return { items: [], coverage: [], lastSyncedAt: null, capped: false };
   }
-  const values: unknown[] = [input.scope.organizationId, input.from, input.through];
-  let filter = "";
+  const values: unknown[] = [input.scope.organizationId, input.from, input.through, input.scope.connectionId];
+  let filter = " and e.metadata->'ghl'->>'connectionId' = $4 and e.correction_status <> 'retracted'";
   if (input.personId && !input.includeOrganizationContext) {
-    filter = " and person_id = $4 and metadata->'ghl'->>'relation' = 'performed'";
+    filter += " and e.person_id = $5 and e.metadata->'ghl'->>'relation' = 'performed' and e.metadata->'ghl'->>'occurredAt' is not null";
     values.push(input.personId);
   } else if (input.personId) {
-    filter = " and (person_id = $4 or person_id is null)";
+    filter += " and (e.person_id = $5 or e.person_id is null)";
     values.push(input.personId);
   }
   const result = await getPool().query(
     `select e.id, e.person_id, e.title, e.summary, e.artifact_url, e.occurred_at, e.metadata,
-            c.excerpt_cipher, c.expires_at, c.content_purged_at
+            c.id as content_id, c.excerpt_cipher, c.expires_at, c.content_purged_at
        from work_evidence_events e
        left join work_ghl_email_content c on c.evidence_event_id = e.id
       where e.organization_id = $1 and e.provider = 'ghl'
@@ -70,7 +70,7 @@ export async function listGhlActivity(input: {
   );
   const rows = result.rows as Json[];
   const now = Date.now();
-  const items = rows.slice(0, SCAN_LIMIT).map((row) => {
+  const mapped = rows.slice(0, SCAN_LIMIT).map((row) => {
     const ghl = ((row.metadata as Json)?.ghl ?? {}) as Json;
     const excerpt = row.excerpt_cipher && !row.content_purged_at && new Date(String(row.expires_at)).getTime() > now
       ? decryptProviderSecret(String(row.excerpt_cipher))
@@ -94,14 +94,23 @@ export async function listGhlActivity(input: {
       conversationId: ghl.conversationId ? String(ghl.conversationId) : null,
       emailId: ghl.emailId ? String(ghl.emailId) : null,
       status: ghl.status ? String(ghl.status) : null,
-      durationSeconds: Number.isFinite(Number(ghl.durationSeconds)) ? Number(ghl.durationSeconds) : null,
+      durationSeconds: ghl.durationSeconds != null && Number.isFinite(Number(ghl.durationSeconds)) ? Number(ghl.durationSeconds) : null,
       basis: String(ghl.basis ?? ""),
       snapshot: ghl.snapshot === true,
       personId: row.person_id ? String(row.person_id) : null,
       excerpt,
       contentExpiresAt: row.expires_at ? new Date(String(row.expires_at)).toISOString() : null,
+      contentId: row.content_id ? String(row.content_id) : null,
     };
     return record;
+  });
+  const seenSnapshots = new Set<string>();
+  const items = mapped.filter((item) => {
+    if (!item.snapshot) return true;
+    const key = `${item.kind}:${item.objectId}`;
+    if (seenSnapshots.has(key)) return false;
+    seenSnapshots.add(key);
+    return true;
   });
 
   let coverage: GhlCoverage[] = [];
@@ -138,7 +147,7 @@ export function eodGhlFactsFromActivity(activity: GhlActivity): {
 } {
   const performed: Record<string, number> = {};
   for (const item of activity.items) {
-    if (item.relation !== "performed") continue;
+    if (item.relation !== "performed" || item.snapshot || !item.occurredAt) continue;
     performed[item.kind] = (performed[item.kind] ?? 0) + 1;
   }
   return {
@@ -150,7 +159,7 @@ export function eodGhlFactsFromActivity(activity: GhlActivity): {
 
 export function ghlRecordedActivityAllowlist(activity: GhlActivity): Array<{ description: string; relation: "performed"; url: string | null; source: "ghl"; eventId: string }> {
   return activity.items
-    .filter((item) => item.relation === "performed")
+    .filter((item) => item.relation === "performed" && !item.snapshot && item.occurredAt)
     .slice(0, 20)
     .map((item) => ({
       description: `${kindLabel(item.kind)} ${item.action}${item.title ? `: ${item.title}` : ""}`.slice(0, 200),

@@ -61,6 +61,13 @@ const pool = getPool();
 const client = await pool.connect();
 try {
   await client.query("begin");
+  const existing = await client.query(
+    "select organization_id from work_provider_connections where provider = 'ghl' and external_workspace_id = $1",
+    [locationId],
+  );
+  if (existing.rows[0] && String(existing.rows[0].organization_id) !== organizationId) {
+    throw new Error("this GHL location is already connected to another organization");
+  }
   const connection = await client.query(
     `insert into work_provider_connections
       (organization_id, provider, external_workspace_id, config, active, updated_at)

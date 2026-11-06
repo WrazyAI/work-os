@@ -114,6 +114,12 @@
       "type": "feature",
       "summary": "Task rows mark completion files beside the status, and the task details list the actual attachments.",
       "verification": "Ledger 199ac08f-2219-4b39-ab5f-b5710684e7d3: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1672 passed; focused attachment/normalizer/task tests 53 passed; focused root desktop/route/evidence tests 84 passed; typecheck and production build passed; rendered 1440/930/720/390 hover, tooltip, keyboard, Escape, reduced-motion, drawer list, preview, and no-overflow checks; TestSprite a299b733 passed 8/8 for the attachment tooltip, drawer list, and image preview."
+    },
+    {
+      "id": "ghl-recorded-activity-labels",
+      "type": "fix",
+      "summary": "Recaps label recorded GoHighLevel calls, emails, and CRM activity as GHL evidence instead of GitHub.",
+      "verification": "ActivityIntervalCard.render and adminDataNormalizers focused suites 37 passed; rendered labels checked in branch codex/ghl-evidence-design."
     }
   ],
   "emergency": {

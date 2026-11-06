@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db/pool";
 import { createGhlClient, type GhlClient } from "./work-os-ghl-client";
 import { loadGhlCredential, loadGhlIdentities, ghlMappingRevision, persistGhlRecords } from "./work-os-ghl-store";
 import { normalizeGhlAppointmentCoverage, normalizeGhlRecord } from "./work-os-ghl-normalize";
+import { hydrateDueGhlEmailContent } from "./work-os-ghl-email";
 import type { GhlCoverage, GhlKind, GhlRecord, GhlScope } from "./work-os-ghl-types";
 
 export const GHL_BACKFILL_DAYS = 30;
@@ -51,6 +52,8 @@ export interface GhlPartitionPlan {
   from: string;
   through: string;
   recurring: boolean;
+  /** Minimum interval between refreshes for a non-message snapshot. */
+  cadenceMs?: number;
 }
 
 type Json = Record<string, any>;
@@ -115,15 +118,15 @@ export function ghlBackfillWindow(now: Date, timeZone = LOCATION_TIMEZONE) {
 export function ghlPartitionPlan(now: Date): GhlPartitionPlan[] {
   const backfill = ghlBackfillWindow(now);
   const recentFrom = new Date(now.getTime() - GHL_RECENT_OVERLAP_MS).toISOString();
-  const appointmentThrough = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const appointmentThrough = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const channels = ["Call", "SMS", "Email"] as const;
   return [
     ...channels.map((channel) => ({ key: `backfill:${channel}`, kind: pageKind(channel), channel, from: backfill.from, through: backfill.through, recurring: false })),
     ...channels.map((channel) => ({ key: `recent:${channel}`, kind: pageKind(channel), channel, from: recentFrom, through: now.toISOString(), recurring: true })),
-    ...channels.map((channel) => ({ key: `reconcile:${channel}`, kind: pageKind(channel), channel, from: backfill.from, through: backfill.through, recurring: false })),
-    { key: "appointments:snapshot", kind: "appointment", from: backfill.from, through: appointmentThrough, recurring: false },
-    { key: "contacts", kind: "note", from: backfill.from, through: backfill.through, recurring: false },
-    { key: "opportunities", kind: "opportunity", from: backfill.from, through: backfill.through, recurring: false },
+    ...channels.map((channel) => ({ key: `reconcile:${channel}`, kind: pageKind(channel), channel, from: backfill.from, through: backfill.through, recurring: false, cadenceMs: GHL_RECENT_OVERLAP_MS })),
+    { key: "appointments:snapshot", kind: "appointment", from: backfill.from, through: appointmentThrough, recurring: false, cadenceMs: GHL_RECENT_OVERLAP_MS },
+    { key: "contacts", kind: "note", from: backfill.from, through: backfill.through, recurring: false, cadenceMs: GHL_RECENT_OVERLAP_MS },
+    { key: "opportunities", kind: "opportunity", from: backfill.from, through: backfill.through, recurring: false, cadenceMs: GHL_RECENT_OVERLAP_MS },
   ];
 }
 
@@ -290,7 +293,7 @@ function sameInstant(left: unknown, right: unknown): boolean {
   return Number.isFinite(leftTime) && leftTime === rightTime;
 }
 
-async function ensureState(scope: GhlScope, plan: GhlPartitionPlan): Promise<Json> {
+async function ensureState(scope: GhlScope, plan: GhlPartitionPlan, now: Date): Promise<Json> {
   const existing = await getPool().query(
     "select * from work_ghl_sync_state where connection_id = $1 and kind = $2 and partition_key = $3",
     [scope.connectionId, plan.kind, plan.key],
@@ -322,6 +325,18 @@ async function ensureState(scope: GhlScope, plan: GhlPartitionPlan): Promise<Jso
       [plan.from, plan.through, row.id],
     );
     return reset.rows[0] as Json;
+  }
+  if (plan.cadenceMs && (row.state === "complete" || row.state === "partial")) {
+    const last = row.last_synced_at ? new Date(String(row.last_synced_at)).getTime() : 0;
+    if (!last || now.getTime() - last >= plan.cadenceMs) {
+      const reset = await getPool().query(
+        `update work_ghl_sync_state
+            set range_from = $1, range_through = $2, cursor_value = null, state = 'pending', updated_at = now()
+          where id = $3 returning *`,
+        [plan.from, plan.through, row.id],
+      );
+      return reset.rows[0] as Json;
+    }
   }
   return row;
 }
@@ -355,19 +370,21 @@ async function processPartition(input: {
   identities: Awaited<ReturnType<typeof loadGhlIdentities>>;
   revision: string;
   persist?: typeof persistGhlRecords;
-}): Promise<void> {
+}): Promise<boolean> {
   const { scope, plan, source, now, identities, revision } = input;
   const persist = input.persist ?? persistGhlRecords;
-  const state = await ensureState(scope, plan);
+  const state = await ensureState(scope, plan, now);
   if (state.state === "complete" || state.state === "partial") {
-    if (!plan.recurring || sameInstant(state.range_through, plan.through)) return;
+    if (!plan.recurring) return false;
+    if (sameInstant(state.range_through, plan.through)) return false;
   }
   const owner = randomUUID();
-  if (!(await claimGhlPartition({ stateId: String(state.id), leaseOwner: owner, now }))) return;
+  if (!(await claimGhlPartition({ stateId: String(state.id), leaseOwner: owner, now }))) return false;
   const limit = plan.key === "contacts" ? 10 : 100;
   const from = String(state.range_from ?? plan.from);
   const through = String(state.range_through ?? plan.through);
   const cursor = state.cursor_value ? String(state.cursor_value) : null;
+  const persistPage = (page: GhlRecord[]) => persist(scope, page, revision, { stateId: String(state.id), leaseOwner: owner, now });
   try {
     let records: GhlRecord[] = [];
     let nextCursor: string | null = null;
@@ -389,7 +406,12 @@ async function processPartition(input: {
       }
       scanned = all.length;
       records = all.flatMap((item) => normalizeGhlRecord("appointment", item, { scope, identities, observedAt: now.toISOString() }));
-      await persist(scope, records, revision);
+      const persisted = await persistPage(records);
+      if (persisted.fenced) return false;
+      if (persisted.rejectedStaleMapping) {
+        await releaseLease(String(state.id), owner, now, "pending", "Mapping changed during the page; pagination will retry from the durable checkpoint.");
+        return true;
+      }
       const coverage = normalizeGhlAppointmentCoverage({ scope, scheduledFrom: from, scheduledThrough: through, scanned, capped });
       const next = null;
       await advanceGhlCheckpoint({
@@ -402,7 +424,7 @@ async function processPartition(input: {
         coverage,
         capped,
       });
-      return;
+      return true;
     } else if (plan.key === "contacts") {
       const page = await source.contacts({ cursor, limit });
       scanned = page.items.length;
@@ -428,7 +450,12 @@ async function processPartition(input: {
       records = page.items.flatMap((item) => normalizeGhlRecord("opportunity", item, { scope, identities, observedAt: now.toISOString() }));
     }
 
-    await persist(scope, records, revision);
+    const persisted = await persistPage(records);
+    if (persisted.fenced) return false;
+    if (persisted.rejectedStaleMapping) {
+      await releaseLease(String(state.id), owner, now, "pending", "Mapping changed during the page; pagination will retry from the durable checkpoint.");
+      return true;
+    }
     const terminal = !nextCursor;
     const terminalState: GhlCoverage["state"] = terminal ? "complete" : "pending";
     const reason = terminal && plan.key === "contacts" && capped ? "Contact discovery is capped; notes and tasks beyond the cap are not covered." : null;
@@ -442,33 +469,35 @@ async function processPartition(input: {
       coverage: coverageFor(state, plan, terminal && plan.key === "contacts" && capped ? "partial" : terminalState, reason, scanned, capped),
       capped,
     });
+    return true;
   } catch (error) {
     const status = (error as { status?: unknown } | null)?.status;
     if (error instanceof GhlCursorExpiredError) {
       await releaseLease(String(state.id), owner, now, "pending", "Provider cursor expired; pagination restarted from a durable checkpoint.");
       await getPool().query(
-        "update work_ghl_sync_state set cursor_value = null, state = 'pending', updated_at = now() where id = $1",
-        [state.id],
+        "update work_ghl_sync_state set cursor_value = null, state = 'pending', updated_at = now() where id = $1 and lease_owner = $2",
+        [state.id, owner],
       );
-      return;
+      return true;
     }
     if (error instanceof GhlRateLimitError || status === 429) {
       const retry = error instanceof GhlRateLimitError ? error.retryAfterSeconds : 60;
       await releaseLease(String(state.id), owner, now, "pending", `Rate limited; retry after ${retry}s.`);
-      return;
+      return true;
     }
     if (status === 401 || status === 403) {
-      await releaseLease(String(state.id), owner, now, "failed", "Provider rejected the credential or scope (401/403).");
       await getPool().query(
         `update work_ghl_sync_state
             set coverage = jsonb_set(coverage, '{state}', to_jsonb('unavailable'::text), true),
                 failure_reason = 'Provider rejected the credential or scope (401/403).', updated_at = now()
-          where id = $1`,
-        [state.id],
+          where id = $1 and lease_owner = $2`,
+        [state.id, owner],
       );
-      return;
+      await releaseLease(String(state.id), owner, now, "failed", "Provider rejected the credential or scope (401/403).");
+      return true;
     }
     await releaseLease(String(state.id), owner, now, "failed", error instanceof Error ? error.message : "GHL synchronization failed");
+    return true;
   }
 }
 
@@ -501,15 +530,9 @@ export async function runGhlSync(input: {
         [scope.connectionId, `backfill:${plan.channel}`],
       );
       if ((backfill.rows[0] as Json | undefined)?.state !== "complete") continue;
-      const previous = await getPool().query(
-        "select last_synced_at from work_ghl_sync_state where connection_id = $1 and partition_key = $2",
-        [scope.connectionId, plan.key],
-      );
-      const last = (previous.rows[0] as Json | undefined)?.last_synced_at;
-      if (last && now.getTime() - new Date(last).getTime() < GHL_RECENT_OVERLAP_MS) continue;
     }
-    await processPartition({ scope, plan, source, now, identities, revision, persist: input.persist });
-    processed += 1;
+    const attempted = await processPartition({ scope, plan, source, now, identities, revision, persist: input.persist });
+    if (attempted) processed += 1;
   }
   const states = await getPool().query(
     "select * from work_ghl_sync_state where connection_id = $1 order by kind, partition_key",
@@ -540,9 +563,13 @@ export async function syncDueGhlEvidence(input: {
     `select c.id, c.organization_id, c.external_workspace_id
        from work_provider_connections c
        join work_organizations o on o.id = c.organization_id
+       left join (
+         select connection_id, max(last_synced_at) as last_synced_at
+           from work_ghl_sync_state group by connection_id
+       ) s on s.connection_id = c.id
       where c.provider = 'ghl' and c.active = true
         and coalesce(o.feature_flags->>'ghl_evidence', 'false') = 'true'
-      order by c.updated_at
+      order by s.last_synced_at asc nulls first
       limit 20`,
   );
   let processed = 0;
@@ -573,6 +600,7 @@ export async function syncDueGhlEvidence(input: {
         source,
         persist: input.persist,
       });
+      await hydrateDueGhlEmailContent({ scope, now: input.now, limit: 3 });
       processed += 1;
     } catch {
       failed += 1;

@@ -32,6 +32,7 @@ import {
 } from "@/lib/work-os-eod-report";
 import { listGithubActivity } from "@/lib/work-os-github-activity";
 import { eodGhlFactsFromActivity, listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
+import { registerGhlContentForPersonDay } from "@/lib/work-os-ghl-retention";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -49,6 +50,21 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
     : db().from("work_report_versions").insert(payload);
   const { error } = await query;
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
+  if (report.person_id) {
+    try {
+      await registerGhlContentForPersonDay({
+        organizationId: access.organizationId,
+        personId: String(report.person_id),
+        date: String(report.report_date),
+        consumerTable: "work_reports",
+        consumerId: String(report.id),
+        fields: ["generated_markdown", "submitted_markdown"],
+      });
+    } catch {
+      // Report saving must not fail because a retention reference could not be
+      // written; the content still expires and a later save retries it.
+    }
+  }
 }
 
 export type EodSectionItem = { id: string; title: string; provenance: string | null; at: string | null };

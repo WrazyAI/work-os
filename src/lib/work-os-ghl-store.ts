@@ -32,8 +32,9 @@ export async function loadGhlIdentities(scope: GhlScope): Promise<GhlIdentity[]>
     `select external_account_id, person_id, verified, metadata
        from work_source_accounts
       where organization_id = $1 and provider = 'ghl'
+        and (metadata->>'locationId' is null or metadata->>'locationId' = $2)
       order by external_account_id`,
-    [scope.organizationId],
+    [scope.organizationId, scope.locationId],
   );
   return (rows.rows as Json[]).map((row) => ({
     externalId: String(row.external_account_id),
@@ -141,7 +142,7 @@ async function upsertEvent(db: QueryClient, input: {
   relation: GhlRelation;
   personId: string | null;
   basis: string;
-}): Promise<{ id: string; summary: string; correctionStatus: string }> {
+}): Promise<{ id: string; summary: string; correctionStatus: string; occurredAt: string }> {
   const { scope, record, relation, personId, basis } = input;
   const occurredAt = record.occurredAt ?? record.observedAt;
   const evidenceClass = record.snapshot ? "activity_observation" : "output_evidence";
@@ -156,13 +157,14 @@ async function upsertEvent(db: QueryClient, input: {
        person_id = excluded.person_id,
        attribution_method = excluded.attribution_method,
        attribution_confidence = excluded.attribution_confidence,
-       occurred_at = excluded.occurred_at,
+       occurred_at = case when work_evidence_events.metadata->'ghl'->>'occurredAt' is null
+         then work_evidence_events.occurred_at else excluded.occurred_at end,
        title = excluded.title,
        summary = case when work_evidence_events.correction_status = 'original' then excluded.summary else work_evidence_events.summary end,
        metadata = excluded.metadata,
        raw = '{}'::jsonb,
        updated_at = now()
-     returning id, summary, correction_status`,
+     returning id, summary, correction_status, occurred_at`,
     [
       scope.organizationId,
       record.key,
@@ -178,7 +180,12 @@ async function upsertEvent(db: QueryClient, input: {
     ],
   );
   const saved = result.rows[0] as Json;
-  return { id: String(saved.id), summary: String(saved.summary ?? ""), correctionStatus: String(saved.correction_status ?? "original") };
+  return {
+    id: String(saved.id),
+    summary: String(saved.summary ?? ""),
+    correctionStatus: String(saved.correction_status ?? "original"),
+    occurredAt: new Date(String(saved.occurred_at)).toISOString(),
+  };
 }
 
 async function mirrorPersonEvent(db: QueryClient, input: {
@@ -188,10 +195,10 @@ async function mirrorPersonEvent(db: QueryClient, input: {
   personId: string;
   relation: GhlRelation;
   summary: string;
+  occurredAt: string;
 }): Promise<void> {
-  const { scope, eventId, record, personId, relation, summary } = input;
+  const { scope, eventId, record, personId, relation, summary, occurredAt } = input;
   const ownerId = await organizationOwner(scope, db);
-  const occurredAt = record.occurredAt ?? record.observedAt;
   await db.query(
     `insert into work_evidence
       (user_id, organization_id, person_id, evidence_event_id, evidence_date, source, title, summary, url, metrics, raw, updated_at)
@@ -230,7 +237,8 @@ export async function persistGhlRecords(
   scope: GhlScope,
   records: GhlRecord[],
   expectedMappingRevision: string,
-): Promise<{ written: number; rejectedStaleMapping: boolean }> {
+  fence?: { stateId: string; leaseOwner: string; now: Date },
+): Promise<{ written: number; rejectedStaleMapping: boolean; fenced?: boolean }> {
   const identities = await loadGhlIdentities(scope);
   if (ghlMappingRevision(identities) !== expectedMappingRevision) {
     return { written: 0, rejectedStaleMapping: true };
@@ -239,6 +247,17 @@ export async function persistGhlRecords(
   let written = 0;
   try {
     await client.query("begin");
+    if (fence) {
+      const held = await client.query(
+        `select 1 from work_ghl_sync_state
+          where id = $1 and lease_owner = $2 and lease_expires_at > $3`,
+        [fence.stateId, fence.leaseOwner, fence.now.toISOString()],
+      );
+      if (!held.rows.length) {
+        await client.query("rollback");
+        return { written: 0, rejectedStaleMapping: false, fenced: true };
+      }
+    }
     for (const record of records) {
       const decision = relationFor(record, identities);
       if (decision.personId) {
@@ -261,6 +280,7 @@ export async function persistGhlRecords(
           personId: decision.personId,
           relation: decision.relation,
           summary: event.correctionStatus === "original" ? record.summary : event.summary,
+          occurredAt: event.occurredAt,
         });
       } else {
         await removeMirror(client, scope, event.id);
@@ -286,7 +306,8 @@ export async function reconcileGhlAttribution(scope: GhlScope, actorId: string):
   const events = await getPool().query(
     `select id, person_id, metadata, title, summary, artifact_url, occurred_at
        from work_evidence_events
-      where organization_id = $1 and provider = 'ghl' and metadata->'actor'->>'id' = $2`,
+      where organization_id = $1 and provider = 'ghl' and metadata->'actor'->>'id' = $2
+        and correction_status <> 'retracted'`,
     [scope.organizationId, actorId],
   );
   let attributed = 0;
@@ -346,6 +367,7 @@ export async function reconcileGhlAttribution(scope: GhlScope, actorId: string):
         personId,
         relation,
         summary: String(row.summary ?? ""),
+        occurredAt: new Date(String(row.occurred_at)).toISOString(),
       });
       attributed += 1;
     } else {
@@ -356,7 +378,7 @@ export async function reconcileGhlAttribution(scope: GhlScope, actorId: string):
   return { attributed, retracted };
 }
 
-export async function requireGhlEvidenceAccess(access: WorkOsAccess, eventId: string): Promise<{
+export async function requireGhlEvidenceAccess(access: WorkOsAccess, eventId: string, options: { allowDisconnected?: boolean } = {}): Promise<{
   scope: GhlScope;
   record: GhlRecord;
   personId: string | null;
@@ -384,11 +406,11 @@ export async function requireGhlEvidenceAccess(access: WorkOsAccess, eventId: st
     [access.organizationId],
   );
   const connectionRow = connection.rows[0] as Json | undefined;
-  if (!connectionRow) throw new WorkOsNotFoundError("GHL connection not found");
+  if (!connectionRow && !options.allowDisconnected) throw new WorkOsNotFoundError("GHL connection not found");
   const scope: GhlScope = {
     organizationId: access.organizationId,
-    connectionId: String(connectionRow.id),
-    locationId: String(ghl.locationId ?? connectionRow.external_workspace_id),
+    connectionId: String(connectionRow?.id ?? ghl.connectionId ?? "disconnected"),
+    locationId: String(ghl.locationId ?? connectionRow?.external_workspace_id ?? ""),
   };
   const record: GhlRecord = {
     key: String(event.external_event_id),
@@ -423,10 +445,7 @@ export async function correctGhlEvidence(
   eventId: string,
   input: { status: string; summary?: string; reason?: string },
 ): Promise<Json> {
-  const { event, personId } = await requireGhlEvidenceAccess(access, eventId).catch((error) => {
-    if (error instanceof WorkOsForbiddenError && access.role !== "admin") throw error;
-    throw error;
-  });
+  const { event, personId } = await requireGhlEvidenceAccess(access, eventId, { allowDisconnected: true });
   const allowed = access.role === "employee" ? ["disputed"] : ["disputed", "corrected", "retracted"];
   if (!allowed.includes(input.status)) throw new WorkOsValidationError(`correction_status must be ${allowed.join(" or ")}`);
   if (!personId && access.role !== "admin") throw new WorkOsForbiddenError("Only an administrator can correct shared GHL evidence");

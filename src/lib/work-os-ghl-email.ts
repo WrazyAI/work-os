@@ -22,6 +22,10 @@ export function ghlContentRetentionDays(env: NodeJS.ProcessEnv = process.env): n
   return Math.min(3_650, Math.max(1, Math.floor(value)));
 }
 
+function validCodePoint(code: number): boolean {
+  return Number.isInteger(code) && code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+}
+
 function decodeEntities(value: string): string {
   const named: Record<string, string> = {
     amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -30,11 +34,11 @@ function decodeEntities(value: string): string {
   return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
     if (entity.startsWith("#x") || entity.startsWith("#X")) {
       const code = Number.parseInt(entity.slice(2), 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      return validCodePoint(code) ? String.fromCodePoint(code) : "";
     }
     if (entity.startsWith("#")) {
       const code = Number.parseInt(entity.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      return validCodePoint(code) ? String.fromCodePoint(code) : "";
     }
     return named[entity.toLowerCase()] ?? match;
   });
@@ -46,7 +50,8 @@ function stripQuotedThread(value: string): string {
   for (const line of lines) {
     if (/^\s*On .+ wrote:\s*$/i.test(line)) break;
     if (/^\s*-{2,}\s*(Original Message|Forwarded message)\s*-{2,}\s*$/i.test(line)) break;
-    if (/^\s*From:\s+.+$/i.test(line) && kept.some((keptLine) => keptLine.trim() === "")) break;
+    if (/^\s*Forwarded message\b/i.test(line)) break;
+    if (/^\s*From:\s+.+$/i.test(line)) break;
     if (/^\s*>/.test(line)) continue;
     kept.push(line);
   }
@@ -64,7 +69,7 @@ export function emailBodyToText(body: string, contentType: string, maxChars = MA
       .replace(/<!--[\s\S]*?-->/g, " ")
       .replace(/<(script|style|head|noscript|iframe|object|embed)[\s\S]*?<\/\1\s*>/gi, " ")
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, " ")
+      .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, "\n")
       .replace(/<[^>]*>/g, "");
     value = decodeEntities(value);
   }
@@ -74,7 +79,9 @@ export function emailBodyToText(body: string, contentType: string, maxChars = MA
     .replace(/\n{3,}/g, "\n\n")
     .split("\n")
     .map((line) => line.trim())
+    .filter((line) => line.length > 0)
     .join("\n")
+    .replace(/\n+/g, " ")
     .trim();
   if (normalized.length > maxChars) return { text: normalized.slice(0, maxChars).trimEnd(), truncated: true };
   return { text: normalized, truncated: inputTruncated };
@@ -92,11 +99,56 @@ function contentExpiry(occurredAt: string): { expiresAt: Date; sourceOccurredAt:
   return { expiresAt: expiry, sourceOccurredAt: occurredAt, observed: false };
 }
 
-async function defaultFetchEmail(scope: GhlScope, emailId: string): Promise<EmailDetail> {
-  const token = await loadGhlCredential(scope);
-  const client = createGhlClient({ scope, token });
+async function fetchEmailFromClient(client: ReturnType<typeof createGhlClient>, scope: GhlScope, emailId: string): Promise<EmailDetail> {
   const body = await client.read({ path: `/conversations/messages/email/${encodeURIComponent(emailId)}`, query: { locationId: scope.locationId } });
   return (body && typeof body === "object" ? body : {}) as EmailDetail;
+}
+
+async function defaultFetchEmail(scope: GhlScope, emailId: string): Promise<EmailDetail> {
+  const token = await loadGhlCredential(scope);
+  return fetchEmailFromClient(createGhlClient({ scope, token }), scope, emailId);
+}
+
+/** Bounded content hydration for the due job: only verified employee-sent
+ * emails without a ready content row, oldest first. */
+export async function hydrateDueGhlEmailContent(input: { scope: GhlScope; now: Date; limit: number }): Promise<{ analyzed: number; unavailable: number }> {
+  let token: string;
+  try {
+    token = await loadGhlCredential(input.scope);
+  } catch {
+    return { analyzed: 0, unavailable: 0 };
+  }
+  const rows = await getPool().query(
+    `select e.id, e.metadata
+       from work_evidence_events e
+       left join work_ghl_email_content c on c.evidence_event_id = e.id and c.analysis_version is not null
+      where e.organization_id = $1 and e.provider = 'ghl'
+        and e.correction_status <> 'retracted'
+        and e.metadata->'ghl'->>'kind' = 'email'
+        and e.metadata->'ghl'->>'relation' = 'performed'
+        and c.id is null
+      order by e.occurred_at asc
+      limit $2`,
+    [input.scope.organizationId, Math.max(1, Math.min(input.limit, 10))],
+  );
+  const client = createGhlClient({ scope: input.scope, token });
+  let analyzed = 0;
+  let unavailable = 0;
+  for (const row of rows.rows as Json[]) {
+    const ghl = (((row.metadata as Json)?.ghl ?? {}) as Json);
+    const emailId = ghl.emailId ? String(ghl.emailId) : "";
+    if (!emailId) continue;
+    const result = await analyzeGhlEmail({
+      scope: input.scope,
+      eventId: String(row.id),
+      emailId,
+      now: input.now,
+      fetchEmail: () => fetchEmailFromClient(client, input.scope, emailId),
+    });
+    if (result.state === "ready") analyzed += 1;
+    else if (result.state === "unavailable") unavailable += 1;
+  }
+  return { analyzed, unavailable };
 }
 
 interface EmailCompletion {
@@ -232,9 +284,11 @@ export async function analyzeGhlEmail(input: {
     evidence = null;
   }
 
+  const atWrite = new Date();
+  if (expiry.expiresAt.getTime() <= atWrite.getTime()) return { state: "expired", contentHash: null };
   const summaryCipher = evidence ? encryptProviderSecret(evidence.summary) : null;
   const excerptCipher = evidence ? encryptProviderSecret(evidence.excerpt) : null;
-  await getPool().query(
+  const saved = await getPool().query(
     `insert into work_ghl_email_content
       (organization_id, connection_id, evidence_event_id, content_hash, excerpt_cipher, summary_cipher,
        analysis_version, source_occurred_at, observed_at, expires_at, content_purged_at)
@@ -247,7 +301,9 @@ export async function analyzeGhlEmail(input: {
        source_occurred_at = excluded.source_occurred_at,
        expires_at = excluded.expires_at,
        content_purged_at = null,
-       updated_at = now()`,
+       updated_at = now()
+     where work_ghl_email_content.content_purged_at is null
+     returning id`,
     [
       input.scope.organizationId,
       input.scope.connectionId,
@@ -261,6 +317,7 @@ export async function analyzeGhlEmail(input: {
       expiry.expiresAt.toISOString(),
     ],
   );
+  if (!saved.rows.length) return { state: "expired", contentHash: null };
   return { state: evidence ? "ready" : "unavailable", contentHash };
 }
 

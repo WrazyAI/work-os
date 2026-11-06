@@ -112,9 +112,12 @@ function normalizeMessage(kind: "email" | "sms" | "call", payload: Json, context
 
   let relation: GhlRelation;
   let basis: string;
-  if (kind === "call" && direction === "inbound") {
+  if (direction === "inbound") {
     relation = "unknown";
-    basis = "An inbound call does not establish which employee answered or handled it.";
+    basis = "An inbound message or call does not establish which employee handled it.";
+  } else if (source === "api") {
+    relation = "unknown";
+    basis = "An API-originated message is not automatically the employee's action.";
   } else {
     const decision = humanRelation(context, actorId, source);
     relation = decision.relation;

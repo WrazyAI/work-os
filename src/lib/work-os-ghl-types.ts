@@ -57,6 +57,7 @@ export interface GhlActivityItem extends GhlRecord {
   personId: string | null;
   excerpt: string | null;
   contentExpiresAt: string | null;
+  contentId: string | null;
 }
 
 export interface GhlActivity {

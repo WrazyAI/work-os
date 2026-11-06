@@ -183,7 +183,13 @@ export default function AdminEvidencePage() {
   const githubConnection = (connections.data?.connections ?? []).find((row) => row.provider === "github" && row.active !== false) ?? null;
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
   const ghlConnection = (connections.data?.connections ?? []).find((row) => row.provider === "ghl" && row.active !== false) ?? null;
-  const ghlAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "ghl");
+  const ghlAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "ghl" && row.person_id && row.verified === true);
+  const ghlStatus = useQuery<{ state: string; lastSyncedAt: string | null; coverage: Array<{ kind: string; state: string }> }>({
+    queryKey: ["work-os", "ghl", "status"],
+    queryFn: () => adminFetch("/api/work-os/admin/integrations/ghl/status"),
+    enabled: !!ghlConnection,
+    staleTime: 30_000,
+  });
   const actors = githubActors.data?.actors ?? [];
   // Provider bots are automation, not people: mapping one to a teammate would
   // attribute machine work to a person, so they never enter the person queue.
@@ -265,8 +271,13 @@ export default function AdminEvidencePage() {
             </div>
             <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
               {ghlConnection
-                ? <>Read-only PIT polling · {ghlAccounts.length} mapped account{ghlAccounts.length === 1 ? "" : "s"}. Shared, automated and assigned-only records stay context, never personal work.</>
+                ? <>Read-only PIT polling · {ghlAccounts.length} verified account{ghlAccounts.length === 1 ? "" : "s"} · {ghlStatus.data?.state ?? "checking"}{ghlStatus.data?.lastSyncedAt ? ` · last sync ${relativeTime(ghlStatus.data.lastSyncedAt)}` : ""}. Shared, automated and assigned-only records stay context, never personal work.</>
                 : "Connect the GoHighLevel location through the protected server credential to bring calls, messages, email, appointments and CRM activity into evidence."}
+              {ghlStatus.data?.coverage?.length ? (
+                <span className="mt-1 block text-[10.5px] text-[var(--text-tertiary)]">
+                  Coverage: {ghlStatus.data.coverage.map((entry) => `${entry.kind} ${entry.state}`).join(" · ")}
+                </span>
+              ) : null}
             </p>
             <p className="mt-3 text-[10.5px] text-[var(--text-tertiary)]">Calls · email · SMS · appointments · notes · tasks · opportunities</p>
           </div>
@@ -494,7 +505,8 @@ export default function AdminEvidencePage() {
         {selected ? (
           <div className="grid gap-4">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-              <span>{selected.source === "loom" ? "Loom recording" : selected.source}</span>
+              <span>{selected.source === "loom" ? "Loom recording" : selected.source === "ghl" ? "GoHighLevel" : selected.source}</span>
+              {selected.ghl?.actorLabel ? <span>{selected.ghl.actorLabel}</span> : null}
               {selected.event?.evidence_class ? <span>{statusLabel(selected.event.evidence_class)}</span> : null}
               {(() => {
                 const metadata = (selected.event?.metadata ?? {}) as AnyRow;

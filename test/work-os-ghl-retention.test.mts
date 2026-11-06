@@ -40,15 +40,15 @@ test("expiry redacts encrypted content and every registered machine copy while l
     const intervalId = randomUUID();
     await f.db.query(
       "insert into work_reports (id, organization_id, status, generated_markdown) values ($1,$2,'pending_review',$3)",
-      [reportId, org, "Draft included SYNTHETIC_EMAIL_BODY_SENTINEL full detail."],
+      [reportId, org, "Draft included SYNTHETIC_EMAIL_BODY_SENTINEL excerpt with other detail."],
     );
     await f.db.query(
       "insert into work_report_versions (id, report_id, markdown) values ($1,$2,$3)",
-      [versionId, reportId, "Version included SYNTHETIC_EMAIL_BODY_SENTINEL."],
+      [versionId, reportId, "Version: SYNTHETIC_EMAIL_BODY_SENTINEL summary."],
     );
     await f.db.query(
       "insert into work_activity_intervals (id, organization_id, headline, ai_detail, final_detail) values ($1,$2,$3,$4,$5)",
-      [intervalId, org, "Recap headline", "Detail with SYNTHETIC_EMAIL_BODY_SENTINEL.", "Employee wrote: keep this line."],
+      [intervalId, org, "Recap headline", "SYNTHETIC_EMAIL_BODY_SENTINEL summary", "Employee wrote: keep this line."],
     );
     for (const reference of [
       { table: "work_reports", id: reportId, field: "generated_markdown" },
@@ -69,6 +69,7 @@ test("expiry redacts encrypted content and every registered machine copy while l
     const report = (await rows(f.db, "select status, generated_markdown from work_reports")).at(0)!;
     assert.equal(report.status, "pending_review", "report review state is not regenerated");
     assert.equal(String(report.generated_markdown).includes("GHL email evidence expired"), true);
+    assert.equal(String(report.generated_markdown).includes("other detail"), true, "non-email report text is preserved");
     assert.equal(JSON.stringify(await rows(f.db, "select * from work_reports")).includes("SYNTHETIC_EMAIL_BODY_SENTINEL"), false);
     assert.equal(JSON.stringify(await rows(f.db, "select * from work_report_versions")).includes("SYNTHETIC_EMAIL_BODY_SENTINEL"), false);
     const interval = (await rows(f.db, "select ai_detail, final_detail, review_status from work_activity_intervals")).at(0)!;

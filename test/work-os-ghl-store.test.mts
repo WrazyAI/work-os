@@ -109,6 +109,44 @@ test("a snapshot without provider time stays contextual and is not an occurrence
   }
 });
 
+test("an undated record does not move its observation date on re-sync", async () => {
+  const f = await fixture();
+  try {
+    const ctx = await context();
+    const record = normalizeGhlRecord("appointment", fixtures.appointmentWithoutTimestamps, ctx)[0];
+    await persistGhlRecords(scope, [record], ctx.revision);
+    const first = (await rows(f.db, "select occurred_at, metadata from work_evidence_events where provider = 'ghl'"))[0] as any;
+    const later = normalizeGhlRecord("appointment", fixtures.appointmentWithoutTimestamps, { ...ctx, observedAt: "2026-11-09T12:00:00.000Z" })[0];
+    await persistGhlRecords(scope, [later], ctx.revision);
+    const second = (await rows(f.db, "select occurred_at, metadata from work_evidence_events where provider = 'ghl'"))[0] as any;
+    assert.equal(new Date(second.occurred_at).toISOString(), new Date(first.occurred_at).toISOString());
+    assert.equal(second.metadata.ghl.occurredAt, null);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a lost lease fences the transaction before any evidence write", async () => {
+  const f = await fixture();
+  try {
+    const ctx = await context();
+    await persistGhlRecords(scope, normalizeGhlRecord("email", fixtures.manualEmail, ctx), ctx.revision);
+    const state = (await rows(
+      f.db,
+      `insert into work_ghl_sync_state (organization_id, connection_id, kind, partition_key, state)
+       values ('${scope.organizationId}', '${scope.connectionId}', 'email', 'fence-test', 'running') returning id`,
+    ))[0]!;
+    const result = await persistGhlRecords(scope, normalizeGhlRecord("email", fixtures.manualEmail, ctx), ctx.revision, {
+      stateId: state.id,
+      leaseOwner: "missing-owner",
+      now: new Date("2026-11-06T12:00:00.000Z"),
+    });
+    assert.equal(result.fenced, true);
+  } finally {
+    await f.close();
+  }
+});
+
 test("an employee correction survives a later provider re-sync", async () => {
   const f = await fixture();
   try {

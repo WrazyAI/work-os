@@ -659,6 +659,7 @@ export function normalizeIntervals(raw: unknown): AdminIntervalListResponse {
         description: asText(entry.description),
         relation: entry.relation === "triggered" ? "triggered" : "performed",
         url: asTextOrNull(entry.url),
+        ...(entry.source === "ghl" ? { source: "ghl" as const } : { source: "github" as const }),
       })),
       employeeFeedback: asTextOrNull(row.employeeFeedback),
       failureReason: asTextOrNull(row.failureReason),

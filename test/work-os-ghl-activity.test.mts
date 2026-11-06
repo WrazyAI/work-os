@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fixture, org, person, scope } from "./helpers/work-os-ghl-fixture.mts";
 import { ghlMappingRevision, loadGhlIdentities, persistGhlRecords } from "../src/lib/work-os-ghl-store";
 import { normalizeGhlRecord } from "../src/lib/work-os-ghl-normalize";
-import { formatGhlActivityBlock, ghlRecordedActivityAllowlist, listGhlActivity } from "../src/lib/work-os-ghl-activity";
+import { eodGhlFactsFromActivity, formatGhlActivityBlock, ghlRecordedActivityAllowlist, listGhlActivity } from "../src/lib/work-os-ghl-activity";
 import { encryptProviderSecret } from "../src/lib/work-os-secrets";
 
 process.env.WORK_OS_PROVIDER_SECRET_KEY = Buffer.alloc(32, 8).toString("base64");
@@ -88,7 +88,7 @@ test("the scan is bounded at 300 rows and reports that it was capped", async () 
        select $1, 'ghl', 'bulk-' || n, 'note.created', 'output_evidence', $2,
               '2026-11-03T18:17:00Z'::timestamptz + (n || ' seconds')::interval,
               'Contact note added', 'Contact note recorded by GHL.',
-              jsonb_build_object('ghl', jsonb_build_object('kind','note','action','created','relation','performed','occurredAt','2026-11-03T18:17:00Z','observedAt','2026-11-06T12:00:00Z'))
+              jsonb_build_object('ghl', jsonb_build_object('kind','note','action','created','relation','performed','occurredAt','2026-11-03T18:17:00Z','observedAt','2026-11-06T12:00:00Z','connectionId','${scope.connectionId}','locationId','${scope.locationId}'))
          from generate_series(1, 301) as n`,
       [org, person],
     );
@@ -123,6 +123,44 @@ test("one logical email stays one fact after delivery-state updates and grounds 
     assert.equal(allowlist.length, 1);
     assert.equal(allowlist[0]!.source, "ghl");
     assert.equal(allowlist[0]!.eventId, activity.items[0]!.eventId);
+  } finally {
+    await f.close();
+  }
+});
+
+test("repeated appointment snapshots do not manufacture performed actions", async () => {
+  const f = await fixture();
+  try {
+    const identities = await loadGhlIdentities(scope);
+    const ctx = { scope, identities, observedAt: "2026-11-06T12:00:00.000Z" };
+    const first = normalizeGhlRecord("appointment", fixtures.appointmentCreatedByUser, ctx);
+    const second = normalizeGhlRecord("appointment", {
+      ...fixtures.appointmentCreatedByUser,
+      status: "rescheduled",
+      dateUpdated: "2026-11-04T12:00:00.000Z",
+    }, ctx);
+    await persistGhlRecords(scope, [...first, ...second], ghlMappingRevision(identities));
+    const activity = await listGhlActivity({
+      scope, personId: person, from: "2026-11-01T00:00:00.000Z", through: "2026-11-07T00:00:00.000Z",
+      includeOrganizationContext: false,
+    });
+    assert.equal(activity.items.filter((item) => item.kind === "appointment").length, 1);
+    assert.equal(eodGhlFactsFromActivity(activity).performed.appointment ?? 0, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("retracted evidence disappears from recap and EOD reads", async () => {
+  const f = await fixture();
+  try {
+    await seed();
+    await f.db.query("update work_evidence_events set correction_status = 'retracted' where provider = 'ghl'");
+    const activity = await listGhlActivity({
+      scope, personId: person, from: "2026-11-01T00:00:00.000Z", through: "2026-11-07T00:00:00.000Z",
+      includeOrganizationContext: false,
+    });
+    assert.equal(activity.items.length, 0);
   } finally {
     await f.close();
   }
