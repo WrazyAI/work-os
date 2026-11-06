@@ -28,6 +28,7 @@ export interface ShiftPulseShift {
 }
 
 export interface ShiftPulseAttendance {
+  source?: unknown;
   state?: unknown;
   stale?: unknown;
   clockedInAt?: unknown;
@@ -39,6 +40,18 @@ export interface ShiftPulseAttendance {
 function validTime(value?: unknown) {
   const parsed = typeof value === "string" && value ? Date.parse(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Elapsed time is a duration, not a clock: past 99 hours an unbounded
+ * HH:MM string stops being readable, so it becomes days and hours. */
+export function formatElapsedDuration(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.floor(totalMinutes));
+  if (minutes >= 100 * 60) {
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    return `${days}d ${hours}h`;
+  }
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 export function shiftPulse(
@@ -69,7 +82,7 @@ export function shiftPulse(
   const observedElapsedMs = observedClockedInAt === null ? 0 : Math.max(0, observedEnd - observedClockedInAt - observedBreakSeconds * 1000);
   const observedMinutes = Math.floor(observedElapsedMs / 60_000);
   const observedBreakMinutes = Math.floor(observedBreakSeconds / 60);
-  const observedElapsedLabel = `${String(Math.floor(observedMinutes / 60)).padStart(2, "0")}:${String(observedMinutes % 60).padStart(2, "0")}`;
+  const observedElapsedLabel = formatElapsedDuration(observedMinutes);
   const observedBreakLabel = `${String(Math.floor(observedBreakMinutes / 60)).padStart(2, "0")}:${String(observedBreakMinutes % 60).padStart(2, "0")}`;
   const clockedInAt = validTime(session?.clocked_in_at);
   if (!session || clockedInAt === null || session.state === "clocked_out") {
@@ -82,10 +95,32 @@ export function shiftPulse(
     : (Number(session.paused_seconds) || 0));
   const elapsedMs = Math.max(0, end - clockedInAt - breakSeconds * 1000);
   const totalMinutes = Math.floor(elapsedMs / 60_000);
-  const elapsedLabel = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+  const elapsedLabel = formatElapsedDuration(totalMinutes);
   const breakMinutes = Math.floor(breakSeconds / 60);
   const breakLabel = `${String(Math.floor(breakMinutes / 60)).padStart(2, "0")}:${String(breakMinutes % 60).padStart(2, "0")}`;
   return { elapsedLabel, breakLabel, breakSeconds, progressPercent, observedElapsedLabel, observedBreakLabel, schedulePhase };
+}
+
+/**
+ * True when the scheduled window has ended but attendance still reads open.
+ * This is the state the dashboard must not present as "100% of the window" or
+ * as a healthy active shift: the timer is past its bound and the employee has
+ * an action left (clock out in the companion, or confirm the day). Attendance
+ * is authoritative when Worktivity observed it; a stale observation never
+ * overrides a mirrored open session, and a verified clock-out wins.
+ */
+export function shiftWindowEndedWithOpenSession(
+  pulse: Pick<ShiftPulse, "schedulePhase">,
+  session: ShiftPulseSession | null | undefined,
+  attendance?: ShiftPulseAttendance | null,
+): boolean {
+  if (pulse.schedulePhase !== "complete") return false;
+  const observed = attendance?.source === "worktivity";
+  const observedOpen = observed && !attendance?.stale && (attendance?.state === "active" || attendance?.state === "paused");
+  if (observedOpen) return true;
+  const observedClosed = observed && (attendance?.stale === true || attendance?.state === "clocked_out");
+  if (observedClosed) return false;
+  return Boolean(session && session.state !== "clocked_out" && validTime(session.clocked_in_at) !== null);
 }
 
 /** Remaining scheduled time as a compact label, or null when unavailable. */
