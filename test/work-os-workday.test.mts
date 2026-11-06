@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PGlite } from "@electric-sql/pglite";
 import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, promptInstant, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { ensureDailyPlan, ensureDailyPlanForDate } from "../src/lib/work-os-workday";
+import type { WorkOsAccess } from "../src/lib/work-os-api";
 
 const session = {
   state: "active" as const,
@@ -312,4 +315,94 @@ test("plan item bounds are coherent so a seeded plan can always be saved back", 
   assert.ok(PLAN_ITEM_DRAFT_HEADROOM > 0);
   assert.ok(seedLimit >= 100);
   assert.ok(MAX_DAILY_PLAN_ITEMS >= seedLimit + 8);
+});
+
+const planOrg = "10000000-0000-4000-8000-000000000001";
+const planPerson = "20000000-0000-4000-8000-000000000001";
+const planSession = "30000000-0000-4000-8000-000000000001";
+const planId = "40000000-0000-4000-8000-000000000001";
+const planAccess = {
+  organizationId: planOrg,
+  personId: planPerson,
+  role: "employee",
+  ctx: { user: { id: planPerson } },
+  featureFlags: {},
+} as unknown as WorkOsAccess;
+
+async function planReopenFixture() {
+  const database = new PGlite();
+  await database.exec(`
+    create table work_daily_plans(
+      id uuid primary key, organization_id uuid not null, person_id uuid not null, session_id uuid,
+      shift_date date not null, status text not null default 'draft', revision integer not null default 1,
+      confirmed_at timestamptz, freeform_intent text, focus_summary text, goal_provenance text,
+      suggestion_task_ids jsonb default '[]', interpretation_metadata jsonb default '{}',
+      clarification_answers jsonb default '{}', updated_at timestamptz default now()
+    );
+    create table work_daily_plan_items(
+      id uuid primary key, plan_id uuid references work_daily_plans(id), task_id uuid,
+      title_snapshot text, disposition text, item_kind text, completion_state text, rank integer
+    );
+    create table work_audit_log(
+      organization_id uuid, actor_user_id uuid, action text, target_type text, target_id text,
+      metadata jsonb, created_at timestamptz default now()
+    );
+  `);
+  await database.query(`
+    insert into work_daily_plans(id, organization_id, person_id, session_id, shift_date, status, revision, confirmed_at, updated_at)
+    values ($1, $2, $3, $4, '2026-11-06', 'closed', 3, null, '2026-11-06T16:26:19Z')
+  `, [planId, planOrg, planPerson, planSession]);
+  const previousPool = globalThis.__workOsPgPool;
+  globalThis.__workOsPgPool = {
+    query: async (sql: string, values?: unknown[]) => database.query(sql, values),
+  } as never;
+  return {
+    database,
+    close: async () => {
+      globalThis.__workOsPgPool = previousPool;
+      await database.close();
+    },
+  };
+}
+
+test("a live session reopens its closed plan without discarding the editor's revision", async () => {
+  const fixture = await planReopenFixture();
+  try {
+    const plan = await ensureDailyPlan(planAccess, {
+      id: planSession,
+      shift_date: "2026-11-06",
+      state: "active",
+    });
+    assert.equal(plan.status, "draft");
+    assert.equal(plan.revision, 3, "reopening a lifecycle status must not make an in-flight save stale");
+    const audit = await fixture.database.query(
+      "select action, metadata from work_audit_log where target_id = $1",
+      [planId],
+    );
+    assert.equal(audit.rows.length, 1);
+    assert.equal((audit.rows[0] as { action: string }).action, "plan.workday_reopened");
+    assert.equal((audit.rows[0] as { metadata: { revision: number } }).metadata.revision, 3);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("today's plan read reopens a live session's plan and leaves a clocked-out day closed", async () => {
+  const fixture = await planReopenFixture();
+  try {
+    const live = await ensureDailyPlanForDate(planAccess, "2026-11-06", {
+      id: planSession,
+      state: "active",
+    });
+    assert.equal(live.status, "draft");
+
+    await fixture.database.query("update work_daily_plans set status = 'closed' where id = $1", [planId]);
+    const closed = await ensureDailyPlanForDate(planAccess, "2026-11-06", {
+      id: planSession,
+      state: "clocked_out",
+    });
+    assert.equal(closed.status, "closed");
+  } finally {
+    await fixture.close();
+  }
 });

@@ -20,6 +20,7 @@ import {
   type PlanAnnotation,
   type PlanDraftEdit,
 } from "./planningAnnotations";
+import { PLAN_SAVE_FALLBACK, type PlanningConfirmResult } from "./planningSave";
 
 export type PlanningSessionState = "idle" | "drafting" | "interpreting" | "refining" | "clarifying" | "reviewing" | "saving" | "saved" | "confirmed" | "offline_fallback" | "ai_unavailable" | "save_error" | "conflict";
 /** The planning modal is a two-view flow: the input view and the drafted plan. */
@@ -256,7 +257,7 @@ export function PlanningSession({
   onClose: () => void;
   onInterpret: (input: string, loom?: { url?: string; transcript?: string }) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[], clarificationAnswers: Record<string, string>) => Promise<PlanningInterpretation>;
-  onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
+  onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<PlanningConfirmResult>;
   /** Goal text handed off from the dock Focus panel. Takes precedence over the
    * saved plan when the modal opens, so Apply lands on the same intent. */
   seedInput?: string;
@@ -516,6 +517,7 @@ export function PlanningSession({
     })) : {};
     try {
       const result = await onConfirm(planningInput, effective, answersForSave);
+      if (typeof result === "object") { setError(result.failed); setState("save_error"); return; }
       if (result === "confirmed") { setState("confirmed"); return; }
       if (result === "conflict") { setState("conflict"); return; }
       if (result === "rebuild") {
@@ -527,10 +529,9 @@ export function PlanningSession({
         setState("drafting");
         return;
       }
-      if (result === "failed") { setState("save_error"); return; }
       setState(result === "queued" ? "offline_fallback" : "saved");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Your plan was not saved.");
+      setError(value instanceof Error ? value.message : "");
       setState("save_error");
     }
   };
@@ -736,7 +737,7 @@ export function PlanningSession({
         {state === "ai_unavailable" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error} {hasDraft ? "Your current draft is kept." : active ? "Try building again — confirming needs an AI-built plan while on shift." : "You can still save your own planning note."}</span></div>}
         {state === "offline_fallback" && <div className="planning-notice"><AlertTriangle size={16} /><span>{interpretation ? "Your structured plan is queued locally. It is not confirmed until sync succeeds." : "Your raw planning note is queued locally."}</span></div>}
         {state === "conflict" && <div className="planning-notice"><AlertTriangle size={16} /><span>Your workspace has a newer confirmed plan, and it is showing now. Close this and reopen the focus editor to change it.</span></div>}
-        {state === "save_error" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error || "Your plan was not saved. Check the connection or correct the plan and try again."}</span></div>}
+        {state === "save_error" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error || PLAN_SAVE_FALLBACK}</span></div>}
       </div>
       <footer>
         <>

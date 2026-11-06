@@ -27,6 +27,7 @@ const adminShellSource = readText(resolve(root, "src/adminShell.ts"));
 const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
+const planningSave = readText(resolve(root, "src/planningSave.ts"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
@@ -352,7 +353,7 @@ describe("operational visualizations", () => {
     expect(planningSession).toContain("Your daily commitments are on the record.");
     expect(planningSession).toContain("planning-confirmation-title");
     expect(planningSession).toContain("queued locally");
-    expect(planningSession).toContain("Your plan was not saved.");
+    expect(planningSave).toContain("Your plan was not saved.");
     expect(planningSession).toContain("planning-clarification-");
     expect(planningSession).toContain("clarificationAnswers");
     expect(app).toContain("clarification_answers");

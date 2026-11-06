@@ -77,6 +77,7 @@ import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
 import { BootOverlay, useBootRise } from "./BootHandoff";
 import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
+import { classifyPlanSaveFailure, type PlanningConfirmResult } from "./planningSave";
 import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
@@ -3770,7 +3771,7 @@ export default function App() {
     return { ...result.interpretation, buildId: result.build_id };
   }
 
-  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild"> {
+  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<PlanningConfirmResult> {
     if (syncBypassRef.current) {
       // Offline fixtures stay on-device. Debugger fixtures without a server plan
       // (e.g. Shift start) simply resolve — the modal owns its confirmed state.
@@ -3842,20 +3843,19 @@ export default function App() {
       void emit("work-os://main-day-changed");
       return "confirmed";
     } catch (value) {
-      const message = errorMessage(value, "Your plan could not be saved.");
-      if (/changed on another device/i.test(message)) {
+      const outcome = classifyPlanSaveFailure(value);
+      if (outcome === "conflict") {
         resyncPlanFromServer();
         notifications.info("Showing the saved plan from your workspace. Close and reopen the focus editor to change it.", "Plan refreshed");
         return "conflict";
       }
       // An expired/used AI build cannot be retried with the same build id;
       // surface it so the editor drops the stale draft and offers Build again.
-      if (/AI build/i.test(message)) {
+      if (outcome === "rebuild") {
         notifications.info("The AI plan build expired. Build the plan again to confirm it.", "Build again");
         return "rebuild";
       }
-      setPlanSaveState("offline");
-      return "failed";
+      return outcome;
     } finally {
       setBusy(false);
     }
