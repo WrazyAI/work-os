@@ -62,6 +62,15 @@ export interface EvidenceRow {
   id: string;
   person_id: string | null;
   task_id: string | null;
+  evidence_event_id?: string | null;
+  ghl?: {
+    eventId: string;
+    relation: string;
+    actorLabel: string;
+    assigneeLabels: string[];
+    contentAvailability: string;
+    coverage: string;
+  } | null;
   evidence_date: string;
   source: string;
   title: string;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { createEvidence } from "@/lib/work-os";
+import { canViewGhlOrganizationContext, ghlEvidenceRow } from "@/lib/work-os-ghl-evidence-view";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsAdmin, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -57,6 +58,34 @@ export async function GET(req: Request) {
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(500, Math.floor(limitParam))) : 200;
     const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
     if (error) throw new Error(`load Work OS evidence: ${error.message}`);
+
+    // Organization-scoped GHL records that are not attributable to one person
+    // (shared accounts, automation, assigned-only context) are admin-only and
+    // never appear behind a person filter.
+    let ghlRows: Record<string, unknown>[] = [];
+    const includeGhlContext = !requestedPersonId
+      && canViewGhlOrganizationContext(auth.access)
+      && (!sp.get("source") || sp.get("source") === "ghl");
+    if (includeGhlContext) {
+      let ghlQuery = createAdminClient().from("work_evidence_events")
+        .select("id,person_id,occurred_at,title,summary,evidence_class,correction_status,metadata")
+        .eq("organization_id", auth.access.organizationId)
+        .eq("provider", "ghl")
+        .is("person_id", null);
+      if (sp.get("date")) {
+        ghlQuery = ghlQuery.gte("occurred_at", `${sp.get("date")}T00:00:00.000Z`).lt("occurred_at", `${sp.get("date")}T23:59:59.999Z`);
+      } else {
+        if (sp.get("from")) ghlQuery = ghlQuery.gte("occurred_at", `${sp.get("from")}T00:00:00.000Z`);
+        if (sp.get("to")) ghlQuery = ghlQuery.lt("occurred_at", `${sp.get("to")}T23:59:59.999Z`);
+      }
+      if (correction) ghlQuery = ghlQuery.eq("correction_status", correction);
+      const ghlResult = await ghlQuery.order("occurred_at", { ascending: false }).limit(limit);
+      if (ghlResult.error) throw new Error(`load GHL organization evidence: ${ghlResult.error.message}`);
+      ghlRows = (ghlResult.data ?? []).map((row) => ghlEvidenceRow(row as Record<string, unknown>));
+    }
+    const merged = [...(data ?? []), ...ghlRows]
+      .sort((left, right) => String((right as Record<string, unknown>).created_at ?? "").localeCompare(String((left as Record<string, unknown>).created_at ?? "")))
+      .slice(0, limit);
     // Optional summary for the Evidence page's lead visual: source mix and a
     // daily volume series over the same filters, computed from date/source
     // columns only so the payload stays small.
@@ -78,6 +107,26 @@ export async function GET(req: Request) {
       if (summaryResult.error) throw new Error(`summarize Work OS evidence: ${summaryResult.error.message}`);
       const sources = new Map<string, number>();
       const days = new Map<string, number>();
+      let ghlContextCount = 0;
+      if (includeGhlContext) {
+        let ghlCount = createAdminClient().from("work_evidence_events")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", auth.access.organizationId)
+          .eq("provider", "ghl")
+          .is("person_id", null);
+        if (date) ghlCount = ghlCount.gte("occurred_at", `${date}T00:00:00.000Z`).lt("occurred_at", `${date}T23:59:59.999Z`);
+        else {
+          const summaryFrom = sp.get("from");
+          const summaryTo = sp.get("to");
+          if (summaryFrom) ghlCount = ghlCount.gte("occurred_at", `${summaryFrom}T00:00:00.000Z`);
+          if (summaryTo) ghlCount = ghlCount.lt("occurred_at", `${summaryTo}T23:59:59.999Z`);
+        }
+        if (correction) ghlCount = ghlCount.eq("correction_status", correction);
+        const ghlCountResult = await ghlCount;
+        if (ghlCountResult.error) throw new Error(`count GHL organization evidence: ${ghlCountResult.error.message}`);
+        ghlContextCount = ghlCountResult.count ?? 0;
+        if (ghlContextCount) sources.set("ghl", (sources.get("ghl") ?? 0) + ghlContextCount);
+      }
       for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
         const source = String(row.source ?? "unknown");
         sources.set(source, (sources.get(source) ?? 0) + 1);
@@ -85,14 +134,14 @@ export async function GET(req: Request) {
         if (day) days.set(day, (days.get(day) ?? 0) + 1);
       }
       return NextResponse.json({
-        evidence: data ?? [],
+        evidence: merged,
         summary: {
           sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
           days: [...days.entries()].map(([day, count]) => ({ date: day, count })).sort((left, right) => left.date.localeCompare(right.date)),
         },
       });
     }
-    return NextResponse.json({ evidence: data ?? [] });
+    return NextResponse.json({ evidence: merged });
   } catch (err) {
     return jsonError(err);
   }

@@ -2575,7 +2575,9 @@ Provider integrations surface as one band at the top of the Evidence page: a
 live provider card (connection state, workspace, mapped accounts, last event,
 and the repository-management action) beside future providers rendered as a
 quiet disabled card with a `Coming soon` pill and no controls — never a blurred
-mock. Unmapped provider accounts appear as
+mock. GoHighLevel is a live read-only source in the same band: PIT polling
+state, mapped accounts and category coverage, with shared/automated/assigned
+records kept as context and never as personal work. Unmapped provider accounts appear as
 a queue — account, event count, last activity, a person selector seeded from
 the employee's own provider username — with one `Map & backfill` action that
 verifies the account and attributes its earlier events. Accounts whose login

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Cable, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
+import GhlEvidenceDetail from "./GhlEvidenceDetail";
 import {
   adminFetch,
   adminKeys,
@@ -27,7 +28,6 @@ import {
   SelectField,
   Skeleton,
   StateMark,
-  StatusPill,
   Switch,
   relativeTime,
   statusLabel,
@@ -45,7 +45,7 @@ function isoDaysAgo(days: number) {
 const SOURCE_OPTIONS = [
   { value: "worktivity", label: "Worktivity (activity)" },
   { value: "github", label: "GitHub" },
-  { value: "ghl", label: "GHL — coming soon", disabled: true },
+  { value: "ghl", label: "GoHighLevel" },
   { value: "loom", label: "Loom" },
   { value: "manual", label: "Manual" },
   { value: "agent", label: "Agent" },
@@ -182,6 +182,8 @@ export default function AdminEvidencePage() {
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
   const githubConnection = (connections.data?.connections ?? []).find((row) => row.provider === "github" && row.active !== false) ?? null;
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
+  const ghlConnection = (connections.data?.connections ?? []).find((row) => row.provider === "ghl" && row.active !== false) ?? null;
+  const ghlAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "ghl");
   const actors = githubActors.data?.actors ?? [];
   // Provider bots are automation, not people: mapping one to a teammate would
   // attribute machine work to a person, so they never enter the person queue.
@@ -254,17 +256,19 @@ export default function AdminEvidencePage() {
             </div>
           </div>
 
-          <div className="rounded-[12px] border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)", opacity: 0.72 }} aria-disabled="true">
+          <div className="rounded-[12px] border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-                <Cable size={15} className="text-[var(--text-tertiary)]" aria-hidden /> GHL
+                <Cable size={15} className="text-[var(--text-tertiary)]" aria-hidden /> GoHighLevel
               </span>
-              <StatusPill tone="neutral">Coming soon</StatusPill>
+              <StateMark tone={ghlConnection ? "ok" : "warn"}>{ghlConnection ? "Connected" : "Not connected"}</StateMark>
             </div>
             <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
-              Opportunity, appointment, and conversation activity from GoHighLevel becomes output evidence for the mapped person.
+              {ghlConnection
+                ? <>Read-only PIT polling · {ghlAccounts.length} mapped account{ghlAccounts.length === 1 ? "" : "s"}. Shared, automated and assigned-only records stay context, never personal work.</>
+                : "Connect the GoHighLevel location through the protected server credential to bring calls, messages, email, appointments and CRM activity into evidence."}
             </p>
-            <p className="mt-3 text-[10.5px] text-[var(--text-tertiary)]">Opportunities · appointments · conversations</p>
+            <p className="mt-3 text-[10.5px] text-[var(--text-tertiary)]">Calls · email · SMS · appointments · notes · tasks · opportunities</p>
           </div>
         </div>
 
@@ -484,7 +488,7 @@ export default function AdminEvidencePage() {
         open={!!selected}
         onClose={() => { setSelected(null); setScreenshotUrl(null); setScreenshotError(null); }}
         title={selected?.title ?? "Evidence"}
-        subtitle={selected ? `${selected.person?.display_name ?? "Unattributed"} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
+        subtitle={selected ? `${selected.person?.display_name ?? (selected.source === "ghl" ? "Shared GHL activity" : "Unattributed")} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
         width={560}
       >
         {selected ? (
@@ -505,6 +509,9 @@ export default function AdminEvidencePage() {
               <span>recorded {relativeTime(selected.created_at)}</span>
             </div>
             {selected.summary ? <p className="text-[13px] leading-6 text-[var(--text-secondary)]">{selected.summary}</p> : <p className="text-[12.5px] text-[var(--text-tertiary)]">No summary was recorded for this item.</p>}
+            {selected.source === "ghl" && (selected.ghl?.eventId || selected.evidence_event_id) ? (
+              <GhlEvidenceDetail key={selected.ghl?.eventId ?? selected.evidence_event_id!} eventId={selected.ghl?.eventId ?? selected.evidence_event_id!} excerpt={null} sourceUrl={selected.url} />
+            ) : null}
             {selected.task ? (
               <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
                 <Link2 size={13} aria-hidden className="text-[var(--text-tertiary)]" /> Linked task: {selected.task.title}
