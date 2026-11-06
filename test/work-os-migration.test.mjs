@@ -71,6 +71,7 @@ const migrations = [
     "supabase/migrations/0066_work_task_assignment_and_status.sql",
     "supabase/migrations/0067_work_task_assigner_visibility.sql",
     "supabase/migrations/0068_work_sessions_day_index_reconcile.sql",
+    "supabase/migrations/0073_work_os_ghl_evidence.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -100,6 +101,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
     "work_employee_onboarding", "work_consent_records",
     "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_daily_plan_builds", "work_session_events", "work_task_day_events",
     "work_activity_intervals", "work_activity_interval_evidence",
+    "work_ghl_sync_state", "work_ghl_email_content", "work_ghl_content_references",
   ];
   const tables = await db.query(`
     select table_name from information_schema.tables
@@ -132,6 +134,26 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and column_name = any($1)
   `, [["interval_id", "screenshot_summary_id", "evidence_event_id", "captured_at", "ordinal", "used_in_model", "raw_image_shown", "selection_reason", "visible_app_snapshot", "frame_summary_snapshot"]]);
   assert.equal(activityIntervalEvidenceColumns.rows.length, 10);
+  const ghlContentColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_ghl_email_content'
+      and column_name = any($1)
+  `, [["content_hash", "excerpt_cipher", "summary_cipher", "expires_at", "content_purged_at", "source_occurred_at"]]);
+  assert.equal(ghlContentColumns.rows.length, 6, "GHL content retention has hashes, encrypted text, and expiry");
+  const ghlPrivate = await db.query(`
+    select relname, relrowsecurity from pg_class
+    where relname = any($1) order by relname
+  `, [["work_ghl_content_references", "work_ghl_email_content", "work_ghl_sync_state"]]);
+  assert.deepEqual(ghlPrivate.rows, [
+    { relname: "work_ghl_content_references", relrowsecurity: true },
+    { relname: "work_ghl_email_content", relrowsecurity: true },
+    { relname: "work_ghl_sync_state", relrowsecurity: true },
+  ], "GHL tables are server-only");
+  const ghlPublicGrants = await db.query(`
+    select grantee from information_schema.table_privileges
+    where table_name = any($1) and grantee = 'PUBLIC'
+  `, [["work_ghl_content_references", "work_ghl_email_content", "work_ghl_sync_state"]]);
+  assert.deepEqual(ghlPublicGrants.rows, [], "no public privileges on GHL tables");
   const taskAssignmentColumns = await db.query(`
     select column_name, is_nullable, column_default from information_schema.columns
     where table_schema='public' and table_name='work_tasks'

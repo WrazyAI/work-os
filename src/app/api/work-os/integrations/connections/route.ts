@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { attributeProviderActor } from "@/lib/work-os-evidence";
+import { reconcileGhlAttribution, redactProviderConfig } from "@/lib/work-os-ghl-store";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -21,7 +22,13 @@ export async function GET(req: Request) {
     ]);
     if (connectionError) throw new Error(`load provider connections: ${connectionError.message}`);
     if (accountError) throw new Error(`load source accounts: ${accountError.message}`);
-    return NextResponse.json({ connections: connections ?? [], accounts: accounts ?? [] });
+    return NextResponse.json({
+      connections: (connections ?? []).map((connection: Record<string, unknown>) => ({
+        ...connection,
+        config: redactProviderConfig(connection.config ?? {}),
+      })),
+      accounts: accounts ?? [],
+    });
   } catch (error) {
     return jsonError(error);
   }
@@ -51,7 +58,7 @@ export async function PUT(req: Request) {
       provider,
       external_workspace_id: externalWorkspaceId,
       active: body.active !== false,
-      config: body.config && typeof body.config === "object" ? body.config : {},
+      config: body.config && typeof body.config === "object" ? redactProviderConfig(body.config) : {},
       created_by: auth.access.ctx.user.id,
       updated_at: new Date().toISOString(),
     };
@@ -92,8 +99,22 @@ export async function PUT(req: Request) {
     // A newly verified, mapped account attributes earlier unattributed events
     // for the same actor so setup order never loses evidence.
     let attributed = 0;
+    let retracted = 0;
     const backfillErrors: string[] = [];
     for (const account of savedAccounts) {
+      if (provider === "ghl") {
+        try {
+          const result = await reconcileGhlAttribution(
+            { organizationId: auth.access.organizationId, connectionId: String(connection.id), locationId: externalWorkspaceId },
+            String(account.external_account_id),
+          );
+          attributed += result.attributed;
+          retracted += result.retracted;
+        } catch (reconcileError) {
+          backfillErrors.push(reconcileError instanceof Error ? reconcileError.message : "GHL attribution reconciliation failed");
+        }
+        continue;
+      }
       if (!account.person_id || account.verified !== true) continue;
       const alias = typeof (account.metadata as Record<string, unknown> | null)?.login === "string"
         ? String((account.metadata as Record<string, unknown>).login)
@@ -120,7 +141,13 @@ export async function PUT(req: Request) {
       metadata: { provider, externalWorkspaceId, accountCount: savedAccounts.length },
     });
     if (auditError) throw new Error(`audit provider connection: ${auditError.message}`);
-    return NextResponse.json({ connection, accounts: savedAccounts, attributed, ...(backfillErrors.length ? { backfillErrors } : {}) });
+    return NextResponse.json({
+      connection: { ...connection, config: redactProviderConfig(connection.config ?? {}) },
+      accounts: savedAccounts,
+      attributed,
+      ...(retracted ? { retracted } : {}),
+      ...(backfillErrors.length ? { backfillErrors } : {}),
+    });
   } catch (error) {
     return jsonError(error);
   }

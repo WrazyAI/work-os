@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { correctGhlEvidence } from "@/lib/work-os-ghl-store";
 import { jsonError, requireWorkOsAccess, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -25,6 +26,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ eventI
       .eq("organization_id", auth.access.organizationId).eq("id", eventId).single();
     if (loadError) throw new Error(`load evidence event: ${loadError.message}`);
     let personId = event.person_id as string | null;
+    if (event.provider === "ghl") {
+      const evidence = await correctGhlEvidence(auth.access, eventId, {
+        status,
+        summary: typeof body.summary === "string" ? body.summary : undefined,
+        reason: typeof body.reason === "string" ? body.reason : undefined,
+      });
+      return NextResponse.json({ evidence });
+    }
     if (!personId && auth.access.role === "admin" && typeof body.person_id === "string") {
       const { data: person, error: personError } = await db.from("work_people").select("id")
         .eq("organization_id", auth.access.organizationId).eq("id", body.person_id).maybeSingle();
