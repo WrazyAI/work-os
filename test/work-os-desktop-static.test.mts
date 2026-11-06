@@ -16,6 +16,14 @@ assert.match(rust, /set_focus\(\)/);
 const debugHost = read("src-tauri/src/debug_window.rs");
 // WebView2 can deadlock when a window is created in a synchronous command.
 assert.match(debugHost, /#\[tauri::command\]\s*pub async fn open_debug_window\s*\(/);
+// An async command runs off the main thread, and the monitor work-area read
+// behind the post-build fit calls NSScreen, which is main-thread only on
+// macOS, so the fit has to be handed back to the main thread.
+assert.match(rust, /window_fit::fit_to_work_area/);
+assert.match(debugHost, /run_on_main_thread/);
+// Two concurrent invokes would otherwise both pass the "already open" lookup
+// and race to build the same window label.
+assert.match(debugHost, /static OPEN_LOCK: Mutex<\(\)>/);
 assert.match(debugHost, /WebviewUrl::App\("debug\.html"\.into\(\)\)/);
 assert.doesNotMatch(debugHost, /\?debug=1/);
 
