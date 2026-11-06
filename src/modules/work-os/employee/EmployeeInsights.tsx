@@ -118,7 +118,11 @@ export default function EmployeeInsights() {
     closingCarryOver > 0 ||
     closingOverdue > 0 ||
     blockers > 0 ||
-    days.some((item) => Boolean(item.goal?.text?.trim()) || item.sessionQuality?.status === "needs_correction")
+    days.some((item) =>
+      Boolean(item.goal?.text?.trim()) ||
+      Number(item.trackedMinutes ?? 0) > 0 ||
+      item.sessionQuality?.status === "needs_correction",
+    )
   );
 
   return (
