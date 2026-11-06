@@ -192,6 +192,66 @@ test("disconnected or disabled locations are skipped by the due job", async () =
   }
 });
 
+test("completed one-shot partitions and an unchanged recurring window are not fetched again", async () => {
+  const f = await fixture();
+  try {
+    let calls = 0;
+    const source = fakeSource({
+      messages: async () => { calls += 1; return { items: [], nextCursor: null, capped: false }; },
+    });
+    await runGhlSync({ scope, now, maxPages: 50, deadlineMs: 40_000, source });
+    const first = calls;
+    assert.equal(first, 9, "three channels across backfill, recent and the first reconciliation");
+    await runGhlSync({ scope, now, maxPages: 50, deadlineMs: 40_000, source });
+    assert.equal(calls, first, "a completed one-shot partition is not refetched");
+  } finally {
+    await f.close();
+  }
+});
+
+test("contacts are paged in batches that match the notes and tasks actually read", async () => {
+  const f = await fixture();
+  try {
+    const seen: string[] = [];
+    let notesCalls = 0;
+    const source = fakeSource({
+      contacts: async ({ limit }) => {
+        assert.equal(limit, 10);
+        return {
+          items: Array.from({ length: limit }, (_, index) => ({ id: `contact-${index}` })),
+          nextCursor: "2",
+          capped: true,
+        };
+      },
+    });
+    const tracked: GhlSyncSource = {
+      ...source,
+      notes: async (contactId) => { notesCalls += 1; seen.push(contactId); return []; },
+      tasks: async () => [],
+    };
+    await runGhlSync({ scope, now, maxPages: 50, deadlineMs: 40_000, source: tracked });
+    assert.equal(notesCalls, 10, "every contact covered by the ten-item page is read");
+    assert.equal(new Set(seen).size, 10);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a provider 429 keeps the partition pending rather than failed", async () => {
+  const f = await fixture();
+  try {
+    await runGhlSync({
+      scope, now, maxPages: 1, deadlineMs: 40_000,
+      source: fakeSource({ messages: async () => { throw new GhlRequestError("GHL read failed (429)", 429); } }),
+    });
+    const state = (await rows(f.db, "select state, failure_reason from work_ghl_sync_state where partition_key = 'backfill:Call'"))[0] as any;
+    assert.equal(state.state, "pending");
+    assert.match(state.failure_reason, /rate/i);
+  } finally {
+    await f.close();
+  }
+});
+
 test("the legacy GHL webhook stays closed for a polling connection", async () => {
   const { POST } = await import("../src/app/api/work-os/integrations/ghl/webhook/route");
   const response = await POST(new Request("http://localhost/api/work-os/integrations/ghl/webhook", { method: "POST", body: "{}" }));

@@ -24,6 +24,10 @@ import type { WorkOsAccess } from "../src/lib/work-os-api";
 
 process.env.WORK_OS_PROVIDER_SECRET_KEY = Buffer.alloc(32, 7).toString("base64");
 
+async function rows(db: { query: (sql: string) => Promise<{ rows: unknown[] }> }, sql: string) {
+  return (await db.query(sql)).rows as Array<Record<string, any>>;
+}
+
 const userId = "aaaaaaaa-0000-4000-8000-000000000001";
 
 function access(overrides: Partial<WorkOsAccess> = {}): WorkOsAccess {
@@ -164,7 +168,7 @@ test("admin can correct or retract unknown GHL evidence without inventing a pers
     });
     assert.equal((corrected as any).person_id, null);
     assert.equal((corrected as any).correction_status, "corrected");
-    assert.equal((await f.db.query("select count(*)::int as n from work_evidence")).rows[0].n, 1, "only the performed email is mirrored");
+    assert.equal((await rows(f.db, "select count(*)::int as n from work_evidence"))[0].n, 1, "only the performed email is mirrored");
     await assert.rejects(
       () => correctGhlEvidence(access({ role: "employee", personId: person }), ids.sharedEvent, { status: "disputed" }),
       /forbidden/i,

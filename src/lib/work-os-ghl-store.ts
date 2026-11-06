@@ -87,8 +87,12 @@ function relationFor(record: GhlRecord, identities: GhlIdentity[]): { relation: 
   return { relation: "performed", personId: identity.personId, basis: "Verified employee identity and a manual source." };
 }
 
-async function organizationOwner(scope: GhlScope): Promise<string | null> {
-  const result = await getPool().query(
+type QueryClient = {
+  query: (sql: string, values?: unknown[]) => Promise<{ rows: unknown[] }>;
+};
+
+async function organizationOwner(scope: GhlScope, db: QueryClient): Promise<string | null> {
+  const result = await db.query(
     "select legacy_owner_id, created_by from work_organizations where id = $1",
     [scope.organizationId],
   );
@@ -131,17 +135,17 @@ function mirrorMetrics(record: GhlRecord, relation: GhlRelation): Json {
   };
 }
 
-async function upsertEvent(input: {
+async function upsertEvent(db: QueryClient, input: {
   scope: GhlScope;
   record: GhlRecord;
   relation: GhlRelation;
   personId: string | null;
   basis: string;
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; summary: string; correctionStatus: string }> {
   const { scope, record, relation, personId, basis } = input;
   const occurredAt = record.occurredAt ?? record.observedAt;
   const evidenceClass = record.snapshot ? "activity_observation" : "output_evidence";
-  const result = await getPool().query(
+  const result = await db.query(
     `insert into work_evidence_events
       (organization_id, provider, external_event_id, event_type, evidence_class, person_id,
        attribution_method, attribution_confidence, occurred_at, title, summary, metadata, raw)
@@ -154,11 +158,11 @@ async function upsertEvent(input: {
        attribution_confidence = excluded.attribution_confidence,
        occurred_at = excluded.occurred_at,
        title = excluded.title,
-       summary = excluded.summary,
+       summary = case when work_evidence_events.correction_status = 'original' then excluded.summary else work_evidence_events.summary end,
        metadata = excluded.metadata,
        raw = '{}'::jsonb,
        updated_at = now()
-     returning id`,
+     returning id, summary, correction_status`,
     [
       scope.organizationId,
       record.key,
@@ -173,20 +177,22 @@ async function upsertEvent(input: {
       JSON.stringify(eventMetadata(scope, record, relation, basis)),
     ],
   );
-  return { id: String((result.rows[0] as Json).id) };
+  const saved = result.rows[0] as Json;
+  return { id: String(saved.id), summary: String(saved.summary ?? ""), correctionStatus: String(saved.correction_status ?? "original") };
 }
 
-async function mirrorPersonEvent(input: {
+async function mirrorPersonEvent(db: QueryClient, input: {
   scope: GhlScope;
   eventId: string;
   record: GhlRecord;
   personId: string;
   relation: GhlRelation;
+  summary: string;
 }): Promise<void> {
-  const { scope, eventId, record, personId, relation } = input;
-  const ownerId = await organizationOwner(scope);
+  const { scope, eventId, record, personId, relation, summary } = input;
+  const ownerId = await organizationOwner(scope, db);
   const occurredAt = record.occurredAt ?? record.observedAt;
-  await getPool().query(
+  await db.query(
     `insert into work_evidence
       (user_id, organization_id, person_id, evidence_event_id, evidence_date, source, title, summary, url, metrics, raw, updated_at)
      values ($1,$2,$3,$4,$5,'ghl',$6,$7,$8,$9,$10,now())
@@ -205,7 +211,7 @@ async function mirrorPersonEvent(input: {
       eventId,
       new Date(occurredAt).toISOString().slice(0, 10),
       record.title.slice(0, 240),
-      record.summary.slice(0, 2_000),
+      summary.slice(0, 2_000),
       record.sourceUrl,
       JSON.stringify(mirrorMetrics(record, relation)),
       JSON.stringify({ evidenceEventId: eventId }),
@@ -213,8 +219,8 @@ async function mirrorPersonEvent(input: {
   );
 }
 
-async function removeMirror(scope: GhlScope, eventId: string): Promise<void> {
-  await getPool().query(
+async function removeMirror(db: QueryClient, scope: GhlScope, eventId: string): Promise<void> {
+  await db.query(
     "delete from work_evidence where organization_id = $1 and evidence_event_id = $2 and source = 'ghl'",
     [scope.organizationId, eventId],
   );
@@ -246,11 +252,18 @@ export async function persistGhlRecords(
           decision.basis = "Mapped person is not an active member of this organization.";
         }
       }
-      const event = await upsertEvent({ scope, record, relation: decision.relation, personId: decision.personId, basis: decision.basis });
+      const event = await upsertEvent(client, { scope, record, relation: decision.relation, personId: decision.personId, basis: decision.basis });
       if (decision.personId) {
-        await mirrorPersonEvent({ scope, eventId: event.id, record, personId: decision.personId, relation: decision.relation });
+        await mirrorPersonEvent(client, {
+          scope,
+          eventId: event.id,
+          record,
+          personId: decision.personId,
+          relation: decision.relation,
+          summary: event.correctionStatus === "original" ? record.summary : event.summary,
+        });
       } else {
-        await removeMirror(scope, event.id);
+        await removeMirror(client, scope, event.id);
       }
       written += 1;
     }
@@ -305,7 +318,7 @@ export async function reconcileGhlAttribution(scope: GhlScope, actorId: string):
       [personId, personId ? "verified_provider_account" : "unattributed", personId ? 1 : 0, relation, row.id],
     );
     if (personId) {
-      await mirrorPersonEvent({
+      await mirrorPersonEvent(getPool(), {
         scope,
         eventId: String(row.id),
         record: {
@@ -332,10 +345,11 @@ export async function reconcileGhlAttribution(scope: GhlScope, actorId: string):
         },
         personId,
         relation,
+        summary: String(row.summary ?? ""),
       });
       attributed += 1;
     } else {
-      await removeMirror(scope, String(row.id));
+      await removeMirror(getPool(), scope, String(row.id));
       retracted += 1;
     }
   }

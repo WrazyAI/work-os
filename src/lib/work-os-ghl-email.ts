@@ -277,7 +277,9 @@ export async function getGhlEmailForViewer(
   );
   const content = contentResult.rows[0] as Json | undefined;
   const excerpt = content?.excerpt_cipher && !content.content_purged_at ? decryptProviderSecret(String(content.excerpt_cipher)) : null;
-  if (content && (content.content_purged_at || new Date(String(content.expires_at)).getTime() <= now.getTime())) {
+  const fallbackExpiry = contentExpiry(record.occurredAt ?? record.observedAt).expiresAt;
+  const expiresAt = content?.expires_at ? new Date(String(content.expires_at)) : fallbackExpiry;
+  if (content?.content_purged_at || expiresAt.getTime() <= now.getTime()) {
     return { text: null, excerpt: null, availability: "expired", sourceUrl: record.sourceUrl, truncated: false };
   }
   const emailId = record.emailId;

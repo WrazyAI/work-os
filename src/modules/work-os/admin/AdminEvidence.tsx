@@ -509,9 +509,11 @@ export default function AdminEvidencePage() {
               <span>recorded {relativeTime(selected.created_at)}</span>
             </div>
             {selected.summary ? <p className="text-[13px] leading-6 text-[var(--text-secondary)]">{selected.summary}</p> : <p className="text-[12.5px] text-[var(--text-tertiary)]">No summary was recorded for this item.</p>}
-            {selected.source === "ghl" && (selected.ghl?.eventId || selected.evidence_event_id) ? (
-              <GhlEvidenceDetail key={selected.ghl?.eventId ?? selected.evidence_event_id!} eventId={selected.ghl?.eventId ?? selected.evidence_event_id!} excerpt={null} sourceUrl={selected.url} />
-            ) : null}
+            {selected.source === "ghl"
+              && (selected.ghl?.contentAvailability === "on_demand" || (selected.event?.metadata as AnyRow | undefined)?.ghl?.emailId)
+              && (selected.ghl?.eventId || selected.evidence_event_id) ? (
+                <GhlEvidenceDetail key={selected.ghl?.eventId ?? selected.evidence_event_id!} eventId={selected.ghl?.eventId ?? selected.evidence_event_id!} excerpt={null} sourceUrl={selected.url} />
+              ) : null}
             {selected.task ? (
               <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
                 <Link2 size={13} aria-hidden className="text-[var(--text-tertiary)]" /> Linked task: {selected.task.title}

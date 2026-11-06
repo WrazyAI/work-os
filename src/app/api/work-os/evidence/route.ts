@@ -64,6 +64,7 @@ export async function GET(req: Request) {
     // never appear behind a person filter.
     let ghlRows: Record<string, unknown>[] = [];
     const includeGhlContext = !requestedPersonId
+      && !sp.get("taskId")
       && canViewGhlOrganizationContext(auth.access)
       && (!sp.get("source") || sp.get("source") === "ghl");
     if (includeGhlContext) {

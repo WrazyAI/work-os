@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, Notice } from "./ui";
+import { adminFetch } from "./api";
 import { isApprovedGhlSourceUrl } from "@/lib/work-os-ghl-evidence-view";
 
 interface EmailResponse {
@@ -23,9 +24,7 @@ export default function GhlEvidenceDetail({ eventId, excerpt, sourceUrl }: { eve
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/work-os/evidence/${encodeURIComponent(eventId)}/ghl-email`, { cache: "no-store" });
-      const body = await response.json().catch(() => ({})) as EmailResponse & { error?: string };
-      if (!response.ok) throw new Error(body.error || `Request failed: ${response.status}`);
+      const body = await adminFetch<EmailResponse>(`/api/work-os/evidence/${encodeURIComponent(eventId)}/ghl-email`, { cache: "no-store" });
       setEmail(body);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "The full email could not be loaded.");

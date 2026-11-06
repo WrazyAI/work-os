@@ -31,7 +31,7 @@ import {
   type EodTaskFact,
 } from "@/lib/work-os-eod-report";
 import { listGithubActivity } from "@/lib/work-os-github-activity";
-import { listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
+import { eodGhlFactsFromActivity, listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -311,15 +311,7 @@ export async function buildDailyWorkspaceEodContent(
           through: bounds.endIso,
           includeOrganizationContext: false,
         });
-        const performed: Record<string, number> = {};
-        for (const item of activity.items.filter((entry) => entry.relation === "performed")) {
-          performed[item.kind] = (performed[item.kind] ?? 0) + 1;
-        }
-        ghl = {
-          performed,
-          context: activity.items.filter((item) => item.relation !== "performed").length,
-          coverage: activity.coverage.map((entry) => ({ kind: entry.kind, state: entry.state })),
-        };
+        ghl = eodGhlFactsFromActivity(activity);
       }
     } catch {
       ghl = null;

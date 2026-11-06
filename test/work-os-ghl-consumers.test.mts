@@ -73,6 +73,16 @@ test("the deterministic EOD reports GHL performed work once and never credits co
   assert.equal(report.metrics.completed, 0, "provider activity never becomes task completion");
 });
 
+test("unavailable GHL coverage is reported even when no activity was counted", () => {
+  const report = buildEodReportMarkdown(eodFacts({
+    performed: {},
+    context: 0,
+    coverage: [{ kind: "email", state: "unavailable" }],
+  }));
+  assert.match(report.markdown, /no attributable activity recorded/);
+  assert.match(report.markdown, /email unavailable/);
+});
+
 test("no GHL facts means no GHL evidence line", () => {
   const report = buildEodReportMarkdown(eodFacts(null));
   assert.equal(report.markdown.includes("GHL, provider-recorded"), false);

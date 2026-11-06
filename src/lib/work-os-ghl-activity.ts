@@ -131,6 +131,23 @@ export function formatGhlActivityBlock(activity: GhlActivity, maxChars = 6_000):
   return text.length > maxChars ? `${text.slice(0, maxChars - 1).trimEnd()}…` : text;
 }
 
+export function eodGhlFactsFromActivity(activity: GhlActivity): {
+  performed: Record<string, number>;
+  context: number;
+  coverage: Array<{ kind: string; state: string }>;
+} {
+  const performed: Record<string, number> = {};
+  for (const item of activity.items) {
+    if (item.relation !== "performed") continue;
+    performed[item.kind] = (performed[item.kind] ?? 0) + 1;
+  }
+  return {
+    performed,
+    context: activity.items.filter((item) => item.relation !== "performed").length,
+    coverage: activity.coverage.map((entry) => ({ kind: entry.kind, state: entry.state })),
+  };
+}
+
 export function ghlRecordedActivityAllowlist(activity: GhlActivity): Array<{ description: string; relation: "performed"; url: string | null; source: "ghl"; eventId: string }> {
   return activity.items
     .filter((item) => item.relation === "performed")

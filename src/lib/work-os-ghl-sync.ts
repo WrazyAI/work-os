@@ -284,6 +284,12 @@ async function releaseLease(stateId: string, owner: string, now: Date, state: st
   );
 }
 
+function sameInstant(left: unknown, right: unknown): boolean {
+  const leftTime = new Date(String(left ?? "")).getTime();
+  const rightTime = new Date(String(right ?? "")).getTime();
+  return Number.isFinite(leftTime) && leftTime === rightTime;
+}
+
 async function ensureState(scope: GhlScope, plan: GhlPartitionPlan): Promise<Json> {
   const existing = await getPool().query(
     "select * from work_ghl_sync_state where connection_id = $1 and kind = $2 and partition_key = $3",
@@ -308,17 +314,25 @@ async function ensureState(scope: GhlScope, plan: GhlPartitionPlan): Promise<Jso
     );
     return inserted.rows[0] as Json;
   }
-  if (plan.recurring && String(row.range_through ?? "") !== plan.through) {
+  if (plan.recurring && row.state === "complete" && !sameInstant(row.range_through, plan.through)) {
     const reset = await getPool().query(
       `update work_ghl_sync_state
-          set range_from = $1, range_through = $2, cursor_value = null, state = case when state = 'complete' then 'pending' else state end,
-              updated_at = now()
+          set range_from = $1, range_through = $2, cursor_value = null, state = 'pending', updated_at = now()
         where id = $3 returning *`,
       [plan.from, plan.through, row.id],
     );
     return reset.rows[0] as Json;
   }
   return row;
+}
+
+function coverageState(row: Json): GhlCoverage["state"] {
+  if (row.state === "failed") return "unavailable";
+  if (row.state === "running") return "pending";
+  if (row.state === "unavailable" || row.state === "partial" || row.state === "complete" || row.state === "pending") {
+    return row.state;
+  }
+  return "pending";
 }
 
 function coverageFor(row: Json, plan: GhlPartitionPlan, state: GhlCoverage["state"], reason: string | null, scanned: number, capped: boolean): GhlCoverage {
@@ -345,9 +359,14 @@ async function processPartition(input: {
   const { scope, plan, source, now, identities, revision } = input;
   const persist = input.persist ?? persistGhlRecords;
   const state = await ensureState(scope, plan);
+  if (state.state === "complete" || state.state === "partial") {
+    if (!plan.recurring || sameInstant(state.range_through, plan.through)) return;
+  }
   const owner = randomUUID();
   if (!(await claimGhlPartition({ stateId: String(state.id), leaseOwner: owner, now }))) return;
-  const limit = 100;
+  const limit = plan.key === "contacts" ? 10 : 100;
+  const from = String(state.range_from ?? plan.from);
+  const through = String(state.range_through ?? plan.through);
   const cursor = state.cursor_value ? String(state.cursor_value) : null;
   try {
     let records: GhlRecord[] = [];
@@ -355,7 +374,7 @@ async function processPartition(input: {
     let scanned = 0;
     let capped = false;
     if (plan.channel) {
-      const page = await source.messages({ channel: plan.channel, from: plan.from, through: plan.through, cursor, limit });
+      const page = await source.messages({ channel: plan.channel, from, through, cursor, limit });
       scanned = page.items.length;
       capped = page.capped;
       nextCursor = page.nextCursor;
@@ -364,14 +383,14 @@ async function processPartition(input: {
       const calendarIds = await source.calendars();
       const all: unknown[] = [];
       for (const calendarId of calendarIds) {
-        const page = await source.appointments({ calendarId, from: plan.from, through: plan.through, cursor: null, limit });
+        const page = await source.appointments({ calendarId, from, through, cursor: null, limit });
         all.push(...page.items);
         capped = capped || page.capped;
       }
       scanned = all.length;
       records = all.flatMap((item) => normalizeGhlRecord("appointment", item, { scope, identities, observedAt: now.toISOString() }));
       await persist(scope, records, revision);
-      const coverage = normalizeGhlAppointmentCoverage({ scope, scheduledFrom: plan.from, scheduledThrough: plan.through, scanned, capped });
+      const coverage = normalizeGhlAppointmentCoverage({ scope, scheduledFrom: from, scheduledThrough: through, scanned, capped });
       const next = null;
       await advanceGhlCheckpoint({
         stateId: String(state.id),
@@ -402,7 +421,7 @@ async function processPartition(input: {
         ...tasks.flatMap((item) => normalizeGhlRecord("task", item, { scope, identities, observedAt: now.toISOString() })),
       ];
     } else if (plan.key === "opportunities") {
-      const page = await source.opportunities({ from: plan.from, through: plan.through, cursor, limit });
+      const page = await source.opportunities({ from, through, cursor, limit });
       scanned = page.items.length;
       capped = page.capped;
       nextCursor = page.nextCursor;
@@ -424,6 +443,7 @@ async function processPartition(input: {
       capped,
     });
   } catch (error) {
+    const status = (error as { status?: unknown } | null)?.status;
     if (error instanceof GhlCursorExpiredError) {
       await releaseLease(String(state.id), owner, now, "pending", "Provider cursor expired; pagination restarted from a durable checkpoint.");
       await getPool().query(
@@ -432,12 +452,12 @@ async function processPartition(input: {
       );
       return;
     }
-    if (error instanceof GhlRateLimitError) {
-      await releaseLease(String(state.id), owner, now, "pending", `Rate limited; retry after ${error.retryAfterSeconds}s.`);
+    if (error instanceof GhlRateLimitError || status === 429) {
+      const retry = error instanceof GhlRateLimitError ? error.retryAfterSeconds : 60;
+      await releaseLease(String(state.id), owner, now, "pending", `Rate limited; retry after ${retry}s.`);
       return;
     }
-    const requestStatus = (error as { status?: unknown } | null)?.status;
-    if (requestStatus === 401 || requestStatus === 403) {
+    if (status === 401 || status === 403) {
       await releaseLease(String(state.id), owner, now, "failed", "Provider rejected the credential or scope (401/403).");
       await getPool().query(
         `update work_ghl_sync_state
@@ -499,7 +519,7 @@ export async function runGhlSync(input: {
     const stored = (row.coverage ?? {}) as Json;
     return {
       kind: String(row.kind) as GhlKind,
-      state: (row.state === "failed" ? "pending" : String(row.state)) as GhlCoverage["state"],
+      state: coverageState(row),
       from: String(row.range_from ?? stored.from ?? now.toISOString()),
       through: String(row.range_through ?? stored.through ?? now.toISOString()),
       reason: row.failure_reason ? String(row.failure_reason) : (stored.reason ?? null),
@@ -590,7 +610,7 @@ export async function getGhlStatus(scope: GhlScope): Promise<{
       const stored = (row.coverage ?? {}) as Json;
       return {
         kind: String(row.kind) as GhlKind,
-        state: String(row.state) as GhlCoverage["state"],
+        state: coverageState(row),
         from: String(row.range_from ?? ""),
         through: String(row.range_through ?? ""),
         reason: row.failure_reason ? String(row.failure_reason) : (stored.reason ?? null),

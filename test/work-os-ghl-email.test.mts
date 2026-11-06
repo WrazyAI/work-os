@@ -175,6 +175,22 @@ test("content older than retention is expired and is never fetched or analyzed",
   }
 });
 
+test("viewing enforces the retention window even when no content row exists", async () => {
+  const f = await fixture();
+  try {
+    const eventId = await seedEmail(f, "2026-01-01T12:00:00.000Z");
+    let fetched = false;
+    const result = await getGhlEmailForViewer(access(), eventId, {
+      now: new Date("2026-11-06T12:00:00.000Z"),
+      fetchEmail: async () => { fetched = true; return { id: "msg-email-1", body: "old", contentType: "text/plain" }; },
+    });
+    assert.equal(result.availability, "expired");
+    assert.equal(fetched, false);
+  } finally {
+    await f.close();
+  }
+});
+
 test("authorized viewing fetches the full email on demand without storing it", async () => {
   const f = await fixture();
   try {

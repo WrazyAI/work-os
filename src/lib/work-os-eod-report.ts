@@ -382,9 +382,10 @@ function ghlEvidenceLine(facts: EodReportFacts): string | null {
     performed.length ? `performed ${performed.join(" · ")}` : "",
     ghl.context ? `${ghl.context} shared, automated, assigned or unknown context item${ghl.context === 1 ? "" : "s"} not credited to the employee` : "",
   ].filter(Boolean);
-  if (!parts.length) return null;
-  const partial = ghl.coverage.filter((coverage) => coverage.state === "partial" || coverage.state === "unavailable");
-  return `- GHL, provider-recorded — ${parts.join("; ")}${partial.length ? ` (${partial.map((coverage) => `${coverage.kind} ${coverage.state}`).join(", ")})` : ""}.`;
+  const degraded = ghl.coverage.filter((coverage) => coverage.state !== "complete");
+  if (!parts.length && !degraded.length) return null;
+  const body = parts.length ? parts.join("; ") : "no attributable activity recorded";
+  return `- GHL, provider-recorded — ${body}${degraded.length ? ` (${degraded.map((coverage) => `${coverage.kind} ${coverage.state}`).join(", ")})` : ""}.`;
 }
 
 function fullText(value: unknown): string {

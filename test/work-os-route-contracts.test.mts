@@ -597,16 +597,17 @@ test("the administration pages read as label/content groups, not a card wall", a
   assert.match(settings, /Switch/, "settings states are switches, not native checkboxes");
 });
 
-test("the evidence page marks future integrations and keeps bots out of the person queue", async () => {
+test("the evidence page presents connected integrations and keeps bots out of the person queue", async () => {
   const evidence = await source("src/modules/work-os/admin/AdminEvidence.tsx");
-  assert.match(evidence, /Coming soon/);
+  assert.match(evidence, /Read-only PIT polling/);
   assert.match(evidence, /Unmapped accounts/);
   assert.match(evidence, /Map &amp; backfill/);
   assert.match(evidence, /Manage repositories/);
   assert.match(evidence, /isAutomation/, "provider bots are separated from the person queue");
   assert.match(evidence, /never mapped to a person/, "a bot is never attributed to a teammate");
   const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
-  assert.match(settings, /GHL — coming soon/);
+  assert.match(settings, /GoHighLevel evidence/);
+  assert.doesNotMatch(settings, /GHL — coming soon/);
   assert.match(settings, /comingSoon/);
   assert.match(evidence, /Organization webhook active/);
   assert.match(evidence, /Covered by organization/);

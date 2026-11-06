@@ -124,6 +124,10 @@ create table work_team_members (
   person_id uuid not null,
   is_manager boolean not null default false
 );
+create table work_check_ins (id int primary key);
+insert into work_check_ins values (1);
+create table work_sessions (id int primary key, last_substantive_update_at timestamptz);
+insert into work_sessions values (1, '2026-11-03T08:00:00Z');
 create table work_activity_intervals (
   id uuid primary key,
   organization_id uuid not null,

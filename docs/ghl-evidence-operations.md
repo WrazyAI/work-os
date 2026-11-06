@@ -28,6 +28,14 @@ Read-only GoHighLevel evidence (calls, SMS, email, appointments, notes, contact 
 - Full email is available only through the authenticated evidence route: the server resolves the stored GHL email ID and the caller's person/team scope. Unknown/shared records are admin-only.
 - Never send production message bodies to logs, chat, test fixtures, or an AI model before the activation readback.
 
+## Probe and configure
+
+- Dry probe: `npm run work-os:ghl:probe -- --organization-id <uuid> --location-id <id>` (no network, no credential).
+- Protected live probe: add `--credential-file <path> --live`; it prints endpoint status and field-presence booleans only.
+- Dry configure: `npm run work-os:ghl:configure -- --organization-id <uuid> --location-id <id> --credential-file <path>` (no writes).
+- Apply only after operator authorization: add `--confirm-host <resolved-db-host> --apply`. The connection starts disabled.
+- Enable only after the probe, confirmed mappings and AI/retention readback: add `--enable --confirm-activation`. No command prints the token.
+
 ## Activation checklist
 
 1. Verify the resolved database host before applying only `supabase/migrations/0073_work_os_ghl_evidence.sql`.
