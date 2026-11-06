@@ -25,7 +25,17 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.25 — 2026-11-06
+
 - Open a submitted or approved EOD to read your report and its confirmation, without being asked to prepare it again.
+- Standing notices now sit under the page title, so they never cover the page or its actions.
+- Secondary text, status labels, and the notification badge are easier to read.
+- Open a task from its title, and the completion box is easier to tap.
+- On small windows, the update composer and the Tasks focus header no longer cover or clip the page.
+- Connect and Start setup appear right away instead of waiting for the whole spoken line.
+- Insights with no recorded work now offers one clear next step instead of a dashboard of zeros.
+- Admin People, Tasks, and EOD Review read as cards on small windows, with every key field visible.
+- The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.
 
 ## 0.5.24 — 2026-11-05
 

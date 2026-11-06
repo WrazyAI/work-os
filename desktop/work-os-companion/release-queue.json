@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -162,6 +162,54 @@
       "type": "fix",
       "summary": "Opening a submitted or approved EOD shows the report read-only instead of asking you to prepare it again.",
       "verification": "Worktree codex/eod-review-submitted-state: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1717 passed; focused EOD/composer/document/asset tests 59 passed; typecheck and production build passed; Playwright submitted/approved/draft/rejected/no-report at 1440/1024/720/390 with keyboard, reduced motion, and no overflow; TestSprite 0f5741c7 passed."
+    },
+    {
+      "id": "notification-region-placement",
+      "type": "fix",
+      "summary": "Standing notices sit under the page title instead of covering the page and its actions.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "text-safe-status-contrast",
+      "type": "fix",
+      "summary": "Secondary text, status labels, and the notification badge are easier to read.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "task-row-open-control",
+      "type": "fix",
+      "summary": "A task opens from its title, and the completion box has a larger touch target.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "companion-small-screen-layout",
+      "type": "fix",
+      "summary": "On small windows the update composer and the Tasks focus header no longer cover or clip the page.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "first-run-cta-pacing",
+      "type": "fix",
+      "summary": "Connect and Start setup appear promptly instead of waiting for the whole spoken line.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "insights-empty-state",
+      "type": "feature",
+      "summary": "Insights with no recorded work shows one clear next step instead of a dashboard of zeros.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "mobile-admin-records",
+      "type": "feature",
+      "summary": "Admin People, Tasks, and EOD Review read as cards on small windows, with every key field visible.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "companion-mobile-navigation",
+      "type": "feature",
+      "summary": "The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
     }
   ],
   "emergency": null
