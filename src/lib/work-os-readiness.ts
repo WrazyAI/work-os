@@ -242,7 +242,9 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   addIssue("runtime.worktivity_key_missing", "needs_setup", requiredProviders.includes("worktivity") && !input.runtime.worktivityConfigured ? 1 : 0, "WORKTIVITY_API_KEY is required for Worktivity evidence synchronization.");
   addIssue("runtime.fal_key_missing", "needs_setup", features.voice_input && !input.runtime.falConfigured ? 1 : 0, "FAL_API_KEY is required for Work OS voice input and for reading recaps aloud.");
   addIssue("runtime.github_webhook_missing", "needs_setup", features.github_evidence && !input.runtime.githubWebhookConfigured ? 1 : 0, "WORK_OS_GITHUB_WEBHOOK_SECRET is required for GitHub evidence ingestion.");
-  addIssue("runtime.ghl_webhook_missing", "needs_setup", features.ghl_evidence && !input.runtime.ghlWebhookConfigured ? 1 : 0, "WORK_OS_GHL_WEBHOOK_PUBLIC_KEY is required for GoHighLevel evidence ingestion.");
+  // GoHighLevel evidence is ingested through read-only PIT polling. The
+  // webhook public key is only needed for a future OAuth event phase, so it
+  // must not block a polling pilot.
   addIssue("runtime.screenshot_encryption_missing", "blocked", features.screenshot_summaries && !input.runtime.screenshotEncryptionConfigured ? 1 : 0, "WORK_OS_SCREENSHOT_ENCRYPTION_KEY is required for retained screenshots.");
   addIssue("runtime.retention_secret_missing", "blocked", features.screenshot_summaries && !input.runtime.cronSecretConfigured ? 1 : 0, "CRON_SECRET is required for scheduled screenshot retention deletion.");
   addIssue("tasks.assignee_missing", "needs_setup", taskChecks.withoutAssignee, "Open tasks need mapped assignees before task evidence can be attributed.");

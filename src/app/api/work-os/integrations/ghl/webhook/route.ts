@@ -12,6 +12,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  // The pilot is a read-only PIT polling connection. Keeping the legacy generic
+  // webhook scaffold closed prevents it from bypassing typed normalization and
+  // attribution; OAuth marketplace webhooks are a separate, later phase.
+  if (process.env.WORK_OS_GHL_WEBHOOK_MODE !== "oauth") {
+    return NextResponse.json(
+      { error: "GHL webhook ingestion is not enabled; this location uses read-only PIT polling" },
+      { status: 503 },
+    );
+  }
   const raw = await req.text();
   if (!isValidGhlWebhookSignature(raw, req.headers.get("x-ghl-signature"))) {
     return NextResponse.json({ error: "invalid GHL webhook signature" }, { status: 401 });

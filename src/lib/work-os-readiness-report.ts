@@ -31,10 +31,13 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
   }
   if (!organization.data) throw new Error("Work OS organization not found");
   const connectionRows = connections.data ?? [];
+  const credentialRows = credentials.data ?? [];
   const providerReady = {
     worktivity: worktivityConfigured(),
     github: connectionRows.some((row: any) => row.provider === "github" && row.active !== false) && !!process.env.WORK_OS_GITHUB_WEBHOOK_SECRET,
-    ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false) && !!process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY,
+    ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false)
+      && credentialRows.some((row: any) => row.provider === "ghl")
+      && !!process.env.WORK_OS_PROVIDER_SECRET_KEY,
   };
   return evaluateWorkOsReadiness({
     organization: {

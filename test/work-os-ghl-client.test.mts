@@ -41,11 +41,13 @@ test("rejects an unallowlisted path before any request", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("area code endpoints are allowed but every mutation method is rejected", async () => {
+test("contact record mutations are rejected while the documented contact search read is allowed", async () => {
   const { calls, fetchImpl } = recordingFetch();
   const client = createGhlClient({ scope, token: "pit-secret", fetchImpl });
-  await assert.rejects(() => client.read({ path: "/contacts/search", method: "POST", body: {} }), /not allowed/i);
+  await assert.rejects(() => client.read({ path: "/contacts/contact-1", method: "POST", body: {} }), /not allowed/i);
   assert.equal(calls.length, 0);
+  await client.read({ path: "/contacts/search", method: "POST", body: { locationId: scope.locationId, page: 1, pageLimit: 100 } });
+  assert.equal(calls.length, 1);
 });
 
 test("rejects absolute and traversal paths", async () => {

@@ -6,6 +6,15 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 export type GhlFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
+export class GhlRequestError extends Error {
+  status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "GhlRequestError";
+    this.status = status;
+  }
+}
+
 export interface GhlClient {
   read(input: {
     path: string;
@@ -38,7 +47,7 @@ const READ_PATTERNS: string[][] = [
 ];
 
 /** Documented read/search operations served as POST. They may not mutate. */
-const POST_READ_PATTERNS: string[][] = [["locations", "*", "tasks", "search"]];
+const POST_READ_PATTERNS: string[][] = [["locations", "*", "tasks", "search"], ["contacts", "search"]];
 
 function matchesPattern(segments: string[], pattern: string[]): boolean {
   if (segments.length !== pattern.length) return false;
@@ -109,18 +118,18 @@ export function createGhlClient(input: {
           ...(method === "POST" && body ? { body: JSON.stringify(body) } : {}),
         });
       } catch {
-        throw new Error(`GHL request failed for ${path}`);
+        throw new GhlRequestError(`GHL request failed for ${path}`, null);
       }
       if (response.status >= 300 && response.status < 400) {
-        throw new Error(`GHL read redirect rejected (${response.status}) for ${path}`);
+        throw new GhlRequestError(`GHL read redirect rejected (${response.status}) for ${path}`, response.status);
       }
-      if (!response.ok) throw new Error(`GHL read failed for ${path} (status ${response.status})`);
+      if (!response.ok) throw new GhlRequestError(`GHL read failed for ${path} (status ${response.status})`, response.status);
       const text = await response.text().catch(() => "");
       if (!text) return null;
       try {
         return JSON.parse(text) as unknown;
       } catch {
-        throw new Error(`GHL read returned an invalid response for ${path}`);
+        throw new GhlRequestError(`GHL read returned an invalid response for ${path}`, response.status);
       }
     },
   };

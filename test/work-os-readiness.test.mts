@@ -68,6 +68,18 @@ test("pilot readiness identifies setup gaps and blocks missing runtime prerequis
   assert.ok(codes.has("people.schedule_missing"));
 });
 
+test("a PIT-polling GHL pilot does not require a webhook public key", () => {
+  const input = baseInput();
+  input.organization.featureFlags = { employee_companion: true, desktop_companion: true, ghl_evidence: true };
+  input.connections.push({ provider: "ghl", active: true });
+  input.credentials.push({ provider: "ghl", expiresAt: null });
+  input.sourceAccounts.push({ provider: "ghl", personId: "employee-a", verified: true, metadata: {} });
+  input.providerReady.ghl = true;
+  const report = evaluateWorkOsReadiness(input);
+  assert.equal(report.issues.some((issue) => issue.code === "runtime.ghl_webhook_missing"), false);
+  assert.equal(report.status, "ready");
+});
+
 test("pilot readiness counts missing task metadata without claiming the task is complete", () => {
   const input = baseInput();
   input.tasks = [{ completed: false, assigneePersonIds: [], dueDate: null, priority: null, expectedOutcome: null, definitionOfDone: null, taskGroupId: null }];
