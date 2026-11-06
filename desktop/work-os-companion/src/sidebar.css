@@ -627,7 +627,9 @@
   .sidebar-nav,
   .sidebar-nav[data-sidebar-collapsed="false"] {
     position: fixed;
-    z-index: 120;
+    /* Above the page, below detached menus (90) and the composer (90): both
+       are offset clear of the bar, so nothing has to paint over it. */
+    z-index: 80;
     top: auto;
     right: 0;
     bottom: 0;

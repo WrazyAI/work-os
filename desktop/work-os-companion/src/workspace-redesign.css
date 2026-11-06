@@ -6928,7 +6928,9 @@ button:not(:disabled):active {
   border-radius: 14px;
   background: var(--white, #fff);
   box-shadow: 0 18px 60px rgba(18, 27, 17, 0.14);
-  z-index: 60;
+  /* The small-class bottom bar paints at 80; a panel that reaches the bottom
+     of a short viewport must stay above it. */
+  z-index: 100;
 }
 
 .notifications-head {
