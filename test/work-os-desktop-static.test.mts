@@ -14,6 +14,8 @@ assert.doesNotMatch(rust, /WebviewUrl::App\("index\.html\?debug=1"/);
 assert.doesNotMatch(rust, /get_webview_window\("debug"\)/);
 assert.match(rust, /set_focus\(\)/);
 const debugHost = read("src-tauri/src/debug_window.rs");
+// WebView2 can deadlock when a window is created in a synchronous command.
+assert.match(debugHost, /#\[tauri::command\]\s*pub async fn open_debug_window\s*\(/);
 assert.match(debugHost, /WebviewUrl::App\("debug\.html"\.into\(\)\)/);
 assert.doesNotMatch(debugHost, /\?debug=1/);
 

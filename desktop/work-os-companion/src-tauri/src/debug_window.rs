@@ -6,7 +6,7 @@ use crate::window_fit;
 pub const DEBUG_LABEL: &str = "debug";
 
 #[tauri::command]
-pub fn open_debug_window(app: AppHandle) -> Result<(), String> {
+pub async fn open_debug_window(app: AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(DEBUG_LABEL) {
         let _ = existing.show();
         let _ = existing.unminimize();
