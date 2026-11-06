@@ -28,6 +28,7 @@ const adminOttoChat = readText(resolve(root, "src/adminOtto/AdminOttoChat.tsx"))
 const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
+const planningSave = readText(resolve(root, "src/planningSave.ts"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
@@ -112,8 +113,9 @@ describe("operational visualizations", () => {
   it("uses the logo and non-navigation surface as the collapsed expand affordance", () => {
     expect(sidebar).toContain("data-sidebar-nav-option");
     expect(sidebar).toContain("data-sidebar-surface-hover");
-    expect(sidebar).toContain('if (collapsed) {\n                setCollapsedState(false);');
-    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).toContain("if (collapsed && !compactNav) {");
+    expect(sidebar).toContain("setCollapsedState(false);");
+    expect(sidebar).toContain('aria-label={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}');
     expect(sidebar).not.toContain("<PanelLeftOpen size={18}");
     expect(sidebarStyles).toContain(".sidebar-workspace-expand-icon");
     expect(sidebarStyles).toContain('[data-sidebar-surface-hover="true"]');
@@ -352,7 +354,7 @@ describe("operational visualizations", () => {
     expect(planningSession).toContain("Your daily commitments are on the record.");
     expect(planningSession).toContain("planning-confirmation-title");
     expect(planningSession).toContain("queued locally");
-    expect(planningSession).toContain("Your plan was not saved.");
+    expect(planningSave).toContain("Your plan was not saved.");
     expect(planningSession).toContain("planning-clarification-");
     expect(planningSession).toContain("clarificationAnswers");
     expect(app).toContain("clarification_answers");
@@ -675,7 +677,7 @@ describe("operational visualizations", () => {
   });
 
   it("switches between administration and the signed-in admin's own workday", () => {
-    expect(app).toContain('import AdminWorkspace from "./admin/AdminWorkspace"');
+    expect(app).toContain('const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));');
     expect(app).toContain("work-os.workspace-mode");
     expect(app).toContain('switchLabel="Open administration"');
     expect(app).toContain("Administration");
@@ -707,7 +709,7 @@ describe("operational visualizations", () => {
     expect(adminWorkspace).toContain('aria-label={`Profile for ${profile.name}`}');
     expect(adminWorkspace).toContain('title="Open profile settings"');
     expect(adminWorkspace).toContain("<ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />");
-    expect(app).toContain("profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}");
+    expect(app).toMatch(/profile=\{visibleOnboarding\s+\? \{ name: visibleOnboarding\.profile\.displayName, avatarUrl: visibleOnboarding\.profile\.avatarUrl, onOpen: openProfileFromAdmin \}\s+: adminOttoContextQuery\.data\?\.displayName/);
     // Changelog: one administration-only workspace-menu item. The employee
     // rail reaches the changelog from Settings and never receives this.
     expect(sidebar).toContain("What's new");

@@ -25,7 +25,30 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- A plan whose session reopens after a false clock-out can be saved again, and a rejected save now explains the real reason instead of blaming your connection.
 - Administrators can switch the floating mascot between Employee and Admin views, keep each chat and its message times, and see Otto in his Admin outfit.
+
+## 0.5.25 — 2026-11-06
+
+- Open a submitted or approved EOD to read your report and its confirmation, without being asked to prepare it again.
+- Standing notices now sit under the page title, so they never cover the page or its actions.
+- Secondary text, status labels, and the notification badge are easier to read.
+- Open a task from its title, and the completion box is easier to tap.
+- On small windows, the update composer and the Tasks focus header no longer cover or clip the page.
+- Connect and Start setup appear right away instead of waiting for the whole spoken line.
+- Insights with no recorded work now offers one clear next step instead of a dashboard of zeros.
+- Admin People, Tasks, and EOD Review read as cards on small windows, with every key field visible.
+- The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.
+
+## 0.5.24 — 2026-11-05
+
+- Switch between your own notifications and the workspace's notifications at the top of the panel, without a repeated summary line.
+- The elapsed-time pill under Otto now fills as your shift progresses, so you can see how much of the day has passed at a glance.
+- Administration no longer loads hidden employee screens, while your reminders and settings stay available.
+- The task backlog loads as you need it, and recap alerts no longer reload history you already opened.
+- Employee day and the weekly record now load a smaller summary, so large backlogs stay out of the way.
+- Admin Overview does less database work, and setup checks refresh separately from the live dashboard.
+- Work OS now does less background work while you use Administration or leave the companion open, so switching views stays lighter.
 
 ## 0.5.23 — 2026-11-05
 

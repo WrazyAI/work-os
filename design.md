@@ -113,7 +113,7 @@ scatter raw values through files.
 |---|---|---|
 | --color-ink | #182018 | headings, body text, dark primary controls |
 | --color-ink-soft | #304033 | strong secondary text |
-| --color-muted | #687267 | metadata, helper text |
+| --color-muted | #62685f | metadata, helper text |
 | --color-faint | #939c90 | quiet labels and unavailable values |
 | --color-canvas | #eef1eb | outer application background |
 | --color-stage | #f5f6f1 | content stage |
@@ -124,7 +124,7 @@ scatter raw values through files.
 | --color-line-strong | #c5cec1 | selected/focused surface outline |
 | --color-signal | #a8f15b | primary action and bounded progress |
 | --color-signal-deep | #5e9d27 | signal icon, progress, current state |
-| --color-danger | #c94e43 | error, destructive, overdue attention |
+| --color-danger | #b84035 | error, destructive, overdue attention |
 | --color-danger-soft | #f9e5e1 | danger surface |
 | --color-warning | #c88918 | aging work and recoverable warning |
 | --color-warning-soft | #fff5dc | warning surface |
@@ -145,16 +145,17 @@ warning `#e0a44a`, observed `#7fb3d1`. Categorical chart hues are
 theme-aware (`--chart-1` … `--chart-8`) so a series keeps its colour across
 themes without a light-paper hue turning sandy on graphite.
 
-Known gaps: `--color-faint` (2.7:1 on paper) must not carry text. `--color-danger`
-(4.3:1 on paper) and `--color-warning` (3.0:1 on white) fail AA as text on light
-surfaces, and the signal focus outline is 1.3:1 on paper. The conversation
+Known gaps: `--color-faint` (2.7:1 on paper) must not carry text.
+`--color-warning` (3.0:1 on white) still fails AA as text on light surfaces,
+and the signal focus outline is 1.3:1 on paper. The muted and danger roles now
+use text-safe steps: `--color-muted` passes on canvas and paper, and
+`--color-danger` passes on paper, canvas, and `--color-danger-soft`, so status
+and metadata text may use them directly. Warning remains for icons, borders,
+and fills unless a darker text value is chosen. The conversation
 surfaces resolve the focus gap with one chat focus color — `--conversation-focus`
 (#4a7d22, 4.5:1 on paper), exposed to the chat Tailwind theme as `--color-focus` —
 used for composer rings and every chat focus outline; the bright signal lime
-stays for actions, progress, and confirmed states. `--color-muted` passes
-on paper (4.8:1) and is borderline on inset (4.47:1). Until a palette decision
-adds text-safe variants and a focus color, these tokens are for icons, borders,
-and fills, and text uses `--color-ink-soft` or a darker muted value.
+stays for actions, progress, and confirmed states.
 
 ### 3.2 Geometry and elevation
 
@@ -262,6 +263,13 @@ control. Hovering the mark or any non-navigation surface reveals the expand
 affordance, and clicking empty sidebar space expands it; navigation rows remain
 clickable without expanding the rail. The icon column uses one shared slot so
 the mark, rows, and footer remain aligned in both states.
+
+At the 560px small class the companion rail becomes a fixed bottom bar instead
+of an icon-only strip: the destinations keep their icons and names (`EOD
+Review` shortens to `EOD`, with the full name as its accessible name), `More`
+opens the workspace menu, and New chat keeps a named action in the bar. The bar
+uses 44px targets, safe-area padding, and one active marker; page content and
+the composer reserve its height, and detached menus open above it.
 
 ### 4.3 Web employee workspace
 
@@ -664,6 +672,10 @@ touch screen.
 
 Rows:
 
+- The title is the row's one open control. The completion control, progress,
+  due, status, and action menu are siblings, never nested inside a button role;
+  the row body may open on a pointer press for convenience, while keyboard
+  activation stays on the title.
 - Minimum 64px high, with 12–16px vertical breathing room.
 - Transparent/paper surface with hairline dividers.
 - One title line, one metadata line, optional one-line description.
@@ -1318,7 +1330,10 @@ that scrolls away:
   `OK`, Escape, or a press outside the card dismisses it.
 - The EOD keeps the page. The submitted state embeds the same animation where
   the report was, with the outcome copy and `All EODs` at the top-left returning
-  to the EOD list; it stays until the employee leaves it.
+  to the EOD list; it stays until the employee leaves it. Reopening a submitted
+  or approved report later shows the same confirmation above the read-only day
+  edition, with `All EODs` and `Return to today`; the report is never presented
+  as an editable draft again.
 - The animation plays exactly once and parks on the completed check. The source
   art fades its check out over the final frames, so the completed state is the
   held frame — never the faded tail. Under reduced motion the completed frame
@@ -1411,16 +1426,19 @@ lists what needs the employee right now, and the badge counts all of it —
 memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
 days — in the amber recoverable-attention tone.
 
-- **Audiences** — an administrator's bell carries two tabs under its title:
+- **Audiences** — an administrator's bell carries two tabs in the panel
+  header, in the place the visible `Notifications` title used to occupy:
   Employee (the signed-in account's own reminders, unchanged) and Admin (the
-  live workspace record). The tab that belongs to the current workspace is
-  selected whenever the panel opens, so opening the bell in Administration
-  never lands on a personal reminder first; closing and reopening resets the
-  tab to the workspace even if the last visit ended on the other audience.
-  Each tab names its own count, and the closed bell's badge names the audience
-  its next open will show. The tablist is reachable through its selected tab;
-  ←/→ move and activate, Home/End jump to the ends. A non-administrator sees
-  the single Employee list and no tablist.
+  live workspace record). The visible title is removed and the rows are not
+  restated in a subtitle; the dialog keeps `Notifications` as its accessible
+  name. The tab that belongs to the current workspace is selected whenever the
+  panel opens, so opening the bell in Administration never lands on a personal
+  reminder first; closing and reopening resets the tab to the workspace even
+  if the last visit ended on the other audience. Each tab names its own count,
+  and the closed bell's badge names the audience its next open will show. The
+  tablist is reachable through its selected tab; ←/→ move and activate,
+  Home/End jump to the ends. A non-administrator sees the single Employee list
+  and no tablist; its header holds only the close control.
 - **Admin rows** — the Admin tab reads the same live overview as the Overview
   page. `Needs your decision` carries every attention record the record
   reports — EOD reports awaiting review, teammates with unsubmitted EOD days,
@@ -2204,11 +2222,14 @@ It may appear as:
 
 The compact floating companion has no circular halo or backdrop behind the
 mascot. Keep elapsed session time visible while a shift is open, including while
-paused; subtract completed breaks and freeze the timer at the current pause. A
-small orange corner marker remains: it shows alerts when input is needed and
-fills clockwise against the scheduled shift window when progress is available.
-The companion's accessible name gives the numeric percentage. The marker
-describes time only, never productivity or quality.
+paused; subtract completed breaks and freeze the timer at the current pause. The
+elapsed pill is also the shift-progress instrument: a lemon-green fill reveals
+the scheduled day from left to right, pale at the start and deeper as the shift
+completes, and reaches full at the scheduled end. The elapsed label stays bold
+and readable over the fill. A small orange corner marker remains for attention
+only; shift progress lives in the pill. The companion's accessible name gives
+the numeric percentage. The pill describes time only, never productivity or
+quality.
 
 When an actionable update needs the employee's input, use the shared `alert`
 pose rather than checking for one prompt kind. Repeat the familiar quick
@@ -2239,7 +2260,7 @@ the elapsed-time pill keep their default positions whether or not a bubble is
 showing: a bubble never pushes the figure down, so the pill can never land on
 it. The bubble's copy clamps to the space above the head — headline and
 supporting line stay legible, the action stays reachable — so a tall bubble may
-temporarily cover the drag handle and progress marker until it is resolved.
+temporarily cover the drag handle until it is resolved.
 
 ## 14. Deep module and seam rules
 
@@ -2375,9 +2396,12 @@ offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.
 Two standing conditions hold persistent cards under stable keys: an overview
 snapshot older than ten minutes, and a workspace status reporting a missing
-migration or an unusable Nifty connection. The flyout stack keeps the shared
-viewport position here: a receipt lands in the window's top-right corner with
-the same insets as the employee view, at every width.
+migration or an unusable Nifty connection. Standing cards render in the shell's
+notification region in the page's reading order below the masthead, so they
+never cover the page identity or its actions; a shell-less surface falls back
+to a fixed stack offset below its header. Transient receipts keep the shared
+viewport position: a receipt lands in the window's top-right corner with the
+same insets as the employee view, at every width.
 
 **Page refresh.** The masthead carries the employee workspace's page refresh
 control in the same place, between the notifications bell and the profile

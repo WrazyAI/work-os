@@ -146,29 +146,6 @@ export function adminNotificationDecisionCount(overview: AdminOverview | null | 
   return Math.max(0, (overview?.attention ?? []).reduce((total, item) => total + Math.max(0, item.count), 0));
 }
 
-/** The header's one-line description of what is waiting, in the same voice as
- * the employee panel. */
-export function adminNotificationSummary(overview: AdminOverview | null | undefined): string {
-  if (!overview) return "Checking the workspace record…";
-  const counts = overview.counts;
-  const parts: string[] = [];
-  if (counts.reportsPendingReview > 0) {
-    parts.push(`${counts.reportsPendingReview} EOD report${counts.reportsPendingReview === 1 ? "" : "s"} to review`);
-  }
-  if (counts.eodOutstandingPeople > 0) {
-    parts.push(`${counts.eodOutstandingPeople} teammate${counts.eodOutstandingPeople === 1 ? "" : "s"} with outstanding EODs`);
-  }
-  if (counts.tasksOverdue > 0) {
-    parts.push(`${counts.tasksOverdue} overdue task${counts.tasksOverdue === 1 ? "" : "s"}`);
-  }
-  if (counts.disputedEvidence > 0) {
-    parts.push(`${counts.disputedEvidence} disputed evidence item${counts.disputedEvidence === 1 ? "" : "s"}`);
-  }
-  const blockers = overview.attention.find((item) => canonicalCode(item.code) === "readiness_blocked")?.count ?? 0;
-  if (blockers > 0) parts.push(`${blockers} configuration blocker${blockers === 1 ? "" : "s"}`);
-  return parts.length ? parts.join(" · ") : "You're caught up";
-}
-
 /** The quiet pulse line: four live measures, never a row of KPI cards. */
 export function adminNotificationPulse(overview: AdminOverview | null | undefined): AdminNotificationPulse[] {
   if (!overview) return [];

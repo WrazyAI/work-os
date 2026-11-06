@@ -144,6 +144,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
 
   return (
     <div className="workspace admin-workspace">
+      <a className="skip-link" href="#work-os-main">Skip to content</a>
       <SidebarNav
         mode="admin"
         activeView="day"
@@ -156,7 +157,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
         onWhatsNew={onOpenWhatsNew}
         onSignOut={onSignOut}
       />
-      <section className="stage admin-stage">
+      <div className="stage admin-stage">
         <header className="masthead admin-masthead">
           <div className="admin-masthead-copy">
             <p>Work OS · Administration</p>
@@ -211,6 +212,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
               block, directly under its title, instead of under the rule. */}
           {session.role === "admin" ? <p className="admin-purpose">{meta.purpose}</p> : null}
         </header>
+        <div id="work-os-notification-region" className="notification-region" />
+        <div id="work-os-main" className="skip-target" tabIndex={-1} />
         <main className="page admin-page">
           {ottoNotice ? <Notice tone="warn">{ottoNotice}</Notice> : null}
           {session.role === "admin" ? (
@@ -221,7 +224,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             </AdminCard>
           )}
         </main>
-      </section>
+      </div>
     </div>
   );
 }

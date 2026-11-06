@@ -318,7 +318,7 @@ export default function TasksPreview() {
         : scenario === "completion-done" ? "done" : "idle";
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="tasks" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
-    <section className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
+    <div className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
       <TasksWorkspace currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => undefined} onOpenTask={() => setDetailsOpen(true)} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
         onStatusTask={(task, workflow_status) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, workflow_status } : row))}
         onAssignTask={() => setDetailsOpen(true)}
@@ -347,6 +347,6 @@ export default function TasksPreview() {
         onCompleteWithoutEvidence={async () => ({ completed: true })}
         onClose={() => undefined}
       />}
-    </section>
+    </div>
   </div>;
 }

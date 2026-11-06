@@ -173,32 +173,32 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                   const personId = String(person.id);
                   const status = statusById.get(personId);
                   return (
-                    <tr key={personId} onClick={() => setSelectedId(personId)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(personId); }}>
-                      <td>
+                    <tr key={personId} onClick={() => setSelectedId(personId)}>
+                      <td data-label="Person">
                         <span className="admin-person">
                           <Avatar name={String(person.display_name ?? "Unknown")} size={30} />
                           <span className="min-w-0">
-                            <b>{String(person.display_name ?? "Unknown")}</b>
+                            <b><button type="button" className="admin-record-open" aria-label={`Open ${String(person.display_name ?? "person")} record`} onClick={(event) => { event.stopPropagation(); setSelectedId(personId); }}>{String(person.display_name ?? "Unknown")}</button></b>
                             <small>{person.email ? String(person.email) : "No email"}</small>
                           </span>
                         </span>
                       </td>
-                      <td>{status?.roleProfile ?? (person.role_profile_id ? "Mapped" : "Unmapped")}</td>
-                      <td className="admin-quiet">{status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}</td>
-                      <td>
+                      <td data-label="Role profile">{status?.roleProfile ?? (person.role_profile_id ? "Mapped" : "Unmapped")}</td>
+                      <td data-label="Schedule" className="admin-quiet">{status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}</td>
+                      <td data-label="Status now">
                         <Pill tone={attendanceTone(status?.attendance.state ?? "unknown")}>
                           {attendanceLabel(status?.attendance.state ?? "unknown")}{status?.attendance.freshness === "stale" ? " · stale" : ""}
                         </Pill>
                       </td>
-                      <td className="admin-numeric">
+                      <td data-label="Today" className="admin-numeric">
                         {status ? `${status.recapsToday} recap${status.recapsToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
                       </td>
-                      <td>
+                      <td data-label="EOD">
                         {status?.eodToday
                           ? <Pill tone={reportTone(status.eodToday)}>{statusLabel(status.eodToday)}</Pill>
                           : <span className="admin-quiet">—</span>}
                       </td>
-                      <td className="admin-quiet">{status?.lastRecapAt ? relativeTime(status.lastRecapAt) : "—"}</td>
+                      <td data-label="Last recap" className="admin-quiet">{status?.lastRecapAt ? relativeTime(status.lastRecapAt) : "—"}</td>
                     </tr>
                   );
                 })}
@@ -331,10 +331,10 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                     <tbody>
                       {workdays.map((workday) => (
                         <tr key={workday.date} className="static">
-                          <td>{formatWorkOsFullDate(workday.date)}</td>
-                          <td>{statusLabel(workday.state)}</td>
-                          <td className="admin-numeric">{workday.observedSeconds ? formatDuration(workday.observedSeconds) : "—"}</td>
-                          <td className="admin-numeric" title={workday.recapCount ? `${workday.recapCount} recap${workday.recapCount === 1 ? "" : "s"} · ${workday.recapReviewed} reviewed` : "No recaps"}>
+                          <td data-label="Day">{formatWorkOsFullDate(workday.date)}</td>
+                          <td data-label="State">{statusLabel(workday.state)}</td>
+                          <td data-label="Observed" className="admin-numeric">{workday.observedSeconds ? formatDuration(workday.observedSeconds) : "—"}</td>
+                          <td data-label="Updates" className="admin-numeric" title={workday.recapCount ? `${workday.recapCount} recap${workday.recapCount === 1 ? "" : "s"} · ${workday.recapReviewed} reviewed` : "No recaps"}>
                             {workday.recapCount ? String(workday.recapCount) : "—"}
                           </td>
                         </tr>

@@ -24,13 +24,12 @@ import { useAnchoredMenu } from "./taskSurfaces";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { renderViewportSurface } from "./viewportSurface";
-import { notificationsBadgeCount, notificationsSummary, overdueSummary } from "./notificationsLogic";
+import { notificationsBadgeCount, overdueSummary } from "./notificationsLogic";
 import {
   adminNotificationActivity,
   adminNotificationDecisionCount,
   adminNotificationDecisions,
   adminNotificationPulse,
-  adminNotificationSummary,
 } from "./admin/adminNotificationModel";
 import type { AdminOverview, AdminSection, AdminSectionFocus } from "./admin/types";
 import type { OutstandingEodDay, OutstandingEodStatus } from "./types";
@@ -153,19 +152,6 @@ export function NotificationsBell({ memoryCandidates, recap, overdueTasks, days,
     : showTabs && defaultTab === "admin" ? adminCount : employeeCount;
   const reviewCount = memoryCandidates + (recap ? 1 : 0);
   const label = count > 0 ? `Notifications, ${count} item${count === 1 ? "" : "s"} need attention` : "Notifications";
-  const headline = activeTab === "admin"
-    ? admin?.loading && !admin.overview
-      ? "Checking the workspace record…"
-      : admin?.error && !admin.overview
-        ? "Could not refresh the workspace record"
-        : adminNotificationSummary(admin?.overview ?? null)
-    : loading && !count
-      ? "Checking what needs you…"
-      : error && !count
-        ? "Could not refresh the list"
-        : count
-          ? notificationsSummary({ memoryCandidates, recapReady: !!recap, overdueTasks, outstandingEodDays: days.length })
-          : "You're all caught up";
   const activeTabId = `${baseId}-${activeTab}-tab`;
   const panelId = `${baseId}-panel`;
 
@@ -379,45 +365,41 @@ export function NotificationsBell({ memoryCandidates, recap, overdueTasks, days,
         style={style}
         onKeyDown={moveRowFocus}
       >
-        <header className="notifications-head">
-          <div>
-            <strong>Notifications</strong>
-            <small>{headline}</small>
-          </div>
+        <header className={`notifications-head${showTabs ? " has-tabs" : ""}`}>
+          {showTabs && <div className="notifications-tabs" role="tablist" aria-label="Notification audience" onKeyDown={moveTabFocus}>
+            <button
+              type="button"
+              role="tab"
+              id={`${baseId}-employee-tab`}
+              data-tab="employee"
+              className="notifications-tab"
+              aria-selected={activeTab === "employee"}
+              aria-controls={panelId}
+              tabIndex={activeTab === "employee" ? 0 : -1}
+              onClick={() => setTab("employee")}
+            >
+              <UserRound size={13} aria-hidden="true" />
+              <span>Employee</span>
+              {employeeCount > 0 && <em className="notifications-tab-count">{employeeCount > 99 ? "99+" : employeeCount}</em>}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`${baseId}-admin-tab`}
+              data-tab="admin"
+              className="notifications-tab"
+              aria-selected={activeTab === "admin"}
+              aria-controls={panelId}
+              tabIndex={activeTab === "admin" ? 0 : -1}
+              onClick={() => setTab("admin")}
+            >
+              <LayoutDashboard size={13} aria-hidden="true" />
+              <span>Admin</span>
+              {adminCount > 0 && <em className="notifications-tab-count">{adminCount > 99 ? "99+" : adminCount}</em>}
+            </button>
+          </div>}
           <button type="button" className="icon notifications-close" aria-label="Close notifications" onClick={onClose}><X size={15} /></button>
         </header>
-        {showTabs && <div className="notifications-tabs" role="tablist" aria-label="Notification audience" onKeyDown={moveTabFocus}>
-          <button
-            type="button"
-            role="tab"
-            id={`${baseId}-employee-tab`}
-            data-tab="employee"
-            className="notifications-tab"
-            aria-selected={activeTab === "employee"}
-            aria-controls={panelId}
-            tabIndex={activeTab === "employee" ? 0 : -1}
-            onClick={() => setTab("employee")}
-          >
-            <UserRound size={13} aria-hidden="true" />
-            <span>Employee</span>
-            {employeeCount > 0 && <em className="notifications-tab-count">{employeeCount > 99 ? "99+" : employeeCount}</em>}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id={`${baseId}-admin-tab`}
-            data-tab="admin"
-            className="notifications-tab"
-            aria-selected={activeTab === "admin"}
-            aria-controls={panelId}
-            tabIndex={activeTab === "admin" ? 0 : -1}
-            onClick={() => setTab("admin")}
-          >
-            <LayoutDashboard size={13} aria-hidden="true" />
-            <span>Admin</span>
-            {adminCount > 0 && <em className="notifications-tab-count">{adminCount > 99 ? "99+" : adminCount}</em>}
-          </button>
-        </div>}
         <div
           className="notifications-body"
           ref={bodyRef}

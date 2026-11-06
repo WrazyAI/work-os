@@ -228,7 +228,10 @@ const queries = read("src/workOsQueries.ts");
 assert.match(queries, /\/api\/work-os\/me\/insights\?range=/);
 assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
-assert.match(app, /secureState\.clearAccount\(\)/);
+// Sign-out waits for any in-flight cache save, clears reads/cache, then erases
+// every account store. The ordered helper owns the secureState.clearAccount call.
+assert.match(app, /clearWorkOsAccountCache\(queryClient\)/);
+assert.match(read("src/queryClient.ts"), /await secureState\.clearAccount\(\)/);
 assert.match(personalSettings, /Account session/);
 assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
@@ -238,7 +241,9 @@ assert.match(app, /debugScenario\.dayState === "shift_start" && !shiftStartScena
 assert.match(app, /Worktivity owns clock actions; the Windows Companion waits for provider confirmation\./);
 assert.ok(queries.includes('params.set("refreshProviders", "true")'), "fetchDay sets refreshProviders");
 assert.ok(queries.includes('params.set("compact", "true")'), "fetchDay sets compact for the compact variant");
-assert.ok(/const detailsViews = view === "tasks" \|\| view === "review" \|\| view === "evidence"/.test(app), "details views gate the lazy details query");
+assert.ok(/const detailsViews = view === "review" \|\| view === "evidence"/.test(app), "heavy details open only on Review or Evidence");
+assert.ok(/useDayQuery\(\{ enabled: employeePageEnabled && detailsViews/.test(app), "details query stays behind the visible employee page");
+assert.ok(/const employeePageEnabled = employeeBootstrapEnabled && dayMonitor\.owns/.test(app), "page reads follow the single background monitor owner");
 assert.match(app, /secureState\.daySnapshot\(\)/);
 // Day persistence moved into the query cache: the snapshot seeds the cache,
 // and the query persister writes the filtered cache to the vault.
@@ -486,7 +491,7 @@ const main = read("src/main.tsx");
 const debug = read("src/debug.tsx");
 const debugHtml = read("debug.html");
 assert.doesNotMatch(main, /import DebugWindow/);
-assert.match(main, /import TasksPreview/);
+assert.match(main, /lazy\(\(\) => import\("\.\/TasksPreview"\)\)/);
 assert.match(main, /loading.css/);
 assert.match(main, /LoadingPreview/);
 assert.match(main, /SkeletonsPreview/);
@@ -500,7 +505,7 @@ assert.match(insightsView, /InsightsSkeleton/);
 assert.match(app, /FadeArc/);
 assert.doesNotMatch(app, /loading-wave-large/);
 assert.match(taskSurfaces, /TaskDetailSkeleton/);
-assert.match(main, /import TodayPreview/);
+assert.match(main, /lazy\(\(\) => import\("\.\/TodayPreview"\)\)/);
 assert.match(main, /params\.has\("preview-tasks"\)/);
 assert.match(main, /params\.has\("preview-today"\)/);
 assert.match(main, /<NotificationProvider>/);
@@ -582,7 +587,9 @@ const tauriConfig = JSON.parse(tauri);
 const updaterPublicKey = Buffer.from(tauriConfig.plugins.updater.pubkey, "base64").toString("utf8");
 assert.match(tauri, /"frontendDist": "\.\.\/dist"/);
 assert.match(tauri, /"useHttpsScheme": true/);
-assert.match(tauri, /"label": "debug"[\s\S]*"url": "debug\.html"[\s\S]*"visible": false/);
+// The opt-in debugger is created on demand and never at packaged startup.
+assert.doesNotMatch(tauri, /"label": "debug"/);
+assert.match(debugHost, /WebviewWindowBuilder::new\(&app, DEBUG_LABEL/);
 assert.doesNotMatch(tauri, /localhost:1420/);
 assert.match(tauri, /com\.wrazy\.workos\.pilot/);
 assert.match(tauri, /"beforeBuildCommand": "npm run build"/);
@@ -629,6 +636,7 @@ assert.ok(openTasksAt >= 0 && recapStreamAt >= 0 && openTasksAt < recapStreamAt,
 assert.match(avatar, /avatarTab === "tasks"\) return/);
 
 const planner = read("src/PlanningSession.tsx");
+const planningSave = read("src/planningSave.ts");
 assert.match(planner, /setInput\(seedInput\?\.trim\(\) \? seedInput : plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
 
 const planItemsModule = read("src/planItems.ts");
@@ -730,7 +738,8 @@ assert.match(interpretation, /const serverOutcome = typeof row\?\.outcome === "s
 assert.match(interpretation, /serverOutcome === "stale" \|\| serverOutcome === "rejected"/);
 assert.match(app, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
 assert.match(avatar, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
-assert.match(app, /if \(\/AI build\/i\.test\(message\)\)/);
+assert.match(planningSave, /if \(\/AI build\/i\.test\(message\)\) return "rebuild";/);
+assert.match(app, /classifyPlanSaveFailure\(value\)/);
 assert.match(planner, /if \(result === "rebuild"\)/);
 assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
 assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);
@@ -833,8 +842,8 @@ assert.match(app, /className="tasks-column-sort"/);
 assert.match(app, /taskSort=\{taskWorkspaceSort\}/);
 assert.match(app, /onTaskSort=\{setTaskWorkspaceSort\}/);
 assert.match(app, /const completedHistoryQuery = useTaskHistoryQuery/);
-assert.match(app, /enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "all" && !!visibleDay\?\.shiftDate/);
-assert.match(app, /enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "completed" && !!visibleDay\?\.shiftDate/);
+assert.match(app, /enabled: employeePageEnabled && view === "tasks" && taskView === "all" && !!visibleDay\?\.shiftDate/);
+assert.match(app, /enabled: employeePageEnabled && view === "tasks" && taskView === "completed" && !!visibleDay\?\.shiftDate/);
 assert.match(app, /completedOnly: true/);
 assert.match(app, /completedHistory=\{completedTaskHistory\}/);
 assert.match(app, /const activeTaskHistoryQuery = view !== "tasks" \? historyQuery/);
@@ -862,10 +871,12 @@ assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
 assert.match(app, /unfinishedBefore\(openBacklog\.filter\(\(task\) => !todayIds\.has\(taskRowId\(task\)\)\), visibleDay\?\.shiftDate/);
 assert.match(app, /useTaskBacklogQuery/);
 const backlogQueries = read("src/workOsQueries.ts");
-assert.match(backlogQueries, /view=open/);
+assert.match(backlogQueries, /view: "open"/);
+assert.match(backlogQueries, /excludeToday/);
 assert.match(backlogQueries, /limit: "50"/);
 assert.match(backlogQueries, /nextCursor/);
-assert.match(backlogQueries, /view=pending&limit=100/);
+assert.doesNotMatch(backlogQueries, /view=pending&limit=100/);
+assert.doesNotMatch(backlogQueries, /page < 40/);
 assert.match(app, /backlog\?: TaskBacklog \| null/);
 assert.match(app, /loadMoreError=\{activeTaskHistoryQuery\.isFetchNextPageError\}/);
 assert.match(app, /Showing \$\{unfiltered\.length\} of \$\{viewTotal\}/);

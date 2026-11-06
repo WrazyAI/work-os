@@ -89,19 +89,3 @@ export function notificationsBadgeCount(input: {
 }): number {
   return Math.max(0, input.memoryCandidates) + (input.recapReady ? 1 : 0) + Math.max(0, input.overdueTasks) + Math.max(0, input.outstandingEodDays);
 }
-
-/** The panel's one-line description of what is waiting. */
-export function notificationsSummary(input: {
-  memoryCandidates: number;
-  recapReady: boolean;
-  overdueTasks: number;
-  outstandingEodDays: number;
-}): string {
-  const parts: string[] = [];
-  if (input.memoryCandidates > 0) parts.push(`${input.memoryCandidates} memor${input.memoryCandidates === 1 ? "y" : "ies"} to review`);
-  if (input.recapReady) parts.push("a recap to review");
-  if (input.overdueTasks > 0) parts.push(`${input.overdueTasks} overdue task${input.overdueTasks === 1 ? "" : "s"}`);
-  if (input.outstandingEodDays > 0) parts.push(`${input.outstandingEodDays} prior EOD${input.outstandingEodDays === 1 ? "" : "s"}`);
-  if (!parts.length) return "You're caught up";
-  return parts.join(" · ");
-}

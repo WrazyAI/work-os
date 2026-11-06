@@ -9,6 +9,9 @@
   --surface: #eef1eb;
   --surface-raised: #fbfcf8;
   --shadow-card: 0 1px 2px rgba(20, 30, 18, 0.035), 0 7px 24px rgba(20, 30, 18, 0.035);
+  /* The composer overlaps the stage by 82px; a page needs this much bottom
+     padding to keep its last row clear of the bar (design §11). */
+  --dock-clearance: 112px;
 }
 
 .planning-session {
@@ -1522,7 +1525,7 @@ body {
 .active-day-page {
   width: min(100%, 1200px);
   margin: 18px auto 0;
-  padding-bottom: 112px;
+  padding-bottom: var(--dock-clearance, 112px);
   animation: view-enter 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
@@ -2219,7 +2222,7 @@ body {
   padding: 4px 8px;
   border-radius: 999px;
   background: #eef1eb;
-  color: #687166;
+  color: #5a6258;
   font-size: 8px;
   font-weight: 750;
   letter-spacing: 0.05em;
@@ -2976,7 +2979,7 @@ body {
   padding: 3px 7px;
   border-radius: 999px;
   background: #eef2ea;
-  color: #687166;
+  color: #5a6258;
   font-size: 8px;
   font-weight: 700;
 }
@@ -3547,7 +3550,57 @@ button:not(:disabled):active {
   }
 
   .masthead {
-    height: 72px;
+    height: auto;
+    min-height: 72px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px 12px;
+    padding-block: 12px;
+  }
+
+  .masthead > div:first-child {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .mast-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  /* The agenda strip wraps instead of clipping: a touch surface has no hover
+     reveal, so the whole focus sentence stays readable (design §6.2). */
+  .task-agenda-strip {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .agenda-strip-focus {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .agenda-strip-focus-scroll {
+    max-width: 100%;
+  }
+
+  .agenda-strip-focus-scroll.overflow-pan {
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .agenda-strip-focus-scroll .overflow-pan-line {
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .agenda-strip-carry {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
   }
 
   .hero-card {
@@ -3569,7 +3622,7 @@ button:not(:disabled):active {
 
   .active-day-page {
     margin-top: 12px;
-    padding-bottom: 104px;
+    padding-bottom: calc(var(--dock-clearance, 112px) + 8px);
   }
 
   .active-day-header {
@@ -3802,6 +3855,30 @@ button:not(:disabled):active {
 /* Task rows — hover, focus, selected, completed, dense */
 .workspace-task {
   border-radius: 12px;
+}
+
+/* The title is the row's one open control. The row itself is not a button:
+   nesting the completion control and the action menu inside a button role is
+   invalid and made Space/Enter ambiguous (axe nested-interactive). */
+.task-open {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-open:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 3px;
+}
+
+.task-row-body {
   cursor: pointer;
 }
 
@@ -4481,7 +4558,7 @@ button:not(:disabled):active {
   padding: 3px 7px;
   border-radius: 999px;
   background: #eef1eb;
-  color: #687166;
+  color: #5a6258;
   font-size: 8px;
   font-weight: 750;
   letter-spacing: 0.05em;
@@ -5038,10 +5115,10 @@ button:not(:disabled):active {
 .task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; align-self: center; }
 
 /* The completion control keeps its compact 22px mark, but §12's target floor
-   applies to the target: the ::after reaches 34px without moving the mark or
+   applies to the target: the ::after reaches 44px without moving the mark or
    the row's geometry. It is absolutely positioned so it adds no grid item. */
 .task-records .workspace-task > .task-check { position: relative; }
-.task-records .workspace-task > .task-check::after { content: ""; position: absolute; inset: -6px; }
+.task-records .workspace-task > .task-check::after { content: ""; position: absolute; inset: -11px; }
 
 /* Compact rows keep the four-column grid (completion | content | progress |
    menu): the due column is hidden by the grid contract and the redundant status
@@ -5803,6 +5880,31 @@ button:not(:disabled):active {
 .eod-quote-flash {
   background: #d9f0bd;
   border-radius: 3px;
+}
+
+/* A submitted report keeps its day edition, with one compact outcome above it. */
+.eod-submitted-report { padding: 0; overflow: hidden; }
+.eod-submitted-nav { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
+.eod-submitted-nav .quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
+.eod-submitted-nav .quiet-action:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 2px; }
+.eod-submitted-outcome { display: flex; align-items: center; gap: 14px; padding: 20px 28px; }
+.eod-submitted-outcome .checked-moment { flex: 0 0 88px; width: 88px; height: 88px; }
+.eod-submitted-outcome h2 { margin: 0 0 6px; color: var(--ink); font-size: 24px; letter-spacing: -.025em; }
+.eod-submitted-outcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.eod-submitted-outcome .eod-submitted-date { margin-top: 8px; font-size: 11px; }
+.eod-submitted-document { border-top: 1px solid var(--line); padding: 26px 32px 32px; overflow-wrap: anywhere; }
+.eod-submitted-document .eod-document { margin-inline: auto; }
+.eod-submitted-text { max-width: 78ch; margin-inline: auto; white-space: pre-wrap; font-size: 14px; line-height: 1.7; }
+.eod-submitted-source { max-width: 980px; margin: 16px auto 0; border-top: 1px solid var(--line); }
+.eod-submitted-source summary { padding: 12px 0; min-height: 40px; color: var(--muted); font-size: 11px; cursor: pointer; }
+.eod-submitted-source summary:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 2px; }
+.eod-submitted-unavailable { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+@media (max-width: 560px) {
+  .eod-submitted-nav { padding: 10px 14px; }
+  .eod-submitted-outcome { gap: 8px; padding: 20px 14px; align-items: flex-start; }
+  .eod-submitted-outcome .checked-moment { flex-basis: 56px; width: 56px; height: 56px; }
+  .eod-submitted-outcome h2 { font-size: 22px; }
+  .eod-submitted-document { padding: 20px 18px 24px; }
 }
 
 .eod-submitted {
@@ -6807,8 +6909,9 @@ button:not(:disabled):active {
   border-radius: 999px;
   border: 1px solid var(--white, #fff);
   background: #d99216;
-  color: #fff;
-  font-size: 9px;
+  /* Amber needs dark ink at this size: white measured 2.6:1. */
+  color: #2b2000;
+  font-size: 10px;
   font-weight: 750;
   font-style: normal;
   line-height: 14px;
@@ -6825,30 +6928,24 @@ button:not(:disabled):active {
   border-radius: 14px;
   background: var(--white, #fff);
   box-shadow: 0 18px 60px rgba(18, 27, 17, 0.14);
-  z-index: 60;
+  /* The small-class bottom bar paints at 80; a panel that reaches the bottom
+     of a short viewport must stay above it. */
+  z-index: 100;
 }
 
 .notifications-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 14px 12px 16px;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
   border-bottom: 1px solid var(--line);
 }
 
-.notifications-head strong {
-  display: block;
-  font-size: 13px;
-  letter-spacing: -0.01em;
-}
-
-.notifications-head small {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
+.notifications-head:not(.has-tabs) {
+  justify-content: flex-end;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .notifications-head .icon {
@@ -7000,9 +7097,10 @@ button:not(:disabled):active {
 
 .notifications-tabs {
   display: grid;
+  flex: 1;
+  min-width: 0;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  margin: 10px 14px 2px;
   padding: 4px;
   border-radius: 10px;
   background: #f1f4ec;
@@ -7216,12 +7314,22 @@ button:not(:disabled):active {
 
 .eod-pill.draft-open {
   background: #edf0ea;
-  color: #687166;
+  color: #5a6258;
 }
 
 .eod-pill.changes-requested {
   background: #fbe7e3;
   color: #a03a30;
+}
+
+.eod-pill.submitted {
+  background: #edf3e6;
+  color: #49613b;
+}
+
+.eod-pill.approved {
+  background: #e6f5d9;
+  color: #3f6b1c;
 }
 
 .notifications-empty,
@@ -7301,9 +7409,9 @@ button:not(:disabled):active {
 }
 
 @media (max-width: 420px) {
-  .notifications-tabs {
-    margin-right: 10px;
-    margin-left: 10px;
+  .notifications-head {
+    padding-right: 10px;
+    padding-left: 12px;
   }
 
   .notifications-tab {
@@ -8029,7 +8137,7 @@ button:not(:disabled):active {
 
 .suggestion-status.waiting { background: #fff3d1; color: #8a5a00; }
 .suggestion-status.failed { background: #fbe7e3; color: #a03a30; }
-.suggestion-status.stale { background: #edf0ea; color: #687166; }
+.suggestion-status.stale { background: #edf0ea; color: #5a6258; }
 
 .suggestion-quote {
   margin: 0 16px;

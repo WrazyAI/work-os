@@ -12,7 +12,7 @@ import EmployeePlanBuilder from "./EmployeePlanBuilder";
 import EmployeeActivityRecaps from "./EmployeeActivityRecaps";
 import { planStatusLabel } from "./planning";
 import { useNow } from "./useNow";
-import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "./shiftPulse";
+import { remainingShiftLabel, shiftPulse, shiftWindowEndedWithOpenSession, untilShiftLabel } from "./shiftPulse";
 import { calendarDateLabel, fetchJson, formatTime, longDateLabel, operationLabel, requestId, type AnyRow, type EmployeeInsightsResponse } from "./model";
 import { Notice, PrimaryButton, SecondaryButton, Skeleton, SyncChip } from "./ui";
 import styles from "./EmployeeToday.module.css";
@@ -193,16 +193,21 @@ export default function EmployeeToday() {
   const pulse = shiftPulse(day.data?.session, shift, new Date(now), day.data?.breakPolicy?.worktivityAuthoritative === true, attendance ?? null);
   const remainingLabel = remainingShiftLabel(shift, new Date(now));
   const upcomingLabel = pulse.schedulePhase === "upcoming" ? untilShiftLabel(shift, new Date(now)) : null;
+  const windowEndedOpenSession = shiftWindowEndedWithOpenSession(pulse, day.data?.session, attendance ?? null);
   const goalChanged = goal !== (day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "");
   const error = onboarding.error || day.error || checkIn.error || saveGoal.error || sessionAction.error || changeTask.error || surfaceTask.error || goalLoom.error;
 
   const savedGoal = day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "";
   const showFocusEditor = editingFocus || !goal.trim();
   const attendanceObserved = attendance?.source === "worktivity";
-  const attendanceLabel = attendanceObserved ? operationLabel(String(attendance?.state || "unknown")) : "Not observed";
-  const attendanceTone = attendanceObserved
-    ? attendance?.state === "active" ? "ok" : attendance?.state === "paused" ? "warn" : "neutral"
-    : "neutral";
+  const attendanceLabel = windowEndedOpenSession
+    ? "Scheduled window ended"
+    : attendanceObserved ? operationLabel(String(attendance?.state || "unknown")) : "Not observed";
+  const attendanceTone = windowEndedOpenSession
+    ? "warn"
+    : attendanceObserved
+      ? attendance?.state === "active" ? "ok" : attendance?.state === "paused" ? "warn" : "neutral"
+      : "neutral";
   const nextCheckIn = day.data?.prompt.nextPromptAt ? formatTime(day.data.prompt.nextPromptAt, timezone) : null;
   const carryGroups = workspace?.carryOverGroups ?? [];
 
@@ -334,6 +339,11 @@ export default function EmployeeToday() {
               />
               <h2 id="today-state">{attendanceLabel}</h2>
             </div>
+            {windowEndedOpenSession ? (
+              <p className={styles.windowEnded}>
+                Today’s scheduled window ended{shift ? ` at ${formatTime(shift.endsAt, timezone)}` : ""}. Clock out in the Windows Companion, or confirm the day in your EOD review.
+              </p>
+            ) : null}
             <p className={styles.stateDetail}>
               {attendance?.observedAt
                 ? `Last observed ${formatTime(attendance.observedAt, timezone)}${attendance.clockedOutAtInferred ? ", clock-out boundary inferred" : ""}. `
@@ -355,7 +365,7 @@ export default function EmployeeToday() {
             <div className={styles.window}>
               <div className={styles.windowValues}>
                 <span className={styles.windowElapsed}><strong>{pulse.elapsedLabel}</strong><span>elapsed</span></span>
-                <span className={styles.windowLeft}>{upcomingLabel ?? remainingLabel ?? `${Math.round(pulse.progressPercent)}% of the window`}</span>
+                <span className={styles.windowLeft}>{windowEndedOpenSession ? "Window ended" : upcomingLabel ?? remainingLabel ?? `${Math.round(pulse.progressPercent)}% of the window`}</span>
               </div>
               <div
                 className={styles.track}
@@ -376,6 +386,7 @@ export default function EmployeeToday() {
                 Scheduled-window progress only — not a productivity measure.
                 {pulse.breakSeconds > 0 ? ` Break ${pulse.breakLabel}.` : ""}
               </p>
+              {windowEndedOpenSession ? <Link className={styles.windowEndedLink} href="/work-os/review">Open EOD review</Link> : null}
             </div>
           ) : (
             <p className={styles.stateDetail}>No schedule is configured for today.</p>

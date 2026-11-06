@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Menu,
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -46,19 +47,23 @@ export type SidebarNavProps = {
 type Destination = {
   id: SidebarView;
   label: string;
+  /** The narrow bottom bar has ~46px per destination; the accessible name
+   * stays the full label. */
+  shortLabel?: string;
   icon: LucideIcon;
 };
 
 type AdminDestination = {
   id: AdminSection;
   label: string;
+  shortLabel?: string;
   icon: LucideIcon;
 };
 
 const DESTINATIONS: Destination[] = [
   { id: "day", label: "My Day", icon: LayoutDashboard },
   { id: "tasks", label: "Tasks", icon: ListChecks },
-  { id: "review", label: "EOD Review", icon: MessageSquareText },
+  { id: "review", label: "EOD Review", shortLabel: "EOD", icon: MessageSquareText },
   { id: "insights", label: "Insights", icon: Gauge },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -67,7 +72,7 @@ const ADMIN_DESTINATIONS: AdminDestination[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "people", label: "People", icon: Users },
   { id: "tasks", label: "Tasks", icon: ListChecks },
-  { id: "review", label: "EOD Review", icon: MessageSquareText },
+  { id: "review", label: "EOD Review", shortLabel: "EOD", icon: MessageSquareText },
   { id: "insights", label: "Insights", icon: Gauge },
   { id: "evidence", label: "Evidence", icon: Images },
   { id: "settings", label: "Settings", icon: Settings },
@@ -120,6 +125,7 @@ function SidebarGlideGroup({ children, className = "" }: { children: ReactNode; 
 function SidebarRow({
   icon: Icon,
   label,
+  shortLabel,
   active = false,
   hint,
   onClick,
@@ -127,6 +133,7 @@ function SidebarRow({
 }: {
   icon: LucideIcon;
   label: string;
+  shortLabel?: string | undefined;
   active?: boolean;
   hint?: string | undefined;
   onClick?: () => void;
@@ -145,7 +152,10 @@ function SidebarRow({
       onClick={onClick}
     >
       <span className="sidebar-row-icon"><Icon size={18} strokeWidth={1.85} /></span>
-      <span className="sidebar-row-copy">{label}</span>
+      <span className="sidebar-row-copy">
+        <span className="sidebar-row-copy-full">{label}</span>
+        <span className="sidebar-row-copy-short" aria-hidden="true">{shortLabel ?? label}</span>
+      </span>
     </button>
   );
 }
@@ -176,8 +186,14 @@ function WorkspaceMenu({
   useEffect(() => {
     const updatePosition = () => {
       const rect = anchor.getBoundingClientRect();
+      const height = menuRef.current?.getBoundingClientRect().height ?? 0;
+      // An anchor on the bottom bar opens its menu upward; the top-right
+      // workspace control keeps the familiar downward placement.
+      const top = rect.top > window.innerHeight / 2
+        ? Math.max(12, rect.top - height - 8)
+        : rect.bottom + 8;
       const left = Math.min(rect.left, window.innerWidth - menuWidth - 12);
-      setPosition({ top: rect.bottom + 8, left: Math.max(12, left) });
+      setPosition({ top, left: Math.max(12, left) });
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -269,7 +285,17 @@ export default function SidebarNav({
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [collapsedSurfaceHover, setCollapsedSurfaceHover] = useState(false);
+  // Below the small class the rail is a labelled bottom bar, so the workspace
+  // control opens its menu instead of expanding a rail that no longer exists.
+  const [compactNav, setCompactNav] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 560px)").matches);
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 560px)");
+    const update = () => setCompactNav(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const admin = mode === "admin";
   const activeId: SidebarView | AdminSection = admin ? adminSection ?? "overview" : activeView;
   const navigate = (id: SidebarView | AdminSection) => {
@@ -308,7 +334,7 @@ export default function SidebarNav({
   };
 
   const handleSidebarClick = (event: ReactMouseEvent<HTMLElement>) => {
-    if (!collapsed || !(event.target instanceof Element)) return;
+    if (compactNav || !collapsed || !(event.target instanceof Element)) return;
     if (event.target.closest("[data-sidebar-nav-option]") || event.target.closest("[data-sidebar-workspace-trigger]")) return;
     setCollapsedState(false);
   };
@@ -326,16 +352,16 @@ export default function SidebarNav({
       <div className="sidebar-shell">
         <div className="sidebar-header">
           <button
-            ref={workspaceButtonRef}
+            ref={compactNav ? undefined : workspaceButtonRef}
             type="button"
             data-sidebar-workspace-trigger
             className="sidebar-workspace-trigger"
-            aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}
-            title={collapsed ? "Expand sidebar" : "Work OS workspace menu"}
-            aria-haspopup={collapsed ? undefined : "menu"}
-            aria-expanded={collapsed ? undefined : workspaceOpen}
+            aria-label={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}
+            title={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}
+            aria-haspopup={collapsed && !compactNav ? undefined : "menu"}
+            aria-expanded={collapsed && !compactNav ? undefined : workspaceOpen}
             onClick={() => {
-              if (collapsed) {
+              if (collapsed && !compactNav) {
                 setCollapsedState(false);
                 return;
               }
@@ -374,13 +400,13 @@ export default function SidebarNav({
           <>
             <nav className="sidebar-navigation" aria-label="Work OS">
               <SidebarGlideGroup className="nav-group nav-core">
-                {primary.map(({ id, label, icon: Icon }) => (
-                  <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+                {primary.map(({ id, label, shortLabel, icon: Icon }) => (
+                  <SidebarRow key={id} icon={Icon} label={label} shortLabel={shortLabel} active={activeId === id} onClick={() => navigate(id)} />
                 ))}
               </SidebarGlideGroup>
               <SidebarGlideGroup className="nav-group nav-context">
-                {context.map(({ id, label, icon: Icon }) => (
-                  <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+                {context.map(({ id, label, shortLabel, icon: Icon }) => (
+                  <SidebarRow key={id} icon={Icon} label={label} shortLabel={shortLabel} active={activeId === id} onClick={() => navigate(id)} />
                 ))}
               </SidebarGlideGroup>
             </nav>
@@ -389,13 +415,13 @@ export default function SidebarNav({
         {admin ? (
           <nav className="sidebar-navigation" aria-label="Work OS administration">
             <SidebarGlideGroup className="nav-group nav-core">
-              {primary.map(({ id, label, icon: Icon }) => (
-                <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+              {primary.map(({ id, label, shortLabel, icon: Icon }) => (
+                <SidebarRow key={id} icon={Icon} label={label} shortLabel={shortLabel} active={activeId === id} onClick={() => navigate(id)} />
               ))}
             </SidebarGlideGroup>
             <SidebarGlideGroup className="nav-group nav-context">
-              {context.map(({ id, label, icon: Icon }) => (
-                <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+              {context.map(({ id, label, shortLabel, icon: Icon }) => (
+                <SidebarRow key={id} icon={Icon} label={label} shortLabel={shortLabel} active={activeId === id} onClick={() => navigate(id)} />
               ))}
             </SidebarGlideGroup>
           </nav>
@@ -403,11 +429,37 @@ export default function SidebarNav({
 
         <div className="sidebar-footer">
           <SidebarGlideGroup className="nav-group nav-settings">
-            {settings.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} hint={id === "settings" && !admin ? "Ctrl + ," : undefined} onClick={() => navigate(id)} />
+            {settings.map(({ id, label, shortLabel, icon: Icon }) => (
+              <SidebarRow key={id} icon={Icon} label={label} shortLabel={shortLabel} active={activeId === id} hint={id === "settings" && !admin ? "Ctrl + ," : undefined} onClick={() => navigate(id)} />
             ))}
           </SidebarGlideGroup>
         </div>
+
+        {/* Small class only: the bar keeps the destinations, and the account
+            menu (switch workspace, what's new, sign out) lives one press away
+            instead of consuming another destination slot. */}
+        <button
+          ref={compactNav ? workspaceButtonRef : undefined}
+          type="button"
+          data-sidebar-nav-option
+          data-sidebar-workspace-trigger
+          className="sidebar-row sidebar-mobile-more"
+          aria-label="Work OS workspace menu"
+          aria-haspopup="menu"
+          aria-expanded={workspaceOpen}
+          title="Work OS workspace menu"
+          onClick={() => setWorkspaceOpen((current) => !current)}
+        >
+          <span className="sidebar-row-icon"><Menu size={18} strokeWidth={1.85} /></span>
+          <span className="sidebar-row-copy"><span className="sidebar-row-copy-full">More</span><span className="sidebar-row-copy-short" aria-hidden="true">More</span></span>
+        </button>
+
+        {!admin ? (
+          <button type="button" data-sidebar-nav-option className="sidebar-row sidebar-mobile-chat" aria-label="New chat" title="New chat" onClick={onNewChat}>
+            <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
+            <span className="sidebar-row-copy"><span className="sidebar-row-copy-full">New chat</span><span className="sidebar-row-copy-short" aria-hidden="true">Chat</span></span>
+          </button>
+        ) : null}
       </div>
 
       {workspaceOpen && workspaceButtonRef.current && (

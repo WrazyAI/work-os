@@ -9,10 +9,38 @@
   --white: #fbfaf4;
   --line: #dcdcd3;
   --signal: #b8ff5a;
-  --danger: #c84e42;
+  /* Text-safe danger: the blueprint's #c94e43 measures 4.3:1 on paper and
+     4.0:1 on canvas, and it is used as status text at 8–12px. */
+  --danger: #b84035;
 }
 * {
   box-sizing: border-box;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10000;
+  top: 10px;
+  left: 10px;
+  padding: 9px 13px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  transform: translateY(-180%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.skip-target {
+  scroll-margin-top: 16px;
+  outline: none;
 }
 html {
   overscroll-behavior: none;
@@ -235,7 +263,7 @@ select:focus-visible {
   margin: 0 0 3px;
   text-transform: uppercase;
   letter-spacing: 0.13em;
-  color: #7a7d74;
+  color: var(--muted);
   font-size: 10px;
 }
 .masthead h1 {
@@ -315,6 +343,30 @@ select:focus-visible {
   -ms-overflow-style: none;
 }
 .notification-flyouts::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* Standing conditions sit in the page's reading order under the masthead.
+   Only the fallback for shell-less surfaces keeps the floating stack, offset
+   below the header so it can never cover the page identity or its actions. */
+.notification-flyouts.has-persistent {
+  top: max(92px, env(safe-area-inset-top));
+}
+@media (max-width: 560px) {
+  .notification-flyouts.has-persistent {
+    top: max(80px, env(safe-area-inset-top));
+  }
+}
+.notification-region {
+  width: min(100%, 1200px);
+  margin: 12px auto 0;
+}
+.notification-region:empty { display: none; }
+.notification-region-list {
+  display: grid;
+  gap: 10px;
+}
+.notification-region-list .notification-flyout {
+  width: 100%;
+  animation: none;
+}
 .notification-flyout {
   --notification-accent: #496176;
   --notification-surface: #f2f7fb;
@@ -490,7 +542,7 @@ select:focus-visible {
 .kicker,
 .page-intro > span {
   display: inline-block;
-  color: #8d9187;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -992,7 +1044,7 @@ button:disabled {
   margin: 18px 0 5px;
 }
 .loading p {
-  color: #8d9187;
+  color: var(--muted);
 }
 @media (max-width: 850px) {
   .workspace {

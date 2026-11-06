@@ -122,10 +122,106 @@
       "verification": "Ledger 08faace9-600a-4699-9d63-eda9aabba66b: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1685 passed; focused bell/model tests 35 passed; typecheck and production build passed; rendered 1440/1024/930/720/560/390 admin, employee, empty, loading, and error states plus tab reset, keyboard tabs/rows, Escape, scroll reset, decision and activity drill-downs, and no panel overflow; TestSprite ec7f241c passed 10/10."
     },
     {
+      "id": "background-work-lightening",
+      "type": "fix",
+      "summary": "Administration and the floating companion stop repeating hidden employee page work, cache saves, and recap checks.",
+      "verification": "Branch codex/work-os-performance on 2026-11-05: real Chromium App checks 5/5; companion Vitest 1644/1644; Work OS full suite 1244/0/11; backend performance/static checks and Agent OS reconciliation passed; Rust day-monitor core 2/2. Details in docs/performance-implementation.md."
+    },
+    {
+      "id": "shift-progress-pill",
+      "type": "feature",
+      "summary": "The floating companion's elapsed-time pill now fills as the shift progresses.",
+      "verification": "Ledger 1fdb52e0-3dc8-42c7-8657-996464ba3f45: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1702 passed; focused bell/model/asset tests 74 passed; mascot sync browser 172 checks passed; typecheck and production build passed; rendered 0/50/100% pill states with bold elapsed text, a pale-to-deep lemon-green fill, reduced motion, and no clipping; notification header checked at 1440/1024/930/720/560/390/320 with no subtitle and no panel overflow; TestSprite 8ada0e0f passed 5/5 and 9a3a990a passed 9/9."
+    },
+    {
+      "id": "admin-notification-header-switcher",
+      "type": "fix",
+      "summary": "The notifications panel switches between personal reminders and workspace activity in its header.",
+      "verification": "fdd886e7; TestSprite ec7f241c 9/9 in run e03efdac-4e81-40fd-8f55-1983f1f8b6da; Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1702 passed."
+    },
+    {
+      "id": "admin-workspace-isolation",
+      "type": "fix",
+      "summary": "Administration stops loading hidden employee screens while keeping personal reminders and settings available.",
+      "verification": "Branch codex/work-os-performance: real Chromium App lifecycle checks 5/5; Admin cold start hidden page reads 8 to 0; full suite 1269/0/11; companion 1702/0."
+    },
+    {
+      "id": "bounded-employee-day-and-insights",
+      "type": "fix",
+      "summary": "Employee day and Today's weekly record use bounded summaries, so large backlogs no longer load whole screens.",
+      "verification": "Branch codex/work-os-performance: compact day 4,699,379 to 15,217 bytes; Today summary 8 queries/28 rows vs full 24/5,230; >2,500 eligible task and pagination regressions pass."
+    },
+    {
+      "id": "admin-overview-readiness-performance",
+      "type": "fix",
+      "summary": "Admin Overview uses less database work and refreshes setup checks separately from the minute-by-minute dashboard.",
+      "verification": "Branch codex/work-os-performance: Work OS Overview 45 to 17 queries; deployed Agent OS version 20 queries with recap/exception measures; readiness 2,507 to 5 rows; exact aggregate tests pass."
+    },
+    {
+      "id": "eod-submitted-read-only",
+      "type": "fix",
+      "summary": "Opening a submitted or approved EOD shows the report read-only instead of asking you to prepare it again.",
+      "verification": "Worktree codex/eod-review-submitted-state: full Work OS suite 1269 passed / 0 failed / 11 skipped; companion suite 1717 passed; focused EOD/composer/document/asset tests 59 passed; typecheck and production build passed; Playwright submitted/approved/draft/rejected/no-report at 1440/1024/720/390 with keyboard, reduced motion, and no overflow; TestSprite 0f5741c7 passed."
+    },
+    {
+      "id": "notification-region-placement",
+      "type": "fix",
+      "summary": "Standing notices sit under the page title instead of covering the page and its actions.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "text-safe-status-contrast",
+      "type": "fix",
+      "summary": "Secondary text, status labels, and the notification badge are easier to read.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "task-row-open-control",
+      "type": "fix",
+      "summary": "A task opens from its title, and the completion box has a larger touch target.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "companion-small-screen-layout",
+      "type": "fix",
+      "summary": "On small windows the update composer and the Tasks focus header no longer cover or clip the page.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "first-run-cta-pacing",
+      "type": "fix",
+      "summary": "Connect and Start setup appear promptly instead of waiting for the whole spoken line.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "insights-empty-state",
+      "type": "feature",
+      "summary": "Insights with no recorded work shows one clear next step instead of a dashboard of zeros.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "mobile-admin-records",
+      "type": "feature",
+      "summary": "Admin People, Tasks, and EOD Review read as cards on small windows, with every key field visible.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "companion-mobile-navigation",
+      "type": "feature",
+      "summary": "The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.",
+      "verification": "Worktree codex/ui-ux-midnight: full Work OS suite 1271 passed / 0 failed / 11 skipped; companion suite 1718 passed; typecheck and production build passed; axe 0 serious/critical on admin Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings at 390 and 1440 plus employee Today, Tasks, and empty Insights; rendered 1440/390 checks for the notice region, composer clearance, mobile bar, cards, and empty state; CodeRabbit review passed after fixes."
+    },
+    {
+      "id": "plan-save-live-session-recovery",
+      "type": "fix",
+      "summary": "A plan whose session reopens after a false clock-out can be saved again, and a rejected save now shows the real reason instead of blaming the connection.",
+      "verification": "Ledger 41bfc9e9-75cc-4469-b0f4-9d61a1bec7a4: full Work OS suite 1273 passed / 0 failed / 11 skipped; companion suite 1721 passed; focused plan/workday/route tests 64 passed; typecheck and production builds passed; rendered 1440 and 390 planner save errors show the server reason with no overflow."
+    },
+    {
       "id": "floating-otto-view-switch",
       "type": "feature",
       "summary": "Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.",
-      "verification": "Companion suite 1796 passed/198 files; production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; final 400/420/390 and in-app 480/390 rendered checks; CodeRabbit and whole-branch review findings fixed."
+      "verification": "Companion suite 1805 passed/199 files; companion typecheck and production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; rendered 400/390/380/360 one-row headers, in-app 480/390, close/reopen history and draft retention, timestamps, attire dress/undress, and symmetric Admin entrance; CodeRabbit and whole-branch review findings fixed."
     }
   ],
   "emergency": null

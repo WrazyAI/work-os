@@ -216,6 +216,26 @@
   text-underline-offset: 3px;
 }
 
+.windowEnded {
+  margin-top: 7px;
+  max-width: 48ch;
+  color: #8a5c08;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.windowEndedLink {
+  display: inline-block;
+  margin-top: 7px;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+
 .watch {
   margin-top: 7px;
   color: var(--accent);

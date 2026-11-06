@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl } from "./workOsQueries";
+import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
 
 describe("activityIntervalDecisionBody", () => {
   it("echoes the review version, including zero for an unreviewed recap", () => {
@@ -24,6 +24,22 @@ describe("activityIntervalDecisionBody", () => {
     const body = activityIntervalDecisionBody("confirm", undefined, 3);
     expect(body).not.toHaveProperty("revision");
     expect(body.expectedReviewVersion).toBe(3);
+  });
+});
+
+describe("openTaskCountUrl", () => {
+  it("asks for one row with exact counts, excluding My day", () => {
+    const url = openTaskCountUrl("2026-11-04");
+    expect(url).toContain("view=open&limit=1");
+    expect(url).toContain("excludeToday=true");
+    expect(url).toContain("date=2026-11-04");
+    expect(openTaskCountUrl()).not.toContain("date=");
+  });
+});
+
+describe("dashboardInsightsUrl", () => {
+  it("asks for the bounded Today summary instead of the full seven-day report", () => {
+    expect(dashboardInsightsUrl("2026-11-04")).toBe("/api/work-os/me/insights?range=7d&summary=1&through=2026-11-04");
   });
 });
 

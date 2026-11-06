@@ -55,6 +55,7 @@ export interface WorkOsReadinessInput {
   }>;
   tasks: Array<{
     completed?: boolean | null;
+    status?: string | null;
     assigneePersonIds?: string[] | null;
     dueDate?: string | null;
     priority?: string | null;
@@ -64,6 +65,9 @@ export interface WorkOsReadinessInput {
     definitionOfDone?: string | null;
     taskGroupId?: string | null;
   }>;
+  /** Database aggregate for large organizations; the evaluator remains shared
+   * with callers that already have task rows. */
+  taskChecks?: WorkOsReadinessReport["checks"]["tasks"];
   providerReady: Partial<Record<WorkOsProvider, boolean>>;
   runtime: {
     aiConfigured: boolean;
@@ -185,8 +189,8 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
     }).length,
   ]));
   const providerReady = Object.fromEntries(providers.map((provider) => [provider, input.providerReady[provider] === true]));
-  const openTasks = input.tasks.filter((task) => task.completed !== true);
-  const taskChecks = {
+  const openTasks = input.tasks.filter((task) => task.completed !== true && !["archived", "deleted"].includes(task.status ?? ""));
+  const taskChecks = input.taskChecks ?? {
     open: openTasks.length,
     withoutAssignee: openTasks.filter((task) => !task.assigneePersonIds?.length).length,
     withoutDueDate: openTasks.filter((task) => !nonEmpty(task.dueDate)).length,

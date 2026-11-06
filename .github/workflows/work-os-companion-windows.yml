@@ -366,7 +366,7 @@ jobs:
     name: Build internal universal macOS packages
     needs: unsigned-windows-release
     if: github.run_attempt == 1
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     environment: windows-production-release
     permissions:

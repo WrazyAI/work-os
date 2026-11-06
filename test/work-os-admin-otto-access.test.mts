@@ -147,7 +147,7 @@ test("unmapped_admin_can_bootstrap_without_person_writes", async () => {
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.deepEqual(await response.json(), {
       schemaVersion: 1, scope: { userId: "actor-1", organizationId: "org-1", mode: "admin" },
-      personId, voiceAvailable: true, transcriptionAvailable: true,
+      personId, displayName: "Admin", avatarUrl: null, voiceAvailable: true, transcriptionAvailable: true,
     });
     assert.equal(f.state.activations, 1, "the explicit POST context activates following");
     assert.deepEqual(f.writes, [], "context does not insert people or enable flags");

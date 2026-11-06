@@ -415,20 +415,48 @@ body.avatar-window {
 @media (prefers-reduced-motion: reduce) {
   .avatar-reading-dots i { animation: none; opacity: 0.8; }
 }
+/* The elapsed pill is also the shift-progress instrument: its lemon-green
+   fill reveals the scheduled day from left to right, so the same readout says
+   how much has passed and how much of the shift is still ahead. The fill spans
+   the whole pill and is clipped, keeping the gradient anchored to the track
+   instead of squeezing the deep end into a short bar. */
 .avatar-day-time {
   position: absolute;
   right: 50%;
   bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 124px;
+  padding: 4px 10px;
+  overflow: hidden;
   transform: translateX(50%);
-  padding: 3px 6px;
-  border: 1px solid rgba(214, 244, 184, 0.4);
-  border-radius: 7px;
-  background: rgba(17, 24, 17, 0.94);
-  color: #efffd6;
-  font: 800 10px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  border: 1px solid rgba(124, 201, 54, 0.46);
+  border-radius: 999px;
+  background: rgba(247, 251, 239, 0.97);
+  color: #182415;
+  font: 800 11px/1 Manrope, Inter, sans-serif;
   font-variant-numeric: tabular-nums;
-  letter-spacing: .03em;
+  letter-spacing: .015em;
   white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 3px 9px rgba(13, 18, 12, 0.13);
+  isolation: isolate;
+}
+.avatar-day-time-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e9fbc6 0%, #d4f7a2 32%, #a8e968 64%, #7cc936 100%);
+  transition: clip-path 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.avatar-day-time-label {
+  position: relative;
+  z-index: 1;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.avatar-day-time.is-unavailable .avatar-day-time-fill {
+  display: none;
 }
 
 .avatar-badge {
@@ -912,7 +940,6 @@ body.avatar-window {
 .avatar-pet .signal-spirit-shadow { fill: rgba(24, 32, 24, .14); }
 .avatar-drag-surface { top: 5px; left: 55px; width: 54px; height: 23px; border-color: rgba(83, 100, 81, .22); border-radius: 999px; background: rgba(251, 252, 248, .92); color: #778174; font: 800 8px/1 Manrope, Inter, sans-serif; letter-spacing: .12em; box-shadow: 0 4px 12px rgba(13, 18, 12, .12); }
 .avatar-prompt-bubble + .avatar-drag-surface { top: 58px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, .25); background: rgba(32, 36, 33, .9); color: rgba(255, 252, 246, .82); font-size: 12px; }
-.avatar-day-time { bottom: 1px; border-color: rgba(83, 100, 81, .7); border-radius: 999px; background: rgba(251, 252, 248, .96); color: #344333; font: 500 11px/1 Manrope, Inter, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 9px rgba(13, 18, 12, .13); }
 .avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
 .avatar-hide { top: 20px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
 .avatar-prompt-bubble ~ .avatar-hide { top: 58px; }
@@ -922,6 +949,7 @@ body.avatar-window {
   .avatar-thinking-active, .avatar-thinking-spinner, .avatar-thinking-chevron,
   .avatar-thinking-trace-wrap { animation: none; transition: none; }
   .avatar-orb:has(.mascot-pet[data-attention-playing="true"]) { animation: none; }
+  .avatar-day-time-fill { transition: none; }
 }
 
 
@@ -948,15 +976,10 @@ body.avatar-window {
 .avatar-compact .avatar-day-time {
   top: 225px;
   bottom: auto;
-  min-width: 76px;
-  padding: 4px 8px;
-  border: 1px solid rgba(83, 100, 81, 0.7);
-  border-radius: 999px;
-  background: rgba(251, 252, 248, 0.96);
-  color: #344333;
-  box-shadow: 0 3px 9px rgba(13, 18, 12, 0.13);
+  min-width: 124px;
+  padding: 4px 10px;
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
 }
 .avatar-drag-surface {
   top: 22px;

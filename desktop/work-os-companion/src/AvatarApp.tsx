@@ -15,6 +15,7 @@ import { Check, History, RotateCcw, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
+import { useDayMonitor } from "./useDayMonitor";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { avatarPlaybackAllowed } from "./avatarSpeech";
@@ -1142,6 +1143,11 @@ export default function AvatarApp(): React.ReactElement {
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const dayRef = useRef<DayFacts>(facts);
   const dayLoadInFlight = useRef(false);
+  const mirroredDay = useRef<Record<string, any> | null>(null);
+  const dayMonitor = useDayMonitor({ window: "avatar", session: desktopSession, enabled: !avatarFixture && !!desktopSession,
+    activePage: false, onSnapshot: (day) => { mirroredDay.current = day; void loadDayRef.current?.(); } });
+  const dayMonitorRef = useRef(dayMonitor); dayMonitorRef.current = dayMonitor;
+  useEffect(() => { mirroredDay.current = null; }, [desktopSession?.token, desktopSession?.organizationId]);
   const daySessionRevision = useRef(0);
   const dayReloadRequested = useRef(false);
   const chatRef = useRef<ChatEntry[]>([]);
@@ -1211,6 +1217,9 @@ export default function AvatarApp(): React.ReactElement {
       // The floating window has its own boot/refresh path. Resolve membership
       // before touching personal endpoints, even before main broadcasts context.
       let membership: AvatarMembership | null = null;
+      const ownsMonitoring = await dayMonitorRef.current.isOwner();
+      if (!ownsMonitoring && !mirroredDay.current) return;
+      if (ownsMonitoring) {
       try {
         membership = await apiRequest<AvatarMembership>("/api/work-os/session");
       } catch (value) {
@@ -1234,10 +1243,11 @@ export default function AvatarApp(): React.ReactElement {
         return;
       }
       if (dayAccess === "wait") return;
+      }
       if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
       // Shared query cache: a fresh cached day is served without a network
       // round-trip; stale data refreshes in the background.
-      let day = await workOsQueryClient.fetchQuery({
+      let day = !ownsMonitoring && mirroredDay.current ? mirroredDay.current : await workOsQueryClient.fetchQuery({
         queryKey: workOsKeys.day("compact"),
         queryFn: () => fetchDay({ variant: "compact" }),
         staleTime: DAY_STALE_MS,
@@ -1248,7 +1258,7 @@ export default function AvatarApp(): React.ReactElement {
       // it from the cached details view only when the active shift needs it.
       const compactStart = Date.parse(String(day?.shift?.startsAt ?? session.scheduled_starts_at ?? ""));
       const compactEnd = Date.parse(String(day?.shift?.endsAt ?? session.scheduled_ends_at ?? ""));
-      if (session.clocked_in_at && (!Number.isFinite(compactEnd) || (Number.isFinite(compactStart) && compactEnd <= compactStart))) {
+      if (ownsMonitoring && session.clocked_in_at && (!Number.isFinite(compactEnd) || (Number.isFinite(compactStart) && compactEnd <= compactStart))) {
         try {
           const detailed = await workOsQueryClient.fetchQuery({
             queryKey: workOsKeys.day("details"),
@@ -1291,7 +1301,7 @@ export default function AvatarApp(): React.ReactElement {
         const end = Date.parse(String(shift?.endsAt ?? ""));
         return Number.isFinite(start) && Number.isFinite(end) && end > start;
       };
-      if (!hasValidShiftWindow(day?.shift)) {
+      if (ownsMonitoring && !hasValidShiftWindow(day?.shift)) {
         const sessionShift = resolveDashboardShift({
           shift: null,
           session: session as unknown as WorkSession,
@@ -1306,7 +1316,7 @@ export default function AvatarApp(): React.ReactElement {
         try {
           const onboarding = await workOsQueryClient.fetchQuery({
             queryKey: workOsKeys.onboarding(),
-            queryFn: fetchOnboarding,
+            queryFn: () => fetchOnboarding(),
             staleTime: force ? 0 : ONBOARDING_STALE_MS,
           });
           const schedule = onboarding.organizationSetup.officialSchedule
@@ -1386,6 +1396,7 @@ export default function AvatarApp(): React.ReactElement {
       });
       setConnected(true);
       setDaySyncState("ready");
+      if (ownsMonitoring) void dayMonitorRef.current.publish(day as any);
     } catch (value) {
       if (sessionRevision !== daySessionRevision.current) return;
       if (value instanceof ApiRequestError && value.status === 401) setConnected(false);
@@ -1484,6 +1495,14 @@ export default function AvatarApp(): React.ReactElement {
     return () => clearInterval(poll);
   }, [avatarFixture, loadDay]);
 
+  // The monitor client is created asynchronously after the saved session is
+  // read. A first load can arrive before ownership exists, so claim completion
+  // retries immediately instead of leaving the avatar on Loading today… for a
+  // full poll interval.
+  useEffect(() => {
+    if (dayMonitor.owns && !avatarFixture) void loadDay(true);
+  }, [avatarFixture, dayMonitor.owns, loadDay]);
+
   // Worktivity can clock the employee in or out from activity alone. Watch on
   // the shared adaptive cadence, reload only when something actually moved,
   // and tell the main window so every surface converges together.
@@ -1492,7 +1511,7 @@ export default function AvatarApp(): React.ReactElement {
     void emit("work-os://avatar-day-changed");
   }, [loadDay]);
   useAttendanceWatch({
-    enabled: connected === true && facts.personId !== null,
+    enabled: connected === true && facts.personId !== null && dayMonitor.owns,
     input: { sessionState: facts.sessionState, shiftStartsAt: facts.shiftStartsAt, shiftEndsAt: facts.shiftEndsAt },
     onChange: onAttendanceChange,
   });
@@ -2869,7 +2888,8 @@ export default function AvatarApp(): React.ReactElement {
   const showShiftTime = hasOpenShiftSession(facts);
   const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
   const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
-  const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable";
+  const progressPercent = Math.round(fraction * 100);
+  const progressText = progressAvailable ? `${progressPercent}% of shift complete` : "Shift progress unavailable";
   const shiftLabel = showShiftTime
     ? facts.sessionState === "paused" ? (label ? `Paused · ${label}` : "Paused") : `On shift · ${label}`
     : "Off shift";
@@ -3276,7 +3296,19 @@ export default function AvatarApp(): React.ReactElement {
               as a stray wedge beside the figure. */}
           {workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
-        {workspaceView === "admin" ? <span className="avatar-admin-label">Admin</span> : showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
+        {workspaceView === "admin"
+          ? <span className="avatar-admin-label">Admin</span>
+          : showShiftTime && <span
+            className={`avatar-day-time${progressAvailable ? "" : " is-unavailable"}`}
+            data-progress={progressPercent}
+            aria-hidden="true"
+          >
+            <i
+              className="avatar-day-time-fill"
+              style={{ clipPath: `inset(0 ${progressAvailable ? 100 - progressPercent : 100}% 0 0)` }}
+            />
+            <span className="avatar-day-time-label">{elapsedText}</span>
+          </span>}
         </div>
       )}
       {expanded && (

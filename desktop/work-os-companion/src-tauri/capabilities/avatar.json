@@ -9,6 +9,7 @@
     "core:default",
     "core:event:default",
     "allow-app-commands",
+    "allow-day-monitor",
     "core:path:default",
     "core:window:allow-set-position",
     "core:window:allow-set-size",

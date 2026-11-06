@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEmployeeDay } from "./useEmployeeDay";
 import { fetchJson, calendarDateLabel, formatDateTimeShort, longDateLabel, type EmployeeInsightsResponse } from "./model";
@@ -106,6 +107,23 @@ export default function EmployeeInsights() {
   const closingCarryOver = rangeSummary?.closingCarryOver ?? 0;
   const closingOverdue = rangeSummary?.closingOverdue ?? 0;
   const blockers = rangeSummary?.blockers ?? 0;
+  // A range with no recorded plan, outcome, update, observation, or evidence
+  // is an invitation to begin, not a dashboard of zeros (design §9).
+  const hasRecordedWork = Boolean(data) && (
+    Number(data?.totals.tasksCompleted ?? 0) > 0 ||
+    Number(data?.totals.updates ?? 0) > 0 ||
+    Number(data?.totals.observedSeconds ?? 0) > 0 ||
+    Number(data?.totals.outputEvidence ?? 0) > 0 ||
+    Number(data?.totals.planned ?? 0) > 0 ||
+    closingCarryOver > 0 ||
+    closingOverdue > 0 ||
+    blockers > 0 ||
+    days.some((item) =>
+      Boolean(item.goal?.text?.trim()) ||
+      Number(item.trackedMinutes ?? 0) > 0 ||
+      item.sessionQuality?.status === "needs_correction",
+    )
+  );
 
   return (
     <div className={styles.page}>
@@ -173,6 +191,7 @@ export default function EmployeeInsights() {
             <span>Worktivity {data.freshness.worktivityObservedAt ? `observed ${formatDateTimeShort(data.freshness.worktivityObservedAt)}` : "not observed"}</span>
           </div>
 
+          {hasRecordedWork ? <>
           <section className={`${styles.kpis} ${styles.reveal}`} style={{ "--delay": "60ms" } as CSSProperties} aria-label="Range facts">
             <Kpi label="Outcomes completed" value={String(data.totals.tasksCompleted)} delta={pillFor("tasksCompleted")} />
             <Kpi
@@ -416,6 +435,16 @@ export default function EmployeeInsights() {
           <p className={styles.footnote}>
             These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.
           </p>
+          </> : (
+            <section className={styles.insightsEmpty} aria-labelledby="insights-empty-title">
+              <h2 id="insights-empty-title">No work recorded in this range</h2>
+              <p>Goals, updates, completed tasks, evidence, and observed time will appear here as you record them. Activity alone never becomes an outcome.</p>
+              <div className={styles.emptyActions}>
+                <Link className={styles.primaryButton} href="/work-os/today">Open today</Link>
+                <Link className={styles.secondaryButton} href="/work-os/tasks">View tasks</Link>
+              </div>
+            </section>
+          )}
         </>
       ) : (
         <div className={styles.empty}>
