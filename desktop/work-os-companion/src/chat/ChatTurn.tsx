@@ -60,7 +60,9 @@ export function ChatTurn({
   const clock = role === "assistant" ? formatChatClock(timestamp) : null;
   // The row reserves its strip and reveals on hover, so adding an action never
   // shifts the thread and never requires the copy control to be present.
-  const actionRow = copyText || actions ? (
+  // A recorded time is an action-row affordance even when a tool card owns the
+  // visible content and supplies no copy payload or extra action.
+  const actionRow = copyText || actions || clock ? (
     <div className="chat-copy-row">
       {copyText ? <CopyMessageButton text={copyText} /> : null}
       {actions}

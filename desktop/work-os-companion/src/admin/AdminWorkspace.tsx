@@ -60,7 +60,7 @@ export type AdminProfileEntry = {
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenOtto, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -79,6 +79,10 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The administration New chat entry. It starts the shared admin Otto
    * thread; it is never a dead sidebar control. */
   onNewChat?: (() => void) | undefined;
+  /** The masthead's Ask Otto entry. It resumes the shared conversation when
+   * one is retained; it is not a second New chat. Falls back to the New chat
+   * callback for hosts that predate the split. */
+  onOpenOtto?: (() => void) | undefined;
   /** Opens Admin Otto on its Recaps tab: the Overview's recap measure and the
    * EOD report's See all recaps both lead to the recaps they name. */
   onOpenRecaps: () => void;
@@ -93,6 +97,9 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   personalSettings?: ReactNode;
 }) {
   const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
+  // Ask Otto reopens the retained conversation. Only the explicit New chat
+  // control (sidebar or sheet header) owns the durable discard.
+  const openOtto = onOpenOtto ?? onNewChat;
   const meta = ADMIN_SECTIONS[section];
 
   const queryClient = useQueryClient();
@@ -156,8 +163,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
           <div className="mast-actions">
-            {onNewChat ? (
-              <button type="button" className="admin-switch admin-ask-otto" onClick={onNewChat}>
+            {openOtto ? (
+              <button type="button" className="admin-switch admin-ask-otto" onClick={openOtto}>
                 <MessageCircle size={14} aria-hidden /> Ask Otto
               </button>
             ) : null}

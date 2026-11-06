@@ -25,7 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
-- Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.
+- Administrators can switch the floating mascot between Employee and Admin views, keep each chat and its message times, and see Otto in his Admin outfit.
 
 ## 0.5.23 — 2026-11-05
 

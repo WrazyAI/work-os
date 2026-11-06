@@ -60,6 +60,18 @@ describe("admin Otto shell wiring", () => {
     expect(app).toContain("transcribeAdminOttoAudio");
   });
 
+  it("reopens the retained conversation from Ask Otto while New chat stays a discard", () => {
+    expect(app).toContain("const resumeAdminOtto = () => openAdminOttoSurface();");
+    expect(app).toContain("onOpenOtto={resumeAdminOtto}");
+    expect(app).toContain("const openAdminOtto = () => openAdminOttoSurface({ newChat: true });");
+    // The masthead binds the resume seam; the sidebar keeps the explicit New
+    // chat seam. A reopen must never call the discard path.
+    expect(adminWorkspace).toContain("const openOtto = onOpenOtto ?? onNewChat;");
+    expect(adminWorkspace).toContain("onClick={openOtto}");
+    expect(adminWorkspace).not.toContain("onClick={onNewChat}");
+    expect(adminPreview).toContain("onOpenOtto={() => { setOttoTab(\"chat\");");
+  });
+
   it("mounts the follow group in the account settings slot on both admin hosts", () => {
     expect(app).toContain("<AdminOttoSettings");
     expect(app).toContain("adminOttoSettings={surface === \"admin\"");
@@ -79,6 +91,19 @@ describe("admin Otto shell wiring", () => {
     expect(avatar).toContain("listenAdminOttoFollowChanged(");
     expect(avatar).toContain("adminOttoFollowChangedAppliesTo(changed, current.scope)");
     expect(avatar).toContain("adminDeliveryRef.current?.pollNow(\"manual\")");
+  });
+
+  it("shows recorded admin turn times and session dividers", () => {
+    expect(adminOttoChat).toContain("ChatTimeDivider");
+    expect(adminOttoChat).toContain("shouldShowChatDivider(chat.turns, index)");
+    expect(adminOttoChat).toContain("timestamp={turn.createdAt}");
+    expect(adminOttoChat).toContain("<ChatTimeDivider at={turn.createdAt} />");
+  });
+
+  it("does not replay an old New chat reset token on a fresh reopen", () => {
+    // The host's post-reset props are authoritative on mount; only an observed
+    // increment may clear a mounted surface's retained draft/thread.
+    expect(adminOttoChat).toContain("const appliedReset = useRef(resetToken);");
   });
 
   it("wires the mode controller to abort/clear and to publish only scope+epoch", () => {

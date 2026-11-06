@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from "react";
 import { X, SquarePen } from "lucide-react";
 import type {
   AdminOttoPendingAction,
@@ -11,7 +11,7 @@ import type {
   TaskCard,
   WorkRecord,
 } from "../../../../src/modules/work-os/admin-otto/contracts";
-import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, type ChatTab } from "../WorkOsChat";
+import { ChatTabs, ChatTimeDivider, ChatTurn, ConversationSurface, WorkOsPromptBar, shouldShowChatDivider, type ChatTab } from "../WorkOsChat";
 import type { VoiceInput } from "../chat/voiceInput";
 import { useVoiceInput } from "../chat/voiceInput";
 import { createAdminAudioInterlock } from "./audioInterlock";
@@ -321,7 +321,10 @@ export function AdminOttoChat({
     initialConversationId: conversationId,
   }));
   const chat = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  const appliedReset = useRef(0);
+  // A fresh mount has already adopted the host's post-reset props (including a
+  // retained draft and conversation id). Replaying an older reset token would
+  // wipe them, so only an increment observed while mounted is applied.
+  const appliedReset = useRef(resetToken);
   const previousConversationProp = useRef<string | null>(conversationId);
   useEffect(() => {
     if (resetToken === 0 || appliedReset.current === resetToken) return;
@@ -663,13 +666,15 @@ export function AdminOttoChat({
                 </div>
               ) : null}
               {chat.turns.map((turn, index) => (
-                <ChatTurn
-                  key={turn.id}
-                  role={turn.role}
-                  showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
-                  mascotMode="admin"
-                  copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
-                >
+                <Fragment key={turn.id}>
+                  {shouldShowChatDivider(chat.turns, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
+                  <ChatTurn
+                    role={turn.role}
+                    showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
+                    mascotMode="admin"
+                    copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
+                    timestamp={turn.createdAt}
+                  >
                   {turn.role === "user" ? <AdminReplyText text={turn.text} className="is-user" /> : (
                     <>
                       {turn.text ? <AdminReplyText text={turn.text} /> : null}
@@ -701,7 +706,8 @@ export function AdminOttoChat({
                         onOpenRecord={onOpenRecord} onOpenRecap={openRecap} onListen={onListen} playback={playback} onBusyChange={setActionBusy} /> : null}
                     </>
                   )}
-                </ChatTurn>
+                  </ChatTurn>
+                </Fragment>
               ))}
               {chat.error && chat.hydration === "idle" ? <p className="admin-otto-error" role="alert">{chat.error}</p> : null}
               {chat.busy ? <p className="admin-otto-status" role="status">Otto is reading</p> : null}

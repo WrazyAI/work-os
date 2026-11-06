@@ -5,6 +5,9 @@ export type AdminOttoEntryTurn = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /** The recorded turn time, or the local receipt time for a turn that has not
+   * been reloaded from the server yet. Never invented for an untimed turn. */
+  createdAt?: string | null;
   result?: AdminRead | null;
   pendingAction?: AdminOttoPendingAction;
   workflow?: AdminOttoWorkflowView;
@@ -143,6 +146,7 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
             id: turn.turnId,
             role: turn.role,
             text: turn.text,
+            createdAt: turn.createdAt,
             result: turn.role === "assistant" && turn.turnId === lastAssistant ? view.result : null,
             ...(turn.pendingAction ? { pendingAction: turn.pendingAction } : {}),
             ...(turn.workflow ? { workflow: turn.workflow } : {}),
@@ -169,7 +173,12 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
       const requestId = pendingRequest?.text === text ? pendingRequest.requestId : createRequestId();
       pendingRequest = { text, requestId };
       const requestScope = { ...state.scope };
-      const userTurn: AdminOttoEntryTurn = { id: `user:${requestId}`, role: "user", text };
+      const userTurn: AdminOttoEntryTurn = {
+        id: `user:${requestId}`,
+        role: "user",
+        text,
+        createdAt: new Date().toISOString(),
+      };
       pendingDraft = text;
       pendingTurnId = userTurn.id;
       attempt = new AbortController();
@@ -197,6 +206,7 @@ export function createAdminOttoEntryController(deps: AdminOttoEntryDeps): AdminO
             id: result.turnId,
             role: "assistant",
             text: result.reply || "No readable result was returned.",
+            createdAt: new Date().toISOString(),
             result: result.result,
             ...(result.pendingAction ? { pendingAction: result.pendingAction } : {}),
             ...(result.workflow ? { workflow: result.workflow } : {}),

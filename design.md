@@ -994,7 +994,11 @@ main window's selected workspace and swaps to the matching real conversation.
 The in-app and floating Administration surfaces render the same Admin Otto
 chat engine and confirmation contract, never a second admin implementation.
 View changes retain the conversation identity, drafts, and unconfirmed
-previews; New chat remains the durable discard. A view switch is a presentation
+previews; the Administration masthead's **Ask Otto** control reopens that
+retained conversation, while **New chat** remains the durable discard. Closing
+and reopening either Administration surface therefore rehydrates the same
+server thread, and assistant turns carry their recorded local time plus the
+same session dividers as the employee chat. A view switch is a presentation
 choice, never an authorization boundary.
 
 Prompt reminders — the plan question, a due check-in, the EOD nudge — are

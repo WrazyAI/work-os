@@ -1772,7 +1772,7 @@ export default function App() {
       const copy: Record<string, string> = {
         employee_unavailable: "This account has no personal workday mapped, so the administration workspace stays open.",
         admin_loading: "Administration is still loading. Try again in a moment.",
-        admin_failed: "Administration could not load. Retry from New chat in the Administration workspace.",
+        admin_failed: "Administration could not load. Retry from Ask Otto in the Administration workspace.",
         admin_unavailable: "Administration is not available for this account.",
         offline: "You are offline. Connect and try again.",
         new_chat_pending: "A new chat is still being prepared. Try again in a moment.",
@@ -5499,6 +5499,9 @@ export default function App() {
       defaultTab: "admin",
     };
     const openAdminOtto = () => openAdminOttoSurface({ newChat: true });
+    // Ask Otto is the reopen control, not a second New chat: it hydrates the
+    // retained server conversation instead of discarding it.
+    const resumeAdminOtto = () => openAdminOttoSurface();
     return <>
       <AdminWorkspace
         session={workSessionQuery.data}
@@ -5509,9 +5512,10 @@ export default function App() {
         guideView={pageGuideView}
         onOpenGuide={openGuide}
         onNewChat={openAdminOtto}
+        onOpenOtto={resumeAdminOtto}
         onOpenRecaps={() => openAdminOttoSurface({ tab: "recaps" })}
         ottoNotice={adminContextState?.status === "failed"
-          ? "Admin Otto could not load its administration context. Retry from New chat; the workspace record remains available."
+          ? "Admin Otto could not load its administration context. Retry from Ask Otto; the workspace record remains available."
           : adminContextState?.status === "loading"
             ? "Loading the administration context…"
             : null}

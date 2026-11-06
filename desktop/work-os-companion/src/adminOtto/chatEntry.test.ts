@@ -253,6 +253,34 @@ describe("admin Otto entry controller", () => {
     expect(turns[0].result).toBeNull();
     expect(turns[1].result).toMatchObject({ kind: "recap" });
   });
+
+  it("preserves recorded turn times and stamps turns sent in this window", async () => {
+    const controller = createAdminOttoEntryController({
+      scope,
+      send: async () => result("live-assistant"),
+      load: async () => ({
+        conversationId: "conversation-1",
+        contextVersion: 1,
+        turns: [
+          { turnId: "recorded-user", role: "user", text: "Recorded question", createdAt: "2026-10-27T10:00:00.000Z" },
+          { turnId: "recorded-assistant", role: "assistant", text: "Recorded answer", createdAt: "2026-10-27T10:00:01.000Z" },
+        ],
+        result: null,
+        resultStatus: "ready",
+      }),
+    });
+    await controller.open("conversation-1");
+    expect(controller.snapshot().turns.map((turn) => turn.createdAt))
+      .toEqual(["2026-10-27T10:00:00.000Z", "2026-10-27T10:00:01.000Z"]);
+
+    controller.setDraft("Live question");
+    await controller.submit();
+    const [liveUser, liveAssistant] = controller.snapshot().turns.slice(-2);
+    for (const turn of [liveUser, liveAssistant]) {
+      expect(turn?.createdAt).toBeTruthy();
+      expect(Number.isNaN(new Date(turn!.createdAt!).getTime())).toBe(false);
+    }
+  });
 });
 
 describe("admin Otto New chat coordination", () => {

@@ -68,6 +68,7 @@ export default function AdminPreview() {
   const [ottoTab, setOttoTab] = useState<"chat" | "recaps">(ottoState && ottoState !== "chat" ? "recaps" : "chat");
   const [ottoTabRequest, setOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [ottoConversation, setOttoConversation] = useState<string | null>(null);
+  const [ottoDraft, setOttoDraft] = useState("");
   const [ottoResetToken, setOttoResetToken] = useState(0);
   const [fixtureActions, setFixtureActions] = useState<AdminOttoPendingAction[]>(() => FIXTURE_ACTIONS.map((action) => ({ ...action })));
   const fixtureWorkflow = {
@@ -205,7 +206,8 @@ export default function AdminPreview() {
         focus={focus}
         onNavigate={(next, nextFocus) => { setSection(next); setFocus(nextFocus ?? {}); }}
         onSwitchToEmployee={() => undefined}
-        onNewChat={() => { setOttoConversation(null); setOttoResetToken((value) => value + 1); setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
+        onNewChat={() => { setOttoConversation(null); setOttoDraft(""); setOttoResetToken((value) => value + 1); setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
+        onOpenOtto={() => { setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
         onOpenRecaps={() => { setOttoTab("recaps"); setOttoTabRequest((current) => ({ tab: "recaps", token: current.token + 1 })); setOttoOpen(true); }}
         onSignOut={() => undefined}
         personalSettings={(
@@ -223,7 +225,9 @@ export default function AdminPreview() {
           initialTab={ottoTab}
           tabRequest={ottoTabRequest}
           initialRecap={ottoState === "single" ? FIXTURE_REVIEWED_RECAP : null}
+          initialDraft={ottoDraft}
           resetToken={ottoResetToken}
+          onRecoveryChange={(recovery) => setOttoDraft(recovery.draft)}
           initialInbox={ottoState === "loading" || ottoState === "error" ? null : fixtureInboxPage({
             count: ottoState === "empty" || state === "empty" ? 0 : 2,
             total: ottoState === "empty" || state === "empty" ? 0 : ottoState === "multiple" ? 25 : 2,

@@ -373,10 +373,13 @@ assert.match(adminWorkspace, /aria-label=\{`Profile for \$\{profile\.name\}`\}/)
 assert.match(adminWorkspace, /title="Open profile settings"/);
 assert.match(adminWorkspace, /onOpenWhatsNew/);
 assert.match(adminWorkspace, /className="admin-switch admin-ask-otto"/);
-assert.match(adminWorkspace, /onClick=\{onNewChat\}/);
+assert.match(adminWorkspace, /const openOtto = onOpenOtto \?\? onNewChat;/);
+assert.match(adminWorkspace, /onClick=\{openOtto\}/);
 assert.match(adminWorkspace, /Ask Otto/);
 assert.match(app, /const openAdminOtto = \(\) => openAdminOttoSurface\(\{ newChat: true \}\);/);
+assert.match(app, /const resumeAdminOtto = \(\) => openAdminOttoSurface\(\);/);
 assert.match(app, /onNewChat=\{openAdminOtto\}/);
+assert.match(app, /onOpenOtto=\{resumeAdminOtto\}/);
 assert.equal((app.match(/onNewChat=\{openAdminOtto\}/g) ?? []).length, 1);
 const sidebarNav = read("src/SidebarNav.tsx");
 assert.match(sidebarNav, /What's new/);

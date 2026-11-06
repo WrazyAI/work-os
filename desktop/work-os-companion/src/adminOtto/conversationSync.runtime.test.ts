@@ -3,8 +3,12 @@ import type { ChatRequest, ChatResult, OttoScope } from "../../../../src/modules
 import { createAdminOttoEntryController } from "./chatEntry";
 import {
   createAdminConversationClient,
+  createAdminConversationEventTransport,
   createAdminConversationOwner,
   createLocalAdminConversationTransport,
+  OTTO_CONVERSATION_REQUEST_EVENT,
+  OTTO_CONVERSATION_RESULT_EVENT,
+  parseAdminConversationRequest,
   type AdminConversationState,
 } from "./conversationSync";
 
@@ -132,6 +136,74 @@ describe("admin conversation event transport", () => {
     expect(h.owner.snapshot().busy).toBe(true);
     await client.finishSend(ticket, "conversation-remote");
     expect(h.owner.snapshot().conversationId).toBe("conversation-remote");
+    stopRequests();
+    transport.dispose();
+  });
+
+  it("keeps the conversation id after the floating window unmounts so a reopen hydrates history", async () => {
+    const handlers = new Map<string, Set<(payload: unknown) => void>>();
+    const bus = {
+      emit(event: string, payload: unknown) {
+        for (const handler of handlers.get(event) ?? []) handler({ event, id: 0, payload });
+      },
+      listen(event: string, handler: (message: unknown) => void) {
+        const group = handlers.get(event) ?? new Set();
+        group.add(handler);
+        handlers.set(event, group);
+        return () => group.delete(handler);
+      },
+    };
+    const h = setup();
+    const stopRequests = bus.listen(OTTO_CONVERSATION_REQUEST_EVENT, (message) => {
+      const request = parseAdminConversationRequest((message as { payload?: unknown })?.payload);
+      if (!request) return;
+      void h.owner.handle(request).then((result) => bus.emit(OTTO_CONVERSATION_RESULT_EVENT, result));
+    });
+    const transport = await createAdminConversationEventTransport({ bus });
+    const client = createAdminConversationClient({
+      windowId: "avatar",
+      getFence: () => {
+        const snapshot = h.owner.snapshot();
+        return { scope: snapshot.scope, epoch: snapshot.epoch, generation: snapshot.generation };
+      },
+      transport: transport.transport,
+    });
+    const floating = createAdminOttoEntryController({
+      scope,
+      createRequestId: () => "floating-first-request",
+      send: async (input: ChatRequest) => {
+        const ticket = await client.beginSend({ requestId: input.requestId, conversationId: input.conversationId });
+        const answer = result("conversation-first");
+        await client.finishSend(ticket, answer.conversationId);
+        return answer;
+      },
+    });
+    floating.setDraft("First floating question");
+    await floating.submit();
+    expect(h.owner.snapshot().conversationId).toBe("conversation-first");
+    floating.dispose();
+
+    // Collapse/expand remounts the floating surface. It receives the owner's
+    // committed id, not the null it had before the first send, and reloads the
+    // recorded turns from the server.
+    const reopened = createAdminOttoEntryController({
+      scope,
+      initialConversationId: h.owner.snapshot().conversationId,
+      load: async (conversationId) => ({
+        conversationId,
+        contextVersion: 1,
+        turns: [
+          { turnId: "floating-user", role: "user", text: "First floating question", createdAt: "2026-10-27T10:00:00.000Z" },
+          { turnId: "floating-assistant", role: "assistant", text: "Done.", createdAt: "2026-10-27T10:00:01.000Z" },
+        ],
+        result: null,
+        resultStatus: "ready" as const,
+      }),
+      send: async () => result("conversation-first"),
+    });
+    await reopened.open("conversation-first");
+    expect(reopened.snapshot().turns.map((turn) => turn.text))
+      .toEqual(["First floating question", "Done."]);
     stopRequests();
     transport.dispose();
   });

@@ -4,7 +4,8 @@ Date: 2026-11-05.
 Branch: `codex/mascot-view-switch` from `origin/main` `831c7ee8`.
 Design: `docs/superpowers/specs/2026-11-05-mascot-view-switch-design.md`.
 Plan: `docs/superpowers/plans/2026-11-05-mascot-view-switch.md`.
-Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`.
+Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`; follow-up
+`337e8e67-abb4-4ac1-9a5a-d371b932f488`.
 
 ## What changed
 
@@ -89,9 +90,44 @@ Ledger: `bce4a29c-049e-4bc2-aaef-2e1e64ce20c3`.
   - stale Escape handlers cannot close the current surface.
   The mascot transition replay concern was verified by the controller's
   clearing signal and a new no-replay test; no code change needed.
-  Remaining minor gap: admin turns do not display recorded message times or
-  session dividers because the admin thread contract carries no timestamps;
-  no timestamps are invented.
+  The earlier admin-timestamp gap was closed on 2026-11-06; see the follow-up
+  section below.
+
+### 2026-11-06 follow-up: Admin timestamps and reopen retention
+
+- Admin turns now carry the recorded `createdAt` from
+  `/api/work-os/admin/otto/chat` into the entry controller. The shared
+  `ChatTimeDivider` marks the first user message and any pause longer than
+  twenty minutes; assistant turns reveal their local clock in the hover row,
+  including result-card turns that own the visible content. Turns sent in the
+  current window are stamped when received and replaced by the server's
+  recorded time on reload.
+- The masthead **Ask Otto** control now resumes the retained server
+  conversation. Previously it reused the sidebar New chat callback and
+  durably discarded the thread on every reopen. **New chat** remains the only
+  durable discard.
+- A fresh `AdminOttoChat` mount adopts the host's post-New-chat props; an older
+  `resetToken` is no longer replayed on mount, so reopening cannot wipe a
+  retained draft or thread.
+- The DEV fixture adapter now stores synthetic turns in memory, so the actual
+  Avatar and Admin Preview branches rehydrate history across
+  collapse/expand and sheet close/reopen without contacting `/api`.
+- Focused tests: `chatEntry`, `conversationSync.runtime`, `fixtures`,
+  `integration`, `AdminWorkspace.render`, `AdminPreview`, `AdminOttoChat.render`,
+  and `chatComponents.render` passed (80 tests). Full companion suite:
+  **199 files / 1,804 tests passed**. Companion typecheck and production build
+  passed; root `work-os:typecheck` passed.
+- Rendered Playwright checks:
+  - `?preview-admin`: send a message, close the in-app sheet with X, click
+    **Ask Otto**, and the same conversation, divider (`Today 4:41 PM`), and
+    assistant clock rehydrate. This is the reported reopen path.
+  - `?preview-admin` after an explicit **New chat**: type a draft, close, and
+    reopen with **Ask Otto**; the draft remains while the discarded thread
+    stays empty. This verifies a stale reset token is not replayed.
+  - `?window=avatar&avatar-view=admin`: send a message, collapse to the orb,
+    expand, and the same turns rehydrate with the divider and assistant clock.
+  - Screenshots: `/tmp/opencode/inapp-after-reopen.png` and
+    `/tmp/opencode/admin-history-after-reopen.png`.
 
 ## Rendered evidence
 
