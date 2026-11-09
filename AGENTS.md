@@ -268,11 +268,12 @@ release. Web deployments do not use this threshold. Read
 - The queue is append-only, including unpublished records. Never remove,
   rewrite, rename, or reset entries. The latest **published** internal release
   snapshot marks consumed outcomes; drafts, bare tags and failed builds do not.
-- Below five, the only exception is an emergency fix that restores a broken app
-  or unblocks essential functionality. Commit an `emergency` record naming the
-  candidate version, pending fix ID, broken behavior and restored behavior. A
-  routine improvement, deadline or desire to ship is not an emergency. Clear
-  that record when preparing the next version; never reuse the exception.
+- Below five, use the `emergency` exception only to restore a broken app or
+  unblock essential functionality, or record a version-scoped `operatorOverride`
+  when the operator explicitly authorizes an earlier release. Both must name the
+  candidate version and a pending outcome. The operator override is for an
+  explicit operator decision, never an agent's default or a deadline excuse.
+  Clear the exception record when preparing the next version; never reuse it.
 - All release entry points go through the free Linux gate before paid packaging;
   manual dispatch or a tag is not an override. Preserve signing, packaged startup,
   asset verification and publication guards. This policy/tooling change itself
