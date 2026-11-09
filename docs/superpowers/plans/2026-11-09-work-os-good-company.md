@@ -72,7 +72,8 @@ Execution: inline main-agent work per repository instructions and user's explici
 - [x] Task 2 — scoped GSAP and canonical success face; normal/paused/reduced/keyboard/failure/delay browser checks pass.
 - [x] Task 3 verification — focused/site/full suites, both typechecks/builds and reviews completed; one skip-link contrast issue fixed RED→GREEN.
 - [x] User explicitly authorized production deployment: “deploy to prod; looks great”.
-- [ ] Exact-rebased-tree final check jobs finish, both remote mains converge, atomic deployment and live acceptance.
+- [x] Exact-rebased-tree typecheck/full suite/build and built-artifact browser checks finish green.
+- [ ] Both remote mains converge, atomic deployment and live acceptance.
 
 TestSprite's reported pass remains classified inconclusive because its pinned
 steps are empty and recording only shows404. Direct browser acceptance is green.
