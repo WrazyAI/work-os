@@ -246,6 +246,12 @@
       "type": "fix",
       "summary": "The scenario debugger stays open on Windows and can be reopened after closing it.",
       "verification": "Ledger 9f3199b5-7bcb-4dd6-afa9-4b45aee7ce69; native Windows isolated Tauri fixture imports production debug_window.rs, diagnostics.rs and window_fit.rs plus built debug.html: open/render/visible/native close/reopen/render/frontend Close all passed. Real startup app-info.json, log metadata and ZIP matched. WebView2 mismatched args reproduced HRESULT 0x8007139F; matching args succeeded. Full Work OS suite 1273 passed/0 failed/11 skipped; typecheck, companion build, locked Windows cargo check passed; diagnostics core 15 Linux and 3 Windows metadata tests passed; CodeRabbit minor finding fixed. Evidence: docs/companion-local-diagnostics.md. Installed 0.5.28 reproduced the original symptom; this fix was not in that build."
+    },
+    {
+      "id": "admin-record-time-and-evidence-frames",
+      "type": "fix",
+      "summary": "A teammate's admin record shows recorded time and update counts again, Worktivity evidence shows its retained frame, and reports read as one tidy list.",
+      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` \u2192 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
     }
   ],
   "emergency": null,

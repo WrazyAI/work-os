@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPersonWorkdays, recapReviewLabel, recapsForDay, recordDate, reportForDay } from "./admin/adminPersonRecord";
+import { buildPersonWorkdays, recapDaysFromIntervals, recapReviewLabel, recapsForDay, recordDate, reportForDay } from "./admin/adminPersonRecord";
 
 describe("admin person record", () => {
   it("keeps the recorded calendar day for plain dates and UTC-midnight instants", () => {
@@ -23,6 +23,41 @@ describe("admin person record", () => {
       { date: "2026-11-04", state: "active", observedSeconds: 5400, recapCount: 3, recapReviewed: 1 },
       { date: "2026-11-03", state: "closed", observedSeconds: 5400, recapCount: 0, recapReviewed: 0 },
       { date: "2026-11-02", state: "unknown", observedSeconds: 0, recapCount: 1, recapReviewed: 1 },
+    ]);
+  });
+
+  it("derives observed time from the clock boundaries when a payload predates observed_seconds", () => {
+    const clockedIn = "2026-11-06T15:00:09.628Z";
+    const clockedOut = "2026-11-06T21:05:16.736Z";
+    const paused = 2401;
+    const elapsed = (Date.parse(clockedOut) - Date.parse(clockedIn)) / 1000;
+
+    const workdays = buildPersonWorkdays([
+      { shift_date: "2026-11-06T00:00:00.000Z", state: "clocked_out", clocked_in_at: clockedIn, clocked_out_at: clockedOut, paused_seconds: paused },
+    ], [], 6, Date.parse("2026-11-09T00:00:00.000Z"));
+
+    expect(workdays[0].observedSeconds).toBe(Math.round(elapsed - paused));
+  });
+
+  it("counts an open session up to the read time when observed_seconds is absent", () => {
+    const workdays = buildPersonWorkdays([
+      { shift_date: "2026-11-09", state: "active", clocked_in_at: "2026-11-09T15:00:00.000Z", paused_seconds: 600 },
+    ], [], 6, Date.parse("2026-11-09T17:00:00.000Z"));
+
+    expect(workdays[0].observedSeconds).toBe(6600);
+  });
+
+  it("derives per-day recap counts from ready intervals when recapDays is absent", () => {
+    const days = recapDaysFromIntervals([
+      { local_date: "2026-11-09T00:00:00.000Z", generation_status: "ready", review_status: "confirmed" },
+      { local_date: "2026-11-09", generation_status: "ready", review_status: "inferred" },
+      { local_date: "2026-11-08", generation_status: "ready", review_status: "amended" },
+      { local_date: "2026-11-07", generation_status: "failed", review_status: "inferred" },
+    ]);
+
+    expect(days).toEqual([
+      { date: "2026-11-09", total: 2, reviewed: 1 },
+      { date: "2026-11-08", total: 1, reviewed: 1 },
     ]);
   });
 

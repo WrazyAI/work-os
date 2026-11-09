@@ -1778,35 +1778,102 @@ body:has(.admin-workspace) .notifications-card {
   outline-offset: 3px;
 }
 
+.admin-report-summary {
+  margin: -2px 0 6px;
+}
+
+/* One report is one row with a stable reading order: the day, what the report
+   is, then its review state. The date owns a fixed track so the statuses line
+   up; the title takes the remaining width and never pushes the pill around. */
 .admin-rows > li > button.admin-report-row {
-  align-items: baseline;
-  min-height: 40px;
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
   padding: 8px 4px;
 }
 
-.admin-report-row > span:first-child {
+.admin-report-date {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-report-date b {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 660;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   text-decoration-color: color-mix(in srgb, var(--ink) 65%, transparent);
 }
 
-.admin-report-row:hover > span:first-child {
+.admin-report-row:hover .admin-report-date b,
+.admin-report-row:focus-visible .admin-report-date b {
   text-decoration-color: var(--ink);
 }
 
-.admin-report-meta {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+.admin-report-date small {
+  color: var(--muted);
+  font-size: 10.5px;
 }
 
-.admin-report-meta small {
+.admin-report-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-report-row > .pill {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+/* Worktivity evidence keeps a small real frame beside the row: the thumbnail
+   is the record, not decoration. Restricted frames say so instead of loading
+   a placeholder that looks like a broken image. */
+.admin-evidence-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-evidence-thumb,
+.admin-evidence-thumb-missing {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 32px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--inset);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.admin-evidence-thumb-missing {
+  display: grid;
+  place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.admin-evidence-thumb.eod-shot-unavailable {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 860px) {
@@ -1816,18 +1883,24 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 @media (max-width: 520px) {
-  .admin-report-row {
-    flex-wrap: wrap;
+  .admin-rows > li > button.admin-report-row {
+    grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 4px;
   }
 
-  .admin-report-row > span:first-child {
-    flex: 1 1 100%;
+  .admin-report-date {
+    grid-column: 1;
   }
 
-  .admin-report-meta {
-    width: 100%;
-    justify-content: space-between;
+  .admin-report-title {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal;
+  }
+
+  .admin-report-row > .pill {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 
