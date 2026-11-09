@@ -27,6 +27,19 @@ try {
       assert.ok(box.y + box.height <= height, `whole product stage fits ${width}×${height}, got ${JSON.stringify(box)}`);
     }
     if (width === 1366 && height === 768) {
+      const skip = page.getByRole("link", { name: "Skip to content" });
+      await skip.focus();
+      const contrast = await skip.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number).map((value) => {
+          const channel = value / 255;
+          return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+        }).reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index], 0);
+        const a = luminance(style.color), b = luminance(style.backgroundColor);
+        return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+      });
+      assert.ok(contrast >= 4.5, `skip-link text contrast: ${contrast}`);
+      await skip.blur();
       const footer = page.locator("[data-landing] footer");
       const footerBox = await footer.boundingBox();
       assert.ok(Math.abs(footerBox.x - box.x) < 1, "dark footer aligns with the landing content axis");
@@ -61,6 +74,15 @@ try {
       assert.match(await page.locator("[data-product-capture]").getAttribute("src"), /workspace-today/);
       await page.waitForFunction(() => document.querySelector("[data-product-capture]").complete);
       await page.emulateMedia({ reducedMotion: "no-preference" });
+      // Exercise decode cancellation while transitions are enabled, not only the
+      // reduced-motion branch above.
+      await page.getByRole("button", { name: "Tasks", exact: true }).click();
+      await page.getByRole("button", { name: "Insights", exact: true }).click();
+      await page.getByRole("button", { name: "My Day", exact: true }).click();
+      await page.waitForFunction(() => {
+        const image = document.querySelector("[data-product-capture]");
+        return image.complete && image.src.includes("workspace-today") && getComputedStyle(image).opacity === "1";
+      });
       for (const selector of ["[data-workday-story]", "[data-workday-steps]", "[data-tutorial-feature]", "[data-landing-closing]"]) {
         await page.locator(selector).scrollIntoViewIfNeeded();
       }
@@ -91,7 +113,48 @@ try {
   const stageBox = await staticPage.locator("[data-hero-stage]").boundingBox();
   assert.ok(stageBox.y + stageBox.height <= 768);
   await staticContext.close();
-  if (motion) {
+  if (motion && process.env.WORK_OS_LANDING_FAILURE_PROBES !== "0") {
+    const delayed = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    let releaseMotion;
+    let markRequested;
+    const motionRequested = new Promise((resolve) => { markRequested = resolve; });
+    const motionGate = new Promise((resolve) => { releaseMotion = resolve; });
+    await delayed.route("**/*landing-motion*", async (route) => {
+      markRequested();
+      await motionGate;
+      await route.continue();
+    });
+    await delayed.goto(`${base}/work-os`, { waitUntil: "domcontentloaded" });
+    await motionRequested;
+    await delayed.getByRole("button", { name: "Pause motion", exact: true }).click();
+    const lateChunk = delayed.waitForResponse((response) => response.url().includes("landing-motion"));
+    releaseMotion();
+    await lateChunk;
+    await delayed.locator('[data-landing][data-motion-paused="true"][data-motion-entered="true"]').waitFor();
+    assert.equal(await delayed.locator("[data-hero-stage]").evaluate((node) => node.style.opacity), "");
+    assert.equal(await delayed.locator("[data-hero-line]").first().evaluate((node) => node.style.transform), "");
+    // Unmount while a capture transition can still be pending.
+    await delayed.getByRole("button", { name: "Resume motion", exact: true }).click();
+    await delayed.getByRole("button", { name: "Insights", exact: true }).click();
+    await delayed.getByRole("link", { name: /Get Work OS/ }).first().click();
+    await delayed.waitForURL("**/work-os/downloads");
+    assert.equal(await delayed.locator("[data-landing]").count(), 0);
+    await delayed.close();
+    const delayedArt = await browser.newPage({ viewport: { width: 1366, height: 768 }, reducedMotion: "reduce" });
+    let resumeArt;
+    let markArt;
+    const artRequested = new Promise((resolve) => { markArt = resolve; });
+    const artGate = new Promise((resolve) => { resumeArt = resolve; });
+    await delayedArt.route("**/studio-otto.svg", async (route) => {
+      if (route.request().resourceType() === "fetch") { markArt(); await artGate; }
+      await route.continue();
+    });
+    await delayedArt.goto(`${base}/work-os`, { waitUntil: "domcontentloaded" });
+    await artRequested;
+    await delayedArt.getByRole("button", { name: "Play companion celebration" }).click();
+    resumeArt();
+    await delayedArt.locator('[data-ready="true"][data-state="celebrate"] .site-ready-face').waitFor();
+    await delayedArt.close();
     // Failure modes leave actual server content and the static mascot available.
     const fallback = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     let blockedMotion = 0;

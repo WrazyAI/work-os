@@ -5,6 +5,7 @@
   --line: #514958;
   --focus: #d4e8be;
   --accent: #d4e8be;
+  --skip-background: #49325f;
   background: var(--paper);
   color: var(--ink);
   min-height: 100svh;

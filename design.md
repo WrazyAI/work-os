@@ -273,6 +273,22 @@ the composer reserve its height, and detached menus open above it.
 
 ### 4.3 Web employee workspace
 
+#### Public site: Good company
+
+The product landing alone uses the approved aubergine `#272331`, warm white
+`#efeee9`, sage stage `#d6e5cb` and pale green action `#d4e8be`. Its large
+two-line statement and real app/Otto stage respond to screen height as well as
+width: at1366×768 the whole stage is visible before scrolling. GSAP supplies
+one coordinated entrance and restrained one-shot section transitions, never a
+scroll hijack or a loading gate. Static content stays visible if JS fails.
+Otto's click uses the canonical success face, including statically under Pause
+or reduced motion; idle work suspends offscreen/in hidden tabs.
+
+The downloads, installation guides and tutorials stay light, with dark-purple
+ink and restrained violet/lilac accents. Red install warnings keep their semantic
+danger treatment. This marketing-only palette does not recolor the workspace or
+companion. Tutorial videos, player/chapters and download behavior are unchanged.
+
 `/work-os` is the public, standalone product landing page, not a console
 destination. Its downloads and tutorials live at `/work-os/downloads` and
 `/work-os/tutorials`; these pages never inherit the dashboard sidebar or header.
