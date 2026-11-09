@@ -244,10 +244,10 @@
   ],
   "emergency": null,
   "operatorOverride": {
-    "version": "0.5.27",
-    "updateId": "admin-otto-motion-eod-document",
+    "version": "0.5.28",
+    "updateId": "employee-inapp-otto-view-switch",
     "approvedBy": "operator",
-    "reason": "Explicit operator request to publish the Admin Otto EOD and motion polish ahead of the five-outcome cadence.",
+    "reason": "Explicit operator request to publish the employee chat Otto view-switch fix ahead of the five-outcome cadence.",
     "approvedAt": "2026-11-09"
   }
 }
