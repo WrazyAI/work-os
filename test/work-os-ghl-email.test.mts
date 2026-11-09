@@ -92,6 +92,21 @@ test("analysis input is capped with an explicit truncation flag", () => {
   assert.equal(large.truncated, true);
 });
 
+test("the email detail response is unwrapped from emailMessage", async () => {
+  const f = await fixture();
+  try {
+    const eventId = await seedEmail(f);
+    const result = await analyzeGhlEmail({
+      scope, eventId, emailId: "msg-email-1", now: new Date("2026-11-06T12:00:00.000Z"),
+      fetchEmail: async () => ({ emailMessage: { id: "msg-email-1", subject: "Proposal", contentType: "text/plain", body: "Sent a proposal." } } as any),
+      complete: async () => ({ summary: "Sent a proposal.", claims: [{ description: "Proposal", quote: "Sent a proposal." }] }),
+    });
+    assert.equal(result.state, "ready");
+  } finally {
+    await f.close();
+  }
+});
+
 test("analysis retains grounded excerpts, never the full body, and reuses an unchanged hash", async () => {
   const f = await fixture();
   try {

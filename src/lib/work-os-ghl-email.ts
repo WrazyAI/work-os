@@ -101,7 +101,8 @@ function contentExpiry(occurredAt: string): { expiresAt: Date; sourceOccurredAt:
 
 async function fetchEmailFromClient(client: ReturnType<typeof createGhlClient>, scope: GhlScope, emailId: string): Promise<EmailDetail> {
   const body = await client.read({ path: `/conversations/messages/email/${encodeURIComponent(emailId)}`, query: { locationId: scope.locationId } });
-  return (body && typeof body === "object" ? body : {}) as EmailDetail;
+  const row = (body && typeof body === "object" ? (body as Json).emailMessage ?? body : {}) as Json;
+  return row as EmailDetail;
 }
 
 async function defaultFetchEmail(scope: GhlScope, emailId: string): Promise<EmailDetail> {
@@ -262,7 +263,8 @@ export async function analyzeGhlEmail(input: {
 
   let detail: EmailDetail;
   try {
-    detail = await (input.fetchEmail ?? (() => defaultFetchEmail(input.scope, input.emailId)))();
+    const fetched = await (input.fetchEmail ?? (() => defaultFetchEmail(input.scope, input.emailId)))();
+    detail = ((fetched as unknown as Json)?.emailMessage ?? fetched) as EmailDetail;
   } catch {
     return { state: "unavailable", contentHash: null };
   }
@@ -344,7 +346,8 @@ export async function getGhlEmailForViewer(
     return { text: null, excerpt, availability: "unavailable", sourceUrl: record.sourceUrl, truncated: false };
   }
   try {
-    const detail = await (input.fetchEmail ?? (() => defaultFetchEmail(scope, emailId)))();
+    const fetched = await (input.fetchEmail ?? (() => defaultFetchEmail(scope, emailId)))();
+    const detail = ((fetched as unknown as Json)?.emailMessage ?? fetched) as EmailDetail;
     if (detail.id && String(detail.id) !== emailId) throw new Error("identity mismatch");
     const converted = emailBodyToText(String(detail.body ?? ""), String(detail.contentType ?? "text/plain"), MAX_VIEW_CHARS);
     await getPool().query(

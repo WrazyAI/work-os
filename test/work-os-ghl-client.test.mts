@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createGhlClient, type GhlFetch } from "../src/lib/work-os-ghl-client";
+import { createGhlSyncSource } from "../src/lib/work-os-ghl-sync";
 
 const scope = {
   organizationId: "org-1",
@@ -83,6 +84,34 @@ test("reads redirect safely by not following to a different origin", async () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0].includes("evil.example"), false);
   assert.equal(calls[0].includes("leadconnectorhq.com"), true);
+});
+
+test("email evidence comes from conversation messages with the real email id", async () => {
+  const calls: string[] = [];
+  const source = createGhlSyncSource(scope, {
+    read: async ({ path }) => {
+      calls.push(path);
+      if (path === "/conversations/search") {
+        return { conversations: [{ id: "conv-email-1", lastMessageType: "TYPE_EMAIL" }] };
+      }
+      return {
+        messages: {
+          messages: [{
+            id: "message-1",
+            messageType: "TYPE_EMAIL",
+            dateAdded: "2026-11-03T18:17:00.000Z",
+            meta: { email: { messageIds: ["email-detail-1"] } },
+          }],
+        },
+      };
+    },
+  });
+  const page = await source.messages({
+    channel: "Email", from: "2026-11-01T00:00:00.000Z", through: "2026-11-07T00:00:00.000Z", cursor: null, limit: 100,
+  });
+  assert.equal(page.items.length, 1);
+  assert.equal(calls[0], "/conversations/search");
+  assert.equal(calls[1], "/conversations/conv-email-1/messages");
 });
 
 test("a non-2xx error names status but never token or response body", async () => {

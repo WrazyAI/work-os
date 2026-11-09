@@ -142,7 +142,9 @@ function normalizeMessage(kind: "email" | "sms" | "call", payload: Json, context
     summary,
     source,
     conversationId: text(payload.conversationId, 120) || null,
-    emailId: kind === "email" ? objectId : null,
+    emailId: kind === "email"
+      ? (text(payload.meta?.email?.messageIds?.[0], 120) || text(payload.emailId, 120) || objectId)
+      : null,
     status,
     durationSeconds: kind === "call" ? positiveDuration(payload.call?.duration) : null,
     snapshot: false,

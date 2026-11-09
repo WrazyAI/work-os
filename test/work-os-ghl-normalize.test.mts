@@ -40,6 +40,14 @@ test("manual outgoing email from a verified actor is performed", () => {
   assert.equal(record.occurredAt, "2026-11-03T18:17:00.000Z");
 });
 
+test("a conversation email uses its provider email message id when present", () => {
+  const record = one("email", {
+    ...fixtures.manualEmail,
+    meta: { email: { messageIds: ["email-detail-1"] } },
+  });
+  assert.equal(record.emailId, "email-detail-1");
+});
+
 test("inbound email and SMS are context, not the employee's action", () => {
   assert.equal(one("email", { ...fixtures.manualEmail, direction: "inbound" }).relation, "unknown");
   assert.equal(one("sms", { ...fixtures.sms, direction: "inbound" }).relation, "unknown");

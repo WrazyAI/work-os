@@ -133,7 +133,7 @@ export function ghlPartitionPlan(now: Date): GhlPartitionPlan[] {
 function entityArray(body: unknown): unknown[] {
   if (!body || typeof body !== "object") return [];
   const row = body as Json;
-  for (const key of ["messages", "events", "calendars", "contacts", "opportunities", "data"]) {
+  for (const key of ["messages", "events", "calendars", "contacts", "conversations", "opportunities", "data"]) {
     if (Array.isArray(row[key])) return row[key];
   }
   return [];
@@ -154,6 +154,36 @@ function nextCursorOf(body: unknown, items: unknown[], limit: number): string | 
 export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSyncSource {
   return {
     async messages({ channel, from, through, cursor, limit }) {
+      if (channel === "Email") {
+        // The bulk export excludes conversation emails on this account. Read a
+        // bounded set of recent email conversations and their messages instead.
+        const conversationBody = await client.read({
+          path: "/conversations/search",
+          query: { locationId: scope.locationId, limit: 20, startAfterDate: from },
+        });
+        const conversations = entityArray(conversationBody)
+          .filter((item) => String((item as Json).lastMessageType ?? "") === "TYPE_EMAIL")
+          .slice(0, 10);
+        const messages: unknown[] = [];
+        for (const conversation of conversations) {
+          const conversationId = String((conversation as Json).id ?? "");
+          if (!conversationId) continue;
+          const detail = await client.read({
+            path: `/conversations/${encodeURIComponent(conversationId)}/messages`,
+            query: { limit: 20 },
+          });
+          const nested = (detail as Json | null)?.messages;
+          const rows = Array.isArray(nested) ? nested : (nested as Json | undefined)?.messages;
+          if (Array.isArray(rows)) messages.push(...rows);
+        }
+        const filtered = messages.filter((item) => {
+          const row = item as Json;
+          if (String(row.messageType ?? "") !== "TYPE_EMAIL") return false;
+          const at = Date.parse(String(row.dateAdded ?? ""));
+          return Number.isFinite(at) && at >= Date.parse(from) && at <= Date.parse(through);
+        });
+        return { items: filtered.slice(0, limit), nextCursor: null, capped: conversations.length >= 10 || filtered.length > limit };
+      }
       const body = await client.read({
         path: "/conversations/messages/export",
         query: {
@@ -457,16 +487,20 @@ async function processPartition(input: {
       return true;
     }
     const terminal = !nextCursor;
-    const terminalState: GhlCoverage["state"] = terminal ? "complete" : "pending";
-    const reason = terminal && plan.key === "contacts" && capped ? "Contact discovery is capped; notes and tasks beyond the cap are not covered." : null;
+    const terminalState: GhlCoverage["state"] = terminal ? (capped ? "partial" : "complete") : "pending";
+    const reason = terminal && capped
+      ? (plan.key === "contacts"
+        ? "Contact discovery is capped; notes and tasks beyond the cap are not covered."
+        : "Provider pagination is capped for this pilot window; further history is not covered.")
+      : null;
     await advanceGhlCheckpoint({
       stateId: String(state.id),
       leaseOwner: owner,
       now,
       scanned,
       nextCursor,
-      state: terminal && plan.key === "contacts" && capped ? "partial" : terminalState,
-      coverage: coverageFor(state, plan, terminal && plan.key === "contacts" && capped ? "partial" : terminalState, reason, scanned, capped),
+      state: terminalState,
+      coverage: coverageFor(state, plan, terminalState, reason, scanned, capped),
       capped,
     });
     return true;
