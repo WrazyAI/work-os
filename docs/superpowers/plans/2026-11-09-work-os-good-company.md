@@ -65,3 +65,15 @@
 - [ ] Record real results/limitations in ledger and docs; stop temporary verification servers. No installer/version/release queue changes.
 
 Execution: inline main-agent work per repository instructions and user's explicit go-ahead; no further aesthetic approval round requested. Checkpoint each task here and in the ledger.
+
+## Execution checkpoint
+
+- [x] Task 1 — approved composition and light siblings; browser geometry and source contracts pass.
+- [x] Task 2 — scoped GSAP and canonical success face; normal/paused/reduced/keyboard/failure/delay browser checks pass.
+- [x] Task 3 verification — focused/site/full suites, both typechecks/builds and reviews completed; one skip-link contrast issue fixed RED→GREEN.
+- [x] User explicitly authorized production deployment: “deploy to prod; looks great”.
+- [ ] Exact-rebased-tree final check jobs finish, both remote mains converge, atomic deployment and live acceptance.
+
+TestSprite's reported pass remains classified inconclusive because its pinned
+steps are empty and recording only shows404. Direct browser acceptance is green.
+No tutorial media or installer-release files changed.

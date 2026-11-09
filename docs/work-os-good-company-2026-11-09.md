@@ -44,11 +44,14 @@ Approved design/plan: `docs/superpowers/{specs,plans}/2026-11-09-work-os-good-co
 
 ## Content convergence and status
 
-Work OS commits: `670c72ee` composition; `7b327b5a` scoped motion/success.
+Work OS commits after rebasing onto the latest main: `c9612751` composition;
+`18381ce5` scoped motion/success; `8403109f` contrast correction/evidence.
 Only changed marketing components/styles, public layout attribute, tests,
 design paragraph and GSAP dependency are ported onto Agent OS6abfee78. Platform
 shell, proxy, Next config, scripts, APIs and media stay untouched. Agent OS's
 unrelated dependency/script differences remain intact.
 
-Pending: final commits/remote convergence, atomic deployment and live acceptance.
+Agent OS prepared commit: `de26ee27`. User explicitly authorized production
+deployment. Pending: exact-tree final check completion, remote convergence,
+atomic deployment and live acceptance. No live server has changed yet.
 Local evidence: `/tmp/opencode/good-company-*` (not committed).
