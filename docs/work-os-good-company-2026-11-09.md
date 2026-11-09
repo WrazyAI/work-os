@@ -55,7 +55,28 @@ design paragraph and GSAP dependency are ported onto Agent OS6abfee78. Platform
 shell, proxy, Next config, scripts, APIs and media stay untouched. Agent OS's
 unrelated dependency/script differences remain intact.
 
-Agent OS prepared commit: `de26ee27`. User explicitly authorized production
-deployment. Pending: exact-tree final check completion, remote convergence,
-atomic deployment and live acceptance. No live server has changed yet.
+## Production acceptance
+
+User explicitly authorized production deployment. Both repositories' mains
+converged. Agent OS deployed commit:
+`de26ee272f31715ea2c7c25d859ba92edf52f0d6`.
+
+- Atomic staging build/swap/restart/asset verification succeeded; web and runner
+  services both read back active, and deployed HEAD matched the expected commit.
+- Only the missing GSAP package was added using registry bytes verified against
+  the committed SHA512; no npm install/ci replaced the running dependency tree.
+- Live `test/work-os-good-company.browser.mjs` passed with production URL:
+  8viewports, short-screen full hero, actual success face/repeated click/keyboard,
+  pause/reduced motion, motion-enabled rapid capture switching, light sibling
+  pages, red warning, no-JS and adjacent tutorial navigation. Live screenshots
+  inspected at1366×768,390px and in the static success state.
+- Live `test/work-os-download-flow.browser.mjs` passed Windows/macOS detection,
+  alternate-platform download, real installer/checksum agreement, matching guide,
+  original logo bytes, dropdown focus/keyboard/dismissal and narrow layouts.
+- Production failure injection was intentionally disabled; failed/delayed JS/art
+  cases were tested locally, while the real production paths were exercised live.
+- Live evidence: `/tmp/opencode/good-company-live/`,
+  `/tmp/opencode/good-company-live-downloads/`, and the matching browser logs.
+- TestSprite remains inconclusive as recorded above, not a successful acceptance
+  claim. Actual production browser flows are the acceptance evidence.
 Local evidence: `/tmp/opencode/good-company-*` (not committed).

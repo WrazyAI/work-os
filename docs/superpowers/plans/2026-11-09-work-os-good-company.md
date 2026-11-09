@@ -73,7 +73,10 @@ Execution: inline main-agent work per repository instructions and user's explici
 - [x] Task 3 verification — focused/site/full suites, both typechecks/builds and reviews completed; one skip-link contrast issue fixed RED→GREEN.
 - [x] User explicitly authorized production deployment: “deploy to prod; looks great”.
 - [x] Exact-rebased-tree typecheck/full suite/build and built-artifact browser checks finish green.
-- [ ] Both remote mains converge, atomic deployment and live acceptance.
+- [x] Both remote mains converge, atomic deployment and live acceptance.
+
+Live Agent OS commit `de26ee272f31715ea2c7c25d859ba92edf52f0d6` verified;
+landing and real Windows/macOS installer/checksum browser journeys passed.
 
 TestSprite's reported pass remains classified inconclusive because its pinned
 steps are empty and recording only shows404. Direct browser acceptance is green.
