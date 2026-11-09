@@ -57,7 +57,8 @@ function matchesPattern(segments: string[], pattern: string[]): boolean {
 function parseSegments(path: string): string[] | null {
   if (!path.startsWith("/") || path.startsWith("//")) return null;
   if (path.includes("\\") || path.includes("?") || path.includes("#") || path.includes("://")) return null;
-  const segments = path.slice(1).split("/");
+  const trimmed = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  const segments = trimmed.slice(1).split("/");
   if (segments.some((segment) => !segment || segment === "." || segment === "..")) return null;
   return segments;
 }

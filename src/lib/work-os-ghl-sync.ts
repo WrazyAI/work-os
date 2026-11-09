@@ -154,36 +154,6 @@ function nextCursorOf(body: unknown, items: unknown[], limit: number): string | 
 export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSyncSource {
   return {
     async messages({ channel, from, through, cursor, limit }) {
-      if (channel === "Email") {
-        // The bulk export excludes conversation emails on this account. Read a
-        // bounded set of recent email conversations and their messages instead.
-        const conversationBody = await client.read({
-          path: "/conversations/search",
-          query: { locationId: scope.locationId, limit: 20, startAfterDate: from },
-        });
-        const conversations = entityArray(conversationBody)
-          .filter((item) => String((item as Json).lastMessageType ?? "") === "TYPE_EMAIL")
-          .slice(0, 10);
-        const messages: unknown[] = [];
-        for (const conversation of conversations) {
-          const conversationId = String((conversation as Json).id ?? "");
-          if (!conversationId) continue;
-          const detail = await client.read({
-            path: `/conversations/${encodeURIComponent(conversationId)}/messages`,
-            query: { limit: 20 },
-          });
-          const nested = (detail as Json | null)?.messages;
-          const rows = Array.isArray(nested) ? nested : (nested as Json | undefined)?.messages;
-          if (Array.isArray(rows)) messages.push(...rows);
-        }
-        const filtered = messages.filter((item) => {
-          const row = item as Json;
-          if (String(row.messageType ?? "") !== "TYPE_EMAIL") return false;
-          const at = Date.parse(String(row.dateAdded ?? ""));
-          return Number.isFinite(at) && at >= Date.parse(from) && at <= Date.parse(through);
-        });
-        return { items: filtered.slice(0, limit), nextCursor: null, capped: conversations.length >= 10 || filtered.length > limit };
-      }
       const body = await client.read({
         path: "/conversations/messages/export",
         query: {
@@ -192,6 +162,7 @@ export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSync
           startDate: from,
           endDate: through,
           limit,
+          ...(channel === "Email" ? { sortBy: "createdAt", sortDirection: "desc" } : {}),
           ...(cursor ? { lastMessageId: cursor } : {}),
         },
       });
@@ -199,7 +170,7 @@ export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSync
       return { items, nextCursor: nextCursorOf(body, items, limit), capped: items.length >= limit };
     },
     async calendars() {
-      const body = await client.read({ path: "/calendars", query: { locationId: scope.locationId } });
+      const body = await client.read({ path: "/calendars/", query: { locationId: scope.locationId } });
       const calendars = entityArray(body);
       return calendars.map((item) => String((item as Json).id ?? "")).filter(Boolean);
     },
@@ -211,7 +182,6 @@ export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSync
           calendarId,
           startTime: Date.parse(from),
           endTime: Date.parse(through),
-          limit,
         },
       });
       const items = entityArray(body).filter((item) => {
@@ -243,11 +213,11 @@ export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSync
       const body = await client.read({
         path: "/opportunities/search",
         query: {
-          location_id: scope.locationId,
+          locationId: scope.locationId,
           limit,
           ...(cursor ? { startAfterId: cursor } : {}),
-          date: from,
-          endDate: through,
+          date: Date.parse(from),
+          endDate: Date.parse(through),
         },
       });
       const items = entityArray(body);
@@ -411,8 +381,12 @@ async function processPartition(input: {
   const owner = randomUUID();
   if (!(await claimGhlPartition({ stateId: String(state.id), leaseOwner: owner, now }))) return false;
   const limit = plan.key === "contacts" ? 10 : 100;
-  const from = String(state.range_from ?? plan.from);
-  const through = String(state.range_through ?? plan.through);
+  const asInstant = (value: unknown, fallback: string): string => {
+    const parsed = new Date(value instanceof Date ? value.toISOString() : String(value ?? ""));
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : fallback;
+  };
+  const from = asInstant(state.range_from, plan.from);
+  const through = asInstant(state.range_through, plan.through);
   const cursor = state.cursor_value ? String(state.cursor_value) : null;
   const persistPage = (page: GhlRecord[]) => persist(scope, page, revision, { stateId: String(state.id), leaseOwner: owner, now });
   try {
