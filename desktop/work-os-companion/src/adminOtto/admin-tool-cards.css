@@ -65,8 +65,19 @@
 .admin-tool-record header { flex-wrap: wrap; gap: 4px 10px; }
 .admin-tool-record blockquote, .admin-tool-excerpt { margin: 10px 0; white-space: pre-wrap; }
 .admin-tool-record blockquote { padding-left: 12px; border-left: 1px solid var(--conversation-line, #d9ded5); }
-.admin-tool-document { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--conversation-line, #d9ded5); white-space: pre-wrap; }
+.admin-tool-document { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--conversation-line, #d9ded5); }
 .admin-tool-document h5 { margin-bottom: 6px; font-size: 12px; font-weight: 650; }
+.admin-tool-document .chat-markdown { font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.admin-tool-document .chat-markdown h1,
+.admin-tool-document .chat-markdown h2,
+.admin-tool-document .chat-markdown h3 { margin: 10px 0 4px; font-size: 12px; font-weight: 700; letter-spacing: -.01em; }
+.admin-tool-document .chat-markdown h1:first-child,
+.admin-tool-document .chat-markdown h2:first-child,
+.admin-tool-document .chat-markdown h3:first-child { margin-top: 0; }
+.admin-tool-document .chat-markdown p { margin: 0 0 6px; }
+.admin-tool-document .chat-markdown ul,
+.admin-tool-document .chat-markdown ol { margin: 4px 0 6px; padding-left: 18px; }
+.admin-tool-document .chat-markdown pre { max-width: 100%; overflow-x: auto; }
 .admin-tool-workday { margin: 12px 0; display: grid; gap: 4px; }
 .admin-tool-workday dt { font-size: 11px; color: var(--conversation-muted, #687267); }
 .admin-tool-workday dd { margin: 0; white-space: pre-wrap; }

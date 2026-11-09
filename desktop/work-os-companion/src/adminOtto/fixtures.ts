@@ -185,9 +185,32 @@ const fixtureThreads = new Map<string, FixtureThread>();
 let fixtureSequence = 0;
 const fixtureNow = () => new Date().toISOString();
 
+export function fixtureEodResult(): AdminRead {
+  return {
+    kind: "records",
+    page: {
+      items: [{
+        id: "record-fixture-eod",
+        personId: FIXTURE_REVIEWED_RECAP.person.id,
+        source: "submitted_eod",
+        occurredAt: "2026-10-30T18:00:00.000Z",
+        localDate: "2026-10-30",
+        text: "## Summary\nNo recorded progress update.\n\n## Completed\nNothing completed yet.\n\n## Carried forward\nNothing pending.",
+        recordUrl: "/work-os/admin/review?report=record-fixture-eod",
+      }],
+      nextCursor: null,
+      total: 1,
+      asOf: "2026-10-30T18:00:00.000Z",
+      coverage: ["Submitted EOD reports only."],
+    },
+    windows: [{ personId: FIXTURE_REVIEWED_RECAP.person.id, timezone: "UTC", from: "2026-10-30", through: "2026-10-30" }],
+  };
+}
+
 export const ADMIN_FIXTURE_TRANSPORT = {
   send: async (input: { conversationId: string | null; requestId?: string; text: string }) => {
     const text = input.text.trim().toLowerCase();
+    if (text === "slow fixture") await new Promise((resolve) => setTimeout(resolve, 1_200));
     const conversationId = input.conversationId ?? FIXTURE_CONVERSATION_ID;
     const turnId = `admin-fixture-turn-${++fixtureSequence}`;
     const response = text === "new chat fixture" ? {
@@ -198,6 +221,12 @@ export const ADMIN_FIXTURE_TRANSPORT = {
       workflow: { id: "admin-fixture-workflow", steps: FIXTURE_ACTIONS.map((pendingAction, index) => ({
         index, label: pendingAction.display.title, status: "ready" as const, pendingAction,
       })) },
+      contextVersion: 1,
+    } : text === "eod fixture" ? {
+      conversationId,
+      turnId,
+      reply: "Synthetic Ada has one submitted EOD report for today.",
+      result: fixtureEodResult(),
       contextVersion: 1,
     } : text === "mixed fixture" ? {
       conversationId,

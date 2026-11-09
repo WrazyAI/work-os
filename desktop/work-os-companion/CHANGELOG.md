@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- You can read a submitted end-of-day report as a document, and Admin Otto shows what it is doing while it works.
+
 ## 0.5.26 — 2026-11-09
 
 - A plan whose session reopens after a false clock-out can be saved again, and a rejected save now explains the real reason instead of blaming your connection.

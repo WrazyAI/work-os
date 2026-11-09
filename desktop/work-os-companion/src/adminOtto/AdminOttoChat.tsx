@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactNode } from "react";
 import { X, SquarePen } from "lucide-react";
+import { AvatarThinking } from "../AvatarThinking";
 import { FadeArc } from "../LoadingUi";
 import type {
   AdminOttoPendingAction,
@@ -554,6 +555,11 @@ export function AdminOttoChat({
   };
   const [resetting, setResetting] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [busyStartedAt, setBusyStartedAt] = useState<number | null>(null);
+  const [busyStage, setBusyStage] = useState(0);
+  const [streamTurnId, setStreamTurnId] = useState<string | null>(null);
+  const [sweepSignal, setSweepSignal] = useState(0);
+  const previousTurnCount = useRef(0);
   const newChat = async () => {
     if (resetting) return false;
     setResetting(true);
@@ -578,6 +584,27 @@ export function AdminOttoChat({
     } finally {
       setResetting(false);
     }
+  };
+
+  useEffect(() => {
+    setBusyStartedAt(chat.busy ? Date.now() : null);
+    setBusyStage(0);
+    if (!chat.busy) return;
+    const timer = window.setTimeout(() => setBusyStage(1), 900);
+    return () => window.clearTimeout(timer);
+  }, [chat.busy]);
+
+  useEffect(() => {
+    const previous = previousTurnCount.current;
+    previousTurnCount.current = chat.turns.length;
+    if (chat.hydration !== "idle" || chat.turns.length !== previous + 1) return;
+    const last = chat.turns.at(-1);
+    if (last?.role === "assistant" && chat.turns.at(-2)?.role === "user") setStreamTurnId(last.id);
+  }, [chat.hydration, chat.turns]);
+
+  const settleStream = () => {
+    setStreamTurnId(null);
+    setSweepSignal((value) => value + 1);
   };
 
   const pendingRefresh = useRef<number | null>(null);
@@ -679,6 +706,9 @@ export function AdminOttoChat({
                   {shouldShowChatDivider(chat.turns, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
                   <ChatTurn
                     role={turn.role}
+                    text={turn.role === "assistant" ? turn.text : undefined}
+                    stream={turn.id === streamTurnId && turn.role === "assistant"}
+                    onSettled={settleStream}
                     showMark={turn.role === "assistant" && (index === 0 || chat.turns[index - 1]?.role !== "assistant")}
                     mascotMode="admin"
                     copySource={turn.result ? undefined : { role: turn.role, text: turn.text }}
@@ -686,7 +716,6 @@ export function AdminOttoChat({
                   >
                   {turn.role === "user" ? <AdminReplyText text={turn.text} className="is-user" /> : (
                     <>
-                      {turn.text ? <AdminReplyText text={turn.text} /> : null}
                       {turn.result ? (
                         <AdminResultCard
                           result={turn.result}
@@ -718,8 +747,17 @@ export function AdminOttoChat({
                   </ChatTurn>
                 </Fragment>
               ))}
+              {chat.busy && busyStartedAt ? (
+                <ChatTurn role="assistant" variant="tool">
+                  <AvatarThinking
+                    stages={[{ label: "Sending your request" }, { label: "Reading the work record" }]}
+                    active={busyStage}
+                    startedAt={busyStartedAt}
+                    activeLabel={busyStage === 0 ? "Sending" : "Reading"}
+                  />
+                </ChatTurn>
+              ) : null}
               {chat.error && chat.hydration === "idle" ? <p className="admin-otto-error" role="alert">{chat.error}</p> : null}
-              {chat.busy ? <p className="admin-otto-status" role="status">Otto is reading</p> : null}
             </div>
             <div className="admin-otto-composer">
               <WorkOsPromptBar
@@ -732,6 +770,7 @@ export function AdminOttoChat({
                 busy={chat.busy || resetting}
                 voice={composerVoice}
                 sendLabel="Ask Otto"
+                sweepSignal={sweepSignal}
               />
             </div>
           </>

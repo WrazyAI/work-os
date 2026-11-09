@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
+      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -228,6 +228,12 @@
       "type": "fix",
       "summary": "The scenario debugger opens in a working window instead of a blank one that could not be closed.",
       "verification": "Recorded from installed 0.5.25: two Windows diagnostics captures held no window.debug.created, window.debug.failed or debugger app.webview.start events, and Tauri's builder docs require async commands for Windows window creation. Fix makes open_debug_window async, queues the macOS NSScreen work-area fit back to the main thread, and serializes concurrent opens. test/work-os-desktop-static.test.mts guard observed failing before and passing after; work-os:typecheck passed; full work-os:test 1271 passed / 0 failed / 11 skipped on de50d10d; macOS packaged build 42291887745 succeeded natively on 861c1c33; merged as db32de23. Windows runtime confirmation on the 0.5.26 installer is still outstanding."
+    },
+    {
+      "id": "admin-otto-motion-eod-document",
+      "type": "feature",
+      "summary": "Admin Otto shows what it is doing while it works, streams the reply, and renders submitted EOD reports as readable documents.",
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion → 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
     }
   ],
   "emergency": {

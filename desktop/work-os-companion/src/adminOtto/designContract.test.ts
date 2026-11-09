@@ -91,6 +91,14 @@ describe("admin Otto design contract", () => {
     expect(chat).not.toContain('resetting ? "Clearing…" : "New chat"');
   });
 
+  it("uses the shared thinking, streamed reply, and composer sweep states", () => {
+    expect(chat).toContain("AvatarThinking");
+    expect(chat).toContain('text={turn.role === "assistant" ? turn.text : undefined}');
+    expect(chat).toContain('stream={turn.id === streamTurnId && turn.role === "assistant"}');
+    expect(chat).toContain("sweepSignal={sweepSignal}");
+    expect(chat).toContain("onSettled={settleStream}");
+  });
+
   it("keeps the compact desktop sheet clear of the standing notification band", () => {
     const surface = ruleBlock(css, ".admin-otto-surface");
     expect(surface).toContain("height: min(680px, calc(100dvh - 160px))");
