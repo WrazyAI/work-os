@@ -5,7 +5,8 @@
   --line: #514958;
   --focus: #d4e8be;
   --accent: #d4e8be;
-  --skip-background: #49325f;
+  --accent-ink: #d4e8be;
+  --skip-background: #314b37;
   background: var(--paper);
   color: var(--ink);
   min-height: 100svh;
@@ -36,7 +37,7 @@
 .views { display: flex; gap: 3px; }
 .views button { border: 0; background: transparent; border-radius: 4px; font: inherit; font-size: 10px; min-height: 34px; color: #314b37; padding: 4px 9px; cursor: pointer; }
 .views button[aria-pressed="true"] { background: #d9e5cf; color: #19352c; }
-.stage :is(button,a):focus-visible { outline-color: #5e3c76; }
+.stage :is(button,a):focus-visible { outline-color: #4a7d22; }
 .window img { display: block; width: 100%; height: auto; aspect-ratio: 1.6; object-fit: cover; object-position: top; }
 .companion { position: absolute; left: 22px; bottom: 0; width: clamp(210px, 28svh, 320px); height: clamp(238px, 31.5svh, 360px); z-index: 4; }
 .speech { position: absolute; left: 24%; top: 43%; max-width: 250px; padding: 13px 18px; border-radius: 15px 15px 15px 3px; background: #fbfbf5; color: #243b2b; box-shadow: 0 8px 25px #293b2012; font-size: 11px; line-height: 1.55; z-index: 5; pointer-events: none; margin: 0; }

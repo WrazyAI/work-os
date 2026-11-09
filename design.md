@@ -285,7 +285,9 @@ Otto's click uses the canonical success face, including statically under Pause
 or reduced motion; idle work suspends offscreen/in hidden tabs.
 
 The downloads, installation guides and tutorials stay light, with dark-purple
-ink and restrained violet/lilac accents. Red install warnings keep their semantic
+ink and restrained lilac grounds; buttons and icon controls use pale green
+`#d4e8be` with dark-green ink and text-safe green focus/selected treatments.
+Red install warnings keep their semantic
 danger treatment. This marketing-only palette does not recolor the workspace or
 companion. Tutorial videos, player/chapters and download behavior are unchanged.
 

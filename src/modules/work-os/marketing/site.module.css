@@ -12,9 +12,11 @@
   --ink: #302638;
   --muted: #665c70;
   --line: #e0d9e6;
-  --accent: #6f548b;
-  --accent-hover: #59406f;
-  --focus: #76598f;
+  --accent: #d4e8be;
+  --accent-hover: #e1f3cf;
+  --accent-ink: #4a7d22;
+  --control-ink: #222c26;
+  --focus: #4a7d22;
   --signal: #a8f15b;
   --signal-deep: #5e9d27;
   --graphite: #1c1d21;
@@ -107,7 +109,7 @@
 }
 
 .nav a[aria-current="page"] {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 6px;
 }
@@ -129,7 +131,7 @@
 }
 
 .workspace:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .darkHeader { width: min(1184px, calc(100% - 96px)); min-height: clamp(64px, 9svh, 88px); }
