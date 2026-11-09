@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- In Employee view, administrators can select Otto’s icon in chat to return to Admin view.
+
 ## 0.5.27 — 2026-11-09
 
 - You can read a submitted end-of-day report as a document, and Admin Otto shows what it is doing while it works.

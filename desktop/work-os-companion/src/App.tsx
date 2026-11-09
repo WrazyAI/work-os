@@ -5515,6 +5515,15 @@ export default function App() {
    * overlay layer mounts on this branch too, so a counted flag always has a
    * rendered owner here (design §9).
    */
+  const chatViewSwitch = viewState ? <CompanionViewSwitch
+    mode={viewState.workspace}
+    employeeAvailable={viewState.employeeAvailable}
+    adminAvailable={viewState.adminAvailable}
+    employeeReason={viewState.employeeAvailable ? null : viewState.adminStatus === "loading" ? "Loading your workspace…" : viewState.adminStatus === "failed" ? "Your workspace is unavailable until Administration connects." : "No personal workday is mapped."}
+    adminReason={viewState.adminAvailable ? null : viewState.adminStatus === "loading" ? "Loading Administration…" : "Administration is unavailable."}
+    switchable={viewState.role === "admin"}
+    onSwitch={(next) => { void setWorkspaceMode(next); }}
+  /> : undefined;
   const renderAdmin = () => {
     // The administration branch only renders with a session; the seam's string
     // cannot narrow that for TypeScript.
@@ -5593,15 +5602,7 @@ export default function App() {
             mode: "admin",
           }}
           conversationId={adminOttoConversationId}
-          headerLeading={viewState ? <CompanionViewSwitch
-            mode={viewState.workspace}
-            employeeAvailable={viewState.employeeAvailable}
-            adminAvailable={viewState.adminAvailable}
-            employeeReason={viewState.employeeAvailable ? null : viewState.adminStatus === "loading" ? "Loading your workspace…" : viewState.adminStatus === "failed" ? "Your workspace is unavailable until Administration connects." : "No personal workday is mapped."}
-            adminReason={viewState.adminAvailable ? null : viewState.adminStatus === "loading" ? "Loading Administration…" : "Administration is unavailable."}
-            switchable={viewState.role === "admin"}
-            onSwitch={(next) => { void setWorkspaceMode(next); }}
-          /> : undefined}
+          headerLeading={chatViewSwitch}
           onNewChat={() => {
             setAdminOttoConversationId(null);
             setAdminOttoDraft("");
@@ -6002,6 +6003,7 @@ export default function App() {
         </main>
       )}
       {dockVisible && <ProgressComposer
+        headerLeading={viewState?.role === "admin" ? chatViewSwitch : undefined}
         recapVoice={recapVoice}
         audioScope={workSessionQuery.data ? { userId: workSessionQuery.data.userId, organizationId: workSessionQuery.data.organizationId, mode: "employee" } : null}
         audioEpoch={adminOttoEpoch}
@@ -6392,7 +6394,8 @@ function WorkingNowTrace({ label }: { label: string }) {
   return <AvatarThinking stages={[{ label }]} active={0} startedAt={startedAt} activeLabel="Thinking" />;
 }
 
-export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, audioScope = null, audioEpoch = 1, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
+export function ProgressComposer({ headerLeading, mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, audioScope = null, audioEpoch = 1, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
+  headerLeading?: ReactNode;
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -6645,7 +6648,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   >
     {open ? <div className="chat-surface is-open" id="conversation-panel">
     <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
-      <header className="workos-chat-head"><span className="conversation-pane-title">{MASCOT.name}</span><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
+      <header className="workos-chat-head">{headerLeading ?? <span className="conversation-pane-title">{MASCOT.name}</span>}<ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
         {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">
           <section className={`focus-goal${goalCollapsed ? " is-collapsed" : ""}`} aria-labelledby="focus-goal-heading">

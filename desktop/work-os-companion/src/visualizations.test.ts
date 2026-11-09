@@ -864,7 +864,9 @@ describe("floating Otto view switch", () => {
   });
 
   it("keeps the in-app admin header and assistant marks on the same mode", () => {
-    expect(app).toContain("headerLeading={viewState ? <CompanionViewSwitch");
+    expect(app).toContain("const chatViewSwitch = viewState ? <CompanionViewSwitch");
+    expect(app).toContain("headerLeading={chatViewSwitch}");
+    expect(app).toContain('headerLeading={viewState?.role === "admin" ? chatViewSwitch : undefined}');
     expect(adminOttoChat).toContain('mascotMode="admin"');
     expect(avatarApp).toContain("adminConversationGeneration");
     expect(avatarApp).toContain("adminConversationRevision");

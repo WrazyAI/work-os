@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { ProgressComposer } from "./App";
+import { CompanionViewSwitch } from "./adminOtto/CompanionViewSwitch";
 import { workOsKeys } from "./queryClient";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { ActivityInterval } from "./types";
@@ -95,6 +96,20 @@ describe("ProgressComposer simplified chrome", () => {
   it("keeps the thread and composer in the shared bounded edge frame", () => {
     const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base }));
     expect(markup).toContain('class="conversation-scroll-region"');
+  });
+
+  it("renders the workspace view switch in both employee chat tabs", () => {
+    for (const panel of ["update", "goal"] as const) {
+      const markup = renderToStaticMarkup(createElement(ProgressComposer, {
+        ...base, panel,
+        headerLeading: createElement(CompanionViewSwitch, {
+          mode: "employee", employeeAvailable: true, adminAvailable: true, onSwitch: noop,
+        }),
+      }));
+      const header = markup.match(/<header class="workos-chat-head">(.*?)<\/header>/s)?.[1];
+      expect(header).toContain('aria-haspopup="menu"');
+      expect(header).toContain("Employee");
+    }
   });
 
   it("renders a compact launcher instead of mounting the full composer when closed", () => {

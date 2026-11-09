@@ -234,6 +234,12 @@
       "type": "feature",
       "summary": "Admin Otto shows what it is doing while it works, streams the reply, and renders submitted EOD reports as readable documents.",
       "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion \u2192 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
+    },
+    {
+      "id": "employee-inapp-otto-view-switch",
+      "type": "fix",
+      "summary": "Administrators can switch back to Admin from the Otto icon in the employee in-app chat header.",
+      "verification": "npm run work-os:test: 1273 passed/11 skipped; companion npx vitest run: 1844 passed/205 files; npm run work-os:typecheck and companion npm run build passed. docs/verification/2026-11-09-employee-chat-view-switch.md records direct browser checks at 1440/1024/720/390: menu selection callback, Focus tab, Escape focus restoration and no overflow. TestSprite inconclusive (omitted Admin selection); installed-client transition remains unverified."
     }
   ],
   "emergency": null,
