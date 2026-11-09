@@ -750,10 +750,10 @@ export function AdminOttoChat({
               {chat.busy && busyStartedAt ? (
                 <ChatTurn role="assistant" variant="tool">
                   <AvatarThinking
-                    stages={[{ label: "Sending your request" }, { label: "Reading the work record" }]}
+                    stages={[{ label: "Sending your request" }, { label: "Working on your request" }]}
                     active={busyStage}
                     startedAt={busyStartedAt}
-                    activeLabel={busyStage === 0 ? "Sending" : "Reading"}
+                    activeLabel={busyStage === 0 ? "Sending" : "Working"}
                   />
                 </ChatTurn>
               ) : null}
