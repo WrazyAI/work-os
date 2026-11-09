@@ -3,11 +3,11 @@ import Image from "next/image";
 import { WORK_OS_SITE } from "./site";
 import styles from "./site.module.css";
 
-export function SiteHeader({ current }: { current: string }) {
+export function SiteHeader({ current, tone = "light" }: { current: string; tone?: "light" | "dark" }) {
   return (
     <>
       <a className={styles.skip} href="#main">Skip to content</a>
-      <header className={styles.header}>
+      <header className={`${styles.header} ${tone === "dark" ? styles.darkHeader : ""}`}>
         <Link className={styles.brand} href={WORK_OS_SITE.home}>
           <Image className={styles.mark} src="/site/work-os/work-os-mark.png" alt="" width={34} height={34} unoptimized />
           <span>{WORK_OS_SITE.product}</span>
@@ -27,9 +27,9 @@ export function SiteHeader({ current }: { current: string }) {
   );
 }
 
-export function SiteFooter() {
+export function SiteFooter({ tone = "light" }: { tone?: "light" | "dark" } = {}) {
   return (
-    <footer className={styles.footer}>
+    <footer className={`${styles.footer} ${tone === "dark" ? styles.darkFooter : ""}`}>
       <span>Work OS. Made for the Wrazy workday.</span>
       <div className={styles.footerLinks}>
         <a href="/work-os/workspace">Open your workspace</a>

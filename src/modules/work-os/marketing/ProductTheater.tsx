@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Companion from "./Companion";
 import styles from "./landing.module.css";
 
 const VIEWS = [
@@ -25,12 +26,15 @@ const VIEWS = [
 ] as const;
 
 export default function ProductTheater() {
-  const [active, setActive] = useState<(typeof VIEWS)[number]["id"]>("today");
+  const [active, setActive] = useState<(typeof VIEWS)[number]["id"]>("tasks");
   const view = VIEWS.find((item) => item.id === active) ?? VIEWS[0];
   return (
-    <div className={styles.theater}>
-      <div className={styles.theaterTop}>
-        <span>Your workday, brought together.</span>
+    <div className={styles.stage} data-hero-stage aria-label="A look inside Work OS">
+      <div className={styles.orbit} aria-hidden="true" />
+      <p className={styles.stageCaption}>A clearer day begins here.</p>
+      <div className={styles.window} data-product-window>
+        <div className={styles.windowBar}>
+          <span className={styles.windowDots} aria-hidden="true"><i /><i /><i /></span>
         <div className={styles.views} role="group" aria-label="Product screenshots">
           {VIEWS.map((item) => (
             <button
@@ -43,15 +47,12 @@ export default function ProductTheater() {
             </button>
           ))}
         </div>
+        </div>
+        <img src={view.src} alt={view.alt} width={1600} height={1000} data-product-capture />
       </div>
-      <div className={styles.window}>
-        <div className={styles.windowBar}>Work OS · Desktop companion</div>
-        <img src={view.src} alt={view.alt} width={1600} height={1000} />
-      </div>
-      <p className={styles.theaterNote}>
-        <span aria-hidden="true" className={styles.dot} />
-        Actual desktop companion · Demonstration data
-      </p>
+      <div className={styles.companion}><Companion /></div>
+      <p className={styles.speech}>You bring the work.<br />I&apos;ll help keep the pieces together.</p>
+      <div className={styles.motionTools}><span>Actual desktop companion · Demonstration data</span></div>
     </div>
   );
 }
