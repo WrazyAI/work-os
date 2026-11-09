@@ -1,11 +1,12 @@
 import Link from "next/link";
 import ProductTheater from "./ProductTheater";
+import LandingMotion from "./LandingMotion";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
 import styles from "./landing.module.css";
 
 export default function LandingPage() {
   return (
-    <div className={styles.page} data-landing>
+    <LandingMotion>
       <SiteHeader current="/work-os" tone="dark" />
       <main id="main" className={styles.main}>
         <section className={styles.hero} aria-labelledby="welcome-title">
@@ -61,6 +62,6 @@ export default function LandingPage() {
         </section>
       </main>
       <SiteFooter tone="dark" />
-    </div>
+    </LandingMotion>
   );
 }

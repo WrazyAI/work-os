@@ -12,7 +12,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`${base}/work-os`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/work-os`, { waitUntil: "domcontentloaded", timeout: 120000 });
     await page.getByRole("heading", { level: 1, name: /Good work\.\s*Good company\./ }).waitFor({ timeout: 10000 });
     if (motion) await page.locator('[data-landing][data-motion-entered="true"]').waitFor();
     const stage = page.locator("[data-hero-stage]");
@@ -25,6 +25,12 @@ try {
     if (width >= 900) {
       assert.ok(box.height >= (height <= 700 ? 220 : 240));
       assert.ok(box.y + box.height <= height, `whole product stage fits ${width}×${height}, got ${JSON.stringify(box)}`);
+    }
+    if (width === 1366 && height === 768) {
+      const footer = page.locator("[data-landing] footer");
+      const footerBox = await footer.boundingBox();
+      assert.ok(Math.abs(footerBox.x - box.x) < 1, "dark footer aligns with the landing content axis");
+      assert.equal(await footer.evaluate((node) => getComputedStyle(node).borderTopWidth), "0px", "closing owns the one separator");
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.equal(await page.locator("h1").count(), 1);
@@ -40,17 +46,20 @@ try {
       await mascot.focus();
       await mascot.press("Enter");
       await page.locator('[data-state="celebrate"] .site-ready-face').waitFor();
+      assert.equal(await page.locator('[data-state="celebrate"] .studio-rig').evaluate((node) => getComputedStyle(node).animationName), "none");
       await page.getByRole("button", { name: "Resume motion", exact: true }).click();
       await page.emulateMedia({ reducedMotion: "reduce" });
       await mascot.press("Space");
       await page.locator('[data-state="celebrate"] .site-ready-face').waitFor();
       assert.equal(await page.locator('[data-state="celebrate"]').getAttribute("data-reduced"), "true");
+      assert.equal(await page.locator('[data-state="celebrate"] .studio-rig').evaluate((node) => getComputedStyle(node).animationName), "none");
       await page.screenshot({ path: `${evidence}/success-reduced.png` });
       await page.getByRole("button", { name: "Insights", exact: true }).click();
       assert.match(await page.locator("[data-product-capture]").getAttribute("src"), /workspace-insights/);
       await page.getByRole("button", { name: "Tasks", exact: true }).click();
       await page.getByRole("button", { name: "My Day", exact: true }).click();
       assert.match(await page.locator("[data-product-capture]").getAttribute("src"), /workspace-today/);
+      await page.waitForFunction(() => document.querySelector("[data-product-capture]").complete);
       await page.emulateMedia({ reducedMotion: "no-preference" });
       for (const selector of ["[data-workday-story]", "[data-workday-steps]", "[data-tutorial-feature]", "[data-landing-closing]"]) {
         await page.locator(selector).scrollIntoViewIfNeeded();
@@ -82,6 +91,23 @@ try {
   const stageBox = await staticPage.locator("[data-hero-stage]").boundingBox();
   assert.ok(stageBox.y + stageBox.height <= 768);
   await staticContext.close();
+  if (motion) {
+    // Failure modes leave actual server content and the static mascot available.
+    const fallback = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    let blockedMotion = 0;
+    await fallback.route("**/*landing-motion*", (route) => { blockedMotion++; return route.abort(); });
+    await fallback.route("**/studio-otto.svg", (route) => route.request().resourceType() === "fetch"
+      ? route.fulfill({ status: 503, body: "unavailable" }) : route.continue());
+    await fallback.goto(`${base}/work-os`);
+    await fallback.locator('[data-landing][data-motion-entered="true"]').waitFor();
+    await fallback.getByRole("heading", { level: 1, name: /Good work/ }).waitFor();
+    await fallback.getByRole("link", { name: /Get Work OS/ }).first().waitFor();
+    assert.equal(await fallback.locator('button[aria-label="Play companion celebration"] img').evaluate((image) => image.complete && image.naturalWidth > 0), true);
+    assert.equal(await fallback.locator("h1").evaluate((node) => getComputedStyle(node).opacity), "1");
+    assert.ok(blockedMotion > 0, "the failure probe actually blocked the motion chunk");
+    await fallback.screenshot({ path: `${evidence}/failed-motion-art-static.png` });
+    await fallback.close();
+  }
   console.log("PASS: approved landing, short-screen hero, success face, motion, light sibling pages, responsive and no-JS contracts.");
 } finally {
   await browser.close();

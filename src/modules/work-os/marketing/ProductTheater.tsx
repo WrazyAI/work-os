@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Companion from "./Companion";
+import { LandingMotionControl, useLandingMotion } from "./LandingMotion";
 import styles from "./landing.module.css";
 
 const VIEWS = [
@@ -28,6 +29,20 @@ const VIEWS = [
 export default function ProductTheater() {
   const [active, setActive] = useState<(typeof VIEWS)[number]["id"]>("tasks");
   const view = VIEWS.find((item) => item.id === active) ?? VIEWS[0];
+  const image = useRef<HTMLImageElement>(null);
+  const first = useRef(true);
+  const { paused, reduced } = useLandingMotion();
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const node = image.current;
+    if (!node || paused || reduced) return;
+    let cancelled = false;
+    let dispose: (() => void) | undefined;
+    Promise.all([node.decode(), import("./landing-motion")]).then(([, { animateCapture }]) => {
+      if (!cancelled) dispose = animateCapture(node);
+    }).catch(() => { /* Native image remains available without transitions. */ });
+    return () => { cancelled = true; dispose?.(); };
+  }, [active, paused, reduced]);
   return (
     <div className={styles.stage} data-hero-stage aria-label="A look inside Work OS">
       <div className={styles.orbit} aria-hidden="true" />
@@ -48,11 +63,11 @@ export default function ProductTheater() {
           ))}
         </div>
         </div>
-        <img src={view.src} alt={view.alt} width={1600} height={1000} data-product-capture />
+        <img ref={image} src={view.src} alt={view.alt} width={1600} height={1000} data-product-capture />
       </div>
-      <div className={styles.companion}><Companion /></div>
-      <p className={styles.speech}>You bring the work.<br />I&apos;ll help keep the pieces together.</p>
-      <div className={styles.motionTools}><span>Actual desktop companion · Demonstration data</span></div>
+      <div className={styles.companion} data-stage-companion><Companion compact paused={paused} /></div>
+      <p className={styles.speech} data-stage-speech>You bring the work.<br />I&apos;ll help keep the pieces together.</p>
+      <div className={styles.motionTools}><span>Actual desktop companion · Demonstration data</span><LandingMotionControl /></div>
     </div>
   );
 }

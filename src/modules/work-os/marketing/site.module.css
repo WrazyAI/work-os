@@ -140,10 +140,10 @@
 .darkHeader .nav > a[aria-current="page"], .darkHeader .back { display: none; }
 .darkHeader .workspace { border: 1px solid #62596e; padding: 10px 15px; border-radius: 8px; font-size: 12px; }
 .darkHeader .workspace:hover { background: #3b3347; }
-.darkFooter { width: min(1184px, calc(100% - 96px)); border: 0; margin-top: 0; padding: 28px 0; font-size: 10px; }
+.footer.darkFooter { width: min(1184px, calc(100% - 96px)); border: 0; margin-top: 0; padding: 28px 0; font-size: 10px; }
 
 @media (min-width: 900px) and (max-height: 700px) { .darkHeader { min-height: 64px; } }
-@media (max-width: 1100px) { .darkHeader, .darkFooter { width: calc(100% - 64px); } }
+@media (max-width: 1100px) { .darkHeader, .footer.darkFooter { width: calc(100% - 64px); } }
 
 .main {
   width: min(1240px, calc(100% - 64px));
@@ -186,7 +186,7 @@
     gap: 16px;
   }
 
-  .darkHeader, .darkFooter { width: calc(100% - 48px); }
+  .darkHeader, .footer.darkFooter { width: calc(100% - 48px); }
   .darkHeader { min-height: 74px; }
   .darkHeader .brand { font-size: 17px; }
   .darkHeader .mark { width: 28px; height: 28px; }
