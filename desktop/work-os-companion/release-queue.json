@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -236,10 +236,5 @@
       "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion → 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
     }
   ],
-  "emergency": {
-    "version": "0.5.26",
-    "updateId": "debugger-window-opens-async",
-    "brokenBehavior": "In the installed 0.5.25 companion the scenario debugger opened as a blank window that could not be closed, came back after restarting the app, and blocked the diagnostics view.",
-    "restoredBehavior": "The debugger opens in a working window that renders its content and can be closed normally."
-  }
+  "emergency": null
 }
