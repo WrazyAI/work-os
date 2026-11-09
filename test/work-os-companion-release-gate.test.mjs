@@ -124,6 +124,37 @@ test("emergencies cannot reuse old fixes, claim features, omit impact, or leak t
   assert.throws(() => evaluate(current, { publishedQueue: structuredClone(current) }), /emergency/i);
 });
 
+const override = () => ({ version: "0.5.17", updateId: "change-1", approvedBy: "operator", reason: "Explicit operator request to publish this outcome ahead of the cadence", approvedAt: "2026-11-09" });
+
+test("a documented operator override may publish one pending outcome once", () => {
+  const current = queue(1);
+  current.operatorOverride = override();
+  const result = evaluate(current);
+  assert.equal(result.eligible, true);
+  assert.equal(result.operatorOverride, true);
+  assert.equal(result.emergency, false);
+  assert.equal(result.pending.length, 1);
+  assert.equal(evaluate(queue(1)).eligible, false, "an override is never implicit");
+});
+
+test("operator overrides are version- and outcome-scoped and need an approver, reason and date", () => {
+  const future = queue(1);
+  future.operatorOverride = override();
+  future.operatorOverride.version = "0.5.18";
+  assert.equal(evaluate(future).eligible, false, "a stale override cannot authorize a later version");
+  for (const change of [
+    (current) => { current.operatorOverride.updateId = "missing-change"; },
+    (current) => { current.operatorOverride.approvedBy = " "; },
+    (current) => { current.operatorOverride.reason = ""; },
+    (current) => { current.operatorOverride.approvedAt = "yesterday"; },
+  ]) {
+    const current = queue(1);
+    current.operatorOverride = override();
+    change(current);
+    assert.throws(() => evaluate(current), /override|approval|version|pending/i);
+  }
+});
+
 test("published-release selection reads every page, ignores drafts, and orders canonical versions", () => {
   assert.equal(typeof gate.latestPublishedRelease, "function", "published history must be authoritative");
   const release = (version, more = {}) => ({ tag_name: `work-os-companion-internal-v${version}`, draft: false, published_at: "2026-10-30T00:00:00Z", ...more });
