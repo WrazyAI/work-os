@@ -222,7 +222,18 @@
       "type": "feature",
       "summary": "Administrators can switch the floating mascot between Employee and Admin views, keeping each chat and seeing Otto in his Admin outfit.",
       "verification": "Companion suite 1805 passed/199 files; companion typecheck and production build; TestSprite 48e5a480 passed the real Avatar switch/Admin/New chat flow; rendered 400/390/380/360 one-row headers, in-app 480/390, close/reopen history and draft retention, timestamps, attire dress/undress, and symmetric Admin entrance; CodeRabbit and whole-branch review findings fixed."
+    },
+    {
+      "id": "debugger-window-opens-async",
+      "type": "fix",
+      "summary": "The scenario debugger opens in a working window instead of a blank one that could not be closed.",
+      "verification": "Recorded from installed 0.5.25: two Windows diagnostics captures held no window.debug.created, window.debug.failed or debugger app.webview.start events, and Tauri's builder docs require async commands for Windows window creation. Fix makes open_debug_window async, queues the macOS NSScreen work-area fit back to the main thread, and serializes concurrent opens. test/work-os-desktop-static.test.mts guard observed failing before and passing after; work-os:typecheck passed; full work-os:test 1271 passed / 0 failed / 11 skipped on de50d10d; macOS packaged build 42291887745 succeeded natively on 861c1c33; merged as db32de23. Windows runtime confirmation on the 0.5.26 installer is still outstanding."
     }
   ],
-  "emergency": null
+  "emergency": {
+    "version": "0.5.26",
+    "updateId": "debugger-window-opens-async",
+    "brokenBehavior": "In the installed 0.5.25 companion the scenario debugger opened as a blank window that could not be closed, came back after restarting the app, and blocked the diagnostics view.",
+    "restoredBehavior": "The debugger opens in a working window that renders its content and can be closed normally."
+  }
 }
