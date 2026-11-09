@@ -16,6 +16,7 @@ use work_os_diagnostics_core::{
     redact_string, redact_value, rotate_if_needed, Anchor, EventRing, EVENT_FILE, PAGE_DEFAULT,
     RING_LIMIT, ROTATED_FILE,
 };
+use work_os_diagnostics_core::app_info::{AppInfo, APP_INFO_FILE};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
@@ -178,6 +179,17 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
         })
     });
     install_panic_hook();
+    let info = app_info();
+    // Support metadata must never turn a writable-log startup into a fatal
+    // error if this optional snapshot cannot be replaced.
+    let snapshot = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())
+        .and_then(|directory| info.write_to(&directory).map_err(|error| error.to_string()));
+    if let Err(error) = snapshot {
+        host_event(app, "app.info.write_failed", &error, DiagnosticLevel::Warn);
+    }
     record(
         app,
         IncomingEvent {
@@ -185,10 +197,21 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
             message: "Companion host starting".into(),
             source: Some(DiagnosticSource::Rust),
             level: Some(DiagnosticLevel::Info),
+            metadata: Some(serde_json::to_value(&info).map_err(|error| error.to_string())?),
             ..IncomingEvent::default()
         },
     );
     Ok(())
+}
+
+fn app_info() -> AppInfo<'static> {
+    AppInfo::new(
+        env!("CARGO_PKG_VERSION"),
+        option_env!("WORK_OS_BUILD_COMMIT"),
+        if cfg!(debug_assertions) { "debug" } else { "release" },
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    )
 }
 
 fn install_panic_hook() {
@@ -443,10 +466,11 @@ pub fn diagnostics_export(app: AppHandle, extras: Option<ExportInput>) -> Result
         "app": "work-os-companion",
         "sessionId": session_id(),
         "exportedAt": now_rfc3339(),
-        "files": ["manifest.json", "app-events.jsonl", "runtime-health.json", "queue-summary.json", "sanitized-config.json"],
+        "files": ["manifest.json", APP_INFO_FILE, "app-events.jsonl", "runtime-health.json", "queue-summary.json", "sanitized-config.json"],
         "redacted": ["tokens", "authorization", "cookies", "stronghold", "transcripts", "input_text", "email"]
     });
     write_zip_json(&mut zip, options, "manifest.json", &manifest)?;
+    write_zip_json(&mut zip, options, APP_INFO_FILE, &serde_json::to_value(app_info()).map_err(|error| error.to_string())?)?;
     write_zip_events(&mut zip, options, &dir)?;
     write_zip_json(
         &mut zip,

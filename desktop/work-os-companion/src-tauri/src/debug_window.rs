@@ -33,14 +33,24 @@ fn open_debug_window_locked(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let result = WebviewWindowBuilder::new(&app, DEBUG_LABEL, WebviewUrl::App("debug.html".into()))
+    let mut builder = WebviewWindowBuilder::new(&app, DEBUG_LABEL, WebviewUrl::App("debug.html".into()))
         .title("Work OS Debugger")
         .inner_size(760.0, 860.0)
         .min_inner_size(520.0, 560.0)
         .resizable(true)
         .visible(true)
-        .use_https_scheme(true)
-        .build();
+        .use_https_scheme(true);
+    // All windows share the default WebView2 data directory. Its environment
+    // options must match: different browser arguments fail with 0x8007139F,
+    // dropping the native window while leaving a detached Tauri handle behind.
+    // Read the main window's configuration rather than duplicating its flags.
+    if let Some(arguments) = app.config().app.windows.iter()
+        .find(|window| window.label == "main")
+        .and_then(|window| window.additional_browser_args.as_deref())
+    {
+        builder = builder.additional_browser_args(arguments);
+    }
+    let result = builder.build();
 
     match result {
         Ok(window) => {

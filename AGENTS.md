@@ -208,6 +208,12 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
 
 ## Verification
 
+- For an installed Windows companion, first inspect its mounted local files under
+  `/mnt/c/Users/<user>/AppData/Local/com.wrazy.workos.pilot/` when available:
+  `app-info.json` identifies the running build and `logs/diagnostics/` holds logs.
+  Older builds expose version via the installed executable's Windows VersionInfo.
+  Do not infer the installed version from this checkout or ask for uploads before
+  checking local access. See `docs/companion-local-diagnostics.md`.
 - Run the focused tests for the touched files, then `work-os:typecheck`, then
   the full `work-os:test` before merging or deploying.
 - UI changes require rendered desktop and narrow checks, loading/empty/dense/
