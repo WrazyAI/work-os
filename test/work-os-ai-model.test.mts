@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import {
   AI_TIMEOUTS,
   AI_TOKEN_BUDGETS,
@@ -16,7 +16,8 @@ import {
 const root = new URL("../", import.meta.url);
 const source = (path: string) => readFile(new URL(path, root), "utf8");
 
-/** Every library that talks to the model provider. */
+/** Known callers, plus discovery below so new/deployed Work OS callers cannot
+ * silently escape this inventory (including injected-fetch admin callers). */
 const AI_LIBRARIES = [
   "src/lib/aiInterpret.ts",
   "src/lib/aiPlan.ts",
@@ -29,12 +30,22 @@ const AI_LIBRARIES = [
   "src/lib/work-os-screenshot-hours.ts",
   "src/lib/work-os-activity-intervals.ts",
   "src/lib/work-os-checkins.ts",
+  "src/lib/work-os-goal-suggestion.ts",
+  "src/lib/work-conversations-summary.ts",
+  "src/lib/work-os-admin-otto-intent.ts",
+  "src/lib/work-os-admin-otto-summary.ts",
 ];
 
 test("every provider call routes through the shared model and provider policy", async () => {
-  for (const library of AI_LIBRARIES) {
+  const libraries = new Set(AI_LIBRARIES);
+  for (const name of await readdir(new URL("src/lib/", root))) {
+    if (!/^(?:ai|work-).*\.ts$/.test(name)) continue;
+    const library = `src/lib/${name}`;
+    if (/https:\/\/openrouter\.ai\/api\/v1\/chat\/completions/.test(await source(library))) libraries.add(library);
+  }
+  for (const library of libraries) {
     const text = await source(library);
-    const calls = text.match(/fetch\(OPENROUTER_URL|fetch\(url,/g) ?? [];
+    const calls = text.match(/\b(?:fetch|fetchImpl)\s*\(\s*(?:OPENROUTER_URL|url)\b|\(deps\.fetch\s*\?\?\s*fetch\)\s*\(\s*process\.env\.OPENROUTER_BASE_URL/g) ?? [];
     const routed = text.match(/aiRequestBody\(/g) ?? [];
     assert.ok(calls.length > 0, `${library} makes no provider call to guard`);
     assert.equal(
@@ -151,6 +162,15 @@ test("a recap never inherits the screenshot model", () => {
   assert.equal(models.nextSteps, DEEPSEEK_MODEL);
 });
 
+test("goal suggestions preserve their legacy default and override precedence", () => {
+  assert.equal(resolveAiModels({}).goalSuggestion, "gpt-5.6-luna");
+  assert.equal(resolveAiModels({ WORK_OS_INTERPRET_MODEL: "interpret/model" }).goalSuggestion, "interpret/model");
+  assert.equal(resolveAiModels({ WORK_OS_INTERPRET_MODEL: "interpret/model", WORK_OS_PLAN_MODEL: "plan/model" }).goalSuggestion, "plan/model");
+  assert.equal(resolveAiModels({
+    WORK_OS_INTERPRET_MODEL: "interpret/model", WORK_OS_PLAN_MODEL: "plan/model", WORK_OS_GOAL_SUGGESTION_MODEL: DEEPSEEK_MODEL,
+  }).goalSuggestion, DEEPSEEK_MODEL);
+});
+
 test("a deployment-wide override still reaches the synthesis surfaces", () => {
   const models = resolveAiModels({ WORK_OS_INTERPRET_MODEL: "openai/gpt-5.6-luna" });
   assert.equal(models.interpret, "openai/gpt-5.6-luna");
@@ -180,6 +200,8 @@ test("every completion budget leaves room for the reasoning pass", () => {
   // truncate a structured answer mid-JSON.
   const reasoningFloor = 1_000;
   for (const [surface, budget] of Object.entries(AI_TOKEN_BUDGETS)) {
+    // The legacy non-reasoning goal model keeps its small completion cap.
+    if (surface === "goalSuggestion") continue;
     assert.ok(budget > reasoningFloor, `${surface} budget ${budget} leaves no reasoning headroom`);
   }
 });

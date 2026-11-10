@@ -14,13 +14,9 @@
 import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
 import { audit, dateOnly, db, type Json } from "@/lib/work-os-internal";
 import { listPersonTasks } from "@/lib/work-os";
+import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, GOAL_SUGGESTION_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
-const GOAL_MODEL = process.env.WORK_OS_GOAL_SUGGESTION_MODEL
-  ?? process.env.WORK_OS_PLAN_MODEL
-  ?? process.env.WORK_OS_INTERPRET_MODEL
-  ?? "gpt-5.6-luna";
-const GOAL_TIMEOUT_MS = 15_000;
 export const MAX_GOAL_CHARS = 160;
 
 export type GoalSuggestionContext = {
@@ -120,20 +116,20 @@ export async function suggestWorkOsDayGoal(
     const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: GOAL_MODEL,
+      body: JSON.stringify(aiRequestBody(GOAL_SUGGESTION_MODEL, {
         temperature: 0.3,
-        max_tokens: 200,
+        max_tokens: AI_TOKEN_BUDGETS.goalSuggestion,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
           { role: "user", content: buildGoalSuggestionPrompt(context) },
         ],
         response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(GOAL_TIMEOUT_MS),
+      })),
+      signal: AbortSignal.timeout(AI_TIMEOUTS.goalSuggestion),
     });
     if (!response.ok) return null;
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    recordAiUsage("goal_suggestion", GOAL_SUGGESTION_MODEL, payload);
     goal = parseGoalSuggestion(JSON.parse(payload.choices?.[0]?.message?.content ?? "{}"));
   } catch {
     return null;
@@ -154,7 +150,7 @@ export async function suggestWorkOsDayGoal(
   if (!updated) return null;
   await audit(access, "plan.goal_suggested", "daily_plan", plan.id as string, {
     goal,
-    model: GOAL_MODEL,
+    model: GOAL_SUGGESTION_MODEL,
     source: "activity_interval",
     taskIds,
   });

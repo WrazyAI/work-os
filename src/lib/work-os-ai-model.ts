@@ -193,6 +193,7 @@ export type AiModelMap = {
   screenshotHour: string;
   checkIn: string;
   conversationSummary: string;
+  goalSuggestion: string;
   screenshot: string;
 };
 
@@ -220,6 +221,8 @@ export function resolveAiModels(env: AiEnvironment = process.env): AiModelMap {
     screenshotHour: envModel(env, "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
     checkIn: envModel(env, "WORK_OS_AI_MODEL") ?? DEEPSEEK_MODEL,
     conversationSummary: envModel(env, "WORK_OS_CONVERSATION_SUMMARY_MODEL", "WORK_OS_INTERPRET_MODEL") ?? DEEPSEEK_MODEL,
+    // Preserve the automatic goal's existing model and nullish precedence.
+    goalSuggestion: env.WORK_OS_GOAL_SUGGESTION_MODEL ?? env.WORK_OS_PLAN_MODEL ?? env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna",
     screenshot: envModel(env, "WORK_OS_SCREENSHOT_MODEL", "WORK_OS_INTERPRET_MODEL") ?? SCREENSHOT_PERCEPTION_MODEL,
   };
 }
@@ -238,6 +241,7 @@ export const SCREENSHOT_HOUR_MODEL = MODELS.screenshotHour;
 export const CHECK_IN_MODEL = MODELS.checkIn;
 export const SCREENSHOT_MODEL = MODELS.screenshot;
 export const CONVERSATION_SUMMARY_MODEL = MODELS.conversationSummary;
+export const GOAL_SUGGESTION_MODEL = MODELS.goalSuggestion;
 
 /* ------------------------------------------------------------------ */
 /* Completion budgets                                                  */
@@ -267,6 +271,9 @@ export const AI_TOKEN_BUDGETS = {
   screenshotVision: 2_000,
   checkIn: 4_000,
   conversationSummary: 1_500,
+  // The legacy non-reasoning goal needs only one sentence. A deployment that
+  // explicitly selects DeepSeek also needs room for its reasoning pass.
+  goalSuggestion: REASONING_MODELS.has(GOAL_SUGGESTION_MODEL) ? 1_500 : 200,
 } as const;
 
 /**
@@ -290,4 +297,5 @@ export const AI_TIMEOUTS = {
   screenshotVision: 30_000,
   checkIn: 60_000,
   conversationSummary: 30_000,
+  goalSuggestion: 15_000,
 } as const;
