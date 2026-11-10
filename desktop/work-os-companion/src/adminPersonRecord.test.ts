@@ -40,11 +40,37 @@ describe("admin person record", () => {
   });
 
   it("counts an open session up to the read time when observed_seconds is absent", () => {
-    const workdays = buildPersonWorkdays([
-      { shift_date: "2026-11-09", state: "active", clocked_in_at: "2026-11-09T15:00:00.000Z", paused_seconds: 600 },
-    ], [], 6, Date.parse("2026-11-09T17:00:00.000Z"));
+    for (const state of ["clocked_in", "active", "paused", "eod_due"]) {
+      const workdays = buildPersonWorkdays([
+        { shift_date: "2026-11-09", state, clocked_in_at: "2026-11-09T15:00:00.000Z", paused_seconds: 600 },
+      ], [], 6, Date.parse("2026-11-09T17:00:00.000Z"));
 
-    expect(workdays[0].observedSeconds).toBe(6600);
+      expect(workdays[0].observedSeconds, state).toBe(6600);
+    }
+  });
+
+  it("keeps a recorded zero instead of deriving time from the clock boundaries", () => {
+    const workdays = buildPersonWorkdays([
+      {
+        shift_date: "2026-11-09",
+        state: "closed",
+        observed_seconds: 0,
+        clocked_in_at: "2026-11-09T15:00:00.000Z",
+        clocked_out_at: "2026-11-09T17:00:00.000Z",
+        paused_seconds: 0,
+      },
+    ], [], 6, Date.parse("2026-11-09T18:00:00.000Z"));
+
+    expect(workdays[0].observedSeconds).toBe(0);
+  });
+
+  it("does not accumulate time for a stale open row in a non-open state", () => {
+    const workdays = buildPersonWorkdays([
+      { shift_date: "2026-11-08", state: "off_shift", clocked_in_at: "2026-11-08T15:00:00.000Z", paused_seconds: 0 },
+      { shift_date: "2026-11-07", state: "clocked_out", clocked_in_at: "2026-11-07T15:00:00.000Z", paused_seconds: 0 },
+    ], [], 6, Date.parse("2026-11-09T18:00:00.000Z"));
+
+    expect(workdays.map((day) => day.observedSeconds)).toEqual([0, 0]);
   });
 
   it("derives per-day recap counts from ready intervals when recapDays is absent", () => {

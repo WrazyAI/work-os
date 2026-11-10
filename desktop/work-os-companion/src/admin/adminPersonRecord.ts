@@ -36,20 +36,35 @@ function sessionStart(session: Record<string, any>): number {
   return Date.parse(String(session.clocked_in_at ?? "")) || 0;
 }
 
+/** The session states that still represent an open workday. A row in any
+ * other state without a clock-out boundary is stale, not an indefinitely
+ * running shift. */
+const OPEN_SESSION_STATES = new Set(["clocked_in", "active", "paused", "eod_due"]);
+
 /** A session's observed time.
  *
  * Current servers send `observed_seconds`. Older responses (the live
  * administration route before the workday fields landed) send only the clock
  * boundaries and the paused total, so the drawer derives the same reading
- * instead of printing an empty dash forever. A session with no usable start
+ * instead of printing an empty dash forever. A recorded zero is a real
+ * zero-length session, and an open-ended derivation only runs while the row's
+ * state still represents an open workday; a missing start or a stale open row
  * stays at zero rather than inventing time. */
 export function observedSecondsOfSession(session: Record<string, any>, now = Date.now()): number {
-  const recorded = Number(session.observed_seconds);
-  if (Number.isFinite(recorded) && recorded > 0) return Math.max(0, Math.round(recorded));
+  const raw = session.observed_seconds;
+  if (raw !== null && raw !== undefined && raw !== "" && Number.isFinite(Number(raw))) {
+    return Math.max(0, Math.round(Number(raw)));
+  }
   const start = Date.parse(String(session.clocked_in_at ?? ""));
   if (!Number.isFinite(start) || start <= 0) return 0;
   const closed = Date.parse(String(session.clocked_out_at ?? ""));
-  const end = Number.isFinite(closed) && closed > 0 ? closed : now;
+  let end: number;
+  if (Number.isFinite(closed) && closed > 0) {
+    end = closed;
+  } else {
+    if (!OPEN_SESSION_STATES.has(String(session.state ?? ""))) return 0;
+    end = now;
+  }
   const paused = Math.max(0, Number(session.paused_seconds ?? 0) || 0);
   return Math.max(0, Math.round((end - start) / 1000 - paused));
 }
