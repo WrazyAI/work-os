@@ -262,10 +262,10 @@
   ],
   "emergency": null,
   "operatorOverride": {
-    "version": "0.5.28",
-    "updateId": "employee-inapp-otto-view-switch",
+    "version": "0.5.29",
+    "updateId": "insights-loads-after-pg-date-normalization",
     "approvedBy": "operator",
-    "reason": "Explicit operator request to publish the employee chat Otto view-switch fix ahead of the five-outcome cadence.",
-    "approvedAt": "2026-11-09"
+    "reason": "Explicit operator request to publish the pending debugger, admin record/evidence, and Insights fixes as 0.5.29.",
+    "approvedAt": "2026-11-10"
   }
 }
