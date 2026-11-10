@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Scrolling over a task table or Otto tool card now moves the page instead of stopping.
+
 ## 0.5.29 — 2026-11-10
 
 - The scenario debugger stays open when launched on Windows and opens again after you close it.

@@ -67,13 +67,16 @@ assert.match(onboarding, /I accept Work OS tracking and the sampled screenshot-a
 assert.doesNotMatch(onboarding, /Allow neutral screenshot summaries/);
 const styles = read("src/styles.css");
 assert.match(styles, /prefers-reduced-motion/);
-// Page-level rubber-banding stays off and inner scrollers keep their
-// containment, except the horizontal-only wrappers that would otherwise
-// swallow the vertical wheel over a zero-range table.
-assert.match(styles, /(^|\n)\*\s*\{\s*overscroll-behavior:\s*contain/);
+// Page-level rubber-banding stays off, but containment must not be universal:
+// Chromium treats decorative `overflow: hidden` cards as scroll containers,
+// so a blanket `contain` swallows the wheel over tables and tool cards before
+// it can reach the page. Horizontal-only wrappers keep X containment and let
+// the vertical wheel chain to the page.
+assert.doesNotMatch(styles, /(^|\n)\*\s*\{\s*overscroll-behavior:\s*contain/);
 assert.match(styles, /\.admin-table-wrap[\s\S]*?overscroll-behavior-y:\s*auto/);
 assert.match(styles, /\.chat-markdown-code[\s\S]*?overscroll-behavior-y:\s*auto/);
 assert.match(styles, /html\s*\{[^}]*overscroll-behavior:\s*none/);
+assert.match(styles, /body\s*\{[^}]*overscroll-behavior:\s*none/);
 const adminStyles = read("src/admin/admin.css");
 assert.match(adminStyles, /\.admin-table-wrap\s*\{[^}]*overflow-x:\s*auto/);
 const insightCharts = read("src/insight-charts.css");

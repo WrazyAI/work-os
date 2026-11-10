@@ -607,6 +607,20 @@ describe("operational visualizations", () => {
     expect(chatStyles).toMatch(/\.chat-task-check\s*\{[^}]*position:\s*relative/s);
   });
 
+  it("lets the page wheel move past clipped panels and tool lists", () => {
+    const adminToolStyles = readText(resolve(root, "src/adminOtto/admin-tool-cards.css"));
+    // A universal `overscroll-behavior: contain` also applies to decorative
+    // `overflow: hidden` cards. Chromium treats those as scroll containers
+    // even with no range, so the wheel dies over a table or panel.
+    expect(styles).not.toMatch(/\*\s*\{[^}]*overscroll-behavior:\s*contain/s);
+    expect(styles).toMatch(/html\s*\{[^}]*overscroll-behavior:\s*none/s);
+    expect(styles).toMatch(/body\s*\{[^}]*overscroll-behavior:\s*none/s);
+    // Tool lists are nested reading surfaces: once their own range is spent,
+    // the wheel keeps moving the conversation behind them.
+    expect(adminToolStyles).toMatch(/\.admin-tool-rows\s*\{[^}]*overscroll-behavior-y:\s*auto/s);
+    expect(workspaceStyles).toMatch(/\.task-selection-scroll\s*\{[^}]*overscroll-behavior-y:\s*auto/s);
+  });
+
   it("keeps streamed floating chat replies visible while the reader is near the tail", () => {
     expect(avatarApp).toContain("new ResizeObserver");
     expect(avatarApp).toContain("observer.observe(newestTurn)");

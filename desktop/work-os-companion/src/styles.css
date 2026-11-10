@@ -52,14 +52,13 @@ body {
   background: #e9e8e1;
   overscroll-behavior: none;
 }
-/* Reaching the edge of any inner scroller must stop there — no chaining to
-   the page, no rubber-band jump. Horizontal-only wrappers are the exception:
-   CSS forces their other axis to auto, so containment would swallow the wheel
-   over a table that has no vertical range. They opt out on the Y axis and keep
-   containment on the X axis. */
-* {
-  overscroll-behavior: contain;
-}
+/* Scroll containment belongs to regions that really scroll. Applying
+   `contain` to every element also stops the wheel dead over decorative
+   `overflow: hidden` cards: Chrome treats them as scroll containers even when
+   they have no scroll range, so a task table or tool card freezes the page
+   under the pointer. The shell owns edge behaviour on html/body; real scroll
+   panels opt in where they need it. Horizontal-only wrappers keep containment
+   on the X axis and let the vertical wheel chain to the page. */
 .admin-table-wrap,
 .insight-table-wrap,
 .scroll-fade-region,

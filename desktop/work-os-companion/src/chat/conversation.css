@@ -218,6 +218,10 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  /* The thread is the end of the reading surface: at its edge the wheel
+     stops instead of moving the page behind the dock. Inner tool lists opt
+     back into chaining so they never become traps. */
+  overscroll-behavior: contain;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--conversation-edge-mask), #000 calc(100% - var(--conversation-edge-mask)), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--conversation-edge-mask), #000 calc(100% - var(--conversation-edge-mask)), transparent 100%);
   -webkit-mask-repeat: no-repeat;
@@ -230,7 +234,6 @@
  * scroll region owns overflow, and the shared edge mask supplies the fade. */
 .conversation-scroll-region > .goal-composer-panel {
   align-content: start;
-  overscroll-behavior: contain;
 }
 
 [data-conversation-surface="in-app"] .chat-surface.is-open {

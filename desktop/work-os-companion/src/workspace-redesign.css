@@ -4450,7 +4450,9 @@ button:not(:disabled):active {
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-  overscroll-behavior: contain;
+  /* A tool list is not the end of the reading surface: when its own range is
+     spent the wheel keeps moving the conversation behind it. */
+  overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
 }
 
