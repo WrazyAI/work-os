@@ -283,6 +283,38 @@
   background: rgba(168, 241, 91, 0.16);
 }
 
+/* Delete confirmation: a labelled red pill, so the only check mark in the
+   header is the edit control's "finish editing". */
+.planning-icon-button.has-label {
+  width: auto;
+  grid-auto-flow: column;
+  gap: 5px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+/* A busy footer button keeps its live surface and shows a spinner instead of
+   washing out like an unavailable decision. */
+.planning-session > footer > button[aria-busy="true"]:disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: progress;
+}
+.planning-session > footer > button.primary[aria-busy="true"]:disabled {
+  border-color: #a6e852;
+  background: var(--signal);
+  color: #141611;
+  box-shadow: 0 3px 10px rgba(143, 203, 64, 0.2);
+}
+.planning-session > footer > button.secondary[aria-busy="true"]:disabled {
+  border-color: #c3ccbb;
+  background: #fbfcf8;
+  color: var(--ink);
+}
+
 .planning-loom {
   margin-top: 16px;
   border: 1px solid var(--line);

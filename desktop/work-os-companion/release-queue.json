@@ -264,6 +264,18 @@
       "type": "fix",
       "summary": "The mouse wheel keeps moving the page when the pointer is over a task table, list, or Otto tool card.",
       "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0→400px, the in-app Otto approval card 0→300px, the plan review body 200→500px, and the Tasks page to its limit."
+    },
+    {
+      "id": "plan-build-refine-spinners-and-single-delete-check",
+      "type": "fix",
+      "summary": "Build and Refine plan show a spinner while they work, and deleting a draft no longer shows a second check mark.",
+      "verification": "Companion vitest PlanningSession (14 pass) with a regression test; companion tsc clean; rendered the real planning modal in headless Chromium showing the Build spinner."
+    },
+    {
+      "id": "compact-rounded-notification-toasts",
+      "type": "fix",
+      "summary": "Notifications are more compact, rounded and easier to read, including the standing notices.",
+      "verification": "Companion vitest NotificationFlyouts (9 pass); test/work-os-desktop-static.test.mts pass; rendered the real success, error, info and persistent notices in headless Chromium."
     }
   ],
   "emergency": null,

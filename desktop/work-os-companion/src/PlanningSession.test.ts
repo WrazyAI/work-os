@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningBuildState, planningPrimaryAction } from "./PlanningSession";
 import { classifyPlanSaveFailure, PLAN_SAVE_FALLBACK } from "./planningSave";
@@ -147,5 +148,14 @@ describe("PlanningSession two-view flow", () => {
     expect(markup).not.toContain("Read the date first");
     expect(markup).not.toContain("reads the recording's own transcript");
     expect(markup).not.toContain("Nothing is filed from the recording");
+  });
+
+  it("shows spinners on busy footer buttons and never a second check mark for delete", () => {
+    const source = readFileSync(new URL("./PlanningSession.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/state === "interpreting" && <FadeArc[^>]*\/>\}\{loomReading/);
+    expect(source).toMatch(/state === "refining" && <FadeArc[^>]*\/>\}Refine plan/);
+    const deleteButton = source.split("\n").find((line) => line.includes("Confirm deletion of this draft")) ?? "";
+    expect(deleteButton).not.toContain("<Check");
+    expect(deleteButton).toContain("Trash2");
   });
 });
