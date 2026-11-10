@@ -62,7 +62,7 @@ test("pg Date session rows keep their recorded calendar day in outstanding EOD m
     effective_to: null,
   };
   const candidates = outstandingCandidatesFromSessions(
-    [{ person_id: "p1", shift_date: new Date("2026-11-06T00:00:00.000Z") }],
+    [{ person_id: "p1", shift_date: new Date(2026, 10, 6) }],
     new Map([["p1:2026-11-06", { id: "report-1", status: "draft", submitted_at: null }]]),
     new Map([["p1", [rule]]]),
     new Map(),
