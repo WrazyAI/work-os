@@ -22,7 +22,7 @@ function screenshotUrl(summaryId: string, size: "thumb" | "preview" | "full") {
   return pending;
 }
 
-export function ScreenshotImage({ summaryId, size, alt, className, srcOverride }: { summaryId: string; size: "thumb" | "preview" | "full"; alt: string; className?: string; srcOverride?: string | null }) {
+export function ScreenshotImage({ summaryId, size, alt, className, srcOverride, unavailableLabel = "Unavailable" }: { summaryId: string; size: "thumb" | "preview" | "full"; alt: string; className?: string; srcOverride?: string | null; unavailableLabel?: string }) {
   const [url, setUrl] = useState<string | null>(srcOverride ?? null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -37,7 +37,7 @@ export function ScreenshotImage({ summaryId, size, alt, className, srcOverride }
     screenshotUrl(summaryId, size).then((value) => { if (active) setUrl(value); }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, [size, srcOverride, summaryId]);
-  if (failed) return <span className={`eod-shot-unavailable ${className ?? ""}`}>Unavailable</span>;
+  if (failed) return <span className={`eod-shot-unavailable ${className ?? ""}`}>{unavailableLabel}</span>;
   if (!url) return <span className={`eod-shot-skeleton ${className ?? ""}`} aria-hidden="true" />;
   return <img className={className} src={url} alt={alt} loading="lazy" onError={() => { setFailed(true); setUrl(null); }} />;
 }

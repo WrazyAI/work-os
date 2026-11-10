@@ -26,6 +26,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - The scenario debugger stays open when launched on Windows and opens again after you close it.
+- An admin record shows recorded time and updates again, Worktivity screenshots show in Evidence and EOD reports, and reports read as one tidy list.
+- Insights loads again instead of failing with an error.
 
 ## 0.5.28 — 2026-11-09
 

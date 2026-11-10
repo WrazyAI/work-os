@@ -36,6 +36,56 @@ function sessionStart(session: Record<string, any>): number {
   return Date.parse(String(session.clocked_in_at ?? "")) || 0;
 }
 
+/** The session states that still represent an open workday. A row in any
+ * other state without a clock-out boundary is stale, not an indefinitely
+ * running shift. */
+const OPEN_SESSION_STATES = new Set(["clocked_in", "active", "paused", "eod_due"]);
+
+/** A session's observed time.
+ *
+ * Current servers send `observed_seconds`. Older responses (the live
+ * administration route before the workday fields landed) send only the clock
+ * boundaries and the paused total, so the drawer derives the same reading
+ * instead of printing an empty dash forever. A recorded zero is a real
+ * zero-length session, and an open-ended derivation only runs while the row's
+ * state still represents an open workday; a missing start or a stale open row
+ * stays at zero rather than inventing time. */
+export function observedSecondsOfSession(session: Record<string, any>, now = Date.now()): number {
+  const raw = session.observed_seconds;
+  if (raw !== null && raw !== undefined && raw !== "" && Number.isFinite(Number(raw))) {
+    return Math.max(0, Math.round(Number(raw)));
+  }
+  const start = Date.parse(String(session.clocked_in_at ?? ""));
+  if (!Number.isFinite(start) || start <= 0) return 0;
+  const closed = Date.parse(String(session.clocked_out_at ?? ""));
+  let end: number;
+  if (Number.isFinite(closed) && closed > 0) {
+    end = closed;
+  } else {
+    if (!OPEN_SESSION_STATES.has(String(session.state ?? ""))) return 0;
+    end = now;
+  }
+  const paused = Math.max(0, Number(session.paused_seconds ?? 0) || 0);
+  return Math.max(0, Math.round((end - start) / 1000 - paused));
+}
+
+/** Ready recap counts by recorded local day. A server that predates
+ * `recapDays` still returns the ready intervals, so the drawer counts those
+ * instead of showing every workday as zero updates. */
+export function recapDaysFromIntervals(intervals: Array<Record<string, any>>): PersonRecapDay[] {
+  const byDate = new Map<string, { total: number; reviewed: number }>();
+  for (const interval of intervals) {
+    if (String(interval.generation_status ?? "ready") !== "ready") continue;
+    const date = recordDate(interval.local_date);
+    if (!date) continue;
+    const entry = byDate.get(date) ?? { total: 0, reviewed: 0 };
+    entry.total += 1;
+    if (["confirmed", "amended"].includes(String(interval.review_status ?? ""))) entry.reviewed += 1;
+    byDate.set(date, entry);
+  }
+  return [...byDate.entries()].map(([date, counts]) => ({ date, ...counts }));
+}
+
 /** One row per workday. Observed seconds are summed across the day's sessions,
  * the latest session owns the state, and the day's recap count comes from the
  * exact grouped count rather than from the visible recap list. */
@@ -43,6 +93,7 @@ export function buildPersonWorkdays(
   sessions: Array<Record<string, any>>,
   recapDays: PersonRecapDay[],
   limit = 6,
+  now = Date.now(),
 ): PersonWorkday[] {
   const byDate = new Map<string, {
     sessions: Array<Record<string, any>>;
@@ -70,7 +121,7 @@ export function buildPersonWorkdays(
   return [...byDate.entries()]
     .map(([date, entry]) => {
       const latest = [...entry.sessions].sort((left, right) => sessionStart(right) - sessionStart(left))[0];
-      const observedSeconds = entry.sessions.reduce((sum, session) => sum + (Number(session.observed_seconds ?? 0) || 0), 0);
+      const observedSeconds = entry.sessions.reduce((sum, session) => sum + observedSecondsOfSession(session, now), 0);
       return {
         date,
         state: String(latest?.state ?? "unknown"),

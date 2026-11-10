@@ -139,6 +139,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
                   key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}`}
                   initialTab={focus.evidenceTab}
                   initialPersonId={focus.personId}
+                  viewerPersonId={session.personId ?? ""}
                 />
               : <SettingsPage personalSettings={personalSettings} />;
 
