@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Check, Info, Pin, X } from "lucide-react";
+import { AlertTriangle, Check, Info, X } from "lucide-react";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 
@@ -182,7 +182,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
     const timer = window.setTimeout(() => onDismiss(notification.id), duration);
     return () => window.clearTimeout(timer);
   }, [duration, notification.id, onDismiss]);
-    const Icon = notification.persistence === "persistent" ? Pin : notification.tone === "success" ? Check : notification.tone === "error" || notification.tone === "warning" ? AlertTriangle : Info;
+    const Icon = notification.tone === "success" ? Check : notification.tone === "error" || notification.tone === "warning" ? AlertTriangle : Info;
   const actions = notification.actions ?? (notification.action ? [{ ...notification.action, kind: "primary" as const }] : []);
   const progress = notification.progress;
   const progressPercent = progress && progress.value !== null && progress.max > 0 ? Math.max(0, Math.min(100, Math.round((progress.value / progress.max) * 100))) : null;
@@ -192,7 +192,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
     aria-atomic="true"
     style={duration === null ? undefined : { "--notification-duration": `${duration}ms` } as CSSProperties}
   >
-    <span className={`notification-icon${notification.icon === "otto" ? " is-mascot" : ""}`}>{notification.icon === "otto" ? <MascotMark className="notification-mascot" /> : <Icon size={18} />}</span>
+    <span className={`notification-icon${notification.icon === "otto" ? " is-mascot" : ""}`}>{notification.icon === "otto" ? <MascotMark className="notification-mascot" /> : <Icon size={15} />}</span>
     <div>
       <strong>{notification.title}</strong>
       <p>{notification.message}</p>
@@ -212,7 +212,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
         onClick={entry.onClick}
       >{entry.label}</button>)}</div>}
     </div>
-    {!notification.locked && <button className="notification-dismiss" type="button" aria-label={`Dismiss ${notification.title}`} onClick={() => onDismiss(notification.id)}><X size={16} /></button>}
+    {!notification.locked && <button className="notification-dismiss" type="button" aria-label={`Dismiss ${notification.title}`} onClick={() => onDismiss(notification.id)}><X size={14} /></button>}
     {notification.persistence !== "persistent" && <i aria-hidden="true" />}
   </div>;
 }

@@ -55,7 +55,7 @@ describe("administration notifications", () => {
     // The base contract the admin workspace now inherits verbatim.
     expect(css).toContain("top: max(18px, env(safe-area-inset-top))");
     expect(css).toContain("right: max(18px, env(safe-area-inset-right))");
-    expect(css).toContain("width: min(390px, calc(100vw - 36px))");
+    expect(css).toContain("width: min(340px, calc(100vw - 36px))");
     expect(css).toContain("max-height: calc(100vh - 36px)");
     expect(css).toContain(".notification-flyouts { top: 12px; right: 12px; width: calc(100vw - 24px); }");
   });
