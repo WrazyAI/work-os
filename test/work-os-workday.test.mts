@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, promptInstant, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
-import { ensureDailyPlan, ensureDailyPlanForDate } from "../src/lib/work-os-workday";
+import { ensureDailyPlan, ensureDailyPlanForDate, syncWorktivitySession } from "../src/lib/work-os-workday";
+import { resolveActivityIntervalWindow } from "../src/lib/work-os-activity-intervals";
+import type { AttendanceProjection } from "../src/modules/work-os/attendance";
 import type { WorkOsAccess } from "../src/lib/work-os-api";
 
 const session = {
@@ -104,11 +106,8 @@ test("planningPromptAnswered recognizes engagement without a confirmed plan", ()
   assert.equal(planningPromptAnswered({ session, breaks: [], lastSubstantiveUpdateAt: "2026-08-12T08:59:00.000Z", at: "2026-08-12T09:40:00.000Z" }), false);
 });
 
-test("a reopened Worktivity interval restarts the cadence instead of replaying missed prompts", () => {
-  // A session whose provider interval was falsely closed mid-day is reopened
-  // with the cadence restarted: the next check-in is one interval out, never an
-  // overdue backlog of every prompt the false close missed. getWorkday mirrors
-  // the session's cadence columns onto the prompt context.
+test("a real follow-up delivery waits for its next deadline instead of replaying missed prompts", () => {
+  // These are actual delivered-prompt timestamps, not a synthetic reopen.
   const reopened = {
     ...session,
     clockedInAt: "2026-08-12T00:46:29.086Z",
@@ -325,7 +324,7 @@ const planAccess = {
   organizationId: planOrg,
   personId: planPerson,
   role: "employee",
-  ctx: { user: { id: planPerson } },
+  ctx: { user: { id: planPerson }, profile: { email: "recap-fixture@example.test" } },
   featureFlags: {},
 } as unknown as WorkOsAccess;
 
@@ -405,4 +404,150 @@ test("today's plan read reopens a live session's plan and leaves a clocked-out d
   } finally {
     await fixture.close();
   }
+});
+
+async function recapSessionFixture() {
+  const f = await planReopenFixture();
+  await f.database.exec(`
+    create table work_sessions (
+      id uuid primary key default gen_random_uuid(), organization_id uuid, person_id uuid, schedule_id uuid,
+      shift_date date, state text, timezone text default 'UTC', source text,
+      scheduled_starts_at timestamptz, scheduled_ends_at timestamptz, clocked_in_at timestamptz, clocked_out_at timestamptz,
+      paused_at timestamptz, paused_seconds int default 0, correction_status text default 'valid',
+      clock_in_idempotency_key text, clock_out_idempotency_key text, attendance_status text, attendance_observed_at timestamptz,
+      first_follow_up_at timestamptz, next_fallback_at timestamptz, last_prompt_kind text, last_prompt_at timestamptz,
+      last_substantive_update_at timestamptz, check_in_interval_minutes int, snoozed_until timestamptz,
+      late_acknowledged_at timestamptz, late_reason text, late_reason_provided_at timestamptz,
+      exception_acknowledged_at timestamptz, exception_reason text, created_by uuid,
+      created_at timestamptz default '2026-11-06T18:00Z', updated_at timestamptz
+    );
+    create unique index active_session on work_sessions(organization_id,person_id) where state in ('clocked_in','active','paused','eod_due');
+    create table work_session_events (organization_id uuid,person_id uuid,session_id uuid,event_type text,from_state text,to_state text,
+      source text,observed_at timestamptz,actor_user_id uuid,idempotency_key text unique,metadata jsonb);
+    create table work_employee_onboarding (organization_id uuid,person_id uuid,timezone text);
+    create table work_schedules (organization_id uuid,person_id uuid,active boolean,effective_from date);
+    create table work_schedule_exceptions (organization_id uuid,person_id uuid,exception_date date);
+    create table work_organizations (id uuid primary key,feature_flags jsonb);
+    create table work_activity_intervals (id uuid primary key,work_session_id uuid,review_status text,window_end timestamptz);
+    create table work_check_ins (id uuid primary key);
+    insert into work_organizations values ('${planOrg}','{}');
+    insert into work_employee_onboarding values ('${planOrg}','${planPerson}','UTC');
+    insert into work_sessions(id,organization_id,person_id,shift_date,state,source,clocked_in_at,clocked_out_at,
+      scheduled_starts_at,scheduled_ends_at,clock_in_idempotency_key,created_at)
+      values ('${planSession}','${planOrg}','${planPerson}','2026-11-06','clocked_out','worktivity',
+        '2026-11-06T15:32:12Z','2026-11-06T15:45Z','2026-11-06T15:00Z','2026-11-06T21:00Z',
+        'worktivity:clock-in:${planPerson}:2026-11-06T15:32:12Z','2026-11-06T15:35Z');
+  `);
+  return f;
+}
+
+const resumedProjection = {
+  source: "worktivity", stale: false, state: "active", status: "working",
+  clockedInAt: "2026-11-06T15:32:12Z", observedAt: "2026-11-06T17:45:00Z",
+} as AttendanceProjection;
+
+function sessionPrompt(row: Record<string, any>, at = "2026-11-06T17:46:00Z", planConfirmedAt: string | null = null) {
+  return decideWorkdayPrompt({
+    session: { state: row.state, clockedInAt: promptInstant(row.clocked_in_at), createdAt: promptInstant(row.created_at),
+      scheduledStartsAt: "2026-11-06T15:00Z", scheduledEndsAt: "2026-11-06T21:00Z" },
+    hasGoal: true, breaks: [], at, firstFollowUpMinutes: 75, checkInIntervalMinutes: 60,
+    lastPromptKind: row.last_prompt_kind, lastPromptAt: promptInstant(row.last_prompt_at),
+    nextFallbackAt: promptInstant(row.next_fallback_at), lastSubstantiveUpdateAt: promptInstant(row.last_substantive_update_at),
+    planConfirmedAt, storedCheckInIntervalMinutes: row.check_in_interval_minutes,
+  });
+}
+
+test("a late-start session's false clock-out does not invent recap delivery or progress on reopen", async () => {
+  const f = await recapSessionFixture();
+  try {
+    const row = await syncWorktivitySession(planAccess, resumedProjection);
+    assert.equal(row.state, "active");
+    assert.equal(row.last_prompt_at, null, "attendance is not recap delivery");
+    assert.equal(row.last_substantive_update_at, null, "attendance is not an employee work update");
+    assert.equal(row.next_fallback_at, null);
+    const due = sessionPrompt(row);
+    assert.equal(due.kind, "follow_up");
+    assert.equal(due.nextPromptAt, "2026-11-06T16:50:00.000Z");
+    assert.deepEqual(resolveActivityIntervalWindow({ promptDueAt: due.nextPromptAt!, dayStartIso: "2026-11-06T00:00Z",
+      clockedInAt: promptInstant(row.clocked_in_at), lastSubstantiveUpdateAt: promptInstant(row.last_substantive_update_at) }),
+    { startIso: "2026-11-06T15:32:12.000Z", endIso: "2026-11-06T16:50:00.000Z" });
+    assert.equal((await f.database.query<{ n: number }>("select count(*)::int as n from work_check_ins")).rows[0].n, 0);
+  } finally { await f.close(); }
+});
+
+test("repeated same-interval reopen preserves real delivery, employee updates and pending or reviewed recaps", async () => {
+  const f = await recapSessionFixture();
+  try {
+    await f.database.exec(`update work_sessions set last_prompt_kind='follow_up',last_prompt_at='2026-11-06T16:00Z',
+      next_fallback_at='2026-11-06T17:00Z',check_in_interval_minutes=60,last_substantive_update_at='2026-11-06T16:10Z';
+      insert into work_activity_intervals values (gen_random_uuid(),'${planSession}','confirmed','2026-11-06T16:00Z'),
+        (gen_random_uuid(),'${planSession}','pending','2026-11-06T17:00Z');`);
+    for (const observedAt of ["2026-11-06T17:45Z", "2026-11-06T18:00Z"]) {
+      const row = await syncWorktivitySession(planAccess, { ...resumedProjection, observedAt });
+      assert.equal(promptInstant(row.last_prompt_at), "2026-11-06T16:00:00.000Z");
+      assert.equal(promptInstant(row.last_substantive_update_at), "2026-11-06T16:10:00.000Z");
+      assert.equal(promptInstant(row.next_fallback_at), "2026-11-06T17:00:00.000Z");
+      assert.equal(sessionPrompt(row, observedAt).nextPromptAt, "2026-11-06T17:10:00.000Z");
+      await f.database.exec("update work_sessions set state='clocked_out',clocked_out_at='2026-11-06T17:50Z'");
+    }
+    assert.deepEqual((await f.database.query("select review_status from work_activity_intervals order by window_end")).rows,
+      [{ review_status: "confirmed" }, { review_status: "pending" }]);
+    assert.equal(nextFallbackAfterDelivery(Date.parse("2026-11-06T17:10Z"), Date.parse("2026-11-06T18:30Z"), 60 * 60_000),
+      "2026-11-06T19:30:00.000Z", "only actual late delivery rebases the next slot, not every reopen");
+  } finally { await f.close(); }
+});
+
+test("adopting a later provider clock-in starts a fresh cadence without forging an employee update", async () => {
+  const f = await recapSessionFixture();
+  try {
+    await f.database.exec(`update work_sessions set state='active',clocked_out_at=null,
+      last_prompt_kind='follow_up',last_prompt_at='2026-11-06T16:00Z',next_fallback_at='2026-11-06T17:00Z',
+      last_substantive_update_at='2026-11-06T16:10Z';`);
+    const row = await syncWorktivitySession(planAccess, { ...resumedProjection, clockedInAt: "2026-11-06T18:00Z", observedAt: "2026-11-06T18:05Z" });
+    assert.equal(promptInstant(row.last_substantive_update_at), "2026-11-06T16:10:00.000Z");
+    assert.equal(row.last_prompt_at, null);
+    const due = sessionPrompt(row, "2026-11-06T19:15Z", "2026-11-06T15:40Z");
+    assert.equal(due.nextPromptAt, "2026-11-06T19:15:00.000Z");
+  } finally { await f.close(); }
+});
+
+test("a real clock-out and new clock-in preserves the old interval and schedules a recap after the new start", async () => {
+  const f = await recapSessionFixture();
+  try {
+    const row = await syncWorktivitySession(planAccess, { ...resumedProjection, clockedInAt: "2026-11-06T18:00Z", observedAt: "2026-11-06T18:05Z" });
+    assert.notEqual(row.id, planSession);
+    assert.equal(row.last_substantive_update_at, null);
+    assert.equal(sessionPrompt(row, "2026-11-06T19:15Z", "2026-11-06T15:40Z").nextPromptAt, "2026-11-06T19:15:00.000Z");
+    const old = (await f.database.query<{ state: string; clocked_out_at: Date }>("select state,clocked_out_at from work_sessions where id=$1", [planSession])).rows[0];
+    assert.equal(old.state, "clocked_out");
+    assert.equal(promptInstant(old.clocked_out_at), "2026-11-06T15:45:00.000Z");
+  } finally { await f.close(); }
+});
+
+test("a plan confirmed before a restarted interval cannot strand the recap deadline before clock-in", () => {
+  assert.equal(firstFollowUpAt({ session: { ...session, clockedInAt: "2026-11-06T18:00Z", createdAt: "2026-11-06T18:00Z" },
+    planConfirmedAt: "2026-11-06T15:40Z", firstFollowUpMinutes: 75, at: "2026-11-06T18:05Z" }), "2026-11-06T19:15:00.000Z");
+});
+
+test("a competing adoption cannot erase a recap delivered after the new interval was adopted", async () => {
+  const f = await recapSessionFixture();
+  try {
+    await f.database.exec("update work_sessions set state='active',clocked_out_at=null");
+    const pool = globalThis.__workOsPgPool!;
+    let interleaved = false;
+    globalThis.__workOsPgPool = { query: async (sql: string, values?: unknown[]) => {
+      if (!interleaved && sql.startsWith('UPDATE "work_sessions"') && sql.includes('"clocked_in_at"')) {
+        interleaved = true;
+        // Another sync adopts first, then a real recap is delivered while our
+        // sync is still holding the old session snapshot. Execute real SQL.
+        await f.database.exec(`update work_sessions set clocked_in_at='2026-11-06T18:00Z',last_prompt_kind='follow_up',
+          last_prompt_at='2026-11-06T19:20Z',next_fallback_at='2026-11-06T20:20Z',check_in_interval_minutes=60`);
+      }
+      return pool.query(sql, values);
+    } } as never;
+    const row = await syncWorktivitySession(planAccess, { ...resumedProjection, clockedInAt: "2026-11-06T18:00Z", observedAt: "2026-11-06T19:21Z" });
+    assert.equal(interleaved, true);
+    assert.equal(promptInstant(row.last_prompt_at), "2026-11-06T19:20:00.000Z");
+    assert.equal(promptInstant(row.next_fallback_at), "2026-11-06T20:20:00.000Z");
+  } finally { await f.close(); }
 });

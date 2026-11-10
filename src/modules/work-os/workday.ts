@@ -143,7 +143,11 @@ export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" |
   // old instant reuses that prompt instance; start from the session instead.
   const backdated = clockedInAt !== null && createdAt !== null
     && Date.parse(clockedInAt) < Date.parse(createdAt) - 60_000;
-  const baseline = planConfirmedAt
+  // A plan confirmed before a new clock-in belongs to the earlier interval.
+  // Reusing it can leave the due instant before the new evidence window starts.
+  const currentPlanConfirmedAt = planConfirmedAt && (!clockedInAt || Date.parse(planConfirmedAt) >= Date.parse(clockedInAt))
+    ? planConfirmedAt : null;
+  const baseline = currentPlanConfirmedAt
     ?? (backdated ? createdAt : clockedInAt)
     ?? context.session?.scheduledStartsAt
     ?? context.at;
