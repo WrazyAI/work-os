@@ -252,6 +252,12 @@
       "type": "fix",
       "summary": "A teammate's admin record shows recorded time and update counts again, Worktivity evidence shows its retained frame, and reports read as one tidy list.",
       "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` \u2192 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
+    },
+    {
+      "id": "insights-loads-after-pg-date-normalization",
+      "type": "fix",
+      "summary": "Insights loads again instead of failing on recorded workdays.",
+      "verification": "Live GET /api/work-os/admin/insights?range=7d returned 500 Invalid time value before the fix. Regression test test/work-os-admin-insights.test.mts proves pg Date session rows keep their recorded calendar day. Local getAdminInsights against the live database returned 7 people for 2026-11-04 through 2026-11-10 after the fix. Full work-os:test 1293 tests / 1282 pass / 0 fail / 11 skipped; companion 206 files / 1852 tests pass; typecheck and companion build passed."
     }
   ],
   "emergency": null,

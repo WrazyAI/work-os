@@ -269,7 +269,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                                     summaryId={shot.id}
                                     size="thumb"
                                     alt={`Retained Worktivity frame for ${row.person?.display_name ?? "this person"}`}
-                                    className="admin-evidence-thumb"
+                                    className="admin-evidence-frame"
                                     unavailableLabel="Private"
                                   />
                                 ) : (

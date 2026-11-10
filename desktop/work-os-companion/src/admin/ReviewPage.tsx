@@ -25,8 +25,9 @@ import {
 } from "./data";
 import { parseEodMarkdown, eodMetricFacts, eodSnippet } from "./eod";
 import EodSectionIcon from "../EodSectionIcon";
+import { ScreenshotImage } from "../ScreenshotGallery";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
-import type { EvidenceRow, EvidenceResponse, ReportsResponse, WorkOsReportRow } from "./types";
+import { one, type EvidenceRow, type EvidenceResponse, type ReportsResponse, type WorkOsReportRow } from "./types";
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
 
@@ -385,17 +386,14 @@ export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvi
   );
 }
 
-function screenshotOf(row: EvidenceRow): { url: string; title: string } | null {
-  const value = row.event?.screenshot;
-  if (!value || typeof value !== "object") return null;
-  const shot = value as { previewUrl?: unknown; deleted_at?: unknown };
-  if (shot.deleted_at) return null;
-  return typeof shot.previewUrl === "string" && shot.previewUrl
-    ? { url: shot.previewUrl, title: row.title }
-    : null;
+export function screenshotOf(row: EvidenceRow): { summaryId: string; title: string } | null {
+  const shot = one<{ id?: unknown; deleted_at?: unknown }>(row.event?.screenshot);
+  if (!shot || shot.deleted_at) return null;
+  const summaryId = typeof shot.id === "string" ? shot.id : "";
+  return summaryId ? { summaryId, title: row.title } : null;
 }
 
-function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; title: string }; onClose: () => void }) {
+function EvidencePreviewDialog({ preview, onClose }: { preview: { summaryId: string; title: string }; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const closeHandler = useRef(onClose);
   useEffect(() => {
@@ -441,7 +439,12 @@ function EvidencePreviewDialog({ preview, onClose }: { preview: { url: string; t
             <X size={16} aria-hidden />
           </button>
         </header>
-        <img src={preview.url} alt={`Evidence frame: ${preview.title}`} />
+        <ScreenshotImage
+          summaryId={preview.summaryId}
+          size="preview"
+          alt={`Evidence frame: ${preview.title}`}
+          unavailableLabel="This frame is not available to your account"
+        />
       </div>
     </div>
   );
@@ -499,7 +502,7 @@ function ReportEvidencePanel({ personId, date }: { personId: string; date: strin
     enabled: !!personId,
     staleTime: ADMIN_DETAIL_STALE_MS,
   });
-  const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
+  const [preview, setPreview] = useState<{ summaryId: string; title: string } | null>(null);
   const rows = evidence.data?.evidence ?? [];
   const visible = rows.slice(0, 12);
   return (
@@ -515,7 +518,12 @@ function ReportEvidencePanel({ personId, date }: { personId: string; date: strin
               <li key={row.id} className="admin-evidence-item">
                 {shot ? (
                   <button type="button" className="admin-evidence-thumb" aria-label={`Expand evidence image for ${row.title}`} onClick={() => setPreview(shot)}>
-                    <img src={shot.url} alt="" />
+                    <ScreenshotImage
+                      summaryId={shot.summaryId}
+                      size="thumb"
+                      alt={`Retained Worktivity frame for ${row.title}`}
+                      unavailableLabel="Private"
+                    />
                   </button>
                 ) : (
                   <span className="admin-evidence-thumb is-empty">

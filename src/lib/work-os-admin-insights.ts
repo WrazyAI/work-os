@@ -511,29 +511,52 @@ async function countOutstandingDays(organizationId: string, now: Date, scope: { 
   }
   const reportByKey = new Map<string, Json>();
   for (const report of (reports.data ?? []) as Json[]) {
-    reportByKey.set(`${report.person_id}:${report.report_date}`, report);
+    const reportDate = dateOnly(report.report_date);
+    if (reportDate) reportByKey.set(`${report.person_id}:${reportDate}`, report);
   }
   // The canonical employee rule keeps a day visible until a submitted report
-  // clears it (drafts and rejected reports stay outstanding).
+  // clears it (drafts and rejected reports stay outstanding). pg returns DATE
+  // columns as Date objects, so every key and schedule lookup is normalized to
+  // its recorded calendar day before it reaches a date parser.
+  const byPerson = outstandingCandidatesFromSessions(
+    (sessions.data ?? []) as Json[],
+    reportByKey,
+    rulesByPerson,
+    exceptionsByPerson,
+  );
+  let total = 0;
+  for (const candidates of byPerson.values()) total += classifyOutstandingEodDays(candidates).length;
+  return total;
+}
+
+/** Maps pg-shaped session and report rows into the outstanding-EOD candidates.
+ * Exported so a Date object from the driver is proven to keep its recorded
+ * calendar day instead of reaching a date parser as `Date.toString()`. */
+export function outstandingCandidatesFromSessions(
+  sessions: Json[],
+  reportByKey: Map<string, Json>,
+  rulesByPerson: Map<string, WorkOsScheduleRule[]>,
+  exceptionsByPerson: Map<string, WorkOsScheduleException[]>,
+): Map<string, OutstandingEodCandidate[]> {
   const byPerson = new Map<string, OutstandingEodCandidate[]>();
-  for (const session of (sessions.data ?? []) as Json[]) {
+  for (const session of sessions) {
     const personId = String(session.person_id);
-    const report = reportByKey.get(`${personId}:${session.shift_date}`) ?? null;
+    const shiftDate = dateOnly(session.shift_date);
+    if (!shiftDate) continue;
+    const report = reportByKey.get(`${personId}:${shiftDate}`) ?? null;
     const list = byPerson.get(personId) ?? [];
     list.push({
-      date: String(session.shift_date),
+      date: shiftDate,
       hasSession: true,
       observedMinutes: 0,
       hasPlan: false,
       completedTasks: 0,
       report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
-      scheduledDay: hasScheduledShiftOnDate(rulesByPerson.get(personId) ?? [], exceptionsByPerson.get(personId) ?? [], String(session.shift_date)),
+      scheduledDay: hasScheduledShiftOnDate(rulesByPerson.get(personId) ?? [], exceptionsByPerson.get(personId) ?? [], shiftDate),
     });
     byPerson.set(personId, list);
   }
-  let total = 0;
-  for (const candidates of byPerson.values()) total += classifyOutstandingEodDays(candidates).length;
-  return total;
+  return byPerson;
 }
 
 export type AdminInsights = Awaited<ReturnType<typeof getAdminInsights>>;

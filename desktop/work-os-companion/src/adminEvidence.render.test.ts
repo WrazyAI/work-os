@@ -21,6 +21,6 @@ describe("admin evidence record", () => {
     // surface mounts; the server render is the skeleton, never a broken image.
     // Five Worktivity rows carry a retained frame; the GitHub and Loom rows in
     // the same fixture stay text-only.
-    expect(markup.match(/admin-evidence-thumb/g)?.length).toBe(5);
+    expect(markup.match(/admin-evidence-frame/g)?.length).toBe(5);
   });
 });

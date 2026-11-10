@@ -1845,7 +1845,7 @@ body:has(.admin-workspace) .notifications-card {
   min-width: 0;
 }
 
-.admin-evidence-thumb,
+.admin-evidence-frame,
 .admin-evidence-thumb-missing {
   flex: 0 0 auto;
   width: 46px;
@@ -1866,7 +1866,7 @@ body:has(.admin-workspace) .notifications-card {
   text-transform: uppercase;
 }
 
-.admin-evidence-thumb.eod-shot-unavailable {
+.admin-evidence-frame.eod-shot-unavailable {
   display: grid;
   place-items: center;
   color: var(--muted);
@@ -2360,6 +2360,19 @@ body:has(.admin-workspace) .notifications-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.admin-evidence-thumb .eod-shot-skeleton,
+.admin-evidence-thumb .eod-shot-unavailable {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .admin-evidence-thumb:focus-visible,
