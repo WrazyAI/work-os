@@ -258,6 +258,12 @@
       "type": "fix",
       "summary": "Insights loads again instead of failing on recorded workdays.",
       "verification": "Live GET /api/work-os/admin/insights?range=7d returned 500 Invalid time value before the fix. Regression test test/work-os-admin-insights.test.mts proves pg Date session rows keep their recorded calendar day. Local getAdminInsights against the live database returned 7 people for 2026-11-04 through 2026-11-10 after the fix. Full work-os:test 1293 tests / 1282 pass / 0 fail / 11 skipped; companion 206 files / 1852 tests pass; typecheck and companion build passed."
+    },
+    {
+      "id": "scroll-past-lists-and-tool-tables",
+      "type": "fix",
+      "summary": "The mouse wheel keeps moving the page when the pointer is over a task table, list, or Otto tool card.",
+      "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0→400px, the in-app Otto approval card 0→300px, the plan review body 200→500px, and the Tasks page to its limit."
     }
   ],
   "emergency": null,
