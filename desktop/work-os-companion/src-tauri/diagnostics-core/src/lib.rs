@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 pub mod ring;
+pub mod app_info;
 
 pub use ring::{Anchor, Entry, EventRing, Page, PAGE_DEFAULT, PAGE_MAX};
 

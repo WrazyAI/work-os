@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The scenario debugger stays open when launched on Windows and opens again after you close it.
+
 ## 0.5.28 — 2026-11-09
 
 - In Employee view, administrators can select Otto’s icon in chat to return to Admin view.

@@ -240,6 +240,12 @@
       "type": "fix",
       "summary": "Administrators can switch back to Admin from the Otto icon in the employee in-app chat header.",
       "verification": "npm run work-os:test: 1273 passed/11 skipped; companion npx vitest run: 1844 passed/205 files; npm run work-os:typecheck and companion npm run build passed. docs/verification/2026-11-09-employee-chat-view-switch.md records direct browser checks at 1440/1024/720/390: menu selection callback, Focus tab, Escape focus restoration and no overflow. TestSprite inconclusive (omitted Admin selection); installed-client transition remains unverified."
+    },
+    {
+      "id": "debugger-webview2-environment-parity",
+      "type": "fix",
+      "summary": "The scenario debugger stays open on Windows and can be reopened after closing it.",
+      "verification": "Ledger 9f3199b5-7bcb-4dd6-afa9-4b45aee7ce69; native Windows isolated Tauri fixture imports production debug_window.rs, diagnostics.rs and window_fit.rs plus built debug.html: open/render/visible/native close/reopen/render/frontend Close all passed. Real startup app-info.json, log metadata and ZIP matched. WebView2 mismatched args reproduced HRESULT 0x8007139F; matching args succeeded. Full Work OS suite 1273 passed/0 failed/11 skipped; typecheck, companion build, locked Windows cargo check passed; diagnostics core 15 Linux and 3 Windows metadata tests passed; CodeRabbit minor finding fixed. Evidence: docs/companion-local-diagnostics.md. Installed 0.5.28 reproduced the original symptom; this fix was not in that build."
     }
   ],
   "emergency": null,

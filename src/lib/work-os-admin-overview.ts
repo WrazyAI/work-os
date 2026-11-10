@@ -225,9 +225,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     completedEventsResult,
     recapGroupsResult,
     timeSeriesSessionsResult,
-    windowPlansResult,
-    windowReportsResult,
-    windowExceptionsResult,
+    outstandingWindowResult,
     taskStatsResult,
     checkInStatsResult,
     evidenceStatsResult,
@@ -279,15 +277,17 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("id,person_id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,attendance_status,attendance_observed_at,correction_status")
       .eq("organization_id", organizationId)
       .gte("shift_date", addDaysIso(date, -13)).lte("shift_date", date),
-    db.from("work_daily_plans")
-      .select("person_id,shift_date")
-      .eq("organization_id", organizationId).gte("shift_date", outstandingFrom).lte("shift_date", outstandingThrough),
-    db.from("work_reports")
-      .select("id,person_id,report_date,status,submitted_at")
-      .eq("organization_id", organizationId).gte("report_date", outstandingFrom).lte("report_date", outstandingThrough),
-    db.from("work_schedule_exceptions").select("*")
-      .eq("organization_id", organizationId)
-      .gte("exception_date", outstandingFrom).lte("exception_date", outstandingThrough),
+    // Three lookback reads feed one outstanding-day calculation, so they share a
+    // round trip instead of widening the dashboard fan-out by two statements.
+    getPool().query(`select
+      (select coalesce(json_agg(json_build_object('person_id', person_id, 'shift_date', shift_date)), '[]'::json)
+        from work_daily_plans where organization_id = $1 and shift_date between $2::date and $3::date) as plans,
+      (select coalesce(json_agg(json_build_object('id', id, 'person_id', person_id, 'report_date', report_date,
+          'status', status, 'submitted_at', submitted_at)), '[]'::json)
+        from work_reports where organization_id = $1 and report_date between $2::date and $3::date) as reports,
+      (select coalesce(json_agg(to_jsonb(exception)), '[]'::json) from work_schedule_exceptions exception
+        where exception.organization_id = $1 and exception.exception_date between $2::date and $3::date) as exceptions`,
+      [organizationId, outstandingFrom, outstandingThrough]),
     // Counts and source freshness share a scan; detail caps never bound totals.
     getPool().query(`select
       count(*) filter (where completed = false and status not in ('archived','deleted'))::int as open,
@@ -334,8 +334,6 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["check-ins", checkInsResult], ["activity intervals", intervalsResult], ["evidence", evidenceResult],
     ["reports", reportsTodayResult], ["completed events", completedEventsResult],
     ["time series sessions", timeSeriesSessionsResult],
-    ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult],
-    ["outstanding schedule exceptions", windowExceptionsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
   }
@@ -402,8 +400,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     list.push(schedule);
     scheduleRulesByPerson.set(personId, list);
   }
+  const outstandingWindow = (outstandingWindowResult.rows[0] ?? {}) as {
+    plans?: Json[]; reports?: Json[]; exceptions?: Array<WorkOsScheduleException & { person_id?: string }>;
+  };
   const scheduleExceptionsByPerson = new Map<string, WorkOsScheduleException[]>();
-  for (const exception of (windowExceptionsResult.data ?? []) as unknown as Array<WorkOsScheduleException & { person_id?: string }>) {
+  for (const exception of outstandingWindow.exceptions ?? []) {
     const personId = String(exception.person_id ?? "");
     if (!personId) continue;
     const list = scheduleExceptionsByPerson.get(personId) ?? [];
@@ -412,12 +413,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   }
   const outstandingCandidates: Array<OutstandingEodCandidate & { personId: string }> = [];
   const plansByPersonDate = new Map<string, number>();
-  for (const plan of (windowPlansResult.data ?? []) as Json[]) {
+  for (const plan of outstandingWindow.plans ?? []) {
     const key = `${plan.person_id}:${dateOnly(plan.shift_date)}`;
     plansByPersonDate.set(key, (plansByPersonDate.get(key) ?? 0) + 1);
   }
   const reportsByPersonDate = new Map<string, Json>();
-  for (const report of (windowReportsResult.data ?? []) as Json[]) {
+  for (const report of outstandingWindow.reports ?? []) {
     reportsByPersonDate.set(`${report.person_id}:${dateOnly(report.report_date)}`, report);
   }
   const completedByPersonDate = new Map<string, number>();

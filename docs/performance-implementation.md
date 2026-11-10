@@ -225,8 +225,21 @@ rows returned by the transport, not HTTP or PostgreSQL wire bytes.
 
 | Function | Baseline queries | Fixed queries | Baseline rows | Fixed rows | Baseline bytes | Fixed bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Overview, warm | 45 | 17 | 9,824 | 1,108 | 5,293,773 | 268,509 |
+| Overview, warm | 45 | 18 | 9,824 | 1,109 | 5,293,773 | 268,510 |
 | Readiness, active team | 11 | 11 | 2,507 | 5 | 4,719,023 | 664 |
+
+> **Re-verified 2026-11-09.** Two claims had drifted and are corrected here:
+> the performance fixture was missing `work_schedule_exceptions` (added by the
+> weekend EOD change), which made both Overview tests fail before any of their
+> assertions ran; and the warm Overview path had grown to **20** round trips
+> because the plan, report, and schedule-exception lookback reads were three
+> separate statements. The fixture now creates that table, and those three
+> lookback reads share one SQL round trip. Measured on the re-run:
+> **Overview warm 18 queries / 1,109 rows / 268,510 bytes**, within the
+> `<= 18` guard; readiness unchanged at 11/5/664. The two backend performance
+> files now run in `npm run work-os:test`, so this drift fails the default
+> suite instead of only a manual command. The browser lifecycle file stays a
+> manual check because CI does not install Playwright Chromium.
 
 The baseline Overview test failed before the fix: chart updates stopped at
 2,000 instead of 2,501, and readiness counted 2,503 open tasks because archived/
@@ -314,7 +327,7 @@ CPU/memory profile was produced.
    fixed.** Six saves → zero; idle heartbeats add zero inbox requests; fallback
    ownership tested separately from normal avatar ownership tests.
 5. **Admin Overview/readiness expensive per minute — confirmed, fixed.**
-   Overview 45 → 17 queries and 5.29 MB → 268 KB returned rows; readiness
+   Overview 45 → 18 queries and 5.29 MB → 268 KB returned rows; readiness
    separate 5-minute lifecycle, 2,507 → 5 rows; exact SQL aggregates tested.
 6. **Backlog auto-drain and shared recap history refetch — confirmed, fixed.**
    40-page loader replaced by demand pages; 3 history pages untouched by a

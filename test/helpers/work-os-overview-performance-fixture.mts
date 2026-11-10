@@ -50,6 +50,8 @@ export async function overviewFixture() {
     create table work_task_day_events (id uuid primary key default gen_random_uuid(), organization_id uuid, person_id uuid,
       local_date date, event_type text, exact_at timestamptz, observed_at timestamptz, task_snapshot jsonb);
     create table work_daily_plans (organization_id uuid, person_id uuid, shift_date date, updated_at timestamptz);
+    create table work_schedule_exceptions (id uuid primary key default gen_random_uuid(), organization_id uuid,
+      person_id uuid, exception_date date, kind text, shift_start time, shift_end time);
     insert into work_organizations values ('${org}', 'Fixture', 'fixture', '{"employee_companion":true}');
     insert into work_people (id,organization_id,display_name,active) values ('${person}','${org}','Fixture person',true);
     insert into work_teams values ('00000000-0000-4000-8000-000000000004','${org}',true);
