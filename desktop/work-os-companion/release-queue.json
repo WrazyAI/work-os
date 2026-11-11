@@ -282,6 +282,12 @@
       "type": "feature",
       "summary": "Find tasks across all views with search, status pills and dates in one window; compact search, calendar and add controls keep column labels clear.",
       "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED→GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search→status→dates→drawer. Server migration0073 and API deployment remain pending before installer publication."
+    },
+    {
+      "id": "focus-plan-hierarchy-and-motion",
+      "type": "feature",
+      "summary": "The focus bar names how much planned work is open, and its focus view groups each main task with the subtasks beneath it; the focus view and task search open and close with motion.",
+      "verification": "Ledger a5ca4f71-b17f-474d-ac64-5782ac910e00; branch codex/employee-task-finder through 8b614003: focusPlan unit 7 pass; focus render 4 pass; companion 210 files/1874 tests pass; root typecheck and companion build pass; Playwright focus-verify PASS (collapsed default, disclosure, focus trap, short/medium/narrow, axe0, no page errors) and finder open/leave/result handoff PASS; CodeRabbit 3 minor staleness findings fixed with day refetch/parent linking/full compact counts. Installed WebView and release were not exercised; server finder migration0073/API deployment remains pending."
     }
   ],
   "emergency": null,
