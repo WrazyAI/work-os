@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, dayTaskGroups, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, dayTaskGroups, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -22,6 +22,17 @@ describe("unified Tasks workspace", () => {
       text: "Focus on completing Repair the pipeline, while progressing Document the release.",
       taskIds: ["due", "created"],
     });
+  });
+
+  it("keeps optimistic pending rows when an authoritative day page arrives", () => {
+    const current = [
+      { id: "pending-1", title: "New task", pending_status: "syncing" },
+      { id: "stale", title: "Server will replace this" },
+      { id: "real", title: "Old title" },
+    ];
+    const next = [{ id: "real", title: "New title" }, { id: "other", title: "Other" }];
+    expect(mergeDayTasks(current, next).map((task) => task.id)).toEqual(["pending-1", "real", "other"]);
+    expect(mergeDayTasks([{ id: "pending-1", pending_status: "failed" }], [{ id: "pending-1", title: "Adopted" }]).map((task) => task.id)).toEqual(["pending-1"]);
   });
 
   it("keeps subtasks nested beneath parent cards", () => {

@@ -34,6 +34,7 @@ export function FocusPlanList({ groups, expandedIds, onToggle }: {
           {copy}
           <small className="task-focus-plan-state">{stateLabel}</small>
         </div>}
+        {!expandable && group.subtaskTotal > 0 && <p className="task-focus-subtask-more">Subtasks are available in the task details.</p>}
         {expandable && <div id={panelId} className="task-focus-subtasks" data-open={expanded ? "true" : undefined} aria-hidden={expanded ? undefined : true} role="group" aria-label={`${group.title} subtasks`}>
           <div className="task-focus-subtasks-clip">
             <ul className="task-focus-subtask-list">
@@ -141,7 +142,7 @@ export function TaskFocusDetails({ text, provenance, date, historical, plan, tas
       <header><div><small>{date} <span className="task-focus-date-separator">/</span> {historical ? "Workday" : "My day"}</small><h2 id="task-focus-dialog-title">{historical ? "Workday focus" : "Today’s focus"}</h2></div><button type="button" aria-label="Close focus details" title="Close focus details" onClick={() => dismiss()}><X size={18} /></button></header>
       <div className="task-focus-dialog-body">
         <section className="task-focus-statement"><div className="task-focus-statement-heading"><span className="task-focus-target"><Target size={18} aria-hidden="true" /></span><span>The focus</span></div><p>{text}</p><small>{provenance}</small></section>
-        <section className="task-focus-plan" aria-label="Selected plan items"><div className="task-focus-plan-heading"><div><h3>On the plan</h3><p>{plan ? planGroups.total ? `${planGroups.completed} of ${planGroups.total} recorded done` : "No items were selected for this plan." : "No plan recorded for this day"}</p></div>{planGroups.total > 0 && <span aria-label={`${planGroups.total} plan items`}>{planGroups.total}</span>}</div>
+        <section className="task-focus-plan" aria-label="Selected planned tasks"><div className="task-focus-plan-heading"><div><h3>On the plan</h3><p>{plan ? planGroups.total ? `${planGroups.completed} of ${planGroups.total} recorded done` : "No items were selected for this plan." : "No plan recorded for this day"}</p></div>{planGroups.total > 0 && <span aria-label={`${planGroups.total} planned tasks`}>{planGroups.total}</span>}</div>
           {planGroups.total > 0 ? <FocusPlanList groups={planGroups.groups} expandedIds={expandedIds} onToggle={toggleGroup} /> : <p className="task-focus-plan-empty">{plan ? "No items were selected for this plan." : "Your focus is available above."}</p>}
         </section>
       </div>

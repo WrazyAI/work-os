@@ -325,6 +325,14 @@ export function parentTasks(tasks: TaskRow[]) {
   return tasks.filter((task) => !task.parent_provider_task_id && !task.parent_task_id);
 }
 
+/** Keep optimistic rows that an authoritative day page has not adopted yet.
+ * A pending add must stay retryable while another write refreshes the day. */
+export function mergeDayTasks(current: TaskRow[], next: TaskRow[]) {
+  const nextIds = new Set(next.map(taskId));
+  const pending = current.filter((task) => task.pending_status && !nextIds.has(taskId(task)));
+  return pending.length ? [...pending, ...next] : next;
+}
+
 export function taskKind(task: TaskRow): "task" | "subtask" {
   return task.parent_provider_task_id || task.parent_task_id ? "subtask" : "task";
 }

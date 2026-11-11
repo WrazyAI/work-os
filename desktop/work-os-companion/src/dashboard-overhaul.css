@@ -808,9 +808,9 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 
 @media (max-width: 780px) {
   .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-  .agenda-strip-focus { grid-column: 1; grid-row: 1; }
-  .task-focus-details-trigger { grid-column: 2; grid-row: 1; align-self: start; width: 40px; height: 40px; }
-  .agenda-strip-carry { grid-column: 1 / -1; grid-row: 2; width: 100%; min-height: 40px; justify-content: center; padding-left: 36px; }
+  .agenda-strip-focus { grid-column: 1 / -1; grid-row: 1; }
+  .task-focus-details-trigger { grid-column: 2; grid-row: 2; align-self: center; width: 40px; height: 40px; }
+  .agenda-strip-carry { grid-column: 1; grid-row: 2; width: 100%; min-height: 40px; justify-content: center; padding-left: 36px; }
   .carry-count { right: auto; left: 8px; }
   .carry-count small { display: none; }
 }
@@ -1169,9 +1169,9 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 @keyframes taskSurfaceEnter { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 720px) {
-  .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "focus trigger" "carry carry"; row-gap: 10px; }
+  .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "focus focus" "carry trigger"; row-gap: 10px; }
   .agenda-strip-focus { grid-area: focus; min-width: 0; }
-  .task-focus-details-trigger { grid-area: trigger; align-self: start; }
+  .task-focus-details-trigger { grid-area: trigger; align-self: center; }
   .agenda-strip-carry { grid-area: carry; justify-self: stretch; }
   .work-os-side-panel,
   .task-detail-modal.work-os-side-panel,

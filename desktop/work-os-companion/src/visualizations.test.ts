@@ -310,7 +310,7 @@ describe("operational visualizations", () => {
     expect(app).toContain('<TaskFocusDetails');
     expect(app).toContain('<TaskFocusDetails');
     expect(app).toContain("tasks={planTasks}");
-    expect(app).toContain("focusTasks={visibleTodayTasks}");
+    expect(app).toContain("focusTasks={focusDayTasks}");
     expect(dashboardStyles).toContain(".task-focus-subtasks");
     expect(dashboardStyles).toContain(".task-focus-dialog.is-closing");
     expect(dashboardStyles).toContain("task-focus-backdrop-out");
@@ -440,7 +440,7 @@ describe("operational visualizations", () => {
     // The strip states the focus, plan progress and the carry action. The counts
     // it used to restate here already lead the panel tabs.
     expect(dashboardStyles).not.toContain(".task-focus-stats");
-    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus trigger"[\s\S]*?"carry carry"/);
+    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"carry trigger"/);
     // Title line never wraps the On today tag onto the metadata line.
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);

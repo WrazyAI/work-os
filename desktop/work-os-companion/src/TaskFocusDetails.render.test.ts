@@ -59,6 +59,17 @@ describe("focus plan disclosure", () => {
     expect(markup).not.toMatch(/class="task-focus-subtasks"[^>]*aria-hidden="true"/);
   });
 
+  it("points to task details when a count is known but the compact children are absent", () => {
+    const countOnlyPlan: DailyPlan = {
+      ...plan,
+      items: [{ ...plan.items[0], id: "item-count-only", task_id: "parent-count-only", rank: 0 }],
+    };
+    const focus = buildFocusPlan(countOnlyPlan, [{ id: "parent-count-only", title: "Ship the workspace", subtask_total: 2, subtask_completed: 0 }]);
+    const markup = renderToStaticMarkup(React.createElement(FocusPlanList, { groups: focus.groups, expandedIds: new Set<string>(), onToggle: () => undefined }));
+    expect(markup).toContain("2 subtasks");
+    expect(markup).toContain("Subtasks are available in the task details.");
+  });
+
   it("states when the compact payload carries only part of the subtask list", () => {
     const truncatedPlan: DailyPlan = {
       ...plan,

@@ -56,7 +56,7 @@ import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
 import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
-import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
+import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { TaskFinder } from "./TaskFinder";
 import { buildFocusPlan } from "./focusPlan";
 import { filterFinderTasks } from "./taskFinder";
@@ -1343,10 +1343,11 @@ export default function App() {
     const keepFilled = <T,>(incoming: T[] | undefined, existing: T[] | undefined): T[] | undefined =>
       Array.isArray(incoming) && incoming.length === 0 && Array.isArray(existing) && existing.length > 0 ? existing : incoming;
     const nextReport = next.report && typeof next.report === "object" && "markdown" in (next.report as Record<string, unknown>) ? next.report : current.report ?? next.report;
+    const nextTasks = Array.isArray(next.tasks) ? next.tasks : current.tasks;
     return {
       ...current,
       ...next,
-      tasks: Array.isArray(next.tasks) ? next.tasks : current.tasks,
+      tasks: mergeDayTasks(current.tasks, nextTasks),
       taskHistory: keepFilled(next.taskHistory, current.taskHistory),
       evidence: keepFilled(next.evidence, current.evidence),
       proposals: keepFilled(next.proposals, current.proposals),
@@ -3383,6 +3384,11 @@ export default function App() {
         void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory(), refetchType: "none" });
         void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details"), refetchType: "none" });
         void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"], refetchType: "none" });
+        // These writes change which tasks belong to the day's plan, so the
+        // compact day cannot wait for its 60s poll to tell the focus strip.
+        if (["workspace.task_surface", "workspace.task_defer", "task.archive", "task.delete"].includes(label)) {
+          invalidateDayData();
+        }
       } else {
         invalidateDayData();
         await refresh();
@@ -3932,6 +3938,13 @@ export default function App() {
   // no surface can disagree with another about what "today" contains. Optimistic
   // adds are cache rows already, so a swap never changes the list's membership.
   const visibleTodayTasks = todayParentTasks;
+  // The compact day is capped at 24 tasks; the ordered day page reaches 50 and
+  // carries complete subtask lists. The focus view reads the wider set so a
+  // plan parent outside the compact window still has its children.
+  const focusDayTasks = useMemo(
+    () => uniqueTasks([...(todayTaskHistoryQuery.data?.pages.flatMap((page) => page.tasks) ?? []), ...visibleTodayTasks]),
+    [todayTaskHistoryQuery.data, visibleTodayTasks],
+  );
   // One lookup for every checkbox surface: "completing" spins, "leaving" shows
   // its check while the row plays its exit.
   const taskFlight = useMemo(() => {
@@ -5870,7 +5883,7 @@ export default function App() {
               ...(!taskSearchQuery && !taskFilterFrom && !taskFilterTo ? visibleTodayTasks : []),
               ...visibleTodayTasks.filter((task) => !!task.pending_status),
             ])}
-        focusTasks={visibleTodayTasks}
+        focusTasks={focusDayTasks}
         taskHistory={taskHistory}
         workspaceHistory={workspaceTaskHistory}
         completedHistory={completedTaskHistory}
@@ -7010,7 +7023,7 @@ export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, 
         <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{agendaText}</OverflowPanText>
         <small className="agenda-strip-meta">
           <span className="agenda-strip-provenance">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</span>
-          {focusPlan.total > 0 && <span className="agenda-strip-plan" aria-label={`${focusPlan.open} open of ${focusPlan.total} planned items; ${focusPlan.completed} recorded done`}><b>{focusPlan.open}</b> open <span>of {focusPlan.total} planned</span><span className="agenda-strip-meter" aria-hidden="true"><i style={{ width: `${focusPlanPercent}%` }} /></span></span>}
+          {focusPlan.total > 0 && <span className="agenda-strip-plan" aria-label={`${focusPlan.open} open of ${focusPlan.total} planned tasks; ${focusPlan.completed} recorded done`}><b>{focusPlan.open}</b> open <span>of {focusPlan.total} planned</span><span className="agenda-strip-meter" aria-hidden="true"><i style={{ width: `${focusPlanPercent}%` }} /></span></span>}
         </small>
       </div>
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" aria-label={`Review unfinished work — ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} onClick={() => onCarryOverOpen(true)}><span className="carry-count" aria-hidden="true"><b>{carryOver.length > 99 ? "99+" : carryOver.length}</b><small>{carryOver.length === 1 ? "unfinished task" : "unfinished tasks"}</small></span><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
