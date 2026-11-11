@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
+import { taskFinderQueryOptions } from "./workOsQueries";
+
+describe("task finder query", () => {
+  it("isolates every filter under the history prefix and disables closed reads", () => {
+    const filters = { search: "needle", status: "overdue" as const, from: "2026-11-01", to: "2026-11-11" };
+    const a = taskFinderQueryOptions({ enabled: false, currentDate: "2026-11-11", filters });
+    expect(a.enabled).toBe(false);
+    expect(a.queryKey.slice(0, 3)).toEqual(["work-os", "task-history", "finder"]);
+    expect(a.queryKey).not.toEqual(taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", filters: { ...filters, status: "all" } }).queryKey);
+    expect(a.initialPageParam).toBeNull();
+  });
+});
 
 describe("activityIntervalDecisionBody", () => {
   it("echoes the review version, including zero for an unreviewed recap", () => {

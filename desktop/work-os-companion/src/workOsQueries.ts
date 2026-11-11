@@ -18,6 +18,7 @@ import {
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
 import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
+import { validateTaskFinderFilters, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -97,6 +98,32 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
 }
 
 /** Load shared task history or a workspace-specific, globally sorted stream. */
+export type TaskFinderSource = (filters: TaskFinderFilters, cursor: string | null, signal: AbortSignal) => Promise<TaskHistoryPage>;
+export function taskFinderQueryOptions(options: { enabled: boolean; currentDate: string; filters: TaskFinderFilters; scope?: string; source?: TaskFinderSource }) {
+  const filters = validateTaskFinderFilters(options.filters);
+  return {
+    queryKey: [...workOsKeys.taskHistory(), "finder", options.scope ?? "", options.currentDate, filters.search, filters.status, filters.from, filters.to],
+    enabled: options.enabled,
+    staleTime: TASK_DETAILS_STALE_MS,
+    retry: 1,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: TaskHistoryPage) => last.nextCursor ?? last.cursor?.next ?? undefined,
+    queryFn: ({ pageParam, signal }: { pageParam: string | null; signal: AbortSignal }) => {
+      if (options.source) return options.source(filters, pageParam, signal);
+      const params = new URLSearchParams({ view: "history", status: filters.status, limit: "50", sort: "due", direction: "desc", sortDate: options.currentDate });
+      if (filters.search) params.set("search", filters.search);
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
+      if (pageParam) params.set("cursor", pageParam);
+      return apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`, { signal });
+    },
+  };
+}
+
+export function useTaskFinderQuery(options: Parameters<typeof taskFinderQueryOptions>[0]) {
+  return useInfiniteQuery(taskFinderQueryOptions(options));
+}
+
 export function useTaskHistoryQuery(options: {
   enabled: boolean;
   workspace?: boolean;

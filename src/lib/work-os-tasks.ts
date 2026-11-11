@@ -12,6 +12,7 @@ import {
 import { WorkOsNotFoundError, WorkOsValidationError } from "@/lib/work-os-api";
 import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
 import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
+import { validateTaskFinderFilters, type TaskFinderStatus } from "@/modules/work-os/task-finder";
 
 function structuredDescription(description: string | null, expectedOutcome: unknown, definitionOfDone: unknown) {
   const base = (description || "")
@@ -37,6 +38,7 @@ export type TaskListOrder =
   | "status_desc";
 
 export interface TaskListOptions {
+  finderStatus?: TaskFinderStatus;
   completed?: string | null;
   personId?: string | null;
   projectId?: string | null;
@@ -420,6 +422,7 @@ export async function listPersonTaskPage(
   const search = opts.search?.trim() || null;
   const excludedTaskIds = [...new Set((opts.excludeTaskIds ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))].sort();
   const overdueFirst = opts.overdueFirst === true;
+  if (opts.finderStatus !== undefined) validateTaskFinderFilters({ status: opts.finderStatus, search: search ?? "", from: opts.fromDate ?? "", to: opts.toDate ?? "" });
   const scope = taskPageScope({
     userId,
     organizationId,
@@ -432,6 +435,7 @@ export async function listPersonTaskPage(
     fromDate: opts.fromDate ?? null,
     toDate: opts.toDate ?? null,
     overdueFirst,
+    ...(opts.finderStatus !== undefined ? { finderStatus: opts.finderStatus } : {}),
   });
   const after = parseWorkspaceTaskCursor(opts.cursor, scope);
   if (after && (after.order !== order || after.sortDate !== sortDate)) {
@@ -446,7 +450,8 @@ export async function listPersonTaskPage(
     "load task person mapping",
   );
   if (!person) throw new Error("Task person must belong to the authorized organization");
-  const rows = await ensureNoError(db().rpc("work_list_person_task_page", {
+  const rows = await ensureNoError(db().rpc(opts.finderStatus !== undefined ? "work_find_person_task_page" : "work_list_person_task_page", {
+    ...(opts.finderStatus !== undefined ? { p_status: opts.finderStatus } : {}),
     p_user_id: userId,
     p_organization_id: organizationId,
     p_person_id: personId,

@@ -5,6 +5,7 @@ import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 import { employeeToday, withTaskCapabilities } from "@/lib/work-os-task-capabilities";
+import { validateTaskFinderFilters } from "@/modules/work-os/task-finder";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,15 @@ export async function GET(req: Request) {
     const search = params.get("search")?.trim() ?? "";
     if (search.length > 200) return NextResponse.json({ error: "search must be 200 characters or fewer" }, { status: 400 });
     const view = params.get("view") ?? "today";
+    let finderStatus;
+    if (params.has("status")) {
+      try {
+        if (view !== "history") throw new Error("Task status search requires history view");
+        finderStatus = validateTaskFinderFilters({ status: params.get("status")!, search, from: fromDate ?? "", to: toDate ?? "" }).status;
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid task filters" }, { status: 400 });
+      }
+    }
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
     if (view === "pending" || view === "overdue") {
       const selection = await listWorkOsEmployeeTaskSelection(auth.access, view, requestedLimit);
@@ -100,6 +110,7 @@ export async function GET(req: Request) {
     if (view === "history") {
       const page = await listPersonTaskPage(ownerId, auth.access.organizationId, auth.access.personId as string, {
         completed: params.get("completed"),
+        finderStatus,
         projectId: params.get("projectId"),
         fromDate,
         toDate,
