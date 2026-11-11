@@ -23,7 +23,8 @@ export async function overviewFixture() {
     create table work_team_members (team_id uuid references work_teams, person_id uuid, is_manager boolean);
     create table work_schedules (id uuid primary key, organization_id uuid, person_id uuid, timezone text, shift_start time,
       shift_end time, days_of_week int[], effective_from date, effective_to date, active boolean);
-    create table work_provider_connections (organization_id uuid, provider text, active boolean);
+    create table work_provider_connections (id uuid primary key default gen_random_uuid(), organization_id uuid, provider text, active boolean);
+    create table work_ghl_sync_state (connection_id uuid, kind text, partition_key text, last_synced_at timestamptz);
     create table work_provider_credentials (organization_id uuid, provider text, expires_at timestamptz);
     create table work_source_accounts (organization_id uuid, provider text, person_id uuid, verified boolean, metadata jsonb);
     create table work_tasks (id uuid primary key default gen_random_uuid(), organization_id uuid, completed boolean, status text,

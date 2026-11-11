@@ -11,7 +11,7 @@ import {
   interpretationFromResponse,
   type PlanningInterpretation,
 } from "./planning";
-import { fetchJson, requestId, type AnyRow, type EmployeeDayResponse } from "./model";
+import { calendarDateLabel, fetchJson, requestId, type AnyRow, type EmployeeDayResponse } from "./model";
 import { CheckedMoment } from "./CheckedMoment";
 import { Field, Notice, PrimaryButton, QuietButton, SecondaryButton, StatusPill, inputClass, inputStyle } from "./ui";
 
@@ -304,7 +304,7 @@ export default function EmployeePlanBuilder({
                     {ghlEvidence.map((item) => (
                       <li key={`${item.date}-${item.title}`} className="text-[11.5px] leading-5 text-[var(--text-secondary)]">
                         <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">GHL</span>
-                        <span className="tabular-nums text-[var(--text-tertiary)]">{item.date}</span> · {item.title}
+                        <span className="tabular-nums text-[var(--text-tertiary)]">{calendarDateLabel(item.date)}</span> · {item.title}
                         {item.summary ? <span className="text-[var(--text-tertiary)]"> — {item.summary}</span> : null}
                       </li>
                     ))}

@@ -110,6 +110,10 @@ export interface AdminOverview {
     githubLastEventAt: string | null;
     githubEventsToday: number;
     ghlLastEventAt: string | null;
+    /** Authoritative last successful GHL poll, used for source freshness.
+     * `ghlLastEventAt` is the latest activity time and does not move on an
+     * empty successful sync. */
+    ghlLastSyncAt: string | null;
     ghlEventsToday: number;
     lastPlanAt: string | null;
     lastReportSubmittedAt: string | null;
@@ -329,11 +333,17 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       (select max(observed_at) from work_attendance_observations where organization_id = $1) as attendance_at,
       (select max(updated_at) from work_daily_plans where organization_id = $1) as plan_at,
       (select max(occurred_at) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted') as ghl_last_at,
+      (select max(s.last_synced_at) from work_ghl_sync_state s
+        join work_provider_connections c on c.id = s.connection_id
+        where c.organization_id = $1 and c.provider = 'ghl' and c.active = true) as ghl_sync_at,
       (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
         and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC')::int as ghl_today,
       (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
         and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC'
-        and metadata->'ghl'->>'relation' = 'performed')::int as ghl_performed_today,
+        and metadata->'ghl'->>'relation' = 'performed'
+        and metadata->'ghl'->>'occurredAt' is not null
+        and coalesce(metadata->'ghl'->>'snapshot', 'false') <> 'true'
+        and person_id is not null)::int as ghl_performed_today,
       (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
         and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC'
         and person_id is null and metadata->'ghl'->>'relation' <> 'performed')::int as ghl_context_today,
@@ -353,6 +363,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
 
   const ghl = {
     last_at: githubStatsResult.rows[0]?.ghl_last_at ?? null,
+    sync_at: githubStatsResult.rows[0]?.ghl_sync_at ?? null,
     today: githubStatsResult.rows[0]?.ghl_today ?? 0,
     performed_today: githubStatsResult.rows[0]?.ghl_performed_today ?? 0,
     context_today: githubStatsResult.rows[0]?.ghl_context_today ?? 0,
@@ -686,6 +697,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     githubLastEventAt: isoOrNull(githubStatsResult.rows[0].occurred_at),
     githubEventsToday: Number(githubStatsResult.rows[0].total),
     ghlLastEventAt: isoOrNull(ghl.last_at),
+    ghlLastSyncAt: isoOrNull(ghl.sync_at),
     ghlEventsToday: Number(ghl.today ?? 0),
     lastPlanAt: isoOrNull(githubStatsResult.rows[0].plan_at),
     lastReportSubmittedAt: isoOrNull(reportStats.submitted_at),
