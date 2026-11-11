@@ -10,6 +10,8 @@ import { taskIsOverdue } from "@/lib/work-os-task-permissions";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import EmployeePlanBuilder from "./EmployeePlanBuilder";
 import EmployeeActivityRecaps from "./EmployeeActivityRecaps";
+import OnboardingSetupModal from "./OnboardingSetupModal";
+import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
 import { planStatusLabel } from "./planning";
 import { useNow } from "./useNow";
 import { remainingShiftLabel, shiftPulse, shiftWindowEndedWithOpenSession, untilShiftLabel } from "./shiftPulse";
@@ -44,6 +46,7 @@ function isOverdue(task: AnyRow, shiftDate?: string) {
 
 export default function EmployeeToday() {
   const { day, refresh, watchExpectation, sync, syncing } = useEmployeeDay();
+  const access = useEmployeeWorkspaceAccess();
   const now = useNow();
   const [input, setInput] = useState("");
   const [goal, setGoal] = useState("");
@@ -56,6 +59,8 @@ export default function EmployeeToday() {
   const [planSeed, setPlanSeed] = useState<string | undefined>(undefined);
   const [editingFocus, setEditingFocus] = useState(false);
   const [listTab, setListTab] = useState<"today" | "carry">("today");
+  const [setupModalOpen, setSetupModalOpen] = useState(false);
+  const setupModalKey = `work-os.onboarding-setup-modal.v1:${access.personId ?? access.organizationName}`;
 
   const outstanding = useOutstandingEods();
   const insights = useQuery<EmployeeInsightsResponse>({
@@ -69,6 +74,19 @@ export default function EmployeeToday() {
     queryFn: () => fetchJson("/api/work-os/me/onboarding"),
     staleTime: 30_000,
   });
+
+  // One first-run nudge per account/device. The persistent inline notice below
+  // stays until setup is complete, so dismissing the modal never hides the work.
+  useEffect(() => {
+    if (onboarding.data?.onboardingRequired !== true) return;
+    try { if (window.localStorage.getItem(setupModalKey) === "dismissed") return; } catch { /* best effort */ }
+    setSetupModalOpen(true);
+  }, [onboarding.data?.onboardingRequired, setupModalKey]);
+
+  const dismissSetupModal = () => {
+    setSetupModalOpen(false);
+    try { window.localStorage.setItem(setupModalKey, "dismissed"); } catch { /* best effort */ }
+  };
 
   useEffect(() => {
     setGoal(day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.focus_summary ?? day.data?.plan?.freeform_intent ?? "");
@@ -813,6 +831,8 @@ export default function EmployeeToday() {
           }}
         />
       ) : null}
+
+      {setupModalOpen ? <OnboardingSetupModal open onClose={dismissSetupModal} /> : null}
     </div>
   );
 }

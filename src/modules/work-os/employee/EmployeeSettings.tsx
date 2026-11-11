@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, X } from "lucide-react";
+import type { ProfileItemKind, WorkArchetype, WorkProfileItem } from "@/modules/work-os/onboarding";
 import { supportedTimezones, timezoneLabel } from "../timezones";
 import EmployeeMemory from "./EmployeeMemory";
 import AgentAccessSettings from "./AgentAccessSettings";
 import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
+import { PROFILE_KINDS, addProfileItem, buildWorkPreferences, profileSetupIssue, removeProfileItem, userProfileItem } from "./onboardingProfile";
 import { fetchJson, requestId, type AnyRow } from "./model";
 import styles from "./EmployeeSettings.module.css";
 
@@ -25,6 +27,12 @@ export default function EmployeeSettings() {
   const [desktopEnabled, setDesktopEnabled] = useState(true);
   const [consent, setConsent] = useState(false);
   const [exclusions, setExclusions] = useState("");
+  const [archetypeId, setArchetypeId] = useState("");
+  const [specialtyIds, setSpecialtyIds] = useState<string[]>([]);
+  const [customRoleTitle, setCustomRoleTitle] = useState("");
+  const [profileItems, setProfileItems] = useState<WorkProfileItem[]>([]);
+  const [newProfileKind, setNewProfileKind] = useState<ProfileItemKind>("responsibility");
+  const [newProfileLabel, setNewProfileLabel] = useState("");
   const hydrationKey = useRef<string | null>(null);
 
   const onboarding = useQuery<AnyRow>({
@@ -52,6 +60,16 @@ export default function EmployeeSettings() {
     setDesktopEnabled(typeof profile.notifications?.desktopEnabled === "boolean" ? profile.notifications.desktopEnabled : true);
     setConsent(onboarding.data?.employeeRequirements?.consentProvided === true && onboarding.data?.employeeRequirements?.screenshotConsentProvided === true && onboarding.data?.employeeRequirements?.privacyAcknowledged === true);
     setExclusions((profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
+    const workPreferences = profile.workPreferences && typeof profile.workPreferences === "object" ? profile.workPreferences : {};
+    const catalog = onboarding.data?.catalog as { archetypes?: WorkArchetype[] } | undefined;
+    const archetypes = catalog?.archetypes ?? [];
+    const fallbackArchetype = archetypes.find((candidate) => candidate.id !== "custom")?.id ?? "custom";
+    const existingArchetype = typeof workPreferences.archetypeId === "string" ? workPreferences.archetypeId : "";
+    const inferredArchetype = typeof workPreferences.inferredArchetypeId === "string" ? workPreferences.inferredArchetypeId : "";
+    setArchetypeId(existingArchetype || inferredArchetype || fallbackArchetype);
+    setSpecialtyIds(Array.isArray(workPreferences.specialtyIds) ? workPreferences.specialtyIds.map(String) : []);
+    setCustomRoleTitle(typeof workPreferences.customRoleTitle === "string" ? workPreferences.customRoleTitle : "");
+    setProfileItems(Array.isArray(workPreferences.items) ? workPreferences.items as WorkProfileItem[] : []);
   }, [onboarding.data?.profile?.email, onboarding.data?.status]);
 
   const saveOnboarding = useMutation({
@@ -70,6 +88,14 @@ export default function EmployeeSettings() {
           breaks: breakStart && breakEnd ? [{ start: breakStart, end: breakEnd }] : [],
         },
         notifications: { desktopEnabled },
+        workPreferences: buildWorkPreferences({
+          archetypeId,
+          specialtyIds,
+          customRoleTitle,
+          items: profileItems,
+          voiceUpdatesEnabled: onboarding.data?.profile?.workPreferences?.voiceUpdatesEnabled === true,
+          githubUsername: onboarding.data?.profile?.workPreferences?.githubUsername ?? "",
+        }),
         privacy: {
           screenshotAnalysisConsent: true,
           sensitiveAppExclusions: exclusions.split(",").map((value) => value.trim()).filter(Boolean),
@@ -100,6 +126,26 @@ export default function EmployeeSettings() {
   });
 
   const onboardingRequired = onboarding.data?.onboardingRequired === true;
+  const catalog = onboarding.data?.catalog as { archetypes?: WorkArchetype[] } | undefined;
+  const archetypes = catalog?.archetypes ?? [];
+  const selectedArchetype = archetypes.find((candidate) => candidate.id === archetypeId) ?? null;
+  const profileIssue = profileSetupIssue({ archetypeId, customRoleTitle, items: profileItems });
+  const selectedProfileItems = (kind: ProfileItemKind) => profileItems.filter((item) => item.kind === kind);
+  const suggestedProfileItems = (kind: ProfileItemKind) => (selectedArchetype?.items ?? []).filter((item) => item.kind === kind && !profileItems.some((selected) => selected.kind === item.kind && selected.label.trim().toLowerCase() === item.label.trim().toLowerCase()));
+  const selectArchetype = (next: string) => {
+    setArchetypeId(next);
+    setSpecialtyIds([]);
+    setProfileItems((current) => current.filter((item) => item.source === "user"));
+  };
+  const toggleSpecialty = (id: string) => setSpecialtyIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const addSuggestedProfileItem = (item: WorkProfileItem) => setProfileItems((current) => addProfileItem(current, item));
+  const removeSelectedProfileItem = (item: WorkProfileItem) => setProfileItems((current) => removeProfileItem(current, item.id));
+  const addOwnProfileItem = () => {
+    const label = newProfileLabel.trim();
+    if (!label) return;
+    setProfileItems((current) => addProfileItem(current, userProfileItem(newProfileKind, label)));
+    setNewProfileLabel("");
+  };
   const organizationSetup = onboarding.data?.organizationSetup;
   const officialSchedule = organizationSetup?.officialSchedule;
   const officialScheduleLabel = officialSchedule
@@ -222,6 +268,109 @@ export default function EmployeeSettings() {
                   <input className={styles.input} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="password manager, bank.example" />
                   <span className={styles.hint}>Comma-separated apps or domains that must never be captured.</span>
                 </label>
+                <div className={`${styles.profileSignals} ${styles.fieldFull}`}>
+                  <div className={styles.profileSignalsHead}>
+                    <span className={styles.fieldLabel}>Work profile</span>
+                    <span className={styles.hint}>Pick what you own, produce, and use as evidence. Choose at least one.</span>
+                  </div>
+                  <div className={styles.profileSignalsTop}>
+                    <label className={styles.field}>
+                      <span className={styles.fieldLabel}>Role</span>
+                      <select className={styles.select} value={archetypeId} onChange={(event) => selectArchetype(event.target.value)}>
+                        {archetypes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                      </select>
+                    </label>
+                    {archetypeId === "custom" ? (
+                      <label className={styles.field}>
+                        <span className={styles.fieldLabel}>Your role</span>
+                        <input className={styles.input} value={customRoleTitle} onChange={(event) => setCustomRoleTitle(event.target.value)} placeholder="Describe your work" />
+                      </label>
+                    ) : null}
+                  </div>
+                  {selectedArchetype && selectedArchetype.specialties.length > 0 ? (
+                    <div className={styles.signalGroup}>
+                      <span className={styles.signalLabel}>Specialties <em>optional</em></span>
+                      <div className={styles.signalChips}>
+                        {selectedArchetype.specialties.map((specialty) => {
+                          const selected = specialtyIds.includes(specialty.id);
+                          return (
+                            <button
+                              key={specialty.id}
+                              type="button"
+                              aria-pressed={selected}
+                              aria-label={`${selected ? "Remove" : "Add"} ${specialty.name}`}
+                              className={selected ? styles.signalChip : styles.signalSuggestion}
+                              onClick={() => toggleSpecialty(specialty.id)}
+                            >
+                              {selected ? <X size={10} aria-hidden /> : <Plus size={10} aria-hidden />}{specialty.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className={styles.profileSignalsGrid}>
+                    {PROFILE_KINDS.map(({ kind, label, hint }) => (
+                      <div className={styles.signalGroup} key={kind}>
+                        <span className={styles.signalLabel}>{label}</span>
+                        <div className={styles.signalChips}>
+                          {selectedProfileItems(kind).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              aria-pressed
+                              aria-label={`Remove ${item.label}`}
+                              className={styles.signalChip}
+                              onClick={() => removeSelectedProfileItem(item)}
+                            >
+                              {item.label}<X size={10} aria-hidden />
+                            </button>
+                          ))}
+                          {suggestedProfileItems(kind).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              aria-pressed={false}
+                              aria-label={`Add ${item.label}`}
+                              className={styles.signalSuggestion}
+                              onClick={() => addSuggestedProfileItem(item)}
+                            >
+                              <Plus size={10} aria-hidden />{item.label}
+                            </button>
+                          ))}
+                        </div>
+                        <span className={styles.signalHint}>{hint}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.signalAdd}>
+                    <select
+                      className={styles.select}
+                      aria-label="Work profile item type"
+                      value={newProfileKind}
+                      onChange={(event) => setNewProfileKind(event.target.value as ProfileItemKind)}
+                    >
+                      <option value="responsibility">Responsibility</option>
+                      <option value="deliverable">Output</option>
+                      <option value="evidence">Evidence source</option>
+                    </select>
+                    <input
+                      className={styles.input}
+                      value={newProfileLabel}
+                      onChange={(event) => setNewProfileLabel(event.target.value)}
+                      placeholder="Add your own"
+                      aria-label="Add your own work profile item"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addOwnProfileItem();
+                        }
+                      }}
+                    />
+                    <button type="button" className={styles.secondaryButton} onClick={addOwnProfileItem} disabled={!newProfileLabel.trim()}>Add</button>
+                  </div>
+                  {profileIssue ? <span className={styles.signalError} role="status">{profileIssue}</span> : null}
+                </div>
                 <label className={`${styles.checkLine} ${styles.fieldFull}`}>
                   <input type="checkbox" checked={desktopEnabled} onChange={(event) => setDesktopEnabled(event.target.checked)} />
                   Desktop notifications
@@ -234,10 +383,10 @@ export default function EmployeeSettings() {
                   <button
                     type="button"
                     className={styles.primaryButton}
-                    disabled={!name.trim() || !email.trim() || !consent || saveOnboarding.isPending}
+                    disabled={!name.trim() || !email.trim() || !consent || Boolean(profileIssue) || saveOnboarding.isPending}
                     onClick={() => saveOnboarding.mutate()}
                   >
-                    {saveOnboarding.isPending ? "Saving…" : "Save required consent"}
+                    {saveOnboarding.isPending ? "Saving…" : "Finish setup"}
                   </button>
                 </div>
               </div>
