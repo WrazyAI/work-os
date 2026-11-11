@@ -2,6 +2,8 @@
 
 Status: design and proposed defaults approved by the user on 2026-11-06 ("Sounds good"). Implementation plan review/execution choice is next. Credentials, live API probes, deployment and companion release remain separate authorization gates.
 
+**Live activation revision — 2026-11-11:** The employee evidence location is **Boots & Hammer** (`EAzucMccSCpfHNlJFNj7`), not Wrazy. The active Work OS workspace is **David Yeboah Workspace** (`b094c847-1332-4cab-9588-bdd7f8e99e7d`). The Wrazy connection and its backfilled evidence were removed. Verified mappings are Aden Badon (`U0iEgwXaVEQ2eYNNAwIj`), David Z (`iRVuCaXZPdlSXiROT6W1`), and Lisa Perry (`qPfsQP7Pzv55XPFJDZS9`). Kalia Bell, David Yeboah, Boots Hammer, and any unverified identity remain context-only until explicitly mapped. Live endpoint validation found that email export requires newest-first sorting, appointment events do not accept a `limit`, and opportunities require `locationId` with numeric date bounds.
+
 Ledger: `ac79f5bc-89fb-4d36-a702-07b8a67afe8e`. Discovery baseline: `e99bfb44`. Supporting findings: [Work OS seams](../../research/2026-11-05-ghl-work-os-evidence-discovery.md), [official API research](../../research/2026-11-05-ghl-evidence-api.md). Follow repository `AGENTS.md` and canonical `design.md`; the latter was read completely for this proposal.
 
 ## Intent and user decisions

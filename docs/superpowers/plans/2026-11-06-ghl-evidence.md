@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-06-ghl-evidence-design.md` (approved 2026-11-06).
 
+**Live activation revision — 2026-11-11:** Pilot location changed to **Boots & Hammer** (`EAzucMccSCpfHNlJFNj7`) and workspace **David Yeboah Workspace** (`b094c847-1332-4cab-9588-bdd7f8e99e7d`). Wrazy evidence was removed. Verified mappings: Aden Badon, David Z, Lisa Perry. Kalia Bell, David Yeboah, and Boots Hammer stay context-only. Live contract corrections: email export newest-first, appointment events without `limit`, opportunities with `locationId` and numeric dates. The expired OpenRouter key blocks email-content analysis until rotated; full-email viewing and metadata evidence still work.
+
 ## Global Constraints
 
 - One shared location; all six reported identities, including shared/generic accounts; no fake Work OS people or name-only verified mappings.

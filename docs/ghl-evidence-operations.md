@@ -1,5 +1,7 @@
 # GHL evidence operations
 
+> **Live pilot (2026-11-11):** Location **Boots & Hammer** (`EAzucMccSCpfHNlJFNj7`), workspace **David Yeboah Workspace** (`b094c847-1332-4cab-9588-bdd7f8e99e7d`). Verified mappings: Aden Badon, David Z, Lisa Perry. The Wrazy pilot connection was removed. Email-content analysis is paused until the expired `OPENROUTER_API_KEY` is rotated; full-email viewing still works.
+
 Read-only GoHighLevel evidence (calls, SMS, email, appointments, notes, contact tasks, opportunities) is pulled with a location-level Private Integrations Token (PIT). There is no employee-level credential and no OAuth app in the pilot.
 
 ## Connection
