@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
-import { taskFinderQueryOptions } from "./workOsQueries";
+import { taskFinderQueryOptions, updateTaskHistoryPages } from "./workOsQueries";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 
 describe("task finder query", () => {
+  it("does not insert an unfiltered optimistic task into a filtered finder", () => {
+    const client = new QueryClient();
+    const page = { pages: [{ tasks: [{ id: "matching" }], totalCount: 1, nextCursor: null }], pageParams: [null] };
+    const historyKey = ["work-os", "task-history", "all"];
+    const finderKey = ["work-os", "task-history", "finder", "scope", "completed"];
+    client.setQueryData(historyKey, page); client.setQueryData(finderKey, page);
+    updateTaskHistoryPages(client, current => ({ ...current, pages: current.pages.map(p => ({ ...p, tasks: [{ id: "pending" }, ...p.tasks] })) }));
+    expect(client.getQueryData<typeof page>(historyKey)?.pages[0].tasks.map(t => t.id)).toEqual(["pending", "matching"]);
+    expect(client.getQueryData<typeof page>(finderKey)?.pages[0].tasks.map(t => t.id)).toEqual(["matching"]);
+    client.clear();
+  });
+  it("does not reuse stale local-source pages on reopening after a local edit", async () => {
+    const client = new QueryClient();
+    let title = "Before edit";
+    const options = taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", filters: { search: "", status: "all", from: "", to: "" },
+      source: async () => ({ tasks: [{ id: "1", title }], totalCount: 1, nextCursor: null }),
+    });
+    const first = new InfiniteQueryObserver(client, options);
+    const stop = first.subscribe(() => {}); await first.refetch(); stop();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    title = "After edit";
+    const second = new InfiniteQueryObserver(client, options);
+    expect(second.getCurrentResult().data).toBeUndefined();
+    const stopSecond = second.subscribe(() => {}); await second.refetch();
+    expect(second.getCurrentResult().data?.pages[0].tasks[0].title).toBe("After edit");
+    stopSecond(); client.clear();
+  });
   it("isolates every filter under the history prefix and disables closed reads", () => {
     const filters = { search: "needle", status: "overdue" as const, from: "2026-11-01", to: "2026-11-11" };
     const a = taskFinderQueryOptions({ enabled: false, currentDate: "2026-11-11", filters });

@@ -137,6 +137,7 @@ export default function TasksPreview() {
   const params = new URLSearchParams(window.location.search);
   const history = params.has("history");
   const scenario = params.get("scenario");
+  const finderMode = params.get("finder") ?? "normal";
   const detailScenario = scenario === "details" || scenario === "details-readonly" || scenario === "details-interactive"
     || scenario === "details-assignee" || scenario === "details-overdue" || scenario === "details-outside-assignee"
     || scenario === "details-status-menu" || scenario === "details-actions-menu" || scenario === "details-assign-menu"
@@ -164,28 +165,30 @@ export default function TasksPreview() {
     subtask_completed: index % 3,
     project: { name: index % 2 === 0 ? "Work OS" : "LaunchLoom" },
   })) : [];
-  const [previewRows, setPreviewRows] = useState<TaskRow[]>(() => many ? [...tasks, ...manyTasks] : tasks);
-  const baseTasks: TaskRow[] = previewRows.map((task) => ({ ...task, capabilities: taskCapabilities(task, { role: "employee", personId: "person-1" }, CURRENT_DATE) }));
+  const [previewRows, setPreviewRows] = useState<TaskRow[]>(() => [
+    ...tasks, ...(many ? manyTasks : []),
+    ...(finderMode === "dense" ? Array.from({ length: 73 }, (_, i) => ({
+      id: `finder-${i}`, finderOnly: true,
+      title: `${i === 72 ? "Integration needle" : "Review workspace record"} ${i + 1}`,
+      description: "Keep the workday evidence clear and ready for review.",
+      due_date: i % 4 === 0 ? "2026-08-20" : "2026-08-21", workflow_status: i % 2 ? "in_progress" : "pending",
+      completed: i % 5 === 0, project: { name: "LaunchLoom" },
+      assignee_person_ids: ["person-1"], assigned_by_person_id: "person-1",
+    })) : []),
+  ]);
+  const baseTasks: TaskRow[] = previewRows.filter(task => !task.finderOnly).map((task) => ({ ...task, capabilities: taskCapabilities(task, { role: "employee", personId: "person-1" }, CURRENT_DATE) }));
   const degraded = scenario === "degraded" ? baseTasks.map((task, index) => index === 1 ? { ...task, sync_error: "nifty_unreachable" } : task) : baseTasks;
   const [carryOpen, setCarryOpen] = useState(params.has("carryover") || scenario === "carryover");
   const [detailsOpen, setDetailsOpen] = useState(detailScenario);
   const [createOpen, setCreateOpen] = useState(scenario === "create");
   const [createTitle, setCreateTitle] = useState("");
-  const [finderSelection, setFinderSelection] = useState<TaskRow | null>(null);
-  const finderMode = params.get("finder") ?? "normal";
   const finderSource: TaskFinderSource = async (filters, cursor, signal) => {
     if (finderMode === "error") throw new Error("Task read unavailable");
     if (finderMode === "loading") await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, 4000);
       signal.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
     });
-    const extra = finderMode === "dense" ? Array.from({ length: 73 }, (_, i) => ({
-      id: `finder-${i}`, title: `${i === 72 ? "Integration needle" : "Review workspace record"} ${i + 1}`,
-      description: "Keep the workday evidence clear and ready for review.",
-      due_date: i % 4 === 0 ? "2026-08-20" : "2026-08-21", workflow_status: i % 2 ? "in_progress" : "pending",
-      completed: i % 5 === 0, project: { name: "LaunchLoom" },
-    })) : [];
-    const rows = finderMode === "empty" ? [] : filterFinderTasks([...tasks, ...extra], filters, CURRENT_DATE);
+    const rows = finderMode === "empty" ? [] : filterFinderTasks(previewRows, filters, CURRENT_DATE);
     const offset = Number(cursor ?? 0);
     return { tasks: rows.slice(offset, offset + 50), totalCount: rows.length, nextCursor: offset + 50 < rows.length ? String(offset + 50) : null };
   };
@@ -221,7 +224,10 @@ export default function TasksPreview() {
       assignees: previewPeople(assigneeIds),
     };
   });
-  const patchPreviewDetail = (patch: Record<string, any>) => setPreviewDetailTask((current) => ({ ...current, ...patch }));
+  const patchPreviewDetail = (patch: Record<string, any>) => {
+    setPreviewDetailTask(current => ({ ...current, ...patch }));
+    setPreviewRows(rows => rows.map(task => String(task.id) === String(previewDetailTask.id) ? { ...task, ...patch } : task));
+  };
   const [goal, setGoal] = useState(currentPlan.freeform_intent ?? "");
   const [input, setInput] = useState("");
   const [composerOpen, setComposerOpen] = useState(params.has("agenda") || params.has("focus"));
@@ -238,8 +244,8 @@ export default function TasksPreview() {
   const suggestion = suggestDailyGoal(baseTasks, CURRENT_DATE, currentPlan.items);
   const detailsTask = {
     task: {
-      ...(finderSelection ?? previewDetailTask),
-      capabilities: taskCapabilities(finderSelection ?? previewDetailTask, { role: "employee", personId: "person-1" }, CURRENT_DATE),
+      ...previewDetailTask,
+      capabilities: taskCapabilities(previewDetailTask, { role: "employee", personId: "person-1" }, CURRENT_DATE),
     },
     subtasks: previewSubtasks.map((subtask) => ({ ...subtask, capabilities: taskCapabilities(subtask, { role: "employee", personId: "person-1" }, CURRENT_DATE) })),
     moveTargets: baseTasks.slice(1, 3),
@@ -341,7 +347,7 @@ export default function TasksPreview() {
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="tasks" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <div className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
-      <TasksWorkspace finderScope={`preview:${finderMode}`} finderSource={finderSource} currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => setCreateOpen(true)} onOpenTask={task => { setFinderSelection(task); setDetailsOpen(true); }} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
+      <TasksWorkspace finderScope={`preview:${finderMode}`} finderSource={finderSource} currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => setCreateOpen(true)} onOpenTask={task => { setPreviewDetailTask(task); setPreviewSubtasks(task.id === "task-today" ? DETAIL_SUBTASKS : []); setDetailsOpen(true); }} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
         onStatusTask={(task, workflow_status) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, workflow_status } : row))}
         onAssignTask={() => setDetailsOpen(true)}
         onTaskCompletion={(task, completed) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, completed } : row))}

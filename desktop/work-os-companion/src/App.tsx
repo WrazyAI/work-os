@@ -60,6 +60,7 @@ import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks,
 import { TaskFinder } from "./TaskFinder";
 import { filterFinderTasks } from "./taskFinder";
 import type { TaskFinderSource } from "./workOsQueries";
+import { updateTaskHistoryPages } from "./workOsQueries";
 import { SortHeaderRow } from "./SortHeaderRow";
 import { taskViewTabIndex } from "./taskViewTabs";
 import { ProgressRing } from "./ProgressRing";
@@ -1481,12 +1482,7 @@ export default function App() {
   const updateTaskHistoryVariants = useCallback((
     updater: (current: InfiniteData<TaskHistoryPage>, completedOnly: boolean) => InfiniteData<TaskHistoryPage>,
   ) => {
-    const queries = queryClient.getQueryCache().findAll({ queryKey: workOsKeys.taskHistory() });
-    for (const query of queries) {
-      const completedOnly = query.queryKey[2] === "completed";
-      queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(query.queryKey, (current) =>
-        current ? updater(current, completedOnly) : current);
-    }
+    updateTaskHistoryPages(queryClient, updater);
   }, [queryClient]);
   /** Refetch active sorted-history variants after a mutation changes membership or order. */
   const revalidateTaskHistoryVariants = useCallback(() => {

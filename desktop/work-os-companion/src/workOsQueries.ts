@@ -99,12 +99,24 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
 
 /** Load shared task history or a workspace-specific, globally sorted stream. */
 export type TaskFinderSource = (filters: TaskFinderFilters, cursor: string | null, signal: AbortSignal) => Promise<TaskHistoryPage>;
+/** Optimistic list membership is not valid for independently filtered finders.
+ * They keep authoritative pages and share the prefix only for invalidation. */
+export function updateTaskHistoryPages(client: QueryClient, updater: (current: InfiniteData<TaskHistoryPage>, completedOnly: boolean) => InfiniteData<TaskHistoryPage>) {
+  for (const query of client.getQueryCache().findAll({ queryKey: workOsKeys.taskHistory() })) {
+    if (query.queryKey[2] === "finder") continue;
+    client.setQueryData<InfiniteData<TaskHistoryPage>>(query.queryKey, current => current ? updater(current, query.queryKey[2] === "completed") : current);
+  }
+}
+
 export function taskFinderQueryOptions(options: { enabled: boolean; currentDate: string; filters: TaskFinderFilters; scope?: string; source?: TaskFinderSource }) {
   const filters = validateTaskFinderFilters(options.filters);
   return {
     queryKey: [...workOsKeys.taskHistory(), "finder", options.scope ?? "", options.currentDate, filters.search, filters.status, filters.from, filters.to],
     enabled: options.enabled,
-    staleTime: TASK_DETAILS_STALE_MS,
+    // Local adapters read mutable on-device data, not an authoritative remote
+    // cache. Closing retires their pages so reopening always reads current rows.
+    staleTime: options.source ? 0 : TASK_DETAILS_STALE_MS,
+    gcTime: options.source ? 0 : 5 * 60_000,
     retry: 1,
     initialPageParam: null as string | null,
     getNextPageParam: (last: TaskHistoryPage) => last.nextCursor ?? last.cursor?.next ?? undefined,
