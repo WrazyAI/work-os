@@ -403,7 +403,10 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <small>{startsIn ? "Starts in" : model.schedule.phase === "complete" ? "Window" : "Schedule"}</small>
           <strong>{windowReading}</strong>
         </div>
-        <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} />
+        <div className="band-window">
+          <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} />
+          {scheduleKnown && <small className="band-window-range">{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)} – {formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</small>}
+        </div>
       </div>
       <div className="workday-band-facts" aria-label="Workday counts">
         <BandFact value={model.metrics.planned} label="planned" detail="on today’s list" review="Review today’s tasks" onClick={() => onOpenTasks("today")} />

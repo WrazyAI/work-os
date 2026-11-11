@@ -5,6 +5,9 @@ export type FocusPlanSubtask = {
   id: string;
   title: string;
   completed: boolean;
+  /** The plan recorded this outcome's success criterion before its task row
+   * (and therefore its materialized subtask) was loaded. */
+  planned: boolean;
 };
 
 export type FocusPlanGroup = {
@@ -34,6 +37,28 @@ const parentKey = (task: TaskRow) => String(task.parent_task_id || task.parent_p
 function count(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+}
+
+/** A plan outcome records its success criteria before confirmation. Those
+ * criteria become the task's subtasks during materialization, so when the day
+ * page does not carry the task row (the plan can exceed the task page), the
+ * criteria are the truthful hierarchy the focus dialog can still show. */
+function plannedCriteria(item: DailyPlan["items"][number], task: TaskRow | null, groupId: string): FocusPlanSubtask[] {
+  const completed = task?.completed === true || item.completion_state === "completed";
+  const seen = new Set<string>();
+  const rows: FocusPlanSubtask[] = [];
+  for (const [index, criterion] of (Array.isArray(item.success_criteria) ? item.success_criteria : []).entries()) {
+    const title = safeTaskText(criterion, "");
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    rows.push({
+      id: `${groupId}:criterion-${index}`,
+      title,
+      completed,
+      planned: true,
+    });
+  }
+  return rows;
 }
 
 function indexTask(index: Map<string, TaskRow>, task: TaskRow) {
@@ -99,7 +124,13 @@ export function buildFocusPlan(plan: DailyPlan | null | undefined, tasks: readon
         id: childId,
         title: safeTaskText(child?.title, "Untitled subtask"),
         completed: child?.completed === true,
+        planned: false,
       });
+    }
+    // Loaded task children are authoritative. Only fall back to the plan's own
+    // success criteria when the compact/current task page did not carry them.
+    if (!subtasks.length && Array.isArray(item.success_criteria) && item.success_criteria.length) {
+      subtasks.push(...plannedCriteria(item, task, id));
     }
     // Open work leads the nested list, matching every task surface.
     subtasks.sort((left, right) => Number(left.completed) - Number(right.completed));

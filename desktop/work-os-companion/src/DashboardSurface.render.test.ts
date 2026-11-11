@@ -177,6 +177,8 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Clock in with Worktivity from the Windows Companion");
     expect(markup).toContain("Updated August 26, 12:06 PM");
     expect(markup).toContain('aria-label="Scheduled window: 3:00 PM to 8:00 PM"');
+    expect(markup).toContain('class="band-window-range"');
+    expect(markup).toContain("3:00 PM – 8:00 PM");
     expect(markup).not.toContain("dashboard-readiness");
     expect(markup).not.toContain("dashboard-metric");
     // One owner per count, and the queue states what it is previewing.

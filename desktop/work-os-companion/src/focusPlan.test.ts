@@ -133,6 +133,60 @@ describe("focus plan grouping", () => {
     expect(focus.groups[0].subtasksTruncated).toBe(true);
   });
 
+  it("nests a plan outcome's success criteria when its task row is not loaded", () => {
+    const outcomePlan: DailyPlan = {
+      ...plan,
+      items: [{
+        id: "outcome-1", task_id: null, source: "existing", disposition: "selected", rank: 0,
+        title_snapshot: "Address the dashboard consolidation items", blocker: null, item_kind: "outcome", completion_state: "open",
+        objective: "Finish the dashboard work", success_criteria: [
+          "Advance admin dashboard refinements",
+          "Complete live tracking and the AI edit flow",
+          "Advance admin dashboard refinements",
+        ],
+      }],
+    };
+    const focus = buildFocusPlan(outcomePlan, []);
+    expect(focus.groups[0].subtasks.map((subtask) => subtask.title)).toEqual([
+      "Advance admin dashboard refinements",
+      "Complete live tracking and the AI edit flow",
+    ]);
+    expect(focus.groups[0].subtasks.every((subtask) => subtask.planned && !subtask.completed)).toBe(true);
+    expect(focus.groups[0].subtaskTotal).toBe(2);
+    expect(focus.groups[0].subtaskCompleted).toBe(0);
+  });
+
+  it("keeps loaded task children authoritative over the plan's criteria snapshot", () => {
+    const linked: DailyPlan = {
+      ...plan,
+      items: [{
+        ...plan.items[1], id: "linked-1", task_id: "parent-1", completion_state: "open",
+        success_criteria: ["A criterion that was edited later", "Another old criterion"],
+      }],
+    };
+    const focus = buildFocusPlan(linked, [tasks[0]]);
+    expect(focus.groups[0].subtasks.map((subtask) => subtask.title)).toEqual([
+      "Trim the header",
+      "Check the narrow window",
+      "Move the tabs",
+    ]);
+    expect(focus.groups[0].subtasks.some((subtask) => subtask.planned)).toBe(false);
+  });
+
+  it("marks criteria done when the plan item is recorded complete", () => {
+    const completedOutcome: DailyPlan = {
+      ...plan,
+      items: [{
+        id: "outcome-done", task_id: null, source: "existing", disposition: "selected", rank: 0,
+        title_snapshot: "Close the dashboard work", blocker: null, item_kind: "outcome", completion_state: "completed",
+        success_criteria: ["Ship the consolidated board"],
+      }],
+    };
+    const focus = buildFocusPlan(completedOutcome, []);
+    expect(focus.groups[0].subtasks[0]).toMatchObject({ title: "Ship the consolidated board", planned: true, completed: true });
+    expect(focus.groups[0].subtaskCompleted).toBe(1);
+  });
+
   it("sanitizes provider errors and untitled records", () => {
     const unsafe: DailyPlan = {
       ...plan,

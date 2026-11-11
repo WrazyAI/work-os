@@ -70,6 +70,26 @@ describe("focus plan disclosure", () => {
     expect(markup).toContain("Subtasks are available in the task details.");
   });
 
+  it("renders plan success criteria as nested planned subtasks when the task row is absent", () => {
+    const outcomePlan: DailyPlan = {
+      ...plan,
+      items: [{
+        id: "outcome-1", task_id: null, source: "existing", disposition: "selected", rank: 0,
+        title_snapshot: "Address the dashboard consolidation items", blocker: null, item_kind: "outcome", completion_state: "open",
+        success_criteria: ["Advance admin dashboard refinements", "Complete live tracking and the AI edit flow"],
+      }],
+    };
+    const focus = buildFocusPlan(outcomePlan, []);
+    const markup = renderToStaticMarkup(React.createElement(FocusPlanList, {
+      groups: focus.groups, expandedIds: new Set<string>([focus.groups[0].id]), onToggle: () => undefined,
+    }));
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("0 of 2 subtasks done");
+    expect(markup).toContain("Advance admin dashboard refinements");
+    expect(markup).toContain("Complete live tracking and the AI edit flow");
+    expect(markup).toContain("Planned");
+  });
+
   it("states when the compact payload carries only part of the subtask list", () => {
     const truncatedPlan: DailyPlan = {
       ...plan,

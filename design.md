@@ -476,10 +476,14 @@ active day, so the page does not change its shape when the shift starts:
    in action in the Windows Companion, and one quiet Set focus action. The
    scheduled-window instrument sits on the same row; before the window opens the
    leading reading is the time until it starts and the axis carries no now dot.
-   The four counts follow on a hairline row — planned, carried over, overdue,
-   and completed — each opening the view it measures. A zero is a quiet fact,
-   not a control. The focus line is the surface's last row: today's focus, its
-   provenance, and the next check-in, under the shared pan contract (§6.2).
+   Between 721px and 1080px the state line and its actions take one clean
+   full-width row and the instrument follows as a second row, so the mascot,
+   status, and controls never wrap into a ragged stack beside empty space. The
+   instrument's scheduled start and end stay visible under the axis at every
+   width. The four counts follow on a hairline row — planned, carried over,
+   overdue, and completed — each opening the view it measures. A zero is a quiet
+   fact, not a control. The focus line is the surface's last row: today's focus,
+   its provenance, and the next check-in, under the shared pan contract (§6.2).
    Otto is a restrained mark in the surface, never the reason it is tall.
 2. Margin instruments. This week's completed-task chart and plan reliability,
    set as labels on hairlines rather than cards. On wide windows they sit beside
@@ -655,7 +659,11 @@ The focus strip opens a centered, labelled dialog containing the selected day's
 full focus and its provenance, followed by the selected plan's parent items and
 their subtasks when a plan exists. Each parent is a disclosure: its subtasks sit
 nested beneath it, the parent is collapsed by default, and it states its recorded
-plan state plus progress through its subtasks. The plan heading states how many
+plan state plus progress through its subtasks. When the current task page does
+not carry a plan-linked task row (the plan can exceed the day page), the plan
+item's recorded success criteria stand in as its subtasks and are labelled
+"Planned"; loaded task children always win over that fallback, so an edited
+task never shows a stale criteria list. The plan heading states how many
 items are recorded done. The strip's existing review and retry buttons retain
 their own actions; a visible details trigger supports keyboard access and the
 focus sentence remains a convenience press target. Current-day focus offers Edit

@@ -38,10 +38,10 @@ export function FocusPlanList({ groups, expandedIds, onToggle }: {
         {expandable && <div id={panelId} className="task-focus-subtasks" data-open={expanded ? "true" : undefined} aria-hidden={expanded ? undefined : true} role="group" aria-label={`${group.title} subtasks`}>
           <div className="task-focus-subtasks-clip">
             <ul className="task-focus-subtask-list">
-              {group.subtasks.map((subtask) => <li key={subtask.id} className="task-focus-subtask">
+              {group.subtasks.map((subtask) => <li key={subtask.id} className={`task-focus-subtask${subtask.planned ? " is-planned" : ""}`}>
                 <span className={`task-focus-subtask-mark${subtask.completed ? " is-done" : ""}`} aria-hidden="true">{subtask.completed ? <Check size={11} /> : <Circle size={11} />}</span>
                 <span>{subtask.title}</span>
-                <small>{subtask.completed ? "Done" : "Open"}</small>
+                <small>{subtask.completed ? "Done" : subtask.planned ? "Planned" : "Open"}</small>
               </li>)}
             </ul>
             {group.subtasksTruncated && <p className="task-focus-subtask-more">Showing {group.subtasks.length} of {group.subtaskTotal} subtasks.</p>}
@@ -132,7 +132,7 @@ export function TaskFocusDetails({ text, provenance, date, historical, plan, tas
       if (!(event.target as Element).closest("button, a, input, select, textarea")) openDialog();
     }}>
       {children}
-      <button ref={trigger} className="task-focus-details-trigger" type="button" aria-haspopup="dialog" aria-label="Open focus details" title="Open focus details" onClick={openDialog}><ChevronRight size={16} aria-hidden="true" /></button>
+      <button ref={trigger} className="task-focus-details-trigger" type="button" aria-haspopup="dialog" aria-label="Open focus details" title="Open focus details" onClick={openDialog}><span className="task-focus-details-label">Open focus</span><ChevronRight size={16} aria-hidden="true" /></button>
     </section>
     {open && <dialog ref={dialog} tabIndex={-1} className={`task-focus-dialog${closing ? " is-closing" : ""}`} aria-labelledby="task-focus-dialog-title" onCancel={(event) => { event.preventDefault(); dismiss(); }} onClick={(event) => {
       if (event.target !== event.currentTarget) return;

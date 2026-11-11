@@ -129,6 +129,48 @@ const currentPlan: DailyPlan = {
   ],
 };
 
+/** Mirrors the production focus modal when today's plan is mostly confirmed
+ * first moves: each outcome carries the criteria that became its subtasks, and
+ * the task page may not have loaded those rows yet. */
+const focusOutcomePlan: DailyPlan = {
+  ...currentPlan,
+  id: "plan-focus-outcomes",
+  freeform_intent: "Complete the dashboard consolidation and live tracking work.",
+  goal_provenance: "accepted_suggestion",
+  suggestion_task_ids: [],
+  items: [
+    {
+      id: "outcome-dashboard", task_id: null, source: "existing", disposition: "selected", rank: 0,
+      title_snapshot: "Address the two dashboard refinement/consolidation items", blocker: null, item_kind: "outcome", completion_state: "open",
+      objective: "Finish the consolidated dashboard work.",
+      success_criteria: [
+        "Advance admin dashboard and consolidate reference-library template refinements",
+        "Complete dashboard live tracking and AI edit flow",
+      ],
+    },
+    {
+      id: "outcome-pipeline", task_id: null, source: "existing", disposition: "selected", rank: 1,
+      title_snapshot: "Finish pipeline design refinements", blocker: null, item_kind: "outcome", completion_state: "open",
+      objective: "Close the remaining pipeline design gaps.",
+      success_criteria: [
+        "Implement the agreed technical improvements to advanced options.",
+        "Review the current pipeline designs and identify the remaining issues.",
+        "Verify that the revised flow is clear and does not introduce regressions.",
+      ],
+    },
+    {
+      id: "outcome-admin", task_id: null, source: "existing", disposition: "selected", rank: 2,
+      title_snapshot: "Continue admin dashboard and add admin chat view", blocker: null, item_kind: "outcome", completion_state: "completed",
+      objective: "Keep the admin workspace moving.",
+      success_criteria: ["Add admin chat view to the shared shell"],
+    },
+    {
+      id: "item-today", task_id: "task-today", source: "due_today", disposition: "selected", rank: 3,
+      title_snapshot: "Ship unified Tasks workspace", blocker: null, item_kind: "nifty_task", completion_state: "open",
+    },
+  ],
+};
+
 const historicalPlan: DailyPlan = {
   id: "plan-history", status: "closed", freeform_intent: "Remove the old Plan route and preserve the task record.", goal_provenance: "employee", suggestion_task_ids: [], shift_date: "2026-08-20", revision: 5,
   items: [
@@ -233,7 +275,8 @@ export default function TasksPreview() {
     setPreviewDetailTask(current => ({ ...current, ...patch }));
     setPreviewRows(rows => rows.map(task => String(task.id) === String(previewDetailTask.id) ? { ...task, ...patch } : task));
   };
-  const [goal, setGoal] = useState(currentPlan.freeform_intent ?? "");
+  const focusFixture = params.get("plan") === "outcomes" ? focusOutcomePlan : currentPlan;
+  const [goal, setGoal] = useState(focusFixture.freeform_intent ?? "");
   const [input, setInput] = useState("");
   const [composerOpen, setComposerOpen] = useState(params.has("agenda") || params.has("focus"));
   const [composerPanel, setComposerPanel] = useState<"update" | "goal">(params.has("focus") ? "goal" : "update");
@@ -246,7 +289,7 @@ export default function TasksPreview() {
   const [previewSearch, setPreviewSearch] = useState(scenario === "filtered-empty" ? "zzz no match" : "");
   const [previewHistoryError, setPreviewHistoryError] = useState(scenario === "history-error");
   const [receipt, setReceipt] = useState<{ text: string; message: string; kind: "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task"; createdAt: string } | null>(null);
-  const suggestion = suggestDailyGoal(baseTasks, CURRENT_DATE, currentPlan.items);
+  const suggestion = suggestDailyGoal(baseTasks, CURRENT_DATE, focusFixture.items);
   const detailsTask = {
     task: {
       ...previewDetailTask,
@@ -352,7 +395,7 @@ export default function TasksPreview() {
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="tasks" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <div className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
-      <TasksWorkspace finderScope={`preview:${finderMode}`} finderSource={finderSource} currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} focusTasks={baseTasks} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => setCreateOpen(true)} onOpenTask={task => { setPreviewDetailTask(task); setPreviewSubtasks(task.id === "task-today" ? DETAIL_SUBTASKS : []); setDetailsOpen(true); }} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
+      <TasksWorkspace finderScope={`preview:${finderMode}`} finderSource={finderSource} currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={focusFixture} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} focusTasks={baseTasks} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => setCreateOpen(true)} onOpenTask={task => { setPreviewDetailTask(task); setPreviewSubtasks(task.id === "task-today" ? DETAIL_SUBTASKS : []); setDetailsOpen(true); }} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
         onStatusTask={(task, workflow_status) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, workflow_status } : row))}
         onAssignTask={() => setDetailsOpen(true)}
         onTaskCompletion={(task, completed) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, completed } : row))}

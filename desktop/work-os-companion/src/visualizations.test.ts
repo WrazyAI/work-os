@@ -312,8 +312,11 @@ describe("operational visualizations", () => {
     expect(app).toContain("tasks={planTasks}");
     expect(app).toContain("focusTasks={focusDayTasks}");
     expect(dashboardStyles).toContain(".task-focus-subtasks");
+    expect(dashboardStyles).toContain(".task-focus-subtask.is-planned");
     expect(dashboardStyles).toContain(".task-focus-dialog.is-closing");
     expect(dashboardStyles).toContain("task-focus-backdrop-out");
+    expect(dashboardStyles).toContain("@media (min-width: 721px) and (max-width: 1080px)");
+    expect(dashboardStyles).toContain(".band-window-range");
     expect(app).toContain('className={`task-list-tab ${taskView === id ? "active" : ""}`}');
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("function DashboardTaskCard");

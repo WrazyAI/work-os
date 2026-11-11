@@ -433,11 +433,16 @@ body {
 .date-navigator button { border-color: var(--dash-line); color: var(--dash-muted); }
 .formatted-date-picker { color: var(--dash-ink); }
 
-.task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 14px 12px 16px; border: 1px solid var(--dash-line); border-radius: 16px; background: linear-gradient(112deg, rgba(255, 255, 252, 0.96), rgba(241, 249, 233, 0.84)); box-shadow: 0 1px 2px rgba(20,30,18,.025); transition: border-color .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), box-shadow .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), transform .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
+.task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 14px 12px 16px; border: 1px solid var(--dash-line); border-radius: 16px; background: var(--dash-card-solid); box-shadow: 0 1px 2px rgba(20,30,18,.035), 0 10px 28px rgba(20,30,18,.035); transition: border-color .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), box-shadow .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), transform .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
 .task-agenda-strip { position: relative; cursor: pointer; }
 .task-agenda-strip:hover { border-color: var(--dash-line-strong); box-shadow: 0 10px 28px rgba(20,30,18,.06); }
 .task-agenda-strip:has(.task-focus-details-trigger:focus-visible) { border-color: var(--dash-line-strong); box-shadow: 0 0 0 3px rgba(74,125,34,.1); }
-.task-focus-details-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--dash-line); border-radius: 10px; background: var(--dash-card-solid); color: var(--dash-muted); cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
+.task-focus-details-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 34px; height: 34px; padding: 0; border: 1px solid var(--dash-line); border-radius: 10px; background: var(--dash-card-solid); color: var(--dash-muted); font: inherit; font-size: 10px; font-weight: 750; white-space: nowrap; cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
+.task-focus-details-label { display: none; }
+@media (min-width: 960px) {
+  .task-focus-details-trigger { width: auto; padding: 0 10px; }
+  .task-focus-details-label { display: inline; }
+}
 .task-focus-details-trigger:hover { background: #f0f3ed; color: var(--dash-ink); transform: translateX(1px); }
 .task-focus-details-trigger:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
 .task-focus-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(86vh, 800px); padding: 0; overflow: hidden; border: 1px solid var(--dash-line); border-radius: 20px; background: var(--dash-card-solid); color: var(--dash-ink); box-shadow: 0 24px 80px rgba(15,25,17,.25); }
@@ -487,6 +492,8 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 .task-focus-subtask > small { flex: none; color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .task-focus-subtask-mark { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 7px; background: #f4f6f1; color: #98a290; }
 .task-focus-subtask-mark.is-done { background: #e7f4df; color: #4a7d22; }
+.task-focus-subtask.is-planned .task-focus-subtask-mark { border: 1px dashed #c9d5c2; background: transparent; }
+.task-focus-subtask.is-planned > small { color: #6f8067; }
 .task-focus-subtask-more { margin: 0 0 8px 35px; color: var(--dash-muted); font-size: 10px; }
 .task-focus-plan-empty { margin: 15px 0 0; padding: 14px 0; border-top: 1px solid var(--dash-line); color: var(--dash-muted); font-size: 12px; }
 .task-focus-dialog footer { flex: none; padding: 18px 28px 26px; border-top: 1px solid var(--dash-line); }
@@ -500,11 +507,12 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 .agenda-strip-text { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .agenda-strip-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 0; color: var(--dash-muted); font-size: 10px; }
 .agenda-strip-provenance { display: inline-flex; align-items: center; gap: 4px; }
-.agenda-strip-plan { display: inline-flex; align-items: center; gap: 5px; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.agenda-strip-plan b { color: var(--dash-ink); font-weight: 750; }
-.agenda-strip-meter { display: inline-block; width: 42px; height: 3px; overflow: hidden; border-radius: 999px; background: #e4e9df; }
+.agenda-strip-plan { display: inline-flex; align-items: center; gap: 7px; min-height: 24px; padding: 0 9px 0 8px; border: 1px solid #e1e9db; border-radius: 999px; background: #f4f8f0; color: #5c6d55; font-size: 10px; font-variant-numeric: tabular-nums; }
+.agenda-strip-plan b { color: var(--dash-ink); font-weight: 780; }
+.agenda-strip-meter { display: inline-block; width: 52px; height: 4px; overflow: hidden; border-radius: 999px; background: #dfe8d8; }
 .agenda-strip-meter > i { display: block; height: 100%; border-radius: inherit; background: #7eb14a; transition: width .32s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
-.agenda-strip-carry { position: relative; min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
+.agenda-strip-carry { position: relative; min-height: 32px; padding: 0 7px; border-color: transparent; border-radius: 9px; background: transparent; color: #8b5c0b; font-size: 10px; font-weight: 700; transition: background .16s ease, border-color .16s ease, color .16s ease; }
+.agenda-strip-carry:hover, .agenda-strip-carry:focus-visible { border-color: #ecd59e; background: #fff9e9; }
 
 /* The unfinished count rides on the carry pill as a compact badge in the same
    amber as the notifications badge. It sits outside the button's box, in strip
@@ -810,8 +818,8 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
   .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .agenda-strip-focus { grid-column: 1 / -1; grid-row: 1; }
   .task-focus-details-trigger { grid-column: 2; grid-row: 2; align-self: center; width: 40px; height: 40px; }
-  .agenda-strip-carry { grid-column: 1; grid-row: 2; width: 100%; min-height: 40px; justify-content: center; padding-left: 36px; }
-  .carry-count { right: auto; left: 8px; }
+  .agenda-strip-carry { grid-column: 1; grid-row: 2; width: 100%; min-height: 40px; justify-content: center; gap: 8px; padding: 0 12px; }
+  .carry-count { position: static; transform: none; }
   .carry-count small { display: none; }
 }
 @media (max-width: 560px) {
@@ -1532,6 +1540,7 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
   min-height: 0;
   gap: 14px;
   padding: 16px 26px;
+  border: 0;
   border-top: 1px solid var(--dash-line);
   border-radius: 0;
   background: transparent;
@@ -1835,4 +1844,66 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
   .dashboard-task-row-actions .ellipsis-button { width: 40px; height: 40px; }
   .dashboard-task-check { position: relative; }
   .dashboard-task-check::after { content: ""; position: absolute; inset: -11px; border-radius: 8px; }
+}
+
+/* Pre-shift reading: once the two-column command surface stops fitting, the
+   state and its actions take one clean row and the scheduled window follows.
+   This is the 920–1024 class where the old flex wrap stacked the mascot, state,
+   and actions into three ragged lines beside an empty instrument. */
+.band-window { display: grid; gap: 6px; min-width: 0; }
+.band-window .dashboard-pulse-timeline { min-width: 0; }
+.band-window-range { color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 721px) {
+  .workday-band-status { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+  .workday-band-actions { justify-self: end; }
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .off-shift-dashboard .workday-band {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "status" "instrument" "facts" "focus" "footer";
+  }
+  .off-shift-dashboard .workday-band-status { padding: 17px 22px 10px; }
+  .off-shift-dashboard .workday-band-instrument { padding: 4px 22px 18px; border-left: 0; }
+  .off-shift-dashboard .workday-band-instrument.is-single { grid-template-columns: auto minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .workday-band-instrument .band-window { grid-area: timeline; }
+}
+
+/* Small screens keep the plan read on the provenance line instead of spending
+   a second metadata row on it. The meter shortens before the label wraps. */
+@media (max-width: 560px) {
+  .agenda-strip-meta { gap: 4px 8px; }
+  .agenda-strip-plan { gap: 5px; min-height: 22px; padding: 0 7px; }
+  .agenda-strip-meter { width: 38px; }
+}
+
+/* Between the compact desktop classes the unfinished action stays one hit
+   target, but drops its words so the focus statement gets the width. The
+   badge, alert glyph, chevron, accessible name, and title still name it. */
+@media (min-width: 781px) and (max-width: 1080px) {
+  .agenda-strip-carry { gap: 6px; padding: 0 8px; }
+  .agenda-strip-carry-label { display: none; }
+}
+
+/* On a phone the plan row gives the title the full measure and puts its
+   recorded state beneath it, instead of squeezing both into one line. */
+@media (max-width: 560px) {
+  .task-focus-plan-row {
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr) 15px;
+    grid-template-areas: "mark copy chevron" "mark state chevron";
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 1px;
+  }
+  .task-focus-plan-row.is-static { grid-template-areas: "mark copy" "mark state"; grid-template-columns: 25px minmax(0, 1fr); }
+  .task-focus-plan-mark { grid-area: mark; }
+  .task-focus-plan-copy { grid-area: copy; }
+  .task-focus-plan-state { grid-area: state; }
+  .task-focus-plan-chevron { grid-area: chevron; }
+  .task-focus-subtask-more { margin-left: 12px; }
 }

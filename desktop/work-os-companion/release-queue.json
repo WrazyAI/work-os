@@ -288,6 +288,12 @@
       "type": "feature",
       "summary": "The focus bar names how much planned work is open, and its focus view groups each main task with the subtasks beneath it; the focus view and task search open and close with motion.",
       "verification": "Ledger a5ca4f71-b17f-474d-ac64-5782ac910e00; branch codex/employee-task-finder through 8b614003: focusPlan unit 7 pass; focus render 4 pass; companion 210 files/1874 tests pass; root typecheck and companion build pass; Playwright focus-verify PASS (collapsed default, disclosure, focus trap, short/medium/narrow, axe0, no page errors) and finder open/leave/result handoff PASS; CodeRabbit 3 minor staleness findings fixed with day refetch/parent linking/full compact counts. Installed WebView and release were not exercised; server finder migration0073/API deployment remains pending."
+    },
+    {
+      "id": "offshift-focus-hierarchy-polish",
+      "type": "fix",
+      "summary": "Clocked-out My Day keeps its status and actions on one row, the Tasks focus card shows plan progress clearly, and the focus view nests plan subtasks before their task rows load.",
+      "verification": "Branch codex/employee-task-finder commit pending: companion 210 files/1880 tests pass; companion typecheck and production build pass; focusPlan 10, focus render 6, taskWorkspace 30, visualizations 49, DashboardSurface render 12 focused tests pass; Playwright final PASS at 1440/1080/1024/920/720/390 (off-shift row, scheduled range, focus strip labels, planned subtasks, default collapsed, 390 tab/scroll, reduced motion, axe 0, no page errors). No server migration/API deployment or companion release was performed."
     }
   ],
   "emergency": null,
