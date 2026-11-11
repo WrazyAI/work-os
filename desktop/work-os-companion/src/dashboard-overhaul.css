@@ -487,6 +487,7 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 .task-focus-subtask > small { flex: none; color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .task-focus-subtask-mark { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 7px; background: #f4f6f1; color: #98a290; }
 .task-focus-subtask-mark.is-done { background: #e7f4df; color: #4a7d22; }
+.task-focus-subtask-more { margin: 0 0 8px 35px; color: var(--dash-muted); font-size: 10px; }
 .task-focus-plan-empty { margin: 15px 0 0; padding: 14px 0; border-top: 1px solid var(--dash-line); color: var(--dash-muted); font-size: 12px; }
 .task-focus-dialog footer { flex: none; padding: 18px 28px 26px; border-top: 1px solid var(--dash-line); }
 .task-focus-dialog footer button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--dash-ink); color: var(--dash-card-solid); font-weight: 700; cursor: pointer; }
@@ -808,8 +809,8 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
 @media (max-width: 780px) {
   .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .agenda-strip-focus { grid-column: 1; grid-row: 1; }
-  .task-focus-details-trigger { grid-column: 2; grid-row: 1; align-self: start; }
-  .agenda-strip-carry { grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: center; padding-left: 36px; }
+  .task-focus-details-trigger { grid-column: 2; grid-row: 1; align-self: start; width: 40px; height: 40px; }
+  .agenda-strip-carry { grid-column: 1 / -1; grid-row: 2; width: 100%; min-height: 40px; justify-content: center; padding-left: 36px; }
   .carry-count { right: auto; left: 8px; }
   .carry-count small { display: none; }
 }

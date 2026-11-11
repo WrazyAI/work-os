@@ -43,6 +43,7 @@ export function FocusPlanList({ groups, expandedIds, onToggle }: {
                 <small>{subtask.completed ? "Done" : "Open"}</small>
               </li>)}
             </ul>
+            {group.subtasksTruncated && <p className="task-focus-subtask-more">Showing {group.subtasks.length} of {group.subtaskTotal} subtasks.</p>}
           </div>
         </div>}
       </li>;

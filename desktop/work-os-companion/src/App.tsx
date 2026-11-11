@@ -1510,6 +1510,13 @@ export default function App() {
         tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
       } : current);
     }
+    if (typeof patch.completed === "boolean") {
+      // The confirmed task write also advances selected plan items and embedded
+      // subtask rows on the server. Refresh the day so the focus meter and
+      // hierarchy show that confirmed state instead of waiting for the poll.
+      void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
+      void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
+    }
     if (patch.completed === true) {
       // The backlog is open-only: completing a task removes it and shifts the
       // counts immediately, then a refetch confirms the server totals.

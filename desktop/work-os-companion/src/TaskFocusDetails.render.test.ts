@@ -59,6 +59,22 @@ describe("focus plan disclosure", () => {
     expect(markup).not.toMatch(/class="task-focus-subtasks"[^>]*aria-hidden="true"/);
   });
 
+  it("states when the compact payload carries only part of the subtask list", () => {
+    const truncatedPlan: DailyPlan = {
+      ...plan,
+      items: [{ ...plan.items[0], id: "item-truncated", task_id: "parent-truncated", rank: 0 }],
+    };
+    const focus = buildFocusPlan(truncatedPlan, [{
+      id: "parent-truncated", title: "Ship the workspace", subtask_total: 12, subtask_completed: 5,
+      subtasks: Array.from({ length: 8 }, (_, index) => ({ id: `child-${index}`, title: `Child ${index + 1}`, completed: index < 3 })),
+    }]);
+    const markup = renderToStaticMarkup(React.createElement(FocusPlanList, {
+      groups: focus.groups, expandedIds: new Set<string>([focus.groups[0].id]), onToggle: () => undefined,
+    }));
+    expect(markup).toContain("Showing 8 of 12 subtasks.");
+    expect(markup).toContain("5 of 12 subtasks done");
+  });
+
   it("keeps the strip trigger visible and does not mount the dialog until it opens", () => {
     const markup = renderToStaticMarkup(React.createElement(TaskFocusDetails, {
       text: "Ship the workspace", provenance: "Written by you", date: "Nov 11", historical: false, plan, tasks, onEdit: () => undefined,

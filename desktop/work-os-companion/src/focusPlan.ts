@@ -15,6 +15,7 @@ export type FocusPlanGroup = {
   subtasks: FocusPlanSubtask[];
   subtaskTotal: number;
   subtaskCompleted: number;
+  subtasksTruncated: boolean;
 };
 
 export type FocusPlan = {
@@ -40,8 +41,15 @@ function indexTask(index: Map<string, TaskRow>, task: TaskRow) {
     if (value) index.set(String(value), task);
   }
   for (const child of Array.isArray(task.subtasks) ? task.subtasks : []) {
+    // A compact day payload can omit the child's parent columns even though it
+    // arrived inside the parent. Keep that relationship for plan deduplication.
+    const linked = child.parent_task_id || child.parent_provider_task_id ? child : {
+      ...child,
+      parent_task_id: task.id ?? null,
+      ...(task.provider_task_id ? { parent_provider_task_id: task.provider_task_id } : {}),
+    };
     for (const value of [child.id, child.provider_task_id]) {
-      if (value) index.set(String(value), child);
+      if (value) index.set(String(value), linked);
     }
   }
 }
@@ -95,10 +103,12 @@ export function buildFocusPlan(plan: DailyPlan | null | undefined, tasks: readon
     }
     // Open work leads the nested list, matching every task surface.
     subtasks.sort((left, right) => Number(left.completed) - Number(right.completed));
-    const subtaskTotal = subtasks.length || count(task?.subtaskProgress?.total ?? task?.subtask_total);
-    const subtaskCompleted = subtasks.length
-      ? subtasks.filter((child) => child.completed).length
-      : count(task?.subtaskProgress?.completed ?? task?.subtask_completed);
+    // The compact day keeps up to eight children but carries the full counts;
+    // the summary must state the task's total, not the loaded window.
+    const declaredTotal = count(task?.subtaskProgress?.total ?? task?.subtask_total ?? task?.subtaskCount);
+    const declaredCompleted = count(task?.subtaskProgress?.completed ?? task?.subtask_completed);
+    const subtaskTotal = Math.max(subtasks.length, declaredTotal);
+    const subtaskCompleted = Math.min(subtaskTotal, Math.max(subtasks.filter((child) => child.completed).length, declaredCompleted));
     groups.push({
       id,
       taskId: task ? String(task.provider_task_id || task.id) : item.task_id,
@@ -107,6 +117,7 @@ export function buildFocusPlan(plan: DailyPlan | null | undefined, tasks: readon
       subtasks,
       subtaskTotal,
       subtaskCompleted,
+      subtasksTruncated: subtaskTotal > subtasks.length,
     });
   }
 

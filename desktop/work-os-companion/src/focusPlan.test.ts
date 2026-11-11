@@ -32,9 +32,9 @@ const tasks = [
   {
     id: "parent-1", title: "Ship the workspace", subtask_total: 3, subtask_completed: 1,
     subtasks: [
-      { id: "child-open", parent_task_id: "parent-1", title: "Trim the header", completed: false },
-      { id: "child-done", parent_task_id: "parent-1", title: "Move the tabs", completed: true },
-      { id: "child-open-2", parent_task_id: "parent-1", title: "Check the narrow window", completed: false },
+      { id: "child-open", title: "Trim the header", completed: false },
+      { id: "child-done", title: "Move the tabs", completed: true },
+      { id: "child-open-2", title: "Check the narrow window", completed: false },
     ],
   },
   {
@@ -106,6 +106,31 @@ describe("focus plan grouping", () => {
   it("returns an empty plan for no plan or no selected items", () => {
     expect(buildFocusPlan(null, tasks)).toMatchObject({ groups: [], total: 0, open: 0, completed: 0 });
     expect(buildFocusPlan({ ...plan, items: plan.items.map((item) => ({ ...item, disposition: "removed" as const })) }, tasks).total).toBe(0);
+  });
+
+  it("keeps the full subtask counts when the compact payload truncates the list", () => {
+    const truncated: DailyPlan = {
+      ...plan,
+      items: [{
+        ...plan.items[1], id: "item-truncated", task_id: "parent-truncated", rank: 0,
+        title_snapshot: "Ship the workspace", completion_state: "open",
+      }],
+    };
+    const focus = buildFocusPlan(truncated, [{
+      id: "parent-truncated",
+      title: "Ship the workspace",
+      subtask_total: 12,
+      subtask_completed: 5,
+      subtasks: Array.from({ length: 8 }, (_, index) => ({
+        id: `child-${index}`,
+        title: `Child ${index + 1}`,
+        completed: index < 3,
+      })),
+    }]);
+    expect(focus.groups[0].subtasks).toHaveLength(8);
+    expect(focus.groups[0].subtaskTotal).toBe(12);
+    expect(focus.groups[0].subtaskCompleted).toBe(5);
+    expect(focus.groups[0].subtasksTruncated).toBe(true);
   });
 
   it("sanitizes provider errors and untitled records", () => {
