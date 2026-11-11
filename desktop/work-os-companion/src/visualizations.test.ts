@@ -24,9 +24,11 @@ const insightDashboardStyles = readText(resolve(root, "src/insight-dashboard.css
 const adminWorkspace = readText(resolve(root, "src/admin/AdminWorkspace.tsx"));
 const adminData = readText(resolve(root, "src/admin/data.ts"));
 const adminShellSource = readText(resolve(root, "src/adminShell.ts"));
+const adminOttoChat = readText(resolve(root, "src/adminOtto/AdminOttoChat.tsx"));
 const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
+const planningSave = readText(resolve(root, "src/planningSave.ts"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
@@ -111,8 +113,9 @@ describe("operational visualizations", () => {
   it("uses the logo and non-navigation surface as the collapsed expand affordance", () => {
     expect(sidebar).toContain("data-sidebar-nav-option");
     expect(sidebar).toContain("data-sidebar-surface-hover");
-    expect(sidebar).toContain('if (collapsed) {\n                setCollapsedState(false);');
-    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).toContain("if (collapsed && !compactNav) {");
+    expect(sidebar).toContain("setCollapsedState(false);");
+    expect(sidebar).toContain('aria-label={collapsed && !compactNav ? "Expand sidebar" : "Work OS workspace menu"}');
     expect(sidebar).not.toContain("<PanelLeftOpen size={18}");
     expect(sidebarStyles).toContain(".sidebar-workspace-expand-icon");
     expect(sidebarStyles).toContain('[data-sidebar-surface-hover="true"]');
@@ -351,7 +354,7 @@ describe("operational visualizations", () => {
     expect(planningSession).toContain("Your daily commitments are on the record.");
     expect(planningSession).toContain("planning-confirmation-title");
     expect(planningSession).toContain("queued locally");
-    expect(planningSession).toContain("Your plan was not saved.");
+    expect(planningSave).toContain("Your plan was not saved.");
     expect(planningSession).toContain("planning-clarification-");
     expect(planningSession).toContain("clarificationAnswers");
     expect(app).toContain("clarification_answers");
@@ -604,6 +607,20 @@ describe("operational visualizations", () => {
     expect(chatStyles).toMatch(/\.chat-task-check\s*\{[^}]*position:\s*relative/s);
   });
 
+  it("lets the page wheel move past clipped panels and tool lists", () => {
+    const adminToolStyles = readText(resolve(root, "src/adminOtto/admin-tool-cards.css"));
+    // A universal `overscroll-behavior: contain` also applies to decorative
+    // `overflow: hidden` cards. Chromium treats those as scroll containers
+    // even with no range, so the wheel dies over a table or panel.
+    expect(styles).not.toMatch(/\*\s*\{[^}]*overscroll-behavior:\s*contain/s);
+    expect(styles).toMatch(/html\s*\{[^}]*overscroll-behavior:\s*none/s);
+    expect(styles).toMatch(/body\s*\{[^}]*overscroll-behavior:\s*none/s);
+    // Tool lists are nested reading surfaces: once their own range is spent,
+    // the wheel keeps moving the conversation behind them.
+    expect(adminToolStyles).toMatch(/\.admin-tool-rows\s*\{[^}]*overscroll-behavior-y:\s*auto/s);
+    expect(workspaceStyles).toMatch(/\.task-selection-scroll\s*\{[^}]*overscroll-behavior-y:\s*auto/s);
+  });
+
   it("keeps streamed floating chat replies visible while the reader is near the tail", () => {
     expect(avatarApp).toContain("new ResizeObserver");
     expect(avatarApp).toContain("observer.observe(newestTurn)");
@@ -674,7 +691,7 @@ describe("operational visualizations", () => {
   });
 
   it("switches between administration and the signed-in admin's own workday", () => {
-    expect(app).toContain('import AdminWorkspace from "./admin/AdminWorkspace"');
+    expect(app).toContain('const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));');
     expect(app).toContain("work-os.workspace-mode");
     expect(app).toContain('switchLabel="Open administration"');
     expect(app).toContain("Administration");
@@ -706,7 +723,7 @@ describe("operational visualizations", () => {
     expect(adminWorkspace).toContain('aria-label={`Profile for ${profile.name}`}');
     expect(adminWorkspace).toContain('title="Open profile settings"');
     expect(adminWorkspace).toContain("<ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />");
-    expect(app).toContain("profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}");
+    expect(app).toMatch(/profile=\{visibleOnboarding\s+\? \{ name: visibleOnboarding\.profile\.displayName, avatarUrl: visibleOnboarding\.profile\.avatarUrl, onOpen: openProfileFromAdmin \}\s+: adminOttoContextQuery\.data\?\.displayName/);
     // Changelog: one administration-only workspace-menu item. The employee
     // rail reaches the changelog from Settings and never receives this.
     expect(sidebar).toContain("What's new");
@@ -840,5 +857,34 @@ describe("operational visualizations", () => {
     // row that disagree about which numbers the day is made of.
     expect(dashboardSurface).not.toContain("active-focus-panel");
     expect(dashboardSurface).toContain('aria-label="Workday counts"');
+  });
+});
+
+describe("floating Otto view switch", () => {
+  it("adopts the owner view and renders the shared admin surface", () => {
+    expect(avatarApp).toContain("OTTO_VIEW_STATE_EVENT");
+    expect(avatarApp).toContain("OTTO_VIEW_REQUEST_EVENT");
+    expect(avatarApp).toContain("CompanionViewSwitch");
+    expect(avatarApp).toContain("<AdminOttoChat");
+    expect(avatarApp).toContain('surface="floating"');
+    expect(avatarApp).toContain("OTTO_RECORD_NAV_EVENT");
+    expect(avatarApp).toContain("mode={workspaceView}");
+    expect(avatarApp).toContain("animateAttire");
+    expect(avatarApp).toContain("adminPendingVoiceStartRef");
+    expect(avatarApp).toContain("avatarViewFenceRef.current.capture()");
+    expect(avatarApp).toContain("if (!fence.isCurrent()) return;");
+    expect(avatarApp).toContain("adminAudioRef.current?.stop()");
+    expect(avatarApp).toContain("const AVATAR_EXPANDED = { width: 400, height: 620 };");
+  });
+
+  it("keeps the in-app admin header and assistant marks on the same mode", () => {
+    expect(app).toContain("const chatViewSwitch = viewState ? <CompanionViewSwitch");
+    expect(app).toContain("headerLeading={chatViewSwitch}");
+    expect(app).toContain('headerLeading={viewState?.role === "admin" ? chatViewSwitch : undefined}');
+    expect(adminOttoChat).toContain('mascotMode="admin"');
+    expect(avatarApp).toContain("adminConversationGeneration");
+    expect(avatarApp).toContain("adminConversationRevision");
+    expect(avatarApp).toContain("adminRecoveryBoundaryRef");
+    expect(app).toContain("conversationState?.generation ?? 1");
   });
 });

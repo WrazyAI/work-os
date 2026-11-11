@@ -1,4 +1,6 @@
 import { apiRequest } from "../api";
+import { workOsQueryClient } from "../queryClient";
+import { readinessQueryOptions, type AdminReadiness } from "../../../../src/modules/work-os/admin-readiness";
 import type {
   AdminInsights,
   AdminInsightRange,
@@ -130,10 +132,17 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function send<T>(path: string, method: "POST" | "PATCH" | "PUT" | "DELETE", body?: unknown): Promise<T> {
-  return apiRequest<T>(path, {
+  const result = await apiRequest<T>(path, {
     method,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+  // Invalidate only after an authoritative successful setup/task write. An
+  // inactive Overview is marked stale, not fetched in the background.
+  if (/^\/api\/work-os\/(organization|people|tasks|integrations)(\/|\?|$)/.test(path)
+    || path.startsWith("/api/work-os/admin/integrations/")) {
+    void workOsQueryClient.invalidateQueries({ queryKey: adminReadinessQueryOptions().queryKey });
+  }
+  return result;
 }
 
 /** Every administration read is normalized before it reaches a page: the same
@@ -146,6 +155,8 @@ async function getNormalized<T>(path: string, normalize: (raw: unknown) => T): P
 
 export const fetchSession = () => get<SessionResponse>("/api/work-os/session");
 export const fetchAdminOverview = (date?: string) => getNormalized(`/api/work-os/admin/overview${buildQuery({ date })}`, normalizeAdminOverview);
+export const fetchAdminReadiness = () => get<AdminReadiness>("/api/work-os/readiness");
+export const adminReadinessQueryOptions = () => readinessQueryOptions(fetchAdminReadiness);
 export const fetchAdminInsights = (range: AdminInsightRange, personId: string, through?: string) =>
   getNormalized(`/api/work-os/admin/insights${buildQuery({ range, personId, through })}`, normalizeAdminInsights);
 export const fetchPeople = () => getNormalized("/api/work-os/people", normalizePeople);

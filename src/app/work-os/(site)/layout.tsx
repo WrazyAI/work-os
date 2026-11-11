@@ -11,5 +11,5 @@ export const metadata: Metadata = {
 /** The public Work OS site owns its own materials. It is intentionally not
  * wrapped by the WrazyOS dashboard shell (see src/components/Shell.tsx). */
 export default function WorkOsSiteLayout({ children }: { children: ReactNode }) {
-  return <div className={styles.shell}>{children}</div>;
+  return <div className={styles.shell} data-work-os-site>{children}</div>;
 }

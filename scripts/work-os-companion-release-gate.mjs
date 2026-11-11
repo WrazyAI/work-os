@@ -32,13 +32,29 @@ function text(value, max = 500) {
   return typeof value === "string" && value.trim().length > 0 && value.length <= max && !/[\r\n\0]/.test(value);
 }
 
+function validateOperatorOverride(queue) {
+  if (queue.operatorOverride === null || queue.operatorOverride === undefined) return null;
+  const record = queue.operatorOverride;
+  if (!record || typeof record !== "object" || Array.isArray(record)) throw new Error("Operator override must be an object");
+  if (!text(record.version, 20)) throw new Error("Operator override needs a version");
+  parts(record.version);
+  if (!text(record.updateId, 100)) throw new Error("Operator override needs a pending update ID");
+  if (!text(record.approvedBy, 80) || !text(record.reason, 500)) {
+    throw new Error("Operator override needs an approver and reason");
+  }
+  if (typeof record.approvedAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(record.approvedAt)) {
+    throw new Error("Operator override needs an approval date");
+  }
+  return record;
+}
+
 function validateQueue(queue) {
   if (!queue || queue.schemaVersion !== 1 || !Array.isArray(queue.updates)) throw new Error("Invalid release queue schema");
   const ids = new Set();
   const summaries = new Set();
   for (const entry of queue.updates) {
     if (!entry || !text(entry.id, 100) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id)
-      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification)) {
+      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification, 800)) {
       throw new Error("Each update needs a stable ID, feature/fix type, outcome summary and verification");
     }
     const summary = entry.summary.trim().toLowerCase();
@@ -46,6 +62,7 @@ function validateQueue(queue) {
     ids.add(entry.id);
     summaries.add(summary);
   }
+  validateOperatorOverride(queue);
   return queue;
 }
 
@@ -69,6 +86,15 @@ export function evaluateRelease({ queue, publishedQueue, version, publishedVersi
   if (version === publishedVersion) return { eligible: false, pending, emergency: false };
   if (version !== `${previous[0]}.${previous[1]}.${previous[2] + 1}`) throw new Error("Release version must be the next patch after the latest published release");
 
+  let operatorOverride = false;
+  const override = queue.operatorOverride;
+  if (override && override.version === version) {
+    if (!pending.some((entry) => entry.id === override.updateId)) {
+      throw new Error("Operator override must name a pending outcome for this version");
+    }
+    operatorOverride = true;
+  }
+
   let emergency = false;
   if (queue.emergency !== null && queue.emergency !== undefined) {
     const record = queue.emergency;
@@ -78,7 +104,7 @@ export function evaluateRelease({ queue, publishedQueue, version, publishedVersi
     }
     emergency = true;
   }
-  return { eligible: pending.length >= THRESHOLD || emergency, pending, emergency };
+  return { eligible: pending.length >= THRESHOLD || emergency || operatorOverride, pending, emergency, operatorOverride };
 }
 
 export function latestPublishedRelease(pages) {
@@ -230,12 +256,12 @@ function main() {
   }
   if (mode === "verify" && !result.eligible) throw new Error("Release is no longer eligible: already published or fewer than five pending updates without an emergency fix");
   const output = { version, publishedVersion: published.version, pendingCount: result.pending.length, requiredUpdates: THRESHOLD,
-    eligible: result.eligible, emergency: result.emergency, pending: result.pending };
+    eligible: result.eligible, emergency: result.emergency, operatorOverride: result.operatorOverride, pending: result.pending };
   if (mode === "check" && process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `eligible=${result.eligible}\nversion=${version}\n`);
   }
   if (mode !== "status" && process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Companion release gate\n\nPending updates: **${result.pending.length}/${THRESHOLD}**. Eligible: **${result.eligible}**. Emergency: **${result.emergency}**.\n`);
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Companion release gate\n\nPending updates: **${result.pending.length}/${THRESHOLD}**. Eligible: **${result.eligible}**. Emergency: **${result.emergency}**. Operator override: **${result.operatorOverride}**.\n`);
   }
   console.log(JSON.stringify(output, null, 2));
 }

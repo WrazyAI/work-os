@@ -69,6 +69,28 @@ of them together. Commits that land after that snapshot remain pending for the
 next batch. The latest published release's queue snapshot is the consumption
 boundary; no reset commit can race another agent's new update.
 
+## Operator override
+
+The operator may explicitly authorize one release ahead of the five-outcome
+threshold. Record it in `release-queue.json`:
+
+```json
+"operatorOverride": {
+  "version": "0.5.27",
+  "updateId": "pending-outcome-id",
+  "approvedBy": "operator",
+  "reason": "Why this release cannot wait for the normal batch.",
+  "approvedAt": "YYYY-MM-DD"
+}
+```
+
+The override is version- and outcome-scoped, needs a pending update, and is
+never implicit. It authorizes one version only; clear it when preparing the
+next version. The rest of the gate still applies: canonical next patch,
+synchronized metadata, dated changelog notes, append-only queue, source on
+`main`, and the normal build/publication checks. Do not use the emergency
+record for a routine release.
+
 ## Emergency exception
 
 Release below five **only** to restore a broken app or unblock an essential

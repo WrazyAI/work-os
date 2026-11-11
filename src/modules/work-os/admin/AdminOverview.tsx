@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys, type AdminOverview } from "./api";
+import type { WorkOsReadinessReport } from "@/lib/work-os-readiness";
+import { readinessAttention, readinessQueryOptions } from "../admin-readiness";
 import { StackedTimeBars } from "./charts";
 import {
   Avatar,
@@ -104,6 +106,7 @@ function activityDigest(rows: ActivityRow[]) {
 }
 
 export default function AdminOverviewPage() {
+  const readinessQuery = useQuery(readinessQueryOptions(() => adminFetch<WorkOsReadinessReport>("/api/work-os/readiness")));
   const today = new Date().toISOString().slice(0, 10);
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(today),
@@ -132,7 +135,8 @@ export default function AdminOverviewPage() {
     return rank(left) - rank(right) || left.displayName.localeCompare(right.displayName);
   });
   const onShift = people.filter((person) => person.attendance.state === "active" || person.attendance.state === "paused");
-  const readiness = data.readiness;
+  const readiness = readinessQuery.data;
+  const attention = [...data.attention.filter((item) => item.code !== "readiness_blocked"), ...readinessAttention(readiness)];
   const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
   const recapsToday = data.counts.recapsToday ?? 0;
   const recapsReviewedToday = data.counts.recapsReviewedToday ?? 0;
@@ -201,9 +205,9 @@ export default function AdminOverviewPage() {
       </Group>
 
       <Group label="Decisions" detail="What needs an answer from you today.">
-        {data.attention.length ? (
+        {attention.length ? (
           <ul className="grid">
-            {data.attention.map((item) => (
+            {attention.map((item) => (
               <li key={item.code} className="border-b last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                 <Link
                   href={item.href ?? "#"}
@@ -314,6 +318,7 @@ export default function AdminOverviewPage() {
               title="Configuration"
               action={<Link href="/work-os/admin/settings" className="text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open Settings</Link>}
             />
+            {readinessQuery.isError ? <Notice tone="warn" action={<button type="button" onClick={() => void readinessQuery.refetch()}>Retry setup checks</button>}>Setup checks could not be refreshed.</Notice> : null}
             {readiness ? (
               <div className="grid gap-3">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -355,7 +360,7 @@ export default function AdminOverviewPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-[12px] text-[var(--text-tertiary)]">Readiness is unavailable right now.</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{readinessQuery.isPending ? "Checking workspace setup…" : "Readiness is unavailable right now."}</p>
             )}
           </div>
 

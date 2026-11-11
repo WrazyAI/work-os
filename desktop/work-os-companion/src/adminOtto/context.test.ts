@@ -10,6 +10,8 @@ const scope: OttoScope = { userId: "user-1", organizationId: "org-1", mode: "adm
 const view = (personId: string | null = null): AdminOttoContextView => ({
   scope,
   personId,
+  displayName: "Admin",
+  avatarUrl: null,
   voiceAvailable: true,
   transcriptionAvailable: false,
 });

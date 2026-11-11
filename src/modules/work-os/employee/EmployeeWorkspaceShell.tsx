@@ -41,7 +41,7 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
       <div data-work-os-workspace="" className="min-h-[calc(100vh-6rem)] bg-[var(--bg-primary)]">
         <div className="mx-auto w-full max-w-[1240px] px-6 py-8 md:px-10 md:py-10">
           {access.role === "admin" || access.canSwitchWorkspaces ? (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+            <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
               <span className="flex min-w-0 items-center gap-1.5">
                 <Building2 size={12} aria-hidden />
                 <span className="truncate">{access.organizationName}</span>
@@ -69,9 +69,9 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
                   </WorkOsViewModeForm>
                 ) : null}
               </span>
-            </div>
+            </header>
           ) : null}
-          {children}
+          <main>{children}</main>
         </div>
       </div>
     </EmployeeWorkspaceProvider>

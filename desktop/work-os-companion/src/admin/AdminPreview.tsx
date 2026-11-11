@@ -4,7 +4,7 @@ import { setDebugSession } from "../api";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
-import { adminPreviewNotifications, seedAdminFixtures } from "./adminFixtures";
+import { adminPreviewNotifications, adminPreviewOverview, seedAdminFixtures } from "./adminFixtures";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
 import type { AdminOttoPendingAction } from "../../../../src/modules/work-os/admin-otto/contracts";
 import { ADMIN_FIXTURE_TRANSPORT, ADMIN_OTTO_FOLLOW_SCENARIOS, FIXTURE_ACTIONS, adminFixtureSpeak, createAdminOttoFollowFixture, fixtureInboxPage, FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "../adminOtto/fixtures";
@@ -68,6 +68,7 @@ export default function AdminPreview() {
   const [ottoTab, setOttoTab] = useState<"chat" | "recaps">(ottoState && ottoState !== "chat" ? "recaps" : "chat");
   const [ottoTabRequest, setOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [ottoConversation, setOttoConversation] = useState<string | null>(null);
+  const [ottoDraft, setOttoDraft] = useState("");
   const [ottoResetToken, setOttoResetToken] = useState(0);
   const [fixtureActions, setFixtureActions] = useState<AdminOttoPendingAction[]>(() => FIXTURE_ACTIONS.map((action) => ({ ...action })));
   const fixtureWorkflow = {
@@ -155,8 +156,9 @@ export default function AdminPreview() {
       void broker.stop();
     };
   }, []);
-  // The bell's rows resolve in the employee workspace, which this preview does
-  // not mount; the actions only close the panel and stay honest no-ops there.
+  // The Admin tab resolves inside this preview; the Employee rows belong to
+  // the employee workspace, which this page does not mount, so those actions
+  // only close the panel and stay honest no-ops here.
   const notifications: AdminNotifications = {
     ...adminPreviewNotifications(state),
     loading: false,
@@ -169,6 +171,18 @@ export default function AdminPreview() {
     onOpenRecap: () => setNotificationsOpen(false),
     onOpenOverdue: () => setNotificationsOpen(false),
     onRetry: () => undefined,
+    defaultTab: "admin",
+    admin: {
+      overview: adminPreviewOverview(state),
+      loading: false,
+      error: null,
+      onRetry: () => undefined,
+      onNavigate: (next, nextFocus) => {
+        setSection(next);
+        setFocus(nextFocus ?? {});
+        setNotificationsOpen(false);
+      },
+    },
   };
   useMemo(() => {
     seedAdminFixtures(queryClient, state);
@@ -192,7 +206,8 @@ export default function AdminPreview() {
         focus={focus}
         onNavigate={(next, nextFocus) => { setSection(next); setFocus(nextFocus ?? {}); }}
         onSwitchToEmployee={() => undefined}
-        onNewChat={() => { setOttoConversation(null); setOttoResetToken((value) => value + 1); setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
+        onNewChat={() => { setOttoConversation(null); setOttoDraft(""); setOttoResetToken((value) => value + 1); setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
+        onOpenOtto={() => { setOttoTab("chat"); setOttoTabRequest((current) => ({ tab: "chat", token: current.token + 1 })); setOttoOpen(true); }}
         onOpenRecaps={() => { setOttoTab("recaps"); setOttoTabRequest((current) => ({ tab: "recaps", token: current.token + 1 })); setOttoOpen(true); }}
         onSignOut={() => undefined}
         personalSettings={(
@@ -210,7 +225,9 @@ export default function AdminPreview() {
           initialTab={ottoTab}
           tabRequest={ottoTabRequest}
           initialRecap={ottoState === "single" ? FIXTURE_REVIEWED_RECAP : null}
+          initialDraft={ottoDraft}
           resetToken={ottoResetToken}
+          onRecoveryChange={(recovery) => setOttoDraft(recovery.draft)}
           initialInbox={ottoState === "loading" || ottoState === "error" ? null : fixtureInboxPage({
             count: ottoState === "empty" || state === "empty" ? 0 : 2,
             total: ottoState === "empty" || state === "empty" ? 0 : ottoState === "multiple" ? 25 : 2,

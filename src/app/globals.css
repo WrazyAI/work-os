@@ -130,7 +130,9 @@
   /* Canonical blueprint tokens (design.md §3.1) */
   --color-ink: #182018;
   --color-ink-soft: #3c4b3c;
-  --color-muted: #687267;
+  /* 5.0:1 on the canvas and 5.5:1 on paper. The blueprint value #687267
+     measured 4.39:1 on the canvas where the workspace band sits. */
+  --color-muted: #62685f;
   --color-faint: #939c90;
   --color-canvas: #eef1eb;
   --color-stage: #f5f6f1;
@@ -141,7 +143,9 @@
   --color-line-strong: #c5cec1;
   --color-signal: #a8f15b;
   --color-signal-deep: #4c801d;
-  --color-danger: #c94e43;
+  /* Text-safe danger: #c94e43 is 4.3:1 on paper but is used as small
+     status copy; this step reads 5.3:1 on paper and 4.9:1 on the canvas. */
+  --color-danger: #b84035;
   --color-danger-soft: #f9e5e1;
   --color-warning: #9a670c;
   --color-warning-soft: #fff5dc;
@@ -176,7 +180,7 @@
   --border-subtle: #e6e9e1;
   --border-hot: var(--color-line-strong);
 
-  --accent: #4c801d;          /* accessible signal green for text + icons */
+  --accent: #467719;          /* accessible signal green for text + icons */
   --accent-hover: #3f6b18;
   --accent-subtle: rgba(168, 241, 91, 0.20);
   --accent-line: rgba(94, 157, 39, 0.35);
@@ -185,10 +189,10 @@
   --signal: #a8f15b;          /* filled primary actions */
   --signal-ink: #1d3417;      /* ink on signal */
 
-  --status-ok: #3f7d1c;
-  --status-warn: #9a670c;
-  --status-error: #c94e43;
-  --status-err: #c94e43;
+  --status-ok: #3a7318;
+  --status-warn: #8a5c08;
+  --status-error: var(--color-danger);
+  --status-err: var(--color-danger);
   --status-info: #2e617d;
   --status-observed: var(--color-observed);
   --status-observed-soft: var(--color-observed-soft);

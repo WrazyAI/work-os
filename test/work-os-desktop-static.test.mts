@@ -14,6 +14,16 @@ assert.doesNotMatch(rust, /WebviewUrl::App\("index\.html\?debug=1"/);
 assert.doesNotMatch(rust, /get_webview_window\("debug"\)/);
 assert.match(rust, /set_focus\(\)/);
 const debugHost = read("src-tauri/src/debug_window.rs");
+// WebView2 can deadlock when a window is created in a synchronous command.
+assert.match(debugHost, /#\[tauri::command\]\s*pub async fn open_debug_window\s*\(/);
+// An async command runs off the main thread, and the monitor work-area read
+// behind the post-build fit calls NSScreen, which is main-thread only on
+// macOS, so the fit has to be handed back to the main thread.
+assert.match(rust, /window_fit::fit_to_work_area/);
+assert.match(debugHost, /run_on_main_thread/);
+// Two concurrent invokes would otherwise both pass the "already open" lookup
+// and race to build the same window label.
+assert.match(debugHost, /static OPEN_LOCK: Mutex<\(\)>/);
 assert.match(debugHost, /WebviewUrl::App\("debug\.html"\.into\(\)\)/);
 assert.doesNotMatch(debugHost, /\?debug=1/);
 
@@ -57,13 +67,16 @@ assert.match(onboarding, /I accept Work OS tracking and the sampled screenshot-a
 assert.doesNotMatch(onboarding, /Allow neutral screenshot summaries/);
 const styles = read("src/styles.css");
 assert.match(styles, /prefers-reduced-motion/);
-// Page-level rubber-banding stays off and inner scrollers keep their
-// containment, except the horizontal-only wrappers that would otherwise
-// swallow the vertical wheel over a zero-range table.
-assert.match(styles, /(^|\n)\*\s*\{\s*overscroll-behavior:\s*contain/);
+// Page-level rubber-banding stays off, but containment must not be universal:
+// Chromium treats decorative `overflow: hidden` cards as scroll containers,
+// so a blanket `contain` swallows the wheel over tables and tool cards before
+// it can reach the page. Horizontal-only wrappers keep X containment and let
+// the vertical wheel chain to the page.
+assert.doesNotMatch(styles, /(^|\n)\*\s*\{\s*overscroll-behavior:\s*contain/);
 assert.match(styles, /\.admin-table-wrap[\s\S]*?overscroll-behavior-y:\s*auto/);
 assert.match(styles, /\.chat-markdown-code[\s\S]*?overscroll-behavior-y:\s*auto/);
 assert.match(styles, /html\s*\{[^}]*overscroll-behavior:\s*none/);
+assert.match(styles, /body\s*\{[^}]*overscroll-behavior:\s*none/);
 const adminStyles = read("src/admin/admin.css");
 assert.match(adminStyles, /\.admin-table-wrap\s*\{[^}]*overflow-x:\s*auto/);
 const insightCharts = read("src/insight-charts.css");
@@ -228,7 +241,10 @@ const queries = read("src/workOsQueries.ts");
 assert.match(queries, /\/api\/work-os\/me\/insights\?range=/);
 assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
-assert.match(app, /secureState\.clearAccount\(\)/);
+// Sign-out waits for any in-flight cache save, clears reads/cache, then erases
+// every account store. The ordered helper owns the secureState.clearAccount call.
+assert.match(app, /clearWorkOsAccountCache\(queryClient\)/);
+assert.match(read("src/queryClient.ts"), /await secureState\.clearAccount\(\)/);
 assert.match(personalSettings, /Account session/);
 assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
@@ -238,7 +254,9 @@ assert.match(app, /debugScenario\.dayState === "shift_start" && !shiftStartScena
 assert.match(app, /Worktivity owns clock actions; the Windows Companion waits for provider confirmation\./);
 assert.ok(queries.includes('params.set("refreshProviders", "true")'), "fetchDay sets refreshProviders");
 assert.ok(queries.includes('params.set("compact", "true")'), "fetchDay sets compact for the compact variant");
-assert.ok(/const detailsViews = view === "tasks" \|\| view === "review" \|\| view === "evidence"/.test(app), "details views gate the lazy details query");
+assert.ok(/const detailsViews = view === "review" \|\| view === "evidence"/.test(app), "heavy details open only on Review or Evidence");
+assert.ok(/useDayQuery\(\{ enabled: employeePageEnabled && detailsViews/.test(app), "details query stays behind the visible employee page");
+assert.ok(/const employeePageEnabled = employeeBootstrapEnabled && dayMonitor\.owns/.test(app), "page reads follow the single background monitor owner");
 assert.match(app, /secureState\.daySnapshot\(\)/);
 // Day persistence moved into the query cache: the snapshot seeds the cache,
 // and the query persister writes the filtered cache to the vault.
@@ -373,10 +391,13 @@ assert.match(adminWorkspace, /aria-label=\{`Profile for \$\{profile\.name\}`\}/)
 assert.match(adminWorkspace, /title="Open profile settings"/);
 assert.match(adminWorkspace, /onOpenWhatsNew/);
 assert.match(adminWorkspace, /className="admin-switch admin-ask-otto"/);
-assert.match(adminWorkspace, /onClick=\{onNewChat\}/);
+assert.match(adminWorkspace, /const openOtto = onOpenOtto \?\? onNewChat;/);
+assert.match(adminWorkspace, /onClick=\{openOtto\}/);
 assert.match(adminWorkspace, /Ask Otto/);
 assert.match(app, /const openAdminOtto = \(\) => openAdminOttoSurface\(\{ newChat: true \}\);/);
+assert.match(app, /const resumeAdminOtto = \(\) => openAdminOttoSurface\(\);/);
 assert.match(app, /onNewChat=\{openAdminOtto\}/);
+assert.match(app, /onOpenOtto=\{resumeAdminOtto\}/);
 assert.equal((app.match(/onNewChat=\{openAdminOtto\}/g) ?? []).length, 1);
 const sidebarNav = read("src/SidebarNav.tsx");
 assert.match(sidebarNav, /What's new/);
@@ -483,7 +504,7 @@ const main = read("src/main.tsx");
 const debug = read("src/debug.tsx");
 const debugHtml = read("debug.html");
 assert.doesNotMatch(main, /import DebugWindow/);
-assert.match(main, /import TasksPreview/);
+assert.match(main, /lazy\(\(\) => import\("\.\/TasksPreview"\)\)/);
 assert.match(main, /loading.css/);
 assert.match(main, /LoadingPreview/);
 assert.match(main, /SkeletonsPreview/);
@@ -497,7 +518,7 @@ assert.match(insightsView, /InsightsSkeleton/);
 assert.match(app, /FadeArc/);
 assert.doesNotMatch(app, /loading-wave-large/);
 assert.match(taskSurfaces, /TaskDetailSkeleton/);
-assert.match(main, /import TodayPreview/);
+assert.match(main, /lazy\(\(\) => import\("\.\/TodayPreview"\)\)/);
 assert.match(main, /params\.has\("preview-tasks"\)/);
 assert.match(main, /params\.has\("preview-today"\)/);
 assert.match(main, /<NotificationProvider>/);
@@ -579,7 +600,9 @@ const tauriConfig = JSON.parse(tauri);
 const updaterPublicKey = Buffer.from(tauriConfig.plugins.updater.pubkey, "base64").toString("utf8");
 assert.match(tauri, /"frontendDist": "\.\.\/dist"/);
 assert.match(tauri, /"useHttpsScheme": true/);
-assert.match(tauri, /"label": "debug"[\s\S]*"url": "debug\.html"[\s\S]*"visible": false/);
+// The opt-in debugger is created on demand and never at packaged startup.
+assert.doesNotMatch(tauri, /"label": "debug"/);
+assert.match(debugHost, /WebviewWindowBuilder::new\(&app, DEBUG_LABEL/);
 assert.doesNotMatch(tauri, /localhost:1420/);
 assert.match(tauri, /com\.wrazy\.workos\.pilot/);
 assert.match(tauri, /"beforeBuildCommand": "npm run build"/);
@@ -626,6 +649,7 @@ assert.ok(openTasksAt >= 0 && recapStreamAt >= 0 && openTasksAt < recapStreamAt,
 assert.match(avatar, /avatarTab === "tasks"\) return/);
 
 const planner = read("src/PlanningSession.tsx");
+const planningSave = read("src/planningSave.ts");
 assert.match(planner, /setInput\(seedInput\?\.trim\(\) \? seedInput : plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
 
 const planItemsModule = read("src/planItems.ts");
@@ -646,7 +670,9 @@ assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/)
 assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
 assert.match(avatar, /const workdayState: MascotWorkdayState =/);
 assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);
-assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" replayKey=\{snoozeReplayId\} speaking=\{recapSpeech\.status === "playing"\} \/>/);
+assert.match(avatar, /<MascotPet[\s\S]*?agent=\{workspaceView === "admin" \? "idle" : agentActivity\}/);
+assert.match(avatar, /mode=\{workspaceView\}/);
+assert.match(avatar, /animateAttire/);
 assert.match(avatar, /Late start — add a reason/);
 
 assert.match(app, /const lateReasonMissing = lateReasonRequired\(visibleDay\?\.session\);/);
@@ -725,7 +751,8 @@ assert.match(interpretation, /const serverOutcome = typeof row\?\.outcome === "s
 assert.match(interpretation, /serverOutcome === "stale" \|\| serverOutcome === "rejected"/);
 assert.match(app, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
 assert.match(avatar, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
-assert.match(app, /if \(\/AI build\/i\.test\(message\)\)/);
+assert.match(planningSave, /if \(\/AI build\/i\.test\(message\)\) return "rebuild";/);
+assert.match(app, /classifyPlanSaveFailure\(value\)/);
 assert.match(planner, /if \(result === "rebuild"\)/);
 assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
 assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);
@@ -828,8 +855,8 @@ assert.match(app, /className="tasks-column-sort"/);
 assert.match(app, /taskSort=\{taskWorkspaceSort\}/);
 assert.match(app, /onTaskSort=\{setTaskWorkspaceSort\}/);
 assert.match(app, /const completedHistoryQuery = useTaskHistoryQuery/);
-assert.match(app, /enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "all" && !!visibleDay\?\.shiftDate/);
-assert.match(app, /enabled: employeeBootstrapEnabled && view === "tasks" && taskView === "completed" && !!visibleDay\?\.shiftDate/);
+assert.match(app, /enabled: employeePageEnabled && view === "tasks" && taskView === "all" && !!visibleDay\?\.shiftDate/);
+assert.match(app, /enabled: employeePageEnabled && view === "tasks" && taskView === "completed" && !!visibleDay\?\.shiftDate/);
 assert.match(app, /completedOnly: true/);
 assert.match(app, /completedHistory=\{completedTaskHistory\}/);
 assert.match(app, /const activeTaskHistoryQuery = view !== "tasks" \? historyQuery/);
@@ -857,10 +884,12 @@ assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
 assert.match(app, /unfinishedBefore\(openBacklog\.filter\(\(task\) => !todayIds\.has\(taskRowId\(task\)\)\), visibleDay\?\.shiftDate/);
 assert.match(app, /useTaskBacklogQuery/);
 const backlogQueries = read("src/workOsQueries.ts");
-assert.match(backlogQueries, /view=open/);
+assert.match(backlogQueries, /view: "open"/);
+assert.match(backlogQueries, /excludeToday/);
 assert.match(backlogQueries, /limit: "50"/);
 assert.match(backlogQueries, /nextCursor/);
-assert.match(backlogQueries, /view=pending&limit=100/);
+assert.doesNotMatch(backlogQueries, /view=pending&limit=100/);
+assert.doesNotMatch(backlogQueries, /page < 40/);
 assert.match(app, /backlog\?: TaskBacklog \| null/);
 assert.match(app, /loadMoreError=\{activeTaskHistoryQuery\.isFetchNextPageError\}/);
 assert.match(app, /Showing \$\{unfiltered\.length\} of \$\{viewTotal\}/);

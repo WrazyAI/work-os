@@ -34,8 +34,8 @@
   min-height: 56px;
   padding: 12px 24px;
   border: 0;
-  background: var(--signal);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--control-ink);
   font: inherit;
   font-size: 16px;
   font-weight: 600;
@@ -46,12 +46,12 @@
 .action { border-radius: 10px 0 0 10px; }
 .action svg { flex-shrink: 0; }
 .toggle { width: 56px; flex-shrink: 0; padding: 12px; border-radius: 0 10px 10px 0; box-shadow: inset 1px 0 #18201830; }
-.action:hover, .toggle:hover { background: #b7f779; }
-.action:active, .toggle:active { background: #97dc4e; }
+.action:hover, .toggle:hover { background: var(--accent-hover); }
+.action:active, .toggle:active { background: #c3dda8; }
 .action:focus-visible, .toggle:focus-visible, .dropdown a:focus-visible, .tutorial a:focus-visible {
   position: relative;
   z-index: 2;
-  outline: 2px solid #4a7d22;
+  outline: 2px solid var(--focus);
   outline-offset: 4px;
 }
 
@@ -79,7 +79,7 @@
 .notice strong { display: block; }
 .tutorial { margin: 32px 0 0; color: var(--muted); font-size: 14px; line-height: 24px; }
 .tutorial a { color: var(--ink); text-underline-offset: 4px; }
-.tutorial a:hover { color: #365d1b; }
+.tutorial a:hover { color: var(--accent-ink); }
 
 @media (max-width: 760px) {
   .main { width: calc(100% - 40px); padding: 40px 0 24px; }

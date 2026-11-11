@@ -47,6 +47,18 @@ describe("admin read cards", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>");
   });
+  it("renders a submitted EOD as a safe document instead of raw heading markers", () => {
+    const result = fixtureRecordsResult();
+    if (result.kind !== "records") throw new Error("fixture");
+    Object.assign(result.page.items[0], {
+      source: "submitted_eod",
+      text: "## Summary\nNo recorded progress update.\n\n## Completed\nNothing completed yet.",
+    });
+    const html = read(result);
+    expect(html).toContain("<h3>Summary</h3>");
+    expect(html).toContain("No recorded progress update.");
+    expect(html).not.toContain("## Summary");
+  });
   it("preserves reviewed recap correction and real playback stop behavior", () => {
     const html = read({ kind: "recap", recap: FIXTURE_REVIEWED_RECAP }, { playback: {
       intervalId: FIXTURE_REVIEWED_RECAP.intervalId, status: "playing", lines: [], progress: 0, activeIndex: 0, slow: false,

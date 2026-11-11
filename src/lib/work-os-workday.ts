@@ -196,9 +196,37 @@ async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
   }]));
 }
 
+const LIVE_PLAN_SESSION_STATES = new Set(["clocked_in", "active", "paused", "eod_due"]);
+
+/** A closed plan belongs to an ended session. When that same session is live
+ * again — Worktivity can falsely infer a clock-out and then reopen the interval
+ * — the plan must reopen too. The revision stays put because the plan content
+ * is unchanged: an editor already holding that revision can still save. */
+async function reopenClosedPlanForLiveSession(access: WorkOsAccess, plan: Record<string, any>, session: Record<string, any> | null) {
+  if (!session || plan.status !== "closed" || !LIVE_PLAN_SESSION_STATES.has(String(session.state))) return plan;
+  const shiftDate = dateOnly(plan.shift_date);
+  const { data, error } = await db().from("work_daily_plans").update({
+    status: plan.confirmed_at ? "confirmed" : "draft",
+    updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("id", plan.id)
+    .eq("status", "closed")
+    .select("*, items:work_daily_plan_items(*)").maybeSingle();
+  if (error) throw new Error(`reopen daily plan: ${error.message}`);
+  if (!data) return shiftDate ? (await loadPlanByDate(access, shiftDate)) ?? plan : plan;
+  await auditPlan(access, "plan.workday_reopened", String(plan.id), {
+    sessionId: session.id,
+    previousSessionId: plan.session_id,
+    shiftDate,
+    previousStatus: "closed",
+    revision: Number(plan.revision ?? 1),
+    source: "live_session",
+  });
+  return data;
+}
+
 export async function ensureDailyPlan(access: WorkOsAccess, session: Record<string, any>) {
   const existing = await loadPlan(access, session.id as string);
-  if (existing) return existing;
+  if (existing) return reopenClosedPlanForLiveSession(access, existing, session);
   const shiftDate = dateOnly(session.shift_date);
   if (!shiftDate) throw new Error("Work session is missing its shift date");
   const dated = await loadPlanByDate(access, shiftDate);
@@ -222,7 +250,7 @@ export async function ensureDailyPlan(access: WorkOsAccess, session: Record<stri
 
 export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: string, session: Record<string, any> | null = null) {
   const existing = await loadPlanByDate(access, shiftDate);
-  if (existing) return existing;
+  if (existing) return reopenClosedPlanForLiveSession(access, existing, session);
   const carryOver = await loadCarryOverItems(access, shiftDate);
   const ownerId = workOsOrganizationOwnerId(access);
   const currentTasks = await listPersonTasks(ownerId, access.personId as string, {
@@ -305,7 +333,7 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     firstFollowUpMinutes: cadence.firstFollowUpMinutes,
     storedCheckInIntervalMinutes: session?.check_in_interval_minutes as number | null,
   });
-  return { session, plan, prompt: promptDecision, cadence };
+  return { session, plan, prompt: promptDecision, cadence, shift, shiftDate: context.shiftDate, at: at.toISOString() };
 }
 
 /** Claims a due notification after a companion has decided to display it.
@@ -400,21 +428,25 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
           : null;
         const existingStart = worktivityIsoInstant(existing.clocked_in_at);
         const observedStart = providerStart ?? activityStart ?? existingStart ?? projection.observedAt;
-        // A second work interval on the same shift row is a fresh start: stamp
-        // it so the check-in cadence does not keep reading the earlier
-        // interval's update time as stale progress. A backfilled earlier start
-        // (provider correction) must not advance the stamp.
+        // A genuine later start gets a fresh cadence, not a fabricated employee
+        // update. A backfilled correction keeps the existing delivery anchors.
         const restarted = worktivityRestarted(existingStart, observedStart);
-        const { data, error } = await db().from("work_sessions").update({
+        let adoption = db().from("work_sessions").update({
           source: "worktivity",
           clocked_in_at: observedStart,
           clocked_out_at: null,
           attendance_status: projection.status,
           attendance_observed_at: projection.observedAt,
-          ...(restarted ? { last_substantive_update_at: projection.observedAt } : {}),
+          ...(restarted ? { first_follow_up_at: null, last_prompt_kind: null, last_prompt_at: null, next_fallback_at: null } : {}),
           updated_at: projection.observedAt,
-        }).eq("organization_id", access.organizationId).eq("id", existing.id).select("*").single();
+        }).eq("organization_id", access.organizationId).eq("id", existing.id);
+        // A competing sync may already have adopted this start and delivered a
+        // recap. Never clear its new cadence using our pre-adoption snapshot.
+        const previousStart = worktivityIsoInstant(existing.clocked_in_at);
+        adoption = previousStart ? adoption.eq("clocked_in_at", previousStart) : adoption.is("clocked_in_at", null);
+        const { data, error } = await adoption.select("*").maybeSingle();
         if (error) throw new Error(`adopt Worktivity work session: ${error.message}`);
+        if (!data) return activeSession(access);
         current = data;
         await audit(access, String(existing.id), "worktivity_adopted", String(existing.state), String(current.state),
           `worktivity:adopt:${existing.id}:${projection.observedAt}`, projection.observedAt,
@@ -449,11 +481,9 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     if (replayed.error) throw new Error(`load replayed Worktivity interval: ${replayed.error.message}`);
     if (replayed.data && worktivityIntervalReopenCandidate(replayed.data)) {
       const shift = await shiftFor(access, new Date(projection.observedAt), "startable").catch(() => null);
-      // The check-in cadence restarts from the reopen instead of replaying the
-      // prompts the false close missed: the first resumed check-in lands one
-      // interval from now, with a window that covers work since the reopen.
-      const cadence = workOsCadenceFor(access);
-      const reopenAt = new Date(projection.observedAt);
+      // This is the SAME interval: keep real deliveries and employee updates.
+      // A due slot remains due; actual late delivery rebases the next deadline
+      // without inventing a delivery here or replaying every missed slot.
       const { data: reopened, error: reopenError } = await db().from("work_sessions").update({
         state: "clocked_in",
         source: "worktivity",
@@ -462,10 +492,6 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
         paused_at: null,
         attendance_status: projection.status,
         attendance_observed_at: projection.observedAt,
-        last_prompt_kind: "follow_up",
-        last_prompt_at: projection.observedAt,
-        next_fallback_at: new Date(reopenAt.getTime() + checkInIntervalMs(cadence.checkInIntervalMinutes)).toISOString(),
-        check_in_interval_minutes: cadence.checkInIntervalMinutes,
         ...(shift ? { schedule_id: shift.scheduleId, scheduled_starts_at: shift.startsAt, scheduled_ends_at: shift.endsAt } : {}),
         updated_at: projection.observedAt,
       }).eq("organization_id", access.organizationId).eq("id", replayed.data.id)
@@ -622,7 +648,7 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   if (action === "pause") patch.paused_at = observed.toISOString();
   if (action === "resume") patch.paused_at = null;
   if (action === "clock_out") Object.assign(patch, { clocked_out_at: observed.toISOString(), clock_out_idempotency_key: idempotencyKey, paused_at: null, extended_acknowledged_at: overtime ? observed.toISOString() : null });
-  if (action === "mark_active") patch.last_substantive_update_at = observed.toISOString();
+  if (action === "mark_active" && source !== "worktivity") patch.last_substantive_update_at = observed.toISOString();
   if (body.snoozed_until) patch.snoozed_until = body.snoozed_until;
   const { data, error } = await db().from("work_sessions").update(patch).eq("id", session.id).eq("organization_id", access.organizationId).select("*").single();
   if (error) throw new Error(`update work session: ${error.message}`);

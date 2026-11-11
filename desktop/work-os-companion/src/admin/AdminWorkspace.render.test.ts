@@ -68,13 +68,19 @@ describe("administration masthead profile entry", () => {
 });
 
 describe("administration masthead Otto entry", () => {
-  it("renders a labeled Ask Otto button when the shell supplies the new-chat callback", () => {
+  it("renders a labeled Ask Otto button when the shell supplies the resume callback", () => {
     // No mapped personal workday: the administration entry must not depend on
-    // the employee switch being available.
-    const markup = render({ session: { ...session, personId: null }, notifications: null, onNewChat: noop });
+    // the employee switch being available. Ask Otto is the reopen control, so
+    // the New chat callback alone is not what gates it.
+    const markup = render({ session: { ...session, personId: null }, notifications: null, onOpenOtto: noop });
     expect(markup).toContain('class="admin-switch admin-ask-otto"');
     expect(markup).toContain("Ask Otto");
     expect(markup).toContain("No personal workday is mapped");
+  });
+
+  it("falls back to the New chat callback for hosts that predate the resume split", () => {
+    const markup = render({ session: { ...session, personId: null }, notifications: null, onNewChat: noop });
+    expect(markup).toContain('class="admin-switch admin-ask-otto"');
   });
 
   it("omits the entry when the shell supplies no callback", () => {

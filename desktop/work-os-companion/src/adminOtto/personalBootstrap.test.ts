@@ -81,7 +81,7 @@ describe("admin Otto personal refresh gate", () => {
     }
   });
 
-  it("mapped admin loads personal settings only after the context is ready", async () => {
+  it("mapped admin keeps page bootstrap off in Admin, and resumes it in Employee", async () => {
     const pending = personalBootstrapAccess({
       signedIn: true, syncBypass: false, role: "admin", workspace: "admin",
       adminContext: { status: "loading", personId: "person-1" },
@@ -92,11 +92,14 @@ describe("admin Otto personal refresh gate", () => {
       signedIn: true, syncBypass: false, role: "admin", workspace: "admin",
       adminContext: { status: "ready", personId: "person-1" },
     });
-    expect(ready).toMatchObject({ onboarding: true, day: true, reason: "admin_mapped" });
+    expect(ready).toMatchObject({ onboarding: false, day: false, reason: "admin_workspace" });
     const h = harness(ready);
-    await expect(h.run("context")).resolves.toMatchObject({ ran: true });
-    expect(h.onboarding).toHaveBeenCalledTimes(1);
-    expect(h.day).toHaveBeenCalledTimes(1);
+    await expect(h.run("context")).resolves.toMatchObject({ ran: false });
+    expect(h.onboarding).not.toHaveBeenCalled();
+    expect(h.day).not.toHaveBeenCalled();
+    const employee = harness(personalBootstrapAccess({ signedIn: true, syncBypass: false, role: "admin", workspace: "employee", adminContext: { status: "ready", personId: "person-1" } }));
+    await expect(employee.run("context")).resolves.toMatchObject({ ran: true });
+    expect(employee.day).toHaveBeenCalledTimes(1);
   });
 
   it("leaves employees and managers on their existing bootstrap", async () => {

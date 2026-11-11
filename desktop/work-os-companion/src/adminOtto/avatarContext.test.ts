@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OttoContextEvent } from "./mode";
-import { adoptAvatarContext, avatarIdentityChanged } from "./avatarContext";
+import { adoptAvatarContext, adoptAvatarView, avatarIdentityChanged } from "./avatarContext";
+import { buildOttoViewState, type OttoViewState } from "./viewSwitch";
 
 const identity = { userId: "user-1", organizationId: "org-1" };
 const event = (patch: Partial<OttoContextEvent> = {}): OttoContextEvent => ({
@@ -60,5 +61,39 @@ describe("avatar context adoption", () => {
     expect(avatarIdentityChanged(event(), identity, { ...identity, userId: "user-2" })).toBe(true);
     expect(avatarIdentityChanged(event(), identity, identity)).toBe(false);
     expect(avatarIdentityChanged(null, identity, identity)).toBe(false);
+  });
+});
+
+const view = (patch: Partial<OttoViewState> = {}): OttoViewState => buildOttoViewState({
+  scope: { userId: "user-1", organizationId: "org-1", mode: "admin" },
+  epoch: 2,
+  revision: 1,
+  workspace: "admin",
+  role: "admin",
+  adminStatus: "ready",
+  personId: "person-1",
+  voiceAvailable: true,
+  transcriptionAvailable: false,
+  adminConversationId: "conversation-1",
+  adminConversationGeneration: 1,
+  adminConversationRevision: 1,
+  adminConversationBusy: false,
+  ...patch,
+});
+
+describe("avatar full view adoption", () => {
+  it("accepts only a newer revision or epoch and rejects a same-epoch mode conflict", () => {
+    const current = view();
+    expect(adoptAvatarView(current, view({ revision: 1 }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ revision: 2 }), identity)).toMatchObject({
+      adopt: true, stopActiveWork: false, revisionChanged: true,
+    });
+    expect(adoptAvatarView(current, view({ epoch: 3 }), identity)).toMatchObject({
+      adopt: true, stopActiveWork: true, epochChanged: true,
+    });
+    expect(adoptAvatarView(current, view({ epoch: 2, scope: { ...current.scope, mode: "employee" }, workspace: "employee" }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ scope: { userId: "other", organizationId: "org-1", mode: "admin" } }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ revision: 3, adminConversationGeneration: 0 }), identity)).toBeNull();
+    expect(adoptAvatarView(current, view({ revision: 3, adminConversationGeneration: 1, adminConversationRevision: 0 }), identity)).toBeNull();
   });
 });

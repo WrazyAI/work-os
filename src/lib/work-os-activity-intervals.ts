@@ -34,7 +34,7 @@ import {
   type GhlActivity,
 } from "@/lib/work-os-ghl-activity";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
-import { checkInCadenceOverride, checkInIntervalOption } from "@/modules/work-os/workday";
+import { checkInCadenceOverride, checkInIntervalMs, checkInIntervalOption } from "@/modules/work-os/workday";
 
 // Existing callers import these projections from the engine; they now live in
 // the neutral module so the reviewed-recap ledger can reuse them without a
@@ -101,6 +101,8 @@ export function activityIntervalSlotKey(sessionId: string | null | undefined, pr
 
 export type IntervalWindowInput = {
   promptDueAt: string;
+  observedAt?: string;
+  cadenceMinutes?: number;
   clockedInAt?: string | null;
   lastSubstantiveUpdateAt?: string | null;
   planConfirmedAt?: string | null;
@@ -109,13 +111,20 @@ export type IntervalWindowInput = {
   maxMinutes?: number;
 };
 
-/** Resolves the authoritative interval: ends at the due prompt, starts after
+/** Resolves the authoritative interval: ends at the due prompt (or now for a
+ * slot more than one cadence overdue), starts after
  * the previous recap, the employee's last substantive update, the plan-confirm
  * baseline, or the configured maximum — whichever is latest — and never before
  * the local workday started. */
 export function resolveActivityIntervalWindow(input: IntervalWindowInput): { startIso: string; endIso: string } | null {
-  const endMs = Date.parse(input.promptDueAt);
-  if (!Number.isFinite(endMs)) return null;
+  const dueMs = Date.parse(input.promptDueAt);
+  const observedMs = input.observedAt ? Date.parse(input.observedAt) : dueMs;
+  if (!Number.isFinite(dueMs) || !Number.isFinite(observedMs)) return null;
+  // One catch-up recap covers recent evidence, not a replay of every missed
+  // slot. Its slot identity stays the original deadline; the row freezes this
+  // bounded window so retries cannot drift or create duplicate recaps.
+  const catchUp = observedMs - dueMs > checkInIntervalMs(input.cadenceMinutes);
+  const endMs = catchUp ? observedMs : dueMs;
   const maxMs = Math.max(1, Number(input.maxMinutes ?? 120)) * 60_000;
   const candidates = [endMs - maxMs, Date.parse(input.dayStartIso)];
   for (const value of [input.previousWindowEnd, input.lastSubstantiveUpdateAt, input.planConfirmedAt, input.clockedInAt]) {
@@ -125,8 +134,13 @@ export function resolveActivityIntervalWindow(input: IntervalWindowInput): { sta
     // keeping it in the max makes the <60s guard return null.
     if (Number.isFinite(parsed)) candidates.push(parsed);
   }
-  const startMs = Math.max(...candidates);
+  let startMs = Math.max(...candidates);
   if (!Number.isFinite(startMs)) return null;
+  if (catchUp) {
+    // The deferral cap is independent of the ordinary configurable maximum: a
+    // catch-up never sweeps more than two hours, even on a 240-minute setting.
+    startMs = Math.max(startMs, endMs - 120 * 60_000);
+  }
   if (endMs - startMs < 60_000) {
     // A prompt is not due within a minute of a substantive update in normal
     // cadence; if it somehow is, there is no interval worth reviewing.
@@ -618,6 +632,58 @@ async function loadIntervalBySlot(organizationId: string, personId: string, slot
   return data as ActivityIntervalRecord | null;
 }
 
+/** An empty, never-reviewed historical attempt may retry against the recent
+ * catch-up window. CAS freezes the winner's window; ready or reviewed evidence
+ * is never rewritten, including when a competing ensure just finished it. */
+export async function canRecoverEmptyActivityInterval(access: WorkOsAccess, row: ActivityIntervalRecord) {
+  const end = isoInstant(row.window_end) as string;
+  const [claimed, current, adjacent] = await Promise.all([
+    db().from("work_activity_intervals").select("id", { count: "exact", head: true })
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("work_session_id", String(row.work_session_id)).neq("id", String(row.id))
+      .in("generation_status", ["preparing", "ready"]).gte("window_end", end),
+    db().from("work_activity_intervals").select("generation_status,review_status,failure_reason,ai_detail,generated_at")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", row.id).maybeSingle(),
+    // A later slot that now overlaps the proposed catch-up window owns that
+    // evidence; do not manufacture two recaps over the same work.
+    db().from("work_activity_intervals").select("id", { count: "exact", head: true })
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("work_session_id", String(row.work_session_id)).neq("id", String(row.id))
+      .in("review_status", ["confirmed", "amended"]).gt("window_end", end),
+  ]);
+  if (claimed.error || current.error || adjacent.error) throw new Error(`check activity interval recovery: ${claimed.error?.message ?? current.error?.message ?? adjacent.error?.message}`);
+  const active = current.data;
+  return Boolean(active && active.generation_status === "unavailable" && active.review_status === "inferred"
+    && active.failure_reason === "no_usable_frames" && !active.ai_detail && !active.generated_at
+    && (claimed.count ?? 0) === 0 && (adjacent.count ?? 0) === 0);
+}
+
+export async function recoverEmptyActivityInterval(access: WorkOsAccess, row: ActivityIntervalRecord, window: { startIso: string; endIso: string }) {
+  const result = await db().from("work_activity_intervals").update({
+    window_start: window.startIso, window_end: window.endIso,
+    generation_status: "preparing", failure_reason: null, updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", row.id)
+    .eq("generation_status", "unavailable").eq("review_status", "inferred").eq("failure_reason", "no_usable_frames")
+    .is("ai_detail", null).is("generated_at", null)
+    .eq("window_end", isoInstant(row.window_end) as string).select("*").maybeSingle();
+  if (result.error) throw new Error(`recover empty activity interval: ${result.error.message}`);
+  if (result.data) return result.data as ActivityIntervalRecord;
+  const current = await db().from("work_activity_intervals").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", row.id).maybeSingle();
+  if (current.error || !current.data) throw new Error(`reload activity interval recovery: ${current.error?.message ?? "row not found"}`);
+  return current.data as ActivityIntervalRecord;
+}
+
+/** A worker may finish after its row was rebased. Only persist results that
+ * still belong to the frozen window this attempt processed. */
+async function intervalAttemptCurrent(id: string, windowStart: string, windowEnd: string) {
+  const current = await db().from("work_activity_intervals").select("window_start,window_end,review_status")
+    .eq("id", id).maybeSingle();
+  return Boolean(current.data && isoInstant(current.data.window_start) === isoInstant(windowStart)
+    && isoInstant(current.data.window_end) === isoInstant(windowEnd)
+    && !["confirmed", "amended"].includes(String(current.data.review_status)));
+}
+
 async function auditInterval(access: WorkOsAccess, action: string, intervalId: string, metadata: Json) {
   await db().from("work_audit_log").insert({
     organization_id: access.organizationId,
@@ -635,8 +701,14 @@ async function markIntervalUnavailable(row: ActivityIntervalRecord, reason: stri
     failure_reason: reason,
     coverage,
     updated_at: new Date().toISOString(),
-  }).eq("id", row.id).select("*").single();
+  }).eq("id", row.id)
+    .eq("window_start", isoInstant(row.window_start) as string).eq("window_end", isoInstant(row.window_end) as string)
+    .in("generation_status", ["preparing", "failed"]).select("*").maybeSingle();
   if (error) throw new Error(`mark activity interval unavailable: ${error.message}`);
+  if (!data) {
+    const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
+    return (current.data ?? row) as ActivityIntervalRecord;
+  }
   return data as ActivityIntervalRecord;
 }
 
@@ -720,6 +792,8 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     if (previous.error) throw new Error(`load previous activity interval: ${previous.error.message}`);
     const window = resolveActivityIntervalWindow({
       promptDueAt,
+      observedAt: at.toISOString(),
+      cadenceMinutes: workday.cadence.checkInIntervalMinutes,
       clockedInAt: isoInstant(session.clocked_in_at),
       lastSubstantiveUpdateAt: isoInstant(session.last_substantive_update_at),
       planConfirmedAt: isoInstant(workday.plan?.confirmed_at),
@@ -730,6 +804,13 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     if (!window) return { status: "no_prompt" as const, reason: "no_reviewable_interval" };
 
     let row = existing;
+    if (row && row.generation_status === "unavailable" && row.failure_reason === "no_usable_frames" && !row.ai_detail && !row.generated_at
+      && Date.parse(window.endIso) > Date.parse(isoInstant(row.window_end) ?? "")
+      && await canRecoverEmptyActivityInterval(access, row)) {
+      row = await recoverEmptyActivityInterval(access, row, window);
+    }
+    const attemptStart = row ? isoInstant(row.window_start) as string : window.startIso;
+    const attemptEnd = row ? isoInstant(row.window_end) as string : window.endIso;
     if (!row) {
       const dayCount = await db().from("work_activity_intervals").select("id", { count: "exact", head: true })
         .eq("organization_id", access.organizationId).eq("person_id", personId).eq("local_date", shiftDate);
@@ -933,6 +1014,10 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "activity interval synthesis failed";
+      if (!(await intervalAttemptCurrent(String(row.id), attemptStart, attemptEnd))) {
+        const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
+        return { status: "failed" as const, reason, interval: (current.data ?? row) as ActivityIntervalRecord };
+      }
       const { data } = await db().from("work_activity_intervals").update({
         generation_status: "failed",
         failure_reason: reason.slice(0, 500),
@@ -941,7 +1026,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         prompt_version: config.promptVersion,
         coverage: { ...preparation.counts, rawImagesLoaded: images.length, memoryUsed: Boolean(contextBlock), memoryChars: contextBlock.length, ...githubCoverage, ...ghlCoverage },
         updated_at: new Date().toISOString(),
-      }).eq("id", row.id).select("*").single();
+      }).eq("id", row.id).eq("window_start", attemptStart).eq("window_end", attemptEnd).select("*").maybeSingle();
       await auditInterval(access, "activity_interval.failed", String(row.id), { reason: reason.slice(0, 200), slotKey });
       return { status: "failed" as const, reason, interval: (data as ActivityIntervalRecord | null) ?? row };
     }
@@ -969,8 +1054,20 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       generated_at: new Date().toISOString(),
       failure_reason: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", row.id).eq("review_status", "inferred").select("*").single();
+    }).eq("id", row.id).eq("review_status", "inferred")
+      .eq("window_start", attemptStart).eq("window_end", attemptEnd)
+      .select("*").maybeSingle();
     if (saveError) throw new Error(`save activity interval: ${saveError.message}`);
+    if (!saved) {
+      const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
+      return { status: "ready" as const, interval: (current.data ?? row) as ActivityIntervalRecord };
+    }
+    // Evidence is deleted and re-inserted, so prove this attempt still owns the
+    // frozen window before touching what a newer attempt may already serve.
+    if (!(await intervalAttemptCurrent(String(row.id), attemptStart, attemptEnd))) {
+      const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
+      return { status: "ready" as const, interval: (current.data ?? row) as ActivityIntervalRecord };
+    }
     for (const item of ghlActivity?.items ?? []) {
       if (!item.contentId) continue;
       for (const field of ["headline", "ai_detail", "structured_summary"]) {

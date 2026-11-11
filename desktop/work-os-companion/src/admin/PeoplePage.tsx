@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { formatWorkOsFullDate, formatWorkOsTime } from "../dateFormat";
-import { buildPersonWorkdays, recapReviewLabel, recapsForDay, reportForDay } from "./adminPersonRecord";
+import { buildPersonWorkdays, recapDaysFromIntervals, recapReviewLabel, recapsForDay, reportForDay } from "./adminPersonRecord";
 import {
   adminKeys,
   ADMIN_DETAIL_STALE_MS,
@@ -117,7 +117,10 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
   const personRecord = detail.data;
   const todayReport = personRecord ? reportForDay(personRecord.reports, today) : null;
   const todayRecaps = personRecord ? recapsForDay(personRecord.intervals, today) : [];
-  const workdays = personRecord ? buildPersonWorkdays(personRecord.sessions, personRecord.recapDays ?? [], 8) : [];
+  // Older servers omit the exact per-day recap counts; the ready intervals
+  // they do send are the same record, so the workday table still counts them.
+  const recapDays = personRecord ? (personRecord.recapDays.length ? personRecord.recapDays : recapDaysFromIntervals(personRecord.intervals)) : [];
+  const workdays = personRecord ? buildPersonWorkdays(personRecord.sessions, recapDays, 8) : [];
   const todayWorkday = workdays.find((workday) => workday.date === today) ?? null;
   const observedSeconds = todayWorkday?.observedSeconds ?? selectedStatus?.session?.observedSeconds ?? 0;
   const personTimezone = String(personRecord?.schedules?.[0]?.timezone ?? "UTC");
@@ -173,32 +176,32 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                   const personId = String(person.id);
                   const status = statusById.get(personId);
                   return (
-                    <tr key={personId} onClick={() => setSelectedId(personId)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(personId); }}>
-                      <td>
+                    <tr key={personId} onClick={() => setSelectedId(personId)}>
+                      <td data-label="Person">
                         <span className="admin-person">
                           <Avatar name={String(person.display_name ?? "Unknown")} size={30} />
                           <span className="min-w-0">
-                            <b>{String(person.display_name ?? "Unknown")}</b>
+                            <b><button type="button" className="admin-record-open" aria-label={`Open ${String(person.display_name ?? "person")} record`} onClick={(event) => { event.stopPropagation(); setSelectedId(personId); }}>{String(person.display_name ?? "Unknown")}</button></b>
                             <small>{person.email ? String(person.email) : "No email"}</small>
                           </span>
                         </span>
                       </td>
-                      <td>{status?.roleProfile ?? (person.role_profile_id ? "Mapped" : "Unmapped")}</td>
-                      <td className="admin-quiet">{status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}</td>
-                      <td>
+                      <td data-label="Role profile">{status?.roleProfile ?? (person.role_profile_id ? "Mapped" : "Unmapped")}</td>
+                      <td data-label="Schedule" className="admin-quiet">{status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}</td>
+                      <td data-label="Status now">
                         <Pill tone={attendanceTone(status?.attendance.state ?? "unknown")}>
                           {attendanceLabel(status?.attendance.state ?? "unknown")}{status?.attendance.freshness === "stale" ? " · stale" : ""}
                         </Pill>
                       </td>
-                      <td className="admin-numeric">
+                      <td data-label="Today" className="admin-numeric">
                         {status ? `${status.recapsToday} recap${status.recapsToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
                       </td>
-                      <td>
+                      <td data-label="EOD">
                         {status?.eodToday
                           ? <Pill tone={reportTone(status.eodToday)}>{statusLabel(status.eodToday)}</Pill>
                           : <span className="admin-quiet">—</span>}
                       </td>
-                      <td className="admin-quiet">{status?.lastRecapAt ? relativeTime(status.lastRecapAt) : "—"}</td>
+                      <td data-label="Last recap" className="admin-quiet">{status?.lastRecapAt ? relativeTime(status.lastRecapAt) : "—"}</td>
                     </tr>
                   );
                 })}
@@ -331,10 +334,10 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                     <tbody>
                       {workdays.map((workday) => (
                         <tr key={workday.date} className="static">
-                          <td>{formatWorkOsFullDate(workday.date)}</td>
-                          <td>{statusLabel(workday.state)}</td>
-                          <td className="admin-numeric">{workday.observedSeconds ? formatDuration(workday.observedSeconds) : "—"}</td>
-                          <td className="admin-numeric" title={workday.recapCount ? `${workday.recapCount} recap${workday.recapCount === 1 ? "" : "s"} · ${workday.recapReviewed} reviewed` : "No recaps"}>
+                          <td data-label="Day">{formatWorkOsFullDate(workday.date)}</td>
+                          <td data-label="State">{statusLabel(workday.state)}</td>
+                          <td data-label="Observed" className="admin-numeric">{workday.observedSeconds ? formatDuration(workday.observedSeconds) : "—"}</td>
+                          <td data-label="Updates" className="admin-numeric" title={workday.recapCount ? `${workday.recapCount} recap${workday.recapCount === 1 ? "" : "s"} · ${workday.recapReviewed} reviewed` : "No recaps"}>
                             {workday.recapCount ? String(workday.recapCount) : "—"}
                           </td>
                         </tr>
@@ -379,29 +382,37 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
             <section className="admin-block">
               <h3><FileCheck2 size={14} aria-hidden /> Reports</h3>
               {detail.data.reports.length ? (
-                <ul className="admin-rows spaced admin-report-list">
-                  {detail.data.reports.slice(0, 6).map((report, index) => {
-                    const reportId = String(report.id ?? "");
-                    const reportDate = formatWorkOsFullDate(String(report.report_date ?? ""), "Report");
-                    const status = String(report.status ?? "draft");
-                    return (
-                      <li key={reportId || index}>
-                        <button
-                          type="button"
-                          className="admin-report-row"
-                          aria-label={`Open EOD report for ${reportDate}: ${statusLabel(status)}`}
-                          onClick={() => reportId && openReport(reportId)}
-                        >
-                          <span>{reportDate}</span>
-                          <span className="admin-report-meta">
-                            <small>{report.submitted_at ? `submitted ${relativeTime(String(report.submitted_at))}` : "not submitted"}</small>
+                <>
+                  <p className="admin-quiet admin-report-summary">
+                    {detail.data.reports.length} recent report{detail.data.reports.length === 1 ? "" : "s"} ·{" "}
+                    {detail.data.reports.filter((report) => String(report.status ?? "draft") === "pending_review").length} awaiting review
+                  </p>
+                  <ul className="admin-rows spaced admin-report-list">
+                    {detail.data.reports.slice(0, 6).map((report, index) => {
+                      const reportId = String(report.id ?? "");
+                      const reportDate = formatWorkOsFullDate(String(report.report_date ?? ""), "Report");
+                      const status = String(report.status ?? "draft");
+                      const reportTitle = String(report.title ?? "").trim() || "End-of-day report";
+                      return (
+                        <li key={reportId || index}>
+                          <button
+                            type="button"
+                            className="admin-report-row"
+                            aria-label={`Open EOD report for ${reportDate}: ${statusLabel(status)}`}
+                            onClick={() => reportId && openReport(reportId)}
+                          >
+                            <span className="admin-report-date">
+                              <b>{reportDate}</b>
+                              <small>{report.submitted_at ? `submitted ${relativeTime(String(report.submitted_at))}` : "not submitted"}</small>
+                            </span>
+                            <span className="admin-report-title">{reportTitle}</span>
                             <Pill tone={reportTone(status)}>{statusLabel(status)}</Pill>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               ) : (
                 <p className="admin-empty-note">No EOD reports for this person yet.</p>
               )}
@@ -422,7 +433,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                 <KeyValue label="Output" value={String(detail.data.evidenceSummary.output)} />
                 <KeyValue label="Disputed" value={String(detail.data.evidenceSummary.disputed)} />
               </div>
-              <p className="admin-quiet">Observed activity is neutral context; raw frames stay behind the flagged/disputed review rule.</p>
+              <p className="admin-quiet">Observed activity is neutral context. Your own retained frames preview in Evidence; teammates&apos; raw frames stay behind the flagged/disputed review rule.</p>
             </section>
           </div>
         )}

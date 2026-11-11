@@ -9,7 +9,7 @@ import type {
   ReviewedRecap,
 } from "../../../../src/modules/work-os/admin-otto/contracts";
 import type { AdminOttoFollowTransport } from "./AdminOttoSettings";
-import { AdminOttoApiError } from "./api";
+import { AdminOttoApiError, type AdminOttoThreadView } from "./api";
 
 /** Token-free administration fixtures. Every value here is synthetic: no live
  * account, provider, database, or native service is contacted. They exist so
@@ -172,42 +172,108 @@ export const FIXTURE_ACTIONS = [{
   display: { title: "Example Task 2", assignees: [FIXTURE_REVIEWED_RECAP.person], changes: [] },
 }];
 
+const FIXTURE_CONVERSATION_ID = "admin-fixture-conversation";
+type FixtureThread = {
+  turns: AdminOttoThreadView["turns"];
+  result: AdminRead | null;
+  resultStatus: AdminOttoThreadView["resultStatus"];
+};
+/** DEV-only, in-memory mirror of the server thread. It is intentionally not
+ * persisted: fixture state must not leak across packaged sessions, but a
+ * collapse/expand remount in one QA session must rehydrate the same turns. */
+const fixtureThreads = new Map<string, FixtureThread>();
+let fixtureSequence = 0;
+const fixtureNow = () => new Date().toISOString();
+
+export function fixtureEodResult(): AdminRead {
+  return {
+    kind: "records",
+    page: {
+      items: [{
+        id: "record-fixture-eod",
+        personId: FIXTURE_REVIEWED_RECAP.person.id,
+        source: "submitted_eod",
+        occurredAt: "2026-10-30T18:00:00.000Z",
+        localDate: "2026-10-30",
+        text: "## Summary\nNo recorded progress update.\n\n## Completed\nNothing completed yet.\n\n## Carried forward\nNothing pending.",
+        recordUrl: "/work-os/admin/review?report=record-fixture-eod",
+      }],
+      nextCursor: null,
+      total: 1,
+      asOf: "2026-10-30T18:00:00.000Z",
+      coverage: ["Submitted EOD reports only."],
+    },
+    windows: [{ personId: FIXTURE_REVIEWED_RECAP.person.id, timezone: "UTC", from: "2026-10-30", through: "2026-10-30" }],
+  };
+}
+
 export const ADMIN_FIXTURE_TRANSPORT = {
-  send: async (input: { conversationId: string | null; requestId?: string; text: string }) => input.text.trim().toLowerCase() === "new chat fixture" ? {
-    conversationId: input.conversationId ?? "admin-fixture-conversation",
-    turnId: "admin-fixture-workflow-turn",
-    reply: "Both changes are ready for review.",
-    result: null,
-    workflow: { id: "admin-fixture-workflow", steps: FIXTURE_ACTIONS.map((pendingAction, index) => ({
-      index, label: pendingAction.display.title, status: "ready" as const, pendingAction,
-    })) },
-    contextVersion: 1,
-  } : input.text.trim().toLowerCase() === "mixed fixture" ? {
-    conversationId: input.conversationId ?? "admin-fixture-conversation",
-    turnId: "admin-fixture-mixed-turn",
-    reply: "I found the team's open tasks and prepared one change.",
-    result: null,
-    workflow: { id: "admin-fixture-mixed", steps: [
-      { index: 0, label: "Tasks", status: "recorded" as const, result: fixtureTaskResult() },
-      { index: 1, label: "Example Task 1", status: "ready" as const, pendingAction: FIXTURE_ACTIONS[0] },
-    ] },
-    contextVersion: 1,
-  } : {
-    conversationId: input.conversationId ?? "admin-fixture-conversation",
-    turnId: `admin-fixture-turn-${input.text.length}`,
-    reply: "This local fixture answers without contacting the workspace. It shows the read-only task result below.",
-    result: fixtureTaskResult(),
-    contextVersion: 1,
+  send: async (input: { conversationId: string | null; requestId?: string; text: string }) => {
+    const text = input.text.trim().toLowerCase();
+    if (text === "slow fixture") await new Promise((resolve) => setTimeout(resolve, 1_200));
+    const conversationId = input.conversationId ?? FIXTURE_CONVERSATION_ID;
+    const turnId = `admin-fixture-turn-${++fixtureSequence}`;
+    const response = text === "new chat fixture" ? {
+      conversationId,
+      turnId,
+      reply: "Both changes are ready for review.",
+      result: null,
+      workflow: { id: "admin-fixture-workflow", steps: FIXTURE_ACTIONS.map((pendingAction, index) => ({
+        index, label: pendingAction.display.title, status: "ready" as const, pendingAction,
+      })) },
+      contextVersion: 1,
+    } : text === "eod fixture" ? {
+      conversationId,
+      turnId,
+      reply: "Synthetic Ada has one submitted EOD report for today.",
+      result: fixtureEodResult(),
+      contextVersion: 1,
+    } : text === "mixed fixture" ? {
+      conversationId,
+      turnId,
+      reply: "I found the team's open tasks and prepared one change.",
+      result: null,
+      workflow: { id: "admin-fixture-mixed", steps: [
+        { index: 0, label: "Tasks", status: "recorded" as const, result: fixtureTaskResult() },
+        { index: 1, label: "Example Task 1", status: "ready" as const, pendingAction: FIXTURE_ACTIONS[0] },
+      ] },
+      contextVersion: 1,
+    } : {
+      conversationId,
+      turnId,
+      reply: "This local fixture answers without contacting the workspace. It shows the read-only task result below.",
+      result: fixtureTaskResult(),
+      contextVersion: 1,
+    };
+    let thread = fixtureThreads.get(conversationId);
+    if (!thread) {
+      thread = { turns: [], result: null, resultStatus: "unavailable" };
+      fixtureThreads.set(conversationId, thread);
+    }
+    thread.turns.push(
+      { turnId: `admin-fixture-user-${++fixtureSequence}`, role: "user", text: input.text, createdAt: fixtureNow() },
+      { turnId, role: "assistant", text: response.reply, createdAt: fixtureNow(),
+        ...(response.workflow ? { workflow: response.workflow } : {}) },
+    );
+    thread.result = response.result;
+    thread.resultStatus = "ready";
+    return response;
   },
-  load: async (conversationId: string) => ({
-    conversationId,
-    contextVersion: 1,
-    turns: [],
-    result: null,
-    resultStatus: "unavailable" as const,
-  }),
-  /** The preview owns no server thread, so discarding is a local no-op. */
-  discard: async () => undefined,
+  load: async (conversationId: string): Promise<AdminOttoThreadView> => {
+    const thread = fixtureThreads.get(conversationId);
+    return {
+      conversationId,
+      contextVersion: 1,
+      turns: thread ? thread.turns.map((turn) => ({ ...turn })) : [],
+      result: thread?.result ?? null,
+      resultStatus: thread?.resultStatus ?? "unavailable",
+    };
+  },
+  /** New chat clears the synthetic thread so the next fixture send starts clean. */
+  discard: async (input: { conversationId: string | null; requestId: string | null }) => {
+    if (input.conversationId) fixtureThreads.delete(input.conversationId);
+    else fixtureThreads.clear();
+  },
   /** Browser QA states for the new cards. Nothing is applied; the fixture only
    * models the persisted statuses the real confirm/status routes return. */
   confirm: async (action: AdminOttoPendingAction) => action,

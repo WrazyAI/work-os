@@ -1,7 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningBuildState, planningPrimaryAction } from "./PlanningSession";
+import { classifyPlanSaveFailure, PLAN_SAVE_FALLBACK } from "./planningSave";
 
 const props = {
   open: true,
@@ -11,7 +13,7 @@ const props = {
   onClose: () => undefined,
   onInterpret: () => Promise.reject(new Error("no AI in tests")),
   onRefine: () => Promise.reject(new Error("no AI in tests")),
-  onConfirm: () => Promise.resolve("failed" as const),
+  onConfirm: () => Promise.resolve({ failed: "no save in tests" } as const),
 };
 
 describe("PlanningSession footer gating", () => {
@@ -90,6 +92,21 @@ describe("PlanningSession Loom source gating", () => {
   });
 });
 
+describe("plan save failures", () => {
+  it("keeps the server's actual reason instead of blaming the connection", () => {
+    expect(classifyPlanSaveFailure(new Error("This plan is read-only."))).toEqual({ failed: "This plan is read-only." });
+  });
+
+  it("keeps the dedicated conflict and expired-build recovery paths", () => {
+    expect(classifyPlanSaveFailure(new Error("This plan changed on another device. Refresh before saving again."))).toBe("conflict");
+    expect(classifyPlanSaveFailure(new Error("The AI build is invalid, expired, already used, or does not match this plan intent."))).toBe("rebuild");
+  });
+
+  it("falls back only when the failure has no usable message", () => {
+    expect(classifyPlanSaveFailure(null)).toEqual({ failed: PLAN_SAVE_FALLBACK });
+  });
+});
+
 describe("PlanningSession two-view flow", () => {
   it("confirms a submitted plan once, with OK and no close control", () => {
     const markup = renderToStaticMarkup(createElement(PlanningConfirmation, {
@@ -131,5 +148,14 @@ describe("PlanningSession two-view flow", () => {
     expect(markup).not.toContain("Read the date first");
     expect(markup).not.toContain("reads the recording's own transcript");
     expect(markup).not.toContain("Nothing is filed from the recording");
+  });
+
+  it("shows spinners on busy footer buttons and never a second check mark for delete", () => {
+    const source = readFileSync(new URL("./PlanningSession.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/state === "interpreting" && <FadeArc[^>]*\/>\}\{loomReading/);
+    expect(source).toMatch(/state === "refining" && <FadeArc[^>]*\/>\}Refine plan/);
+    const deleteButton = source.split("\n").find((line) => line.includes("Confirm deletion of this draft")) ?? "";
+    expect(deleteButton).not.toContain("<Check");
+    expect(deleteButton).toContain("Trash2");
   });
 });

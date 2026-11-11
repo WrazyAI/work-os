@@ -51,3 +51,4 @@ next-env.d.ts
 /.worktrees/
 /.worktrees
 /skills-lock.json
+/.superpowers/

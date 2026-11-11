@@ -41,7 +41,7 @@
 .install > h2 { margin: 0 0 8px; font-size: 24px; line-height: 32px; letter-spacing: -0.025em; font-weight: 550; }
 .steps { margin: 0; padding: 0; list-style: none; }
 .steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
-.stepNumber { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--sage); font-size: 14px; font-weight: 600; }
+.stepNumber { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--control-ink); font-size: 14px; font-weight: 600; }
 .steps h3 { margin: 0 0 4px; font-size: 16px; line-height: 24px; font-weight: 600; }
 .steps p { margin: 0; color: var(--muted); font-size: 14px; line-height: 24px; text-wrap: pretty; }
 .after { margin: 32px 0 0; color: var(--muted); font-size: 14px; line-height: 24px; }

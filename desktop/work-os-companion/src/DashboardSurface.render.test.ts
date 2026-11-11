@@ -37,6 +37,15 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Next check-in 5:00 PM (required)");
     expect(markup.match(/role="tooltip" hidden=""/g)).toHaveLength(2);
   });
+  it("states exact carry-over tab counts while only a bounded page is loaded", () => {
+    const now = Date.parse("2026-08-26T16:00:00Z");
+    const live = { ...attendance, state: "active" as const, status: "working" as const, clockedInAt: shift.startsAt };
+    const model = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift, attendance: live, pulse: shiftPulse(null, shift, new Date(now), false, live), tasks: [task], carryover: [], focus: "First move", focusSource: "Suggested by Otto" }, now);
+    const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [], otherTasks: [], carryOverTotals: { yesterday: 2, other: 2_500 }, currentDate: "2026-08-26" }));
+    expect(markup).toContain("Yesterday <em>2</em>");
+    expect(markup).toContain("Older <em>2500</em>");
+  });
+
   it("offers a keyboard-accessible workday details entry", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now);

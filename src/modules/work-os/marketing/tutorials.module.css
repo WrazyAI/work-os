@@ -21,7 +21,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--signal-deep);
+  background: var(--accent);
 }
 
 .intro h1 {
@@ -61,7 +61,7 @@
 }
 
 .card:focus-visible {
-  outline: 2px solid var(--signal-deep);
+  outline: 2px solid var(--focus);
   outline-offset: 6px;
   border-radius: 12px;
 }
@@ -113,8 +113,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--signal);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--control-ink);
   font-size: 16px;
   padding-left: 3px;
   box-shadow: 0 4px 18px rgb(24 32 24 / 12%);
@@ -304,11 +304,11 @@
 }
 
 .lessonLink:hover {
-  border-color: var(--signal-deep);
+  border-color: var(--accent-ink);
 }
 
 .lessonLink:focus-visible {
-  outline: 2px solid var(--signal-deep);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -377,8 +377,8 @@
 .chapters { border-top: 1px solid var(--color-line, #d9ded5); margin-top: 18px; padding-top: 10px; }
 .chapters ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0; gap: 0 24px; }
 .chapters button { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 10px 6px; text-align: left; border: 0; border-bottom: 1px solid var(--color-line, #d9ded5); background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.chapters button:hover { background: #eef1eb; }
-.chapters button:focus-visible { outline: 2px solid #4a7d22; outline-offset: 3px; }
+.chapters button:hover { background: var(--canvas); }
+.chapters button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .chapters strong { font-size: 12px; font-weight: 550; line-height: 1.45; }
 .chapters span, .chapters time { font-size: 11px; color: #687267; font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) { .chapters ol { grid-template-columns: 1fr; } }

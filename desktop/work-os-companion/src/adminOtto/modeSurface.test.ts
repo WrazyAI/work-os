@@ -6,7 +6,7 @@ describe("admin Otto mode surface", () => {
   it("clears the entry and conversation through the shell's production seam", () => {
     expect(clearAdminOttoSurface()).toEqual({ entryOpen: false, conversationId: null });
   });
-  it("retains a known conversation on context disposal but clears it on a deliberate workspace switch", async () => {
+  it("retains a known conversation across context disposal and a deliberate workspace switch", async () => {
     const context = (mode: "admin" | "employee") => ({ scope: { userId: "user", organizationId: "org", mode }, personId: "person", voiceAvailable: false, transcriptionAvailable: false });
     let surface = { entryOpen: true, conversationId: "known-thread" as string | null };
     const create = () => createOttoModeController({ initialContext: context("admin"), employeeContext: context("employee"),
@@ -15,6 +15,6 @@ describe("admin Otto mode surface", () => {
     create().dispose();
     expect(surface).toEqual({ entryOpen: false, conversationId: "known-thread" });
     await create().switchMode("employee");
-    expect(surface).toEqual({ entryOpen: false, conversationId: null });
+    expect(surface).toEqual({ entryOpen: false, conversationId: "known-thread" });
   });
 });

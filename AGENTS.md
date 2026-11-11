@@ -208,6 +208,12 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
 
 ## Verification
 
+- For an installed Windows companion, first inspect its mounted local files under
+  `/mnt/c/Users/<user>/AppData/Local/com.wrazy.workos.pilot/` when available:
+  `app-info.json` identifies the running build and `logs/diagnostics/` holds logs.
+  Older builds expose version via the installed executable's Windows VersionInfo.
+  Do not infer the installed version from this checkout or ask for uploads before
+  checking local access. See `docs/companion-local-diagnostics.md`.
 - Run the focused tests for the touched files, then `work-os:typecheck`, then
   the full `work-os:test` before merging or deploying.
 - UI changes require rendered desktop and narrow checks, loading/empty/dense/
@@ -268,11 +274,12 @@ release. Web deployments do not use this threshold. Read
 - The queue is append-only, including unpublished records. Never remove,
   rewrite, rename, or reset entries. The latest **published** internal release
   snapshot marks consumed outcomes; drafts, bare tags and failed builds do not.
-- Below five, the only exception is an emergency fix that restores a broken app
-  or unblocks essential functionality. Commit an `emergency` record naming the
-  candidate version, pending fix ID, broken behavior and restored behavior. A
-  routine improvement, deadline or desire to ship is not an emergency. Clear
-  that record when preparing the next version; never reuse the exception.
+- Below five, use the `emergency` exception only to restore a broken app or
+  unblock essential functionality, or record a version-scoped `operatorOverride`
+  when the operator explicitly authorizes an earlier release. Both must name the
+  candidate version and a pending outcome. The operator override is for an
+  explicit operator decision, never an agent's default or a deadline excuse.
+  Clear the exception record when preparing the next version; never reuse it.
 - All release entry points go through the free Linux gate before paid packaging;
   manual dispatch or a tag is not an override. Preserve signing, packaged startup,
   asset verification and publication guards. This policy/tooling change itself

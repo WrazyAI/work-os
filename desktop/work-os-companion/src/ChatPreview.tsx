@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
+import { CompanionViewSwitch } from "./adminOtto/CompanionViewSwitch";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { workOsKeys } from "./queryClient";
 import type { ActivityInterval } from "./types";
@@ -181,7 +182,10 @@ function HistorySection() {
             <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
             <span className="avatar-badge" />
           </button>
-          <span className="avatar-day-time">3h 12m left</span>
+          <span className="avatar-day-time" data-progress={55}>
+            <i className="avatar-day-time-fill" style={{ clipPath: "inset(0 45% 0 0)" }} />
+            <span className="avatar-day-time-label">3h 12m elapsed</span>
+          </span>
         </div>
       </div>
     );
@@ -220,7 +224,9 @@ const PREVIEW_INTERVALS: ActivityInterval[] = [{
 }];
 
 function InAppSection() {
+  const [requestedWorkspace, setRequestedWorkspace] = useState<string | null>(null);
   const params = new URLSearchParams(window.location.search);
+  const showViewSwitch = params.has("view-switch");
   const focusParam = params.get("focus");
   const empty = params.has("empty");
   const activityDate = focusParam ? "2026-09-28" : null;
@@ -291,10 +297,18 @@ function InAppSection() {
     <QueryClientProvider client={fixtureClient}>
     <section aria-label="In-app composer preview" style={{ display: "grid", gap: 12 }}>
       <h2 style={{ margin: 0, fontSize: 14 }}>In-app launcher</h2>
+      {showViewSwitch ? <p role="status">{requestedWorkspace ? `Requested ${requestedWorkspace} workspace.` : "No workspace switch requested."}</p> : null}
       {/* Stand-in for the page content that remains in normal flow while the
           viewport-anchored launcher waits in the lower corner. */}
       <div aria-hidden="true" style={{ height: 200 }} />
       <ProgressComposer
+        headerLeading={showViewSwitch ? <CompanionViewSwitch
+          mode="employee"
+          employeeAvailable
+          adminAvailable
+          // No live workspace owner here: report the request, not a switch.
+          onSwitch={setRequestedWorkspace}
+        /> : undefined}
         displayName="David Zahemen"
         input={input}
         open={open}

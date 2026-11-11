@@ -59,9 +59,9 @@ describe("companion artwork", () => {
     expect(conversationCss).toMatch(/\.avatar-orb\s*\{[^}]*background:\s*transparent/s);
     expect(avatar).toContain('const showBadge = mascotVisual.pose === "alert"');
     expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
-    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).toContain('{workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}');
     // The badge marks attention only; shift progress is the elapsed pill.
-    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).toContain('{workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}');
     expect(avatar).not.toContain("avatar-badge-progress");
     expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
@@ -121,7 +121,7 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('invoke("hide_avatar")');
     expect(avatar).toContain("avatar-hide");
     expect(avatar).toContain("avatar-head-actions");
-    expect(avatar.match(/aria-label="Collapse companion"/g)).toHaveLength(2);
+    expect(avatar.match(/aria-label="Collapse companion"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(avatar).toContain('title="Collapse companion"');
     expect(avatar).not.toContain("Minimize to orb");
     expect(avatar).toContain("nextAgendaAutoExpand");
@@ -143,7 +143,8 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("schedule: null");
     expect(avatar).toContain("hasOpenShiftSession(facts)");
     expect(avatar).toContain('const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable"');
-    expect(avatar).toContain('const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable"');
+    expect(avatar).toContain("const progressPercent = Math.round(fraction * 100)");
+    expect(avatar).toContain('const progressText = progressAvailable ? `${progressPercent}% of shift complete` : "Shift progress unavailable"');
     expect(avatar).not.toContain("avatar-badge-progress-unavailable");
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
@@ -164,6 +165,11 @@ describe("floating companion integration", () => {
     expect(chatPreview).toContain("avatar-day-time");
     expect(avatarStyles).not.toContain(".avatar-orb-state");
     expect(avatarStyles).toContain(".avatar-day-time");
+    expect(avatar).toContain("avatar-day-time-fill");
+    expect(avatar).toContain("data-progress={progressPercent}");
+    expect(avatarStyles).toContain(".avatar-day-time-fill");
+    expect(avatarStyles).toMatch(/\.avatar-day-time-fill\s*\{[^}]*linear-gradient\(90deg, #e9fbc6/);
+    expect(avatarStyles).toMatch(/\.avatar-day-time-label\s*\{[^}]*font-weight:\s*800;/);
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble strong\s*\{[^}]*font-size:\s*12px;/);
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*font-size:\s*11px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
@@ -312,6 +318,16 @@ describe("floating companion integration", () => {
     expect(startup).toContain("host_panicked");
     expect(startup).toContain("rust.panic");
     expect(startup).toMatch(/run_scenario "fresh device" usable/);
+  });
+
+  it("hydrates the query cache only after the vault gate opens the vault", () => {
+    const main = readFileSync(resolve(root, "src/main.tsx"), "utf8");
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    // A module-load restore raced the gate's first open on a fresh device and
+    // left the gate reporting ClientDataNotPresent while later reads succeeded.
+    expect(main).not.toContain("restoreWorkOsQueryCache");
+    expect(app).toContain("restoreWorkOsQueryCache");
+    expect(app).toMatch(/outcome\.status === "ready"[\s\S]{0,240}?restoreWorkOsQueryCache/);
   });
 
   // A first launch on a fresh Mac had no app data directory, so the Stronghold

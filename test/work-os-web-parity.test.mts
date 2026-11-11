@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
+import { formatElapsedDuration, remainingShiftLabel, shiftPulse, shiftWindowEndedWithOpenSession, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
 import { applicableClarificationAnswers, applyCommitmentEdits, buildPlanItemsFromInterpretation, clarificationReviewState, unansweredClarifications, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
 import { consistencyChips, flowBreakdown, insightRangeSummary, insightSeries, periodDeltas } from "../src/modules/work-os/employee/insights";
 import { assistantDraftFallbackNotice, assistantDraftNotice, extractBottleneckSection, restoreBottleneckSection, stripBottleneckSection } from "../src/modules/work-os/employee/eod";
@@ -37,6 +37,27 @@ test("shift pulse keeps the schedule instrument honest without a session", () =>
   assert.equal(pulse.schedulePhase, "upcoming");
   assert.equal(remainingShiftLabel({ endsAt: "2026-09-30T17:00:00.000Z" }, new Date("2026-09-30T15:30:00.000Z")), "1h 30m remaining");
   assert.equal(untilShiftLabel({ startsAt: "2026-09-30T09:00:00.000Z" }, new Date("2026-09-30T08:15:00.000Z")), "45m until your shift");
+});
+
+test("elapsed duration stops printing unbounded hour strings", () => {
+  assert.equal(formatElapsedDuration(210), "03:30");
+  assert.equal(formatElapsedDuration(99 * 60 + 59), "99:59");
+  assert.equal(formatElapsedDuration(1335 * 60 + 58), "55d 15h");
+});
+
+test("a finished window with an open session is called ended, not 100% complete", () => {
+  const shift = { startsAt: "2026-09-30T09:00:00.000Z", endsAt: "2026-09-30T17:00:00.000Z" };
+  const now = new Date("2026-09-30T22:00:00.000Z");
+  const session = { state: "active", clocked_in_at: "2026-09-30T09:00:00.000Z" };
+  const pulse = shiftPulse(session, shift, now);
+  assert.equal(pulse.schedulePhase, "complete");
+  assert.equal(pulse.progressPercent, 100);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, session), true);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "active", stale: false }), true);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "clocked_out" }), false);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, session, { source: "worktivity", state: "clocked_out", stale: true }), true);
+  assert.equal(shiftWindowEndedWithOpenSession(pulse, { ...session, state: "clocked_out" }), false);
+  assert.equal(shiftWindowEndedWithOpenSession({ schedulePhase: "in_progress" }, session), false);
 });
 
 test("shift pulse prefers the authoritative provider break clock when enabled", () => {

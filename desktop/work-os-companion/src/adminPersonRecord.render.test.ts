@@ -48,7 +48,7 @@ function personDetail(overrides: Record<string, unknown> = {}) {
       { date: "2026-11-03", total: 1, reviewed: 1 },
     ],
     reports: [
-      { id: "report-today", report_date: today, status: "pending_review", submitted_at: `${today}T17:00:00Z` },
+      { id: "report-today", report_date: today, status: "pending_review", submitted_at: `${today}T17:00:00Z`, title: "Shipped the settings review" },
     ],
     updates: [],
     intervals: [
@@ -91,6 +91,12 @@ describe("admin person record", () => {
     expect(markup).toContain("Reviewed the settings IA and the mapping states.");
     expect(markup).toContain("Worked through the provider mapping review.");
     expect(markup).toContain('aria-label="Open EOD report for');
+    // The report row carries the day, its title, and its review state on one
+    // stable line, with a count line above the list.
+    expect(markup).toContain("admin-report-date");
+    expect(markup).toContain("admin-report-title");
+    expect(markup).toContain("Shipped the settings review");
+    expect(markup).toContain("1 recent report · 1 awaiting review");
 
     // The workday is grouped: three sessions across two days become two rows,
     // with the day's observed time and exact recap count.
@@ -98,6 +104,24 @@ describe("admin person record", () => {
     expect(markup).toContain("1h 30m");
     expect(markup).toContain("3 recaps · 1 reviewed");
     expect(markup).toContain("1 recap · 1 reviewed");
+  });
+
+  it("reads observed time and recap counts from the older payload shape", () => {
+    const today = todayIso();
+    const markup = renderRecord(personDetail({
+      sessions: [
+        { shift_date: today, state: "clocked_out", clocked_in_at: `${today}T07:00:00Z`, clocked_out_at: `${today}T09:00:00Z`, paused_seconds: 0 },
+      ],
+      recapDays: [],
+      reports: [],
+      intervals: [
+        { id: "older-shape", local_date: today, generation_status: "ready", review_status: "confirmed", headline: "A confirmed interval from the older payload." },
+      ],
+    }));
+
+    expect(markup).toContain("2h");
+    expect(markup).toContain('title="1 recap · 1 reviewed"');
+    expect(markup).toContain("A confirmed interval from the older payload.");
   });
 
   it("keeps EOD blank when no report exists and names an empty recap day", () => {

@@ -9,12 +9,14 @@ import styles from "./companion.module.css";
  * idle curiosity beat, and a click-only celebration. The installed companion is
  * untouched. A visitor who never clicks never sees a celebration.
  */
-export default function Companion() {
+export default function Companion({ compact = false, paused: parentPaused = false }: { compact?: boolean; paused?: boolean } = {}) {
   const art = useRef<HTMLDivElement>(null);
   const pet = useRef<HTMLButtonElement>(null);
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<"idle" | "celebrate">("idle");
-  const [paused, setPaused] = useState(false);
+  const [localPaused, setPaused] = useState(false);
+  const [suspended, setSuspended] = useState(false);
+  const paused = parentPaused || localPaused;
   const [reduced, setReduced] = useState(false);
   const celebrateTimer = useRef<number | null>(null);
 
@@ -28,8 +30,9 @@ export default function Companion() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/site/work-os/studio-otto.svg")
-      .then((response) => response.text())
+    const controller = new AbortController();
+    fetch("/site/work-os/studio-otto.svg", { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error("Artwork unavailable"); return response.text(); })
       .then((markup) => {
         if (cancelled || !art.current) return;
         const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
@@ -60,7 +63,7 @@ export default function Companion() {
         setReady(true);
       })
       .catch(() => { /* the static configured image remains */ });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, []);
 
   const finish = useCallback(() => {
@@ -70,8 +73,15 @@ export default function Companion() {
   }, []);
 
   useEffect(() => {
-    if (reduced && state === "celebrate") finish();
-  }, [finish, reduced, state]);
+    const node = pet.current;
+    if (!node) return;
+    let visible = true;
+    const sync = () => setSuspended(!visible || document.hidden);
+    const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; sync(); }, { threshold: .1 });
+    observer.observe(node);
+    document.addEventListener("visibilitychange", sync);
+    return () => { observer.disconnect(); document.removeEventListener("visibilitychange", sync); };
+  }, []);
 
   useEffect(() => () => {
     if (celebrateTimer.current) window.clearTimeout(celebrateTimer.current);
@@ -79,7 +89,7 @@ export default function Companion() {
 
   useEffect(() => {
     const node = pet.current;
-    if (!node || !ready || reduced || paused) return;
+    if (!node || !ready || reduced || paused || suspended || state !== "idle") return;
     const fine = window.matchMedia("(hover: hover) and (pointer: fine)");
     let visible = true;
     let frame = 0;
@@ -141,23 +151,24 @@ export default function Companion() {
       document.removeEventListener("pointermove", move);
       document.documentElement.removeEventListener("pointerleave", away);
       cancelAnimationFrame(frame);
+      x = 0;
+      y = 0;
       paint();
     };
-  }, [paused, ready, reduced, state]);
+  }, [paused, ready, reduced, suspended, state]);
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${compact ? styles.compact : ""}`}>
       <button
         ref={pet}
         type="button"
         className={styles.pet}
         data-state={state}
         data-reduced={reduced ? "true" : "false"}
+        data-paused={paused || suspended ? "true" : "false"}
         data-ready={ready ? "true" : "false"}
         aria-label="Play companion celebration"
-        disabled={reduced && state === "celebrate"}
         onClick={() => {
-          if (reduced) return;
           setState("celebrate");
           if (celebrateTimer.current) window.clearTimeout(celebrateTimer.current);
           celebrateTimer.current = window.setTimeout(finish, 2800);
@@ -167,17 +178,17 @@ export default function Companion() {
           <img src="/site/work-os/studio-otto.svg" alt="" width={220} height={248} />
         </div>
       </button>
-      <p className={styles.note}>
-        {reduced ? "Click to say hello. Motion is reduced." : paused ? "Motion paused. Click to say hello." : "Move your pointer. Click to say hello."}
+      <p className={styles.note} aria-live="polite">
+        {state === "celebrate" ? "A little company goes a long way." : reduced ? "Click to say hello. Motion is reduced." : paused ? "Motion paused. Click to say hello." : "Move your pointer. Click to say hello."}
       </p>
-      <button
+      {!compact && <button
         type="button"
         className={styles.pause}
         onClick={() => setPaused((value) => !value)}
         disabled={reduced}
       >
         {reduced ? "Reduced motion is on" : paused ? "Resume motion" : "Pause motion"}
-      </button>
+      </button>}
     </div>
   );
 }

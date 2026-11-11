@@ -3,6 +3,7 @@ import type { AdminOttoPendingAction, AdminRead, Page, PersonRef, ReviewedRecap,
 import { AdminRecapView, type AdminRecapPlayback } from "./AdminRecapView";
 import { adminCalendarDate, adminRecapDate, adminReviewStatusLabel } from "./labels";
 import { safeAdminRecordHref } from "./recordLinks";
+import { ChatMarkdown } from "../ChatMarkdown";
 import "./admin-tool-cards.css";
 
 /** Local compatibility seam; older previews deliberately do not expose ID diffs. */
@@ -77,7 +78,7 @@ export function AdminReadCard({ result, onOpenRecord, onOpenRecap, onListen, pla
         return <li key={record.id}><article className={`admin-tool-record admin-tool-record--${record.source}`}>
           <header><strong>{name}</strong><span className="admin-tool-meta">{sourceLabels[record.source]}</span></header>
           <p className="admin-tool-meta"><time dateTime={record.localDate}>{adminCalendarDate(record.localDate)}</time>{timezone ? ` · ${timezone}` : ""}</p>
-          {record.source === "submitted_eod" ? <div className="admin-tool-document"><h5>Submitted report</h5><p>{record.text || "No report text available."}</p></div>
+          {record.source === "submitted_eod" ? <div className="admin-tool-document"><h5>Submitted report</h5><ChatMarkdown text={record.text || "No report text available."} /></div>
             : record.source === "update" ? <blockquote>{record.text || "No update text available."}</blockquote>
               : record.source === "workday" ? <dl className="admin-tool-workday"><dt>Day record</dt><dd>{record.text || "No day details available."}</dd></dl>
                 : <p className="admin-tool-excerpt">{record.text || sourceLabels[record.source]}</p>}
@@ -206,9 +207,10 @@ export type AdminActionBatchProps = {
   onConfirm: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
   onRefresh?: (action: AdminOttoPendingAction) => Promise<AdminOttoPendingAction>;
   onOpenRecord?: (url: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 };
 
-export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord }: AdminActionBatchProps) {
+export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord, onBusyChange }: AdminActionBatchProps) {
   const sessionRef = useRef<ReturnType<typeof createAdminActionSession> | null>(null);
   if (!sessionRef.current) sessionRef.current = createAdminActionSession(actions);
   const session = sessionRef.current;
@@ -219,6 +221,7 @@ export function AdminActionBatch({ actions, onConfirm, onRefresh, onOpenRecord }
   const pending = rows.filter((row) => statusOf(row.action) === "pending");
   const selected = pending.filter((row) => row.selected);
   const busy = rows.some((row) => row.busy);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   const allCreates = selected.length > 0 && selected.every((row) => ["create_task", "task.create"].includes(row.action.action));
   const standalone = rows.length === 1;
   const uniformAction = new Set(rows.map((row) => row.action.action)).size === 1;

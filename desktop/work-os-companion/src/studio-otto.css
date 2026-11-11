@@ -290,3 +290,88 @@
 @media (prefers-reduced-motion: reduce) {
   .studio-speak-mouth { animation: none; }
 }
+
+/* Administration is the same chassis, tailored around its controls. Accessories
+ * inherit the pose rig, then animate on their own nested transform layer. */
+.studio-otto .studio-admin-accessory { pointer-events: none; opacity: 0; }
+.studio-otto[data-mode="admin"] .studio-admin-accessory { opacity: 1; }
+.studio-otto .studio-admin-blazer,
+.studio-otto .studio-admin-sleeve,
+.studio-otto .studio-admin-collar,
+.studio-otto .studio-blazer-panel,
+.studio-otto .studio-admin-lapel,
+.studio-otto .studio-admin-specs { transform-box: view-box; }
+.studio-otto .studio-admin-blazer,
+.studio-otto .studio-admin-sleeve,
+.studio-otto .studio-admin-collar,
+.studio-otto .studio-blazer-panel,
+.studio-otto .studio-admin-lapel { transform-origin: 80px 110px; }
+.studio-otto .studio-admin-specs { transform-origin: 80px 42px; }
+.studio-otto .studio-blazer-left { --studio-jacket-open: 7deg; }
+.studio-otto .studio-blazer-right { --studio-jacket-open: -7deg; }
+.studio-otto[data-attire-transition="on"] .studio-admin-blazer,
+.studio-otto[data-attire-transition="on"] .studio-admin-sleeve {
+  animation: studio-blazer-on 280ms cubic-bezier(.2,.8,.2,1) 1 both;
+}
+.studio-otto[data-attire-transition="on"] .studio-admin-lapel {
+  animation: studio-lapel-on 280ms cubic-bezier(.2,.8,.2,1) 1 both;
+}
+.studio-otto[data-attire-transition="on"] .studio-admin-specs {
+  animation: studio-specs-on 220ms cubic-bezier(.2,.8,.2,1) 100ms 1 both;
+}
+.studio-otto[data-attire-transition="off"] .studio-admin-specs {
+  animation: studio-specs-off 220ms cubic-bezier(.2,.8,.2,1) 1 both;
+}
+/* Do not hide Employee's accessory groups until these removal frames finish. */
+.studio-otto[data-attire-transition="off"] .studio-admin-blazer,
+.studio-otto[data-attire-transition="off"] .studio-admin-sleeve {
+  animation: studio-blazer-off 280ms cubic-bezier(.2,.8,.2,1) 80ms 1 both;
+}
+.studio-otto[data-attire-transition="off"] .studio-blazer-panel {
+  animation: studio-panel-off 280ms cubic-bezier(.2,.8,.2,1) 80ms 1 both;
+}
+@keyframes studio-blazer-on {
+  from { opacity: 0; transform: translateY(-7px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes studio-lapel-on {
+  from { transform: rotate(var(--studio-jacket-open)); }
+  to { transform: rotate(0); }
+}
+@keyframes studio-specs-on {
+  from { opacity: 0; transform: translateY(-7px) scaleY(.15); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes studio-specs-off {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(-7px) scaleY(.15); }
+}
+@keyframes studio-blazer-off {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-7px) scale(.96); }
+}
+@keyframes studio-panel-off {
+  from { transform: rotate(0); }
+  to { transform: rotate(var(--studio-jacket-open)); }
+}
+
+/* Keep the lab's complete Studio matrix distinct from the legacy comparison. */
+.mascot-lab.studio-lab { min-width: 0; }
+.mascot-lab.studio-lab .otto-preview-panel { min-width: 0; }
+.mascot-lab.studio-lab .card-title { flex-wrap: wrap; }
+.mascot-lab.studio-lab .card-title > * { min-width: 0; overflow-wrap: anywhere; }
+.mascot-lab.studio-lab .otto-preview-sizes { flex-wrap: wrap; }
+.mascot-lab .studio-attire-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 12px;
+}
+.mascot-lab .studio-attire-sample { min-width: 0; padding: 12px; background: #fafaf6; color: #182018; border: 1px solid #d9ded5; border-radius: 12px; }
+.mascot-lab .studio-attire-gallery.dark .studio-attire-sample { background: #1a1b1e; color: #e9eaed; border-color: #34363d; }
+.mascot-lab .studio-attire-sample h3 { font-size: 13px; margin: 0 0 12px; }
+.mascot-lab .studio-attire-crop { display: grid; gap: 8px; margin-top: 12px; }
+.mascot-lab .studio-attire-sizes { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
+.mascot-lab .studio-attire-size { display: grid; justify-items: center; gap: 8px; }
+.mascot-lab .studio-attire-size small,
+.mascot-lab .studio-attire-crop > small { font-size: 11px; }
+.mascot-lab .studio-attire-gallery .studio-otto * { animation: none !important; transition: none !important; }

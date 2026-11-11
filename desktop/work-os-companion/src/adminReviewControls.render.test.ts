@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { adminKeys, isoDaysAgo, todayIso } from "./admin/data";
 import { formatWorkOsFullDate } from "./dateFormat";
-import ReviewPage, { ReportRangeControl, sortReportsNewestFirst } from "./admin/ReviewPage";
-import type { ReportsResponse, WorkOsReportRow } from "./admin/types";
+import ReviewPage, { ReportRangeControl, screenshotOf, sortReportsNewestFirst } from "./admin/ReviewPage";
+import type { EvidenceRow, ReportsResponse, WorkOsReportRow } from "./admin/types";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const readText = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
@@ -55,6 +55,19 @@ function bodyOf(markup: string) {
   expect(end).toBeGreaterThan(start);
   return markup.slice(start + "<tbody>".length, end);
 }
+
+describe("review evidence frames", () => {
+  it("reads a retained screenshot summary from the API relation", () => {
+    const row = {
+      id: "evidence-1",
+      title: "Worktivity screenshot context",
+      event: { screenshot: [{ id: "summary-1", deleted_at: null }] },
+    } as unknown as EvidenceRow;
+
+    expect(screenshotOf(row)).toEqual({ summaryId: "summary-1", title: "Worktivity screenshot context" });
+    expect(screenshotOf({ ...row, event: { screenshot: [{ id: "summary-1", deleted_at: "2026-11-10T00:00:00Z" }] } })).toBeNull();
+  });
+});
 
 describe("review queue order", () => {
   it("sorts newest submission first, falls back to the report date, and puts missing values last", () => {

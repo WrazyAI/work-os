@@ -36,6 +36,33 @@
   color: var(--danger);
 }
 
+/* A range with nothing recorded is one invitation, not a wall of zeros. */
+.insight-empty-state {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  padding: 26px 24px;
+}
+
+.insight-empty-state h2 {
+  margin: 0;
+  color: var(--dash-ink);
+  font: 650 21px/1.2 Manrope, Inter, "Segoe UI Variable Text", sans-serif;
+  letter-spacing: -0.025em;
+}
+
+.insight-empty-state p {
+  margin: 7px 0 0;
+  max-width: 56ch;
+  color: var(--dash-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.insight-empty-state .primary {
+  min-height: 38px;
+}
+
 /* --- KPI strip ----------------------------------------------------------- */
 
 .insight-kpi-strip {

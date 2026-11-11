@@ -160,10 +160,10 @@ function overview(): AdminOverview {
       { id: "a-6", kind: "update", at: `${DATES[DATES.length - 1]}T07:50:00.000Z`, personId: "p-6", personName: "Farid Haddad", title: "Blocker raised", detail: "Waiting on staging credentials", provenance: "employee" },
     ],
     attention: [
-      { code: "reports_pending", severity: "warn", count: 2, message: "2 EOD reports are waiting for review.", href: "/work-os/admin/review" },
+      { code: "reports_pending_review", severity: "warn", count: 2, message: "2 EOD reports are waiting for review.", href: "/work-os/admin/review" },
       { code: "eod_outstanding", severity: "warn", count: 3, message: "3 workdays still have an unsubmitted EOD report.", href: "/work-os/admin/review" },
       { code: "tasks_overdue", severity: "info", count: 5, message: "5 open tasks are past their due date.", href: "/work-os/admin/tasks" },
-      { code: "disputed_evidence", severity: "error", count: 1, message: "1 evidence item is disputed and needs a decision.", href: "/work-os/admin/evidence" },
+      { code: "evidence_disputed", severity: "error", count: 1, message: "1 evidence item is disputed and needs a decision.", href: "/work-os/admin/evidence" },
     ],
     series: DATES.map((date, index) => ({ date, completed: (index * 3) % 7, updates: 4 + ((index * 5) % 9), recaps: 2 + ((index * 4) % 7), evidence: 12 + ((index * 7) % 18) })),
     timeSeries: timeSeries(),
@@ -177,6 +177,25 @@ function overview(): AdminOverview {
       lastReportSubmittedAt: `${DATES[DATES.length - 1]}T08:40:00.000Z`,
     },
   };
+}
+
+/** The overview record the notification preview reads. It mirrors the record
+ * seeded for the page, so the Admin tab and the Overview never disagree in a
+ * rendered check. Sparse deliberately reuses the empty record: the panel must
+ * render honest zeros rather than invent decisions the partial payload omits. */
+export function adminPreviewOverview(state: "dense" | "empty" | "sparse"): AdminOverview {
+  if (state !== "dense") {
+    return {
+      ...overview(),
+      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
+      people: [],
+      recentActivity: [],
+      attention: [],
+      series: DATES.map((date) => ({ date, completed: 0, updates: 0, recaps: 0, evidence: 0 })),
+      timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
+    };
+  }
+  return overview();
 }
 
 function peopleResponse(): PeopleResponse {
@@ -421,15 +440,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     return;
   }
   if (state === "empty") {
-    queryClient.setQueryData(adminKeys.overview(today), {
-      ...overview(),
-      counts: { people: 1, onShift: 0, paused: 0, offShift: 0, unknown: 1, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
-      people: [],
-      recentActivity: [],
-      attention: [],
-      series: DATES.map((date) => ({ date, completed: 0, updates: 0, recaps: 0, evidence: 0 })),
-      timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
-    } satisfies AdminOverview);
+    queryClient.setQueryData(adminKeys.overview(today), adminPreviewOverview("empty"));
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);

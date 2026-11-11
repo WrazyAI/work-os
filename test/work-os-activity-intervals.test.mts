@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PGlite } from "@electric-sql/pglite";
 import {
   activityIntervalCardView,
   activityIntervalConfig,
@@ -19,7 +20,9 @@ import {
   selectIntervalEvidence,
   type IntervalEvidenceEntry,
 } from "../src/lib/work-os-activity-intervals";
+import * as intervalEngine from "../src/lib/work-os-activity-intervals";
 import type { ScreenshotWindowCandidate, ScreenshotWindowPreparation } from "../src/lib/work-os-screenshots";
+import type { WorkOsAccess } from "../src/lib/work-os-api";
 
 const candidate = (id: string, capturedAt: string, app: string | null, retained = true, confidence = 0.8): ScreenshotWindowCandidate => ({
   summaryId: `summary-${id}`,
@@ -37,6 +40,77 @@ const candidate = (id: string, capturedAt: string, app: string | null, retained 
 /** The config reads only the keys it knows; a partial env is the point. */
 const processEnv = (values: Record<string, string>): NodeJS.ProcessEnv =>
   values as unknown as NodeJS.ProcessEnv;
+
+test("a long-overdue slot catches up to one recent bounded window rather than an empty historical slot", () => {
+  const input = { promptDueAt: "2026-11-10T15:45Z", observedAt: "2026-11-10T19:15Z", cadenceMinutes: 30,
+    clockedInAt: "2026-11-10T15:32Z", dayStartIso: "2026-11-10T00:00Z", maxMinutes: 120 };
+  assert.deepEqual(resolveActivityIntervalWindow(input), { startIso: "2026-11-10T17:15:00.000Z", endIso: "2026-11-10T19:15:00.000Z" });
+  assert.deepEqual(resolveActivityIntervalWindow({ ...input, previousWindowEnd: "2026-11-10T18:40Z" }),
+    { startIso: "2026-11-10T18:40:00.000Z", endIso: "2026-11-10T19:15:00.000Z" });
+  assert.deepEqual(resolveActivityIntervalWindow({ ...input, observedAt: "2026-11-10T16:10Z" }),
+    { startIso: "2026-11-10T15:32:00.000Z", endIso: "2026-11-10T15:45:00.000Z" }, "ordinary polling lag keeps its scheduled window");
+  assert.deepEqual(resolveActivityIntervalWindow({ ...input, maxMinutes: 240 }),
+    { startIso: "2026-11-10T17:15:00.000Z", endIso: "2026-11-10T19:15:00.000Z" }, "catch-up recovery never exceeds two hours");
+});
+
+test("only an unreviewed empty interval can move to a catch-up window, once per attempt", async () => {
+  const { recoverEmptyActivityInterval } = intervalEngine;
+  const database = new PGlite();
+  const org = "10000000-0000-4000-8000-000000000001", person = "20000000-0000-4000-8000-000000000001";
+  const id = "30000000-0000-4000-8000-000000000001";
+  const previous = globalThis.__workOsPgPool;
+  try {
+    await database.exec(`create table work_activity_intervals(id uuid primary key,organization_id uuid,person_id uuid,work_session_id uuid,
+      generation_status text,review_status text,failure_reason text,window_start timestamptz,window_end timestamptz,updated_at timestamptz,
+      ai_detail text,generated_at timestamptz);
+      insert into work_activity_intervals values ('${id}','${org}','${person}','${id}','unavailable','inferred','no_usable_frames',
+        '2026-11-10T15:32Z','2026-11-10T15:45Z',now(),null,null)`);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql,values) } as never;
+    const row = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const access = { organizationId: org, personId: person } as WorkOsAccess;
+    const window = { startIso: "2026-11-10T17:15:00.000Z", endIso: "2026-11-10T19:15:00.000Z" };
+    const recovered = await recoverEmptyActivityInterval(access, row, window);
+    assert.equal(isoInstant(recovered.window_end), window.endIso);
+    assert.equal(recovered.generation_status, "preparing");
+    const retried = await recoverEmptyActivityInterval(access, row, { ...window, endIso: "2026-11-10T19:25:00.000Z" });
+    assert.equal(isoInstant(retried.window_end), window.endIso, "a competing retry must use the winner's frozen window");
+    await database.exec("update work_activity_intervals set generation_status='ready',review_status='confirmed'");
+    const protectedRow = await recoverEmptyActivityInterval(access, row, { ...window, endIso: "2026-11-10T19:30:00.000Z" });
+    assert.equal(protectedRow.review_status, "confirmed");
+    assert.equal(isoInstant(protectedRow.window_end), window.endIso);
+    await database.exec("update work_activity_intervals set generation_status='unavailable',review_status='inferred',failure_reason='no_usable_frames',ai_detail='Previously generated recap',generated_at=now()");
+    const formerlyReady = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const retained = await recoverEmptyActivityInterval(access, formerlyReady, { ...window, endIso: "2026-11-10T19:40:00.000Z" });
+    assert.equal(isoInstant(retained.window_end), window.endIso, "expired evidence must not rebase a previously generated recap");
+    await assert.rejects(recoverEmptyActivityInterval({ ...access, organizationId: "10000000-0000-4000-8000-000000000002" }, row, window), /interval|row/i);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+test("a recoverable first slot can select one unclaimed recent window before a slow old attempt lands", async () => {
+  const database = new PGlite();
+  const org = "10000000-0000-4000-8000-000000000001", person = "20000000-0000-4000-8000-000000000001";
+  const first = "30000000-0000-4000-8000-000000000001", second = "30000000-0000-4000-8000-000000000002";
+  const previous = globalThis.__workOsPgPool;
+  try {
+    await database.exec(`create table work_activity_intervals(id uuid primary key,organization_id uuid,person_id uuid,work_session_id uuid,
+      generation_status text,review_status text,failure_reason text,window_start timestamptz,window_end timestamptz,updated_at timestamptz,
+      ai_detail text,generated_at timestamptz);
+      insert into work_activity_intervals values ('${first}','${org}','${person}','${first}','unavailable','inferred','no_usable_frames',
+        '2026-11-10T15:32Z','2026-11-10T15:45Z',now(),null,null)`);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql,values) } as never;
+    const access = { organizationId: org, personId: person } as WorkOsAccess;
+    const row = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const window = { startIso: "2026-11-10T17:15:00.000Z", endIso: "2026-11-10T19:15:00.000Z" };
+    assert.equal(await intervalEngine.canRecoverEmptyActivityInterval(access, row), true);
+    await database.exec(`insert into work_activity_intervals values ('${second}','${org}','${person}','${first}','preparing','inferred',null,
+      '2026-11-10T17:15Z','2026-11-10T19:15Z',now(),null,null)`);
+    assert.equal(await intervalEngine.canRecoverEmptyActivityInterval(access, row), false);
+    await database.exec(`delete from work_activity_intervals where id='${second}'`);
+    const recovered = await intervalEngine.recoverEmptyActivityInterval(access, row, window);
+    assert.equal(recovered.generation_status, "preparing");
+    assert.equal(isoInstant(recovered.window_end), window.endIso);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
 
 test("a prompt slot has one deterministic identity", () => {
   const key = activityIntervalSlotKey("session-1", "2026-09-28T15:19:29.446Z");

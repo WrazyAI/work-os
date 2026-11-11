@@ -113,7 +113,7 @@ scatter raw values through files.
 |---|---|---|
 | --color-ink | #182018 | headings, body text, dark primary controls |
 | --color-ink-soft | #304033 | strong secondary text |
-| --color-muted | #687267 | metadata, helper text |
+| --color-muted | #62685f | metadata, helper text |
 | --color-faint | #939c90 | quiet labels and unavailable values |
 | --color-canvas | #eef1eb | outer application background |
 | --color-stage | #f5f6f1 | content stage |
@@ -124,7 +124,7 @@ scatter raw values through files.
 | --color-line-strong | #c5cec1 | selected/focused surface outline |
 | --color-signal | #a8f15b | primary action and bounded progress |
 | --color-signal-deep | #5e9d27 | signal icon, progress, current state |
-| --color-danger | #c94e43 | error, destructive, overdue attention |
+| --color-danger | #b84035 | error, destructive, overdue attention |
 | --color-danger-soft | #f9e5e1 | danger surface |
 | --color-warning | #c88918 | aging work and recoverable warning |
 | --color-warning-soft | #fff5dc | warning surface |
@@ -145,16 +145,17 @@ warning `#e0a44a`, observed `#7fb3d1`. Categorical chart hues are
 theme-aware (`--chart-1` … `--chart-8`) so a series keeps its colour across
 themes without a light-paper hue turning sandy on graphite.
 
-Known gaps: `--color-faint` (2.7:1 on paper) must not carry text. `--color-danger`
-(4.3:1 on paper) and `--color-warning` (3.0:1 on white) fail AA as text on light
-surfaces, and the signal focus outline is 1.3:1 on paper. The conversation
+Known gaps: `--color-faint` (2.7:1 on paper) must not carry text.
+`--color-warning` (3.0:1 on white) still fails AA as text on light surfaces,
+and the signal focus outline is 1.3:1 on paper. The muted and danger roles now
+use text-safe steps: `--color-muted` passes on canvas and paper, and
+`--color-danger` passes on paper, canvas, and `--color-danger-soft`, so status
+and metadata text may use them directly. Warning remains for icons, borders,
+and fills unless a darker text value is chosen. The conversation
 surfaces resolve the focus gap with one chat focus color — `--conversation-focus`
 (#4a7d22, 4.5:1 on paper), exposed to the chat Tailwind theme as `--color-focus` —
 used for composer rings and every chat focus outline; the bright signal lime
-stays for actions, progress, and confirmed states. `--color-muted` passes
-on paper (4.8:1) and is borderline on inset (4.47:1). Until a palette decision
-adds text-safe variants and a focus color, these tokens are for icons, borders,
-and fills, and text uses `--color-ink-soft` or a darker muted value.
+stays for actions, progress, and confirmed states.
 
 ### 3.2 Geometry and elevation
 
@@ -263,7 +264,32 @@ affordance, and clicking empty sidebar space expands it; navigation rows remain
 clickable without expanding the rail. The icon column uses one shared slot so
 the mark, rows, and footer remain aligned in both states.
 
+At the 560px small class the companion rail becomes a fixed bottom bar instead
+of an icon-only strip: the destinations keep their icons and names (`EOD
+Review` shortens to `EOD`, with the full name as its accessible name), `More`
+opens the workspace menu, and New chat keeps a named action in the bar. The bar
+uses 44px targets, safe-area padding, and one active marker; page content and
+the composer reserve its height, and detached menus open above it.
+
 ### 4.3 Web employee workspace
+
+#### Public site: Good company
+
+The product landing alone uses the approved aubergine `#272331`, warm white
+`#efeee9`, sage stage `#d6e5cb` and pale green action `#d4e8be`. Its large
+two-line statement and real app/Otto stage respond to screen height as well as
+width: at1366×768 the whole stage is visible before scrolling. GSAP supplies
+one coordinated entrance and restrained one-shot section transitions, never a
+scroll hijack or a loading gate. Static content stays visible if JS fails.
+Otto's click uses the canonical success face, including statically under Pause
+or reduced motion; idle work suspends offscreen/in hidden tabs.
+
+The downloads, installation guides and tutorials stay light, with dark-purple
+ink and restrained lilac grounds; buttons and icon controls use pale green
+`#d4e8be` with dark-green ink and text-safe green focus/selected treatments.
+Red install warnings keep their semantic
+danger treatment. This marketing-only palette does not recolor the workspace or
+companion. Tutorial videos, player/chapters and download behavior are unchanged.
 
 `/work-os` is the public, standalone product landing page, not a console
 destination. Its downloads and tutorials live at `/work-os/downloads` and
@@ -664,6 +690,10 @@ touch screen.
 
 Rows:
 
+- The title is the row's one open control. The completion control, progress,
+  due, status, and action menu are siblings, never nested inside a button role;
+  the row body may open on a pointer press for convenience, while keyboard
+  activation stays on the title.
 - Minimum 64px high, with 12–16px vertical breathing room.
 - Transparent/paper surface with hairline dividers.
 - One title line, one metadata line, optional one-line description.
@@ -987,6 +1017,20 @@ Both chat surfaces use the configured mascot head crop through
 src/chat/MascotMark.tsx. Never hardcode mascot art, the mascot name, or a
 generic sparkle as agent identity. Global mascot changes belong in mascot.ts.
 
+The mascot at the far left of either Otto header is also the one Employee /
+Admin view control for an administrator. Its detached menu marks the current
+view and explains an unavailable destination; the floating window follows the
+main window's selected workspace and swaps to the matching real conversation.
+The in-app and floating Administration surfaces render the same Admin Otto
+chat engine and confirmation contract, never a second admin implementation.
+View changes retain the conversation identity, drafts, and unconfirmed
+previews; the Administration masthead's **Ask Otto** control reopens that
+retained conversation, while **New chat** remains the durable discard. Closing
+and reopening either Administration surface therefore rehydrates the same
+server thread, and assistant turns carry their recorded local time plus the
+same session dividers as the employee chat. A view switch is a presentation
+choice, never an authorization boundary.
+
 Prompt reminders — the plan question, a due check-in, the EOD nudge — are
 scaffolding for the prompt they announce. The companion may show one in the
 thread, but it is removed as soon as that prompt is answered or replaced, is
@@ -1304,7 +1348,10 @@ that scrolls away:
   `OK`, Escape, or a press outside the card dismisses it.
 - The EOD keeps the page. The submitted state embeds the same animation where
   the report was, with the outcome copy and `All EODs` at the top-left returning
-  to the EOD list; it stays until the employee leaves it.
+  to the EOD list; it stays until the employee leaves it. Reopening a submitted
+  or approved report later shows the same confirmation above the read-only day
+  edition, with `All EODs` and `Return to today`; the report is never presented
+  as an editable draft again.
 - The animation plays exactly once and parks on the completed check. The source
   art fades its check out over the final frames, so the completed state is the
   held frame — never the faded tail. Under reduced motion the completed frame
@@ -1397,6 +1444,33 @@ lists what needs the employee right now, and the badge counts all of it —
 memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
 days — in the amber recoverable-attention tone.
 
+- **Audiences** — an administrator's bell carries two tabs in the panel
+  header, in the place the visible `Notifications` title used to occupy:
+  Employee (the signed-in account's own reminders, unchanged) and Admin (the
+  live workspace record). The visible title is removed and the rows are not
+  restated in a subtitle; the dialog keeps `Notifications` as its accessible
+  name. The tab that belongs to the current workspace is selected whenever the
+  panel opens, so opening the bell in Administration never lands on a personal
+  reminder first; closing and reopening resets the tab to the workspace even
+  if the last visit ended on the other audience. Each tab names its own count,
+  and the closed bell's badge names the audience its next open will show. The
+  tablist is reachable through its selected tab; ←/→ move and activate,
+  Home/End jump to the ends. A non-administrator sees the single Employee list
+  and no tablist; its header holds only the close control.
+- **Admin rows** — the Admin tab reads the same live overview as the Overview
+  page. `Needs your decision` carries every attention record the record
+  reports — EOD reports awaiting review, teammates with unsubmitted EOD days,
+  overdue tasks, disputed evidence, and configuration blockers — with its real
+  count, severity tile, and the action that resolves it. Each row opens the
+  exact surface: Review, the filtered Tasks record, Evidence, or Settings. A
+  clear queue states that no decisions are waiting instead of hiding the
+  section. `Today across the workspace` is one quiet pulse line (on shift,
+  recaps, outcomes, evidence), never a second KPI board. `Recent team
+  activity` is the overview's own newest-first timeline of updates, recaps,
+  completed tasks, evidence, and EOD submissions; a completion opens that
+  person's Completed tasks, a report opens their EOD review, evidence opens
+  their evidence, and an update or recap opens their People record. The footer
+  opens the overview that owns the full record.
 - **Rows** — agent-authored reminders wear the configured mascot mark, the
   same identity the chat window uses, never a generic tone glyph. The memory
   row reads `This is what Otto remembers about you so far` with its proposed
@@ -2142,6 +2216,16 @@ Otto is configured once in
 desktop/work-os-companion/src/mascot.ts: name, poses, art, and crop. Render
 the configured identity through Otto or MascotMark according to surface.
 
+Administration adds a charcoal open-front blazer, a signal pocket square, a
+brass lapel pin, and thin brass spectacles to the one configured Studio Otto
+renderer. The accessories belong to the mascot, so every pose and crop keeps
+them without a second art path. Only the still-mounted collapsed pet plays the
+one-shot dressing or undressing transition; header marks and chat marks render
+the final state without motion. Opening, collapsing, or replaying a pose never
+replays the outfit transition, and reduced motion renders the final dressed
+state immediately. The collapsed Administration orb carries a small `Admin`
+text label so the state never depends on costume alone.
+
 The mascot is a quiet guide, not a dashboard card and not a status replacement.
 It may appear as:
 
@@ -2156,11 +2240,14 @@ It may appear as:
 
 The compact floating companion has no circular halo or backdrop behind the
 mascot. Keep elapsed session time visible while a shift is open, including while
-paused; subtract completed breaks and freeze the timer at the current pause. A
-small orange corner marker remains: it shows alerts when input is needed and
-fills clockwise against the scheduled shift window when progress is available.
-The companion's accessible name gives the numeric percentage. The marker
-describes time only, never productivity or quality.
+paused; subtract completed breaks and freeze the timer at the current pause. The
+elapsed pill is also the shift-progress instrument: a lemon-green fill reveals
+the scheduled day from left to right, pale at the start and deeper as the shift
+completes, and reaches full at the scheduled end. The elapsed label stays bold
+and readable over the fill. A small orange corner marker remains for attention
+only; shift progress lives in the pill. The companion's accessible name gives
+the numeric percentage. The pill describes time only, never productivity or
+quality.
 
 When an actionable update needs the employee's input, use the shared `alert`
 pose rather than checking for one prompt kind. Repeat the familiar quick
@@ -2191,7 +2278,7 @@ the elapsed-time pill keep their default positions whether or not a bubble is
 showing: a bubble never pushes the figure down, so the pill can never land on
 it. The bubble's copy clamps to the space above the head — headline and
 supporting line stay legible, the action stays reachable — so a tall bubble may
-temporarily cover the drag handle and progress marker until it is resolved.
+temporarily cover the drag handle until it is resolved.
 
 ## 14. Deep module and seam rules
 
@@ -2311,20 +2398,28 @@ controls use 8–9px; there is no resting shadow. Signal green stays on state an
 the one forward action.
 
 **Notifications.** The masthead carries the same notifications bell and panel
-as the employee workspace (§8.12), reading the signed-in administrator's own
-notifications: the memory row opens the memory modal in place, while recap and
-outstanding EOD rows switch to the employee view first and then open the exact
-surface they name. While the panel is open it owns the layer above the receipt
-stack, whose cards keep their position underneath. Administration also uses
-the shared in-app flyouts: every confirmed write leaves one transient receipt
+as the employee workspace (§8.12). Its Employee tab reads the signed-in
+administrator's own notifications: the memory row opens the memory modal in
+place, while recap and outstanding EOD rows switch to the employee view first
+and then open the exact surface they name. Its Admin tab reads the live
+workspace overview — the decision queue, today's pulse, and recent team
+activity — and opens the exact administration section each row names. The bell
+defaults to Admin while Administration is the current workspace and to
+Employee in the personal workday. While the panel is open it owns the layer
+above the receipt stack, whose cards keep their position underneath.
+Administration also uses the shared in-app flyouts: every confirmed write
+leaves one transient receipt
 naming the persisted outcome, failures keep the page's own inline notice and
 offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.
 Two standing conditions hold persistent cards under stable keys: an overview
 snapshot older than ten minutes, and a workspace status reporting a missing
-migration or an unusable Nifty connection. The flyout stack keeps the shared
-viewport position here: a receipt lands in the window's top-right corner with
-the same insets as the employee view, at every width.
+migration or an unusable Nifty connection. Standing cards render in the shell's
+notification region in the page's reading order below the masthead, so they
+never cover the page identity or its actions; a shell-less surface falls back
+to a fixed stack offset below its header. Transient receipts keep the shared
+viewport position: a receipt lands in the window's top-right corner with the
+same insets as the employee view, at every width.
 
 **Page refresh.** The masthead carries the employee workspace's page refresh
 control in the same place, between the notifications bell and the profile
@@ -2452,7 +2547,8 @@ header.
 
 **Admin Otto tools.** The administration chat uses one thread-native card family
 for reads, proposals, and receipts: a paper frame, a clear header and lifecycle
-marker, flat rows, and one action region. Tasks, work records/EODs, reviewed
+marker, flat rows, and one action region. Its mascot/Admin chip opens the same
+Employee / Admin view switch as the floating companion. Tasks, work records/EODs, reviewed
 recaps, workdays, person resolution, and every task change each get their own
 layout; a proposal never prints raw ids, an unchanged field, or a meaningless
 empty value. Independent changes group into one review card with per-item

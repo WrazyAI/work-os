@@ -11,8 +11,8 @@ test("the Work OS root page is the In good company landing, not a placeholder", 
   const page = read("src/app/work-os/(site)/page.tsx");
   const landing = read("src/modules/work-os/marketing/LandingPage.tsx");
   assert.match(page, /<LandingPage\s*\/>/, "the route must render the landing component");
-  assert.match(landing, /A little company\./);
-  assert.match(landing, /A clearer workday\./);
+  assert.match(landing, /Good work\./);
+  assert.match(landing, /Good company\./);
   assert.match(landing, /Get Work OS/);
   assert.match(landing, /Actual desktop app · Demonstration data/);
   assert.equal((landing.match(/<h1/g) ?? []).length, 1, "exactly one h1");

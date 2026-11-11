@@ -25,7 +25,56 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Scrolling over a task table or Otto tool card now moves the page instead of stopping.
+- Build and Refine plan show a spinner while they work, and deleting a draft no longer shows a second check mark.
+- Notifications are more compact, rounded and easier to read.
+
+## 0.5.29 — 2026-11-10
+
+- The scenario debugger stays open when launched on Windows and opens again after you close it.
+- An admin record shows recorded time and updates again, Worktivity screenshots show in Evidence and EOD reports, and reports read as one tidy list.
+- Insights loads again instead of failing with an error.
+
+## 0.5.28 — 2026-11-09
+
+- In Employee view, administrators can select Otto’s icon in chat to return to Admin view.
+
+## 0.5.27 — 2026-11-09
+
+- You can read a submitted end-of-day report as a document, and Admin Otto shows what it is doing while it works.
+
+## 0.5.26 — 2026-11-09
+
+- A plan whose session reopens after a false clock-out can be saved again, and a rejected save now explains the real reason instead of blaming your connection.
+- Administrators can switch the floating mascot between Employee and Admin views, keep each chat and its message times, and see Otto in his Admin outfit.
+- The scenario debugger now opens normally instead of showing a blank window you could not close.
+
+## 0.5.25 — 2026-11-06
+
+- Open a submitted or approved EOD to read your report and its confirmation, without being asked to prepare it again.
+- Standing notices now sit under the page title, so they never cover the page or its actions.
+- Secondary text, status labels, and the notification badge are easier to read.
+- Open a task from its title, and the completion box is easier to tap.
+- On small windows, the update composer and the Tasks focus header no longer cover or clip the page.
+- Connect and Start setup appear right away instead of waiting for the whole spoken line.
+- Insights with no recorded work now offers one clear next step instead of a dashboard of zeros.
+- Admin People, Tasks, and EOD Review read as cards on small windows, with every key field visible.
+- The small-window navigation names every destination and keeps New chat and the workspace menu one tap away.
+
+## 0.5.24 — 2026-11-05
+
+- Switch between your own notifications and the workspace's notifications at the top of the panel, without a repeated summary line.
+- The elapsed-time pill under Otto now fills as your shift progresses, so you can see how much of the day has passed at a glance.
+- Administration no longer loads hidden employee screens, while your reminders and settings stay available.
+- The task backlog loads as you need it, and recap alerts no longer reload history you already opened.
+- Employee day and the weekly record now load a smaller summary, so large backlogs stay out of the way.
+- Admin Overview does less database work, and setup checks refresh separately from the live dashboard.
+- Work OS now does less background work while you use Administration or leave the companion open, so switching views stays lighter.
+
+## 0.5.23 — 2026-11-05
+
 - A teammate's admin record now shows real recap, observed-time, task, evidence, and EOD records, with one click to each.
+- The notifications bell now switches between your own reminders and the workspace's review queue, pulse, and recent team activity.
 - Tasks with completion files now show a small attachment marker beside their status, and the task details list the files.
 - Weekends no longer ask you for an EOD report, and the daily charts skip weekend days.
 - Admin Otto can handle several task requests in one message, show each result separately, and keep every change unapplied until you approve it.

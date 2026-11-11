@@ -29,32 +29,44 @@ const fs = require('node:fs');
     await orb.locator('.avatar-pet .studio-otto').waitFor();
     const orbFigure = await orb.locator('.avatar-pet .studio-otto').boundingBox();
     assert(orbFigure.width >= 116 && orbFigure.height >= 130, JSON.stringify(orbFigure)); checks++;
-    assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m left'); checks++;
+    assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m elapsed'); checks++;
     const orbMotion = await orb.locator('.studio-rig').evaluate(el => {
       const style = getComputedStyle(el);
       return { name: style.animationName, timing: style.animationTimingFunction };
     });
     assert(orbMotion.name.includes('studio-attention-rig'), JSON.stringify(orbMotion)); checks++;
     assert(orbMotion.timing.includes('steps(5'), JSON.stringify(orbMotion)); checks++;
-    // Exercise the deterministic token-free fixture that uses the live shift badge.
+    // Exercise the deterministic token-free fixture that uses the live shift progress pill.
     await progress.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=shift-progress');
-    await progress.locator('.avatar-badge.avatar-badge-progress').waitFor();
-    const shiftProgress = await progress.locator('.avatar-badge-progress').evaluate(el => ({
-      value: getComputedStyle(el).getPropertyValue('--shift-progress').trim(),
-      image: getComputedStyle(el).backgroundImage,
-    }));
-    assert(Math.abs(Number.parseFloat(shiftProgress.value) - 50) < 0.1, JSON.stringify(shiftProgress)); checks++;
-    assert(shiftProgress.image.includes('conic-gradient'), JSON.stringify(shiftProgress)); checks++;
+    await progress.locator('.avatar-day-time-fill').waitFor();
+    // Shift progress lives in the elapsed pill; the former pie marker was
+    // deliberately removed because it read as a stray wedge beside Otto.
+    const shiftProgress = await progress.locator('.avatar-day-time').evaluate(el => {
+      const fill = el.querySelector('.avatar-day-time-fill');
+      const label = el.querySelector('.avatar-day-time-label');
+      return {
+        progress: el.getAttribute('data-progress'),
+        clip: fill ? getComputedStyle(fill).clipPath : '',
+        image: fill ? getComputedStyle(fill).backgroundImage : '',
+        weight: label ? getComputedStyle(label).fontWeight : '',
+      };
+    });
+    assert.equal(shiftProgress.progress, '50'); checks++;
+    assert(shiftProgress.clip.includes('50%'), JSON.stringify(shiftProgress)); checks++;
+    assert(shiftProgress.image.includes('linear-gradient'), JSON.stringify(shiftProgress)); checks++;
+    assert(Number(shiftProgress.weight) >= 700, JSON.stringify(shiftProgress)); checks++;
     assert.equal((await progress.locator('.avatar-day-time').innerText()).trim(), '1h 30m elapsed'); checks++;
+    assert.match(await progress.locator('.avatar-orb').getAttribute('title') ?? '', /1h 30m elapsed/); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
     await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
-    await readiness.locator('.dashboard-otto .studio-otto').waitFor();
-    assert.equal(await readiness.locator('.dashboard-readiness-art .otto').count(), 0); checks++;
-    const size = await readiness.locator('.dashboard-otto .studio-otto').boundingBox();
-    assert(size.width >= 108 && size.height >= 108); checks++;
+    await readiness.locator('.dashboard-otto-band .studio-otto').waitFor();
+    assert.equal(await readiness.locator('.off-shift-dashboard').count(), 1); checks++;
+    const size = await readiness.locator('.dashboard-otto-band .studio-otto').boundingBox();
+    // The compact command surface uses a quiet band mark, not the old hero art.
+    assert(size.width >= 30 && size.height >= 30); checks++;
     await main.goto('http://127.0.0.1:5173/?offline&day=optional');
-    await main.locator('.dashboard-otto-active .studio-otto').waitFor();
+    await main.locator('.dashboard-shell .dashboard-otto-band .studio-otto').waitFor();
     await debug.goto('http://127.0.0.1:5173/debug.html');
     await debug.getByLabel('Mascot activity', { exact: true }).waitFor();
     await debug.waitForFunction(() => document.querySelector('.debug-mascot-controls')?.disabled === false, null, { timeout: 12000 });
@@ -112,7 +124,7 @@ const fs = require('node:fs');
     assert(await debug.getByLabel('Mascot activity', { exact: true }).isDisabled()); checks++;
     await debug.getByRole('button', { name: /Offline playground \(no backend\)/ }).click();
     await debug.getByLabel('Shift state', { exact: true }).selectOption('optional');
-    await main.locator('.dashboard-otto-active').waitFor();
+    await main.locator('.dashboard-shell .dashboard-otto-band').waitFor();
     for (const page of [main, readiness]) {
       for (const width of [1440, 1024, 720, 390]) {
         await page.setViewportSize({ width, height: 900 });

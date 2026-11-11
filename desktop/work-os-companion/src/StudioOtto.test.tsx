@@ -6,6 +6,7 @@ import { MASCOT_POSES } from "./mascotTypes";
 import { MASCOT } from "./mascot";
 import { MascotPet } from "./MascotPet";
 import { studioOttoPalette } from "./studioOttoPalette";
+import { MascotMark } from "./chat/MascotMark";
 
 const render = (pose: (typeof MASCOT_POSES)[number], crop: "full" | "head" = "full", tone: "signal" | "late" = "signal") =>
   renderToStaticMarkup(<StudioOtto pose={pose} crop={crop} tone={tone} />);
@@ -40,6 +41,56 @@ describe("Studio Otto", () => {
     expect(studioOttoPalette("alert", "signal")).toBe("working");
     expect(studioOttoPalette("celebrate", "signal")).toBe("ready");
     expect(studioOttoPalette("recover", "signal")).toBe("blocked");
+  });
+
+  it.each(MASCOT_POSES)("keeps %s readable in both attire modes, crops and tones", (pose) => {
+    for (const mode of ["employee", "admin"] as const) {
+      for (const crop of ["full", "head"] as const) {
+        for (const tone of ["signal", "late"] as const) {
+          const html = renderToStaticMarkup(<StudioOtto pose={pose} crop={crop} tone={tone} mode={mode} />);
+          expect(html).toContain(`data-mode="${mode}"`);
+          expect(html).toContain("studio-admin-specs");
+          expect(html).toContain('fill="none"');
+          expect(html).toContain("studio-terminal-");
+          expect(html).not.toMatch(/NaN|undefined|<image\b|<text\b/);
+          if (crop === "full") {
+            expect(html).toContain("studio-admin-blazer");
+            expect(html).toContain("studio-admin-sleeve");
+            expect(html).toContain("studio-admin-lapel");
+            expect(html).toContain("studio-admin-pocket");
+            expect(html).toContain("studio-admin-pin");
+            expect(html).toContain("studio-power");
+            if (pose === "think") expect(html).toContain("studio-taskpad");
+          } else {
+            expect(html).toContain('viewBox="9 10 142 110"');
+            expect(html).toContain("studio-admin-collar");
+            expect(html).not.toMatch(/studio-chassis|studio-taskpad|studio-admin-blazer|studio-arm|<filter/);
+          }
+          const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+          expect(new Set(ids).size).toBe(ids.length);
+          for (const match of html.matchAll(/url\(#([^)]+)\)/g)) expect(ids).toContain(match[1]);
+        }
+      }
+    }
+  });
+
+  it("defaults to employee, forwards admin through shared seams and keeps marks static", () => {
+    expect(render("idle")).toContain('data-mode="employee"');
+    for (const component of [<MascotMark key="mark" mode="admin" />, <MascotPet key="pet" isolated mode="admin" animateAttire />]) {
+      const html = renderToStaticMarkup(component);
+      expect(html).toContain('data-mode="admin"');
+      expect(html).not.toContain('data-attire-transition="');
+    }
+    expect(renderToStaticMarkup(<MascotMark />)).toContain('data-mode="employee"');
+  });
+
+  it("exposes both bounded transition directions without owning a renderer timer", () => {
+    for (const attireTransition of ["on", "off"] as const) {
+      const html = renderToStaticMarkup(<StudioOtto mode={attireTransition === "on" ? "admin" : "employee"} attireTransition={attireTransition} />);
+      expect(html).toContain(`data-attire-transition="${attireTransition}"`);
+      expect(html).toContain("studio-admin-blazer");
+      expect(html).toContain("studio-admin-specs");
+    }
   });
 
   it("keeps late as a secondary badge during work and completion", () => {

@@ -51,15 +51,16 @@ export type AdminProfileEntry = {
  * record and never changes the signed-in admin's own employee state. The
  * switch back to the personal workday is a view change, not a role change.
  * The masthead carries the same notifications bell the employee workspace
- * mounts — the account's own notifications — and the app supplies its data,
- * alongside the account's own profile avatar.
+ * mounts: its Employee tab is the account's own notifications, its Admin tab
+ * the workspace decision queue, and the app supplies both records alongside
+ * the account's own profile avatar.
  *
  * The current section is a prop rather than local state: the app's page-guide
  * seam keys its first-visit flags by section, and the workspace tour drives
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenOtto, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -78,6 +79,10 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The administration New chat entry. It starts the shared admin Otto
    * thread; it is never a dead sidebar control. */
   onNewChat?: (() => void) | undefined;
+  /** The masthead's Ask Otto entry. It resumes the shared conversation when
+   * one is retained; it is not a second New chat. Falls back to the New chat
+   * callback for hosts that predate the split. */
+  onOpenOtto?: (() => void) | undefined;
   /** Opens Admin Otto on its Recaps tab: the Overview's recap measure and the
    * EOD report's See all recaps both lead to the recaps they name. */
   onOpenRecaps: () => void;
@@ -92,6 +97,9 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   personalSettings?: ReactNode;
 }) {
   const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
+  // Ask Otto reopens the retained conversation. Only the explicit New chat
+  // control (sidebar or sheet header) owns the durable discard.
+  const openOtto = onOpenOtto ?? onNewChat;
   const meta = ADMIN_SECTIONS[section];
 
   const queryClient = useQueryClient();
@@ -131,11 +139,13 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
                   key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}`}
                   initialTab={focus.evidenceTab}
                   initialPersonId={focus.personId}
+                  viewerPersonId={session.personId ?? ""}
                 />
               : <SettingsPage personalSettings={personalSettings} />;
 
   return (
     <div className="workspace admin-workspace">
+      <a className="skip-link" href="#work-os-main">Skip to content</a>
       <SidebarNav
         mode="admin"
         activeView="day"
@@ -148,15 +158,15 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
         onWhatsNew={onOpenWhatsNew}
         onSignOut={onSignOut}
       />
-      <section className="stage admin-stage">
+      <div className="stage admin-stage">
         <header className="masthead admin-masthead">
           <div className="admin-masthead-copy">
             <p>Work OS · Administration</p>
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
           <div className="mast-actions">
-            {onNewChat ? (
-              <button type="button" className="admin-switch admin-ask-otto" onClick={onNewChat}>
+            {openOtto ? (
+              <button type="button" className="admin-switch admin-ask-otto" onClick={openOtto}>
                 <MessageCircle size={14} aria-hidden /> Ask Otto
               </button>
             ) : null}
@@ -203,6 +213,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
               block, directly under its title, instead of under the rule. */}
           {session.role === "admin" ? <p className="admin-purpose">{meta.purpose}</p> : null}
         </header>
+        <div id="work-os-notification-region" className="notification-region" />
+        <div id="work-os-main" className="skip-target" tabIndex={-1} />
         <main className="page admin-page">
           {ottoNotice ? <Notice tone="warn">{ottoNotice}</Notice> : null}
           {session.role === "admin" ? (
@@ -213,7 +225,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             </AdminCard>
           )}
         </main>
-      </section>
+      </div>
     </div>
   );
 }

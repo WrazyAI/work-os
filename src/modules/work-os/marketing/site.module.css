@@ -6,12 +6,17 @@
 }
 
 .shell {
-  --paper: #fafaf6;
-  --canvas: #f5f6f1;
-  --sage: #e6ece1;
-  --ink: #182018;
-  --muted: #536052;
-  --line: #d9ded5;
+  --paper: #fbfafc;
+  --canvas: #f3eff7;
+  --sage: #eee9f4;
+  --ink: #302638;
+  --muted: #665c70;
+  --line: #e0d9e6;
+  --accent: #d4e8be;
+  --accent-hover: #e1f3cf;
+  --accent-ink: #4a7d22;
+  --control-ink: #222c26;
+  --focus: #4a7d22;
   --signal: #a8f15b;
   --signal-deep: #5e9d27;
   --graphite: #1c1d21;
@@ -30,6 +35,10 @@
   box-sizing: border-box;
 }
 
+.shell :is(h1, h2, h3) { color: inherit; }
+.shell :is(a, button):focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.shell :is(h1, h2) { text-wrap: balance; }
+
 .skip {
   position: absolute;
   left: 16px;
@@ -37,7 +46,7 @@
   z-index: 100;
   padding: 10px 16px;
   border-radius: 8px;
-  background: var(--ink);
+  background: var(--skip-background, var(--ink));
   color: #fff;
   font-size: 14px;
 }
@@ -100,6 +109,7 @@
 }
 
 .nav a[aria-current="page"] {
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 6px;
 }
@@ -121,8 +131,21 @@
 }
 
 .workspace:hover {
-  color: var(--signal-deep);
+  color: var(--accent-ink);
 }
+
+.darkHeader { width: min(1184px, calc(100% - 96px)); min-height: clamp(64px, 9svh, 88px); }
+.darkHeader .brand { font-size: 19px; gap: 10px; }
+.darkHeader .mark { width: 32px; height: 32px; }
+.darkHeader .byline { border: 0; padding-left: 3px; font-size: 11px; }
+.darkHeader .nav { gap: 30px; font-size: 12px; }
+.darkHeader .nav > a[aria-current="page"], .darkHeader .back { display: none; }
+.darkHeader .workspace { border: 1px solid #62596e; padding: 10px 15px; border-radius: 8px; font-size: 12px; }
+.darkHeader .workspace:hover { background: #3b3347; }
+.footer.darkFooter { width: min(1184px, calc(100% - 96px)); border: 0; margin-top: 0; padding: 28px 0; font-size: 10px; }
+
+@media (min-width: 900px) and (max-height: 700px) { .darkHeader { min-height: 64px; } }
+@media (max-width: 1100px) { .darkHeader, .footer.darkFooter { width: calc(100% - 64px); } }
 
 .main {
   width: min(1240px, calc(100% - 64px));
@@ -164,6 +187,13 @@
     min-height: 76px;
     gap: 16px;
   }
+
+  .darkHeader, .footer.darkFooter { width: calc(100% - 48px); }
+  .darkHeader { min-height: 74px; }
+  .darkHeader .brand { font-size: 17px; }
+  .darkHeader .mark { width: 28px; height: 28px; }
+  .darkHeader .nav { gap: 20px; font-size: 11px; }
+  .darkHeader .workspace { display: none; }
 
   .byline,
   .back {

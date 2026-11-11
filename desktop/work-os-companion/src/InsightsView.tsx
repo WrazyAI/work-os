@@ -19,7 +19,7 @@ import "./insight-dashboard.css";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 
-export function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
+export function PersonalInsights({ data, loading, range, onRange, onOpenToday, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onOpenToday: () => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
   const notifications = useNotifications();
   const [synthesis, setSynthesis] = useState<InsightSynthesisState | null>(null);
   const liveInsights = new URLSearchParams(window.location.search).has("liveinsights");
@@ -70,7 +70,20 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
   // earlier period; a missing comparison must never read as a drop against zero.
   const comparisonAvailable = Boolean(data?.comparison?.days?.length);
   const pillFor = (key: string) => (comparisonAvailable ? deltas.find((stat) => stat.key === key) ?? null : null);
-  const hasRecord = !!data?.days.some((day) => day.observedSeconds > 0 || day.tasksCompleted > 0 || day.updates > 0 || day.outputEvidence > 0 || (day.trackedMinutes ?? 0) > 0);
+  const hasRecord = !!data?.days.some((day) =>
+    day.observedSeconds > 0 ||
+    day.tasksCompleted > 0 ||
+    day.updates > 0 ||
+    day.outputEvidence > 0 ||
+    (day.trackedMinutes ?? 0) > 0 ||
+    (day.planned ?? 0) > 0 ||
+    Boolean(day.goal?.text) ||
+    // Open work and a session that needs correction are actionable records,
+    // not an empty range: keep their facts and controls visible.
+    Number(day.carried ?? day.carryOver ?? 0) > 0 ||
+    Number(day.overdue ?? 0) > 0 ||
+    day.sessionQuality?.status === "needs_correction",
+  );
   const blockedTotal = updateSlices.find((slice) => slice.key === "blocked")?.value ?? 0;
   const pausedTotal = data ? data.totals.pausedSeconds : 0;
   const observedTotal = data ? data.totals.observedSeconds : 0;
@@ -128,6 +141,13 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
         </span>
       </div>
 
+      {!hasRecord ? <section className="panel insight-empty-state" aria-labelledby="insights-empty-title">
+        <div>
+          <h2 id="insights-empty-title">No work recorded in this range</h2>
+          <p>Goals, updates, task outcomes, evidence, and observed time will appear here as you record them. Activity alone never becomes an outcome.</p>
+        </div>
+        <button type="button" className="primary" onClick={onOpenToday}>Open today</button>
+      </section> : <>
       <div className="insight-kpi-strip" aria-label={`Key measurements for ${rangeLabel}`}>
         <KpiCard label="Outcomes completed" value={String(data.totals.tasksCompleted)} delta={pillFor("tasksCompleted")} spark={series.map((point) => point.outcomes)} sparkLabel={`Completed outcomes per day for ${rangeLabel}`} />
         <KpiCard label="Commitment rate" value={rangeSummary?.commitmentRate != null ? `${rangeSummary.commitmentRate}%` : "—"} delta={commitmentPill} detail={rangeSummary?.commitmentRate != null ? `${data.totals.plannedCompleted} of ${data.totals.planned} planned` : "No planned commitments in this range"} />
@@ -135,8 +155,6 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
         <KpiCard label="Observed context" value={durationLabel(data.totals.observedSeconds)} delta={pillFor("observedMinutes")} spark={series.map((point) => point.observedMinutes)} sparkLabel={`Observed minutes per day for ${rangeLabel}`} />
         <KpiCard label="Closing carry-over" value={String(carryOverCount)} delta={carryOverDelta} attention={carryOverCount > 0} detail={carryOverCount > 0 ? "Still open at the close" : "Nothing carried at the close"} />
       </div>
-      {!hasRecord ? <p className="insight-empty-note">No work record is stored for {rangeLabel} yet. Goals, updates, task outcomes, and evidence will appear here as they are recorded.</p> : null}
-
       <InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />
 
       <section className="panel insight-primary-chart">
@@ -253,6 +271,7 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
       </details>
 
       <p className="insight-disclaimer">These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.</p>
+      </>}
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;
 }

@@ -43,6 +43,6 @@ export default function PlanningPreview() {
         readiness: remaining.length === 0 ? "ready" : "needs_one_clarification",
       };
     }}
-    onConfirm={async () => "confirmed"}
+    onConfirm={async () => params.has("save-error") ? { failed: "This plan is read-only." } : "confirmed"}
   /></main>;
 }

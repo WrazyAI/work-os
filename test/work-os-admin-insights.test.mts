@@ -4,6 +4,7 @@ import {
   adminInsightWindow,
   buildAdminInsightNotes,
   outcomeTimingFromEvents,
+  outstandingCandidatesFromSessions,
   previousAdminInsightWindow,
   type AdminInsightTotals,
 } from "../src/lib/work-os-admin-insights";
@@ -48,6 +49,29 @@ test("chart date ranges leave weekends out while the range totals keep them", ()
     "2026-09-07",
     "2026-09-08",
   ]);
+});
+
+test("pg Date session rows keep their recorded calendar day in outstanding EOD math", () => {
+  const rule = {
+    id: "schedule-1",
+    timezone: "UTC",
+    days_of_week: [1, 2, 3, 4, 5],
+    shift_start: "09:00",
+    shift_end: "17:00",
+    effective_from: "2026-01-01",
+    effective_to: null,
+  };
+  const candidates = outstandingCandidatesFromSessions(
+    [{ person_id: "p1", shift_date: new Date(2026, 10, 6) }],
+    new Map([["p1:2026-11-06", { id: "report-1", status: "draft", submitted_at: null }]]),
+    new Map([["p1", [rule]]]),
+    new Map(),
+  );
+
+  const candidate = candidates.get("p1")?.[0];
+  assert.equal(candidate?.date, "2026-11-06");
+  assert.equal(candidate?.report?.id, "report-1");
+  assert.equal(candidate?.scheduledDay, true);
 });
 
 test("completion timing uses the task snapshot due date and ignores undated work", () => {

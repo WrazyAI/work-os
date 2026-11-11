@@ -27,6 +27,7 @@ import {
   isoDaysAgo,
   todayIso,
 } from "./data";
+import { ScreenshotImage } from "../ScreenshotGallery";
 import { ShareBars } from "./charts";
 import { one, type ActivityIntervalView, type EvidenceRow } from "./types";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
@@ -48,7 +49,7 @@ function screenshotOf(row: EvidenceRow) {
  * apart; the raw-frame preview stays inside the flagged/disputed rule and
  * records a reason with every view. A caller can land directly on the
  * activity-recap tab (the Overview recap action does). */
-export default function EvidencePage({ initialTab = "evidence", initialPersonId = "" }: { initialTab?: EvidenceTab; initialPersonId?: string } = {}) {
+export default function EvidencePage({ initialTab = "evidence", initialPersonId = "", viewerPersonId = "" }: { initialTab?: EvidenceTab; initialPersonId?: string; viewerPersonId?: string } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [tab, setTab] = useState<EvidenceTab>(initialTab);
@@ -131,6 +132,24 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
     return [...map.entries()].sort((left, right) => right[0].localeCompare(left[0]));
   }, [evidence.data]);
 
+  // A retained frame is the evidence itself for a Worktivity row, so the first
+  // page of activity rows carries a real thumbnail. The cap bounds both the
+  // image reads and the audited preview accesses on one page view; later rows
+  // keep the frame marker and open their own detail.
+  const thumbnailIds = useMemo(() => {
+    const ids = new Set<string>();
+    let remaining = 24;
+    for (const row of evidence.data?.evidence ?? []) {
+      if (remaining <= 0) break;
+      if (row.source !== "worktivity") continue;
+      const shot = screenshotOf(row);
+      if (!shot?.id || shot.deleted_at) continue;
+      ids.add(shot.id);
+      remaining -= 1;
+    }
+    return ids;
+  }, [evidence.data]);
+
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
   const githubConnection = (connections.data?.connections ?? []).find((row) => row.provider === "github" && row.active !== false) ?? null;
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
@@ -138,9 +157,11 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   const sources = evidence.data?.summary?.sources ?? [];
   const selectedShot = selected ? screenshotOf(selected) : null;
   const selectedReviewable = !!selected && (selected.event?.correction_status === "disputed" || one<Record<string, unknown>>(selected.event?.metadata)?.needsReview === true);
+  const selectedOwn = !!selected?.person?.id && !!viewerPersonId && String(selected.person.id) === String(viewerPersonId);
 
   return (
     <div className="admin-grid">
+      <h2 className="sr-only">Evidence record</h2>
       <AdminCard
         icon={Camera}
         title="Record shape"
@@ -236,20 +257,38 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 <section key={date}>
                   <h3>{formatWorkOsFullDate(date)}<small>{rows.length} item{rows.length === 1 ? "" : "s"}</small></h3>
                   <ul>
-                    {rows.map((row) => (
-                      <li key={row.id}>
-                        <button type="button" onClick={() => { setSelected(row); setReason(""); setScreenshotUrl(null); setScreenshotError(null); }}>
-                          <span className="min-w-0">
-                            <b>{row.title}</b>
-                            <small>{row.person?.display_name ?? "Unmapped person"} · {row.summary}</small>
-                          </span>
-                          <span className="admin-activity-meta">
-                            {row.event?.correction_status === "disputed" ? <Pill tone="err">Disputed</Pill> : null}
-                            <Pill tone={row.source === "worktivity" ? "observed" : "neutral"}>{evidenceSourceLabel(row.source)}</Pill>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
+                    {rows.map((row) => {
+                      const shot = screenshotOf(row);
+                      return (
+                        <li key={row.id}>
+                          <button type="button" onClick={() => { setSelected(row); setReason(""); setScreenshotUrl(null); setScreenshotError(null); }}>
+                            <span className="admin-evidence-row">
+                              {shot?.id ? (
+                                thumbnailIds.has(shot.id) ? (
+                                  <ScreenshotImage
+                                    summaryId={shot.id}
+                                    size="thumb"
+                                    alt={`Retained Worktivity frame for ${row.person?.display_name ?? "this person"}`}
+                                    className="admin-evidence-frame"
+                                    unavailableLabel="Private"
+                                  />
+                                ) : (
+                                  <span className="admin-evidence-thumb-missing" aria-hidden="true">Frame</span>
+                                )
+                              ) : null}
+                              <span className="min-w-0">
+                                <b>{row.title}</b>
+                                <small>{row.person?.display_name ?? "Unmapped person"} · {row.summary}</small>
+                              </span>
+                            </span>
+                            <span className="admin-activity-meta">
+                              {row.event?.correction_status === "disputed" ? <Pill tone="err">Disputed</Pill> : null}
+                              <Pill tone={row.source === "worktivity" ? "observed" : "neutral"}>{evidenceSourceLabel(row.source)}</Pill>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               ))}
@@ -315,7 +354,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
               <p className="admin-quiet">{selected.summary}</p>
               {selected.url ? <p><a href={selected.url} target="_blank" rel="noreferrer">Open the artifact</a></p> : null}
             </section>
-            {selectedShot ? (
+            {selectedShot?.id ? (
               <section className="admin-block">
                 <h3><ShieldCheck size={14} aria-hidden /> Screenshot frame</h3>
                 <div className="admin-kv-grid">
@@ -325,6 +364,17 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 {selectedShot.summary ? <p className="admin-quiet">{selectedShot.summary}</p> : null}
                 {selectedShot.deleted_at ? (
                   <Notice tone="warn">This frame was flagged as sensitive and the image was deleted; the summary stays on the record.</Notice>
+                ) : selectedOwn ? (
+                  <>
+                    <ScreenshotImage
+                      summaryId={selectedShot.id}
+                      size="preview"
+                      alt="Your retained Worktivity frame for this evidence item"
+                      className="admin-shot"
+                      unavailableLabel="This frame is no longer available"
+                    />
+                    <p className="admin-quiet">Your own retained frame. Each preview is recorded in the screenshot access log.</p>
+                  </>
                 ) : selectedReviewable ? (
                   <>
                     <p className="admin-quiet">Raw frames stay limited to flagged or disputed review. Every view is recorded with the reason you give.</p>
