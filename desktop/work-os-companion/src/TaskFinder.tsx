@@ -94,7 +94,7 @@ export function TaskFinder({ entry, currentDate, scope, source, onClose, onOpenT
     return () => { dialog?.close(); if (closeTimer.current) clearTimeout(closeTimer.current); };
   }, [entry]);
 
-  function finish(task?: TaskRow) {
+  function completeClose(task?: TaskRow) {
     dialogRef.current?.close();
     originRef.current?.focus({ preventScroll: true });
     onClose();
@@ -102,12 +102,13 @@ export function TaskFinder({ entry, currentDate, scope, source, onClose, onOpenT
     // existing task drawer, whose own focus lifecycle then becomes the owner.
     if (task) requestAnimationFrame(() => onOpenTask(task));
   }
-  function dismiss() {
+  function finish(task?: TaskRow) {
     if (closing) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { completeClose(task); return; }
     setClosing(true);
-    closeTimer.current = setTimeout(() => finish(), 160);
+    closeTimer.current = setTimeout(() => { closeTimer.current = null; completeClose(task); }, 160);
   }
+  const dismiss = () => finish();
   function searchKeys(event: KeyboardEvent<HTMLInputElement>) {
     if (composing || event.nativeEvent.isComposing || waitingForText || dateError) return;
     if (event.key === "ArrowDown") {

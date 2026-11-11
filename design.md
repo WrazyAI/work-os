@@ -592,8 +592,9 @@ workspace than a list of cards.
 ### 6.1 Page order
 
 1. Masthead title/date and date navigator.
-2. One compact agenda strip: focus statement, save/provenance state, live count
-   shortcuts, and Review unfinished work only when relevant.
+2. One compact agenda strip: focus statement, save/provenance state, a truthful
+   plan read (`N open of M planned` with a thin recorded-done meter), one
+   open-focus control, and Review unfinished work only when relevant.
 3. One flat task-list panel whose header borrows the dashboard queue's outline:
    the four views (My day, Unfinished, Completed, All tasks) are the panel title,
    and three icon-only controls — Search, Calendar, Add task — ride the trailing
@@ -651,12 +652,18 @@ it. The native modal owns inert background and focus, the result area scrolls,
 and narrow/short windows retain every control with no horizontal overflow.
 
 The focus strip opens a centered, labelled dialog containing the selected day's
-full focus and its provenance, followed by selected plan items and their
-recorded plan states when a plan exists. The strip's existing review and retry buttons
-retain their own actions; a focusable details trigger supports keyboard access.
-Current-day focus offers Edit focus, while historical focus is read-only. Escape,
-the close control, and a backdrop press dismiss the dialog and restore focus;
-long text wraps and scrolls within the viewport.
+full focus and its provenance, followed by the selected plan's parent items and
+their subtasks when a plan exists. Each parent is a disclosure: its subtasks sit
+nested beneath it, the parent is collapsed by default, and it states its recorded
+plan state plus progress through its subtasks. The plan heading states how many
+items are recorded done. The strip's existing review and retry buttons retain
+their own actions; a visible details trigger supports keyboard access and the
+focus sentence remains a convenience press target. Current-day focus offers Edit
+focus, while historical focus is read-only. Escape, the close control, and a
+backdrop press dismiss the dialog and restore focus; long text wraps, the body
+scrolls within the viewport, and the header and footer stay put. The dialog
+arrives and leaves with the shared small translation and fade, and disclosures
+expand with a height-and-opacity transition; reduced motion removes both.
 
 At wide widths, the title column absorbs available space. Progress, due date,
 status, and menu columns remain intrinsic and aligned. At narrow widths, the
@@ -2135,8 +2142,14 @@ Use small transforms only: a 1px hover lift, 4–9px entry translation, or
 approximately .985 press scale. No ambient loops, bouncing, overshoot, or
 theatrical dashboard animation.
 
-The Plan your day session hands off between its input, drafted review, and
-recorded confirmation without replacing the modal backdrop. Compose/review
+The focus strip uses 160–220ms for its hover, chevron, and recorded-done meter;
+the focus dialog arrives over 220ms with a 10px translation and leaves over
+180ms; the task finder panel arrives over 220ms and leaves over 160ms. Their
+backdrops fade with them. The focus plan's subtask disclosures use a 220ms
+height-and-opacity transition. Reduced motion removes every one of these while
+preserving the same states and geometry. The Plan your day session hands off
+between its input, drafted review, and recorded confirmation without replacing
+the modal backdrop. Compose/review
 content enters over 210ms with a 7px translation; recorded confirmation enters
 over 240ms with a 9px translation, using the product easing. Review focus and
 the confirmation state persist when motion is reduced, with nonessential

@@ -26,6 +26,8 @@
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
 }
+.task-finder-dialog[open]::backdrop { animation: task-finder-backdrop-in 220ms ease-out both; }
+.task-finder-dialog.is-closing::backdrop { animation: task-finder-backdrop-out 160ms ease-in both; }
 .task-finder-panel {
   position: relative;
   isolation: isolate;
@@ -38,7 +40,7 @@
   border-radius: 18px;
   background: var(--surface-raised, #fff);
   box-shadow: 0 24px 72px rgba(18, 27, 17, .16);
-  animation: task-finder-arrive 200ms cubic-bezier(.2,.8,.2,1) both;
+  animation: task-finder-arrive 220ms cubic-bezier(.2,.8,.2,1) both;
 }
 .task-finder-panel::before {
   content: "";
@@ -110,9 +112,11 @@
 .task-finder-footer > span { display: inline-flex; align-items: center; gap: 4px; }
 .task-finder-footer kbd { padding: 2px 4px; margin-left: 5px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
 .task-finder-dialog button:focus-visible, .task-finder-date-fields input:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
-.task-finder-dialog.is-closing .task-finder-panel { animation: task-finder-leave 160ms cubic-bezier(.2,.8,.2,1) both; }
-@keyframes task-finder-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes task-finder-leave { to { opacity: 0; transform: translateY(4px); } }
+.task-finder-dialog.is-closing .task-finder-panel { animation: task-finder-leave 160ms cubic-bezier(.4,0,.2,1) both; }
+@keyframes task-finder-arrive { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes task-finder-leave { to { opacity: 0; transform: translateY(8px) scale(.99); } }
+@keyframes task-finder-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes task-finder-backdrop-out { to { opacity: 0; } }
 @media (max-width: 560px) {
   .task-list-controls .task-toolbar-icon { flex-basis: 44px; width: 44px; height: 44px; }
   .task-finder-dialog { padding: 12px; }
@@ -139,5 +143,6 @@
   .task-finder-results { max-height: 45dvh; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .task-finder-panel, .task-finder-dialog.is-closing .task-finder-panel { animation: none; }
+  .task-finder-panel, .task-finder-dialog.is-closing .task-finder-panel,
+  .task-finder-dialog[open]::backdrop, .task-finder-dialog.is-closing::backdrop { animation: none; }
 }

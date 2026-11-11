@@ -58,6 +58,7 @@ import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportO
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { TaskFinder } from "./TaskFinder";
+import { buildFocusPlan } from "./focusPlan";
 import { filterFinderTasks } from "./taskFinder";
 import type { TaskFinderSource } from "./workOsQueries";
 import { updateTaskHistoryPages } from "./workOsQueries";
@@ -5862,6 +5863,7 @@ export default function App() {
               ...(!taskSearchQuery && !taskFilterFrom && !taskFilterTo ? visibleTodayTasks : []),
               ...visibleTodayTasks.filter((task) => !!task.pending_status),
             ])}
+        focusTasks={visibleTodayTasks}
         taskHistory={taskHistory}
         workspaceHistory={workspaceTaskHistory}
         completedHistory={completedTaskHistory}
@@ -6791,13 +6793,13 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
 }
 
 /** Render the employee Tasks workspace with shared day history and sorted paginated views. */
-export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
+export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, focusTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
   finderScope?: string; finderSource?: TaskFinderSource; onFinderOpenChange?: (open: boolean) => void;
   onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
   onAssignTask?: (task: TaskRow) => void;
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
-  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null; unfinishedHistory?: TaskRow[] | null;
+  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; focusTasks?: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null; unfinishedHistory?: TaskRow[] | null;
   pageCounts?: { total: number; open: number; completed: number } | null; pageTotal?: number | null;
   taskSearch?: string; filterFrom?: string; filterTo?: string;
   historyOrder?: "server" | "local"; historyError?: boolean; historyHasData?: boolean; onRetryHistory?: () => void;
@@ -6820,6 +6822,9 @@ export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, 
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
+  const planTasks = historical ? historicalTasks : focusTasks ?? todayTasks;
+  const focusPlan = buildFocusPlan(shownPlan, planTasks);
+  const focusPlanPercent = focusPlan.total ? Math.round((focusPlan.completed / focusPlan.total) * 100) : 0;
   const historyById = new Map<string, TaskRow>();
   for (const task of [...taskHistory, ...workspaceHistory, ...(completedHistory ?? []), ...historicalTasks]) {
     historyById.set(String(task.id), task);
@@ -6992,11 +6997,14 @@ export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, 
   };
 
   return <main className="page tasks-workspace">
-    <TaskFocusDetails text={agendaText} provenance={provenance} date={formatWorkOsDate(selectedDate)} historical={historical} plan={(historical ? shownPlan : currentPlan) ?? null} onEdit={onEditFocus}>
+    <TaskFocusDetails text={agendaText} provenance={provenance} date={formatWorkOsDate(selectedDate)} historical={historical} plan={shownPlan ?? null} tasks={planTasks} onEdit={onEditFocus}>
       <div className="agenda-strip-focus">
-        <span className="task-focus-kicker"><Target size={12} aria-hidden="true" /> {historical ? "Workday focus" : "Today's focus"}</span>
+        <span className="task-focus-kicker"><span className="task-focus-mark" aria-hidden="true"><Target size={12} /></span> {historical ? "Workday focus" : "Today's focus"}</span>
         <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{agendaText}</OverflowPanText>
-        <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small>
+        <small className="agenda-strip-meta">
+          <span className="agenda-strip-provenance">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</span>
+          {focusPlan.total > 0 && <span className="agenda-strip-plan" aria-label={`${focusPlan.open} open of ${focusPlan.total} planned items; ${focusPlan.completed} recorded done`}><b>{focusPlan.open}</b> open <span>of {focusPlan.total} planned</span><span className="agenda-strip-meter" aria-hidden="true"><i style={{ width: `${focusPlanPercent}%` }} /></span></span>}
+        </small>
       </div>
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" aria-label={`Review unfinished work — ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} onClick={() => onCarryOverOpen(true)}><span className="carry-count" aria-hidden="true"><b>{carryOver.length > 99 ? "99+" : carryOver.length}</b><small>{carryOver.length === 1 ? "unfinished task" : "unfinished tasks"}</small></span><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </TaskFocusDetails>

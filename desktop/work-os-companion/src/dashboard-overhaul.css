@@ -433,17 +433,25 @@ body {
 .date-navigator button { border-color: var(--dash-line); color: var(--dash-muted); }
 .formatted-date-picker { color: var(--dash-ink); }
 
-.task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--dash-line); border-radius: 14px; background: rgba(255, 255, 252, 0.88); box-shadow: none; }
+.task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 14px 12px 16px; border: 1px solid var(--dash-line); border-radius: 16px; background: linear-gradient(112deg, rgba(255, 255, 252, 0.96), rgba(241, 249, 233, 0.84)); box-shadow: 0 1px 2px rgba(20,30,18,.025); transition: border-color .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), box-shadow .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), transform .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
 .task-agenda-strip { position: relative; cursor: pointer; }
-.task-focus-details-trigger { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.task-focus-details-trigger:focus-visible { position: static; width: auto; height: auto; min-height: 40px; clip-path: none; padding: 0 10px; border: 1px solid var(--dash-line); border-radius: 8px; background: var(--dash-card-solid); color: var(--dash-ink); outline: 2px solid #4a7d22; }
-.task-focus-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(86vh, 800px); padding: 0; overflow: auto; border: 1px solid var(--dash-line); border-radius: 18px; background: var(--dash-card-solid); color: var(--dash-ink); box-shadow: 0 24px 80px rgba(15,25,17,.25); }
-.task-focus-dialog::backdrop { background: rgba(20,29,22,.52); }
-.task-focus-dialog > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 28px 30px 20px; }
+.task-agenda-strip:hover { border-color: var(--dash-line-strong); box-shadow: 0 10px 28px rgba(20,30,18,.06); }
+.task-agenda-strip:has(.task-focus-details-trigger:focus-visible) { border-color: var(--dash-line-strong); box-shadow: 0 0 0 3px rgba(74,125,34,.1); }
+.task-focus-details-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--dash-line); border-radius: 10px; background: var(--dash-card-solid); color: var(--dash-muted); cursor: pointer; transition: background .16s ease, color .16s ease, transform .16s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
+.task-focus-details-trigger:hover { background: #f0f3ed; color: var(--dash-ink); transform: translateX(1px); }
+.task-focus-details-trigger:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
+.task-focus-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(86vh, 800px); padding: 0; overflow: hidden; border: 1px solid var(--dash-line); border-radius: 20px; background: var(--dash-card-solid); color: var(--dash-ink); box-shadow: 0 24px 80px rgba(15,25,17,.25); }
+.task-focus-dialog:focus, .task-focus-dialog:focus-visible { outline: none; }
+.task-focus-dialog[open] { display: flex; flex-direction: column; animation: task-focus-arrive 220ms cubic-bezier(.2,.8,.2,1) both; }
+.task-focus-dialog::backdrop { background: rgba(20,29,22,.52); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+.task-focus-dialog[open]::backdrop { animation: task-focus-backdrop-in 220ms ease-out both; }
+.task-focus-dialog.is-closing { animation: task-focus-leave 180ms cubic-bezier(.4,0,1,1) both; }
+.task-focus-dialog.is-closing::backdrop { animation: task-focus-backdrop-out 180ms ease-in both; }
+.task-focus-dialog > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 26px 28px 18px; border-bottom: 1px solid var(--dash-line); flex: none; }
 .task-focus-dialog > header small, .task-focus-dialog-body > span, .task-focus-dialog-body > small { color: var(--dash-muted); font-size: 11px; }
 .task-focus-dialog h2 { margin: 6px 0 0; font-size: 25px; letter-spacing: -.035em; }
 .task-focus-dialog > header button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--dash-line); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
-.task-focus-dialog-body { margin: 0 30px; padding: 0 0 20px; }
+.task-focus-dialog-body { min-height: 0; margin: 0 28px; padding: 0 0 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .task-focus-date-separator { margin: 0 6px; color: var(--dash-line-strong); }
 .task-focus-statement { padding: 22px 24px; border: 1px solid #dde6d7; border-radius: 14px; background: #f3f7ef; }
 .task-focus-statement-heading { display: flex; align-items: center; gap: 10px; color: #4b6142; font-size: 11px; font-weight: 700; }
@@ -455,19 +463,46 @@ body {
 .task-focus-plan-heading h3 { margin: 0; font-size: 15px; }
 .task-focus-plan-heading p { margin: 4px 0 0; color: var(--dash-muted); font-size: 11px; }
 .task-focus-plan-heading > span { display: grid; place-items: center; min-width: 27px; height: 27px; border-radius: 50%; background: #edf2e9; color: #52634d; font-size: 11px; font-weight: 700; }
-.task-focus-plan ul { list-style: none; margin: 15px 0 0; padding: 0; border-top: 1px solid var(--dash-line); }
-.task-focus-plan li { display: flex; align-items: center; gap: 10px; min-height: 45px; padding: 9px 0; border-bottom: 1px solid var(--dash-line); font-size: 12px; font-weight: 650; }
-.task-focus-plan li > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.task-focus-plan li > small { color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.task-focus-plan-list { list-style: none; margin: 15px 0 0; padding: 0; border-top: 1px solid var(--dash-line); }
+.task-focus-plan-group { border-bottom: 1px solid var(--dash-line); }
+.task-focus-plan-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 9px 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; text-align: left; }
+button.task-focus-plan-row { cursor: pointer; }
+button.task-focus-plan-row:hover { background: #f6f8f3; }
+.task-focus-plan-row:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
+.task-focus-plan-row.is-static { cursor: default; }
+.task-focus-plan-copy { display: grid; flex: 1; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.task-focus-plan-copy strong { font-size: 12px; font-weight: 680; line-height: 1.45; }
+.task-focus-plan-copy small { color: var(--dash-muted); font-size: 10px; font-weight: 550; }
+.task-focus-plan-state { flex: none; color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .task-focus-plan-mark { display: grid; place-items: center; flex: none; width: 25px; height: 25px; border-radius: 8px; background: #f1f4ed; color: #8a9882; }
 .task-focus-plan-mark.is-done { background: #e7f4df; color: #4a7d22; }
+.task-focus-plan-chevron { flex: none; color: var(--dash-muted); transition: transform .18s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
+.task-focus-plan-chevron.is-open { transform: rotate(180deg); }
+.task-focus-subtasks { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .22s var(--dash-ease, cubic-bezier(.2,.8,.2,1)), opacity .16s ease; }
+.task-focus-subtasks[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.task-focus-subtasks-clip { min-height: 0; overflow: hidden; }
+.task-focus-subtask-list { list-style: none; margin: 0 0 6px 12px; padding: 0 0 0 23px; border-left: 1px solid var(--dash-line); }
+.task-focus-subtask { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 6px 0; color: var(--dash-ink); font-size: 11.5px; font-weight: 560; }
+.task-focus-subtask > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-focus-subtask > small { flex: none; color: var(--dash-muted); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.task-focus-subtask-mark { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 7px; background: #f4f6f1; color: #98a290; }
+.task-focus-subtask-mark.is-done { background: #e7f4df; color: #4a7d22; }
 .task-focus-plan-empty { margin: 15px 0 0; padding: 14px 0; border-top: 1px solid var(--dash-line); color: var(--dash-muted); font-size: 12px; }
-.task-focus-dialog footer { padding: 0 30px 28px; }
+.task-focus-dialog footer { flex: none; padding: 18px 28px 26px; border-top: 1px solid var(--dash-line); }
 .task-focus-dialog footer button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--dash-ink); color: var(--dash-card-solid); font-weight: 700; cursor: pointer; }
 .task-focus-dialog button:focus-visible { outline: 2px solid #4a7d22; outline-offset: 3px; }
+@keyframes task-focus-arrive { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes task-focus-leave { to { opacity: 0; transform: translateY(8px) scale(.99); } }
+@keyframes task-focus-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes task-focus-backdrop-out { to { opacity: 0; } }
 .agenda-strip-focus { min-width: 0; }
 .agenda-strip-text { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.agenda-strip-meta { color: var(--dash-muted); font-size: 10px; }
+.agenda-strip-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 0; color: var(--dash-muted); font-size: 10px; }
+.agenda-strip-provenance { display: inline-flex; align-items: center; gap: 4px; }
+.agenda-strip-plan { display: inline-flex; align-items: center; gap: 5px; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.agenda-strip-plan b { color: var(--dash-ink); font-weight: 750; }
+.agenda-strip-meter { display: inline-block; width: 42px; height: 3px; overflow: hidden; border-radius: 999px; background: #e4e9df; }
+.agenda-strip-meter > i { display: block; height: 100%; border-radius: inherit; background: #7eb14a; transition: width .32s var(--dash-ease, cubic-bezier(.2,.8,.2,1)); }
 .agenda-strip-carry { position: relative; min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
 
 /* The unfinished count rides on the carry pill as a compact badge in the same
@@ -734,9 +769,9 @@ body {
    are separate beats so the top of the page reads as a decision surface rather
    than one crowded toolbar. */
 .task-agenda-strip {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 14px;
-  min-height: 74px;
+  min-height: 72px;
   padding: 12px 16px;
   background: linear-gradient(112deg, rgba(255, 255, 252, 0.96), rgba(241, 249, 233, 0.84));
 }
@@ -758,6 +793,7 @@ body {
   text-transform: uppercase;
 }
 .task-focus-kicker svg { color: var(--dash-signal-deep); }
+.task-focus-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: #e7f4df; color: #4a7d22; }
 .agenda-strip-edit {
   width: fit-content;
   max-width: min(660px, 100%);
@@ -768,6 +804,24 @@ body {
 .agenda-strip-edit svg { order: 2; color: var(--dash-signal-deep); }
 .agenda-strip-edit:hover .agenda-strip-text { text-decoration: none; }
 .agenda-strip-text { overflow: visible; font-size: 15px; letter-spacing: -0.025em; text-overflow: clip; }
+
+@media (max-width: 780px) {
+  .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .agenda-strip-focus { grid-column: 1; grid-row: 1; }
+  .task-focus-details-trigger { grid-column: 2; grid-row: 1; align-self: start; }
+  .agenda-strip-carry { grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: center; padding-left: 36px; }
+  .carry-count { right: auto; left: 8px; }
+  .carry-count small { display: none; }
+}
+@media (max-width: 560px) {
+  .task-agenda-strip { gap: 10px; padding: 12px; }
+  .task-focus-mark { width: 20px; height: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-agenda-strip, .task-focus-details-trigger, .agenda-strip-meter > i, .task-focus-plan-chevron, .task-focus-subtasks { transition: none; }
+  .task-focus-dialog[open], .task-focus-dialog.is-closing, .task-focus-dialog[open]::backdrop, .task-focus-dialog.is-closing::backdrop { animation: none; }
+  .task-focus-details-trigger:hover { transform: none; }
+}
 
 /* Today's focus keeps a fixed readable measure, so a long goal is clipped. It
    fades at the edge it clips at — the right edge at rest — and pans to its end
@@ -1114,9 +1168,10 @@ body {
 @keyframes taskSurfaceEnter { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 720px) {
-  .task-agenda-strip { grid-template-columns: minmax(0, 1fr); grid-template-areas: "focus" "carry"; row-gap: 10px; }
+  .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "focus trigger" "carry carry"; row-gap: 10px; }
   .agenda-strip-focus { grid-area: focus; min-width: 0; }
-  .agenda-strip-carry { grid-area: carry; justify-self: end; }
+  .task-focus-details-trigger { grid-area: trigger; align-self: start; }
+  .agenda-strip-carry { grid-area: carry; justify-self: stretch; }
   .work-os-side-panel,
   .task-detail-modal.work-os-side-panel,
   .carry-over-layer .carry-flyout { width: 100vw; border-radius: 22px 0 0 22px; }

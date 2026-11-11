@@ -309,6 +309,11 @@ describe("operational visualizations", () => {
   it("keeps focus contextual and task lifecycle actions consistent", () => {
     expect(app).toContain('<TaskFocusDetails');
     expect(app).toContain('<TaskFocusDetails');
+    expect(app).toContain("tasks={planTasks}");
+    expect(app).toContain("focusTasks={visibleTodayTasks}");
+    expect(dashboardStyles).toContain(".task-focus-subtasks");
+    expect(dashboardStyles).toContain(".task-focus-dialog.is-closing");
+    expect(dashboardStyles).toContain("task-focus-backdrop-out");
     expect(app).toContain('className={`task-list-tab ${taskView === id ? "active" : ""}`}');
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("function DashboardTaskCard");
@@ -419,6 +424,8 @@ describe("operational visualizations", () => {
     const finderStyles = readText(resolve(root, "src/task-finder.css"));
     expect(finderStyles).toContain(".task-list-controls .task-toolbar-icon");
     expect(finderStyles).toContain(".task-toolbar-icon.is-primary");
+    expect(finderStyles).toContain(".task-finder-dialog[open]::backdrop");
+    expect(finderStyles).toContain("task-finder-backdrop-out");
     expect(dashboardStyles).not.toContain(".tasks-column-sort .sort-header-action");
     // The list's column labels read as words, not shouted labels.
     expect(dashboardStyles).toMatch(/\.tasks-column-sort \.sort-header-cell button \{[^}]*text-transform: none;/);
@@ -428,12 +435,12 @@ describe("operational visualizations", () => {
     expect(app).toContain("requestAnimationFrame(() => taskTabRefs.current[next]?.focus())");
     // Status labels center inside their pill instead of hugging the top edge.
     expect(dashboardStyles).toContain(".task-state { display: inline-flex; align-items: center; justify-content: center;");
-    expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
+    expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto;/);
     expect(dashboardStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?min-width: 0;/);
-    // The strip states the focus and the carry action. The counts it used to
-    // restate here already lead the panel tabs.
+    // The strip states the focus, plan progress and the carry action. The counts
+    // it used to restate here already lead the panel tabs.
     expect(dashboardStyles).not.toContain(".task-focus-stats");
-    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus"[\s\S]*?"carry"/);
+    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus trigger"[\s\S]*?"carry carry"/);
     // Title line never wraps the On today tag onto the metadata line.
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);
