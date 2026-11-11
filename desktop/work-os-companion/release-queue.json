@@ -276,6 +276,12 @@
       "type": "fix",
       "summary": "Notifications are more compact, rounded and easier to read, including the standing notices.",
       "verification": "Companion vitest NotificationFlyouts (9 pass); test/work-os-desktop-static.test.mts pass; rendered the real success, error, info and persistent notices in headless Chromium."
+    },
+    {
+      "id": "employee-unified-task-finder",
+      "type": "feature",
+      "summary": "Find tasks across all views with search, status pills and dates in one window; compact search, calendar and add controls keep column labels clear.",
+      "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED→GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search→status→dates→drawer. Server migration0073 and API deployment remain pending before installer publication."
     }
   ],
   "emergency": null,

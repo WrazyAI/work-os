@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Find any task with search, status pills and dates in one focused window; search, calendar and add now sit together above the list.
+
 - Scrolling over a task table or Otto tool card now moves the page instead of stopping.
 - Build and Refine plan show a spinner while they work, and deleting a draft no longer shows a second check mark.
 - Notifications are more compact, rounded and easier to read.
