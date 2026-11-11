@@ -127,17 +127,22 @@ export function buildFocusPlan(plan: DailyPlan | null | undefined, tasks: readon
         planned: false,
       });
     }
-    // Loaded task children are authoritative. Only fall back to the plan's own
-    // success criteria when the compact/current task page did not carry them.
-    if (!subtasks.length && Array.isArray(item.success_criteria) && item.success_criteria.length) {
-      subtasks.push(...plannedCriteria(item, task, id));
-    }
-    // Open work leads the nested list, matching every task surface.
-    subtasks.sort((left, right) => Number(left.completed) - Number(right.completed));
     // The compact day keeps up to eight children but carries the full counts;
     // the summary must state the task's total, not the loaded window.
     const declaredTotal = count(task?.subtaskProgress?.total ?? task?.subtask_total ?? task?.subtaskCount);
     const declaredCompleted = count(task?.subtaskProgress?.completed ?? task?.subtask_completed);
+    // Loaded task children are authoritative. Only fall back to the plan's own
+    // success criteria when the task row or its child counts are unavailable;
+    // an explicit empty list (including `subtask_total: 0`) means the
+    // subtasks were removed and must not be resurrected from the old plan.
+    const childDataKnown = task != null && (Array.isArray(task.subtasks)
+      || task.subtaskProgress?.total !== undefined || task.subtask_total !== undefined || task.subtaskCount !== undefined);
+    const authoritativeEmpty = childDataKnown && rawSubtasks.length === 0 && declaredTotal === 0;
+    if (!subtasks.length && !authoritativeEmpty && Array.isArray(item.success_criteria) && item.success_criteria.length) {
+      subtasks.push(...plannedCriteria(item, task, id));
+    }
+    // Open work leads the nested list, matching every task surface.
+    subtasks.sort((left, right) => Number(left.completed) - Number(right.completed));
     const subtaskTotal = Math.max(subtasks.length, declaredTotal);
     const subtaskCompleted = Math.min(subtaskTotal, Math.max(subtasks.filter((child) => child.completed).length, declaredCompleted));
     groups.push({

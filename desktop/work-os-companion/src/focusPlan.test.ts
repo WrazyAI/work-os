@@ -173,6 +173,25 @@ describe("focus plan grouping", () => {
     expect(focus.groups[0].subtasks.some((subtask) => subtask.planned)).toBe(false);
   });
 
+  it("does not resurrect criteria after loaded subtasks are explicitly removed", () => {
+    const linked: DailyPlan = {
+      ...plan,
+      items: [{
+        ...plan.items[1], id: "linked-empty", task_id: "parent-empty", completion_state: "open",
+        success_criteria: ["Old criterion one", "Old criterion two"],
+      }],
+    };
+    for (const task of [
+      { id: "parent-empty", title: "Ship the workspace", subtask_total: 0, subtask_completed: 0, subtasks: [] as Array<Record<string, unknown>> },
+      { id: "parent-empty", title: "Ship the workspace", subtask_total: 0, subtask_completed: 0 },
+    ]) {
+      const focus = buildFocusPlan(linked, [task]);
+      expect(focus.groups[0].subtasks).toEqual([]);
+      expect(focus.groups[0].subtaskTotal).toBe(0);
+      expect(focus.groups[0].subtaskCompleted).toBe(0);
+    }
+  });
+
   it("marks criteria done when the plan item is recorded complete", () => {
     const completedOutcome: DailyPlan = {
       ...plan,
