@@ -577,42 +577,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .task-list-tab.active em { background: #e1f2d2; color: #5b6459; }
-/* Views lead the panel header; search and the date filter ride the right edge
-   of the same row, now that the list's own header row carries Add task. */
+/* Views lead; icon-only Search, Calendar and Add task share the trailing edge.
+   The column header below is labels only. */
 .task-list-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-.task-list-controls .task-search { flex: 0 1 170px; min-width: 140px; max-width: 200px; min-height: 38px; border-radius: 10px; }
-.task-list-controls .task-filters-toggle { min-height: 38px; height: 38px; padding: 0 11px; border-radius: 10px; }
-/* The list's own header row carries the Add task action, right of the status
-   column, so the panel title row stays views, search, and date range only. */
-.task-list-panel .task-add-button { min-height: 32px; height: 32px; padding: 0 11px; border-color: transparent; border-radius: 9px; background: var(--dash-ink, #182018); color: #fff; box-shadow: none; font-size: 11.5px; }
-.task-list-panel .task-add-button:not(:disabled):hover { border-color: transparent; background: #263526; color: #fff; box-shadow: none; }
-.tasks-column-sort .sort-header-action { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: inline-flex; }
 .task-list-panel > .task-filter-summary { margin: 9px var(--task-list-inset) 0; }
 .task-list-panel > .skeleton-task-list { padding: 0 var(--task-list-inset); }
 .task-list-panel > .task-load-more { width: calc(100% - var(--task-list-inset) - var(--task-list-inset)); margin: 10px var(--task-list-inset) 16px; }
-/* The compact search lets all seven controls share the panel header at the
-   984px app width. Step to the stacked header below 970px so a wrapped controls
-   row starts at the panel edge instead of floating at the right. */
-@media (max-width: 970px) {
-  .task-list-controls { flex-basis: 100%; justify-content: flex-start; }
-  .task-list-controls .task-filters-wrap { margin-left: auto; }
-}
+/* The smaller controls allow a single row until the tab labels need the width. */
 @media (max-width: 720px) {
   .task-list-panel { --task-list-inset: 12px; }
   .task-list-header { padding: 9px 12px; }
   .task-list-tabs { width: 100%; flex-wrap: wrap; }
-  .task-list-controls .task-search { flex: 1 1 180px; max-width: none; }
-  .task-list-tab,
-  .task-list-controls .task-search,
-  .task-list-controls .task-filters-toggle { min-height: 40px; }
-  .task-list-controls .task-filters-toggle { height: 40px; }
-  .tasks-column-sort .task-add-button { min-height: 40px; height: 40px; }
-}
-@media (max-width: 520px) {
-  .task-list-controls .task-search,
-  .task-list-controls .task-filters-wrap { width: 100%; }
-  .task-list-controls .task-filters-wrap { margin-left: 0; }
-  .task-list-controls .task-filters-toggle { width: 100%; justify-content: center; }
+  .task-list-tab { min-height: 40px; }
 }
 .task-records { padding: 0 16px 18px; box-shadow: none; background: transparent; }
 .task-records.evidence-list { padding: 0 16px 18px; }

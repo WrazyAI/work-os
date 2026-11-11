@@ -596,15 +596,12 @@ workspace than a list of cards.
    shortcuts, and Review unfinished work only when relevant.
 3. One flat task-list panel whose header borrows the dashboard queue's outline:
    the four views (My day, Unfinished, Completed, All tasks) are the panel title,
-   and the compact search field and the date-range filter ride the trailing
-   edge. The controls wrap below the views only when the header runs out of
-   width.
+   and three icon-only controls — Search, Calendar, Add task — ride the trailing
+   edge. They wrap below the views only when the header runs out of width.
 4. The list's own header row — the quiet sortable column row for Name, Date
-   Due, and Status — carries the local Add task action at its right edge, so the
-   action belongs to the list it adds to and the panel title row stays a title.
-   Ordering and the action share that row without crowding: the date and status
-   tracks keep the width the rows use, and the action sits in the space the
-   status column leaves free. The column labels are written as words, not
+   Due, and Status — carries labels only; Add task belongs beside the finder
+   controls above it. The date and status tracks keep the width the rows use.
+   The column labels are written as words, not
    shouted labels, so the row reads as a quiet table header.
 5. Shared anchored composer with reserved bottom clearance.
 
@@ -630,18 +627,28 @@ check mark and is disabled, because choosing it would write the value the task
 already holds.
 
 The Tasks page has one date navigator in the masthead, one task-list panel, and
-one task list. The panel header carries the views, a compact search, and the
-date filter on one row while width permits; search and the date filter ride the
-right edge, the search stays compact while the header is one row, and the
-controls wrap beneath the views rather than compressing them. Once wrapped on a
-small screen, the search may take the row. Do not repeat a Task queue heading or
+one task list. The panel header carries the views and compact icon-only Search,
+Calendar and Add task controls on one row while width permits; controls ride the
+right edge and wrap beneath the views rather than compressing them. Do not repeat a Task queue heading or
 status section headers. The list begins with one quiet sortable column row for
-Name, Date Due, and Status, which also carries the Add task action at its
-right edge; the row aligns to the task, due, and status tracks rather than
-introducing a second boxed toolbar, and the action never crowds the status
-label. Keep the canonical default order visible through the row
+Name, Date Due, and Status; the row aligns to the task, due, and status tracks
+and carries no action. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
+
+In the employee companion, Search and Calendar open one unified task finder,
+independent of the page view and selected day. Search focuses text; Calendar
+expands inline date controls. Status pills (All, Pending, In progress, Overdue,
+Completed) intersect with text and an inclusive task-attributed date range
+before server pagination. All is default; dates use the existing workday
+attribution, not a new due-date-only interpretation. Presets are Today,
+Monday-based This week, Last week and Custom range, with a removable range chip.
+The finder is a crisp paper surface with a feathered outer edge over a blurred
+backdrop; no text or control is blurred. Results page in 50s and open the
+existing task drawer after closing the finder. Escape or dismissal restores its
+originating toolbar control; closing never filters or navigates the page behind
+it. The native modal owns inert background and focus, the result area scrolls,
+and narrow/short windows retain every control with no horizontal overflow.
 
 The focus strip opens a centered, labelled dialog containing the selected day's
 full focus and its provenance, followed by selected plan items and their

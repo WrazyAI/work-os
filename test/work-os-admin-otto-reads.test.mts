@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import type { PGlite } from "@electric-sql/pglite";
+import * as taskFinder from "../src/modules/work-os/task-finder.ts";
 import {
   adminAccess, adminUser, fixture, intervalA, intervalB, org, otherOrg, otherOrgAdminAccess,
   otherPerson, personA, personB, personC,
@@ -1067,6 +1068,7 @@ function loadTaskService(rows: Array<Record<string, any>>, people: Array<Record<
     "@/lib/work-os-plan-ghosts": {
       removePlanItemsForTombstonedTask: async () => undefined,
     },
+    "@/modules/work-os/task-finder": taskFinder,
     "@/lib/work-os-api": {
       WorkOsNotFoundError: class extends Error {},
       WorkOsValidationError: class extends Error {},

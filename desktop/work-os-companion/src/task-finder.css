@@ -1,0 +1,143 @@
+/* A task finder, not a second task workspace: one reading surface, one result
+   rhythm. Only the outside feather softens; content and focus stay crisp. */
+.task-list-controls .task-toolbar-icon { display: inline-grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; padding: 0; border: 1px solid var(--dash-line, var(--line)); border-radius: 10px; background: var(--dash-card-solid, var(--white)); color: var(--dash-muted, var(--muted)); }
+.task-list-controls .task-toolbar-icon:hover { background: var(--surface); color: var(--ink); }
+.task-list-controls .task-toolbar-icon.is-primary { border-color: transparent; background: var(--ink); color: var(--white); }
+.task-list-controls .task-toolbar-icon.is-primary:hover { background: var(--ink-soft, #304033); }
+.task-list-controls .task-toolbar-icon:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
+.task-finder-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: clamp(24px, 10vh, 96px) 24px 24px;
+  overflow: auto;
+  background: transparent;
+  color: var(--ink);
+  overscroll-behavior: contain;
+}
+.task-finder-dialog[open] { display: flex; justify-content: center; align-items: flex-start; }
+.task-finder-dialog::backdrop {
+  background: rgba(24, 32, 24, .34);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+.task-finder-panel {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: calc(100dvh - clamp(24px, 10vh, 96px) - 24px);
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 24px 72px rgba(18, 27, 17, .16);
+  animation: task-finder-arrive 200ms cubic-bezier(.2,.8,.2,1) both;
+}
+.task-finder-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -5px;
+  border-radius: 23px;
+  background: var(--surface-raised, #fff);
+  filter: blur(10px);
+  opacity: .5;
+  pointer-events: none;
+}
+.task-finder-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; flex: none; }
+.task-finder-heading h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.025em; line-height: 1.35; }
+.task-finder-heading p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.task-finder-close { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); flex: none; }
+.task-finder-close:hover { background: var(--surface, #f0f3ed); color: var(--ink); }
+.task-finder-controls { padding: 0 24px 16px; flex: none; }
+.task-finder-search { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--white, #fff); color: var(--muted); box-shadow: 0 1px 2px rgba(20,30,18,.025); }
+.task-finder-search:focus-within { border-color: #4a7d22; box-shadow: 0 0 0 3px rgba(74,125,34,.1); }
+.task-finder-search > svg { flex: none; }
+.task-finder-search input { width: 100%; min-width: 0; height: 52px; padding: 0; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 18px; font-weight: 500; }
+.task-finder-search input::placeholder { color: var(--muted); font-weight: 400; }
+.task-finder-dialog .task-finder-search input:focus,
+.task-finder-dialog .task-finder-search input:focus-visible { outline: none; border: 0; box-shadow: none; }
+.task-finder-search button { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.task-finder-statuses { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.task-finder-statuses button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; }
+.task-finder-statuses button[aria-pressed="true"] { border-color: var(--line); background: var(--surface, #f0f3ed); color: var(--ink); }
+.task-finder-statuses button:hover { background: var(--surface, #f0f3ed); color: var(--ink); }
+.task-finder-date-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.task-finder-date-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 6px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 12px; font-weight: 600; }
+.task-finder-date-toggle > span { color: var(--muted); font-weight: 400; }
+.task-finder-date-toggle[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.task-finder-date-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 30px; max-width: 100%; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #f0f3ed); color: var(--ink); font-size: 11px; }
+.task-finder-date-chip > svg { flex: none; }
+.task-finder-dates { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #f0f3ed); }
+.task-finder-dates[hidden] { display: none; }
+.task-finder-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.task-finder-presets button { min-height: 30px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--white, #fff); color: var(--ink); font-size: 11px; }
+.task-finder-date-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: end; margin-top: 14px; }
+.task-finder-date-fields label { display: grid; min-width: 0; gap: 6px; font-size: 11px; color: var(--muted); }
+.task-finder-date-fields > span { align-self: center; margin-top: 18px; color: var(--muted); }
+.task-finder-date-fields input { min-width: 0; width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--white, #fff); padding: 7px 10px; color: var(--ink); font-size: 12px; }
+.task-finder-dates > p { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.task-finder-dates > .task-finder-date-error { color: var(--danger, #b84035); }
+.task-finder-count { padding: 12px 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+.task-finder-results { min-height: 100px; overflow-y: auto; overscroll-behavior-y: auto; padding: 0 12px 12px; scrollbar-gutter: stable; }
+.task-finder-list { list-style: none; margin: 0; padding: 0; }
+.task-finder-list > li + li { border-top: 1px solid var(--line); }
+.task-finder-result { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; }
+.task-finder-result:hover { background: var(--surface, #f0f3ed); }
+.task-finder-mark { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 7px; }
+.task-finder-mark > span { width: 6px; height: 6px; border: 1px solid var(--muted); border-radius: 50%; }
+.task-finder-mark.is-done { color: var(--ink); background: var(--surface, #f0f3ed); }
+.task-finder-copy { display: grid; gap: 5px; min-width: 0; }
+.task-finder-copy strong { font-size: 13px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
+.task-finder-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); line-height: 1.5; }
+.task-finder-meta { display: grid; justify-items: end; gap: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.task-finder-open { color: var(--muted); opacity: 0; }
+.task-finder-result:is(:hover, :focus-visible) .task-finder-open { opacity: 1; }
+.task-finder-more, .task-finder-empty button, .task-finder-notice button { min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--white, #fff); color: var(--ink); font-size: 12px; font-weight: 600; }
+.task-finder-more { display: block; margin: 12px auto 0; }
+.task-finder-empty { display: grid; place-items: center; gap: 10px; padding: 36px 20px; color: var(--muted); text-align: center; }
+.task-finder-empty h3 { margin: 2px 0 0; color: var(--ink); font-size: 15px; font-weight: 650; }
+.task-finder-empty p { margin: 0; font-size: 12px; line-height: 1.6; }
+.task-finder-notice { padding: 16px 12px; color: var(--muted); font-size: 12px; }
+.task-finder-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 12px 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.task-finder-footer > span { display: inline-flex; align-items: center; gap: 4px; }
+.task-finder-footer kbd { padding: 2px 4px; margin-left: 5px; border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+.task-finder-dialog button:focus-visible, .task-finder-date-fields input:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
+.task-finder-dialog.is-closing .task-finder-panel { animation: task-finder-leave 160ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes task-finder-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes task-finder-leave { to { opacity: 0; transform: translateY(4px); } }
+@media (max-width: 560px) {
+  .task-list-controls .task-toolbar-icon { flex-basis: 44px; width: 44px; height: 44px; }
+  .task-finder-dialog { padding: 12px; }
+  .task-finder-panel { max-height: calc(100dvh - 24px); }
+  .task-finder-heading { padding: 18px 16px 14px; }
+  .task-finder-controls { padding: 0 16px 12px; }
+  .task-finder-search input { font-size: 16px; }
+  .task-finder-close, .task-finder-search button { width: 40px; height: 40px; }
+  .task-finder-statuses { gap: 4px; }
+  .task-finder-statuses button { min-height: 40px; padding-inline: 10px; }
+  .task-finder-date-toggle, .task-finder-date-chip, .task-finder-presets button, .task-finder-more { min-height: 40px; }
+  .task-finder-date-fields { gap: 8px; }
+  .task-finder-date-fields input { min-height: 40px; padding: 6px; }
+  .task-finder-result { grid-template-columns: 22px minmax(0, 1fr) 16px; gap: 8px; padding: 12px 8px; }
+  .task-finder-meta { grid-column: 2; grid-row: 2; justify-items: start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .task-finder-open { grid-column: 3; grid-row: 1; opacity: 1; }
+  .task-finder-results { padding-inline: 8px; }
+  .task-finder-count { padding-inline: 16px; }
+  .task-finder-footer { padding-inline: 16px; }
+}
+@media (max-height: 680px) {
+  .task-finder-dialog { padding-top: 12px; }
+  .task-finder-panel { max-height: none; }
+  .task-finder-results { max-height: 45dvh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-finder-panel, .task-finder-dialog.is-closing .task-finder-panel { animation: none; }
+}

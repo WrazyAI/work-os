@@ -905,7 +905,7 @@ const dashboardStyles = read("src/dashboard-overhaul.css");
 assert.match(dashboardStyles, /\.tasks-column-sort \{/);
 assert.match(dashboardStyles, /grid-template-columns: 30px minmax\(0, 1fr\) 36px 100px 116px 38px/);
 assert.match(dashboardStyles, /\.task-record\.workspace-task \{[^\n]*grid-template-columns: 30px minmax\(0, 1fr\) 36px 100px 116px 38px/);
-assert.match(dashboardStyles, /\.tasks-column-sort \.sort-header-action \{ position: absolute; right: 0;/);
+assert.doesNotMatch(dashboardStyles, /\.tasks-column-sort \.sort-header-action/);
 assert.match(dashboardStyles, /@media \(max-width: 720px\) \{\n  \.tasks-column-sort \{/);
 assert.match(dashboardStyles, /\.task-history-error button:focus-visible/);
 const taskServer = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-tasks.ts"), "utf8");

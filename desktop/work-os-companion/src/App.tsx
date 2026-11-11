@@ -57,6 +57,9 @@ import { BatchApprovalCards } from "./TaskBatchCard";
 import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
+import { TaskFinder } from "./TaskFinder";
+import { filterFinderTasks } from "./taskFinder";
+import type { TaskFinderSource } from "./workOsQueries";
 import { SortHeaderRow } from "./SortHeaderRow";
 import { taskViewTabIndex } from "./taskViewTabs";
 import { ProgressRing } from "./ProgressRing";
@@ -475,6 +478,7 @@ export default function App() {
   const [taskView, setTaskView] = useState<TaskView>("today");
   const [taskWorkspaceSort, setTaskWorkspaceSort] = useState<TaskSort>(() => readTaskSort(TASKS_SORT_STORAGE_KEY));
   const [taskSearch, setTaskSearch] = useState("");
+  const [taskFinderOpen, setTaskFinderOpen] = useState(false);
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [taskFilterFrom, setTaskFilterFrom] = useState("");
   const [taskFilterTo, setTaskFilterTo] = useState("");
@@ -1046,7 +1050,7 @@ export default function App() {
    * mount no overlays) can never freeze the window with no modal to close.
    * Employee-only flags are ignored, not closed, so a half-finished draft or
    * confirmation survives a visit to administration (design §9). */
-  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!taskEvidenceRequest || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || !!eodDeleteConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
+  const employeeOnlyOverlaysOpen = taskFinderOpen || taskComposerOpen || !!taskDetails || !!taskEvidenceRequest || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || !!eodDeleteConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
   /** The profile modal needs the onboarding record it edits; without it the
    * flag renders nothing and must therefore count for nothing. */
   const profileModalOpen = profileOpen && !!visibleOnboarding;
@@ -5460,7 +5464,7 @@ export default function App() {
   useModalScrollLock(modalOpen);
 
   useEffect(() => {
-    if (!modalOpen) return;
+    if (!modalOpen || taskFinderOpen) return; // Native finder dialog owns inertness/focus.
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => {
       const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
@@ -5488,7 +5492,7 @@ export default function App() {
       document.removeEventListener("keydown", onKey);
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [dismissTopLayer, modalOpen]);
+  }, [dismissTopLayer, modalOpen, taskFinderOpen]);
 
   if (landing === "vault_failed") {
     // The seam decides the surface; the gate's own state carries the failure.
@@ -5869,6 +5873,13 @@ export default function App() {
         pageCounts={syncBypass ? null : activeTaskHistoryQuery.data?.pages[0]?.counts ?? null}
         pageTotal={syncBypass ? null : activeTaskHistoryQuery.data?.pages[0]?.totalCount ?? null}
         taskSearch={taskSearch}
+        onFinderOpenChange={setTaskFinderOpen}
+        finderScope={`${workSessionQuery.data?.organizationId ?? session?.organizationId ?? ""}:${workSessionQuery.data?.userId ?? ""}:${workSessionQuery.data?.personId ?? ""}`}
+        finderSource={syncBypass ? async (filters, cursor) => {
+          const rows = filterFinderTasks(parentTasks(uniqueTasks([...taskHistory, ...visibleTodayTasks])), filters, visibleDay?.shiftDate ?? "");
+          const offset = Number(cursor ?? 0);
+          return { tasks: rows.slice(offset, offset + 50), totalCount: rows.length, nextCursor: offset + 50 < rows.length ? String(offset + 50) : null };
+        } : undefined}
         filterFrom={taskFilterFrom}
         filterTo={taskFilterTo}
         historyOrder={syncBypass ? "local" : "server"}
@@ -6784,7 +6795,8 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
 }
 
 /** Render the employee Tasks workspace with shared day history and sorted paginated views. */
-export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onTaskSearch, onFilterFrom, onFilterTo, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
+export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
+  finderScope?: string; finderSource?: TaskFinderSource; onFinderOpenChange?: (open: boolean) => void;
   onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
   onAssignTask?: (task: TaskRow) => void;
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
@@ -6805,7 +6817,9 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   onTaskSearch?: (value: string) => void; onFilterFrom?: (value: string) => void; onFilterTo?: (value: string) => void;
 }) {
   const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
-  const [filtersOpen, setFiltersOpen] = useState(initialFiltersOpen);
+  const [finderEntry, setFinderEntry] = useState<"search" | "date" | null>(initialFiltersOpen ? "date" : null);
+  useEffect(() => { onFinderOpenChange?.(finderEntry !== null); }, [finderEntry, onFinderOpenChange]);
+  useEffect(() => () => onFinderOpenChange?.(false), [onFinderOpenChange]);
   const taskTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
@@ -6910,22 +6924,11 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "suggested" ? `Suggested by ${MASCOT.name}` : shownPlan.goal_provenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
     : goal ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
-  const dateFilterActive = !!filterFrom || !!filterTo;
   // One source for the day's groups: they are built from the same my-day list
   // the view renders, so a group's count can never contradict the rows beneath
   // it. The strip no longer restates those counts — it states the focus and the
   // carry action, and the groups and view chips carry the numbers.
   const dayGroups = dayTaskGroups(myDayTasks, currentDate, taskSort);
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".task-filters-wrap")) setFiltersOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
-  }, [filtersOpen]);
   const emptyCopy = hasFilters
     ? { title: "No tasks match these filters", body: "Try a different search or clear the date filters." }
     : historical
@@ -7004,23 +7007,17 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     <section className="panel task-list-panel" aria-label="Task list"><h2 className="sr-only">{historical ? `Tasks from ${formatWorkOsDate(selectedDate)}` : viewLabel}</h2>
       <header className="task-list-header">
         {!historical && <nav className="task-list-tabs" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }, index) => <button key={id} ref={(node) => { taskTabRefs.current[index] = node; }} id={`task-list-tab-${id}`} role="tab" aria-controls="task-list-panel" aria-selected={taskView === id} tabIndex={taskView === id ? 0 : -1} className={`task-list-tab ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)} onKeyDown={(event) => onTaskTabKeyDown(event, index)}>{label}<em>{count}</em></button>)}</nav>}
-        <section className="task-list-controls" aria-label="Task search and date filters">
-          <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => onTaskSearch?.(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => onTaskSearch?.("")}><X size={14} /></button>}</label>
-          <div className="task-filters-wrap">
-            <button type="button" className={`task-filters-toggle ${dateFilterActive ? "active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}><CalendarDays size={15} aria-hidden="true" /> Date range{dateFilterActive ? " · on" : ""}</button>
-            {filtersOpen && <div className="task-filters-popover" role="group" aria-label="Task date range">
-              <label><span>From</span><input aria-label="Filter from date" type="date" max={filterTo || currentDate} value={filterFrom} onChange={(event) => onFilterFrom?.(event.target.value)} /></label>
-              <i aria-hidden="true">—</i>
-              <label><span>To</span><input aria-label="Filter to date" type="date" min={filterFrom || undefined} max={currentDate} value={filterTo} onChange={(event) => onFilterTo?.(event.target.value)} /></label>
-              {dateFilterActive && <button onClick={() => { onFilterFrom?.(""); onFilterTo?.(""); }}>Clear dates</button>}
-            </div>}
-          </div>
+        <section className="task-list-controls" aria-label="Task actions">
+          <button type="button" className="task-toolbar-icon" aria-label="Search tasks" title="Search tasks" aria-haspopup="dialog" onClick={() => setFinderEntry("search")}><Search size={17} aria-hidden="true" /></button>
+          <button type="button" className="task-toolbar-icon" aria-label="Search tasks by date" title="Search tasks by date" aria-haspopup="dialog" onClick={() => setFinderEntry("date")}><CalendarDays size={17} aria-hidden="true" /></button>
+          {!historical && <button type="button" className="task-toolbar-icon is-primary" aria-label="Add task" title="Add task" onClick={onAddTask}><Plus size={18} aria-hidden="true" /></button>}
         </section>
       </header>
       {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{overflowNote ?? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}`}</p>}
-      <div className="evidence-list task-records" id="task-list-panel" ref={listRef} role={historical ? undefined : "tabpanel"} aria-labelledby={historical ? undefined : `task-list-tab-${taskView}`}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}<SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" action={!historical ? <button className="primary task-add-button" onClick={onAddTask}><Plus size={15} /> Add task</button> : null} />{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <>{taskView === "today" && !historical
+      <div className="evidence-list task-records" id="task-list-panel" ref={listRef} role={historical ? undefined : "tabpanel"} aria-labelledby={historical ? undefined : `task-list-tab-${taskView}`}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}<SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <>{taskView === "today" && !historical
         ? dayGroupsForDisplay.flatMap((group) => group.tasks).map(renderTaskRow)
         : displayedTasks.map(renderTaskRow)}</> : historyError && !historyHasData ? null : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading tasks…</> : loadMoreError ? "Retry load more" : "Load more"}</button>}</section>
+    {finderEntry && <TaskFinder entry={finderEntry} currentDate={currentDate} scope={finderScope} source={finderSource} onClose={() => setFinderEntry(null)} onOpenTask={task => onOpenTask(task, false)} />}
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} taskFlight={taskFlight} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }

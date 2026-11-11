@@ -26,7 +26,7 @@ describe("Tasks workspace filters", () => {
       loadingMore: false,
       hasMore: false,
       busy: false,
-      initialFiltersOpen: true,
+      initialFiltersOpen: false,
       onTaskView: () => undefined,
       onTaskSort: () => undefined,
       onDate: async () => undefined,
@@ -42,13 +42,13 @@ describe("Tasks workspace filters", () => {
       onLoadMore: () => undefined,
     }));
 
-    expect(markup).toContain('aria-label="Task search and date filters"');
+    expect(markup).toContain('aria-label="Task actions"');
     expect(markup).toContain('aria-label="Search tasks"');
-    expect(markup).toContain('aria-label="Filter from date"');
-    expect(markup).toContain('aria-label="Filter to date"');
+    expect(markup).toContain('aria-label="Search tasks by date"');
+    expect(markup).not.toContain('placeholder="Search tasks"');
   });
 
-  it("puts the views, search, and date range in the panel header and Add task in the list header", () => {
+  it("puts the views and three icon actions in the panel header and leaves column labels alone", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       currentDate: "2026-08-26",
       historyDate: "2026-08-26",
@@ -68,7 +68,7 @@ describe("Tasks workspace filters", () => {
       loadingMore: false,
       hasMore: false,
       busy: false,
-      initialFiltersOpen: true,
+      initialFiltersOpen: false,
       onTaskView: () => undefined,
       onTaskSort: () => undefined,
       onDate: async () => undefined,
@@ -86,11 +86,11 @@ describe("Tasks workspace filters", () => {
     const header = markup.match(/<header class="task-list-header">[\s\S]*?<\/header>/)?.[0] ?? "";
 
     expect(header).toContain('aria-label="Task views"');
-    expect(header).toContain('aria-label="Task search and date filters"');
+    expect(header).toContain('aria-label="Task actions"');
     expect(header).toContain('aria-label="Search tasks"');
-    expect(header).toContain("Date range");
-    // The action belongs to the list itself, not to the panel title row.
-    expect(header).not.toContain("Add task");
+    expect(header).toContain('aria-label="Search tasks by date"');
+    expect(header).toContain('aria-label="Add task"');
+    expect(header).not.toContain("> Add task<");
     const selectedTab = header.match(/<button[^>]*aria-selected="true"[^>]*>/)?.[0] ?? "";
     expect(selectedTab).toContain('tabindex="0"');
     expect(header.match(/tabindex="-1"/g)?.length).toBe(3);
@@ -101,11 +101,10 @@ describe("Tasks workspace filters", () => {
     expect(markup).toContain('aria-labelledby="task-list-tab-all"');
     expect(markup).not.toContain("tasks-toolbar");
     expect(markup).not.toContain("task-search-toolbar");
-    // The list's own header row carries the action, below the panel header.
+    // The list's own header row carries labels only, below the panel header.
     const headerEnd = markup.indexOf(header) + header.length;
     expect(markup.indexOf("sort-header-row")).toBeGreaterThan(headerEnd);
-    expect(markup.indexOf("task-add-button")).toBeGreaterThan(markup.indexOf("sort-header-row"));
-    expect(markup).toMatch(/sort-header-row[\s\S]*?task-add-button/);
+    expect(markup).not.toContain("sort-header-action");
   });
 
   it("keeps Add task available when the list has no rows", () => {
@@ -143,7 +142,7 @@ describe("Tasks workspace filters", () => {
       onLoadMore: () => undefined,
     }));
 
-    expect(markup).toContain("task-add-button");
+    expect(markup).toContain('aria-label="Add task"');
     expect(markup).toContain("Add task");
   });
 
@@ -182,7 +181,7 @@ describe("Tasks workspace filters", () => {
       onLoadMore: () => undefined,
     }));
 
-    expect(markup).toContain('aria-label="Task search and date filters"');
+    expect(markup).toContain('aria-label="Task actions"');
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain('role="tabpanel"');
     expect(markup).not.toContain("Add task");

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { filterFinderTasks } from "./taskFinder";
+import type { TaskFinderSource } from "./workOsQueries";
 import SidebarNav from "./SidebarNav";
 import { ProgressComposer, TasksWorkspace } from "./App";
 import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation, TaskCarryOverFlyout } from "./taskSurfaces";
@@ -167,6 +169,26 @@ export default function TasksPreview() {
   const degraded = scenario === "degraded" ? baseTasks.map((task, index) => index === 1 ? { ...task, sync_error: "nifty_unreachable" } : task) : baseTasks;
   const [carryOpen, setCarryOpen] = useState(params.has("carryover") || scenario === "carryover");
   const [detailsOpen, setDetailsOpen] = useState(detailScenario);
+  const [createOpen, setCreateOpen] = useState(scenario === "create");
+  const [createTitle, setCreateTitle] = useState("");
+  const [finderSelection, setFinderSelection] = useState<TaskRow | null>(null);
+  const finderMode = params.get("finder") ?? "normal";
+  const finderSource: TaskFinderSource = async (filters, cursor, signal) => {
+    if (finderMode === "error") throw new Error("Task read unavailable");
+    if (finderMode === "loading") await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, 4000);
+      signal.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+    });
+    const extra = finderMode === "dense" ? Array.from({ length: 73 }, (_, i) => ({
+      id: `finder-${i}`, title: `${i === 72 ? "Integration needle" : "Review workspace record"} ${i + 1}`,
+      description: "Keep the workday evidence clear and ready for review.",
+      due_date: i % 4 === 0 ? "2026-08-20" : "2026-08-21", workflow_status: i % 2 ? "in_progress" : "pending",
+      completed: i % 5 === 0, project: { name: "LaunchLoom" },
+    })) : [];
+    const rows = finderMode === "empty" ? [] : filterFinderTasks([...tasks, ...extra], filters, CURRENT_DATE);
+    const offset = Number(cursor ?? 0);
+    return { tasks: rows.slice(offset, offset + 50), totalCount: rows.length, nextCursor: offset + 50 < rows.length ? String(offset + 50) : null };
+  };
   const [previewDate, setPreviewDate] = useState(history ? "2026-08-20" : CURRENT_DATE);
   const previewHistorical = previewDate !== CURRENT_DATE;
   const [previewSubtasks, setPreviewSubtasks] = useState(() => DETAIL_SUBTASKS.map((subtask) => ({ ...subtask })));
@@ -216,8 +238,8 @@ export default function TasksPreview() {
   const suggestion = suggestDailyGoal(baseTasks, CURRENT_DATE, currentPlan.items);
   const detailsTask = {
     task: {
-      ...previewDetailTask,
-      capabilities: taskCapabilities(previewDetailTask, { role: "employee", personId: "person-1" }, CURRENT_DATE),
+      ...(finderSelection ?? previewDetailTask),
+      capabilities: taskCapabilities(finderSelection ?? previewDetailTask, { role: "employee", personId: "person-1" }, CURRENT_DATE),
     },
     subtasks: previewSubtasks.map((subtask) => ({ ...subtask, capabilities: taskCapabilities(subtask, { role: "employee", personId: "person-1" }, CURRENT_DATE) })),
     moveTargets: baseTasks.slice(1, 3),
@@ -319,7 +341,7 @@ export default function TasksPreview() {
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="tasks" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <div className={`stage${previewHistorical ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(previewDate)}</p><h1>Tasks</h1></div><div className="mast-actions"><TaskDateNavigator currentDate={CURRENT_DATE} selectedDate={previewDate} onDate={async (date) => setPreviewDate(date)} /><button className="avatar">DZ</button></div></header>
-      <TasksWorkspace currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => undefined} onOpenTask={() => setDetailsOpen(true)} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
+      <TasksWorkspace finderScope={`preview:${finderMode}`} finderSource={finderSource} currentDate={CURRENT_DATE} historyDate={previewDate} backlog={backlog} currentPlan={currentPlan} historicalPlan={previewHistorical ? historicalPlan : null} historicalTasks={previewHistorical ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} taskSort={taskSort} taskSearch={previewSearch} onTaskSearch={setPreviewSearch} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={previewTaskHistory} workspaceHistory={previewTaskHistory} historyOrder="local" historyError={previewHistoryError} historyHasData={params.has("stale")} onRetryHistory={() => setPreviewHistoryError(false)} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} loading={scenario === "history-loading"} initialTaskMenuId={menuId} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onTaskSort={setTaskSort} onDate={async (date) => setPreviewDate(date)} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => setCreateOpen(true)} onOpenTask={task => { setFinderSelection(task); setDetailsOpen(true); }} onEditTask={openPreviewEdit} onArchiveTask={(task) => setPreviewRemoval({ task, mode: "archive", scope: "task" })} onDeleteTask={(task) => setPreviewRemoval({ task, mode: "delete", scope: "task" })} onSurfaceTask={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined}
         onStatusTask={(task, workflow_status) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, workflow_status } : row))}
         onAssignTask={() => setDetailsOpen(true)}
         onTaskCompletion={(task, completed) => setPreviewRows((current) => current.map((row) => row.id === task.id ? { ...row, completed } : row))}
@@ -327,7 +349,7 @@ export default function TasksPreview() {
       {!previewHistorical && <ProgressComposer mode="agenda" input={input} open={composerOpen} panel={composerPanel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="accepted_suggestion" goalSuggestion={suggestion} saveState="saved" onInput={setInput} onOpen={() => { setComposerPanel("update"); setComposerOpen(true); }} onOpenGoal={() => { setComposerPanel("goal"); setComposerOpen(true); }} onClose={() => { setComposerOpen(false); setPending(""); }} onSubmit={() => { const text = input.trim(); if (!text) return; setPending(text); setReceipt(null); setInput(""); setComposerOpen(true); }} onClassify={(kind) => { const text = pending; setReceipt({ text, kind, createdAt: new Date().toISOString(), message: kind === "new_task" ? `Added “${text}” to today’s agenda.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onApplyGoal={setGoal} />}
       {detailsOpen && <TaskDetailsModal details={detailsTask} loading={false} readOnly={scenario === "details-readonly"} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={() => undefined} onEditTask={openPreviewEdit} onCompleteTask={previewDetailCompleted} completionEvidence={PREVIEW_EVIDENCE} loadEvidence={loadPreviewEvidence} onAttachEvidence={() => undefined} onDownloadEvidence={() => undefined} onMoveSubtask={(subtask) => { setSubtaskMenuId(null); setMoveMenuId(null); setPreviewSubtasks((current) => current.filter((row) => String(row.provider_task_id || row.id) !== String(subtask.provider_task_id || subtask.id))); }} onToggleSubtask={(subtask) => setPreviewSubtasks((current) => current.map((row) => String(row.provider_task_id || row.id) === String(subtask.provider_task_id || subtask.id) ? { ...row, completed: !row.completed } : row))} onArchiveSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "archive", scope: "subtask" })} onDeleteSubtask={(subtask) => setPreviewRemoval({ task: subtask, mode: "delete", scope: "subtask" })} {...detailActions} initialMenu={detailInitialMenu} onClose={() => setDetailsOpen(false)} />}
       {scenario === "details-loading" && <TaskDetailsModal details={{ task: tasks[0] as unknown as Record<string, unknown>, subtasks: [], moveTargets: [], subtaskSync: undefined }} loading={true} readOnly={false} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={null} moveMenuId={null} loadEvidence={loadPreviewEvidence} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={() => undefined} onMoveMenu={() => undefined} onSubtaskCreate={() => undefined} onEditTask={() => undefined} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
-      {scenario === "create" && <TaskComposerModal busy={false} title="" description="" assignees={["person-1"]} options={[{ id: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" }, { id: "person-2", displayName: "Alex Rivera", email: null }]} optionsLoading={false} onTitle={() => undefined} onDescription={() => undefined} onToggleAssignee={() => undefined} onClose={() => undefined} onSubmit={() => undefined} />}
+      {createOpen && <TaskComposerModal busy={false} title={createTitle} description="" assignees={["person-1"]} options={[{ id: "person-1", displayName: "Dana Whitfield", email: "dana@example.com" }, { id: "person-2", displayName: "Alex Rivera", email: null }]} optionsLoading={false} onTitle={setCreateTitle} onDescription={() => undefined} onToggleAssignee={() => undefined} onClose={() => setCreateOpen(false)} onSubmit={() => { if (createTitle.trim()) { setPreviewRows(rows => [...rows, { id: `created-${rows.length}`, title: createTitle, due_date: CURRENT_DATE }]); setCreateOpen(false); setCreateTitle(""); } }} />}
       {scenario === "edit" && <TaskEditModal kind="task" title="Ship unified Tasks workspace" description="Finish the desktop implementation and validation." dueDate="2026-09-04" busy={false} onTitle={() => undefined} onDescription={() => undefined} onDueDate={() => undefined} onClose={() => undefined} onSubmit={() => undefined} />}
       {scenario === "confirm-archive" && <TaskRemovalConfirmation mode="archive" scope="task" title="Ship unified Tasks workspace" subtaskCount={3} busy={false} onCancel={() => undefined} onConfirm={() => undefined} />}
       {scenario === "confirm-delete" && <TaskRemovalConfirmation mode="delete" scope="task" title="Ship unified Tasks workspace" subtaskCount={3} busy={false} onCancel={() => undefined} onConfirm={() => undefined} />}

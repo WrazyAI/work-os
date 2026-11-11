@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import vm from "node:vm";
+import ts from "typescript";
 import { validateTaskFinderFilters } from "../src/modules/work-os/task-finder.ts";
 import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope } from "../src/lib/work-os-task-pagination.ts";
+import { validateWorkOsDate } from "../src/lib/work-os-schedule-validation.ts";
 
 test("finder validates status, query length and calendar ranges before querying", () => {
   assert.deepEqual(validateTaskFinderFilters({}), { search: "", status: "all", from: "", to: "" });
@@ -14,6 +17,44 @@ test("finder validates status, query length and calendar ranges before querying"
   const a = taskPageScope({ status: "pending" });
   const cursor = createWorkspaceTaskCursor({ id: "id", title: "title" }, { scope: a, order: "due_desc", sortDate: "2026-11-11", position: 50 });
   assert.throws(() => parseWorkspaceTaskCursor(cursor, taskPageScope({ status: "overdue" })), /must be valid/);
+});
+
+test("finder route validates filters and forwards only the authoritative employee scope", async () => {
+  const source = await readFile(new URL("../src/app/api/work-os/me/tasks/route.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const calls: unknown[][] = [];
+  let rejected = false;
+  const access = { organizationId: "authorized-org", personId: "authorized-person", role: "employee" };
+  const context = { exports: {} as { GET: (req: Request) => Promise<Response> }, Request, Response, URL, require: (name: string) => {
+    if (name === "next/server") return { NextResponse: Response };
+    if (name === "@/lib/work-os-api") return {
+      requireWorkOsAccess: async () => rejected ? { response: Response.json({ error: "Unauthorized" }, { status: 401 }) } : { access },
+      workOsOrganizationOwnerId: () => "owner", jsonError: (error: Error) => Response.json({ error: error.message }, { status: 400 }),
+    };
+    if (name === "@/lib/work-os-task-capabilities") return { employeeToday: async () => "2026-11-11", withTaskCapabilities: (rows: unknown) => rows };
+    if (name === "@/lib/work-os-schedule-validation") return { validateWorkOsDate };
+    if (name === "@/modules/work-os/task-finder") return { validateTaskFinderFilters };
+    if (name === "@/lib/work-os") return { listPersonTaskPage: async (...args: unknown[]) => { calls.push(args); return { tasks: [{ id: "real-row" }], totalCount: 1, nextCursor: null }; } };
+    return {};
+  } };
+  vm.runInNewContext(compiled, context);
+  const request = (params: string) => context.exports.GET(new Request(`https://example.test/api/work-os/me/tasks?${params}`));
+  for (const params of ["view=history&status=bogus", "view=open&status=all", "view=history&status=all&from=2026-11-12&to=2026-11-01", `view=history&status=all&search=${"x".repeat(201)}`, "view=history&status=all&from=2026-02-29"]) {
+    assert.equal((await request(params)).status, 400);
+  }
+  assert.equal(calls.length, 0);
+  const response = await request("view=history&status=in_progress&search=needle&from=2026-11-01&to=2026-11-11&limit=500&personId=someone-else&organizationId=another-org");
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls[0].slice(0, 3), ["owner", "authorized-org", "authorized-person"]);
+  const options = calls[0][3] as Record<string, unknown>;
+  assert.equal(options.finderStatus, "in_progress");
+  assert.equal(options.limit, 50);
+  assert.equal(options.search, "needle");
+  assert.equal(options.fromDate, "2026-11-01");
+  assert.equal(options.toDate, "2026-11-11");
+  rejected = true;
+  assert.equal((await request("view=history&status=all")).status, 401);
+  assert.equal(calls.length, 1);
 });
 
 test("finder SQL intersects state/text/date before paging and keeps tenant and parent boundaries", async () => {

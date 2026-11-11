@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
 import { taskFinderQueryOptions } from "./workOsQueries";
+import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 
 describe("task finder query", () => {
   it("isolates every filter under the history prefix and disables closed reads", () => {
@@ -10,6 +11,25 @@ describe("task finder query", () => {
     expect(a.queryKey.slice(0, 3)).toEqual(["work-os", "task-history", "finder"]);
     expect(a.queryKey).not.toEqual(taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", filters: { ...filters, status: "all" } }).queryKey);
     expect(a.initialPageParam).toBeNull();
+    expect(a.queryKey).not.toEqual(taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", scope: "other-workspace", filters }).queryKey);
+  });
+  it("aborts an obsolete filter read instead of putting it in the new result", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const filters = { search: "", status: "all" as const, from: "", to: "" };
+    let aborted = false;
+    const observer = new InfiniteQueryObserver(client, taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", filters,
+      source: async (_filters, _cursor, signal) => new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => { aborted = true; reject(new DOMException("Aborted", "AbortError")); });
+      }),
+    }));
+    const unsubscribe = observer.subscribe(() => {});
+    observer.setOptions(taskFinderQueryOptions({ enabled: true, currentDate: "2026-11-11", filters: { ...filters, search: "new" },
+      source: async () => ({ tasks: [{ id: "new" }], totalCount: 1, nextCursor: null }),
+    }));
+    await observer.refetch();
+    expect(aborted).toBe(true);
+    expect(observer.getCurrentResult().data?.pages[0].tasks).toEqual([{ id: "new" }]);
+    unsubscribe(); client.clear();
   });
 });
 

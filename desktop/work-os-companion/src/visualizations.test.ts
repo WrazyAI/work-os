@@ -416,10 +416,10 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toMatch(/\.task-list-tabs \{[\s\S]*?flex-wrap: nowrap/);
     expect(dashboardStyles).toContain(".task-list-tabs { width: 100%; flex-wrap: wrap; }");
     expect(dashboardStyles).toMatch(/\.task-list-controls \{[\s\S]*?justify-content: flex-end;/);
-    expect(dashboardStyles).toContain(".task-list-controls .task-search { flex: 0 1 170px;");
-    expect(dashboardStyles).toContain(".task-list-panel .task-add-button { min-height: 32px; height: 32px; padding: 0 11px; border-color: transparent; border-radius: 9px; background: var(--dash-ink, #182018);");
-    expect(dashboardStyles).toContain(".task-list-panel .task-add-button:not(:disabled):hover");
-    expect(dashboardStyles).toContain(".tasks-column-sort .sort-header-action { position: absolute; right: 0;");
+    const finderStyles = readText(resolve(root, "src/task-finder.css"));
+    expect(finderStyles).toContain(".task-list-controls .task-toolbar-icon");
+    expect(finderStyles).toContain(".task-toolbar-icon.is-primary");
+    expect(dashboardStyles).not.toContain(".tasks-column-sort .sort-header-action");
     // The list's column labels read as words, not shouted labels.
     expect(dashboardStyles).toMatch(/\.tasks-column-sort \.sort-header-cell button \{[^}]*text-transform: none;/);
     expect(dashboardStyles).toContain(".task-list-panel { padding: 0;");

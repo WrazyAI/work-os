@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { compareWorkspaceTaskCursor, createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope } from "../src/lib/work-os-task-pagination.ts";
 import { taskRangeAttributionDate } from "../src/lib/work-os-daily-workspace.ts";
+// Finder adds effective-state filtering to this same paginated task contract.
+import "./work-os-task-finder.test.mts";
 
 const USER = "00000000-0000-4000-8000-000000000001";
 const ORGANIZATION = "00000000-0000-4000-8000-000000000002";
