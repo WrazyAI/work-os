@@ -35,13 +35,13 @@ function overviewFixture(state: PreviewState) {
     return {
       date: TODAY,
       generatedAt: NOW,
-      counts: { people: 0, onShift: 0, paused: 0, offShift: 0, unknown: 0, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
+      counts: { people: 0, onShift: 0, paused: 0, offShift: 0, unknown: 0, updatesToday: 0, substantiveUpdatesToday: 0, recapsToday: 0, recapsReviewedToday: 0, tasksCompletedToday: 0, tasksOpen: 0, tasksOverdue: 0, evidenceToday: 0, evidenceActivityToday: 0, evidenceOutputToday: 0, ghlPerformedToday: 0, ghlContextToday: 0, reportsDraftedToday: 0, reportsSubmittedToday: 0, reportsPendingReview: 0, pendingReviewOldestAt: null, eodOutstandingPeople: 0, eodOutstandingDays: 0, disputedEvidence: 0 },
       people: [],
       recentActivity: [],
       attention: [],
       series: overviewSeries(0),
       timeSeries: [],
-      freshness: { niftySyncedAt: null, niftyTasksToday: 0, worktivityObservedAt: null, githubLastEventAt: null, githubEventsToday: 0, lastPlanAt: null, lastReportSubmittedAt: null },
+      freshness: { niftySyncedAt: null, niftyTasksToday: 0, worktivityObservedAt: null, githubLastEventAt: null, githubEventsToday: 0, ghlLastEventAt: null, ghlLastSyncAt: null, ghlEventsToday: 0, lastPlanAt: null, lastReportSubmittedAt: null },
       readiness: { status: "ready", ready: true, issues: [], checks: { people: { active: 0 }, tasks: { open: 0 }, organization: { activeTeams: 0, activeSchedules: 0 } } },
     };
   }
@@ -77,7 +77,7 @@ function overviewFixture(state: PreviewState) {
   return {
     date: TODAY,
     generatedAt: NOW,
-    counts: { people: 4, onShift: 2, paused: 1, offShift: 1, unknown: 1, updatesToday: 5, substantiveUpdatesToday: 3, recapsToday: 6, recapsReviewedToday: 4, tasksCompletedToday: 6, tasksOpen: 41, tasksOverdue: 7, evidenceToday: 19, evidenceActivityToday: 14, evidenceOutputToday: 5, reportsDraftedToday: 1, reportsSubmittedToday: 2, reportsPendingReview: 2, pendingReviewOldestAt: `${TODAY}T11:00:00.000Z`, eodOutstandingPeople: 2, eodOutstandingDays: 3, disputedEvidence: 1 },
+    counts: { people: 4, onShift: 2, paused: 1, offShift: 1, unknown: 1, updatesToday: 5, substantiveUpdatesToday: 3, recapsToday: 6, recapsReviewedToday: 4, tasksCompletedToday: 6, tasksOpen: 41, tasksOverdue: 7, evidenceToday: 19, evidenceActivityToday: 14, evidenceOutputToday: 5, ghlPerformedToday: 7, ghlContextToday: 12, reportsDraftedToday: 1, reportsSubmittedToday: 2, reportsPendingReview: 2, pendingReviewOldestAt: `${TODAY}T11:00:00.000Z`, eodOutstandingPeople: 2, eodOutstandingDays: 3, disputedEvidence: 1 },
     people,
     recentActivity: [
       { id: "a1", kind: "update", at: `${TODAY}T14:48:00.000Z`, personId: "p-ada", personName: "Ada Okafor", title: "Progress update", detail: "Finished the settlement reconciliation and moved to the payout edge cases.", provenance: "material progress" },
@@ -110,6 +110,9 @@ function overviewFixture(state: PreviewState) {
       worktivityObservedAt: `${TODAY}T15:58:00.000Z`,
       githubLastEventAt: `${TODAY}T14:12:00.000Z`,
       githubEventsToday: 60,
+      ghlLastEventAt: `${TODAY}T14:58:00.000Z`,
+      ghlLastSyncAt: `${TODAY}T15:10:00.000Z`,
+      ghlEventsToday: 19,
       lastPlanAt: `${TODAY}T09:20:00.000Z`,
       lastReportSubmittedAt: `${TODAY}T13:05:00.000Z`,
     },
@@ -208,6 +211,25 @@ function insightsFixture(state: PreviewState) {
       nextFocus: ["Review outstanding EOD reports and follow up with the teammate.", "Rebalance or close the overdue backlog."],
     },
     freshness: { generatedAt: NOW },
+    ghl: {
+      connected: !empty,
+      state: empty ? "not_connected" : "partial",
+      performed: empty ? 0 : 18,
+      context: { automation: empty ? 0 : 4, shared_account: empty ? 0 : 3, assigned_only: empty ? 0 : 3, unknown: empty ? 0 : 1 },
+      contextTotal: empty ? 0 : 11,
+      coverage: empty ? [] : [
+        { kind: "call", state: "complete", from: "2026-09-24", through: TODAY, reason: null, scanned: 42, capped: false },
+        { kind: "email", state: "complete", from: "2026-09-24", through: TODAY, reason: null, scanned: 88, capped: false },
+        { kind: "sms", state: "complete", from: "2026-09-24", through: TODAY, reason: null, scanned: 24, capped: false },
+        { kind: "note", state: "pending", from: "2026-09-24", through: TODAY, reason: "Backfill continues from the last saved cursor.", scanned: 30, capped: true },
+        { kind: "opportunity", state: "pending", from: "2026-09-24", through: TODAY, reason: "Backfill continues from the last saved cursor.", scanned: 12, capped: true },
+        { kind: "appointment", state: "partial", from: "2026-09-24", through: TODAY, reason: "Scheduled-window snapshots do not reconstruct booking history.", scanned: 6, capped: false },
+      ],
+      lastSyncedAt: empty ? null : `${TODAY}T15:50:00.000Z`,
+      from: "2026-09-24",
+      through: TODAY,
+      asOf: NOW,
+    },
   };
 }
 
@@ -327,7 +349,7 @@ function tasksFixture(state: PreviewState) {
 function organizationFixture(state: PreviewState) {
   const empty = state === "empty";
   return {
-    organization: { id: "org-1", name: "Preview Workspace", slug: "preview", feature_flags: { employee_companion: true, admin_agent_api: true, desktop_companion: true, screenshot_summaries: true, github_evidence: true, ghl_evidence: false, voice_input: true, seo_mission_control: false } },
+    organization: { id: "org-1", name: "Preview Workspace", slug: "preview", feature_flags: { employee_companion: true, admin_agent_api: true, desktop_companion: true, screenshot_summaries: true, github_evidence: true, ghl_evidence: true, voice_input: true, seo_mission_control: false } },
     memberships: empty ? [] : [
       { id: "m-1", user_id: "u-1", person_id: "p-ada", role: "admin", active: true, feature_flags: {}, person: { id: "p-ada", display_name: "Ada Okafor", email: "ada.okafor@example.com" } },
       { id: "m-2", user_id: "u-2", person_id: "p-luis", role: "employee", active: true, feature_flags: { desktop_companion: true }, person: { id: "p-luis", display_name: "Luis Moreno", email: "luis.moreno@example.com" } },

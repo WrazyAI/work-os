@@ -337,6 +337,10 @@ const interpretationFixture = {
     readiness: "needs_one_clarification",
   },
   build_id: "11111111-1111-4111-8111-111111111111",
+  ghl_evidence: [
+    { title: "Discovery call logged", summary: "Synthetic operations call recorded in the CRM.", url: null, date: "2026-09-09" },
+    { title: "Reconciliation email sent", summary: "Synthetic handoff email recorded in the CRM.", url: null, date: "2026-09-10" },
+  ],
 };
 
 const outstandingFixture = {
