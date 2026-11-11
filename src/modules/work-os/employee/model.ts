@@ -180,6 +180,7 @@ export interface ActivityInterval {
   activities?: string[];
   workflow?: string[];
   uncertainties?: string[];
+  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;

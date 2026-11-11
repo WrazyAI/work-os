@@ -358,8 +358,9 @@ test("structured recap fields parse defensively and reach the card view", () => 
       workflow: [{ phase: "review" }],
       uncertainties: ["whether the change shipped"],
       recordedActivity: [
-        { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
-        { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+        { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc", source: "github" },
+        { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1", source: "github" },
+        { description: "email sent: Proposal", relation: "performed", url: null, source: "ghl", eventId: "event-1" },
         { description: "", relation: "performed", url: null },
         { description: "Bad relation", relation: "maybe", url: null },
       ],
@@ -370,8 +371,9 @@ test("structured recap fields parse defensively and reach the card view", () => 
   assert.deepEqual(view.workflow, ["review"]);
   assert.deepEqual(view.uncertainties, ["whether the change shipped"]);
   assert.deepEqual(view.recordedActivity, [
-    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
-    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc", source: "github" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1", source: "github" },
+    { description: "email sent: Proposal", relation: "performed", url: null, source: "ghl", eventId: "event-1" },
   ]);
 });
 

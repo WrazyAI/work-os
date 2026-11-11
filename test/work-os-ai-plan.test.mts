@@ -54,6 +54,12 @@ test("includes bounded GitHub evidence as context but not a linkable task source
   assert.match(prompt, /Only link a task using an id from the supplied context/);
 });
 
+test("includes GHL evidence as continuity context but not completion", () => {
+  const prompt = buildPlanningPrompt("Follow up with prospects.", { ...context, ghlEvidence: [{ title: "Email sent: Proposal", summary: "Sent a proposal for review.", url: null, date: "2026-11-10" }] }, []);
+  assert.match(prompt, /Email sent: Proposal/);
+  assert.match(prompt, /never proves task completion, sales, or employee effort/);
+});
+
 test("planning prompt embeds live snapshot and recalled memory only when provided", () => {
   const plain = buildPlanningPrompt("Prepare the release.", context, []);
   assert.doesNotMatch(plain, /todayContext|memoryContext|same-day tentative context/);
