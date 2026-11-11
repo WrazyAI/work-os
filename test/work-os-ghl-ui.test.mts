@@ -27,3 +27,19 @@ test("the detail surface keeps content transient, scrollable and keyboard reacha
   assert.equal(evidence.includes("key={selected.ghl?.eventId"), true);
   assert.equal(detail.includes("<Button"), true);
 });
+
+test("SOD shows a bounded GHL disclosure without claiming completion", () => {
+  const planBuilder = readFileSync(new URL("../src/modules/work-os/employee/EmployeePlanBuilder.tsx", import.meta.url), "utf8");
+  assert.equal(planBuilder.includes("GHL evidence context"), true);
+  assert.equal(planBuilder.includes("does not prove completion, sales, or effort"), true);
+  assert.equal(planBuilder.includes("ghlEvidence"), true);
+});
+
+test("manager Overview and Insights show a GHL aggregate source", () => {
+  const overview = readFileSync(new URL("../src/modules/work-os/admin/AdminOverview.tsx", import.meta.url), "utf8");
+  const insights = readFileSync(new URL("../src/modules/work-os/admin/AdminInsights.tsx", import.meta.url), "utf8");
+  assert.equal(overview.includes('label="GoHighLevel"'), true);
+  assert.equal(overview.includes("ghlPerformedToday"), true);
+  assert.equal(insights.includes('label="GHL evidence"'), true);
+  assert.equal(insights.includes("data.ghl.contextTotal"), true);
+});

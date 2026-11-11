@@ -730,6 +730,8 @@ function recordUrl(source: WorkRecord["source"], personId: string, target: strin
       return `/work-os/admin/people/${encodeURIComponent(personId)}?recap=${encodeURIComponent(target)}`;
     case "workday":
       return `/work-os/admin/people/${encodeURIComponent(personId)}?workday=${encodeURIComponent(target)}`;
+    case "ghl":
+      return `/work-os/admin/evidence?personId=${encodeURIComponent(personId)}`;
     case "update":
     default:
       return `/work-os/admin/people/${encodeURIComponent(personId)}?update=${encodeURIComponent(target)}`;
@@ -756,7 +758,7 @@ function recordText(value: unknown) {
 }
 
 const RECORD_SOURCES = new Set<WorkRecord["source"]>([
-  "update", "submitted_eod", "task", "reviewed_recap", "workday",
+  "update", "submitted_eod", "task", "reviewed_recap", "workday", "ghl",
 ]);
 
 /** Optional exact source filter for a typed admin read (for example the
@@ -910,6 +912,23 @@ export async function listAdminOttoRecords(access: WorkOsAccess, input: {
           SELECT 1 FROM work_recap_reviews existing
           WHERE existing.organization_id = i.organization_id AND existing.interval_id = i.id
         )
+      UNION ALL
+      SELECT 'ghl', e.id::text, e.id::text, e.person_id,
+        e.occurred_at, w.timezone, (e.occurred_at AT TIME ZONE w.timezone)::date,
+        concat_ws(E'\n', nullif(e.title, ''), nullif(e.summary, '')),
+        false, NULL::uuid, NULL::jsonb
+      FROM work_evidence_events e
+      JOIN LATERAL (
+        SELECT w.* FROM windows w
+        WHERE w.person_id = e.person_id
+          AND (e.occurred_at AT TIME ZONE w.timezone)::date BETWEEN w.from_date AND w.through_date
+        ORDER BY w.from_date DESC LIMIT 1
+      ) w ON true
+      WHERE e.organization_id = $1 AND e.provider = 'ghl' AND e.person_id IS NOT NULL
+        AND e.correction_status <> 'retracted'
+        AND e.metadata->'ghl'->>'relation' = 'performed'
+        AND e.metadata->'ghl'->>'occurredAt' IS NOT NULL
+        AND coalesce(e.metadata->'ghl'->>'snapshot', 'false') <> 'true'
       UNION ALL
       SELECT 'workday', s.id::text, s.id::text, s.person_id,
         coalesce(s.clocked_out_at, s.clocked_in_at, s.scheduled_starts_at, s.created_at),

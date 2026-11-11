@@ -242,7 +242,7 @@ before(async () => {
       reason text,
       created_at timestamptz not null default now()
     );
-    create table work_evidence_events (
+    create table if not exists work_evidence_events (
       id uuid primary key default gen_random_uuid(),
       organization_id uuid,
       person_id uuid,

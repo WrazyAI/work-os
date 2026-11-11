@@ -3,6 +3,7 @@ import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
 import { timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { getGhlManagerSummary, type GhlManagerSummary } from "@/lib/work-os-ghl-manager";
 import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -444,8 +445,17 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   );
 
   const outstandingDays = await countOutstandingDays(organizationId, now, { personId: personFilter, allowedSet });
+  const ghl = await getGhlManagerSummary({
+    organizationId,
+    from: `${current.from}T00:00:00.000Z`,
+    through: `${addDaysIso(current.through, 1)}T00:00:00.000Z`,
+    personIds: personFilter ? [personFilter] : allowedSet ? [...allowedSet] : null,
+    includeOrganizationContext: !personFilter && access.role === "admin",
+    now,
+  });
 
   return {
+    ghl,
     range,
     from: current.from,
     through: current.through,

@@ -35,7 +35,7 @@ function ReadFrame({ title, page, children, onLoadMore }: { title: string; page:
 }
 
 const sourceLabels: Record<WorkRecord["source"], string> = {
-  update: "Employee update", submitted_eod: "EOD report", task: "Task", reviewed_recap: "Reviewed recap", workday: "Workday",
+  update: "Employee update", submitted_eod: "EOD report", task: "Task", reviewed_recap: "Reviewed recap", workday: "Workday", ghl: "GHL evidence",
 };
 type NamedRecord = WorkRecord & { person?: Pick<PersonRef, "displayName">; personDisplayName?: string; displayName?: string };
 
@@ -82,7 +82,7 @@ export function AdminReadCard({ result, onOpenRecord, onOpenRecap, onListen, pla
             : record.source === "update" ? <blockquote>{record.text || "No update text available."}</blockquote>
               : record.source === "workday" ? <dl className="admin-tool-workday"><dt>Day record</dt><dd>{record.text || "No day details available."}</dd></dl>
                 : <p className="admin-tool-excerpt">{record.text || sourceLabels[record.source]}</p>}
-          <RecordLink url={record.recordUrl} onOpenRecord={onOpenRecord}>Open {record.source === "submitted_eod" ? "report" : record.source === "workday" ? "workday" : "record"}</RecordLink>
+          <RecordLink url={record.recordUrl} onOpenRecord={onOpenRecord}>Open {record.source === "submitted_eod" ? "report" : record.source === "workday" ? "workday" : record.source === "ghl" ? "GHL evidence" : "record"}</RecordLink>
         </article></li>;
       })}</ol> : <p>No records matched that request. Try another person or date range.</p>}
     </ReadFrame>;

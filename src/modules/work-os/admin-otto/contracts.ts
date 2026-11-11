@@ -34,10 +34,10 @@ export type TaskCard = {
   status: "open" | "overdue"; recordUrl: string;
 };
 export type LocalWindow = { personId: string; timezone: string; from: string; through: string };
-export type WorkRecord = { id: string; personId: string; source: "update" | "submitted_eod" | "task" | "reviewed_recap" | "workday";
+export type WorkRecord = { id: string; personId: string; source: "update" | "submitted_eod" | "task" | "reviewed_recap" | "workday" | "ghl";
   occurredAt: string | null; localDate: string; text: string; recordUrl: string };
 export type AdminRecordAction = "records" | "reports" | "eods";
-export type ReadIntent = { action: "unfinished" | AdminRecordAction | "recaps" | "read_recap" | "workday";
+export type ReadIntent = { action: "unfinished" | AdminRecordAction | "ghl" | "recaps" | "read_recap" | "workday";
   target: Target; date: string | null; from: string | null; through: string | null;
   relativeDay: "today" | "yesterday" | "this_week" | "last_week" | null;
   overdueOnly: boolean; latest: boolean };

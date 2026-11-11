@@ -17,6 +17,7 @@ export const ADMIN_OTTO_INTENT_ACTIONS = [
   "records",
   "reports",
   "eods",
+  "ghl",
   "recaps",
   "read_recap",
   "workday",
@@ -289,7 +290,7 @@ export function validateAdminOttoIntent(value: unknown): ReadIntent | null {
     }
     return { action, target, date: null, from: null, through: null, relativeDay: null, overdueOnly: raw.overdueOnly, latest: false };
   }
-  if (action === "records" || action === "reports" || action === "eods") {
+  if (action === "records" || action === "reports" || action === "eods" || action === "ghl") {
     return { action, target, date, from, through, relativeDay, overdueOnly: false, latest: false };
   }
   if (action === "recaps") {
@@ -382,6 +383,7 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "- records: the broad record projection for a person, several people, or the team: authored updates, submitted EOD text, task events, reviewed recaps, and workday snapshots.",
     "- reports: authored updates plus submitted EOD text only. Use this for \"what did they report\" or \"show me their reports\".",
     "- eods: submitted EOD reports only. Use this whenever the administrator explicitly says EOD, end of day, or end-of-day report.",
+    "- ghl: verified employee-attributed GoHighLevel evidence only (calls, messages, email, appointments, notes, tasks, opportunities). Use this when the administrator explicitly asks about GHL/GoHighLevel/CRM activity. Ownership and assignment are not authorship; context-only records are not returned here.",
     "- recaps: reviewed recap history for a date or local range. Set latest only when they ask for the latest reviewed recap per employee.",
     "- read_recap: the latest reviewed recap for exactly one employee.",
     "- workday: the employee's workday/schedule snapshot for one date.",
@@ -399,7 +401,7 @@ export function buildAdminOttoIntentPrompt(text: string, context: AdminOttoInten
     "Conversation rules:",
     "- Greetings, thanks, capability questions, questions about yourself or how you work, and questions asking you to confirm what you just said are not reads: set action to null and write a specific natural answer in reply.",
     "- You run on the deployment's model and query live Work OS records only when a read action runs. You do not continuously monitor anyone. If asked whether an answer is real-time, explain that distinction honestly instead of claiming continuous monitoring.",
-    "- You can read open or overdue tasks, work updates and EOD reports, reviewed recaps, a latest reviewed recap, and workdays. You can also propose assigning, delegating, adding or removing a co-assignee, creating, completing, or reopening a task; every proposal needs the administrator's confirmation. You cannot message, approve an EOD, impersonate, or run anything. Explicit ranges are capped at 31 days; person overviews default to the recent 7-day window.",
+    "- You can read open or overdue tasks, work updates and EOD reports, GHL evidence, reviewed recaps, a latest reviewed recap, and workdays. You can also propose assigning, delegating, adding or removing a co-assignee, creating, completing, or reopening a task; every proposal needs the administrator's confirmation. You cannot message, approve an EOD, impersonate, or run anything. Explicit ranges are capped at 31 days; person overviews default to the recent 7-day window.",
     "- Use the recent conversation to resolve follow-ups such as \"what else can you do?\", \"show me those\", or \"are you sure?\". Do not repeat a previous assistant reply verbatim; answer the new question and add useful detail.",
     "- If a request is not a supported read, politely say what you can read and that you cannot perform the requested action. Do not invent a result.",
     "",

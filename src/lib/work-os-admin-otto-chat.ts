@@ -657,6 +657,9 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
     if (intent.action === "eods") {
       return { reply: `${label}: ${plural(read.page.total, "EOD report")} in ${scope}.${shown}` };
     }
+    if (intent.action === "ghl") {
+      return { reply: `${label}: ${plural(read.page.total, "attributed GHL event")} in ${scope}.${shown}` };
+    }
     if (intent.action === "reports") {
       return { reply: `${label}: ${plural(read.page.total, "report")} in ${scope}.${shown}` };
     }
@@ -690,6 +693,7 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
 function recordSources(intent: ReadIntent): WorkRecord["source"][] | undefined {
   if (intent.action === "workday") return ["workday"];
   if (intent.action === "eods") return ["submitted_eod"];
+  if (intent.action === "ghl") return ["ghl"];
   if (intent.action === "reports") return ["update", "submitted_eod"];
   return undefined;
 }
@@ -1222,9 +1226,11 @@ function replyForContinuation(read: AdminRead, intent: ReadIntent | null): strin
       ? "workday row"
       : intent?.action === "eods"
         ? "EOD report"
-        : intent?.action === "reports"
-          ? "report"
-          : "record";
+        : intent?.action === "ghl"
+          ? "GHL event"
+          : intent?.action === "reports"
+            ? "report"
+            : "record";
     return `Loaded the next ${plural(read.page.items.length, kind)}.`;
   }
   if (read.kind === "recaps") return `Loaded the next ${plural(read.page.items.length, "reviewed recap")}.`;

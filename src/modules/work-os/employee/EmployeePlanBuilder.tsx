@@ -16,6 +16,7 @@ import { CheckedMoment } from "./CheckedMoment";
 import { Field, Notice, PrimaryButton, QuietButton, SecondaryButton, StatusPill, inputClass, inputStyle } from "./ui";
 
 type DraftEdits = Record<string, { title: string; objective: string; criteria: string }>;
+type GhlPlanEvidence = { title: string; summary: string | null; url: string | null; date: string };
 
 function sessionActive(session: AnyRow | null | undefined) {
   return !!session && !["scheduled", "clocked_out"].includes(String(session.state));
@@ -43,6 +44,7 @@ export default function EmployeePlanBuilder({
   const [loomUrl, setLoomUrl] = useState("");
   const [loomTranscript, setLoomTranscript] = useState("");
   const [interpretation, setInterpretation] = useState<PlanningInterpretation | null>(null);
+  const [ghlEvidence, setGhlEvidence] = useState<GhlPlanEvidence[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [edits, setEdits] = useState<DraftEdits>({});
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export default function EmployeePlanBuilder({
     mutationFn: () => {
       const loomUrlText = loomUrl.trim();
       const transcript = loomTranscript.trim();
-      return fetchJson<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
+      return fetchJson<{ interpretation: PlanningInterpretation; build_id: string; ghl_evidence?: GhlPlanEvidence[] }>("/api/work-os/me/plan/interpret", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,6 +93,7 @@ export default function EmployeePlanBuilder({
     },
     onSuccess: (result) => {
       setInterpretation(interpretationFromResponse(result));
+      setGhlEvidence(result.ghl_evidence ?? []);
       setAnswers({});
       setEdits({});
       setRefineInput("");
@@ -99,7 +102,7 @@ export default function EmployeePlanBuilder({
   });
 
   const refine = useMutation({
-    mutationFn: () => fetchJson<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/refine", {
+    mutationFn: () => fetchJson<{ interpretation: PlanningInterpretation; build_id: string; ghl_evidence?: GhlPlanEvidence[] }>("/api/work-os/me/plan/refine", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -118,6 +121,7 @@ export default function EmployeePlanBuilder({
     onSuccess: (result) => {
       const next = interpretationFromResponse(result);
       setInterpretation(next);
+      setGhlEvidence(result.ghl_evidence ?? []);
       setAnswers((current) => next ? applicableClarificationAnswers(next, current) : {});
       setRefineInput("");
       setEditingId(null);
@@ -292,6 +296,22 @@ export default function EmployeePlanBuilder({
                 <p className="text-[11px] font-semibold text-[var(--text-secondary)]">Draft summary</p>
                 <p className="mt-1.5 text-[14px] leading-6 text-[var(--text-primary)]">{effectiveInterpretation?.summary || "No summary was drafted."}</p>
               </div>
+
+              {ghlEvidence.length ? (
+                <div>
+                  <p className="text-[11px] font-semibold text-[var(--text-secondary)]">GHL evidence context</p>
+                  <ul className="mt-2 grid gap-1.5">
+                    {ghlEvidence.map((item) => (
+                      <li key={`${item.date}-${item.title}`} className="text-[11.5px] leading-5 text-[var(--text-secondary)]">
+                        <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">GHL</span>
+                        <span className="tabular-nums text-[var(--text-tertiary)]">{item.date}</span> · {item.title}
+                        {item.summary ? <span className="text-[var(--text-tertiary)]"> — {item.summary}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-[10.5px] leading-5 text-[var(--text-tertiary)]">Provider-recorded context for planning only. It does not prove completion, sales, or effort.</p>
+                </div>
+              ) : null}
 
               <div>
                 <p className="text-[11px] font-semibold text-[var(--text-secondary)]">Commitments</p>

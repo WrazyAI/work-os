@@ -84,6 +84,7 @@ export interface AdminOverview {
     evidenceToday: number;
     evidenceActivityToday: number;
     evidenceOutputToday: number;
+    ghlPerformedToday: number;
     ghlContextToday: number;
     reportsDraftedToday: number;
     reportsSubmittedToday: number;
@@ -327,6 +328,15 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     getPool().query(`select max(occurred_at) as occurred_at,
       (select max(observed_at) from work_attendance_observations where organization_id = $1) as attendance_at,
       (select max(updated_at) from work_daily_plans where organization_id = $1) as plan_at,
+      (select max(occurred_at) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted') as ghl_last_at,
+      (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
+        and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC')::int as ghl_today,
+      (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
+        and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC'
+        and metadata->'ghl'->>'relation' = 'performed')::int as ghl_performed_today,
+      (select count(*) from work_evidence_events where organization_id = $1 and provider = 'ghl' and correction_status <> 'retracted'
+        and occurred_at >= $2::date::timestamp at time zone 'UTC' and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC'
+        and person_id is null and metadata->'ghl'->>'relation' <> 'performed')::int as ghl_context_today,
       count(*) filter (where occurred_at >= $2::date::timestamp at time zone 'UTC'
         and occurred_at < ($2::date + 1)::timestamp at time zone 'UTC')::int as total
       from work_evidence_events where organization_id = $1 and provider = 'github'`, [organizationId, date]),
@@ -341,19 +351,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
   }
 
-  const ghlVolume = await getPool().query<{
-    last_at: string | null;
-    today: number;
-    context_today: number;
-  }>(
-    `select max(occurred_at) as last_at,
-            count(*) filter (where occurred_at >= $2)::int as today,
-            count(*) filter (where occurred_at >= $2 and person_id is null)::int as context_today
-       from work_evidence_events
-      where organization_id = $1 and provider = 'ghl'`,
-    [organizationId, `${date}T00:00:00.000Z`],
-  );
-  const ghl = ghlVolume.rows[0] ?? { last_at: null, today: 0, context_today: 0 };
+  const ghl = {
+    last_at: githubStatsResult.rows[0]?.ghl_last_at ?? null,
+    today: githubStatsResult.rows[0]?.ghl_today ?? 0,
+    performed_today: githubStatsResult.rows[0]?.ghl_performed_today ?? 0,
+    context_today: githubStatsResult.rows[0]?.ghl_context_today ?? 0,
+  };
 
   const people = (peopleResult.data ?? []) as Json[];
   const schedules = (schedulesResult.data ?? []) as Json[];
@@ -633,6 +636,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     tasksOpen: Number(taskStats.open),
     tasksOverdue: Number(taskStats.overdue),
     evidenceToday: sum(todayEvidence, "total"),
+    ghlPerformedToday: Number(ghl.performed_today ?? 0),
     ghlContextToday: Number(ghl.context_today ?? 0),
     evidenceActivityToday: sum(todayEvidence, "activity"),
     evidenceOutputToday: sum(todayEvidence, "total") - sum(todayEvidence, "activity"),

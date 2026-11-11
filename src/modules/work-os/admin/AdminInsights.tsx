@@ -162,6 +162,19 @@ export default function AdminInsightsPage() {
         </p>
       </Group>
 
+      <Group label="GHL evidence" detail="Provider-recorded activity in this range, separate from task outcomes.">
+        <Record columns={3}>
+          <Fact label="Performed by employees" value={data.ghl.performed} detail="Verified mapped actions with a provider occurrence time" tone="observed" />
+          <Fact label="Context only" value={data.ghl.contextTotal} detail="Shared, automated, assigned or unknown; not credited" />
+          <Fact label="Last sync" value={data.ghl.lastSyncedAt ? relativeTime(data.ghl.lastSyncedAt) : "—"} detail={data.ghl.connected ? statusLabel(data.ghl.state) : "Not connected"} />
+        </Record>
+        <p className="mt-3 text-[11px] leading-5 text-[var(--text-tertiary)]">
+          {data.ghl.coverage.length
+            ? data.ghl.coverage.map((entry) => `${entry.kind} ${entry.state}${entry.capped ? " (capped)" : ""}`).join(" · ")
+            : "No GHL coverage has been recorded for this range."}
+        </p>
+      </Group>
+
       <Group label="Daily record" detail="Completed outcomes, updates, and submissions.">
         <Panel>
           <TrendBars

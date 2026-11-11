@@ -273,6 +273,18 @@ create table work_report_versions (
   idempotency_key text,
   created_at timestamptz not null default now()
 );
+create table work_evidence_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references work_organizations(id) on delete cascade,
+  provider text not null,
+  external_event_id text not null default '',
+  person_id uuid,
+  occurred_at timestamptz not null default now(),
+  title text not null default '',
+  summary text not null default '',
+  correction_status text not null default 'original',
+  metadata jsonb not null default '{}'::jsonb
+);
 create table work_evidence (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,
