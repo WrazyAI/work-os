@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { filterFinderTasks } from "./taskFinder";
+import { filterFinderTasks } from "./taskFinderFilters";
 import type { TaskFinderSource } from "./workOsQueries";
 import SidebarNav from "./SidebarNav";
 import { ProgressComposer, TasksWorkspace } from "./App";

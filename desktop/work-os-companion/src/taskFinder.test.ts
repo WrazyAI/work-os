@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { taskFinderDatePreset, taskFinderRangeError, filterFinderTasks } from "./taskFinder";
+import { taskFinderDatePreset, taskFinderRangeError, filterFinderTasks } from "./taskFinderFilters";
 
 describe("finder dates", () => {
   it("uses inclusive Monday weeks without local timezone shifts", () => {

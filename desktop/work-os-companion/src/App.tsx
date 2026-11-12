@@ -59,7 +59,7 @@ import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCa
 import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { TaskFinder } from "./TaskFinder";
 import { buildFocusPlan } from "./focusPlan";
-import { filterFinderTasks } from "./taskFinder";
+import { filterFinderTasks } from "./taskFinderFilters";
 import type { TaskFinderSource } from "./workOsQueries";
 import { updateTaskHistoryPages } from "./workOsQueries";
 import { SortHeaderRow } from "./SortHeaderRow";

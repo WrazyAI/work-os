@@ -5,7 +5,7 @@ import { TASK_FINDER_STATUSES, type TaskFinderFilters } from "../../../src/modul
 import { formatWorkOsFullDate } from "./dateFormat";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { TaskRow } from "./taskWorkspace";
-import { taskFinderDatePreset, taskFinderRangeError } from "./taskFinder";
+import { taskFinderDatePreset, taskFinderRangeError } from "./taskFinderFilters";
 import { TaskFinderResults } from "./TaskFinderResults";
 import { useTaskFinderQuery, type TaskFinderSource } from "./workOsQueries";
 import "./task-finder.css";
