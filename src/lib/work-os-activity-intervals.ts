@@ -715,6 +715,7 @@ export function shouldRetrySystemPlanGoal(access: WorkOsAccess, input: { promptK
   return input.reviewed
     && input.promptKind === "plan"
     && !input.goal
+    && typeof access.membershipId === "string"
     && access.membershipId.startsWith("system-");
 }
 

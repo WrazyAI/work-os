@@ -117,7 +117,9 @@ export async function organizationOwnerId(organizationId: string) {
 /** System-scheduled work is not the organization owner's action. Interactive
  * access keeps the real signed-in actor. */
 export function workOsActorUserId(access: WorkOsAccess) {
-  return access.membershipId.startsWith("system-") ? null : access.ctx.user.id;
+  return typeof access.membershipId === "string" && access.membershipId.startsWith("system-")
+    ? null
+    : access.ctx.user.id;
 }
 
 export async function audit(access: WorkOsAccess, action: string, targetType: string, targetId?: string | null, metadata: Json = {}) {
