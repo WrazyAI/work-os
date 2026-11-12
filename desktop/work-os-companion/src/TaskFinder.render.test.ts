@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { TaskFinderResults } from "./TaskFinder";
+import { TaskFinderResults } from "./TaskFinderResults";
 
 describe("task finder results", () => {
   const base = { tasks: [], currentDate: "2026-11-11", loading: false, error: false, filtered: false, total: 0, hasMore: false, loadingMore: false, loadMoreError: false, onRetry: () => {}, onReset: () => {}, onLoadMore: () => {}, onOpen: () => {} };
