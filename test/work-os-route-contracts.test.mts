@@ -57,6 +57,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(scheduledRecaps, /CRON_SECRET/);
   assert.match(scheduledRecaps, /runScheduledActivityRecaps/);
   assert.match(scheduledRecaps, /Math\.min\(48/);
+  const latestRecap = await source("src/app/api/work-os/me/activity-intervals/latest/route.ts");
+  assert.match(latestRecap, /latestActivityInterval/);
+  assert.match(latestRecap, /requireWorkOsAccess/);
+  assert.match(latestRecap, /requirePerson: true/);
   assert.match(await source("src/lib/work-os-screenshots.ts"), /export function screenshotRunMode/);
   assert.match(await source("src/lib/work-os-screenshots.ts"), /terminallyAnalyzedFrames/);
   const onboardingService = await source("src/lib/work-os-onboarding.ts");

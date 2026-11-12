@@ -3,6 +3,7 @@ import type { Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { isoInstant } from "@/lib/work-os-activity-interval-projection";
 import {
+  activityIntervalRetryBlocked,
   activityIntervalSlotKey,
   ensureActivityInterval,
   type ActivityIntervalRecord,
@@ -34,11 +35,10 @@ export function scheduledRecapRetryBlocked(
   options: { promptKind?: string | null; planHasGoal?: boolean } = {},
 ) {
   if (!row) return false;
+  if (activityIntervalRetryBlocked(row, atMs)) return true;
   const updatedAt = Date.parse(isoInstant(row.updated_at) ?? "");
   if (!Number.isFinite(updatedAt) || atMs - updatedAt >= SCHEDULED_RECAP_FAILURE_BACKOFF_MS) return false;
-  const status = String(row.generation_status ?? "");
-  if (status === "failed" || status === "unavailable") return true;
-  return status === "ready" && options.promptKind === "plan" && options.planHasGoal === false;
+  return String(row.generation_status ?? "") === "ready" && options.promptKind === "plan" && options.planHasGoal === false;
 }
 
 async function loadSlot(access: WorkOsAccess, slotKey: string) {
