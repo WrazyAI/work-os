@@ -854,7 +854,9 @@ the assignees records the actor as the task's assigner.
 At narrow widths it becomes a bottom sheet with a safe viewport inset and an
 internal scroll region. Menus and drawers must collide with the viewport, close
 on Escape/outside click where appropriate, and restore focus to their trigger.
-Destructive archive/delete actions are explicit and separate.
+Destructive archive/delete actions are explicit and separate. A confirmed
+completion of the task the drawer is showing closes the drawer; completing a
+subtask or reopening the task leaves it in place.
 
 **Completion evidence previews.** The drawer's employee-attached evidence rows
 show the file before download: an image uses its real bytes as the thumbnail,
@@ -895,13 +897,18 @@ provider confirmation or proof of completion.
 
 A completion may carry one explicit employee upload: one file plus an optional
 short note. The task row's completion control and the drawer's `Mark complete`
-open the same completion step, so the two paths cannot tell different stories.
-The step states whether the task records an expected outcome (where the
-attachment is required before completion) or is a simple task (where evidence is
-optional), and it keeps the honest no-evidence path wherever the task allows it.
+mark a simple task done immediately; neither interrupts the check-off with a
+form. Confirmation arrives as one transient receipt naming the task, with a
+single `Attach evidence` action that opens the same completion step in its
+attach-only mode, so evidence stays one deliberate press away without costing
+every completion a modal.
 
-The step moves only through persisted states: idle, saving the file, saved but
-not complete with `Retry completion`, and confirmed completion. A failed upload
+A task that records an expected outcome cannot be completed without a file —
+the server refuses that write — so its completion control opens the completion
+step instead. That step states the requirement and never offers the no-evidence
+path; every other task keeps evidence optional and after the fact. The step
+moves only through persisted states: idle, saving the file, saved but not
+complete with `Retry completion`, and confirmed completion. A failed upload
 keeps the selected file and note for retry and never marks the task done. A
 completion failure keeps the saved evidence and says the task is not complete
 yet. The same step can attach evidence to an already completed task without

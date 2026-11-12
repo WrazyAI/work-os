@@ -517,7 +517,9 @@ select:focus-visible {
 }
 @keyframes notification-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (max-width: 560px) {
-  .notification-flyouts { top: 12px; right: 12px; width: calc(100vw - 24px); }
+  /* Fixed inset edges, not 100vw: a desktop scrollbar makes 100vw wider than
+     the layout viewport and pushes the stack's leading edge off screen. */
+  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .notification-flyout, .notification-flyout > i { animation: none; }

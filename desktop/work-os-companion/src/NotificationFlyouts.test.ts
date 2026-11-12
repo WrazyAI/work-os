@@ -108,6 +108,21 @@ describe("application notification flyouts", () => {
     expect(markup).toContain("Dismiss Update downloaded");
   });
 
+  it("renders the completion receipt with its attach-evidence action", () => {
+    const notification: AppNotification = {
+      id: "completion",
+      tone: "success",
+      title: "Task complete",
+      message: "“Ship the drawer” was marked done.",
+      action: { label: "Attach evidence", onClick: () => undefined },
+    };
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notification], onDismiss: () => undefined }));
+    expect(markup).toContain("Task complete");
+    expect(markup).toContain("Ship the drawer");
+    expect(markup).toContain("Attach evidence");
+    expect(markup).toContain('class="notification-action"');
+  });
+
   it("replaces a persistent card in place when progress advances", () => {
     const started = appendNotification([], {
       tone: "info",

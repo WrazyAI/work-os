@@ -3,9 +3,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
-import { COMPLETION_BLOCKED_LABEL, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, patchedTaskCapabilities, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
+import { COMPLETION_BLOCKED_LABEL, completionClosesTaskPanel, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, patchedTaskCapabilities, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
 
@@ -244,5 +244,47 @@ describe("task actions", () => {
     expect(taskDueDateSeed(null)).toBe("");
     expect(taskDueDateSeed(undefined)).toBe("");
     expect(taskDueDateSeed(20261030)).toBe("");
+  });
+  it("keeps the evidence step only for tasks the server refuses to complete without a file", () => {
+    expect(taskCompletionNeedsEvidenceStep({ ...base, title: "Simple task" })).toBe(false);
+    expect(taskCompletionNeedsEvidenceStep({ ...base, expected_outcome: "A signed verification record." })).toBe(true);
+    expect(taskCompletionNeedsEvidenceStep({ ...base, definition_of_done: "The checklist is signed." })).toBe(true);
+    expect(taskCompletionNeedsEvidenceStep({ ...base, expected_outcome: "   " })).toBe(false);
+  });
+  it("offers evidence from the completion receipt instead of blocking the check-off", () => {
+    const attach = vi.fn();
+    const receipt = taskCompletionReceipt({ ...base, title: "Ship the drawer" }, attach);
+    expect(receipt.title).toBe("Task complete");
+    expect(receipt.message).toContain("Ship the drawer");
+    expect(receipt.message).toContain("was marked done");
+    expect(receipt.action?.label).toBe("Attach evidence");
+    receipt.action?.onClick();
+    expect(attach).toHaveBeenCalledTimes(1);
+    const subtaskReceipt = taskCompletionReceipt({ ...base, title: "Draft the appendix", parent_task_id: "task-1" }, attach);
+    expect(subtaskReceipt.message).toContain("Draft the appendix");
+    expect(subtaskReceipt.action).toBeUndefined();
+  });
+  it("closes an open task panel only for the completed task itself", () => {
+    const open = { id: "task-1", provider_task_id: "provider-1" };
+    expect(completionClosesTaskPanel(open, "provider-1", true)).toBe(true);
+    expect(completionClosesTaskPanel({ id: "task-1" }, "task-1", true)).toBe(true);
+    expect(completionClosesTaskPanel(open, "task-1", true)).toBe(false);
+    expect(completionClosesTaskPanel(open, "subtask-1", true)).toBe(false);
+    expect(completionClosesTaskPanel(open, "provider-1", false)).toBe(false);
+    expect(completionClosesTaskPanel(null, "provider-1", true)).toBe(false);
+  });
+  it("wires immediate completion, the evidence receipt, and the panel close into App", () => {
+    const request = appSource.slice(appSource.indexOf("async function requestTaskCompletion("), appSource.indexOf("function requestTaskEvidence("));
+    expect(request).toContain("!taskCompletionNeedsEvidenceStep(task)");
+    expect(request).toContain("setTaskCompletion(task, true, refreshDetails)");
+    const completion = appSource.slice(appSource.indexOf("function setTaskCompletion("), appSource.indexOf("async function requestTaskCompletion("));
+    expect(completion).toContain("taskCompletionReceipt(task, () => requestTaskEvidence(task))");
+    expect(completion).toContain("}, receipt ?? undefined)");
+    const confirmed = appSource.slice(appSource.indexOf("async function applyConfirmedTaskCompletion("), appSource.indexOf("function setTaskCompletion("));
+    expect(confirmed).toContain("completionClosesTaskPanel(taskDetailsRef.current?.task");
+    expect(confirmed).toContain("setTaskDetails(null)");
+    const scenario = appSource.slice(appSource.indexOf("function applyScenarioTaskCompletion("), appSource.indexOf("async function refreshTaskDetailsFor("));
+    expect(scenario).toContain("completionClosesTaskPanel(taskDetails?.task");
+    expect(scenario).toContain("requestTaskEvidence(task)");
   });
 });

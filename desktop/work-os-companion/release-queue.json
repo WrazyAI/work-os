@@ -294,6 +294,12 @@
       "type": "fix",
       "summary": "Clocked-out My Day keeps its status and actions on one row, the Tasks focus card shows plan progress clearly, and the focus view nests plan subtasks before their task rows load.",
       "verification": "Branch codex/employee-task-finder commit pending: companion 210 files/1880 tests pass; companion typecheck and production build pass; focusPlan 10, focus render 6, taskWorkspace 30, visualizations 49, DashboardSurface render 12 focused tests pass; Playwright final PASS at 1440/1080/1024/920/720/390 (off-shift row, scheduled range, focus strip labels, planned subtasks, default collapsed, 390 tab/scroll, reduced motion, axe 0, no page errors). No server migration/API deployment or companion release was performed."
+    },
+    {
+      "id": "task-completion-toast-and-panel-close",
+      "type": "fix",
+      "summary": "Checking off a task marks it done immediately, the confirmation offers Attach evidence, and an open task panel closes when its task is completed.",
+      "verification": "Branch codex/task-completion-toast: companion 210 files/1886 tests pass; companion typecheck and production build pass; taskActions 25 and notification 10 focused tests pass; rendered offline Playwright at 1440x900 and 390x844 confirmed no auto-modal, the named Task complete toast with Attach evidence, the toast action opening the attach-only evidence dialog, and the drawer Mark complete closing the drawer with the receipt; no page errors. Required-outcome tasks still open the evidence step because the server refuses completion without a file."
     }
   ],
   "emergency": null,

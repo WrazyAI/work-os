@@ -40,7 +40,7 @@ import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "../../../src/lib/work-os-shift-gate";
 import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { completionTaskCapabilities, hasTaskMenu, displayTaskState, patchedTaskCapabilities, taskCheckboxA11y, taskCheckboxEnabled, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
+import { completionClosesTaskPanel, completionTaskCapabilities, hasTaskMenu, displayTaskState, patchedTaskCapabilities, taskCheckboxA11y, taskCheckboxEnabled, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -3333,13 +3333,13 @@ export default function App() {
     notifications.info("Saved on this device — it will sync automatically when the connection is back.", "Waiting to sync");
   }
 
-  async function act(label: string, action: () => Promise<unknown>) {
+  async function act(label: string, action: () => Promise<unknown>, receipt?: { title?: string; message?: string; action?: { label: string; onClick: () => void } }) {
     setBusy(true); setError("");
     diagnostics.info("ui.action.requested", label, { activeView: view });
     try {
       if (syncBypassRef.current) {
       diagnostics.info("ui.action.bypass", label, { activeView: view });
-      notifications.success(actionSuccessMessages[label] ?? "The change was saved on this device.");
+      notifications.success(receipt?.message ?? actionSuccessMessages[label] ?? "The change was saved on this device.", receipt?.title, receipt?.action);
       return;
     }
     if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
@@ -3396,9 +3396,9 @@ export default function App() {
       const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
       void emit("work-os://main-day-changed");
       diagnostics.info("ui.action.completed", label, { activeView: view });
-      notifications.success(isWorktivityControlResult(result) && result.status === "confirmed" && result.already_target
+      notifications.success(receipt?.message ?? (isWorktivityControlResult(result) && result.status === "confirmed" && result.already_target
         ? "Worktivity already reflects this attendance state."
-        : actionSuccessMessages[label] ?? "The change was saved.");
+        : actionSuccessMessages[label] ?? "The change was saved."), receipt?.title, receipt?.action);
     }
     catch (value) {
       const message = value instanceof Error ? value.message : "Action failed";
@@ -4421,15 +4421,22 @@ export default function App() {
 
   function applyScenarioTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const taskId = String(task.provider_task_id || task.id);
+    const closePanel = completionClosesTaskPanel(taskDetails?.task as TaskRow | undefined, taskId, completed);
     setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed, ...(row.capabilities ? { capabilities: completionTaskCapabilities(row, completed, taskCalendarDate) } : {}) } : row) ?? [] }));
-    if (refreshDetails && taskDetails) {
+    if (refreshDetails && taskDetails && !closePanel) {
       setTaskDetails((current) => current ? {
         ...current,
         task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed, ...(current.task.capabilities ? { capabilities: completionTaskCapabilities(current.task, completed, taskCalendarDate) } : {}) } : current.task,
         subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed, ...(row.capabilities ? { capabilities: completionTaskCapabilities(row, completed, taskCalendarDate) } : {}) } : row),
       } : current);
     }
-    notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
+    if (closePanel) setTaskDetails(null);
+    if (completed) {
+      const receipt = taskCompletionReceipt(task, () => requestTaskEvidence(task));
+      notifications.success(receipt.message, receipt.title, receipt.action);
+    } else {
+      notifications.success(actionSuccessMessages["task.reopen"]);
+    }
   }
 
   async function refreshTaskDetailsFor(taskId: string, force = false) {
@@ -4450,6 +4457,7 @@ export default function App() {
    * confirmed the state, so the checkbox never reports a false success. */
   async function applyConfirmedTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false, evidence?: TaskEvidenceRecord) {
     const taskId = String(task.provider_task_id || task.id);
+    const closePanel = completionClosesTaskPanel(taskDetailsRef.current?.task as TaskRow | undefined, taskId, completed);
     setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
     setLeavingTaskIds((current) => new Set([...current, taskId]));
     setMascotReceipt({});
@@ -4460,6 +4468,10 @@ export default function App() {
       ...(evidence ? { completion_evidence_count: Number(task.completion_evidence_count ?? 0) + 1 } : {}),
     });
     setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+    if (closePanel) {
+      setTaskDetails(null);
+      return;
+    }
     if (refreshDetails) await refreshTaskDetailsFor(taskId, true);
     else if (evidence) await refreshTaskDetailsFor(taskId);
   }
@@ -4472,6 +4484,7 @@ export default function App() {
     }
     if (completingTaskIds.has(taskId) || leavingTaskIds.has(taskId)) return;
     setCompletingTaskIds((current) => new Set([...current, taskId]));
+    const receipt = completed ? taskCompletionReceipt(task, () => requestTaskEvidence(task)) : null;
     void act(completed ? "task.complete" : "task.reopen", async () => {
       try {
         await updateTaskCompletion(taskId, completed);
@@ -4481,13 +4494,13 @@ export default function App() {
         throw value;
       }
       await applyConfirmedTaskCompletion(task, completed, refreshDetails);
-    });
+    }, receipt ?? undefined);
   }
 
   async function requestTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const sequence = ++taskEvidenceRequestSeq.current;
     if (!completed) { setTaskCompletion(task, false, refreshDetails); return; }
-    if (syncBypassRef.current || (taskKind(task) === "subtask" && !taskRequiresCompletionEvidence(task))) { setTaskCompletion(task, true, refreshDetails); return; }
+    if (syncBypassRef.current || !taskCompletionNeedsEvidenceStep(task)) { setTaskCompletion(task, true, refreshDetails); return; }
     if (carryOverOpen) setCarryOverOpen(false);
     const taskId = String(task.provider_task_id || task.id);
     const openDetails = taskDetails && String(taskDetails.task.provider_task_id || taskDetails.task.id) === taskId ? taskDetails : null;
@@ -5812,7 +5825,7 @@ export default function App() {
         <KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} />
                 <section className="panel dashboard-tasks-card">
           <div className="card-title"><span><BriefcaseBusiness size={17} /> Today’s tasks</span><button onClick={() => { setTaskView("today"); setView("tasks"); }}>View all <ChevronRight size={14} /></button></div>
-          {dashboardTopTasks.length ? <div className="dashboard-task-grid" ref={dashboardGridRef}>{dashboardTopTasks.map((task) => { const taskId = String(task.provider_task_id || task.id); return <DashboardTaskCard key={taskId} task={task} currentDate={visibleDay?.shiftDate ?? ""} flight={taskFlight.get(taskId) ?? null} onComplete={() => setTaskCompletion(task, true)} onOpen={() => void openTaskDetails(task)} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} />; })}</div> : <div className="dashboard-task-empty"><strong>{yesterdayDueTasks.length ? "Nothing scheduled yet" : "Your agenda is open"}</strong><span>{yesterdayDueTasks.length ? "Review unfinished work or add today’s first priority." : "Add your first priority — the composer below plans without clocking you in."}</span></div>}
+          {dashboardTopTasks.length ? <div className="dashboard-task-grid" ref={dashboardGridRef}>{dashboardTopTasks.map((task) => { const taskId = String(task.provider_task_id || task.id); return <DashboardTaskCard key={taskId} task={task} currentDate={visibleDay?.shiftDate ?? ""} flight={taskFlight.get(taskId) ?? null} onComplete={() => void requestTaskCompletion(task, true)} onOpen={() => void openTaskDetails(task)} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} />; })}</div> : <div className="dashboard-task-empty"><strong>{yesterdayDueTasks.length ? "Nothing scheduled yet" : "Your agenda is open"}</strong><span>{yesterdayDueTasks.length ? "Review unfinished work or add today’s first priority." : "Add your first priority — the composer below plans without clocking you in."}</span></div>}
         </section>
       </main> : <ActiveDayWorkspace
         focus={planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}

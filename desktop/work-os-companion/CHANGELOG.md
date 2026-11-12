@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Checking off a task now marks it done right away; the confirmation offers Attach evidence, and an open task panel closes when its task is completed.
+
 ## 0.5.30 — 2026-11-12
 
 - Clocked-out My Day keeps its status and actions on one row, and Tasks focus now shows plan progress with nested subtasks.

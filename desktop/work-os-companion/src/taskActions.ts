@@ -1,5 +1,6 @@
 import { taskDisplayState, taskIsOverdue, type TaskCapabilities, type TaskDisplayState } from "../../../src/lib/work-os-task-permissions";
-import type { TaskRow } from "./taskWorkspace";
+import { taskRequiresCompletionEvidence } from "../../../src/modules/work-os/completion-evidence";
+import { safeTaskText, type TaskRow } from "./taskWorkspace";
 
 export type TaskMenuAction = "pending" | "in_progress" | "complete" | "reopen" | "edit" | "assign" | "archive" | "delete";
 
@@ -137,6 +138,36 @@ export function patchedTaskCapabilities(task: TaskRow, today: string): TaskCapab
  *  restored from had already cleared it. */
 export function completionTaskCapabilities(task: TaskRow, completed: boolean, today: string): TaskCapabilities | null {
   return patchedTaskCapabilities({ ...task, completed }, today);
+}
+
+/** Only a task that records an expected outcome needs the completion step
+ *  before it can be marked done; the server refuses that write without a file.
+ *  Every other task completes straight from its checkbox, with evidence
+ *  offered afterwards instead of blocking the check-off. */
+export function taskCompletionNeedsEvidenceStep(task: TaskRow): boolean {
+  return taskRequiresCompletionEvidence(task);
+}
+
+/** The success receipt for an ordinary completion. It names the task so a
+ *  rapid run of check-offs stays legible, and keeps evidence one deliberate
+ *  press away without making every completion pass through a form. A subtask
+ *  gets the receipt but not the attach action: the drawer keeps evidence with
+ *  the task record it belongs to. */
+export function taskCompletionReceipt(task: TaskRow, onAttachEvidence: () => void) {
+  const topLevel = !task.parent_provider_task_id && !task.parent_task_id;
+  return {
+    title: "Task complete",
+    message: `“${safeTaskText(task.title, "Task")}” was marked done.`,
+    action: topLevel ? { label: "Attach evidence", onClick: onAttachEvidence } : undefined,
+  };
+}
+
+/** A confirmed completion closes the open task panel only when the panel is
+ *  showing the completed task itself. Completing a subtask or reopening a task
+ *  leaves the parent record in place. */
+export function completionClosesTaskPanel(openTask: TaskRow | null | undefined, completedTaskId: string, completed: boolean): boolean {
+  if (!completed || !openTask) return false;
+  return String(openTask.provider_task_id || openTask.id) === completedTaskId;
 }
 
 /** One predicate for "this row has a menu", shared by every trigger so a row
