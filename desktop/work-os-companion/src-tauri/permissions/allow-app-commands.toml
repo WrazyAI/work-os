@@ -13,6 +13,7 @@ commands.allow = [
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
   "quit_app",
+  "sync_app_menu",
   "open_work_os_auth",
   "worktivity_control",
   "finish_worktivity_control",

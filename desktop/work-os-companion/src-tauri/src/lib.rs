@@ -1,3 +1,4 @@
+mod app_menu;
 mod day_monitor;
 mod day_monitor_core;
 mod debug_window;
@@ -664,6 +665,7 @@ pub fn run() {
             arm_update_exit_watchdog,
             disarm_update_exit_watchdog,
             quit_app,
+            app_menu::sync_app_menu,
             notify_focus,
             focus_main,
             hide_avatar,
@@ -680,6 +682,25 @@ pub fn run() {
             diagnostics::open_logs_dir
         ])
         .setup(|app| {
+            // macOS always shows a system menu bar; route its Work OS items
+            // back to the window that owns the actions. Tray items carry their
+            // own handler and never use the `menu:` prefix.
+            app.on_menu_event(|app, event| {
+                app_menu::handle_menu_event(app, event.id.as_ref());
+            });
+            // Replace the framework's default File/View/Window menu before the
+            // first frame, so macOS never flashes destinations Work OS does
+            // not have. The frontend fills in Workspace/Go/View/Help once the
+            // shell knows which surface is on screen.
+            #[cfg(target_os = "macos")]
+            if let Err(error) = app_menu::install(app.handle(), Vec::new()) {
+                diagnostics::host_event(
+                    app.handle(),
+                    "menu.native.initial_failed",
+                    &format!("Could not install the initial macOS menu bar: {error}"),
+                    diagnostics::DiagnosticLevel::Warn,
+                );
+            }
             // Fit the window before anything renders: the configured 1000x960
             // window is taller than a 13-inch MacBook's work area, and macOS
             // only keeps the title bar on screen, so the bottom row of the UI

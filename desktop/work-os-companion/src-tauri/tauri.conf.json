@@ -18,6 +18,9 @@
         "minHeight": 600,
         "center": true,
         "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 19, "y": 11 },
         "additionalBrowserArgs": "--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling",
         "useHttpsScheme": true
       },

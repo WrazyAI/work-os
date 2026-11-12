@@ -42,6 +42,7 @@ const mainEntry = readText(resolve(root, "src/main.tsx"));
 const tauriLib = readText(resolve(root, "src-tauri/src/lib.rs"));
 const defaultCapability = readText(resolve(root, "src-tauri/capabilities/default.json"));
 const appCommands = readText(resolve(root, "src-tauri/permissions/allow-app-commands.toml"));
+const tauriConfig = readText(resolve(root, "src-tauri/tauri.conf.json"));
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -428,6 +429,17 @@ describe("operational visualizations", () => {
     expect(defaultCapability).toContain("core:window:allow-close");
     expect(defaultCapability).toContain("core:window:allow-start-dragging");
     expect(appCommands).toContain('"quit_app"');
+  });
+
+  it("mirrors the menu into the macOS menu bar and names admin mode", () => {
+    expect(app).toContain("<NativeAppMenu");
+    expect(app).toContain('"Admin mode"');
+    expect(appMenuBar).toContain("wc-traffic");
+    expect(tauriLib).toContain("app_menu::sync_app_menu");
+    expect(tauriLib).toContain("app_menu::handle_menu_event");
+    expect(appCommands).toContain('"sync_app_menu"');
+    expect(tauriConfig).toContain('"titleBarStyle": "Overlay"');
+    expect(tauriConfig).toContain('"hiddenTitle": true');
   });
 
   it("keeps the Tasks page layout flat, single-headed, and wrap-proof", () => {

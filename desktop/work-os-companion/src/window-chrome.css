@@ -139,6 +139,11 @@ html.modal-open .window-chrome-content {
   background: var(--sidebar-marker, #76bf3b);
 }
 
+.wc-drag > i.is-admin {
+  background: var(--ink);
+  opacity: 0.4;
+}
+
 .wc-status {
   flex: 0 0 auto;
 }
@@ -278,15 +283,164 @@ html.modal-open .window-chrome-content {
   letter-spacing: 0.01em;
 }
 
+/* macOS keeps its native traffic lights, so the bar reserves their track and
+   spends the trailing edge on the shift state instead of window buttons. */
+.wc-bar--mac {
+  border-bottom-color: rgba(20, 30, 18, 0.12);
+  background: rgba(250, 250, 246, 0.9);
+  backdrop-filter: blur(24px) saturate(1.35);
+}
+
+.wc-traffic {
+  flex: 0 0 74px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 19px;
+}
+
+.wc-traffic i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+}
+
+.wc-traffic-close { background: #ff5f57; }
+.wc-traffic-min { background: #febc2e; }
+.wc-traffic-zoom { background: #28c840; }
+
+.wc-bar--mac .wc-brand {
+  padding-left: 4px;
+}
+
+.wc-bar--mac .wc-trigger {
+  height: 24px;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+}
+
+.wc-bar--mac .wc-trigger svg {
+  color: var(--muted);
+}
+
+.wc-bar--mac .wc-drag {
+  gap: 0;
+}
+
+.wc-bar--mac .wc-page {
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+}
+
+.wc-mac-trail {
+  flex: 0 0 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 13px;
+}
+
+.wc-mac-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.wc-mac-state i {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--sidebar-marker, #76bf3b);
+}
+
+.wc-mac-state.is-admin i {
+  background: var(--ink);
+  opacity: 0.4;
+}
+
+.wc-mac-trail.is-chip .wc-mac-state {
+  height: 21px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  background: rgba(24, 32, 24, 0.055);
+  color: var(--ink);
+  font-weight: 620;
+}
+
+/* macOS menus drop from the app menu's leading edge and borrow the platform's
+   tighter metrics: smaller radius, denser rows, a softer shadow. */
+.wc-bar--mac .wc-menu {
+  left: 78px;
+  width: 264px;
+  padding: 5px;
+  border-radius: 9px;
+  border-color: rgba(20, 30, 18, 0.12);
+  box-shadow: 0 22px 60px rgba(20, 30, 18, 0.2), 0 0 0 0.5px rgba(20, 30, 18, 0.06);
+}
+
+.wc-bar--mac .wc-menu-group + .wc-menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.wc-bar--mac .wc-menu-group.is-quit:not(:first-child) {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top-color: rgba(20, 30, 18, 0.16);
+}
+
+.wc-bar--mac .wc-menu-label {
+  padding: 4px 7px 3px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.wc-bar--mac .wc-menu button {
+  height: 28px;
+  gap: 6px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wc-bar--mac .wc-menu kbd {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Quit stays a plain item on macOS; the separation and its place at the
+   bottom carry the weight, not an alarm colour. */
+.wc-bar--mac .wc-menu button.is-destructive {
+  color: var(--ink);
+}
+
+.wc-bar--mac .wc-menu button.is-destructive:hover,
+.wc-bar--mac .wc-menu button.is-destructive:focus-visible {
+  background: rgba(24, 32, 24, 0.07);
+}
+
 @media (max-width: 760px) {
-  .wc-status,
-  .wc-drag > i {
-    display: none;
+  /* The shift state and admin mode both stay readable at the 720px minimum. */
+  .wc-status {
+    font-size: 10px;
   }
 }
 
 @media (max-width: 560px) {
-  .wc-page {
+  .wc-page,
+  .wc-drag > i {
     display: none;
   }
   .wc-brand {

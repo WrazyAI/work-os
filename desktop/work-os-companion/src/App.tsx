@@ -88,6 +88,7 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
 import { isMacOS, isWindows } from "./platform";
 import AppMenuBar, { type AppMenuGroup, type AppMenuItem } from "./AppMenuBar";
+import NativeAppMenu from "./NativeAppMenu";
 import { installContextMenuSuppression } from "./contextMenu";
 import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
@@ -803,12 +804,18 @@ export default function App() {
   const bootRise = useBootRise(landing);
   const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
   const employeeWorkspaceBranch = landing === "workspace";
-  /* Windows-first custom chrome. The dev flag keeps the real shell reviewable
-     in a browser without giving the web app a fake title bar. */
-  const customWindowChrome = (isTauri() && isWindows())
-    || (import.meta.env.DEV && new URLSearchParams(window.location.search).has("window-chrome"));
+  /* Windows and macOS both draw the Work OS caption bar; the dev flag keeps
+     the real shell reviewable in a browser without giving the web app a fake
+     title bar. */
+  const macChromePreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has("mac-chrome");
+  const macChrome = (isTauri() && isMacOS()) || macChromePreview;
+  const customWindowChrome = (isTauri() && (isWindows() || isMacOS()))
+    || (import.meta.env.DEV && (new URLSearchParams(window.location.search).has("window-chrome") || macChromePreview));
   const contextMenuSuppressionEnabled = isTauri()
-    || (import.meta.env.DEV && new URLSearchParams(window.location.search).has("window-chrome"));
+    || (import.meta.env.DEV && (new URLSearchParams(window.location.search).has("window-chrome") || macChromePreview));
+  /* Menu labels follow the chrome being rendered, not just the user agent, so
+     the macOS preview carries the shortcuts the real app would show. */
+  const chromeUsesMacShortcuts = macChrome;
 
   /* The organization flag says the workspace may use voice input; the server
      capability says this deployment can actually transcribe. The record
@@ -5565,7 +5572,15 @@ export default function App() {
 
   const frameWindow = (content: ReactNode, groups: AppMenuGroup[], page: string, status: string | null = null) => customWindowChrome
     ? <div className="window-chrome-frame">
-      <AppMenuBar pageLabel={page} statusLabel={status} menuGroups={groups} onQuit={quitApp} />
+      <AppMenuBar
+        pageLabel={page}
+        statusLabel={status}
+        statusTone={adminWorkspaceBranch ? "admin" : "shift"}
+        menuGroups={groups}
+        onQuit={quitApp}
+        variant={macChrome ? "mac" : "windows"}
+      />
+      <NativeAppMenu groups={groups} />
       <div className="window-chrome-content">{content}</div>
     </div>
     : content;
@@ -6174,49 +6189,56 @@ export default function App() {
     : landing === "workspace"
       ? views.find((item) => item.id === view)?.label ?? "Work OS"
       : landing === "onboarding" ? "Set up Work OS" : landing === "connect" ? "Connect" : "Work OS";
-  const statusLabel = landing === "workspace" && visibleSession ? (active ? "On shift" : "Off shift") : null;
+  const statusLabel = adminWorkspaceBranch
+    ? "Admin mode"
+    : landing === "workspace" && visibleSession ? (active ? "On shift" : "Off shift") : null;
   const menuGroups: AppMenuGroup[] = [];
   if (landing === "workspace" || landing === "admin") {
     const workspaceItems: AppMenuItem[] = [{
+      id: "workspace:organization",
       label: workSessionQuery.data?.organizationName?.trim() || "Work OS workspace",
       checked: true,
       disabled: true,
     }];
     if (adminWorkspaceBranch) {
-      if (adminOttoBootstrap.switchToEmployeeAvailable) workspaceItems.push({ label: "Switch to my workspace", onSelect: () => setWorkspaceMode("employee") });
+      if (adminOttoBootstrap.switchToEmployeeAvailable) workspaceItems.push({ id: "workspace:employee", label: "Switch to my workspace", onSelect: () => setWorkspaceMode("employee") });
     } else if (workSessionQuery.data?.role === "admin") {
-      workspaceItems.push({ label: "Switch to Administration", onSelect: () => setWorkspaceMode("admin") });
+      workspaceItems.push({ id: "workspace:admin", label: "Switch to Administration", onSelect: () => setWorkspaceMode("admin") });
     }
     menuGroups.push({ label: "Workspace", items: workspaceItems });
-    const settingsShortcut = isMacOS() ? "⌘," : "Ctrl ,";
+    const settingsShortcut = chromeUsesMacShortcuts ? "⌘," : "Ctrl ,";
     const goItems: AppMenuItem[] = adminWorkspaceBranch
       ? ADMIN_MENU_SECTIONS.map((section) => ({
+        id: `go:${section.id}`,
         label: section.label,
         checked: adminSection === section.id,
         disabled: adminSection === section.id,
-        ...(section.id === "settings" ? { shortcut: settingsShortcut } : {}),
+        ...(section.id === "settings" ? { shortcut: settingsShortcut, accelerator: "CmdOrCtrl+," } : {}),
         onSelect: () => navigateAdmin(section.id),
       }))
       : views.filter((item) => item.id !== "evidence").map((item) => ({
+        id: `go:${item.id}`,
         label: item.label,
         checked: view === item.id,
         disabled: view === item.id,
-        ...(item.id === "settings" ? { shortcut: settingsShortcut } : {}),
+        ...(item.id === "settings" ? { shortcut: settingsShortcut, accelerator: "CmdOrCtrl+," } : {}),
         onSelect: () => setView(item.id),
       }));
     menuGroups.push({ label: "Go", items: goItems });
     menuGroups.push({
       label: "View",
       items: [{
+        id: "view:sidebar",
         label: "Toggle sidebar",
-        shortcut: isMacOS() ? "⌘B" : "Ctrl B",
+        shortcut: chromeUsesMacShortcuts ? "⌘B" : "Ctrl B",
+        accelerator: "CmdOrCtrl+B",
         onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
       }],
     });
     const helpItems: AppMenuItem[] = [];
-    if (pageGuideView) helpItems.push({ label: "How Work OS works", onSelect: () => openGuide(pageGuideView) });
-    helpItems.push({ label: "What’s new", onSelect: openChangelogFromAdmin });
-    if (isTauri()) helpItems.push({ label: "Diagnostics", onSelect: () => void openDebugger() });
+    if (pageGuideView) helpItems.push({ id: "help:guide", label: "How Work OS works", onSelect: () => openGuide(pageGuideView) });
+    helpItems.push({ id: "help:new", label: "What’s new", onSelect: openChangelogFromAdmin });
+    if (isTauri()) helpItems.push({ id: "help:diagnostics", label: "Diagnostics", onSelect: () => void openDebugger() });
     menuGroups.push({ label: "Help", items: helpItems });
   }
   return frameWindow(<BootOverlay surface={landing}>{bootContent}</BootOverlay>, menuGroups, pageLabel, statusLabel);

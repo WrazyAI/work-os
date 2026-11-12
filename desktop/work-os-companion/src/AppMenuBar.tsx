@@ -6,8 +6,13 @@ import { isMacOS } from "./platform";
 import { isEditableTarget, isQuitShortcut, isSidebarShortcut, SIDEBAR_TOGGLE_EVENT, shortcutLabel } from "./windowChrome";
 
 export type AppMenuItem = {
+  /** Stable across menu rebuilds; the native menu maps clicks by this, never
+   * by position. */
+  id?: string;
   label: string;
   shortcut?: string;
+  /** The native menu bar needs a real accelerator, not the display label. */
+  accelerator?: string;
   checked?: boolean;
   disabled?: boolean;
   destructive?: boolean;
@@ -15,6 +20,10 @@ export type AppMenuItem = {
 };
 
 export type AppMenuGroup = { label?: string; items: AppMenuItem[] };
+
+/** Windows draws its own window controls; macOS keeps the native traffic
+ * lights and spends the trailing edge on the shift state instead. */
+export type AppMenuBarVariant = "windows" | "mac";
 
 /** The Quit action is appended by the bar itself so every surface and test
  * gets the same bottom-of-menu contract. */
@@ -29,20 +38,42 @@ function menuItems(menu: HTMLDivElement | null) {
   return Array.from(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
 }
 
-export default function AppMenuBar({ pageLabel, statusLabel = null, menuGroups, onQuit, quitLabel = "Quit Work OS" }: {
+function shiftState(statusLabel: string | null, tone: "shift" | "admin") {
+  return statusLabel
+    ? <span className={`wc-mac-state${tone === "admin" ? " is-admin" : ""}`}><i aria-hidden="true" />{statusLabel}</span>
+    : null;
+}
+
+export default function AppMenuBar({
+  pageLabel,
+  statusLabel = null,
+  statusTone = "shift",
+  menuGroups,
+  onQuit,
+  quitLabel = "Quit Work OS",
+  variant: requestedVariant,
+  showTrafficLights = !isTauri(),
+}: {
   pageLabel: string;
   statusLabel?: string | null;
+  /** Admin mode is a workspace, not attendance, so it must not borrow the
+   * shift marker. */
+  statusTone?: "shift" | "admin";
   menuGroups: AppMenuGroup[];
   onQuit: () => void;
   quitLabel?: string;
+  variant?: AppMenuBarVariant;
+  showTrafficLights?: boolean;
 }) {
+  const variant = requestedVariant ?? (isMacOS() ? "mac" : "windows");
+  const mac = variant === "mac";
   const appWindow = useMemo(() => (isTauri() ? getCurrentWindow() : null), []);
   const [maximized, setMaximized] = useState(false);
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
-  const groups = withQuitGroup(menuGroups, onQuit, isMacOS(), quitLabel);
+  const groups = withQuitGroup(menuGroups, onQuit, mac, quitLabel);
 
   useEffect(() => {
     document.documentElement.classList.add("window-chrome-active");
@@ -71,19 +102,19 @@ export default function AppMenuBar({ pageLabel, statusLabel = null, menuGroups, 
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (isQuitShortcut(event)) {
+      if (isQuitShortcut(event, mac)) {
         event.preventDefault();
         onQuit();
         return;
       }
-      if (isSidebarShortcut(event) && !isEditableTarget(event.target)) {
+      if (isSidebarShortcut(event, mac) && !isEditableTarget(event.target)) {
         event.preventDefault();
         window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT));
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onQuit]);
+  }, [mac, onQuit]);
 
   useEffect(() => {
     if (!open) return;
@@ -148,7 +179,10 @@ export default function AppMenuBar({ pageLabel, statusLabel = null, menuGroups, 
   const toggleMaximize = () => { void appWindow?.toggleMaximize().catch(() => undefined); };
   const closeWindow = () => { void appWindow?.close().catch(() => undefined); };
 
-  return <header className="wc-bar" data-tauri-drag-region>
+  return <header className={`wc-bar${mac ? " wc-bar--mac" : ""}`} data-variant={variant} data-tauri-drag-region>
+    {mac ? <span className={`wc-traffic${showTrafficLights ? "" : " is-native"}`} aria-hidden="true">
+      {showTrafficLights ? <><i className="wc-traffic-close" /><i className="wc-traffic-min" /><i className="wc-traffic-zoom" /></> : null}
+    </span> : null}
     <div className="wc-brand" data-tauri-drag-region="deep">
       <button
         ref={triggerRef}
@@ -163,13 +197,17 @@ export default function AppMenuBar({ pageLabel, statusLabel = null, menuGroups, 
     </div>
     <div className="wc-drag" data-tauri-drag-region="deep">
       <span className="wc-page" title={pageLabel}>{pageLabel}</span>
-      {statusLabel ? <><i aria-hidden="true" /><span className="wc-status">{statusLabel}</span></> : null}
+      {variant === "windows" && statusLabel ? <><i className={statusTone === "admin" ? "is-admin" : undefined} aria-hidden="true" /><span className="wc-status">{statusLabel}</span></> : null}
     </div>
-    <div className="wc-controls">
-      <button type="button" aria-label="Minimize" title="Minimize" onClick={minimize}><Minus size={13} aria-hidden="true" /></button>
-      <button type="button" aria-label={maximized ? "Restore" : "Maximize"} title={maximized ? "Restore" : "Maximize"} onClick={toggleMaximize}>{maximized ? <Copy size={11} aria-hidden="true" /> : <Square size={11} aria-hidden="true" />}</button>
-      <button type="button" aria-label="Close window" title="Close window" className="wc-close" onClick={closeWindow}><X size={13} aria-hidden="true" /></button>
-    </div>
+    {variant === "windows"
+      ? <div className="wc-controls">
+        <button type="button" aria-label="Minimize" title="Minimize" onClick={minimize}><Minus size={13} aria-hidden="true" /></button>
+        <button type="button" aria-label={maximized ? "Restore" : "Maximize"} title={maximized ? "Restore" : "Maximize"} onClick={toggleMaximize}>{maximized ? <Copy size={11} aria-hidden="true" /> : <Square size={11} aria-hidden="true" />}</button>
+        <button type="button" aria-label="Close window" title="Close window" className="wc-close" onClick={closeWindow}><X size={13} aria-hidden="true" /></button>
+      </div>
+      : <div className="wc-mac-trail is-chip">
+        {shiftState(statusLabel, statusTone)}
+      </div>}
     {open ? <div id={menuId} ref={menuRef} className="wc-menu" role="menu" aria-label="Work OS menu" onKeyDown={onMenuKeyDown}>
       {groups.map((group, groupIndex) => <div className={`wc-menu-group${groupIndex === groups.length - 1 ? " is-quit" : ""}`} key={`${group.label ?? "quit"}-${groupIndex}`}>
         {group.label ? <span className="wc-menu-label">{group.label}</span> : null}

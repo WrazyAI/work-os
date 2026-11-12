@@ -39,4 +39,36 @@ describe("app menu bar", () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.items[0]?.label).toBe("Quit Work OS");
   });
+
+  it("reserves the native traffic lights and drops window controls on macOS", () => {
+    const markup = renderToStaticMarkup(createElement(AppMenuBar, {
+      pageLabel: "My Day",
+      statusLabel: "On shift",
+      menuGroups: groups,
+      onQuit: () => undefined,
+      variant: "mac",
+      showTrafficLights: false,
+    }));
+    expect(markup).toContain('data-variant="mac"');
+    expect(markup).toContain("wc-bar--mac");
+    expect(markup).toContain('class="wc-traffic is-native"');
+    expect(markup).not.toContain('aria-label="Minimize"');
+    expect(markup).not.toContain('aria-label="Close window"');
+    expect(markup).toContain("On shift");
+  });
+
+  it("carries the admin status in the same trailing slot", () => {
+    const markup = renderToStaticMarkup(createElement(AppMenuBar, {
+      pageLabel: "People",
+      statusLabel: "Admin mode",
+      statusTone: "admin",
+      menuGroups: groups,
+      onQuit: () => undefined,
+      variant: "mac",
+      showTrafficLights: false,
+    }));
+    expect(markup).toContain("Admin mode");
+    expect(markup).toContain("wc-mac-state is-admin");
+    expect(markup).not.toContain("On shift");
+  });
 });

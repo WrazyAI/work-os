@@ -243,8 +243,17 @@ edge in the platform's order. The bar is the drag region and a double-click
 maximizes. The menu carries Workspace, Go, View, and Help, then a separated
 `Quit Work OS` (`Ctrl + Q`; `Cmd + Q` on macOS). Close hides the window to the
 tray; Quit exits the app. The bar stays above modal surfaces. The webview's
-browser context menu is suppressed outside text fields. macOS keeps its native
-title bar until its own custom-chrome pass.
+browser context menu is suppressed outside text fields.
+
+macOS uses the same 34px bar with its native traffic lights at the leading
+edge, so the bar reserves that track and drops its own window buttons; the
+trailing edge carries the shift state instead. The administration workspace
+replaces that state with `Admin mode`, because attendance is not the
+administrator's current context. macOS also gets the same Work OS menu in the
+system menu bar, in the same Workspace, Go, View, Help order, with the standard
+app and Edit menus around it; `Quit Work OS` lives at the bottom of the app
+menu. The system menu is a mirror, not a second source of navigation: both it
+and the caption menu run the same actions.
 
 ### 4.2 Navigation states
 

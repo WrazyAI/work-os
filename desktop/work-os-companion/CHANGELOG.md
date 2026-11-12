@@ -28,6 +28,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Checking off a task now marks it done right away; the confirmation offers Attach evidence, and an open task panel closes when its task is completed.
 - Activity recaps now show your GoHighLevel calls and messages with their own icon, so CRM work is never listed as GitHub activity.
 - Windows now has a custom Work OS menu bar with every destination in one menu, window controls, and Quit Work OS; right-click no longer shows the browser menu.
+- The Mac app now has the same Work OS bar with its native window buttons, and the same menu in the system menu bar.
+- Switching to Administration now labels the window Admin mode instead of a shift state.
 
 ## 0.5.30 — 2026-11-12
 
