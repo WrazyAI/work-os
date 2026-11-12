@@ -170,8 +170,9 @@ describe("the floating companion surfaces the latest recap and the remaining que
     const avatar = read("./AvatarApp.tsx");
     expect(avatar).toContain("useLatestActivityIntervalQuery");
     expect(avatar).toContain("recapSurfaceDecision");
-    expect(avatar).toContain("You have unapproved recaps");
-    expect(avatar).toContain("View recaps");
+    expect(avatar).toContain("RecapQueueBubble");
     expect(avatar).toContain("avatarUnapprovedRecapsFixtureRequested");
+    expect(read("./RecapQueueBubble.tsx")).toContain("You have unapproved recaps");
+    expect(read("./RecapQueueBubble.tsx")).toContain("View recaps");
   });
 });

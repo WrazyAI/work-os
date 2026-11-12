@@ -169,7 +169,11 @@ export async function runScheduledActivityRecaps(limit = 24, at = new Date()): P
       .in("state", ["clocked_in", "active"])
       .not("clocked_in_at", "is", null)
       .gte("clocked_in_at", since)
-      .or(`next_fallback_at.lte.${at.toISOString()},last_prompt_at.is.null`)
+      .or([
+        `next_fallback_at.lte.${at.toISOString()}`,
+        `and(last_prompt_at.is.null,first_follow_up_at.lte.${at.toISOString()})`,
+        "and(last_prompt_at.is.null,first_follow_up_at.is.null)",
+      ].join(","))
       .order("next_fallback_at", { ascending: true, nullsFirst: true })
       .order("clocked_in_at", { ascending: true })
       .range(candidateOffset, candidateOffset + pageSize - 1);

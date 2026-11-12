@@ -43,7 +43,8 @@ import { presentAdminRecapArrival } from "./adminOtto/notifications";
 import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
-import { recapSurfaceDecision } from "./notificationsLogic";
+import { recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapQueueBubbleState } from "./notificationsLogic";
+import { RecapQueueBubble } from "./RecapQueueBubble";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
@@ -317,10 +318,6 @@ export default function AvatarApp(): React.ReactElement {
   const adminOttoSessionRef = useRef(desktopSession);
   adminOttoSessionRef.current = desktopSession;
   const [now, setNow] = useState(() => Date.now());
-  const latestRecapQuery = useLatestActivityIntervalQuery({
-    enabled: facts.loaded && connected !== false && !avatarFixture,
-    pollMs: 60_000,
-  });
   const [chat, setChat] = useState<ChatEntry[]>(() => avatarUnapprovedRecapsFixture
     ? []
     : avatarNextStepsPairFixture
@@ -339,13 +336,12 @@ export default function AvatarApp(): React.ReactElement {
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
   const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarRecapReadingFixture || avatarRecapNoVoiceFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
-  const [unapprovedRecapsPrompt, setUnapprovedRecapsPrompt] = useState(avatarUnapprovedRecapsFixture);
+  const [recapQueueBubble, setRecapQueueBubble] = useState<RecapQueueBubbleState>({ prompt: avatarUnapprovedRecapsFixture, awaitingBeat: false });
   const [pendingUnapprovedRecaps, setPendingUnapprovedRecaps] = useState(avatarUnapprovedRecapsFixture ? 2 : 0);
   const [recapSurfaceBlocked, setRecapSurfaceBlocked] = useState(false);
   const recapAnnouncedIds = useRef<Set<string>>(new Set());
   const recapSurfaceWatermark = useRef<string | null>(null);
   const recapAccountRef = useRef<string | null>(null);
-  const awaitingUnapprovedBubble = useRef(false);
   const celebrationSeen = useRef(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
   /* A failed or cancelled read is acknowledged by the mascot itself: its own
@@ -787,6 +783,10 @@ export default function AvatarApp(): React.ReactElement {
     ?? (avatarRole === "admin" ? "admin" : adminOttoContext?.scope.mode === "admin" ? "admin" : "employee");
   const workspaceViewRef = useRef(workspaceView);
   workspaceViewRef.current = workspaceView;
+  const latestRecapQuery = useLatestActivityIntervalQuery({
+    enabled: workspaceView === "employee" && facts.loaded && connected !== false && !avatarFixture,
+    pollMs: 60_000,
+  });
   const adminAudio = useAdminOttoRecapAudio({
     scope: adminScope,
     epoch: adminEpoch,
@@ -2223,7 +2223,7 @@ export default function AvatarApp(): React.ReactElement {
 
   /** The post-approval bubble's one action: open the floating recaps queue. */
   const openUnapprovedRecaps = useCallback((): void => {
-    setUnapprovedRecapsPrompt(false);
+    setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "opened" }));
     setAvatarTab("tasks");
     clearRecapAutoCollapse();
     void toggleExpanded(true);
@@ -2294,10 +2294,10 @@ export default function AvatarApp(): React.ReactElement {
       await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
       if (!fence.isCurrent()) return;
       setPendingUnapprovedRecaps((current) => Math.max(0, current - 1));
+      setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "approved" }));
       void fetchLatestActivityInterval()
         .then((latest) => { if (fence.isCurrent()) setPendingUnapprovedRecaps(latest.pendingCount); })
         .catch(() => undefined);
-      awaitingUnapprovedBubble.current = true;
       const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
       setActivityPrompt(null);
       setRecapEditMode(false);
@@ -2868,7 +2868,7 @@ export default function AvatarApp(): React.ReactElement {
     recapSurfaceWatermark.current = null;
     recapAnnouncedIds.current.clear();
     setRecapSurfaceBlocked(false);
-    setUnapprovedRecapsPrompt(false);
+    setRecapQueueBubble({ prompt: false, awaitingBeat: false });
     setPendingUnapprovedRecaps(0);
   }, [facts.personId, avatarFixture]);
 
@@ -2886,7 +2886,6 @@ export default function AvatarApp(): React.ReactElement {
     recapSurfaceWatermark.current = decision.watermark;
     if (decision.reason === "approved") {
       setRecapSurfaceBlocked(true);
-      setUnapprovedRecapsPrompt(false);
       return;
     }
     setRecapSurfaceBlocked(false);
@@ -2902,7 +2901,7 @@ export default function AvatarApp(): React.ReactElement {
     }
     if (decision.surface) {
       setActivityPrompt(latest);
-      setUnapprovedRecapsPrompt(false);
+      setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "surfaced" }));
     }
   }, [latestRecapQuery.data, pendingRecap]);
 
@@ -2912,11 +2911,13 @@ export default function AvatarApp(): React.ReactElement {
   }, [latestRecapQuery.data]);
 
   useEffect(() => {
-    if (pendingUnapprovedRecaps <= 0) setUnapprovedRecapsPrompt(false);
+    setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "pending-count", pendingCount: pendingUnapprovedRecaps }));
   }, [pendingUnapprovedRecaps]);
 
   useEffect(() => {
-    if (expanded && avatarTab === "tasks") setUnapprovedRecapsPrompt(false);
+    if (expanded && avatarTab === "tasks") {
+      setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "opened" }));
+    }
   }, [expanded, avatarTab]);
 
   /* The recap success beat is owned by nextStepsCelebration. After it ends,
@@ -2928,9 +2929,7 @@ export default function AvatarApp(): React.ReactElement {
     }
     if (!celebrationSeen.current) return;
     celebrationSeen.current = false;
-    if (!awaitingUnapprovedBubble.current) return;
-    awaitingUnapprovedBubble.current = false;
-    if (pendingUnapprovedRecaps > 0) setUnapprovedRecapsPrompt(true);
+    setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "celebration-ended", pendingCount: pendingUnapprovedRecaps }));
   }, [nextStepsCelebration, pendingUnapprovedRecaps]);
   const bubble = avatarBubble({
     preparing: activityPreparing,
@@ -3297,12 +3296,8 @@ export default function AvatarApp(): React.ReactElement {
       {!expanded && (
         <div className="avatar-compact">
         {workspaceView === "employee" && bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
-        {workspaceView === "employee" && bubble === null && unapprovedRecapsPrompt && (
-          <div className="avatar-prompt-bubble avatar-unapproved-bubble">
-            <strong>You have unapproved recaps</strong>
-            <span>Open the recaps tab to review them.</span>
-            <button type="button" className="avatar-bubble-more" onClick={openUnapprovedRecaps}>View recaps</button>
-          </div>
+        {workspaceView === "employee" && unapprovedRecapsBubbleVisible(recapQueueBubble, pendingUnapprovedRecaps, bubble) && (
+          <RecapQueueBubble onViewRecaps={openUnapprovedRecaps} />
         )}
         {workspaceView === "employee" && bubble === "recap" && pendingRecap && (
           <div className="avatar-prompt-bubble avatar-recap-bubble">

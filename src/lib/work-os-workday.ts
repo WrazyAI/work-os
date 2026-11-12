@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { listPersonTasks } from "@/lib/work-os";
-import { dateOnly } from "@/lib/work-os-internal";
+import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
@@ -22,7 +22,7 @@ async function audit(access: WorkOsAccess, sessionId: string, eventType: string,
   const { error } = await db().from("work_session_events").insert({
     organization_id: access.organizationId, person_id: access.personId, session_id: sessionId,
     event_type: eventType, from_state: fromState, to_state: toState, source,
-    observed_at: observedAt, actor_user_id: access.ctx.user.id, idempotency_key: idempotencyKey, metadata,
+    observed_at: observedAt, actor_user_id: workOsActorUserId(access), idempotency_key: idempotencyKey, metadata,
   });
   if (error && !/duplicate/i.test(error.message)) throw new Error(`record work session event: ${error.message}`);
 }
@@ -30,7 +30,7 @@ async function audit(access: WorkOsAccess, sessionId: string, eventType: string,
 async function auditPlan(access: WorkOsAccess, action: string, planId: string, metadata: Json = {}) {
   const { error } = await db().from("work_audit_log").insert({
     organization_id: access.organizationId,
-    actor_user_id: access.ctx.user.id,
+    actor_user_id: workOsActorUserId(access),
     action,
     target_type: "daily_plan",
     target_id: planId,
@@ -271,7 +271,7 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
     }));
   const { data: plan, error: planError } = await db().from("work_daily_plans").insert({
     organization_id: access.organizationId, person_id: access.personId, session_id: session?.id ?? null,
-    shift_date: shiftDate, created_by: access.ctx.user.id,
+    shift_date: shiftDate, created_by: workOsActorUserId(access),
   }).select("*").single();
   if (planError) {
     if (/duplicate|unique/i.test(planError.message)) return loadPlanByDate(access, shiftDate);
