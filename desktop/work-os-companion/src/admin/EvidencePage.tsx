@@ -34,6 +34,18 @@ import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Chec
 
 type EvidenceTab = "evidence" | "recaps";
 
+/** Who an evidence row belongs to, said truthfully. A GHL row the record itself
+ * marks as automation, shared, assigned-only or actor-unknown is not a missing
+ * person mapping — it is context nobody performed, so it must not read as
+ * "Unmapped person". A row with no organization context at all keeps the
+ * unmapped wording, which is the real setup gap. */
+function evidencePersonLabel(row: EvidenceRow): string {
+  if (row.person?.display_name) return row.person.display_name;
+  const ghl = (row as { ghl?: { actorLabel?: string | null } }).ghl;
+  if (row.source === "ghl" && ghl?.actorLabel) return ghl.actorLabel;
+  return "Unmapped person";
+}
+
 const SOURCE_OPTIONS = [
   { value: "worktivity", label: "Worktivity (activity)" },
   { value: "github", label: "GitHub" },
@@ -278,7 +290,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                               ) : null}
                               <span className="min-w-0">
                                 <b>{row.title}</b>
-                                <small>{row.person?.display_name ?? "Unmapped person"} · {row.summary}</small>
+                                <small>{evidencePersonLabel(row)} · {row.summary}</small>
                               </span>
                             </span>
                             <span className="admin-activity-meta">
@@ -337,7 +349,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.title ?? "Evidence"}
-        subtitle={selected ? `${selected.person?.display_name ?? "Unmapped person"} · ${formatWorkOsFullDate(selected.evidence_date)}` : undefined}
+        subtitle={selected ? `${evidencePersonLabel(selected)} · ${formatWorkOsFullDate(selected.evidence_date)}` : undefined}
         width={560}
       >
         {selected ? (

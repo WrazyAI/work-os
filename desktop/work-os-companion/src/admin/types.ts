@@ -235,6 +235,17 @@ export interface EvidenceRow {
   created_at: string;
   person?: { id: string; display_name: string } | null;
   task?: { id: string; title: string } | null;
+  /** Provider-recorded GHL classification. `actorLabel` states who the record
+   * says performed the action (or that it was automation / unknown), so the
+   * row never implies a missing person mapping it does not have. */
+  ghl?: {
+    eventId?: string;
+    relation?: string;
+    actorLabel?: string | null;
+    assigneeLabels?: string[];
+    contentAvailability?: string;
+    coverage?: string;
+  } | null;
   event?: {
     correction_status?: string;
     evidence_class?: string;
