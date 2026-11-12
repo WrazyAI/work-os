@@ -2902,6 +2902,10 @@ export default function AvatarApp(): React.ReactElement {
     if (pendingUnapprovedRecaps <= 0) setUnapprovedRecapsPrompt(false);
   }, [pendingUnapprovedRecaps]);
 
+  useEffect(() => {
+    if (expanded && avatarTab === "tasks") setUnapprovedRecapsPrompt(false);
+  }, [expanded, avatarTab]);
+
   /* The recap success beat is owned by nextStepsCelebration. After it ends,
      older unapproved recaps get one quiet route back to the queue. */
   useEffect(() => {
