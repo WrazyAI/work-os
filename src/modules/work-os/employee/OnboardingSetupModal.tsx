@@ -13,7 +13,12 @@ import { Download, X } from "lucide-react";
 export default function OnboardingSetupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+
+  // Keep the latest close handler without writing the ref during render; the
+  // dialog's key listener is installed once per open and reads this ref.
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;

@@ -85,4 +85,7 @@ test("Today opens the one-time setup modal and keeps the inline notice", async (
   assert.match(modal, /aria-modal="true"/);
   assert.match(modal, /\/work-os\/downloads/);
   assert.match(modal, /\/work-os\/settings/);
+  // The close handler follows the latest prop through an effect, never a
+  // render-time ref write (react-hooks/refs).
+  assert.match(modal, /useEffect\(\(\) => \{\s*closeRef\.current = onClose;\s*\}, \[onClose\]\)/);
 });
