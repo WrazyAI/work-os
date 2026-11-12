@@ -29,6 +29,7 @@ export const workOsKeys = {
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
   activityIntervals: (date: string) => ["work-os", "activity-intervals", date] as const,
+  activityIntervalLatest: () => ["work-os", "activity-intervals", "latest"] as const,
   memory: () => ["work-os", "memory"] as const,
   suggestions: () => ["work-os", "suggestions"] as const,
 };
