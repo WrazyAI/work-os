@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
-import { decideActivityIntervalReview, useActivityIntervalsQuery } from "./workOsQueries";
+import { decideActivityIntervalReview, fetchLatestActivityInterval, useActivityIntervalsQuery } from "./workOsQueries";
 import { workOsKeys } from "./queryClient";
+import { useNotifications } from "./NotificationFlyouts";
 import type { PreviewResolver } from "./ScreenshotGallery";
+import type { ActivityIntervalsData } from "./types";
 
 /** The Tasks tab's Recent activity stream: Activity Interval Reviews newest
  * first, oldest last, each able to reveal the exact frames it was built from.
@@ -93,7 +95,7 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
 /** Self-contained stream for the in-app Focus tab: owns its decision calls and
  * cache invalidation so the dock can embed the same list without App-level
  * wiring. Renders only while a workday date is available. */
-export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs, onListen, listeningId }: {
+export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs, onListen, listeningId, onViewRecaps }: {
   date: string | null;
   enabled?: boolean;
   timezone?: string | null;
@@ -101,8 +103,11 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
   /** Read a recap aloud. Offered on both surfaces, so both wire the control. */
   onListen?: (id: string, revision: number | null) => void;
   listeningId?: string | null;
+  /** Opens the recap stream after a decision leaves older recaps waiting. */
+  onViewRecaps?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const notifications = useNotifications();
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const decide = async (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) => {
@@ -110,6 +115,22 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
     setError(null);
     try {
       await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
+      let remaining = false;
+      try {
+        remaining = (await fetchLatestActivityInterval()).pendingCount > 0;
+      } catch {
+        const cached = queryClient.getQueryData<InfiniteData<ActivityIntervalsData>>(workOsKeys.activityIntervals(date ?? "none"));
+        remaining = Boolean(cached?.pages.some((page) => page.intervals.some((interval) =>
+          interval.id !== id && interval.generationStatus === "ready" && interval.reviewStatus === "inferred")));
+      }
+      if (remaining && onViewRecaps) {
+        notifications.info(
+          "Other recaps are still waiting for your review.",
+          "You have unapproved recaps",
+          { label: "View recaps", onClick: onViewRecaps },
+          { icon: "otto" },
+        );
+      }
       await queryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(date ?? "none") });
     } catch (value) {
       setError(value instanceof Error ? value.message : "The recap decision could not be saved.");

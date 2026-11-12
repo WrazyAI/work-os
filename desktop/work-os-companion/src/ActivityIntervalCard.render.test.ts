@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -422,5 +423,20 @@ describe("ActivityIntervalList", () => {
       }),
     ));
     expect(withoutHandler).not.toContain("View in app");
+  });
+});
+
+describe("recap queue navigation", () => {
+  it("exposes a View recaps action only when the stream can navigate there", () => {
+    const source = readFileSync(new URL("./ActivityIntervalList.tsx", import.meta.url), "utf8");
+    expect(source).toContain("onViewRecaps");
+    expect(source).toContain("You have unapproved recaps");
+    expect(source).toContain("View recaps");
+  });
+
+  it("announces recaps from the session watermark instead of the old persistent registry", () => {
+    const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    expect(source).toContain("latestReadyRecap");
+    expect(source).not.toContain("RECAP_NOTIFIED_KEY");
   });
 });
