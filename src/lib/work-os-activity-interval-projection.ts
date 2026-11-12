@@ -59,10 +59,10 @@ export function intervalStructure(row: { structured_summary?: unknown }): {
       const description = typeof item?.description === "string" ? item.description.replace(/\s+/g, " ").trim().slice(0, 200) : "";
       const relation = item?.relation === "triggered" ? "triggered" as const : item?.relation === "performed" ? "performed" as const : null;
       const url = typeof item?.url === "string" && item.url.trim() ? item.url.trim().slice(0, 400) : null;
-      if (!description || !relation) return [];
-      const provider = item?.source === "ghl" ? "ghl" as const : "github" as const;
+      // A stored entry with no provider predates provider mixing: it is GitHub.
+      const source = item?.source === "ghl" ? "ghl" as const : "github" as const;
       const eventId = typeof item?.eventId === "string" && item.eventId.trim() ? item.eventId.trim().slice(0, 120) : undefined;
-      return [{ description, relation, url, source: provider, ...(eventId ? { eventId } : {}) }];
+      return description && relation ? [{ description, relation, url, source, ...(eventId ? { eventId } : {}) }] : [];
     }).slice(0, 8),
   };
 }
