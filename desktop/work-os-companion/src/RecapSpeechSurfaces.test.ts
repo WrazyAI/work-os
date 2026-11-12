@@ -164,3 +164,14 @@ describe("the next-steps card is never cut off", () => {
     expect(avatar).toContain("needsInput: !nextStepsCelebration && (");
   });
 });
+
+describe("the floating companion surfaces the latest recap and the remaining queue", () => {
+  it("wires the launch recap query and the unapproved-recaps bubble", () => {
+    const avatar = read("./AvatarApp.tsx");
+    expect(avatar).toContain("useLatestActivityIntervalQuery");
+    expect(avatar).toContain("recapSurfaceDecision");
+    expect(avatar).toContain("You have unapproved recaps");
+    expect(avatar).toContain("View recaps");
+    expect(avatar).toContain("avatarUnapprovedRecapsFixtureRequested");
+  });
+});

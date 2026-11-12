@@ -189,6 +189,8 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 11px; line-height: 1.4; }
+.avatar-unapproved-bubble { cursor: default; }
+.avatar-unapproved-bubble .avatar-bubble-more { width: 100%; margin-top: 8px; }
 /* Every compact bubble clamps to the space above a figure that never moves, so
    the mascot and the elapsed pill keep their default positions and the bubble
    never reaches the head. The headline keeps two lines where it has room (the
