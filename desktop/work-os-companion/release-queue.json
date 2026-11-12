@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -233,7 +233,7 @@
       "id": "admin-otto-motion-eod-document",
       "type": "feature",
       "summary": "Admin Otto shows what it is doing while it works, streams the reply, and renders submitted EOD reports as readable documents.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion \u2192 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion → 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
     },
     {
       "id": "employee-inapp-otto-view-switch",
@@ -251,7 +251,7 @@
       "id": "admin-record-time-and-evidence-frames",
       "type": "fix",
       "summary": "A teammate's admin record shows recorded time and update counts again, Worktivity evidence shows its retained frame, and reports read as one tidy list.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` \u2192 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` → 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
     },
     {
       "id": "insights-loads-after-pg-date-normalization",
@@ -300,6 +300,12 @@
       "type": "fix",
       "summary": "Checking off a task marks it done immediately, the confirmation offers Attach evidence, and an open task panel closes when its task is completed.",
       "verification": "Branch codex/task-completion-toast: companion 210 files/1886 tests pass; companion typecheck and production build pass; taskActions 25 and notification 10 focused tests pass; rendered offline Playwright at 1440x900 and 390x844 confirmed no auto-modal, the named Task complete toast with Attach evidence, the toast action opening the attach-only evidence dialog, and the drawer Mark complete closing the drawer with the receipt; no page errors. Required-outcome tasks still open the evidence step because the server refuses completion without a file."
+    },
+    {
+      "id": "recap-ghl-activity-icon",
+      "type": "feature",
+      "summary": "Activity recaps show CRM work from GoHighLevel with its own icon and section, separate from GitHub.",
+      "verification": "b3f41b24, 6336aaad: GHL label and recap-source tests (5 label cases, 2 render cases) plus 1300 Work OS tests pass; live GHL allowlist returns source=ghl with 20 performed items for the pilot org."
     }
   ],
   "emergency": null,
