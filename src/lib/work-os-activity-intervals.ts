@@ -696,6 +696,18 @@ export function activityIntervalRetryBlocked(
   return Number.isFinite(updatedAt) && atMs - updatedAt < backoffMs;
 }
 
+/** A retry-blocked row must keep its operational status: the scheduler only
+ * stops on `failed`, while an empty unavailable row advances the prompt. */
+export function activityIntervalRetryStatus(row: ActivityIntervalRecord | null) {
+  return String(row?.generation_status ?? "") === "failed" ? "failed" as const : "unavailable" as const;
+}
+
+/** A ready plan-hold recap whose goal suggestion still failed needs a retry
+ * timestamp; otherwise every scheduler tick would call the goal model again. */
+export function shouldRecordPlanHoldRetry(input: { promptKind: string | null; goalBefore: string | null; goalAfter: string | null }) {
+  return input.promptKind === "plan" && !input.goalBefore && !input.goalAfter;
+}
+
 /** System-scheduled work must not attribute its model call to the organization
  * owner. Interactive decisions keep the real signed-in actor. */
 export function intervalAuditActorId(access: WorkOsAccess) {
@@ -794,7 +806,11 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     return { status: "ready" as const, interval: existing };
   }
   if (activityIntervalRetryBlocked(existing, at.getTime())) {
-    return { status: "unavailable" as const, reason: String(existing?.failure_reason ?? "retry_backoff"), interval: existing ?? undefined };
+    return {
+      status: activityIntervalRetryStatus(existing),
+      reason: String(existing?.failure_reason ?? "retry_backoff"),
+      interval: existing ?? undefined,
+    };
   }
 
   const coalesceKey = `${access.organizationId}:${personId}:${slotKey}`;
@@ -881,7 +897,8 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
        recap, the dashboard, and the EOD describing the same focus. It runs
        before evidence selection so a day without usable frames still receives
        a goal; a failure only leaves the day goal-less. */
-    let goalText = dailyPlanGoalText(workday.plan);
+    const goalBefore = dailyPlanGoalText(workday.plan);
+    let goalText = goalBefore;
     if (!goalText) {
       try {
         const suggested = await suggestWorkOsDayGoal(access, {
@@ -903,6 +920,11 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     }
     const sourceHash = intervalSourceHash(selection.selected, config.model, config.promptVersion);
     if (String(row.generation_status) === "ready" && row.source_hash === sourceHash && row.ai_detail) {
+      if (shouldRecordPlanHoldRetry({ promptKind, goalBefore, goalAfter: goalText })) {
+        const touchedAt = new Date().toISOString();
+        await db().from("work_activity_intervals").update({ updated_at: touchedAt }).eq("id", row.id);
+        return { status: "ready" as const, interval: { ...row, updated_at: touchedAt } };
+      }
       return { status: "ready" as const, interval: row };
     }
 
@@ -1343,10 +1365,10 @@ export async function listActivityIntervals(
 
 /** The newest ready recap for launch surfacing, plus the pending count that
  * decides whether an older queue remains after approval. */
-export async function latestActivityInterval(access: WorkOsAccess): Promise<{ interval: ActivityIntervalView | null; pendingCount: number }> {
+export async function latestActivityInterval(access: WorkOsAccess, at = new Date()): Promise<{ interval: ActivityIntervalView | null; pendingCount: number }> {
   if (!access.personId) throw new Error("Work OS person mapping required.");
   const timezone = await personTimezone(access.organizationId, access.personId);
-  const date = localDateForTimezone(new Date(), timezone);
+  const date = localDateForTimezone(at, timezone);
   const from = new Date(`${date}T12:00:00Z`);
   from.setUTCDate(from.getUTCDate() - 29);
   const fromDate = from.toISOString().slice(0, 10);

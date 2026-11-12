@@ -149,6 +149,9 @@ export type ScheduledRecapRunResult = {
 };
 
 let scheduledRun: Promise<ScheduledRecapRunResult> | null = null;
+/** Rotates the candidate window so an ineligible prefix cannot starve the
+ * employees beyond it on every five-minute run. */
+let candidateOffset = 0;
 
 /** Bounded cron work for server-side recaps. Every employee stays fail-closed
  * behind the same flags and consent the employee path uses. */
@@ -159,7 +162,7 @@ export async function runScheduledActivityRecaps(limit = 24, at = new Date()): P
   if (scheduledRun) return scheduledRun;
   const run = (async (): Promise<ScheduledRecapRunResult> => {
     const db = createAdminClient();
-    const candidateLimit = Math.max(1, Math.min(200, Math.floor(limit) * 4));
+    const pageSize = Math.max(100, Math.min(200, Math.floor(limit) * 4));
     const since = new Date(at.getTime() - 24 * 60 * 60_000).toISOString();
     const sessions = await db.from("work_sessions")
       .select("id,organization_id,person_id,timezone,clocked_in_at")
@@ -169,8 +172,10 @@ export async function runScheduledActivityRecaps(limit = 24, at = new Date()): P
       .or(`next_fallback_at.lte.${at.toISOString()},last_prompt_at.is.null`)
       .order("next_fallback_at", { ascending: true, nullsFirst: true })
       .order("clocked_in_at", { ascending: true })
-      .limit(candidateLimit);
+      .range(candidateOffset, candidateOffset + pageSize - 1);
     if (sessions.error) throw new Error(`load scheduled recap candidates: ${sessions.error.message}`);
+    const candidateRows = (sessions.data ?? []) as Array<Record<string, unknown>>;
+    let consumed = 0;
 
     const organizations = new Map<string, { organizationId: string; actorId: string | null; featureFlags: Record<string, boolean> }>();
     const people = new Map<string, { active: boolean; worktivityEmployeeId: string | null }>();
@@ -181,8 +186,9 @@ export async function runScheduledActivityRecaps(limit = 24, at = new Date()): P
     let skipped = 0;
     let failed = 0;
 
-    for (const session of (sessions.data ?? []) as Array<Record<string, unknown>>) {
+    for (const session of candidateRows) {
       if (results.length >= limit) break;
+      consumed += 1;
       const organizationId = String(session.organization_id ?? "");
       const personId = String(session.person_id ?? "");
       if (!organizationId || !personId) continue;
@@ -270,6 +276,7 @@ export async function runScheduledActivityRecaps(limit = 24, at = new Date()): P
       }
     }
 
+    candidateOffset = candidateRows.length < pageSize ? 0 : candidateOffset + consumed;
     return { attempted, employees: results.length, generated, skipped, failed, results };
   })().finally(() => { scheduledRun = null; });
   scheduledRun = run;

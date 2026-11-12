@@ -41,6 +41,13 @@ describe("recap launch selection", () => {
     expect(recapSurfaceDecision({ latest: { ...latest, reviewStatus: "confirmed" }, watermark: null, pendingRecap: null })).toMatchObject({ surface: false, reason: "approved" });
     expect(recapSurfaceDecision({ latest, watermark: null, pendingRecap: { ...latest, id: "newer-chat", windowStart: "2026-11-12T16:00:00.000Z" } })).toMatchObject({ surface: false, reason: "already_pending" });
   });
+
+  it("never moves the session watermark backward", () => {
+    const approvedOlder = interval("approved-older", "2026-11-12T15:00:00.000Z", "ready", "confirmed");
+    expect(recapSurfaceDecision({ latest: approvedOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: null }).watermark).toBe("2026-11-12T16:00:00.000Z");
+    const pendingOlder = interval("pending-older", "2026-11-12T15:00:00.000Z", "ready", "inferred");
+    expect(recapSurfaceDecision({ latest: pendingOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: pendingOlder }).watermark).toBe("2026-11-12T16:00:00.000Z");
+  });
 });
 
 describe("memory candidate notifications", () => {

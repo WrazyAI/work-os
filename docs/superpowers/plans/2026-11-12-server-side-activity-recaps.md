@@ -228,10 +228,10 @@ Add to `test/work-os-route-contracts.test.mts`, beside the screenshot scheduled 
 
 ```ts
 test("the scheduled recap route is cron-only and bounded", async () => {
-  const source = await source("src/app/api/work-os/evidence/activity-intervals/run-scheduled/route.ts");
-  assert.match(source, /CRON_SECRET/);
-  assert.match(source, /runScheduledActivityRecaps/);
-  assert.match(source, /Math\.min\(48/);
+  const routeSource = await source("src/app/api/work-os/evidence/activity-intervals/run-scheduled/route.ts");
+  assert.match(routeSource, /CRON_SECRET/);
+  assert.match(routeSource, /runScheduledActivityRecaps/);
+  assert.match(routeSource, /Math\.min\(48/);
 });
 ```
 
@@ -327,10 +327,10 @@ Add to `test/work-os-route-contracts.test.mts`:
 
 ```ts
 test("the latest recap route is owner-scoped", async () => {
-  const source = await source("src/app/api/work-os/me/activity-intervals/latest/route.ts");
-  assert.match(source, /latestActivityInterval/);
-  assert.match(source, /requireWorkOsAccess/);
-  assert.match(source, /requirePerson: true/);
+  const routeSource = await source("src/app/api/work-os/me/activity-intervals/latest/route.ts");
+  assert.match(routeSource, /latestActivityInterval/);
+  assert.match(routeSource, /requireWorkOsAccess/);
+  assert.match(routeSource, /requirePerson: true/);
 });
 ```
 

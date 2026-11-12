@@ -70,10 +70,11 @@ export function recapSurfaceDecision(input: {
   pendingRecap: Pick<ActivityInterval, "id" | "windowStart"> | null;
 }): { surface: boolean; watermark: string | null; reason: "surface" | "approved" | "older" | "not_newer" | "already_pending" | "none" } {
   const { latest, watermark, pendingRecap } = input;
+  const later = (candidate: string) => watermark && watermark >= candidate ? watermark : candidate;
   if (!latest) return { surface: false, watermark, reason: "none" };
-  if (latest.reviewStatus !== "inferred") return { surface: false, watermark: latest.windowStart, reason: "approved" };
+  if (latest.reviewStatus !== "inferred") return { surface: false, watermark: later(latest.windowStart), reason: "approved" };
   if (pendingRecap && (pendingRecap.id === latest.id || pendingRecap.windowStart >= latest.windowStart)) {
-    return { surface: false, watermark: pendingRecap.windowStart, reason: "already_pending" };
+    return { surface: false, watermark: later(pendingRecap.windowStart), reason: "already_pending" };
   }
   if (watermark && watermark >= latest.windowStart) return { surface: false, watermark, reason: "not_newer" };
   return { surface: true, watermark: latest.windowStart, reason: "surface" };

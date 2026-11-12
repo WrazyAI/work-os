@@ -344,6 +344,7 @@ export default function AvatarApp(): React.ReactElement {
   const [recapSurfaceBlocked, setRecapSurfaceBlocked] = useState(false);
   const recapAnnouncedIds = useRef<Set<string>>(new Set());
   const recapSurfaceWatermark = useRef<string | null>(null);
+  const recapAccountRef = useRef<string | null>(null);
   const awaitingUnapprovedBubble = useRef(false);
   const celebrationSeen = useRef(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
@@ -1772,7 +1773,7 @@ export default function AvatarApp(): React.ReactElement {
             writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
             if (recap) {
               setActivityPrompt(recap);
-              if (!recapAnnouncedIds.current.has(recap.id)) {
+              if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
                 recapAnnouncedIds.current.add(recap.id);
                 fireNotification({
                   kind: "hourly",
@@ -1824,7 +1825,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       if (recap) {
         setActivityPrompt(recap);
-        if (!recapAnnouncedIds.current.has(recap.id)) {
+        if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
           recapAnnouncedIds.current.add(recap.id);
           fireNotification({
             kind: "hourly",
@@ -2294,7 +2295,7 @@ export default function AvatarApp(): React.ReactElement {
       if (!fence.isCurrent()) return;
       setPendingUnapprovedRecaps((current) => Math.max(0, current - 1));
       void fetchLatestActivityInterval()
-        .then((latest) => setPendingUnapprovedRecaps(latest.pendingCount))
+        .then((latest) => { if (fence.isCurrent()) setPendingUnapprovedRecaps(latest.pendingCount); })
         .catch(() => undefined);
       awaitingUnapprovedBubble.current = true;
       const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
@@ -2859,6 +2860,18 @@ export default function AvatarApp(): React.ReactElement {
     return entry?.activityInterval ?? null;
   }, [activityPrompt, chat, recapSurfaceBlocked]);
 
+  useEffect(() => {
+    if (avatarFixture) return;
+    const account = facts.personId ?? null;
+    if (recapAccountRef.current === account) return;
+    recapAccountRef.current = account;
+    recapSurfaceWatermark.current = null;
+    recapAnnouncedIds.current.clear();
+    setRecapSurfaceBlocked(false);
+    setUnapprovedRecapsPrompt(false);
+    setPendingUnapprovedRecaps(0);
+  }, [facts.personId, avatarFixture]);
+
   /* The server may create the newest recap while this window is closed. This
      effect is the launch surface: newest ready recap only, re-announced on a
      new launch, and never an older recap after the newest is approved. */
@@ -2878,7 +2891,7 @@ export default function AvatarApp(): React.ReactElement {
     }
     setRecapSurfaceBlocked(false);
     if (latest.reviewStatus !== "inferred") return;
-    if (!recapAnnouncedIds.current.has(latest.id)) {
+    if (notificationPermission.current && !recapAnnouncedIds.current.has(latest.id)) {
       recapAnnouncedIds.current.add(latest.id);
       fireNotification({
         kind: "hourly",

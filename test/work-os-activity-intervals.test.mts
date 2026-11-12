@@ -575,13 +575,28 @@ test("employee queue hides empty recaps and latest returns the newest ready reca
     const page = await intervalEngine.listActivityIntervals(access, { date: "2026-11-12", days: 1, limit: 10 });
     assert.deepEqual(page.intervals.map((entry) => entry.generationStatus), ["ready", "preparing"]);
     assert.equal(page.total, 2);
-    const latest = await intervalEngine.latestActivityInterval(access);
+    const pinned = new Date("2026-11-12T15:30:00.000Z");
+    const latest = await intervalEngine.latestActivityInterval(access, pinned);
     assert.equal(latest.interval?.id, readyId);
     assert.equal(latest.pendingCount, 1);
     await database.exec(`update work_activity_intervals set review_status='confirmed' where id='${readyId}'`);
-    const approved = await intervalEngine.latestActivityInterval(access);
+    const approved = await intervalEngine.latestActivityInterval(access, pinned);
     assert.equal(approved.interval?.id, readyId);
     assert.equal(approved.interval?.reviewStatus, "confirmed");
     assert.equal(approved.pendingCount, 0);
   } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+
+test("retry-blocked rows preserve their failed status", () => {
+  assert.equal(intervalEngine.activityIntervalRetryStatus({ generation_status: "failed" }), "failed");
+  assert.equal(intervalEngine.activityIntervalRetryStatus({ generation_status: "unavailable" }), "unavailable");
+  assert.equal(intervalEngine.activityIntervalRetryStatus(null), "unavailable");
+});
+
+test("a failed goal suggestion records a plan-hold retry", () => {
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: null, goalAfter: null }), true);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: null, goalAfter: "A goal" }), false);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "follow_up", goalBefore: null, goalAfter: null }), false);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: "Already set", goalAfter: "Already set" }), false);
 });

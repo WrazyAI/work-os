@@ -2797,6 +2797,13 @@ export default function App() {
   // never fires two system toasts.
   const latestRecapInterval = useMemo(() => latestReadyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
   const recapSurfaceWatermark = useRef<string | null>(null);
+  const recapAccountRef = useRef<string | null>(null);
+  useEffect(() => {
+    const account = workSessionQuery.data?.personId ?? workSessionQuery.data?.userId ?? null;
+    if (recapAccountRef.current === account) return;
+    recapAccountRef.current = account;
+    recapSurfaceWatermark.current = null;
+  }, [workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
   useEffect(() => {
     if (!latestRecapInterval) return;
     const previous = recapSurfaceWatermark.current;
