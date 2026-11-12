@@ -306,6 +306,12 @@
       "type": "feature",
       "summary": "Activity recaps show CRM work from GoHighLevel with its own icon and section, separate from GitHub.",
       "verification": "b3f41b24, 6336aaad: GHL label and recap-source tests (5 label cases, 2 render cases) plus 1300 Work OS tests pass; live GHL allowlist returns source=ghl with 20 performed items for the pilot org."
+    },
+    {
+      "id": "server-side-recap-launch",
+      "type": "feature",
+      "summary": "Activity recaps keep arriving while the app is closed; opening Work OS shows the newest one first, with the rest waiting in your recaps.",
+      "verification": "Branch codex/recap-server-schedule: scheduler, queue, latest-endpoint, launch-selection, and companion flyout suites pass; companion typecheck passes; rendered avatar and main-window states plus live timer evidence recorded in ledger 4fffb588-e129-4cf4-aa28-c3be9445889d."
     }
   ],
   "emergency": null,
