@@ -4457,7 +4457,6 @@ export default function App() {
    * confirmed the state, so the checkbox never reports a false success. */
   async function applyConfirmedTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false, evidence?: TaskEvidenceRecord) {
     const taskId = String(task.provider_task_id || task.id);
-    const closePanel = completionClosesTaskPanel(taskDetailsRef.current?.task as TaskRow | undefined, taskId, completed);
     setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
     setLeavingTaskIds((current) => new Set([...current, taskId]));
     setMascotReceipt({});
@@ -4468,6 +4467,10 @@ export default function App() {
       ...(evidence ? { completion_evidence_count: Number(task.completion_evidence_count ?? 0) + 1 } : {}),
     });
     setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
+    // The drawer can change while the row plays its exit. Decide against the
+    // committed drawer now, so completing task A never clears task B and a
+    // drawer opened for A during the delay still closes.
+    const closePanel = completionClosesTaskPanel(taskDetailsRef.current?.task as TaskRow | undefined, taskId, completed);
     if (closePanel) {
       setTaskDetails(null);
       return;

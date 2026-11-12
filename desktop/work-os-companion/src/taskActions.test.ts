@@ -283,6 +283,9 @@ describe("task actions", () => {
     const confirmed = appSource.slice(appSource.indexOf("async function applyConfirmedTaskCompletion("), appSource.indexOf("function setTaskCompletion("));
     expect(confirmed).toContain("completionClosesTaskPanel(taskDetailsRef.current?.task");
     expect(confirmed).toContain("setTaskDetails(null)");
+    // The drawer can change during the row's exit, so the identity check must
+    // run after that delay rather than against the pre-delay drawer.
+    expect(confirmed.indexOf("completionClosesTaskPanel(taskDetailsRef.current?.task")).toBeGreaterThan(confirmed.indexOf("await new Promise"));
     const scenario = appSource.slice(appSource.indexOf("function applyScenarioTaskCompletion("), appSource.indexOf("async function refreshTaskDetailsFor("));
     expect(scenario).toContain("completionClosesTaskPanel(taskDetails?.task");
     expect(scenario).toContain("requestTaskEvidence(task)");
