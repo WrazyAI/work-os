@@ -3,7 +3,7 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { decideActivityIntervalReview, fetchLatestActivityInterval, useActivityIntervalsQuery } from "./workOsQueries";
 import { workOsKeys } from "./queryClient";
-import { useNotifications } from "./NotificationFlyouts";
+import { useNotificationsOrNull } from "./NotificationFlyouts";
 import type { PreviewResolver } from "./ScreenshotGallery";
 import type { ActivityIntervalsData } from "./types";
 
@@ -107,7 +107,7 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
   onViewRecaps?: () => void;
 }) {
   const queryClient = useQueryClient();
-  const notifications = useNotifications();
+  const notifications = useNotificationsOrNull();
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const decide = async (id: string, action: "confirm" | "amend", feedback?: string, expectedReviewVersion?: number) => {
@@ -123,7 +123,7 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
         remaining = Boolean(cached?.pages.some((page) => page.intervals.some((interval) =>
           interval.id !== id && interval.generationStatus === "ready" && interval.reviewStatus === "inferred")));
       }
-      if (remaining && onViewRecaps) {
+      if (remaining && onViewRecaps && notifications) {
         notifications.info(
           "Other recaps are still waiting for your review.",
           "You have unapproved recaps",
