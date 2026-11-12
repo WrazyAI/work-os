@@ -75,7 +75,7 @@ import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodSc
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
-import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
@@ -2798,25 +2798,32 @@ export default function App() {
     writeSeenIds(MEMORY_SEEN_KEY, merged);
   }, [memoryQuery.data, notifications]);
 
-  // A ready recap announces itself once per interval: the panel row stands
-  // until the recap is confirmed, while the floating companion keeps owning
-  // system-level delivery so one recap never fires two system toasts.
-  const recapNotifiedRef = useRef<string[] | null>(null);
+  // A ready recap announces itself per launch, but only the newest ready one.
+  // Once that newest is approved an older recap never cascades into a flyout;
+  // the floating companion keeps owning system-level delivery so one recap
+  // never fires two system toasts.
+  const latestRecapInterval = useMemo(() => latestReadyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
+  const recapSurfaceWatermark = useRef<string | null>(null);
+  const recapAccountRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!readyRecapInterval) return;
-    const key = recapNotifyKey(readyRecapInterval.id);
-    const seen = recapNotifiedRef.current ?? readSeenIds(RECAP_NOTIFIED_KEY);
-    if (seen.includes(key)) return;
+    const account = workSessionQuery.data?.personId ?? workSessionQuery.data?.userId ?? null;
+    if (recapAccountRef.current === account) return;
+    recapAccountRef.current = account;
+    recapSurfaceWatermark.current = null;
+  }, [workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
+  useEffect(() => {
+    if (!latestRecapInterval) return;
+    const previous = recapSurfaceWatermark.current;
+    recapSurfaceWatermark.current = latestRecapInterval.windowStart;
+    if (latestRecapInterval.reviewStatus !== "inferred") return;
+    if (previous !== null && latestRecapInterval.windowStart <= previous) return;
     notifications.info(
       "Confirm or correct what Otto saw during your last interval.",
       "Your recap is ready",
       { label: "Review", onClick: openGoalComposer },
       { icon: "otto" },
     );
-    const next = [...seen, key].slice(-120);
-    recapNotifiedRef.current = next;
-    writeSeenIds(RECAP_NOTIFIED_KEY, next);
-  }, [readyRecapInterval, notifications]); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
+  }, [latestRecapInterval, notifications]); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
 
   // Overdue work for the bell and the reminder. The set matches the Unfinished
   // destination exactly: tasks day-scoped to today belong to My day (and to the
@@ -6828,7 +6835,7 @@ export function ProgressComposer({ headerLeading, mode = "progress", displayName
                </>}</div>
           </section>
           {recapSpeechError ? <p className="chat-activity-error" role="alert">{recapSpeechError}</p> : null}
-          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onListen={voice ? toggleRecapRead : undefined} listeningId={recapSpeech.status !== "idle" ? recapSpeech.intervalId : null} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
+          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onListen={voice ? toggleRecapRead : undefined} listeningId={recapSpeech.status !== "idle" ? recapSpeech.intervalId : null} onViewRecaps={onOpenGoal} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
   {shouldShowChatDivider(visibleHistory, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
   <HistoryTurn
   turn={{

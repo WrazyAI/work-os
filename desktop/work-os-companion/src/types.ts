@@ -475,6 +475,14 @@ export interface ActivityIntervalsData {
   total?: number;
 }
 
+/** The newest ready recap and how many recaps still wait for review. The
+ * floating companion uses this to surface the latest one at launch without
+ * loading the whole history. */
+export interface ActivityIntervalLatestData {
+  interval: ActivityInterval | null;
+  pendingCount: number;
+}
+
 /** Card shape returned by the activity-interval routes. The prompt turn and
  * decision responses now carry the full evidence disclosure; the optional
  * fields keep older compact payloads renderable. */

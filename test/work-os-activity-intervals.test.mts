@@ -527,3 +527,76 @@ test("recorded activity is kept only when it matches the supplied GitHub list", 
   }, 0);
   assert.deepEqual(noList.recordedActivity, []);
 });
+
+test("an unavailable or failed row waits fifteen minutes before another attempt", () => {
+  const recent = { generation_status: "unavailable", updated_at: "2026-11-12T15:20:00.000Z" };
+  assert.equal(intervalEngine.activityIntervalRetryBlocked(recent, Date.parse("2026-11-12T15:30:00.000Z")), true);
+  assert.equal(intervalEngine.activityIntervalRetryBlocked(recent, Date.parse("2026-11-12T15:36:00.000Z")), false);
+  assert.equal(intervalEngine.activityIntervalRetryBlocked({ ...recent, generation_status: "ready" }, Date.parse("2026-11-12T15:30:00.000Z")), false);
+});
+
+test("scheduled audits are not attributed to the organization owner", () => {
+  assert.equal(intervalEngine.intervalAuditActorId({ membershipId: "system-activity-recap-schedule:person", ctx: { user: { id: "owner" } } } as WorkOsAccess), null);
+  assert.equal(intervalEngine.intervalAuditActorId({ membershipId: "session-membership", ctx: { user: { id: "owner" } } } as WorkOsAccess), "owner");
+});
+
+test("employee queue hides empty recaps and latest returns the newest ready recap", async () => {
+  const database = new PGlite();
+  const org = "10000000-0000-4000-8000-000000000001", person = "20000000-0000-4000-8000-000000000001";
+  const readyId = "30000000-0000-4000-8000-000000000001", preparingId = "30000000-0000-4000-8000-000000000002";
+  const emptyId = "30000000-0000-4000-8000-000000000003", failedId = "30000000-0000-4000-8000-000000000004";
+  const previous = globalThis.__workOsPgPool;
+  try {
+    await database.exec(`
+      create table work_employee_onboarding(organization_id uuid, person_id uuid, timezone text);
+      create table work_activity_intervals(id uuid primary key, organization_id uuid, person_id uuid, work_session_id uuid,
+        local_date date, slot_key text, prompt_kind text, prompt_due_at timestamptz, window_start timestamptz, window_end timestamptz,
+        timezone text, generation_status text, review_status text, headline text, ai_detail text, final_detail text,
+        employee_feedback text, structured_summary jsonb default '{}'::jsonb, coverage jsonb default '{}'::jsonb,
+        source_hash text, model text, prompt_version text, revision integer default 1, generated_at timestamptz,
+        notified_at timestamptz, reviewed_at timestamptz, evidence_expired_at timestamptz, failure_reason text,
+        created_at timestamptz default now(), updated_at timestamptz default now());
+      create table work_activity_interval_evidence(id uuid, organization_id uuid, interval_id uuid, screenshot_summary_id uuid,
+        captured_at timestamptz, ordinal integer, used_in_model boolean, raw_image_shown boolean, selection_reason text,
+        visible_app_snapshot text, frame_summary_snapshot text);
+      create table work_screenshot_summaries(id uuid, storage_path text, expires_at timestamptz, deleted_at timestamptz);
+      create table work_recap_reviews(organization_id uuid, interval_id uuid, version integer);
+      insert into work_employee_onboarding values ('${org}','${person}','UTC');
+      insert into work_activity_intervals (id,organization_id,person_id,work_session_id,local_date,slot_key,prompt_kind,prompt_due_at,window_start,window_end,timezone,generation_status,review_status,headline,revision)
+      values
+        ('${readyId}','${org}','${person}','${readyId}','2026-11-12','ready','follow_up','2026-11-12T15:00Z','2026-11-12T14:00Z','2026-11-12T15:00Z','UTC','ready','inferred','Newest ready recap',1),
+        ('${preparingId}','${org}','${person}','${readyId}','2026-11-12','preparing','follow_up','2026-11-12T14:00Z','2026-11-12T13:00Z','2026-11-12T14:00Z','UTC','preparing','inferred',null,1),
+        ('${emptyId}','${org}','${person}','${readyId}','2026-11-12','empty','follow_up','2026-11-12T13:00Z','2026-11-12T12:00Z','2026-11-12T13:00Z','UTC','unavailable','inferred',null,1),
+        ('${failedId}','${org}','${person}','${readyId}','2026-11-12','failed','follow_up','2026-11-12T12:00Z','2026-11-12T11:00Z','2026-11-12T12:00Z','UTC','failed','inferred',null,1);
+      update work_activity_intervals set failure_reason='no_usable_frames' where id='${emptyId}';
+    `);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql, values) } as never;
+    const access = { organizationId: org, personId: person } as WorkOsAccess;
+    const page = await intervalEngine.listActivityIntervals(access, { date: "2026-11-12", days: 1, limit: 10 });
+    assert.deepEqual(page.intervals.map((entry) => entry.generationStatus), ["ready", "preparing"]);
+    assert.equal(page.total, 2);
+    const pinned = new Date("2026-11-12T15:30:00.000Z");
+    const latest = await intervalEngine.latestActivityInterval(access, pinned);
+    assert.equal(latest.interval?.id, readyId);
+    assert.equal(latest.pendingCount, 1);
+    await database.exec(`update work_activity_intervals set review_status='confirmed' where id='${readyId}'`);
+    const approved = await intervalEngine.latestActivityInterval(access, pinned);
+    assert.equal(approved.interval?.id, readyId);
+    assert.equal(approved.interval?.reviewStatus, "confirmed");
+    assert.equal(approved.pendingCount, 0);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+
+test("retry-blocked rows preserve their failed status", () => {
+  assert.equal(intervalEngine.activityIntervalRetryStatus({ generation_status: "failed" }), "failed");
+  assert.equal(intervalEngine.activityIntervalRetryStatus({ generation_status: "unavailable" }), "unavailable");
+  assert.equal(intervalEngine.activityIntervalRetryStatus(null), "unavailable");
+});
+
+test("a failed goal suggestion records a plan-hold retry", () => {
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: null, goalAfter: null }), true);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: null, goalAfter: "A goal" }), false);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "follow_up", goalBefore: null, goalAfter: null }), false);
+  assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: "Already set", goalAfter: "Already set" }), false);
+});

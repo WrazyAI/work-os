@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, recapSurfaceDecision, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import type { ActivityInterval, MemoryFact } from "./types";
 
 function fact(id: string, review_status: MemoryFact["review_status"]): MemoryFact {
@@ -26,6 +26,29 @@ function interval(id: string, windowStart: string, generationStatus: ActivityInt
     evidence: [],
   };
 }
+
+describe("recap launch selection", () => {
+  it("selects the newest ready recap even when it is already approved", () => {
+    const confirmed = interval("confirmed-newest", "2026-11-12T15:00:00.000Z", "ready", "confirmed");
+    const olderPending = interval("older-pending", "2026-11-12T14:00:00.000Z", "ready", "inferred");
+    expect(latestReadyRecap([olderPending, confirmed])?.id).toBe("confirmed-newest");
+  });
+
+  it("surfaces only an inferred newest recap that is newer than the session watermark", () => {
+    const latest = interval("latest", "2026-11-12T15:00:00.000Z", "ready", "inferred");
+    expect(recapSurfaceDecision({ latest, watermark: null, pendingRecap: null }).surface).toBe(true);
+    expect(recapSurfaceDecision({ latest, watermark: "2026-11-12T15:00:00.000Z", pendingRecap: null }).surface).toBe(false);
+    expect(recapSurfaceDecision({ latest: { ...latest, reviewStatus: "confirmed" }, watermark: null, pendingRecap: null })).toMatchObject({ surface: false, reason: "approved" });
+    expect(recapSurfaceDecision({ latest, watermark: null, pendingRecap: { ...latest, id: "newer-chat", windowStart: "2026-11-12T16:00:00.000Z" } })).toMatchObject({ surface: false, reason: "already_pending" });
+  });
+
+  it("never moves the session watermark backward", () => {
+    const approvedOlder = interval("approved-older", "2026-11-12T15:00:00.000Z", "ready", "confirmed");
+    expect(recapSurfaceDecision({ latest: approvedOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: null }).watermark).toBe("2026-11-12T16:00:00.000Z");
+    const pendingOlder = interval("pending-older", "2026-11-12T15:00:00.000Z", "ready", "inferred");
+    expect(recapSurfaceDecision({ latest: pendingOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: pendingOlder }).watermark).toBe("2026-11-12T16:00:00.000Z");
+  });
+});
 
 describe("memory candidate notifications", () => {
   it("tracks only candidates, in stable order", () => {

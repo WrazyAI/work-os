@@ -51,6 +51,35 @@ export function recapNotifyKey(intervalId: string): string {
   return `recap:${intervalId}`;
 }
 
+/** The newest ready recap regardless of review state. Launch surfacing uses
+ * this so an approved newest recap suppresses older unapproved ones instead of
+ * cascading down the queue. */
+export function latestReadyRecap(intervals: readonly ActivityInterval[] | undefined): ActivityInterval | null {
+  const ready = (intervals ?? [])
+    .filter((interval) => interval.generationStatus === "ready")
+    .sort((left, right) => String(right.windowStart).localeCompare(String(left.windowStart)));
+  return ready[0] ?? null;
+}
+
+/** Decides whether the latest recap should replace the mascot card. The
+ * watermark is the highest window this app session already surfaced; it keeps
+ * an older recap from appearing after the newer one is approved. */
+export function recapSurfaceDecision(input: {
+  latest: Pick<ActivityInterval, "id" | "windowStart" | "reviewStatus"> | null;
+  watermark: string | null;
+  pendingRecap: Pick<ActivityInterval, "id" | "windowStart"> | null;
+}): { surface: boolean; watermark: string | null; reason: "surface" | "approved" | "older" | "not_newer" | "already_pending" | "none" } {
+  const { latest, watermark, pendingRecap } = input;
+  const later = (candidate: string) => watermark && watermark >= candidate ? watermark : candidate;
+  if (!latest) return { surface: false, watermark, reason: "none" };
+  if (latest.reviewStatus !== "inferred") return { surface: false, watermark: later(latest.windowStart), reason: "approved" };
+  if (pendingRecap && (pendingRecap.id === latest.id || pendingRecap.windowStart >= latest.windowStart)) {
+    return { surface: false, watermark: later(pendingRecap.windowStart), reason: "already_pending" };
+  }
+  if (watermark && watermark >= latest.windowStart) return { surface: false, watermark, reason: "not_newer" };
+  return { surface: true, watermark: latest.windowStart, reason: "surface" };
+}
+
 /** One key per overdue task and due date: the same overdue state is announced
  * once, while a task that moves its due date can announce itself again. */
 export function overdueNotifyKey(task: { id: string; dueDate: string }): string {

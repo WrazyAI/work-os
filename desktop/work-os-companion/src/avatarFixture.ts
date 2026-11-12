@@ -56,6 +56,8 @@ export const AVATAR_RECAP_SLOW_FIXTURE = "recap-reading-slow";
 /** The bubble after a cancelled or failed read: View more + Try again. */
 export const AVATAR_RECAP_RETRY_FIXTURE = "recap-reading-retry";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
+/** The settled orb after a recap approval when older recaps remain. */
+export const AVATAR_UNAPPROVED_RECAPS_FIXTURE = "avatar-unapproved-recaps";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
 export const AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE = "recap-next-steps-empty";
@@ -107,7 +109,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_MULTI_SELECT_SCROLL_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_LIVE_FIXTURE || fixture === AVATAR_RECAP_NO_VOICE_FIXTURE || fixture === AVATAR_RECAP_SLOW_FIXTURE || fixture === AVATAR_RECAP_RETRY_FIXTURE || fixture === AVATAR_RECAP_READING_FIXTURE || fixture === AVATAR_RECAP_READING_STILL_FIXTURE || fixture === AVATAR_RECAP_READING_DONE_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_LIVE_FIXTURE || fixture === AVATAR_RECAP_NO_VOICE_FIXTURE || fixture === AVATAR_RECAP_SLOW_FIXTURE || fixture === AVATAR_RECAP_RETRY_FIXTURE || fixture === AVATAR_RECAP_READING_FIXTURE || fixture === AVATAR_RECAP_READING_STILL_FIXTURE || fixture === AVATAR_RECAP_READING_DONE_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE || fixture === AVATAR_UNAPPROVED_RECAPS_FIXTURE;
 }
 
 export function avatarMultiSelectScrollFixtureRequested(search: string): boolean {
@@ -155,6 +157,17 @@ export function avatarRecapNoVoiceFixtureRequested(search: string): boolean {
 /** The recap's facts with the capability off: the control must not appear. */
 export function avatarRecapNoVoiceFixtureFacts(now = Date.now()): AvatarFixtureFacts {
   return { ...avatarRecapFixtureFacts(now), voiceAvailable: false };
+}
+
+/** The settled orb after a recap approval: no live prompt, two older recaps
+ * still waiting in the queue. */
+export function avatarUnapprovedRecapsFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_UNAPPROVED_RECAPS_FIXTURE;
+}
+
+export function avatarUnapprovedRecapsFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return { ...avatarRecapFixtureFacts(now), promptRequired: false, nextPromptAt: null };
 }
 
 /** True only for the interactive preview, whose decisions stay on the device. */

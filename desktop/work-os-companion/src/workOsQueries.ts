@@ -16,7 +16,7 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalLatestData, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 import { validateTaskFinderFilters, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
 
@@ -371,6 +371,29 @@ export const ACTIVITY_INTERVALS_PAGE_SIZE = 12;
  * keyset cursor. */
 export function activityIntervalsUrl(date: string, cursor: string | null): string {
   return `/api/work-os/me/activity-intervals?date=${encodeURIComponent(date)}&days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+}
+
+/** Owner-scoped newest ready recap plus the pending count. The floating
+ * companion can surface the latest without loading the 30-day page. */
+export function latestActivityIntervalUrl() {
+  return "/api/work-os/me/activity-intervals/latest" as const;
+}
+
+export function fetchLatestActivityInterval(signal?: AbortSignal): Promise<ActivityIntervalLatestData> {
+  const timeout = AbortSignal.timeout(20_000);
+  return apiRequest<ActivityIntervalLatestData>(latestActivityIntervalUrl(), {
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+}
+
+export function useLatestActivityIntervalQuery(options: { enabled: boolean; pollMs?: number }) {
+  return useQuery({
+    queryKey: workOsKeys.activityIntervalLatest(),
+    enabled: options.enabled,
+    staleTime: 15_000,
+    refetchInterval: options.pollMs ?? false,
+    queryFn: ({ signal }) => fetchLatestActivityInterval(signal),
+  });
 }
 
 /** Live notices own only the latest page, never the history observer. With no
