@@ -53,6 +53,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const scheduledShots = await source("src/app/api/work-os/evidence/screenshots/run-scheduled/route.ts");
   assert.match(scheduledShots, /runScheduledScreenshotAnalysis/);
   assert.match(scheduledShots, /CRON_SECRET/);
+  const scheduledRecaps = await source("src/app/api/work-os/evidence/activity-intervals/run-scheduled/route.ts");
+  assert.match(scheduledRecaps, /CRON_SECRET/);
+  assert.match(scheduledRecaps, /runScheduledActivityRecaps/);
+  assert.match(scheduledRecaps, /Math\.min\(48/);
   assert.match(await source("src/lib/work-os-screenshots.ts"), /export function screenshotRunMode/);
   assert.match(await source("src/lib/work-os-screenshots.ts"), /terminallyAnalyzedFrames/);
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
