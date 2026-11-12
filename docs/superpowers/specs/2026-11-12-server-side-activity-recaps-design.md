@@ -78,6 +78,9 @@ real recaps or one in-progress skeleton; a break or idle interval leaves no
 trace.
 
 Admin surfaces already read `generation_status = 'ready'` and remain unchanged.
+An existing `unavailable` or `failed` row is returned without re-preparing for
+fifteen minutes, so hiding it from the list cannot turn a client `ensure` into
+a repeated vision-analysis loop.
 
 ## Launch surfacing
 
