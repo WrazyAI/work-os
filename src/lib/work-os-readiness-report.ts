@@ -45,10 +45,22 @@ export async function loadWorkOsReadinessReport(access: WorkOsAccess) {
   }
   if (!organization.data) throw new Error("Work OS organization not found");
   const connectionRows = connections.data ?? [];
+  // GHL readiness is its sync state, not a webhook secret: the pilot location is
+  // read-only PIT polling, so a secret would report a healthy integration that
+  // is actually not syncing.
+  let ghlStates: Array<{ state: string }> = [];
+  try {
+    const syncStates = await db.from("work_ghl_sync_state").select("state").eq("organization_id", organizationId).limit(200);
+    if (!syncStates.error) ghlStates = (syncStates.data ?? []) as Array<{ state: string }>;
+  } catch {
+    ghlStates = [];
+  }
   const providerReady = {
     worktivity: worktivityConfigured(),
     github: connectionRows.some((row: any) => row.provider === "github" && row.active !== false) && !!process.env.WORK_OS_GITHUB_WEBHOOK_SECRET,
-    ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false) && !!process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY,
+    ghl: connectionRows.some((row: any) => row.provider === "ghl" && row.active !== false)
+      && ghlStates.length > 0
+      && !ghlStates.some((row) => row.state === "failed"),
   };
   return evaluateWorkOsReadiness({
     organization: {

@@ -98,6 +98,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(activityEngine, /githubRecordedActivityAllowlist/, "recorded activity is validated against the recorded list");
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /listGithubActivity/, "the EOD draft receives attributed GitHub activity");
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /github_evidence/, "the EOD draft reads GitHub activity only behind the feature flag");
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /listGhlActivity/, "the EOD draft receives attributed GHL activity on the same terms as GitHub");
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /ghl_evidence/, "the EOD draft reads GHL activity only behind the feature flag");
+  assert.match(activityEngine, /ghlRecordedActivityAllowlist/, "recap recorded activity includes GHL items the record proves");
+  assert.match(await source("src/lib/work-os-eod-report.ts"), /ghlEvidenceLine/, "the deterministic report states GHL evidence");
+  assert.match(await source("src/lib/work-os-planning-context.ts"), /ghlEvidence/, "the agenda plan receives GHL continuity context");
   assert.doesNotMatch(activityEngine, /recordWorkMemory/, "interval recaps consume memory without writing inferences back");
   assert.match(eodService, /listActivityIntervalActivityLines/);
   assert.match(await source("src/lib/work-os-eod-report.ts"), /recapProvenance/, "the report labels recap provenance");
@@ -599,14 +604,15 @@ test("the administration pages read as label/content groups, not a card wall", a
 
 test("the evidence page marks future integrations and keeps bots out of the person queue", async () => {
   const evidence = await source("src/modules/work-os/admin/AdminEvidence.tsx");
-  assert.match(evidence, /Coming soon/);
+  assert.match(evidence, /GoHighLevel/);
+  assert.doesNotMatch(evidence, /Coming soon/, "GHL evidence is live, not a future integration");
   assert.match(evidence, /Unmapped accounts/);
   assert.match(evidence, /Map &amp; backfill/);
   assert.match(evidence, /Manage repositories/);
   assert.match(evidence, /isAutomation/, "provider bots are separated from the person queue");
   assert.match(evidence, /never mapped to a person/, "a bot is never attributed to a teammate");
   const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
-  assert.match(settings, /GHL — coming soon/);
+  assert.match(settings, /ghl_evidence/);
   assert.match(settings, /comingSoon/);
   assert.match(evidence, /Organization webhook active/);
   assert.match(evidence, /Covered by organization/);

@@ -172,6 +172,45 @@ describe("ActivityIntervalCard", () => {
     expect(markup).not.toContain("GitHub activity");
   });
 
+  it("renders a GHL icon and section for provider-recorded CRM activity", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...baseInterval,
+        recordedActivity: [
+          { description: "call sent: Call outbound", relation: "performed", url: null, source: "ghl", eventId: "call:1:sent" },
+          { description: "sms sent: Text message sent", relation: "performed", url: null, source: "ghl", eventId: "sms:2:sent" },
+        ],
+      },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("lucide-cable");
+    expect(markup).toContain("GHL activity</span>");
+    expect(markup).toContain("2 GHL events");
+    expect(markup).not.toContain("GitHub activity</span>");
+    const eventPosition = markup.indexOf("call sent: Call outbound");
+    const enclosingSection = markup.lastIndexOf("<section", eventPosition);
+    expect(markup.slice(enclosingSection, eventPosition)).toContain("GHL activity");
+  });
+
+  it("splits GitHub and GHL activity into their own sections with their own counts", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...baseInterval,
+        recordedActivity: [
+          { description: "Pushed a commit", relation: "performed", url: null, source: "github" },
+          { description: "call sent: Call outbound", relation: "performed", url: null, source: "ghl", eventId: "call:1:sent" },
+        ],
+      },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("1 GitHub event");
+    expect(markup).toContain("1 GHL event");
+    expect(markup).toContain("lucide-github");
+    expect(markup).toContain("lucide-cable");
+    expect(markup).toContain("GitHub activity</span>");
+    expect(markup).toContain("GHL activity</span>");
+  });
+
   it("renders the chat bubble with Looks good / Edit actions", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: baseInterval,

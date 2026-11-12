@@ -255,6 +255,32 @@ function RecapCard({ interval, timezone, onDecided, voiceAvailable, read }: {
         </p>
       ) : null}
 
+      {interval.recordedActivity?.length ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-tertiary)]">
+            Recorded activity · {interval.recordedActivity.length} event{interval.recordedActivity.length === 1 ? "" : "s"}
+          </summary>
+          <ul className="mt-2 grid gap-1">
+            {interval.recordedActivity.map((item, index) => (
+              <li key={`${item.eventId ?? index}-${item.description}`} className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-5">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                  {item.source === "ghl" ? "GHL" : "GitHub"}
+                </span>
+                <span className="text-[var(--text-secondary)]">{item.description}</span>
+                <span className="text-[10.5px] text-[var(--text-tertiary)]">
+                  {item.relation === "performed" ? "You" : "Your work"}
+                </span>
+                {item.url ? (
+                  <a href={item.url} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-[var(--text-secondary)] underline">
+                    Open
+                  </a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {read.state.intervalId === interval.id && read.state.error ? (
         <p className="mt-2 text-[11px] leading-5" role="alert" style={{ color: "var(--status-error)" }}>{read.state.error}</p>
       ) : null}

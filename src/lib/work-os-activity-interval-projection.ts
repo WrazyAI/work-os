@@ -31,7 +31,7 @@ export function intervalStructure(row: { structured_summary?: unknown }): {
   activities: string[];
   workflow: string[];
   uncertainties: string[];
-  recordedActivity: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  recordedActivity: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
 } {
   const source = row.structured_summary && typeof row.structured_summary === "object" && !Array.isArray(row.structured_summary)
     ? row.structured_summary as Record<string, unknown>
@@ -59,7 +59,10 @@ export function intervalStructure(row: { structured_summary?: unknown }): {
       const description = typeof item?.description === "string" ? item.description.replace(/\s+/g, " ").trim().slice(0, 200) : "";
       const relation = item?.relation === "triggered" ? "triggered" as const : item?.relation === "performed" ? "performed" as const : null;
       const url = typeof item?.url === "string" && item.url.trim() ? item.url.trim().slice(0, 400) : null;
-      return description && relation ? [{ description, relation, url }] : [];
+      if (!description || !relation) return [];
+      const provider = item?.source === "ghl" ? "ghl" as const : "github" as const;
+      const eventId = typeof item?.eventId === "string" && item.eventId.trim() ? item.eventId.trim().slice(0, 120) : undefined;
+      return [{ description, relation, url, source: provider, ...(eventId ? { eventId } : {}) }];
     }).slice(0, 8),
   };
 }

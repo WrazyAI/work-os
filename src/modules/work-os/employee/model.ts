@@ -180,6 +180,9 @@ export interface ActivityInterval {
   activities?: string[];
   workflow?: string[];
   uncertainties?: string[];
+  /** Provider-recorded actions the recap may state as fact: the employee's own
+   * GitHub work, and GHL activity recorded on their verified account. */
+  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;

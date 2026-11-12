@@ -22,6 +22,7 @@ export type PlanningContext = {
   activeBlockers: Array<{ id: string; description: string; taskId: string }>;
   recentUpdates: string[];
   githubEvidence?: Array<{ title: string; summary: string | null; url: string | null; date: string }>;
+  ghlEvidence?: Array<{ title: string; summary: string | null; url: string | null; date: string }>;
 };
 
 const db = () => createAdminClient();
@@ -50,7 +51,7 @@ export async function buildPlanningContext(access: WorkOsAccess, date: string): 
   const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 200, includeAssignedBy: false }) as Json[];
   const githubFrom = new Date(`${date}T12:00:00Z`);
   githubFrom.setUTCDate(githubFrom.getUTCDate() - 14);
-  const [previousPlanResult, blockerResult, updateResult, githubResult] = await Promise.all([
+  const [previousPlanResult, blockerResult, updateResult, githubResult, ghlResult] = await Promise.all([
     db().from("work_daily_plans").select("focus_summary,freeform_intent,items:work_daily_plan_items(title_snapshot,completion_state,disposition)")
       .eq("organization_id", access.organizationId).eq("person_id", personId).lt("shift_date", date)
       .order("shift_date", { ascending: false }).limit(1).maybeSingle(),
@@ -65,10 +66,16 @@ export async function buildPlanningContext(access: WorkOsAccess, date: string): 
       .eq("organization_id", access.organizationId).eq("person_id", personId).eq("source", "github")
       .gte("evidence_date", githubFrom.toISOString().slice(0, 10)).lte("evidence_date", date)
       .order("evidence_date", { ascending: false }).limit(8),
+    // GHL is provider-recorded continuity context, never completion proof.
+    db().from("work_evidence").select("title,summary,url,evidence_date")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("source", "ghl")
+      .gte("evidence_date", githubFrom.toISOString().slice(0, 10)).lte("evidence_date", date)
+      .order("evidence_date", { ascending: false }).limit(8),
   ]);
   if (previousPlanResult.error) throw new Error(`load previous planning context: ${previousPlanResult.error.message}`);
   if (blockerResult.error) throw new Error(`load planning blockers: ${blockerResult.error.message}`);
   if (updateResult.error) throw new Error(`load recent planning updates: ${updateResult.error.message}`);
+  if (ghlResult.error) throw new Error(`load planning GHL evidence: ${ghlResult.error.message}`);
 
   const openTasks = taskContext(tasks);
   const todayTasks = openTasks.filter((task) => task.dueDate === date).slice(0, 20);
@@ -95,6 +102,12 @@ export async function buildPlanningContext(access: WorkOsAccess, date: string): 
     }),
     recentUpdates: (updateResult.data ?? []).map((row: Json) => asText(row.input_text, 600)).filter((item): item is string => !!item),
     githubEvidence: (githubResult.data ?? []).flatMap((row: Json) => {
+      const title = asText(row.title, 240);
+      const evidenceDate = dateOnly(row.evidence_date);
+      if (!title || !evidenceDate) return [];
+      return [{ title, summary: asText(row.summary, 600), url: asText(row.url, 1_000), date: evidenceDate }];
+    }),
+    ghlEvidence: (ghlResult.data ?? []).flatMap((row: Json) => {
       const title = asText(row.title, 240);
       const evidenceDate = dateOnly(row.evidence_date);
       if (!title || !evidenceDate) return [];

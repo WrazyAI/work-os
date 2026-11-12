@@ -84,6 +84,15 @@ export interface EvidenceRow {
       deleted_at: string | null;
     } | null;
   } | null;
+  /** Provider-recorded GHL classification, present only on GHL rows. */
+  ghl?: {
+    eventId?: string;
+    relation?: string;
+    actorLabel?: string | null;
+    assigneeLabels?: string[];
+    contentAvailability?: string;
+    coverage?: string;
+  } | null;
 }
 
 export interface GithubIntegrationActor {

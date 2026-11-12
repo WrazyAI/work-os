@@ -25,6 +25,13 @@ import {
   type GithubActivity,
   type RecordedActivityAllowlistEntry,
 } from "@/lib/work-os-github-activity";
+import {
+  formatGhlActivityBlock,
+  ghlRecordedActivityAllowlist,
+  listGhlActivity,
+  resolveGhlScope,
+  type GhlActivity,
+} from "@/lib/work-os-ghl-activity";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
 import { checkInCadenceOverride, checkInIntervalMs, checkInIntervalOption } from "@/modules/work-os/workday";
 
@@ -250,9 +257,9 @@ export type IntervalSynthesis = {
   workflow: Array<{ phase: string; evidenceIndexes: number[] }>;
   uncertainties: string[];
   apps: string[];
-  /** Recorded GitHub activity copied from the provided list; empty when no
-   * GitHub activity was supplied. */
-  recordedActivity: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  /** Recorded provider activity copied from the provided list; empty when no
+   * provider activity was supplied. */
+  recordedActivity: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
   coverage: { firstObservedAt: string | null; lastObservedAt: string | null; analyzedFrames: number; rawFramesShownToModel: number };
 };
 
@@ -300,7 +307,7 @@ export function recordedActivityFromAllowlist(
     const key = `${relation}:${url ? normalizeMatchText(url) : normalizeMatchText(description)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    kept.push({ description, relation, url: match.url });
+    kept.push({ description, relation, url: match.url, source: match.source ?? "github", ...(match.eventId ? { eventId: match.eventId } : {}) });
   }
   return kept;
 }
@@ -504,6 +511,7 @@ export function intervalSynthesisMessages(input: {
   goal?: string;
   contextBlock?: string;
   githubBlock?: string;
+  ghlBlock?: string;
 }) {
   const observationText = input.observations.map((observation) =>
     `${observation.index}. ${observation.at} — app=${observation.app ?? "unknown"} — ${observation.summary}` +
@@ -523,6 +531,11 @@ export function intervalSynthesisMessages(input: {
         "",
         "Recorded GitHub activity (provider facts, attributed to this employee — state only as recorded; never screenshot evidence and never task completion):",
         input.githubBlock,
+      ] : []),
+      ...(input.ghlBlock ? [
+        "",
+        "Recorded GoHighLevel activity (provider facts, attributed to this employee — state only as recorded; never screenshot evidence and never task completion):",
+        input.ghlBlock,
       ] : []),
       ...(input.contextBlock ? [
         "",
@@ -551,6 +564,7 @@ async function synthesizeInterval(input: {
   goal?: string;
   contextBlock?: string;
   githubBlock?: string;
+  ghlBlock?: string;
   recordedActivityAllowlist?: RecordedActivityAllowlistEntry[];
   model: string;
   timeoutMs: number;
@@ -949,6 +963,33 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       githubTriggered: githubActivity ? Object.values(githubActivity.counts.triggered).reduce((sum, value) => sum + value, 0) : 0,
       githubBlockChars: githubBlock.length,
     };
+    let ghlActivity: GhlActivity | null = null;
+    let ghlBlock = "";
+    if (access.featureFlags.ghl_evidence === true && personId) {
+      try {
+        const ghlScope = await resolveGhlScope(access.organizationId);
+        if (ghlScope) {
+          ghlActivity = await listGhlActivity({
+            scope: ghlScope,
+            personId,
+            from: String(row.window_start),
+            through: String(row.window_end),
+            includeOrganizationContext: false,
+          });
+          ghlBlock = formatGhlActivityBlock(ghlActivity);
+        }
+      } catch {
+        ghlActivity = null;
+        ghlBlock = "";
+      }
+    }
+    const ghlCoverage = {
+      ghlUsed: Boolean(ghlBlock),
+      ghlEvents: ghlActivity?.items.length ?? 0,
+      ghlPerformed: ghlActivity?.items.filter((item) => item.relation === "performed").length ?? 0,
+      ghlBlockChars: ghlBlock.length,
+      ghlCoverage: ghlActivity?.coverage ?? [],
+    };
     let synthesis: IntervalSynthesis;
     try {
       synthesis = await synthesizeInterval({
@@ -959,7 +1000,11 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         goal: goalText ?? undefined,
         contextBlock: contextBlock || undefined,
         githubBlock: githubBlock || undefined,
-        recordedActivityAllowlist: githubActivity ? githubRecordedActivityAllowlist(githubActivity) : undefined,
+        ghlBlock: ghlBlock || undefined,
+        recordedActivityAllowlist: [
+          ...(githubActivity ? githubRecordedActivityAllowlist(githubActivity) : []),
+          ...(ghlActivity ? ghlRecordedActivityAllowlist(ghlActivity) : []),
+        ],
         model: config.model,
         timeoutMs: clampInt(process.env.WORK_OS_ACTIVITY_INTERVAL_TIMEOUT_MS, AI_TIMEOUTS.activityInterval, 5_000, 120_000),
       });
@@ -975,7 +1020,8 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         source_hash: sourceHash,
         model: config.model,
         prompt_version: config.promptVersion,
-        coverage: { ...preparation.counts, rawImagesLoaded: images.length, memoryUsed: Boolean(contextBlock), memoryChars: contextBlock.length, ...githubCoverage },
+        coverage: { ...preparation.counts, rawImagesLoaded: images.length, memoryUsed: Boolean(contextBlock), memoryChars: contextBlock.length, ...githubCoverage,
+        ...ghlCoverage },
         updated_at: new Date().toISOString(),
       }).eq("id", row.id).eq("window_start", attemptStart).eq("window_end", attemptEnd).select("*").maybeSingle();
       await auditInterval(access, "activity_interval.failed", String(row.id), { reason: reason.slice(0, 200), slotKey });
@@ -988,6 +1034,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       memoryUsed: Boolean(contextBlock),
       memoryChars: contextBlock.length,
       ...githubCoverage,
+      ...ghlCoverage,
       modelCoverage: synthesis.coverage,
     };
     const { data: saved, error: saveError } = await db().from("work_activity_intervals").update({
@@ -1069,7 +1116,7 @@ export type ActivityIntervalView = {
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
-  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;

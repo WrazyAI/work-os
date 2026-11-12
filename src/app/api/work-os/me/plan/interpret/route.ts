@@ -92,6 +92,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       interpretation: result.interpretation,
       build_id: buildId,
+      ghl_evidence: context.ghlEvidence ?? [],
       model: result.model,
       promptVersion: result.promptVersion,
       contextVersion: result.contextVersion,

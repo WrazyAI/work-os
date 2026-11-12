@@ -28,7 +28,7 @@ const FEATURES: Array<{ key: string; label: string; detail: string; comingSoon?:
   { key: "desktop_companion", label: "Windows companion", detail: "The installed desktop app with Worktivity attendance control." },
   { key: "screenshot_summaries", label: "Screenshot summaries", detail: "Sampled, encrypted activity context with 30-day retention." },
   { key: "github_evidence", label: "GitHub evidence", detail: "Attributed commits and pull requests as output evidence." },
-  { key: "ghl_evidence", label: "GHL evidence", detail: "Attributed CRM events as output evidence.", comingSoon: true },
+  { key: "ghl_evidence", label: "GoHighLevel evidence", detail: "Read-only PIT polling for attributable calls, messages, email, appointments and CRM activity." },
   { key: "voice_input", label: "Voice input & output", detail: "Record-to-transcribe updates in the composers, and hear recaps read back." },
   { key: "seo_mission_control", label: "SEO Mission Control", detail: "The SEO operations surface for this workspace." },
 ];
@@ -329,7 +329,7 @@ export default function AdminSettingsPage() {
             onChange={setConnectorProvider}
             options={[
               { value: "github", label: "GitHub" },
-              { value: "ghl", label: "GHL — coming soon", disabled: true },
+              { value: "ghl", label: "GoHighLevel" },
               { value: "worktivity", label: "Worktivity" },
             ]}
             ariaLabel="Provider"

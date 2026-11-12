@@ -456,10 +456,15 @@ export interface RecordedActivityAllowlistEntry {
   description: string;
   relation: GithubActivityRelation;
   url: string | null;
+  /** Which provider recorded the item, so a recap can say so. Defaults to
+   * GitHub for entries that predate provider mixing. */
+  source?: "github" | "ghl";
+  /** The provider event identity, when the source carries one. */
+  eventId?: string;
 }
 
 export function githubRecordedActivityAllowlist(activity: GithubActivity): RecordedActivityAllowlistEntry[] {
-  return activity.items.map((item) => ({ description: item.description, relation: item.relation, url: item.url }));
+  return activity.items.map((item) => ({ description: item.description, relation: item.relation, url: item.url, source: "github" as const }));
 }
 
 /** EOD-ready observed lines: a tally plus a few concrete highlights. */

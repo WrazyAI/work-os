@@ -272,7 +272,7 @@ export type ActivityIntervalView = {
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
-  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;

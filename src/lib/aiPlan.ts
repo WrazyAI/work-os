@@ -174,6 +174,7 @@ export function buildPlanningPrompt(
       "Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
       "`summary` is the day's focus in one or two plain sentences. Write the goal, not a description of the input: never mention the Loom, transcript, recording, link, recording date, task IDs, linking, analysis, or 'no completion is assumed'. Use attachedLoom.cautions only to avoid overclaiming; never copy them into the summary or commitments.",
       "Only link a task using an id from the supplied context. Do not invent task, PR, deadline, blocker, or provider references.",
+      ...(context.ghlEvidence?.length ? ["ghlEvidence is provider-recorded GHL activity. Use it only as continuity context for today's plan; it never proves task completion, sales, or employee effort."] : []),
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
       "Ask only when missing information prevents a useful daily commitment. Use plain language.",
@@ -258,6 +259,7 @@ export function buildPlanRefinePrompt(
       "Keep every commitment that received no feedback exactly as written unless an edit or annotation requires a change.",
       "Keep `summary` as the day's focus in one or two plain sentences; never add provenance, recording, link, task-ID, linking, or analysis notes.",
       "Only link a task using an id from the supplied context. Do not invent task, PR, deadline, blocker, or provider references.",
+      ...(context.ghlEvidence?.length ? ["ghlEvidence is provider-recorded GHL activity. Use it only as continuity context for today's plan; it never proves task completion, sales, or employee effort."] : []),
       "A commitment describes success for today, not a permanent rewrite of a task.",
       ...(clarificationAnswers.length ? [
         "clarificationAnswers are the employee's answers to the current draft's questions. Revise the affected commitments so their title, objective, and success criteria reflect each answer.",

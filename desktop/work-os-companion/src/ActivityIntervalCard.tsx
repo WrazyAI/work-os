@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
+import { Cable, Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -206,6 +206,10 @@ export function ActivityIntervalCard({
 
   const evidence = useMemo(() => (interval.evidence ?? []).filter((entry) => entry.usedInModel), [interval.evidence]);
   const recordedActivity = interval.recordedActivity ?? [];
+  // Provider-recording is the fact; which provider it came from is what the
+  // icon says. A legacy payload without a source is GitHub.
+  const githubActivity = recordedActivity.filter((item) => item.source !== "ghl");
+  const ghlActivity = recordedActivity.filter((item) => item.source === "ghl");
   const retained = evidence.filter((entry) => entry.summaryId && entry.retained);
   const evidenceExpired = interval.evidenceExpired === true || retained.length < evidence.length;
   // Only claim a screenshot count when the payload actually carries evidence
@@ -215,7 +219,8 @@ export function ActivityIntervalCard({
   const coverage = coverageLabel(interval.coverage);
   const evidenceParts = [
     ...(evidenceKnown ? [`${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}`] : []),
-    ...(recordedActivity.length > 0 ? [`${recordedActivity.length} GitHub event${recordedActivity.length === 1 ? "" : "s"}`] : []),
+    ...(githubActivity.length > 0 ? [`${githubActivity.length} GitHub event${githubActivity.length === 1 ? "" : "s"}`] : []),
+    ...(ghlActivity.length > 0 ? [`${ghlActivity.length} GHL event${ghlActivity.length === 1 ? "" : "s"}`] : []),
   ];
   const showScreenshotGroup = evidenceKnown && (screenshotCount > 0 || evidenceExpired);
   const showEvidence = showScreenshotGroup || recordedActivity.length > 0;
@@ -377,8 +382,11 @@ export function ActivityIntervalCard({
               {evidenceKnown ? (
                 <span className="chat-activity-panel-metric"><Camera size={12} aria-hidden="true" /> {screenshotCount}</span>
               ) : null}
-              {recordedActivity.length > 0 ? (
-                <span className="chat-activity-panel-metric"><Github size={12} aria-hidden="true" /> {recordedActivity.length}</span>
+              {githubActivity.length > 0 ? (
+                <span className="chat-activity-panel-metric"><Github size={12} aria-hidden="true" /> {githubActivity.length}</span>
+              ) : null}
+              {ghlActivity.length > 0 ? (
+                <span className="chat-activity-panel-metric"><Cable size={12} aria-hidden="true" /> {ghlActivity.length}</span>
               ) : null}
               {evidenceParts.length ? (
                 <span className="chat-activity-panel-tooltip" aria-hidden="true">{evidenceParts.join(" · ")}</span>
@@ -459,22 +467,48 @@ export function ActivityIntervalCard({
               ) : null}
             </section>
           ) : null}
-          {recordedActivity.length > 0 ? (
+          {githubActivity.length > 0 ? (
             <section className="chat-activity-panel-section">
               <header className="chat-activity-panel-head">
                 <Github size={11} aria-hidden="true" />
                 <span>GitHub activity</span>
-                <span className="chat-activity-panel-count">{recordedActivity.length}</span>
+                <span className="chat-activity-panel-count">{githubActivity.length}</span>
               </header>
               <div className="chat-activity-github">
                 <ul>
-                  {recordedActivity.map((item, index) => (
+                  {githubActivity.map((item, index) => (
                     <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
                       <span
                         className={`chat-activity-github-tag is-${item.relation}`}
                         title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
                       >
                         {item.relation === "performed" ? "You" : "Your work"}
+                      </span>
+                      {item.url
+                        ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
+                        : <span>{item.description}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          ) : null}
+          {ghlActivity.length > 0 ? (
+            <section className="chat-activity-panel-section">
+              <header className="chat-activity-panel-head">
+                <Cable size={11} aria-hidden="true" />
+                <span>GHL activity</span>
+                <span className="chat-activity-panel-count">{ghlActivity.length}</span>
+              </header>
+              <div className="chat-activity-github">
+                <ul>
+                  {ghlActivity.map((item, index) => (
+                    <li key={`${item.eventId ?? `${item.relation}-${index}`}`}>
+                      <span
+                        className={`chat-activity-github-tag is-${item.relation}`}
+                        title="Recorded on your GHL account"
+                      >
+                        You
                       </span>
                       {item.url
                         ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>

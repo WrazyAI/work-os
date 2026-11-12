@@ -444,8 +444,8 @@ test("structured recap fields parse defensively and reach the card view", () => 
   assert.deepEqual(view.workflow, ["review"]);
   assert.deepEqual(view.uncertainties, ["whether the change shipped"]);
   assert.deepEqual(view.recordedActivity, [
-    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
-    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc", source: "github" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1", source: "github" },
   ]);
 });
 
@@ -512,10 +512,12 @@ test("recorded activity is kept only when it matches the supplied GitHub list", 
       { description: "Deployment success for WrazyAI/work-os", relation: "triggered", url: null },
     ],
   }, 0, allowed);
+  // Entries carry their provider so a recap can label GitHub and GHL apart;
+  // an allowlist that predates provider mixing is GitHub.
   assert.deepEqual(parsed.recordedActivity, [
-    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
-    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
-    { description: "Deployment success for WrazyAI/work-os", relation: "triggered", url: null },
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc", source: "github" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1", source: "github" },
+    { description: "Deployment success for WrazyAI/work-os", relation: "triggered", url: null, source: "github" },
   ]);
   // Without an allowlist nothing can be recorded.
   const noList = parseIntervalSynthesis({

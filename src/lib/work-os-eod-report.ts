@@ -59,6 +59,14 @@ export interface EodGithubFacts {
   pullRequests: string[];
 }
 
+export interface EodGhlFacts {
+  /** Counts of verified employee-performed actions by evidence kind. */
+  performed: Record<string, number>;
+  /** Shared, automation, assigned-only or unknown records kept as context. */
+  context: number;
+  coverage: Array<{ kind: string; state: string }>;
+}
+
 export interface EodMediaFact {
   title: string;
   url: string;
@@ -91,6 +99,7 @@ export interface EodReportFacts {
   recaps: EodRecap[];
   hourly: Array<{ label: string; summary: string }>;
   github: EodGithubFacts | null;
+  ghl?: EodGhlFacts | null;
   media: EodMediaFact[];
   evidence: EodEvidenceFact[];
 }
@@ -331,6 +340,22 @@ function taskLine(item: CollapsedEodTask, timezone: string, includeProject = tru
   return meta ? `- ${title} [${meta}]` : `- ${title}`;
 }
 
+function ghlEvidenceLine(facts: EodReportFacts): string | null {
+  const ghl = facts.ghl;
+  if (!ghl) return null;
+  const performed = Object.entries(ghl.performed)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${count} ${kind}${count === 1 ? "" : "s"}`);
+  const parts = [
+    performed.length ? `performed ${performed.join(" · ")}` : "",
+    ghl.context ? `${ghl.context} shared, automated, assigned or unknown context item${ghl.context === 1 ? "" : "s"} not credited to the employee` : "",
+  ].filter(Boolean);
+  const degraded = ghl.coverage.filter((coverage) => coverage.state !== "complete");
+  if (!parts.length && !degraded.length) return null;
+  const body = parts.length ? parts.join("; ") : "no attributable activity recorded";
+  return `- GHL, provider-recorded — ${body}${degraded.length ? ` (${degraded.map((coverage) => `${coverage.kind} ${coverage.state}`).join(", ")})` : ""}.`;
+}
+
 function recapLine(recap: EodRecap): string {
   return `- ${recap.label} — ${recapProvenance(recap.provenance)}: ${recapHeadline(recap)}`;
 }
@@ -442,6 +467,7 @@ export function buildEodReportMarkdown(facts: EodReportFacts): { markdown: strin
     "## Evidence",
     `- ${deliverables.length} work deliverable${deliverables.length === 1 ? "" : "s"} · ${facts.recaps.length} recorded recap${facts.recaps.length === 1 ? "" : "s"}${facts.media.length ? ` · ${facts.media.length} Loom recording${facts.media.length === 1 ? "" : "s"}` : ""}.`,
     ...(githubEvidenceLine(facts) ? [githubEvidenceLine(facts) as string] : []),
+    ...(ghlEvidenceLine(facts) ? [ghlEvidenceLine(facts) as string] : []),
     "",
     "Activity context is descriptive; recorded GitHub activity is a provider fact and still does not prove attendance, productivity, or task completion.",
   ];

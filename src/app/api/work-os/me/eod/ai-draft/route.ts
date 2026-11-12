@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
 import { githubObservedLines, listGithubActivity } from "@/lib/work-os-github-activity";
+import { formatGhlActivityBlock, listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
 import { personTimezone } from "@/lib/work-os-screenshots";
 import { localDayBounds } from "@/modules/work-os/companion";
 
@@ -147,6 +148,31 @@ export async function POST(req: Request) {
           githubLines = [];
         }
       }
+      // GHL reaches the draft on the same terms as the deterministic report and
+      // the recaps: only activity the record proves the employee performed is
+      // stated as theirs, and the workday window bounds the query.
+      let ghlLines: string[] = [];
+      if (auth.access.featureFlags.ghl_evidence === true) {
+        try {
+          const scope = await resolveGhlScope(auth.access.organizationId);
+          if (scope) {
+            const timezone = await personTimezone(auth.access.organizationId, personId);
+            const window = await eodActivityWindowFor(auth.access.organizationId, personId, date);
+            const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, timezone);
+            const activity = await listGhlActivity({
+              scope,
+              personId,
+              from: bounds.startIso,
+              through: bounds.endIso,
+              includeOrganizationContext: false,
+            });
+            const block = formatGhlActivityBlock(activity);
+            ghlLines = block ? block.split("\n").filter((line) => line.trim().startsWith("- ")) : [];
+          }
+        } catch {
+          ghlLines = [];
+        }
+      }
       grounding.observed = [
         ...intervalLines.map((line) => ({
           at: null,
@@ -154,6 +180,7 @@ export async function POST(req: Request) {
           app: null,
         })),
         ...githubLines.map((text) => ({ at: null, text, app: "GitHub" })),
+        ...ghlLines.map((text) => ({ at: null, text, app: "GHL" })),
         ...observedHours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
       ];
       const result = await refineEodNarrative(grounding, body.draft as string, feedback, annotations);
