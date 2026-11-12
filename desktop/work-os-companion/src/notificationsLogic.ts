@@ -5,7 +5,6 @@ import type { ActivityInterval, MemoryFact } from "./types";
  * whether a NEW arrival may pop a flyout or a system toast, so a reload never
  * re-announces something the employee already saw. */
 export const MEMORY_SEEN_KEY = "work-os.notifications.memory-seen.v1";
-export const RECAP_NOTIFIED_KEY = "work-os.notifications.recap-notified.v1";
 export const OVERDUE_NOTIFIED_KEY = "work-os.notifications.overdue-notified.v1";
 
 /** Cap on retained seen ids so the registry cannot grow without bound. */
@@ -47,10 +46,6 @@ export function readyRecap(intervals: readonly ActivityInterval[] | undefined): 
   return ready[0] ?? null;
 }
 
-export function recapNotifyKey(intervalId: string): string {
-  return `recap:${intervalId}`;
-}
-
 /** The newest ready recap regardless of review state. Launch surfacing uses
  * this so an approved newest recap suppresses older unapproved ones instead of
  * cascading down the queue. */
@@ -68,7 +63,7 @@ export function recapSurfaceDecision(input: {
   latest: Pick<ActivityInterval, "id" | "windowStart" | "reviewStatus"> | null;
   watermark: string | null;
   pendingRecap: Pick<ActivityInterval, "id" | "windowStart"> | null;
-}): { surface: boolean; watermark: string | null; reason: "surface" | "approved" | "older" | "not_newer" | "already_pending" | "none" } {
+}): { surface: boolean; watermark: string | null; reason: "surface" | "approved" | "not_newer" | "already_pending" | "none" } {
   const { latest, watermark, pendingRecap } = input;
   const later = (candidate: string) => watermark && watermark >= candidate ? watermark : candidate;
   if (!latest) return { surface: false, watermark, reason: "none" };
@@ -78,6 +73,40 @@ export function recapSurfaceDecision(input: {
   }
   if (watermark && watermark >= latest.windowStart) return { surface: false, watermark, reason: "not_newer" };
   return { surface: true, watermark: latest.windowStart, reason: "surface" };
+}
+
+/** One compact bubble state for the post-approval queue. The approved recap
+ * event never clears a bubble that is already showing; only an empty queue,
+ * opening the queue, or a newer recap does. */
+export type RecapQueueBubbleState = { prompt: boolean; awaitingBeat: boolean };
+export type RecapQueueBubbleEvent =
+  | { type: "approved" }
+  | { type: "celebration-ended"; pendingCount: number }
+  | { type: "pending-count"; pendingCount: number }
+  | { type: "opened" }
+  | { type: "surfaced" };
+
+export function reduceRecapQueueBubble(state: RecapQueueBubbleState, event: RecapQueueBubbleEvent): RecapQueueBubbleState {
+  switch (event.type) {
+    case "approved":
+      return { ...state, awaitingBeat: true };
+    case "celebration-ended":
+      return {
+        prompt: event.pendingCount > 0 && (state.prompt || state.awaitingBeat),
+        awaitingBeat: false,
+      };
+    case "pending-count":
+      return event.pendingCount <= 0 ? { ...state, prompt: false } : state;
+    case "opened":
+    case "surfaced":
+      return { ...state, prompt: false };
+    default:
+      return state;
+  }
+}
+
+export function unapprovedRecapsBubbleVisible(state: RecapQueueBubbleState, pendingCount: number, bubble: string | null) {
+  return state.prompt && pendingCount > 0 && bubble === null;
 }
 
 /** One key per overdue task and due date: the same overdue state is announced

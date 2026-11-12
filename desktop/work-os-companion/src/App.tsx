@@ -2814,9 +2814,9 @@ export default function App() {
   useEffect(() => {
     if (!latestRecapInterval) return;
     const previous = recapSurfaceWatermark.current;
+    if (previous !== null && latestRecapInterval.windowStart <= previous) return;
     recapSurfaceWatermark.current = latestRecapInterval.windowStart;
     if (latestRecapInterval.reviewStatus !== "inferred") return;
-    if (previous !== null && latestRecapInterval.windowStart <= previous) return;
     notifications.info(
       "Confirm or correct what Otto saw during your last interval.",
       "Your recap is ready",

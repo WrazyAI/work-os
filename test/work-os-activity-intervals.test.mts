@@ -600,3 +600,12 @@ test("a failed goal suggestion records a plan-hold retry", () => {
   assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "follow_up", goalBefore: null, goalAfter: null }), false);
   assert.equal(intervalEngine.shouldRecordPlanHoldRetry({ promptKind: "plan", goalBefore: "Already set", goalAfter: "Already set" }), false);
 });
+
+test("a confirmed goal-less plan hold is retried only for system access", () => {
+  const system = { membershipId: "system-activity-recap-schedule:person", ctx: { user: { id: "owner" } } } as WorkOsAccess;
+  const employee = { membershipId: "session-membership", ctx: { user: { id: "owner" } } } as WorkOsAccess;
+  assert.equal(intervalEngine.shouldRetrySystemPlanGoal(system, { promptKind: "plan", goal: null, reviewed: true }), true);
+  assert.equal(intervalEngine.shouldRetrySystemPlanGoal(system, { promptKind: "plan", goal: "A goal", reviewed: true }), false);
+  assert.equal(intervalEngine.shouldRetrySystemPlanGoal(system, { promptKind: "follow_up", goal: null, reviewed: true }), false);
+  assert.equal(intervalEngine.shouldRetrySystemPlanGoal(employee, { promptKind: "plan", goal: null, reviewed: true }), false);
+});

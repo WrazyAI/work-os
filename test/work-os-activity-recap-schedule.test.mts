@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   SCHEDULED_RECAP_FAILURE_BACKOFF_MS,

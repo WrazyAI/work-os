@@ -115,6 +115,9 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
     setError(null);
     try {
       await decideActivityIntervalReview(id, action, feedback, expectedReviewVersion);
+      // The decision is settled; the optional queue-count read must not keep
+      // the card in its Saving state.
+      setDecidingId(null);
       let remaining = false;
       try {
         remaining = (await fetchLatestActivityInterval()).pendingCount > 0;

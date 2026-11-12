@@ -4,7 +4,7 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
 import { decideReviewedRecap } from "@/lib/work-os-reviewed-recaps";
 import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, reviewVersionForRow } from "@/lib/work-os-activity-interval-projection";
 import { getPool } from "@/lib/db/pool";
-import { dateOnly } from "@/lib/work-os-internal";
+import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { dailyPlanGoalText, getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
 import { suggestWorkOsDayGoal } from "@/lib/work-os-goal-suggestion";
@@ -708,10 +708,20 @@ export function shouldRecordPlanHoldRetry(input: { promptKind: string | null; go
   return input.promptKind === "plan" && !input.goalBefore && !input.goalAfter;
 }
 
+/** A confirmed plan-hold recap still needs its suggested goal written. Only the
+ * server scheduler retries that path, so an employee decision can never trigger
+ * a surprise model call. */
+export function shouldRetrySystemPlanGoal(access: WorkOsAccess, input: { promptKind: string | null; goal: string | null; reviewed: boolean }) {
+  return input.reviewed
+    && input.promptKind === "plan"
+    && !input.goal
+    && access.membershipId.startsWith("system-");
+}
+
 /** System-scheduled work must not attribute its model call to the organization
  * owner. Interactive decisions keep the real signed-in actor. */
 export function intervalAuditActorId(access: WorkOsAccess) {
-  return access.membershipId.startsWith("system-") ? null : access.ctx.user.id;
+  return workOsActorUserId(access);
 }
 
 async function auditInterval(access: WorkOsAccess, action: string, intervalId: string, metadata: Json) {
@@ -803,6 +813,20 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
   const slotKey = activityIntervalSlotKey(String(session.id), promptDueAt);
   const existing = await loadIntervalBySlot(access.organizationId, personId, slotKey);
   if (existing && ["confirmed", "amended"].includes(String(existing.review_status))) {
+    if (shouldRetrySystemPlanGoal(access, {
+      promptKind,
+      goal: dailyPlanGoalText(workday.plan),
+      reviewed: true,
+    })) {
+      try {
+        await suggestWorkOsDayGoal(access, { date: workday.shiftDate, activity: [] });
+      } catch {
+        // The recap is already reviewed; the goal retry must never fail the slot.
+      }
+      const touchedAt = new Date().toISOString();
+      await db().from("work_activity_intervals").update({ updated_at: touchedAt }).eq("id", existing.id);
+      return { status: "ready" as const, interval: { ...existing, updated_at: touchedAt } };
+    }
     return { status: "ready" as const, interval: existing };
   }
   if (activityIntervalRetryBlocked(existing, at.getTime())) {
