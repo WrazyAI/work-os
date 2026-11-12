@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.30 — 2026-11-12
+
 - Clocked-out My Day keeps its status and actions on one row, and Tasks focus now shows plan progress with nested subtasks.
 
 - Today’s focus shows planned progress, and each main task opens to reveal its subtasks. The focus and search windows ease open and closed.
