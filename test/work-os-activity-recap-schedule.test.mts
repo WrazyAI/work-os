@@ -114,3 +114,22 @@ test("scheduled recap eligibility fails closed", () => {
   assert.equal(scheduledRecapEligible({ ...base, worktivityEmployeeId: null }), false);
   assert.equal(scheduledRecapEligible({ ...base, exceptionKind: "leave" }), false);
 });
+
+test("a long-gap catch-up advances one slot and stops", async () => {
+  let delivered = 0;
+  const days = [workday("hourly_fallback", "2026-11-12T13:00:00.000Z"), workday("hourly_fallback", "2026-11-12T16:00:00.000Z")];
+  const result = await settleDueActivityRecaps(access, { at, deps: {
+    getWorkday: async () => days.shift()!,
+    loadSlot: async () => null,
+    ensure: async () => ({ status: "ready" }),
+    deliver: async () => { delivered += 1; return { delivered: true, prompt: { kind: "hourly_fallback", nextPromptAt: "2026-11-12T16:00:00.000Z" } } as any; },
+  } });
+  assert.equal(delivered, 1);
+  assert.equal(result.generated, 1);
+  assert.equal(result.advanced, 1);
+});
+
+test("the scheduler never writes check-ins or substantive updates", () => {
+  const source = readFileSync(new URL("../src/lib/work-os-activity-recap-schedule.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /work_check_ins|last_substantive_update_at/);
+});
