@@ -12,6 +12,7 @@ commands.allow = [
   "focus_main",
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
+  "quit_app",
   "open_work_os_auth",
   "worktivity_control",
   "finish_worktivity_control",

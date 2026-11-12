@@ -27,6 +27,7 @@ export type WorkOsOrgRole = "employee" | "manager" | "admin";
 
 export interface SessionResponse {
   organizationId: string;
+  organizationName?: string | null;
   role: WorkOsOrgRole;
   personId: string | null;
   userId: string;

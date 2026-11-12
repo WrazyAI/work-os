@@ -369,6 +369,13 @@ fn request_clean_exit(app: &tauri::AppHandle) {
     });
 }
 
+/// Quit the whole companion (not just hide its window), through the same
+/// clean-exit path as the tray menu so the next launch never reads a crash.
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    request_clean_exit(&app);
+}
+
 /* ── Voice input: hold-to-talk ─────────────────────────────────────────────
  *
  * Ctrl + M is registered as a real global shortcut so the hold reaches the
@@ -656,6 +663,7 @@ pub fn run() {
             session_guard::app_heartbeat,
             arm_update_exit_watchdog,
             disarm_update_exit_watchdog,
+            quit_app,
             notify_focus,
             focus_main,
             hide_avatar,
@@ -677,6 +685,15 @@ pub fn run() {
             // only keeps the title bar on screen, so the bottom row of the UI
             // sat below the physical display.
             if let Some(window) = app.get_webview_window("main") {
+                #[cfg(windows)]
+                if let Err(error) = window.set_decorations(false) {
+                    diagnostics::host_event(
+                        app.handle(),
+                        "window.main.decorations_failed",
+                        &format!("Could not remove the native title bar: {error}"),
+                        diagnostics::DiagnosticLevel::Warn,
+                    );
+                }
                 window_fit::fit_to_work_area(&window, app.handle());
             }
             // The Stronghold plugin derives its key with Argon2 and writes the

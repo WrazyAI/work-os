@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import wordmark from "./assets/work-os-mark.png";
+import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import type { AdminSection } from "./admin/types";
 
 export type SidebarView = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
@@ -308,6 +309,18 @@ export default function SidebarNav({
     setCollapsedSurfaceHover(false);
     setWorkspaceOpen(false);
   };
+
+  /* The custom app bar's View item and Ctrl+B reach the rail without lifting
+     its local collapsed state into the app shell. */
+  useEffect(() => {
+    const toggle = () => {
+      setCollapsed((current) => !current);
+      setCollapsedSurfaceHover(false);
+      setWorkspaceOpen(false);
+    };
+    window.addEventListener(SIDEBAR_TOGGLE_EVENT, toggle);
+    return () => window.removeEventListener(SIDEBAR_TOGGLE_EVENT, toggle);
+  }, []);
 
   const primary = admin
     ? ADMIN_DESTINATIONS.filter(({ id }) => ADMIN_PRIMARY_IDS.has(id))

@@ -35,6 +35,13 @@ const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
 const personalSettings = readText(resolve(root, "src/PersonalSettings.tsx"));
 const memoryStyles = readText(resolve(root, "src/workspace-redesign.css"));
 const listShift = readText(resolve(root, "src/listShift.ts"));
+const appMenuBar = readText(resolve(root, "src/AppMenuBar.tsx"));
+const windowChrome = readText(resolve(root, "src/windowChrome.ts"));
+const windowChromeStyles = readText(resolve(root, "src/window-chrome.css"));
+const mainEntry = readText(resolve(root, "src/main.tsx"));
+const tauriLib = readText(resolve(root, "src-tauri/src/lib.rs"));
+const defaultCapability = readText(resolve(root, "src-tauri/capabilities/default.json"));
+const appCommands = readText(resolve(root, "src-tauri/permissions/allow-app-commands.toml"));
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -401,6 +408,26 @@ describe("operational visualizations", () => {
     expect(styles).toContain("Finishing-quality accessibility and legibility floor");
     expect(styles).toContain('[role="menuitem"]):focus-visible');
     expect(insightChartStyles).toContain("Chart labels must remain readable at native Windows scaling");
+  });
+
+  it("gives Windows one custom caption bar, a clean quit, and no browser context menu", () => {
+    expect(app).toContain("<AppMenuBar");
+    expect(app).toContain("installContextMenuSuppression");
+    expect(app).toContain("window-chrome-frame");
+    expect(mainEntry).toContain('import "./window-chrome.css"');
+    expect(windowChrome).toContain("SIDEBAR_TOGGLE_EVENT");
+    expect(sidebar).toContain("SIDEBAR_TOGGLE_EVENT");
+    expect(appMenuBar).toContain("Quit Work OS");
+    expect(appMenuBar).toContain('role="menuitem"');
+    expect(windowChromeStyles).toContain("--window-chrome-height: 34px");
+    expect(tauriLib).toContain("fn quit_app");
+    expect(tauriLib).toContain("set_decorations(false)");
+    expect(tauriLib).toContain("quit_app,");
+    expect(defaultCapability).toContain("core:window:allow-minimize");
+    expect(defaultCapability).toContain("core:window:allow-toggle-maximize");
+    expect(defaultCapability).toContain("core:window:allow-close");
+    expect(defaultCapability).toContain("core:window:allow-start-dragging");
+    expect(appCommands).toContain('"quit_app"');
   });
 
   it("keeps the Tasks page layout flat, single-headed, and wrap-proof", () => {

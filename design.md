@@ -236,6 +236,16 @@ The masthead is context, not a second hero. The title appears once. Utility
 actions (sync, notifications, refresh, identity) stay compact and aligned to
 the title baseline.
 
+The Windows companion replaces the native title bar with one 34px caption bar.
+Its leading edge is the Work OS menu; the current page and on/off-shift state
+sit at the centre; minimize, maximize/restore, and close sit at the trailing
+edge in the platform's order. The bar is the drag region and a double-click
+maximizes. The menu carries Workspace, Go, View, and Help, then a separated
+`Quit Work OS` (`Ctrl + Q`; `Cmd + Q` on macOS). Close hides the window to the
+tray; Quit exits the app. The bar stays above modal surfaces. The webview's
+browser context menu is suppressed outside text fields. macOS keeps its native
+title bar until its own custom-chrome pass.
+
 ### 4.2 Navigation states
 
 Navigation is a stable noun: My Day, Tasks, EOD Review, Insights, Evidence, Settings.
@@ -1547,6 +1557,8 @@ Shortcut inventory:
 | Shortcut | Action | Scope |
 |---|---|---|
 | `Ctrl + ,` (`Cmd + ,` on macOS) | Open Settings — the administration workspace's own Settings section while that workspace is on screen | Either companion window while it is focused; never system-wide |
+| `Ctrl + Q` (`Cmd + Q` on macOS) | Quit Work OS completely | Companion main window while focused; the app menu exposes the same action |
+| `Ctrl + B` (`Cmd + B` on macOS) | Toggle the sidebar rail | Companion main window while focused, except text fields |
 | Hold `Ctrl + M` | Hold-to-talk | System-wide in the companion; in the browser while the page has focus (§8.8) |
 | `Escape` | Dismiss the topmost menu, drawer, sheet, or modal and return focus to its trigger | Every detached surface (§8.3) |
 

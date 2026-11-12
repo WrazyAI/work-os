@@ -86,7 +86,10 @@ import { classifyPlanSaveFailure, type PlanningConfirmResult } from "./planningS
 import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
-import { isMacOS } from "./platform";
+import { isMacOS, isWindows } from "./platform";
+import AppMenuBar, { type AppMenuGroup, type AppMenuItem } from "./AppMenuBar";
+import { installContextMenuSuppression } from "./contextMenu";
+import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
@@ -242,6 +245,18 @@ const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
   { id: "review", label: "EOD Review", icon: MessageSquareText }, { id: "insights", label: "Insights", icon: Gauge },
   { id: "evidence", label: "Evidence", icon: ShieldCheck }, { id: "settings", label: "Settings", icon: Settings },
 ];
+const ADMIN_MENU_SECTIONS: Array<{ id: AdminSection; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "people", label: "People" },
+  { id: "tasks", label: "Tasks" },
+  { id: "review", label: "EOD Review" },
+  { id: "insights", label: "Insights" },
+  { id: "evidence", label: "Evidence" },
+  { id: "settings", label: "Settings" },
+];
+const ADMIN_SECTION_LABELS: Record<AdminSection, string> = Object.fromEntries(
+  ADMIN_MENU_SECTIONS.map((section) => [section.id, section.label]),
+) as Record<AdminSection, string>;
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const initials = (value?: string | null) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
@@ -788,6 +803,12 @@ export default function App() {
   const bootRise = useBootRise(landing);
   const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
   const employeeWorkspaceBranch = landing === "workspace";
+  /* Windows-first custom chrome. The dev flag keeps the real shell reviewable
+     in a browser without giving the web app a fake title bar. */
+  const customWindowChrome = (isTauri() && isWindows())
+    || (import.meta.env.DEV && new URLSearchParams(window.location.search).has("window-chrome"));
+  const contextMenuSuppressionEnabled = isTauri()
+    || (import.meta.env.DEV && new URLSearchParams(window.location.search).has("window-chrome"));
 
   /* The organization flag says the workspace may use voice input; the server
      capability says this deployment can actually transcribe. The record
@@ -5372,6 +5393,13 @@ export default function App() {
     return () => unlisten?.();
   }, []);
 
+  // The webview's own right-click menu makes the companion read as a browser
+  // page. Text fields keep the platform edit menu for paste and spellcheck.
+  useEffect(() => {
+    if (!contextMenuSuppressionEnabled) return;
+    return installContextMenuSuppression();
+  }, [contextMenuSuppressionEnabled]);
+
   // The app's own config file: created the first time from the cadence the
   // workspace reports for this person, then read back. An edit there wins over
   // the workspace on this machine, which is what the API layer reports.
@@ -5527,16 +5555,31 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen, taskFinderOpen]);
 
+  const quitApp = () => {
+    if (!isTauri()) {
+      notifications.info("Quit is available in the desktop app.", "Desktop only");
+      return;
+    }
+    void invoke("quit_app").catch((value) => showError(value, "Work OS could not quit.", "Quit failed"));
+  };
+
+  const frameWindow = (content: ReactNode, groups: AppMenuGroup[], page: string, status: string | null = null) => customWindowChrome
+    ? <div className="window-chrome-frame">
+      <AppMenuBar pageLabel={page} statusLabel={status} menuGroups={groups} onQuit={quitApp} />
+      <div className="window-chrome-content">{content}</div>
+    </div>
+    : content;
+
   if (landing === "vault_failed") {
     // The seam decides the surface; the gate's own state carries the failure.
     const vaultFailure = vaultGate.status === "failed" ? vaultGate.failure : null;
-    return <LoadingScreen
+    return frameWindow(<LoadingScreen
       failed
       retry={retryVaultGate}
       note={vaultFailure?.message}
       onReset={vaultFailure?.requiresReset ? startFreshOnThisDevice : undefined}
       onDebug={() => void openDebugger()}
-    />;
+    />, [], "Recovery");
   }
   const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} awaiting={awaitingApproval} onConnect={() => void connectWorkspace(awaitingApproval)} onSave={async () => { try { await secureState.saveSettings({ apiBase }); authResolutionHandledRef.current = true; await discardPendingAuthentication(); setAwaitingApproval(false); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   const renderOnboarding = () => visibleOnboarding ? <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding ?? undefined; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} /> : null;
@@ -6126,7 +6169,57 @@ export default function App() {
       case "workspace": bootContent = renderWorkspace(); break;
     }
   }
-  return <BootOverlay surface={landing}>{bootContent}</BootOverlay>;
+  const pageLabel = adminWorkspaceBranch
+    ? ADMIN_SECTION_LABELS[adminSection]
+    : landing === "workspace"
+      ? views.find((item) => item.id === view)?.label ?? "Work OS"
+      : landing === "onboarding" ? "Set up Work OS" : landing === "connect" ? "Connect" : "Work OS";
+  const statusLabel = landing === "workspace" && visibleSession ? (active ? "On shift" : "Off shift") : null;
+  const menuGroups: AppMenuGroup[] = [];
+  if (landing === "workspace" || landing === "admin") {
+    const workspaceItems: AppMenuItem[] = [{
+      label: workSessionQuery.data?.organizationName?.trim() || "Work OS workspace",
+      checked: true,
+      disabled: true,
+    }];
+    if (adminWorkspaceBranch) {
+      if (adminOttoBootstrap.switchToEmployeeAvailable) workspaceItems.push({ label: "Switch to my workspace", onSelect: () => setWorkspaceMode("employee") });
+    } else if (workSessionQuery.data?.role === "admin") {
+      workspaceItems.push({ label: "Switch to Administration", onSelect: () => setWorkspaceMode("admin") });
+    }
+    menuGroups.push({ label: "Workspace", items: workspaceItems });
+    const settingsShortcut = isMacOS() ? "⌘," : "Ctrl ,";
+    const goItems: AppMenuItem[] = adminWorkspaceBranch
+      ? ADMIN_MENU_SECTIONS.map((section) => ({
+        label: section.label,
+        checked: adminSection === section.id,
+        disabled: adminSection === section.id,
+        ...(section.id === "settings" ? { shortcut: settingsShortcut } : {}),
+        onSelect: () => navigateAdmin(section.id),
+      }))
+      : views.filter((item) => item.id !== "evidence").map((item) => ({
+        label: item.label,
+        checked: view === item.id,
+        disabled: view === item.id,
+        ...(item.id === "settings" ? { shortcut: settingsShortcut } : {}),
+        onSelect: () => setView(item.id),
+      }));
+    menuGroups.push({ label: "Go", items: goItems });
+    menuGroups.push({
+      label: "View",
+      items: [{
+        label: "Toggle sidebar",
+        shortcut: isMacOS() ? "⌘B" : "Ctrl B",
+        onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
+      }],
+    });
+    const helpItems: AppMenuItem[] = [];
+    if (pageGuideView) helpItems.push({ label: "How Work OS works", onSelect: () => openGuide(pageGuideView) });
+    helpItems.push({ label: "What’s new", onSelect: openChangelogFromAdmin });
+    if (isTauri()) helpItems.push({ label: "Diagnostics", onSelect: () => void openDebugger() });
+    menuGroups.push({ label: "Help", items: helpItems });
+  }
+  return frameWindow(<BootOverlay surface={landing}>{bootContent}</BootOverlay>, menuGroups, pageLabel, statusLabel);
 }
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }

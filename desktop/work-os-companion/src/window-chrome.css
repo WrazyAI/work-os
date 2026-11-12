@@ -1,0 +1,304 @@
+/* Custom Windows window chrome. The bar is a caption: the work stays the
+   loudest surface, and the app menu holds every destination in one place. */
+:root {
+  --window-chrome-height: 0px;
+}
+
+html.window-chrome-active {
+  --window-chrome-height: 34px;
+}
+
+html.window-chrome-active body {
+  overflow: hidden;
+}
+
+.window-chrome-frame {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.window-chrome-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.window-chrome-content .workspace {
+  min-height: calc(100vh - var(--window-chrome-height));
+}
+
+.window-chrome-content .loading {
+  height: calc(100vh - var(--window-chrome-height));
+  min-height: calc(100vh - var(--window-chrome-height));
+}
+
+.window-chrome-content .guided-onboarding {
+  height: calc(100vh - var(--window-chrome-height));
+}
+
+@media (min-width: 561px) {
+  .window-chrome-content .sidebar-nav {
+    height: calc(100vh - var(--window-chrome-height));
+    min-height: calc(100vh - var(--window-chrome-height));
+  }
+}
+
+.window-chrome-content .boot-overlay {
+  top: var(--window-chrome-height);
+}
+
+html.window-chrome-active .notification-flyouts {
+  top: calc(var(--window-chrome-height) + max(18px, env(safe-area-inset-top)));
+}
+
+html.window-chrome-active .skip-link {
+  top: calc(var(--window-chrome-height) + 10px);
+}
+
+html.modal-open .window-chrome-content {
+  overflow: hidden;
+}
+
+.wc-bar {
+  position: relative;
+  z-index: 12000;
+  flex: 0 0 var(--window-chrome-height);
+  height: var(--window-chrome-height);
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(220, 220, 211, 0.82);
+  background: rgba(250, 250, 246, 0.96);
+  color: var(--ink);
+  backdrop-filter: blur(14px);
+  user-select: none;
+}
+
+.wc-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 14px;
+  flex: 0 0 auto;
+}
+
+.wc-trigger {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: 650 10.5px/1 Inter, "Segoe UI Variable Text", sans-serif;
+  cursor: default;
+}
+
+.wc-trigger:hover,
+.wc-trigger:focus-visible,
+.wc-trigger.is-open {
+  background: rgba(24, 32, 24, 0.06);
+}
+
+.wc-trigger:focus-visible {
+  outline: 2px solid var(--conversation-focus, #4a7d22);
+  outline-offset: 1px;
+}
+
+.wc-drag {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.wc-page {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 550;
+  text-overflow: ellipsis;
+}
+
+.wc-drag > i {
+  width: 3px;
+  height: 3px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--sidebar-marker, #76bf3b);
+}
+
+.wc-status {
+  flex: 0 0 auto;
+}
+
+.wc-controls {
+  display: flex;
+  align-self: stretch;
+  flex: 0 0 auto;
+}
+
+.wc-controls button {
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: default;
+}
+
+.wc-controls button:hover {
+  background: rgba(24, 32, 24, 0.07);
+}
+
+.wc-controls button:focus-visible {
+  outline: 2px solid var(--conversation-focus, #4a7d22);
+  outline-offset: -3px;
+}
+
+.wc-controls .wc-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.wc-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 8px;
+  z-index: 13000;
+  width: min(270px, calc(100vw - 16px));
+  max-height: calc(100vh - var(--window-chrome-height) - 14px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffef9;
+  color: var(--ink);
+  box-shadow: 0 18px 52px rgba(20, 30, 18, 0.18), 0 1px 2px rgba(20, 30, 18, 0.05);
+  animation: wc-menu-in 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes wc-menu-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.wc-menu-group + .wc-menu-group {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+.wc-menu-group.is-quit:not(:first-child) {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top-color: var(--line-strong, #c5cec1);
+}
+
+.wc-menu-label {
+  display: block;
+  padding: 4px 8px 3px;
+  color: var(--muted);
+  font: 650 9px/1.2 Inter, "Segoe UI Variable Text", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wc-menu button {
+  width: 100%;
+  height: 30px;
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: 500 11.5px/1 Inter, "Segoe UI Variable Text", sans-serif;
+  cursor: default;
+}
+
+.wc-menu button:hover:not(:disabled),
+.wc-menu button:focus-visible {
+  background: #edf2e9;
+}
+
+.wc-menu button:focus-visible {
+  outline: 2px solid var(--conversation-focus, #4a7d22);
+  outline-offset: -2px;
+}
+
+.wc-menu button:disabled {
+  color: var(--muted);
+}
+
+.wc-menu button.is-destructive {
+  color: var(--danger, #b84035);
+}
+
+.wc-menu button.is-destructive:hover,
+.wc-menu button.is-destructive:focus-visible {
+  background: var(--danger-soft, #f9e5e1);
+}
+
+.wc-menu-check {
+  display: grid;
+  place-items: center;
+  color: var(--sidebar-marker, #76bf3b);
+}
+
+.wc-menu-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-menu kbd {
+  color: var(--muted);
+  font: 500 10px/1 Inter, "Segoe UI Variable Text", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 760px) {
+  .wc-status,
+  .wc-drag > i {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .wc-page {
+    display: none;
+  }
+  .wc-brand {
+    padding-left: 10px;
+  }
+  .wc-controls button {
+    width: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wc-menu {
+    animation: none;
+  }
+}
