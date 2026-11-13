@@ -431,6 +431,13 @@ describe("operational visualizations", () => {
     expect(appCommands).toContain('"quit_app"');
   });
 
+  it("paints the boot theme and follows it in the floating window", () => {
+    expect(mainEntry).toContain("applyBootTheme");
+    expect(mainEntry).toContain('import "./theme.css"');
+    expect(avatarApp).toContain("watchSystemTheme");
+    expect(avatarApp).toContain("APPEARANCE_EVENT");
+  });
+
   it("mirrors the menu into the macOS menu bar and names admin mode", () => {
     expect(app).toContain("<NativeAppMenu");
     expect(app).toContain('"Admin mode"');
