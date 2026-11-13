@@ -239,6 +239,7 @@ jobs:
             Select-Object -First 1
           if (-not $dumpbin) { throw "dumpbin not found; cannot inspect the Windows import table" }
           $dependents = & $dumpbin.FullName /dependents $releaseExe.Path | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed to inspect the companion import table (exit $LASTEXITCODE)" }
           if ($dependents -match 'vertdll\.dll') {
             throw "The companion imports vertdll.dll; this build crashes at startup. Keep the Rust 1.99.1 pin in rust-toolchain.toml and the workflows."
           }
