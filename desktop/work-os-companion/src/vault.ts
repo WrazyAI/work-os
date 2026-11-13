@@ -133,22 +133,48 @@ export async function resetLocalVault(): Promise<void> {
 }
 
 async function get<T>(key: string): Promise<T | null> {
-  const { client } = await vault();
-  const value = await client.getStore().get(key);
-  if (!value) return null;
-  return JSON.parse(new TextDecoder().decode(new Uint8Array(value))) as T;
+  return withVault(async ({ client }) => {
+    const value = await client.getStore().get(key);
+    if (!value) return null;
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(value))) as T;
+  });
 }
 
 async function set(key: string, value: unknown) {
-  const { stronghold, client } = await vault();
-  await client.getStore().insert(key, [...new TextEncoder().encode(JSON.stringify(value))]);
-  await stronghold.save();
+  return withVault(async ({ stronghold, client }) => {
+    await client.getStore().insert(key, [...new TextEncoder().encode(JSON.stringify(value))]);
+    await stronghold.save();
+  });
 }
 
 async function remove(key: string) {
-  const { stronghold, client } = await vault();
-  await client.getStore().remove(key);
-  await stronghold.save();
+  return withVault(async ({ stronghold, client }) => {
+    await client.getStore().remove(key);
+    await stronghold.save();
+  });
+}
+
+/** The host keeps one Stronghold per snapshot path. A second window's open
+ * replaces that instance, so the first window's previously loaded client is
+ * gone and its next store call reports ClientDataNotPresent. That is a race,
+ * not a damaged vault: retire our cached open and retry against the collection
+ * the other window just created. */
+const VAULT_CLIENT_RACE = /error loading client data; no data present|has already been loaded before, can not be loaded twice/;
+
+function vaultErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function withVault<T>(operation: (opened: Awaited<ReturnType<typeof openVault>>) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation(await vault());
+    } catch (error) {
+      if (attempt >= 2 || !VAULT_CLIENT_RACE.test(vaultErrorMessage(error))) throw error;
+      diagnostics.warn("vault.open.replaced", "The other window replaced the shared vault; reopening it");
+      abandonVaultOpen();
+    }
+  }
 }
 
 /** Dev-fixture only (mirrors the ?preview-* bootstrap): a dev server URL with

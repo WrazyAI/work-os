@@ -29,10 +29,10 @@ vi.mock("@tauri-apps/api/core", () => ({
         host.loaded = new Map();
         return;
       case "plugin:stronghold|get_store_record":
-        if (!host.loaded) throw "client data not present";
+        if (!host.loaded) throw "error loading client data; no data present";
         return host.loaded.get(String(args.key)) ?? null;
       case "plugin:stronghold|save_store_record":
-        if (!host.loaded) throw "client data not present";
+        if (!host.loaded) throw "error loading client data; no data present";
         host.loaded.set(String(args.key), args.value as number[]);
         return;
       case "plugin:stronghold|save":
@@ -99,5 +99,24 @@ describe("session persistence through real Stronghold JS bindings", () => {
     host.loadError = null;
     const restarted = await windowState();
     expect(await restarted.session()).toEqual(session);
+  });
+
+  it("reopens the vault when another window replaced it before a read", async () => {
+    host.disk.set("session", [...new TextEncoder().encode(JSON.stringify(session))]);
+    const main = await windowState();
+    expect(await main.session()).toEqual(session);
+    // The other window's Stronghold.load replaced the host collection, which
+    // drops this window's loaded client until it reopens.
+    host.loaded = null;
+    host.snapshot = new Map(host.disk);
+    expect(await main.session()).toEqual(session);
+  });
+
+  it("treats an empty vault replaced during startup as signed out, not a failure", async () => {
+    const main = await windowState();
+    expect(await main.session()).toBeNull();
+    host.loaded = null;
+    host.snapshot = new Map(host.disk);
+    expect(await main.session()).toBeNull();
   });
 });
