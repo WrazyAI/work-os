@@ -5,9 +5,21 @@ import WarningMark from "@/modules/work-os/marketing/WarningMark";
 import { SiteFooter, SiteHeader } from "@/modules/work-os/marketing/SiteChrome";
 import styles from "@/modules/work-os/marketing/downloads.module.css";
 
+const description = "Download the Work OS desktop companion for Windows or macOS. Keep your workday, plans and end-of-day updates together.";
+
 export const metadata: Metadata = {
-  title: "Download Work OS",
-  description: "Install the Work OS desktop companion for Windows or macOS.",
+  title: "Download Work OS by Wrazy",
+  description,
+  alternates: { canonical: "/work-os/downloads" },
+  openGraph: {
+    title: "Download Work OS by Wrazy",
+    description,
+    url: "/work-os/downloads",
+  },
+  twitter: {
+    title: "Download Work OS by Wrazy",
+    description,
+  },
   robots: { index: false, follow: false },
 };
 
