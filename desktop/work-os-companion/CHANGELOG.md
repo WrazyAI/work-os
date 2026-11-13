@@ -23,8 +23,9 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.32 — 2026-11-13
 
+- Work OS opens again on Windows; the previous update could close as soon as it opened.
 - Saved memories no longer disappear behind new proposals; counts stay accurate, and you can load older saved facts and proposals separately.
 
 ## 0.5.31 — 2026-11-13

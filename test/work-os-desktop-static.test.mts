@@ -21,6 +21,19 @@ const vaultDirectories = rust.indexOf("ensure_vault_directories", setupStart);
 assert.ok(diagnosticsInit > setupStart, "diagnostics starts inside setup");
 assert.ok(diagnosticsInit < menuInstall, "diagnostics starts before the menu install");
 assert.ok(diagnosticsInit < vaultDirectories, "diagnostics starts before the vault directories");
+
+// Rust 1.100.0 linked WaitOnAddress/WakeByAddressAll against vertdll.dll; that
+// VSM enclave runtime crashed the packaged Windows app before its first frame.
+// Keep every companion build on the last clean stable and fail here if a future
+// edit unpins a workflow without re-checking the import table.
+const toolchain = readFileSync(resolve(root, "rust-toolchain.toml"), "utf8");
+assert.match(toolchain, /^channel = "1\.99\.1"$/m);
+for (const workflow of ["work-os-companion-windows.yml", "work-os-companion-macos-check.yml", "ci.yml"]) {
+  const source = readFileSync(resolve(root, "../..", ".github/workflows", workflow), "utf8");
+  const steps = source.split("dtolnay/rust-toolchain").slice(1);
+  assert.ok(steps.length > 0, `${workflow} sets up Rust`);
+  for (const step of steps) assert.match(step.slice(0, 240), /toolchain: 1\.99\.1/, `${workflow} pins the companion toolchain`);
+}
 assert.doesNotMatch(rust, /WebviewUrl::App\("index\.html\?debug=1"/);
 assert.doesNotMatch(rust, /get_webview_window\("debug"\)/);
 assert.match(rust, /set_focus\(\)/);
