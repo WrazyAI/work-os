@@ -1,5 +1,5 @@
 "use client";
-import { useId, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import type { WorkArrangementProposal } from "./work-arrangement";
 
 export type ArrangementDraft = Omit<WorkArrangementProposal, "arrangement" | "breaks"> & {
@@ -17,7 +17,6 @@ export function WorkArrangementFields({ value, onChange, disabled = false, autho
   value: ArrangementDraft; onChange: (next: ArrangementDraft) => void; disabled?: boolean; authoritativeBreaks?: boolean;
 }) {
   const flexible = value.arrangement === "flexible";
-  const radioName = useId();
   const breaks = value.breaks ?? [];
   const days = value.daysOfWeek ?? [];
   const patch = (next: Partial<ArrangementDraft>) => onChange({ ...value, ...next });
@@ -27,8 +26,8 @@ export function WorkArrangementFields({ value, onChange, disabled = false, autho
   return <div style={{ display: "grid", gap: 18 }}>
     <fieldset disabled={disabled} style={group}>
       <legend>Work arrangement</legend>
-      <label><input name={radioName} type="radio" checked={!flexible} onChange={() => patch({ arrangement: "scheduled", shiftStart: value.shiftStart || "09:00", shiftEnd: value.shiftEnd || "17:00" })} /> Scheduled hours</label>
-      <label><input name={radioName} type="radio" checked={flexible} onChange={() => patch({ arrangement: "flexible" })} /> Contractor / flexible hours</label>
+      <label><input name="work-os-arrangement" type="radio" checked={!flexible} onChange={() => patch({ arrangement: "scheduled", shiftStart: value.shiftStart || "09:00", shiftEnd: value.shiftEnd || "17:00" })} /> Scheduled hours</label>
+      <label><input name="work-os-arrangement" type="radio" checked={flexible} onChange={() => patch({ arrangement: "flexible" })} /> Contractor / flexible hours</label>
     </fieldset>
     <fieldset disabled={disabled} style={group}>
       <legend>Working days</legend>
