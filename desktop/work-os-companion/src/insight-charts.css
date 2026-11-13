@@ -72,7 +72,7 @@
 
 .sparkline-line {
   fill: none;
-  stroke: var(--ink);
+  stroke: var(--chart-ink);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -105,7 +105,7 @@
   border: 0;
   border-radius: 999px;
   padding: 3px 8px;
-  background: #eceee6;
+  background: var(--inset);
   color: var(--muted);
   font-size: 11px;
   line-height: 1;
@@ -118,15 +118,15 @@
 }
 
 .delta-badge.better {
-  background: rgba(184, 255, 90, 0.28);
+  background: var(--tool-success-soft);
 }
 
 .delta-badge.better b {
-  color: #3d6210;
+  color: var(--tool-success);
 }
 
 .delta-badge.worse {
-  background: rgba(200, 78, 66, 0.1);
+  background: var(--danger-soft);
 }
 
 .delta-badge.worse b {
@@ -232,7 +232,7 @@
   width: min(34px, 68%);
   min-height: 0;
   border-radius: 7px 7px 3px 3px;
-  background: linear-gradient(180deg, #3c4037, var(--ink));
+  background: var(--chart-ink);
   transform-origin: bottom;
   animation: bar-grow 360ms var(--ease-product) both;
   transition: background 150ms var(--ease-product), box-shadow 150ms var(--ease-product);
@@ -267,7 +267,7 @@
 
 .trend-line {
   fill: none;
-  stroke: #82bd39;
+  stroke: var(--chart-1);
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -284,7 +284,7 @@
   margin-bottom: -3.5px;
   border: 1.5px solid var(--paper);
   border-radius: 50%;
-  background: #82bd39;
+  background: var(--chart-1);
   pointer-events: none;
 }
 
@@ -373,11 +373,11 @@
   height: 10px;
   margin-top: 1px;
   border-radius: 3px;
-  background: var(--ink);
+  background: var(--chart-ink);
 }
 
 .trend-legend b {
-  background: #82bd39;
+  background: var(--chart-1);
 }
 
 .trend-legend-copy {
@@ -427,20 +427,20 @@
   width: 9px;
   height: 9px;
   border-radius: 3px;
-  background: var(--ink);
+  background: var(--chart-ink);
 }
 
 .swatch.completion,
 .swatch.on-time {
-  background: #82bd39;
+  background: var(--chart-1);
 }
 
 .swatch.observed {
-  background: var(--ink);
+  background: var(--chart-ink);
 }
 
 .swatch.late {
-  background: #c8845a;
+  background: var(--chart-2);
 }
 
 .trend-chart-table {
@@ -510,11 +510,11 @@
   opacity: 0.28;
 }
 
-.slice-completed { stroke: var(--ink); }
-.slice-progressed { stroke: #82bd39; }
-.slice-deferred { stroke: #c9b56a; }
-.slice-carried { stroke: #c8845a; }
-.slice-unplanned { stroke: #a9ada2; }
+.slice-completed { stroke: var(--chart-ink); }
+.slice-progressed { stroke: var(--chart-1); }
+.slice-deferred { stroke: var(--chart-3); }
+.slice-carried { stroke: var(--chart-2); }
+.slice-unplanned { stroke: var(--faint); }
 
 .donut-center {
   position: absolute;
@@ -575,10 +575,10 @@
   border-radius: 3px;
 }
 
-.donut-legend i.slice-completed { background: var(--ink); }
-.donut-legend i.slice-progressed { background: #82bd39; }
-.donut-legend i.slice-deferred { background: #c9b56a; }
-.donut-legend i.slice-carried { background: #c8845a; }
+.donut-legend i.slice-completed { background: var(--chart-ink); }
+.donut-legend i.slice-progressed { background: var(--chart-1); }
+.donut-legend i.slice-deferred { background: var(--chart-3); }
+.donut-legend i.slice-carried { background: var(--chart-2); }
 .donut-legend i.slice-unplanned { background: #a9ada2; }
 
 .donut-legend b {
@@ -617,7 +617,7 @@
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--ink);
+  background: var(--chart-ink);
 }
 
 .bar-label {
@@ -630,7 +630,7 @@
 }
 
 .bar-label em {
-  color: #983e35;
+  color: var(--danger);
   font-size: 10px;
   font-style: normal;
   letter-spacing: 0.04em;
@@ -664,22 +664,22 @@
   display: block;
   height: 100%;
   border-radius: 6px;
-  background: var(--ink);
+  background: var(--chart-ink);
   transform-origin: left;
   animation: bar-slide 360ms var(--ease-product) both;
   animation-delay: calc(var(--bar-index, 0) * 26ms);
 }
 
 .bar-breakdown li.attention .bar-track i {
-  background: #c8845a;
+  background: var(--chart-2);
 }
 
 .bar-breakdown li:not(.attention) .bar-swatch {
-  background: var(--ink);
+  background: var(--chart-ink);
 }
 
 .bar-breakdown li.attention .bar-swatch {
-  background: #c8845a;
+  background: var(--chart-2);
 }
 
 /* --- On-time outcomes --------------------------------------------------- */
@@ -698,13 +698,13 @@
 }
 
 .on-time-fill {
-  background: #82bd39;
+  background: var(--chart-1);
   animation: bar-slide 420ms var(--ease-product) both;
   transform-origin: left;
 }
 
 .late-fill {
-  background: #c8845a;
+  background: var(--chart-2);
   animation: bar-slide 420ms var(--ease-product) 60ms both;
   transform-origin: left;
 }
@@ -821,7 +821,7 @@
 }
 
 .heatmap-cell:focus-visible {
-  outline: 2px solid #82bd39;
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -984,7 +984,7 @@
 }
 
 .scroll-fade-region:focus-visible {
-  outline: 2px solid #82bd39;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 10px;
 }
@@ -1194,7 +1194,7 @@
 
 .daily-rhythm-line {
   fill: none;
-  stroke: #82bd39;
+  stroke: var(--chart-1);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1249,7 +1249,7 @@
   min-height: 0;
   transform: none;
   border-radius: 8px 8px 2px 2px;
-  background: linear-gradient(180deg, #31362e, var(--ink));
+  background: var(--chart-ink);
   box-shadow: 0 8px 18px rgba(18, 27, 17, 0.08);
   transform-origin: bottom;
   animation: bar-grow 360ms var(--ease-product) both;
@@ -1279,7 +1279,7 @@
   margin-bottom: -4.5px;
   border: 2px solid var(--paper);
   border-radius: 50%;
-  background: #82bd39;
+  background: var(--chart-1);
   box-shadow: 0 0 0 1px rgba(94, 157, 39, 0.28);
   pointer-events: none;
 }
@@ -1367,10 +1367,10 @@
   opacity: 0.24;
 }
 
-.activity-tone-0 { stroke: var(--ink); background: var(--ink); }
-.activity-tone-1 { stroke: #82bd39; background: #82bd39; }
-.activity-tone-2 { stroke: #668aa0; background: #668aa0; }
-.activity-tone-3 { stroke: #c8845a; background: #c8845a; }
+.activity-tone-0 { stroke: var(--chart-ink); background: var(--chart-ink); }
+.activity-tone-1 { stroke: var(--chart-1); background: var(--chart-1); }
+.activity-tone-2 { stroke: var(--chart-5); background: var(--chart-5); }
+.activity-tone-3 { stroke: var(--chart-2); background: var(--chart-2); }
 .activity-tone-4 { stroke: #9a8fbd; background: #9a8fbd; }
 .activity-tone-5 { stroke: #a9ada2; background: #a9ada2; }
 
@@ -1954,7 +1954,7 @@
   min-height: 0;
   transform: none;
   border-radius: 8px 8px 2px 2px;
-  background: linear-gradient(180deg, #31362e, var(--ink));
+  background: var(--chart-ink);
   transition: box-shadow 150ms var(--ease-product), opacity 150ms var(--ease-product);
 }
 

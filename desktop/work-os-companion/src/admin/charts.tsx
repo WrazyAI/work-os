@@ -12,14 +12,14 @@ import type { AdminTimeSeriesPoint } from "./types";
  * region announces the focused point. Numbers are never hover-only. */
 
 export const ADMIN_PALETTE = [
-  "var(--ink)",
-  "#82bd39",
-  "#2e617d",
-  "#c8845a",
-  "#c9b56a",
-  "#8b5cf6",
-  "#0d9488",
-  "#a9ada2",
+  "var(--chart-ink)",
+  "var(--chart-1)",
+  "var(--chart-5)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-7)",
+  "var(--chart-8)",
 ] as const;
 
 function assignColors(people: Array<{ personId: string; name: string; minutes: number }>) {

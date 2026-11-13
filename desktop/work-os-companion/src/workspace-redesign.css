@@ -6757,7 +6757,7 @@ button:not(:disabled):active {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #6d5bd0;
+  color: var(--ai);
   font-size: 9px;
   font-weight: 780;
   letter-spacing: 0.09em;
@@ -6774,15 +6774,15 @@ button:not(:disabled):active {
   padding: 0 12px;
   border: 1px solid #cbc0ee;
   border-radius: 9px;
-  background: #f3f0ff;
-  color: #4c3ba8;
+  background: var(--ai-soft);
+  color: var(--ai);
   font-size: 10px;
   font-weight: 700;
 }
 
 .insight-synthesis > header button:not(:disabled):hover {
-  border-color: #a99ae0;
-  background: #ebe5ff;
+  border-color: var(--ai-border);
+  background: var(--ai-soft);
 }
 
 .synthesis-text {

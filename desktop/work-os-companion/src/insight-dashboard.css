@@ -303,11 +303,11 @@
   animation: flow-stage-rise 320ms var(--ease-product) both;
 }
 
-.flow-stage > i.slice-completed { background: var(--ink); }
-.flow-stage > i.slice-progressed { background: #82bd39; }
-.flow-stage > i.slice-deferred { background: #c9b56a; }
-.flow-stage > i.slice-carried { background: #c8845a; }
-.flow-stage > i.slice-unplanned { background: #a9ada2; }
+.flow-stage > i.slice-completed { background: var(--chart-ink); }
+.flow-stage > i.slice-progressed { background: var(--chart-1); }
+.flow-stage > i.slice-deferred { background: var(--chart-3); }
+.flow-stage > i.slice-carried { background: var(--chart-2); }
+.flow-stage > i.slice-unplanned { background: var(--faint); }
 
 @keyframes flow-stage-rise {
   from {
@@ -345,11 +345,11 @@
   background: var(--muted);
 }
 
-.flow-stage-legend li > i.slice-completed { background: var(--ink); }
-.flow-stage-legend li > i.slice-progressed { background: #82bd39; }
-.flow-stage-legend li > i.slice-deferred { background: #c9b56a; }
-.flow-stage-legend li > i.slice-carried { background: #c8845a; }
-.flow-stage-legend li > i.slice-unplanned { background: #a9ada2; }
+.flow-stage-legend li > i.slice-completed { background: var(--chart-ink); }
+.flow-stage-legend li > i.slice-progressed { background: var(--chart-1); }
+.flow-stage-legend li > i.slice-deferred { background: var(--chart-3); }
+.flow-stage-legend li > i.slice-carried { background: var(--chart-2); }
+.flow-stage-legend li > i.slice-unplanned { background: var(--faint); }
 
 .flow-stage-legend li > span {
   min-width: 0;

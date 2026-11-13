@@ -189,9 +189,9 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
               values: { outcomes: point.outcomesCompleted, updates: point.updates, eod: point.eodSubmitted },
             }))}
             series={[
-              { key: "outcomes", label: "Outcomes", color: "var(--ink)" },
-              { key: "updates", label: "Updates", color: "#82bd39" },
-              { key: "eod", label: "EOD reports", color: "#2e617d" },
+              { key: "outcomes", label: "Outcomes", color: "var(--chart-ink)" },
+              { key: "updates", label: "Updates", color: "var(--chart-1)" },
+              { key: "eod", label: "EOD reports", color: "var(--chart-5)" },
             ]}
           />
         </AdminCard>

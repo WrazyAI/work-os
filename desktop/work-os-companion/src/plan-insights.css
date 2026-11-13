@@ -63,7 +63,7 @@
 }
 .save-state.conflict {
   background: #fae0dc;
-  color: #983e35;
+  color: var(--danger);
 }
 .plan-board-title {
   display: flex;

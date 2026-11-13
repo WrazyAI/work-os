@@ -2787,7 +2787,7 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 .admin-toggle input:checked + span {
-  background: #82bd39;
+  background: var(--signal-deep);
 }
 
 .admin-toggle input:checked + span::after {
@@ -3006,7 +3006,7 @@ body:has(.admin-workspace) .notifications-card {
 .admin-stack:focus-visible,
 .admin-grouped:focus-visible,
 .admin-share:focus-visible {
-  outline: 2px solid #82bd39;
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
   border-radius: 8px;
 }
