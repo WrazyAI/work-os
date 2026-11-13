@@ -24,6 +24,7 @@
   --ai-border: #a99ae0;
 
   --chart-ink: #182018;
+  --conversation-on-graphite: #fffcf6;
   --chart-1: #82bd39;
   --chart-2: #c8845a;
   --chart-3: #c9b56a;
@@ -65,6 +66,34 @@
   --ai-soft: #2e293f;
   --ai-border: #5b4d8a;
 
+  /* The chat surfaces use their own --color-* namespace. */
+  --color-canvas: var(--canvas);
+  --color-stage: var(--canvas);
+  --color-paper: var(--paper);
+  --color-surface: var(--paper);
+  --color-white: var(--white);
+  --color-field: var(--white);
+  --color-inset: var(--inset);
+  --color-hover: rgba(255, 255, 255, 0.07);
+  --color-hover-2: rgba(255, 255, 255, 0.11);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--muted);
+  --color-ink-3: var(--faint);
+  --color-signal: var(--signal);
+  --color-signal-strong: var(--signal-deep);
+  --color-focus: var(--focus);
+  --color-green: var(--tool-success);
+  --color-green-tint: var(--tool-success-soft);
+  --color-accent-ink: var(--tool-success);
+  --color-accent-tint: var(--tool-success-soft);
+  --color-orange: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-soft);
+  --accent-tint: var(--tool-success-soft);
+  --hover: rgba(255, 255, 255, 0.07);
+
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 7px 24px rgba(0, 0, 0, 0.22);
   --shadow-raised: 0 16px 48px rgba(0, 0, 0, 0.4);
   --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.32);
@@ -104,6 +133,7 @@
   --conversation-surface: var(--paper);
   --conversation-ink: var(--ink);
   --conversation-graphite: #1b1c1e;
+  --conversation-on-graphite: var(--ink);
   --conversation-signal: var(--signal);
   --conversation-focus: var(--focus);
   --conversation-muted: var(--muted);

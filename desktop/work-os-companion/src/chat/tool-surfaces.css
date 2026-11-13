@@ -99,7 +99,7 @@
   min-height: 56px;
   padding: 11px 14px;
   border-bottom: 1px solid var(--tool-line);
-  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+  background: linear-gradient(180deg, var(--tool-paper) 0%, var(--tool-inset) 100%);
 }
 
 [data-workos-tool-surface="task-selection"] .chat-task-heading {
@@ -118,9 +118,9 @@
   height: 26px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #dce7d2;
+  border: 1px solid var(--tool-line-strong);
   border-radius: 9px;
-  background: #edf7df;
+  background: var(--tool-success-soft);
   color: var(--tool-success);
   content: "✓";
   font-size: 12px;
@@ -161,14 +161,14 @@
 }
 
 [data-workos-tool-surface="task-selection"] .chat-task-pill.is-selected {
-  border-color: #d3e5b8;
-  background: #edf7df;
-  color: #416c24;
+  border-color: var(--tool-line-strong);
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 [data-workos-tool-surface="task-selection"] .chat-task-pill.is-proposed {
-  border-color: #e3d7ac;
-  background: #fff6dc;
+  border-color: var(--tool-line-strong);
+  background: var(--tool-warning-soft);
   color: var(--tool-warning);
 }
 
@@ -204,7 +204,7 @@
 
 [data-workos-tool-surface="task-selection"] .chat-task-row {
   padding: 0 12px;
-  border-bottom: 1px solid #edf0ea;
+  border-bottom: 1px solid var(--tool-line);
   background: transparent;
   transition: background-color 150ms ease;
 }
@@ -434,7 +434,7 @@
 
 [data-workos-tool-surface="task-selection"] .chat-task-table-row {
   min-height: 52px;
-  border-bottom: 1px solid #edf0ea;
+  border-bottom: 1px solid var(--tool-line);
   color: var(--tool-muted);
   font-size: 10px;
 }
@@ -461,7 +461,7 @@
   min-height: 154px;
   gap: 7px;
   padding: 28px 18px;
-  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+  background: linear-gradient(180deg, var(--tool-paper) 0%, var(--tool-inset) 100%);
 }
 
 [data-workos-tool-surface="task-selection"] .chat-task-blank .chat-turn-mark {
@@ -546,7 +546,7 @@
   min-height: 48px;
   padding: 11px 14px;
   border-bottom: 0;
-  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+  background: linear-gradient(180deg, var(--tool-paper) 0%, var(--tool-inset) 100%);
 }
 
 [data-workos-tool-surface="approval"] .approval-flow.is-destructive > header {
@@ -660,7 +660,7 @@
 
 [data-workos-tool-surface="action-results"] .approval-results-head {
   border-bottom: 1px solid var(--tool-line);
-  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+  background: linear-gradient(180deg, var(--tool-paper) 0%, var(--tool-inset) 100%);
 }
 
 [data-workos-tool-surface="action-results"] .approval-results:has(.approval-results-body[hidden]) .approval-results-head {
@@ -804,7 +804,7 @@
   align-items: center;
   padding: 13px 15px;
   border-bottom: 1px solid var(--tool-line);
-  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+  background: linear-gradient(180deg, var(--tool-paper) 0%, var(--tool-inset) 100%);
 }
 
 [data-workos-tool-surface="batch"] .task-batch-head > div:first-child {

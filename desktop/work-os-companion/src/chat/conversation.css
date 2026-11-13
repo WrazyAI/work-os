@@ -134,7 +134,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--conversation-graphite);
-  color: var(--conversation-surface);
+  color: var(--conversation-on-graphite);
 }
 
 .conversation-launcher.is-agenda {
@@ -455,7 +455,7 @@
   padding: 11px 14px;
   border-radius: 20px 20px 5px 20px;
   background: var(--conversation-graphite);
-  color: var(--conversation-surface);
+  color: var(--conversation-on-graphite);
   box-shadow: 0 5px 12px rgba(23, 26, 24, 0.1);
 }
 
@@ -467,7 +467,7 @@
 }
 
 .conversation-surface .chat-turn-user .chat-markdown p {
-  color: var(--conversation-surface);
+  color: var(--conversation-on-graphite);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -522,7 +522,7 @@
   border: 1px solid var(--conversation-line);
   border-radius: 999px;
   padding: 0 8px;
-  background: rgba(255, 252, 246, 0.78);
+  background: var(--conversation-surface);
   box-shadow: 0 2px 7px rgba(23, 26, 24, 0.05);
   font-size: 12px;
   font-weight: 650;
@@ -690,7 +690,7 @@
 .conversation-surface .task-selection-primary:not(:disabled) {
   border-radius: 999px;
   background: var(--conversation-graphite);
-  color: var(--conversation-surface);
+  color: var(--conversation-on-graphite);
 }
 
 .conversation-surface .tool-display-error { color: var(--conversation-danger); }
