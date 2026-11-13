@@ -22,7 +22,7 @@ export async function overviewFixture() {
     create table work_teams (id uuid primary key, organization_id uuid, active boolean);
     create table work_team_members (team_id uuid references work_teams, person_id uuid, is_manager boolean);
     create table work_schedules (id uuid primary key, organization_id uuid, person_id uuid, timezone text, shift_start time,
-      shift_end time, days_of_week int[], effective_from date, effective_to date, active boolean);
+      shift_end time, days_of_week int[], effective_from date, effective_to date, active boolean, arrangement text default 'scheduled');
     create table work_provider_connections (organization_id uuid, provider text, active boolean);
     create table work_provider_credentials (organization_id uuid, provider text, expires_at timestamptz);
     create table work_source_accounts (organization_id uuid, provider text, person_id uuid, verified boolean, metadata jsonb);

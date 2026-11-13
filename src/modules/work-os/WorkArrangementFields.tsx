@@ -19,6 +19,7 @@ export function WorkArrangementFields({ value, onChange, disabled = false, autho
   const flexible = value.arrangement === "flexible";
   const radioName = useId();
   const breaks = value.breaks ?? [];
+  const days = value.daysOfWeek ?? [];
   const patch = (next: Partial<ArrangementDraft>) => onChange({ ...value, ...next });
   const setBreak = (index: number, next: Partial<{ start: string; end: string }>) => {
     patch({ breaks: breaks.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item) });
@@ -33,7 +34,7 @@ export function WorkArrangementFields({ value, onChange, disabled = false, autho
       <legend>Working days</legend>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => <label key={day} style={{ minHeight: 40, display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <input type="checkbox" checked={value.daysOfWeek.includes(index)} onChange={() => patch({ daysOfWeek: value.daysOfWeek.includes(index) ? value.daysOfWeek.filter((item) => item !== index) : [...value.daysOfWeek, index].sort() })} /> {day}
+          <input type="checkbox" checked={days.includes(index)} onChange={() => patch({ daysOfWeek: days.includes(index) ? days.filter((item) => item !== index) : [...days, index].sort() })} /> {day}
         </label>)}
       </div>
     </fieldset>

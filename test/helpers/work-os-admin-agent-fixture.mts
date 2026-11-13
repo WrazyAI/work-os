@@ -156,6 +156,7 @@ create table work_schedules (
   shift_start time not null,
   shift_end time not null,
   break_windows jsonb not null default '[]'::jsonb,
+  arrangement text not null default 'scheduled',
   days_of_week smallint[] not null default '{1,2,3,4,5}',
   effective_from date not null default current_date,
   effective_to date,

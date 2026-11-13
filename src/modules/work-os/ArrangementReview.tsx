@@ -46,7 +46,7 @@ export function ArrangementReview({ proposal, onReview }: {
         <label style={{ display: "grid", gap: 6 }}>Review note<textarea maxLength={1000} disabled={busy} value={note} onChange={(event) => setNote(event.target.value)} style={{ minHeight: 64, padding: 8, width: "100%", boxSizing: "border-box", color: "inherit", background: "transparent", border: "1px solid currentColor", borderRadius: 8 }} /></label>
         <p style={{ margin: 0 }}>A replacement takes effect tomorrow in the selected timezone. A first arrangement takes effect today. Approval waits until any running work session has closed.</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          <button type="button" aria-busy={busy} disabled={busy || !schedule.daysOfWeek.length} onClick={() => void decide("approve")} style={{ minHeight: 42, padding: "8px 14px" }}>{busy ? "Saving…" : "Approve arrangement"}</button>
+          <button type="button" aria-busy={busy} disabled={busy || !schedule.daysOfWeek?.length} onClick={() => void decide("approve")} style={{ minHeight: 42, padding: "8px 14px" }}>{busy ? "Saving…" : "Approve arrangement"}</button>
           <button type="button" disabled={busy || !note.trim()} onClick={() => void decide("request_changes")} style={{ minHeight: 42, padding: "8px 14px" }}>Request changes</button>
         </div>
       </>}

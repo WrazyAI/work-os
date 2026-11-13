@@ -13,9 +13,10 @@ test("flexible proposals retain fixed days but strip hidden times and targets", 
 });
 test("legacy clients keep scheduled semantics and invalid arrangements/days fail", () => {
   assert.equal(arrangements.normalizeWorkArrangement({ daysOfWeek: [1], shiftStart: "09:00", shiftEnd: "17:00" }).arrangement, "scheduled");
-  for (const input of [{ arrangement: "mystery", daysOfWeek: [1] }, { arrangement: "flexible", daysOfWeek: [] }, { arrangement: "flexible", daysOfWeek: [1, 8] }, { arrangement: "flexible", daysOfWeek: ["1"] }]) {
+  for (const input of [{ arrangement: "mystery", daysOfWeek: [1] }, { arrangement: "flexible", daysOfWeek: [] }, { arrangement: "flexible", daysOfWeek: [1, 8] }, { arrangement: "flexible", daysOfWeek: ["nope"] }]) {
     assert.throws(() => arrangements.normalizeWorkArrangement(input));
   }
+  assert.equal(arrangements.normalizeWorkArrangement({ arrangement: null, daysOfWeek: ["1"], shiftStart: "09:00", shiftEnd: "17:00" }).arrangement, "scheduled");
   assert.throws(() => arrangements.normalizeWorkArrangement({ daysOfWeek: [1] }));
 });
 const flexible = { id: "flex", arrangement: "flexible" as const, timezone: "America/New_York", days_of_week: [1, 5], shift_start: null, shift_end: null, effective_from: "2026-11-01", effective_to: null };

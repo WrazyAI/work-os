@@ -1733,7 +1733,9 @@ A flexible submission is a proposal until an administrator approves it. The curr
 
 On flexible days, the dashboard and time surfaces never show a scheduled window, countdown, late state, missed-shift state, or required-hours progress. Clock-in needs no late or exception acknowledgement, and clock-out needs no extended-shift acknowledgement. Prompts follow the recorded session and the normal check-in cadence: one update at the first follow-up, then the configured interval; they are never anchored to invented wall-clock boundaries. Actual observed time and the selected days remain visible as facts, and work recorded outside the selected days remains recordable without being labelled a violation. Exceptions still apply: leave removes the day; a working-day or changed-shift exception makes it a working day, but a changed-shift exception on a flexible day does not create a shift window.
 
-Administration displays **Flexible hours** wherever it would otherwise print a time range, and carries the pending proposal in the person record with its days, timezone, submission time, and note. Legacy proposals without an arrangement remain scheduled.
+Today's EOD opens for a flexible worker once a work session has started or the day has closed; before any work it stays closed, so an early click cannot describe a day that has not happened. There is no scheduled clock-out to wait for.
+
+Administration displays **Flexible hours** wherever it would otherwise print a time range, and carries the pending proposal in the person record with its days, timezone, submission time, and note. Legacy proposals without an arrangement remain scheduled. The timed schedule editor refuses overlapping official periods, and a flexible row is changed through its review rather than the timed editor.
 
 ### 8.16 EOD drafts before clock-out, and deleting a draft
 
