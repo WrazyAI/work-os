@@ -312,6 +312,18 @@
       "type": "feature",
       "summary": "Activity recaps keep arriving while the app is closed; opening Work OS shows the newest one first, with the rest waiting in your recaps.",
       "verification": "Branch codex/recap-server-schedule: scheduler, queue, latest-endpoint, launch-selection, and companion flyout suites pass; companion typecheck passes; rendered avatar and main-window states plus live timer evidence recorded in ledger 4fffb588-e129-4cf4-aa28-c3be9445889d."
+    },
+    {
+      "id": "saved-sign-in-survives-shared-vault",
+      "type": "fix",
+      "summary": "Your saved sign-in stays put when both companion windows open together.",
+      "verification": "b7c0f15f: vaultPersistence reproduces the native Stronghold ClientAlreadyLoaded response and the empty-client replacement, then verifies a restart still restores the session, including when main and avatar open together and when a client read fails (3 tests pass); a direct iota_stronghold probe confirmed create_client wipes the loaded signed-in client; companion suite 216 files/1922 tests, companion typecheck and production build pass."
+    },
+    {
+      "id": "macos-webkit-request-helpers",
+      "type": "fix",
+      "summary": "Work OS opens normally on Macs that previously stopped at the loading screen.",
+      "verification": "b7c0f15f: macosRuntimeCompatibility reproduces the missing AbortSignal.any and AbortSignal.timeout failures in the initial day read and session check, then verifies the fallbacks still honor the request deadline and caller cancellation (5 tests pass); companion suite 216 files/1922 tests, companion typecheck and production build pass."
     }
   ],
   "emergency": null,

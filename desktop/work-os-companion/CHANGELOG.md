@@ -23,8 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.31 — 2026-11-13
 
+- Your saved sign-in stays put when both companion windows open together, so you do not have to connect the app again.
+- Work OS opens normally on some Macs that previously stopped at the loading screen.
 - Activity recaps keep arriving while the app is closed; opening Work OS shows the newest one first, with the rest waiting in your recaps.
 - Checking off a task now marks it done right away; the confirmation offers Attach evidence, and an open task panel closes when its task is completed.
 - Activity recaps now show your GoHighLevel calls and messages with their own icon, so CRM work is never listed as GitHub activity.
