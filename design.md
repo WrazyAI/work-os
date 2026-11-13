@@ -135,15 +135,20 @@ Do not use signal green to mean “good” in general. It means action, progress
 current state, or an explicitly confirmed result whose label says what was
 confirmed. Observation remains blue/cool-neutral even when activity is present.
 
-The dark variant re-materials the same roles on a neutral graphite ground so
-the workspace reads as one material inside the host console (see the dark
-material rule in §4.3). Reference values: ink `#e9eaed`, ink-soft `#b4b7be`,
-muted `#8b909a`, faint `#6b6f78`, canvas `#17181b`, stage `#1c1d21`, paper
-`#1a1b1e`, raised `#212227`, inset `#282930`, line `#34363d`, line-strong
-`#41444c`, signal `#a8f15b`, signal-deep `#8fd24a`, danger `#e57b6f`,
-warning `#e0a44a`, observed `#7fb3d1`. Categorical chart hues are
-theme-aware (`--chart-1` … `--chart-8`) so a series keeps its colour across
-themes without a light-paper hue turning sandy on graphite.
+The desktop companion's dark variant is **Soft ash**: the same roles on a
+lighter graphite ladder so every surface step stays legible without glow.
+Reference values: canvas `#242527`, navigation `#292a2c`, paper `#303133`,
+raised `#393a3d`, inset `#414246`, line `#505256`, line-strong `#686b70`,
+ink `#f0f0ef`, ink-soft `#d2d3d6`, muted `#bfc0c3`, faint `#8f9298`, signal
+`#a8f15b`, signal-deep `#8fd24a`, danger `#f09a93`, warning `#e3b15f`,
+observed `#8fbdd8`, focus `#b8e794`. The ladder is
+`navigation < paper < raised < inset`, with the canvas beneath it; a dialog is
+one step above the surface it covers, and hover is the inset step or a 4–7%
+white wash. Categorical chart hues are theme-aware (`--chart-ink`,
+`--chart-1` … `--chart-8`) so a series keeps its meaning across themes without
+a light-paper hue turning sandy on graphite. The web workspace keeps its own
+dark scope (§4.3); the two materials are reconciled by role, not by copying
+hex values.
 
 Known gaps: `--color-faint` (2.7:1 on paper) must not carry text.
 `--color-warning` (3.0:1 on white) still fails AA as text on light surfaces,
@@ -1223,11 +1228,18 @@ beneath the copy, and below 560px the modal takes the viewport inset. Keep,
 reject, and forget keep their exact existing behavior and states; nothing is
 remembered without a keep.
 
-### 8.6 Appearance settings: text and mascot size
+### 8.6 Appearance settings: theme, text, and mascot size
 
-Reading & display sits with the Settings groups and holds exactly two
-preferences. Both are per-device, apply instantly in every window, and are
-remembered locally rather than synced to the workspace:
+Appearance sits above Reading & display and holds exactly one preference:
+**Theme** — `Light`, `Dark`, or `System` (default). It is per-device, applies
+instantly in every window, and is remembered locally rather than synced to the
+workspace. System resolves through the device preference and follows a live
+change. A best-effort local mirror paints the boot theme before the vault
+opens; the vault is always the source of truth once it loads.
+
+Reading & display sits below it and holds exactly two preferences. Both are
+per-device, apply instantly in every window, and are remembered locally
+rather than synced to the workspace:
 
 - **Text size** — `Small` (default) or `Medium`,
   which scales text 15% through one root custom property (`--text-scale`).
@@ -1248,6 +1260,25 @@ the default — never to the larger setting. The main window applies
 and persists a change (rolling the visible state back if the save fails) and
 broadcasts it with `work-os://appearance-changed`; the floating companion
 window reads the stored value on boot and follows the broadcast live.
+
+### 8.6.1 First-login theme choice
+
+The first signed-in workspace paint after the build that introduces themes
+offers the choice once per device, when the stored prompt flag is false:
+
+- Three peer choices — Light, Dark, System — preview against the real
+  workspace. The dialog itself uses the chosen material, so the decision is
+  seen, not described. Closing without choosing restores the previous theme;
+  `Use` commits and broadcasts to the floating window. Preview never persists.
+- The prompt is suppressed during onboarding, over the vault gate, over the
+  task finder or any other modal, and in the floating window. It outranks the
+  automatic first-visit page guide; the guide's timer waits for it to close.
+- Theme and the seen flag are written in one vault save. A failed choice keeps
+  the dialog open with the preview and a retry; dismissal keeps the current
+  theme and writes the seen flag best-effort.
+- Settings remains the permanent home of the choice. Choosing there also
+  marks the prompt seen, so a choice made while the prompt was suppressed is
+  never followed by the prompt later.
 
 ### 8.7 Attendance freshness: activity-driven clock-in and clock-out
 
@@ -2383,8 +2414,9 @@ Each surface states its budgets, and visual QA checks them.
 
 ## 15. Visual QA and release acceptance
 
-A UI change is incomplete until the rendered result is inspected. The required
-evidence for a dashboard/task change is:
+A UI change is incomplete until the rendered result is inspected. Theme work
+adds the second material to every item below; a surface that was only checked
+in Light is not verified. The required evidence for a dashboard/task change is:
 
 1. Wide normal state at 1440px or equivalent.
 2. Compact desktop state around 1024px.

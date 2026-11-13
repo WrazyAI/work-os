@@ -43,6 +43,10 @@ const tauriLib = readText(resolve(root, "src-tauri/src/lib.rs"));
 const defaultCapability = readText(resolve(root, "src-tauri/capabilities/default.json"));
 const appCommands = readText(resolve(root, "src-tauri/permissions/allow-app-commands.toml"));
 const tauriConfig = readText(resolve(root, "src-tauri/tauri.conf.json"));
+const themeStyles = readText(resolve(root, "src/theme.css"));
+const themePrompt = readText(resolve(root, "src/ThemePrompt.tsx"));
+const appearanceSettings = readText(resolve(root, "src/AppearanceSettings.tsx"));
+const vaultSource = readText(resolve(root, "src/vault.ts"));
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -434,8 +438,22 @@ describe("operational visualizations", () => {
   it("paints the boot theme and follows it in the floating window", () => {
     expect(mainEntry).toContain("applyBootTheme");
     expect(mainEntry).toContain('import "./theme.css"');
+    expect(mainEntry).toContain('import "./theme-prompt.css"');
     expect(avatarApp).toContain("watchSystemTheme");
     expect(avatarApp).toContain("APPEARANCE_EVENT");
+  });
+
+  it("ships one soft ash material, one prompt, and one appearance group", () => {
+    expect(themeStyles).toContain(':root[data-theme="dark"]');
+    expect(themeStyles).toContain("--canvas: #242527");
+    expect(themeStyles).toContain("--paper: #303133");
+    expect(app).toContain("<ThemePrompt");
+    expect(app).toContain("themePromptSeen");
+    expect(themePrompt).toContain("How should Work OS look?");
+    expect(appearanceSettings).toContain("Appearance");
+    expect(appearanceSettings).toContain('label="Theme"');
+    expect(vaultSource).toContain("themePromptSeen");
+    expect(vaultSource).toContain("theme: ThemePreference");
   });
 
   it("mirrors the menu into the macOS menu bar and names admin mode", () => {
