@@ -1010,7 +1010,7 @@ body {
   width: min(100%, 1200px);
   height: 82px;
   margin: 0 auto;
-  border-bottom: 1px solid rgba(24, 32, 24, 0.08);
+  border-bottom: 1px solid var(--line);
 }
 
 .masthead p {
@@ -1032,7 +1032,7 @@ body {
 .icon,
 .avatar {
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--paper);
 }
 
 .avatar {

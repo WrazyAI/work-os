@@ -32,7 +32,7 @@ body {
   width: 80px;
   padding: 20px 12px;
   border-right: 1px solid var(--dash-line);
-  background: rgba(250, 251, 247, 0.92);
+  background: var(--sidebar-surface);
   box-shadow: 8px 0 24px rgba(31, 50, 27, 0.025);
 }
 
@@ -63,15 +63,15 @@ body {
 
 .rail nav button:hover {
   border-color: var(--dash-line);
-  background: #f0f5ed;
+  background: var(--dash-inset);
   color: var(--dash-ink);
   transform: translateY(-1px);
 }
 
 .rail nav button.active {
-  border-color: #d5eac4;
-  background: #e8f4dc;
-  color: #285c18;
+  border-color: var(--dash-line-strong);
+  background: var(--dash-inset);
+  color: var(--dash-ink);
   box-shadow: inset 0 0 0 1px rgba(94, 157, 39, 0.08);
 }
 
@@ -82,7 +82,7 @@ body {
   justify-content: center;
   border: 1px solid var(--dash-line);
   border-radius: 16px;
-  background: rgba(255, 255, 252, 0.8);
+  background: var(--dash-card-solid);
 }
 
 .stage {
@@ -109,7 +109,7 @@ body {
 
 .mast-actions .provider {
   border-color: var(--dash-line);
-  background: rgba(255, 255, 252, 0.76);
+  background: var(--dash-card);
   color: var(--dash-muted);
 }
 
@@ -200,15 +200,15 @@ body {
 
 .dashboard-primary-action {
   background: var(--dash-ink);
-  color: #fff;
+  color: var(--dash-paper);
   box-shadow: 0 8px 18px rgba(23, 33, 23, 0.15);
 }
 
-.dashboard-primary-action:hover:not(:disabled) { background: #263526; transform: translateY(-1px); }
-.dashboard-secondary-action { border-color: var(--dash-line-strong); background: rgba(255, 255, 252, 0.72); color: var(--dash-ink); }
-.dashboard-secondary-action:hover:not(:disabled) { border-color: #9cb08f; background: #fff; transform: translateY(-1px); }
-.dashboard-danger-action { border-color: #e5beb8; background: #fff7f5; color: #963e34; }
-.dashboard-danger-action:hover:not(:disabled) { background: #fff0ec; }
+.dashboard-primary-action:hover:not(:disabled) { background: var(--dash-ink-soft); transform: translateY(-1px); }
+.dashboard-secondary-action { border-color: var(--dash-line-strong); background: var(--dash-card); color: var(--dash-ink); }
+.dashboard-secondary-action:hover:not(:disabled) { border-color: var(--dash-line-strong); background: var(--dash-card-solid); transform: translateY(-1px); }
+.dashboard-danger-action { border-color: var(--dash-line); background: var(--danger-soft); color: var(--danger); }
+.dashboard-danger-action:hover:not(:disabled) { background: var(--danger-soft); }
 .dashboard-primary-action:disabled, .dashboard-secondary-action:disabled, .dashboard-danger-action:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .dashboard-panel-footer {
@@ -231,7 +231,7 @@ body {
 .dashboard-save-warning { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: #96620d; font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; }
 
 .dashboard-pulse-timeline { display: grid; gap: 10px; }
-.dashboard-pulse-line { position: relative; height: 7px; border-radius: 99px; background: #e5ebe2; }
+.dashboard-pulse-line { position: relative; height: 7px; border-radius: 99px; background: var(--dash-line); }
 .dashboard-pulse-line i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, #c1f779, var(--dash-signal-deep)); }
 .dashboard-pulse-line b { position: absolute; top: 50%; width: 13px; height: 13px; border: 3px solid #fff; border-radius: 50%; background: var(--dash-ink); box-shadow: 0 1px 4px rgba(20, 30, 18, 0.2); transform: translate(-50%, -50%); }
 .dashboard-pulse-line:focus-visible { outline: 2px solid #4a7d22; outline-offset: 5px; }
@@ -250,12 +250,12 @@ body {
 .dashboard-inline-link, .dashboard-icon-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
 .dashboard-inline-link:hover { color: var(--dash-ink); }
 .dashboard-icon-link { width: 32px; height: 32px; justify-content: center; border: 1px solid var(--dash-line); border-radius: 10px; }
-.dashboard-icon-link:hover { border-color: var(--dash-line-strong); background: #f5f8f3; color: var(--dash-ink); }
+.dashboard-icon-link:hover { border-color: var(--dash-line-strong); background: var(--dash-inset); color: var(--dash-ink); }
 .dashboard-task-queue { display: grid; gap: 2px; margin-top: 22px; }
 .dashboard-task-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; padding: 11px 0; border-top: 1px solid var(--dash-line); }
 .dashboard-task-row:first-child { border-top: 0; }
 .dashboard-task-check { display: grid; width: 25px; height: 25px; place-items: center; padding: 0; border: 1px solid #b8c8b2; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; }
-.dashboard-task-check:hover:not(:disabled) { border-color: var(--dash-signal-deep); background: #eef8e8; }
+.dashboard-task-check:hover:not(:disabled) { border-color: var(--dash-signal-deep); background: var(--dash-inset); }
 .dashboard-task-check.is-complete { border-color: var(--dash-signal-deep); background: var(--dash-signal-deep); }
 .dashboard-task-row-copy { display: grid; min-width: 0; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--dash-ink); text-align: left; cursor: pointer; }
 .dashboard-task-row-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
@@ -263,10 +263,10 @@ body {
 .dashboard-task-row-meta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 0; color: var(--dash-muted); font-size: 11px; white-space: nowrap; }
 .dashboard-task-row-meta > span.is-overdue { color: var(--dash-danger); font-weight: 750; }
 .dashboard-pending-actions { display: inline-flex; gap: 3px; }
-.dashboard-pending-actions button { display: grid; width: 23px; height: 23px; place-items: center; padding: 0; border: 1px solid var(--dash-line); border-radius: 7px; background: #f6f8f4; color: var(--dash-muted); cursor: pointer; }
+.dashboard-pending-actions button { display: grid; width: 23px; height: 23px; place-items: center; padding: 0; border: 1px solid var(--dash-line); border-radius: 7px; background: var(--dash-inset); color: var(--dash-muted); cursor: pointer; }
 .dashboard-pending-actions button:hover { color: var(--dash-ink); }
 .dashboard-empty-state { display: grid; justify-items: start; gap: 6px; margin: 22px 0; padding: 22px 0; }
-.dashboard-empty-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: #eef7e7; color: var(--dash-signal-deep); }
+.dashboard-empty-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: var(--dash-inset); color: var(--dash-signal-deep); }
 .dashboard-empty-state strong { font-size: 13px; }
 .dashboard-empty-state p { max-width: 280px; margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.45; }
 
@@ -413,10 +413,10 @@ body {
 .work-queue-tabs { display: flex; gap: 2px; margin: 0; }
 .work-queue-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
 /* One quiet inset marks the selected view; there is no second underline. */
-.work-queue-tabs button.active { background: #e9eee5; color: var(--dash-ink); }
+.work-queue-tabs button.active { background: var(--dash-inset); color: var(--dash-ink); }
 .work-queue-tabs button:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
-.work-queue-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #edf2e9; color: #5b6459; font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
-.work-queue-tabs button.active em { background: #e1f2d2; color: #5b6459; }
+.work-queue-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: var(--dash-inset); color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
+.work-queue-tabs button.active em { background: var(--inset); color: var(--dash-muted); }
 .work-queue-list { margin: 0; padding: 0 20px; }
 .work-queue-list .dashboard-task-queue { margin-top: 4px; }
 .work-queue-panel > .dashboard-panel-footer { margin: 0; padding: 10px 20px; }
@@ -429,7 +429,7 @@ body {
   margin: 0 auto;
 }
 
-.date-navigator { border-color: var(--dash-line); background: rgba(255, 255, 252, 0.76); border-radius: 12px; }
+.date-navigator { border-color: var(--dash-line); background: var(--dash-card); border-radius: 12px; }
 .date-navigator button { border-color: var(--dash-line); color: var(--dash-muted); }
 .formatted-date-picker { color: var(--dash-ink); }
 
@@ -443,7 +443,7 @@ body {
   .task-focus-details-trigger { width: auto; padding: 0 10px; }
   .task-focus-details-label { display: inline; }
 }
-.task-focus-details-trigger:hover { background: #f0f3ed; color: var(--dash-ink); transform: translateX(1px); }
+.task-focus-details-trigger:hover { background: var(--dash-inset); color: var(--dash-ink); transform: translateX(1px); }
 .task-focus-details-trigger:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
 .task-focus-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(86vh, 800px); padding: 0; overflow: hidden; border: 1px solid var(--dash-line); border-radius: 20px; background: var(--dash-card-solid); color: var(--dash-ink); box-shadow: 0 24px 80px rgba(15,25,17,.25); }
 .task-focus-dialog:focus, .task-focus-dialog:focus-visible { outline: none; }
@@ -620,7 +620,7 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
-.task-list-tab.active em { background: #e1f2d2; color: #5b6459; }
+.task-list-tab.active em { background: var(--inset); color: var(--dash-muted); }
 /* Views lead; icon-only Search, Calendar and Add task share the trailing edge.
    The column header below is labels only. */
 .task-list-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
@@ -685,7 +685,7 @@ button.task-focus-plan-row:hover { background: #f6f8f3; }
    date stays a quiet date at narrow widths. */
 .task-record.workspace-task .task-meta-due.danger { color: var(--dash-muted) !important; font-weight: 700; }
 .task-check { width: 24px; height: 24px; border-color: #b6c8b0; border-radius: 8px; }
-.task-check:hover:not(:disabled) { border-color: var(--dash-signal-deep); background: #eef8e8; }
+.task-check:hover:not(:disabled) { border-color: var(--dash-signal-deep); background: var(--dash-inset); }
 .task-check.is-completing { border-color: var(--dash-signal-deep); }
 .task-row-ring { justify-self: center; }
 .task-due { color: var(--dash-muted); font-size: 11px; font-weight: 700; }

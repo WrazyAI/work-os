@@ -56,9 +56,9 @@
   align-items: center;
   gap: 10px;
   padding: 9px 10px 9px 9px;
-  border: 1px solid rgba(23, 26, 24, 0.14);
+  border: 1px solid var(--conversation-line);
   border-radius: 18px;
-  background: rgba(255, 252, 246, 0.96);
+  background: var(--conversation-surface);
   color: var(--conversation-ink);
   box-shadow: 0 16px 36px rgba(18, 21, 18, 0.15), 0 2px 7px rgba(18, 21, 18, 0.06);
   cursor: pointer;
@@ -68,7 +68,7 @@
 }
 
 .conversation-launcher:hover {
-  border-color: rgba(23, 26, 24, 0.25);
+  border-color: var(--line-strong);
   box-shadow: 0 20px 42px rgba(18, 21, 18, 0.18), 0 3px 8px rgba(18, 21, 18, 0.07);
   transform: translateY(-2px);
 }
@@ -87,7 +87,7 @@
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(23, 26, 24, 0.12);
+  border: 1px solid var(--conversation-line);
   border-radius: 12px;
   background: var(--conversation-paper);
 }
@@ -166,7 +166,7 @@
 [data-conversation-surface="in-app"].progress-dock > .chat-surface {
   width: 100%;
   pointer-events: auto;
-  border: 1px solid rgba(23, 26, 24, 0.12);
+  border: 1px solid var(--conversation-line);
   border-radius: var(--conversation-radius);
   background: var(--conversation-paper);
   box-shadow: var(--conversation-shadow);
@@ -238,7 +238,7 @@
 
 [data-conversation-surface="in-app"] .chat-surface.is-open {
   overflow: hidden;
-  border: 1px solid rgba(23, 26, 24, 0.12);
+  border: 1px solid var(--conversation-line);
   border-radius: var(--conversation-radius);
   background: var(--conversation-paper);
   box-shadow: var(--conversation-shadow);
@@ -427,7 +427,7 @@
   width: 26px;
   height: 26px;
   margin-top: 2px;
-  border: 1px solid rgba(23, 26, 24, 0.12);
+  border: 1px solid var(--conversation-line);
   background: var(--conversation-surface);
   box-shadow: 0 2px 7px rgba(23, 26, 24, 0.08);
 }
@@ -519,7 +519,7 @@
   align-items: center;
   gap: 4px;
   min-height: 23px;
-  border: 1px solid rgba(23, 26, 24, 0.12);
+  border: 1px solid var(--conversation-line);
   border-radius: 999px;
   padding: 0 8px;
   background: rgba(255, 252, 246, 0.78);
