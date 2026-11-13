@@ -43,7 +43,7 @@ export interface AdminOverviewPerson {
   email: string | null;
   roleProfile: string | null;
   timezone: string | null;
-  schedule: { start: string; end: string; daysOfWeek: number[]; timezone: string } | null;
+  schedule: { arrangement?: "scheduled" | "flexible"; start: string; end: string; daysOfWeek: number[]; timezone: string } | null;
   attendance: {
     state: AttendanceState;
     source: "worktivity" | "none";
@@ -284,6 +284,7 @@ export type ActivityIntervalView = {
 };
 
 export interface PersonDetailResponse {
+  arrangementProposal?: import("../../../../src/modules/work-os/ArrangementReview").ArrangementReviewData | null;
   person: {
     id: string;
     display_name: string;

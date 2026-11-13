@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Camera, Check, Plus, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, Trash2, UserRound } from "lucide-react";
+import { WorkArrangementFields } from "../../../src/modules/work-os/WorkArrangementFields";
 import { apiRequestBlob } from "./api";
 import { ItemPillGroup, ProviderAccountPills } from "./ProfilePills";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -74,6 +75,7 @@ function formFromData(data: OnboardingData): ProfileFormState {
     weekStart: data.profile.weekStart,
     timeFormat: data.profile.timeFormat ?? "",
     schedule: {
+      arrangement: data.profile.schedule.arrangement,
       daysOfWeek: [...data.profile.schedule.daysOfWeek],
       shiftStart: data.profile.schedule.shiftStart,
       shiftEnd: data.profile.schedule.shiftEnd,
@@ -280,12 +282,10 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
       </div>
     </Section>
 
-    <Section title="Workday" description="Choose when Work OS expects your day to start, end, and pause.">
+    <Section title="Workday" description="Choose your work arrangement and expected workdays.">
       <div className="profile-schedule">
-        <div className="profile-schedule-note">Used for clock-in windows and scheduled check-ins.</div>
-        <div className="profile-day-picker" role="group" aria-label="Scheduled days">{[{ value: 1, label: "Mon" }, { value: 2, label: "Tue" }, { value: 3, label: "Wed" }, { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" }, { value: 0, label: "Sun" }].map((day) => <button key={day.value} type="button" aria-pressed={form.schedule.daysOfWeek.includes(day.value)} onClick={() => toggleDay(day.value)}>{day.label}</button>)}</div>
-        <div className="profile-field-grid compact"><Field label="Starts"><input type="time" value={form.schedule.shiftStart} onChange={(event) => updateSchedule({ shiftStart: event.target.value })} /></Field><Field label="Ends"><input type="time" value={form.schedule.shiftEnd} onChange={(event) => updateSchedule({ shiftEnd: event.target.value })} /></Field></div>
-        <div className="profile-breaks"><div className="profile-subhead"><strong>Break windows</strong><button type="button" className="profile-inline-action" onClick={() => updateSchedule({ breaks: [...form.schedule.breaks, { start: "12:00", end: "12:30" }] })}><Plus size={13} /> Add break</button></div>{form.schedule.breaks.length ? form.schedule.breaks.map((item, index) => <div className="profile-break-row" key={`${index}-${item.start}-${item.end}`}><input type="time" aria-label={`Break ${index + 1} starts`} value={item.start} onChange={(event) => updateBreak(index, { start: event.target.value })} /><span>to</span><input type="time" aria-label={`Break ${index + 1} ends`} value={item.end} onChange={(event) => updateBreak(index, { end: event.target.value })} /><button type="button" aria-label={`Remove break ${index + 1}`} onClick={() => updateSchedule({ breaks: form.schedule.breaks.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={13} /></button></div>) : <small className="profile-muted">No break windows added.</small>}</div>
+        <div className="profile-schedule-note">Flexible arrangements and changes to them are proposals for administrator review.</div>
+        <WorkArrangementFields value={form.schedule} onChange={(next) => updateSchedule(next)} disabled={busy || saving} authoritativeBreaks={data.breakPolicy.worktivityAuthoritative} />
       </div>
       <div className="profile-preference-row"><div><strong>Desktop check-ins</strong><small>Show scheduled check-ins from the desktop companion.</small></div><SettingsSwitch label="Desktop check-ins" checked={form.desktopEnabled} onChange={(value) => patchForm({ desktopEnabled: value })} /></div>
     </Section>

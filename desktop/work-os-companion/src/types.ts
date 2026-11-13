@@ -158,6 +158,7 @@ export interface InsightsData {
 }
 
 export interface DayData {
+  arrangement?: { kind: "scheduled" | "flexible"; daysOfWeek: number[]; timezone: string } | null;
   at: string;
   shiftDate: string;
   shift: { startsAt: string; endsAt: string; timezone: string; breaks: Array<{ startsAt: string; endsAt: string }> } | null;
@@ -250,9 +251,10 @@ export type OnboardingRequirement =
   | "privacyAcknowledged";
 
 export interface OnboardingSchedule {
+  arrangement?: "scheduled" | "flexible";
   daysOfWeek: number[];
-  shiftStart: string;
-  shiftEnd: string;
+  shiftStart: string | null;
+  shiftEnd: string | null;
   breaks: Array<{ start: string; end: string }>;
 }
 

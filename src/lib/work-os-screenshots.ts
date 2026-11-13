@@ -973,6 +973,8 @@ export function screenshotRunMode(input: {
   timezone: string;
   shiftStart: string;
   shiftEnd: string;
+  arrangement?: "scheduled" | "flexible";
+  clockedInAt?: string | null;
   intervalMinutes?: number | null;
   eodLeadMinutes?: number | null;
   windowStart?: string | null;
@@ -982,6 +984,16 @@ export function screenshotRunMode(input: {
   eodCompleted?: boolean;
 }): ScreenshotRunMode | null {
   if (input.eodCompleted) return null;
+  if (input.arrangement === "flexible") {
+    const start = input.clockedInAt ? Date.parse(input.clockedInAt) : Number.NaN;
+    const now = input.now.getTime();
+    if (!Number.isFinite(start) || now < start) return null;
+    const end = input.clockedOutAt ? Date.parse(input.clockedOutAt) : Number.NaN;
+    if (Number.isFinite(end)) return now >= end + 2 * 60_000 ? "eod" : null;
+    const last = input.lastHourlyAt ? Date.parse(input.lastHourlyAt) : Number.NaN;
+    const interval = Math.max(15, Number(input.intervalMinutes ?? 60) || 60) * 60_000;
+    return !Number.isFinite(last) || now >= last + interval ? "hourly" : null;
+  }
   const localDate = localDateForTimezone(input.now, input.timezone);
   const at = (time: string) => Date.parse(zonedDateTimeToUtc(localDate, time, input.timezone).toISOString());
   const shiftStartAt = at(input.shiftStart);
@@ -1036,7 +1048,7 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
     if (exception.error || exception.data?.kind === "leave") continue;
     const shiftStart = String(exception.data?.shift_start ?? schedule.shift_start).slice(0, 5);
     const shiftEnd = String(exception.data?.shift_end ?? schedule.shift_end).slice(0, 5);
-    const session = await db().from("work_sessions").select("clocked_out_at")
+    const session = await db().from("work_sessions").select("clocked_in_at,clocked_out_at")
       .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", localDate)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     const target = SCHEDULE_AUDIT_TARGET(person.organization_id, person.id, localDate);
@@ -1050,6 +1062,8 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
     const lastHourly = auditRows.find((row) => row.action === "screenshot.hourly_completed")?.created_at;
     const mode = screenshotRunMode({
       now, timezone, shiftStart, shiftEnd,
+      arrangement: schedule.arrangement === "flexible" ? "flexible" : "scheduled",
+      clockedInAt: (session.data?.clocked_in_at as string | null) ?? null,
       intervalMinutes: schedule.screenshot_analysis_interval_minutes,
       eodLeadMinutes: schedule.screenshot_analysis_eod_lead_minutes,
       windowStart: schedule.screenshot_analysis_start ? String(schedule.screenshot_analysis_start).slice(0, 5) : null,

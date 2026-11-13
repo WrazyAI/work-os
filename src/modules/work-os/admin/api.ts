@@ -123,6 +123,7 @@ export interface GithubIntegrationReposResponse {
 }
 
 export interface PersonDetailResponse {
+  arrangementProposal?: import("../ArrangementReview").ArrangementReviewData | null;
   person: {
     id: string;
     display_name: string;

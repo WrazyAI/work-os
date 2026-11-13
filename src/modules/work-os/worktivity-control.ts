@@ -126,11 +126,13 @@ export function worktivityConfirmationRequirement(input: {
   now: string;
   scheduledStartsAt?: string | null;
   scheduledEndsAt?: string | null;
+  flexible?: boolean;
   body: Record<string, unknown>;
 }): WorktivityConfirmationRequirement | null {
   const now = Date.parse(input.now);
   if (!Number.isFinite(now)) return null;
   if (input.action === "clock_in") {
+    if (input.flexible) return null;
     const starts = input.scheduledStartsAt ? Date.parse(input.scheduledStartsAt) : Number.NaN;
     const ends = input.scheduledEndsAt ? Date.parse(input.scheduledEndsAt) : Number.NaN;
     const startable = Number.isFinite(starts) && now >= starts - 30 * 60_000 && now < ends;

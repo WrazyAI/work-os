@@ -305,8 +305,9 @@ function normalizeOverviewPerson(row: Loose): AdminOverviewPerson {
     // same ones the overview builder applies when a column is unset.
     schedule: schedule
       ? {
-          start: asText(schedule.start, "09:00"),
-          end: asText(schedule.end, "17:00"),
+          arrangement: schedule.arrangement === "flexible" ? "flexible" : "scheduled",
+          start: schedule.arrangement === "flexible" ? "" : asText(schedule.start, "09:00"),
+          end: schedule.arrangement === "flexible" ? "" : asText(schedule.end, "17:00"),
           daysOfWeek: Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek.map((day) => asNumber(day)).filter((day) => Number.isInteger(day)) : [1, 2, 3, 4, 5],
           timezone: asText(schedule.timezone, "UTC"),
         }
@@ -506,6 +507,8 @@ export function normalizePersonDetail(raw: unknown): PersonDetailResponse {
   const person = asRecord(source.person);
   const roleProfile = person.role_profile && typeof person.role_profile === "object" ? asRecord(person.role_profile) : null;
   const evidenceSummary = asRecord(source.evidenceSummary);
+  const proposal = asRecord(source.arrangementProposal);
+  const proposedSchedule = asRecord(proposal.schedule);
   return {
     person: {
       id: asText(person.id),
@@ -527,6 +530,10 @@ export function normalizePersonDetail(raw: unknown): PersonDetailResponse {
       };
     }),
     schedules: asRows(source.schedules),
+    arrangementProposal: source.arrangementProposal ? {
+      status: asText(proposal.status), revision: asNumber(proposal.revision), submittedAt: asIsoOrNull(proposal.submittedAt), timezone: asText(proposal.timezone, "UTC"), note: asTextOrNull(proposal.note), canReview: asBoolean(proposal.canReview),
+      schedule: Array.isArray(proposedSchedule.daysOfWeek) ? { arrangement: proposedSchedule.arrangement === "flexible" ? "flexible" : "scheduled", daysOfWeek: proposedSchedule.daysOfWeek.map(Number), shiftStart: asTextOrNull(proposedSchedule.shiftStart), shiftEnd: asTextOrNull(proposedSchedule.shiftEnd), breaks: asRows(proposedSchedule.breaks).map((row) => ({ start: asText(row.start), end: asText(row.end) })) } : null,
+    } : null,
     exceptions: asRows(source.exceptions),
     sessions: asRows(source.sessions),
     reports: asRows(source.reports),

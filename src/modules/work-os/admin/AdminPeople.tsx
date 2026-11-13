@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
+import { ArrangementReview } from "../ArrangementReview";
 import { adminFetch, adminKeys, type AdminOverview, type PersonDetailResponse } from "./api";
 import {
   Avatar,
@@ -232,6 +233,12 @@ export default function AdminPeoplePage() {
             </section>
 
             {/* Schedule */}
+            {detail.data.arrangementProposal ? <ArrangementReview key={`${selectedId}:${detail.data.arrangementProposal.revision}`} proposal={detail.data.arrangementProposal} onReview={async (body) => {
+              const result = await adminFetch<{ status: string; effectiveFrom?: string | null }>(`/api/work-os/admin/people/${selectedId}/arrangement`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+              void queryClient.invalidateQueries({ queryKey: adminKeys.person(selectedId ?? "") });
+              void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "overview"] });
+              return result;
+            }} /> : null}
             <section className="grid gap-2.5">
               <SectionHeading icon={CalendarClock} title="Schedule" detail="Most recent configured schedule and upcoming exceptions." />
               {detail.data.schedules.length ? (
@@ -239,7 +246,7 @@ export default function AdminPeoplePage() {
                   {detail.data.schedules.slice(0, 2).map((schedule) => (
                     <li key={String(schedule.id)} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 first:pt-1 last:pb-1">
                       <span className="text-[12px] font-medium text-[var(--text-primary)]">
-                        {String(schedule.shift_start).slice(0, 5)}–{String(schedule.shift_end).slice(0, 5)} · {String(schedule.timezone)}
+                         {schedule.arrangement === "flexible" ? "Flexible hours" : `${String(schedule.shift_start).slice(0, 5)}–${String(schedule.shift_end).slice(0, 5)}`} · {String(schedule.timezone)}
                       </span>
                       <span className="text-[11px] text-[var(--text-tertiary)]">
                         {Array.isArray(schedule.days_of_week) ? (schedule.days_of_week as number[]).map((day) => ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][day]).join(" ") : ""}
@@ -425,7 +432,7 @@ function PersonRow({ row, onOpen }: { row: BoardRow; onOpen: (id: string) => voi
         </span>
         <span className="mt-0.5 block truncate text-[11px] text-[var(--text-tertiary)]">
           {row.role ?? "No role profile"}
-          {row.schedule ? ` · ${row.schedule.start}–${row.schedule.end} ${row.schedule.timezone}` : " · No schedule"}
+          {row.schedule ? ` · ${row.schedule.arrangement === "flexible" ? "Flexible hours" : `${row.schedule.start}–${row.schedule.end}`} ${row.schedule.timezone}` : " · No schedule"}
         </span>
       </span>
       <span className="hidden shrink-0 items-center gap-3 text-[11px] tabular-nums text-[var(--text-secondary)] lg:flex">

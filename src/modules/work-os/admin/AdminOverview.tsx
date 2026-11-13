@@ -164,7 +164,7 @@ export default function AdminOverviewPage() {
                       </p>
                       <p className="truncate text-[11px] text-[var(--text-tertiary)]">
                         {person.roleProfile ?? "No role profile"}
-                        {person.schedule ? ` · ${person.schedule.start}–${person.schedule.end} ${person.schedule.timezone}` : " · No schedule"}
+                        {person.schedule ? ` · ${person.schedule.arrangement === "flexible" ? "Flexible hours" : `${person.schedule.start}–${person.schedule.end}`} ${person.schedule.timezone}` : " · No schedule"}
                       </p>
                     </div>
                   </div>

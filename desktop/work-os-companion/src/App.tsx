@@ -4995,6 +4995,10 @@ export default function App() {
   }
 
   function clockIn() {
+    if (visibleDay?.arrangement?.kind === "flexible" && !syncBypassRef.current) {
+      void act("shift.clock_in", () => performWorktivityControl("clock_in"));
+      return;
+    }
     const shift = visibleDay?.shift;
     const now = pulseNow.getTime();
     const starts = shift ? Date.parse(shift.startsAt) : NaN;

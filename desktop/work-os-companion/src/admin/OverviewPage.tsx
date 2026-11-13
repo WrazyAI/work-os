@@ -247,7 +247,7 @@ export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps
                           <Avatar name={person.displayName} size={28} />
                           <span className="min-w-0">
                             <b><button type="button" className="admin-record-open" aria-label={`Open ${person.displayName} record`} onClick={(event) => { event.stopPropagation(); onOpenPerson(person.personId); }}>{person.displayName}</button></b>
-                            <small>{person.roleProfile ?? "Unmapped role"}{person.schedule ? ` · ${person.schedule.start}–${person.schedule.end}` : " · No schedule"}</small>
+                            <small>{person.roleProfile ?? "Unmapped role"}{person.schedule ? ` · ${person.schedule.arrangement === "flexible" ? "Flexible hours" : `${person.schedule.start}–${person.schedule.end}`}` : " · No schedule"}</small>
                           </span>
                         </span>
                       </td>

@@ -12,6 +12,7 @@ import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
 import { PROFILE_KINDS, addProfileItem, buildWorkPreferences, profileSetupIssue, removeProfileItem, userProfileItem } from "./onboardingProfile";
 import { fetchJson, requestId, type AnyRow } from "./model";
 import styles from "./EmployeeSettings.module.css";
+import { WorkArrangementFields } from "../WorkArrangementFields";
 
 export default function EmployeeSettings() {
   const queryClient = useQueryClient();
@@ -20,6 +21,8 @@ export default function EmployeeSettings() {
   const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   const [language, setLanguage] = useState("en");
+  const [arrangement, setArrangement] = useState<"scheduled" | "flexible">("scheduled");
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
   const [shiftStart, setShiftStart] = useState("09:00");
   const [shiftEnd, setShiftEnd] = useState("17:00");
   const [breakStart, setBreakStart] = useState("");
@@ -52,6 +55,8 @@ export default function EmployeeSettings() {
     setTimezone(profile.timezone || "UTC");
     setLanguage(profile.language || "en");
     const schedule = profile.schedule || {};
+    setArrangement(schedule.arrangement === "flexible" ? "flexible" : "scheduled");
+    setDaysOfWeek(Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [1, 2, 3, 4, 5]);
     setShiftStart(schedule.shiftStart || "09:00");
     setShiftEnd(schedule.shiftEnd || "17:00");
     const firstBreak = Array.isArray(schedule.breaks) ? schedule.breaks[0] : null;
@@ -82,7 +87,8 @@ export default function EmployeeSettings() {
         timezone,
         language,
         schedule: {
-          daysOfWeek: [1, 2, 3, 4, 5],
+          arrangement,
+          daysOfWeek,
           shiftStart,
           shiftEnd,
           breaks: breakStart && breakEnd ? [{ start: breakStart, end: breakEnd }] : [],
@@ -149,7 +155,7 @@ export default function EmployeeSettings() {
   const organizationSetup = onboarding.data?.organizationSetup;
   const officialSchedule = organizationSetup?.officialSchedule;
   const officialScheduleLabel = officialSchedule
-    ? `${officialSchedule.shiftStart}–${officialSchedule.shiftEnd} · ${officialSchedule.timezone}`
+    ? `${officialSchedule.arrangement === "flexible" ? "Flexible hours" : `${officialSchedule.shiftStart}–${officialSchedule.shiftEnd}`} · ${officialSchedule.timezone}`
     : "Pending manager setup";
   const worktivityBreaks = onboarding.data?.breakPolicy?.worktivityAuthoritative === true;
   const error = onboarding.error || saveOnboarding.error || changeConsent.error;
@@ -243,26 +249,12 @@ export default function EmployeeSettings() {
                   <span className={styles.fieldLabel}>Language</span>
                   <input className={styles.input} value={language} onChange={(event) => setLanguage(event.target.value)} />
                 </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Shift start</span>
-                  <input type="time" className={styles.input} value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Shift end</span>
-                  <input type="time" className={styles.input} value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} />
-                </label>
-                {!worktivityBreaks ? (
-                  <>
-                    <label className={styles.field}>
-                      <span className={styles.fieldLabel}>Break start</span>
-                      <input type="time" className={styles.input} value={breakStart} onChange={(event) => setBreakStart(event.target.value)} />
-                    </label>
-                    <label className={styles.field}>
-                      <span className={styles.fieldLabel}>Break end</span>
-                      <input type="time" className={styles.input} value={breakEnd} onChange={(event) => setBreakEnd(event.target.value)} />
-                    </label>
-                  </>
-                ) : null}
+                <div className={styles.fieldFull}>
+                  <WorkArrangementFields value={{ arrangement, daysOfWeek, shiftStart, shiftEnd, breaks: breakStart || breakEnd ? [{ start: breakStart, end: breakEnd }] : [] }} authoritativeBreaks={worktivityBreaks} disabled={saveOnboarding.isPending}
+                    onChange={(next) => { setArrangement(next.arrangement ?? "scheduled"); setDaysOfWeek(next.daysOfWeek); setShiftStart(next.shiftStart ?? ""); setShiftEnd(next.shiftEnd ?? ""); setBreakStart(next.breaks[0]?.start ?? ""); setBreakEnd(next.breaks[0]?.end ?? ""); }} />
+                  <p className={styles.hint}>Submitted arrangements await administrator review. Your current official arrangement remains in effect until a change is approved.</p>
+                  {onboarding.data?.reviewNote ? <p className={styles.hint}>Administrator note: {String(onboarding.data.reviewNote)}</p> : null}
+                </div>
                 <label className={`${styles.field} ${styles.fieldFull}`}>
                   <span className={styles.fieldLabel}>Sensitive apps/domains to exclude <em>optional</em></span>
                   <input className={styles.input} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="password manager, bank.example" />

@@ -28,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
     const today = todayIso();
     const evidenceFrom = addDaysIso(today, -6);
 
-    const [personResult, teamsResult, schedulesResult, exceptionsResult, sessionsResult, reportsResult, updatesResult, intervalsResult, recapDaysResult, evidenceSummaryResult] = await Promise.all([
+    const [personResult, teamsResult, schedulesResult, exceptionsResult, sessionsResult, reportsResult, updatesResult, intervalsResult, recapDaysResult, evidenceSummaryResult, onboardingResult] = await Promise.all([
       db.from("work_people")
         .select("*, role_profile:work_role_profiles(id,name)")
         .eq("organization_id", organizationId).eq("id", personId).maybeSingle(),
@@ -36,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
         .select("team_id,is_manager,team:work_teams(id,name,active)")
         .eq("person_id", personId),
       db.from("work_schedules")
-        .select("id,timezone,shift_start,shift_end,days_of_week,break_windows,effective_from,effective_to,active,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes")
+        .select("id,arrangement,timezone,shift_start,shift_end,days_of_week,break_windows,effective_from,effective_to,active,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes")
         .eq("organization_id", organizationId).eq("person_id", personId)
         .order("effective_from", { ascending: false }).limit(6),
       db.from("work_schedule_exceptions")
@@ -90,10 +90,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
         WHERE e.organization_id = $1 AND e.person_id = $2
           AND e.evidence_date >= $3 AND e.evidence_date <= $4
       `, [organizationId, personId, evidenceFrom, today]),
+      db.from("work_employee_onboarding").select("status,draft_revision,employee_submitted_at,schedule_proposal,timezone,review_note")
+        .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle(),
     ]);
     for (const [label, result] of [
       ["person", personResult], ["teams", teamsResult], ["schedules", schedulesResult], ["exceptions", exceptionsResult],
       ["sessions", sessionsResult], ["reports", reportsResult], ["updates", updatesResult], ["intervals", intervalsResult],
+      ["onboarding", onboardingResult],
     ] as const) {
       if (result.error) throw new Error(`load person detail ${label}: ${result.error.message}`);
     }
@@ -121,6 +124,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
       person: personResult.data,
       teams: teamsResult.data ?? [],
       schedules: schedulesResult.data ?? [],
+      arrangementProposal: onboardingResult.data ? {
+        status: onboardingResult.data.status,
+        revision: onboardingResult.data.draft_revision,
+        submittedAt: onboardingResult.data.employee_submitted_at,
+        timezone: onboardingResult.data.timezone ?? "UTC",
+        schedule: onboardingResult.data.schedule_proposal,
+        note: onboardingResult.data.review_note,
+        canReview: auth.access.role === "admin",
+      } : null,
       exceptions: exceptionsResult.data ?? [],
       sessions,
       reports: reportsResult.data ?? [],

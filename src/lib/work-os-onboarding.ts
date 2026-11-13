@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
-import { validateWorkOsBreakWindows, validateWorkOsTime, validateWorkOsTimezone } from "@/lib/work-os-schedule-validation";
+import { validateWorkOsTimezone } from "@/lib/work-os-schedule-validation";
+import { normalizeWorkArrangement } from "@/modules/work-os/work-arrangement";
 import {
   WORK_PROFILE_CATALOG_VERSION,
   inferArchetype,
@@ -63,18 +64,7 @@ function normalizedEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function scheduleProposal(value: unknown) {
-  const input = value && typeof value === "object" ? value as Json : {};
-  const days = Array.isArray(input.daysOfWeek)
-    ? [...new Set(input.daysOfWeek.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))]
-    : [];
-  if (!days.length) throw new Error("schedule days are required");
-  const shiftStart = validateWorkOsTime(input.shiftStart, "shift start");
-  const shiftEnd = validateWorkOsTime(input.shiftEnd, "shift end");
-  if (shiftStart === shiftEnd) throw new Error("shift start and end must be different");
-  const breaks = validateWorkOsBreakWindows(input.breaks, shiftStart, shiftEnd);
-  return { daysOfWeek: days.sort(), shiftStart, shiftEnd, breaks };
-}
+const scheduleProposal = normalizeWorkArrangement;
 
 async function policyScheduleProposal(organizationId: string, value: unknown) {
   const proposal = scheduleProposal(value);
@@ -115,6 +105,8 @@ async function promoteSubmittedAdminSchedule(
   timezone: string,
 ) {
   if (!shouldPromoteSubmittedSchedule(access.role)) return;
+  // Flexible arrangements always use explicit review, including dual-role admins.
+  if (schedule.arrangement === "flexible") return;
   const supabase = db();
   const { data: existing, error: existingError } = await supabase.from("work_schedules").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("active", true)
@@ -125,6 +117,7 @@ async function promoteSubmittedAdminSchedule(
     person_id: access.personId,
     timezone,
     days_of_week: schedule.daysOfWeek,
+    arrangement: schedule.arrangement,
     shift_start: schedule.shiftStart,
     shift_end: schedule.shiftEnd,
     break_windows: schedule.breaks,
@@ -158,10 +151,11 @@ function currentScheduleShape(schedule: Json | null) {
   if (!schedule) return null;
   const breaks = Array.isArray(schedule.break_windows) ? schedule.break_windows : [];
   return {
+    arrangement: schedule.arrangement === "flexible" ? "flexible" : "scheduled",
     timezone: String(schedule.timezone ?? "UTC"),
     daysOfWeek: Array.isArray(schedule.days_of_week) ? schedule.days_of_week : [1, 2, 3, 4, 5],
-    shiftStart: String(schedule.shift_start ?? "").slice(0, 5),
-    shiftEnd: String(schedule.shift_end ?? "").slice(0, 5),
+    shiftStart: schedule.arrangement === "flexible" ? null : String(schedule.shift_start ?? "").slice(0, 5),
+    shiftEnd: schedule.arrangement === "flexible" ? null : String(schedule.shift_end ?? "").slice(0, 5),
     breaks: breaks.map((item) => {
       const row = item && typeof item === "object" ? item as Json : {};
       return { start: String(row.start ?? "").slice(0, 5), end: String(row.end ?? "").slice(0, 5) };
@@ -290,7 +284,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     screenshotConsentProvided,
     profileConfirmed: !!onboarding?.profile_confirmed_at,
     timezoneProvided: !!onboarding?.timezone,
-    scheduleProvided: !!officialSchedule || !!proposedSchedule?.shiftStart,
+    scheduleProvided: onboarding?.status !== "changes_requested" && (!!officialSchedule || !!proposedSchedule?.shiftStart || (proposedSchedule?.arrangement === "flexible" && Array.isArray(proposedSchedule.daysOfWeek) && proposedSchedule.daysOfWeek.length > 0)),
     notificationsConfigured: typeof notifications.desktopEnabled === "boolean",
     privacyAcknowledged: !!privacy.noticeAcknowledgedAt,
   };
@@ -316,7 +310,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
       language: onboarding?.language ?? nifty.language ?? "en",
       weekStart: nifty.week_start ?? 1,
       timeFormat: nifty.time_format ?? null,
-      schedule: officialSchedule ? currentScheduleShape(officialSchedule) : proposedSchedule ?? {
+      schedule: proposedSchedule && Array.isArray(proposedSchedule.daysOfWeek) && proposedSchedule.daysOfWeek.length ? proposedSchedule : officialSchedule ? currentScheduleShape(officialSchedule) : {
         daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [],
       },
       notifications: { desktopEnabled: notifications.desktopEnabled ?? true },
@@ -358,6 +352,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
       officialSchedule: officialSchedule ? currentScheduleShape(officialSchedule) : null,
     },
     status: onboarding?.status ?? "not_started",
+    reviewNote: onboarding?.review_note ?? null,
     submittedAt: onboarding?.employee_submitted_at ?? null,
     draft: { step: onboarding?.draft_step ?? "seen", updatedAt: onboarding?.draft_updated_at ?? null, revision: Number(onboarding?.draft_revision ?? 0) },
     breakPolicy: { worktivityAuthoritative: authoritativeBreaks },

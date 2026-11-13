@@ -4,8 +4,9 @@ export interface WorkOsScheduleRule {
   id: string;
   timezone: string;
   days_of_week: number[];
-  shift_start: string;
-  shift_end: string;
+  arrangement?: "scheduled" | "flexible";
+  shift_start: string | null;
+  shift_end: string | null;
   break_windows?: Array<{ start: string; end: string }>;
   effective_from: string;
   effective_to?: string | null;
@@ -133,11 +134,18 @@ function ruleApplies(rule: WorkOsScheduleRule, date: string, weekday: number) {
     (to === null || to >= date);
 }
 
+function coversDate(rule: WorkOsScheduleRule, date: string) {
+  const from = dateKey(rule.effective_from);
+  const to = dateKey(rule.effective_to);
+  return from !== null && from <= date && (to === null || to >= date);
+}
+
 function buildWindow(
   rule: WorkOsScheduleRule,
   date: string,
   exception?: WorkOsScheduleException,
 ): WorkOsShiftWindow | null {
+  if (rule.arrangement === "flexible" || !rule.shift_start || !rule.shift_end) return null;
   if (exception?.kind === "leave") return null;
   const startTime = exception?.shift_start || rule.shift_start;
   const endTime = exception?.shift_end || rule.shift_end;
@@ -176,6 +184,7 @@ function candidateShiftWindows(
     for (const rule of rules) {
       const local = localParts(at, rule.timezone);
       const date = shiftDate(local.date, offset);
+      if (!coversDate(rule, date)) continue;
       const weekday = (local.weekday + offset + 7) % 7;
       const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
       if (!exception && !ruleApplies(rule, date, weekday)) continue;
@@ -230,6 +239,7 @@ export function resolveShiftWindowForDate(
   const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
   if (exception?.kind === "leave") return null;
   for (const rule of rules) {
+    if (!coversDate(rule, date)) continue;
     const weekday = weekdayForLocalDate(date, rule.timezone);
     if (!ruleApplies(rule, date, weekday) && exception?.kind !== "working_day") continue;
     const window = buildWindow(rule, date, exception);
@@ -249,6 +259,13 @@ export function hasScheduledShiftOnDate(
 ): boolean {
   if (!rules.length) return true;
   const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
+  const flexible = rules.find((rule) => rule.arrangement === "flexible" &&
+    (dateKey(rule.effective_from) ?? "9999") <= date && (dateKey(rule.effective_to) ?? "9999") >= date);
+  if (flexible) {
+    if (exception?.kind === "leave") return false;
+    if (exception?.kind === "working_day" || exception?.kind === "changed_shift") return true;
+    return flexible.days_of_week.includes(weekdayForLocalDate(date, flexible.timezone));
+  }
   if (exception) return resolveShiftWindowForDate(rules, exceptions, date) !== null;
   // No rule covers the date (for example before the person's first schedule):
   // keep the legacy record instead of silently hiding those days.

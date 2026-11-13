@@ -86,5 +86,5 @@ export async function getWorkOsDay(
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
   const workdayPrompt = suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined);
-  return { at: at.toISOString(), shiftDate, shift, dayShift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: taskRows, taskHistory: historyRows, workspaceSummary: { ...workspace, tasks: taskRows }, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
+  return { at: at.toISOString(), shiftDate, shift, dayShift: workday.arrangement?.kind === "flexible" ? null : dayShift, arrangement: workday.arrangement, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: taskRows, taskHistory: historyRows, workspaceSummary: { ...workspace, tasks: taskRows }, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
 }

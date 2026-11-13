@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { ArrangementReview } from "../../../../src/modules/work-os/ArrangementReview";
+import { apiRequest } from "../api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
@@ -187,7 +189,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                         </span>
                       </td>
                       <td data-label="Role profile">{status?.roleProfile ?? (person.role_profile_id ? "Mapped" : "Unmapped")}</td>
-                      <td data-label="Schedule" className="admin-quiet">{status?.schedule ? `${status.schedule.start}–${status.schedule.end} ${status.schedule.timezone}` : "No schedule"}</td>
+                      <td data-label="Schedule" className="admin-quiet">{status?.schedule ? `${status.schedule.arrangement === "flexible" ? "Flexible hours" : `${status.schedule.start}–${status.schedule.end}`} ${status.schedule.timezone}` : "No schedule"}</td>
                       <td data-label="Status now">
                         <Pill tone={attendanceTone(status?.attendance.state ?? "unknown")}>
                           {attendanceLabel(status?.attendance.state ?? "unknown")}{status?.attendance.freshness === "stale" ? " · stale" : ""}
@@ -306,13 +308,20 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
               </div>
             </section>
 
+            {detail.data.arrangementProposal ? <ArrangementReview key={`${selectedId}:${detail.data.arrangementProposal.revision}`} proposal={detail.data.arrangementProposal} onReview={async (body) => {
+              const result = await apiRequest<{ status: string; effectiveFrom?: string | null }>(`/api/work-os/admin/people/${selectedId}/arrangement`, { method: "POST", body: JSON.stringify(body) });
+              void queryClient.invalidateQueries({ queryKey: adminKeys.person(selectedId ?? "") });
+              void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "overview"] });
+              return result;
+            }} /> : null}
+
             <section className="admin-block">
               <h3><CalendarClock size={14} aria-hidden /> Schedule</h3>
               {detail.data.schedules.length ? (
                 <ul className="admin-rows">
                   {detail.data.schedules.slice(0, 4).map((schedule, index) => (
                     <li key={index}>
-                      <span>{String(schedule.shift_start ?? schedule.start ?? "").slice(0, 5)}–{String(schedule.shift_end ?? schedule.end ?? "").slice(0, 5)}</span>
+                      <span>{schedule.arrangement === "flexible" ? "Flexible hours" : `${String(schedule.shift_start ?? schedule.start ?? "").slice(0, 5)}–${String(schedule.shift_end ?? schedule.end ?? "").slice(0, 5)}`}</span>
                       <small>{String(schedule.timezone ?? "")} · from {formatWorkOsFullDate(String(schedule.effective_from ?? ""))}</small>
                     </li>
                   ))}

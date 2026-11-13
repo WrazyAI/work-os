@@ -20,7 +20,7 @@ export interface AdminOverviewPerson {
   email: string | null;
   roleProfile: string | null;
   timezone: string | null;
-  schedule: { start: string; end: string; daysOfWeek: number[]; timezone: string } | null;
+  schedule: { arrangement?: "scheduled" | "flexible"; start: string; end: string; daysOfWeek: number[]; timezone: string } | null;
   attendance: {
     state: AttendanceState;
     source: "worktivity" | "none";
@@ -238,7 +238,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("id,display_name,email,role_profile_id,nifty_member_id,worktivity_employee_id,role_profile:work_role_profiles(id,name)")
       .eq("organization_id", organizationId).eq("active", true).order("display_name"),
     db.from("work_schedules")
-      .select("id,person_id,timezone,shift_start,shift_end,days_of_week,effective_from,effective_to,active")
+      .select("id,person_id,arrangement,timezone,shift_start,shift_end,days_of_week,effective_from,effective_to,active")
       .eq("organization_id", organizationId).eq("active", true).order("effective_from", { ascending: false }),
     db.from("work_attendance_observations")
       .select("person_id,state,observed_at,clocked_in_at,clocked_out_at,activity_observed_at,provider_break_seconds")
@@ -491,8 +491,9 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       timezone: schedule ? String(schedule.timezone ?? "UTC") : null,
       schedule: schedule
         ? {
-            start: timeValue(schedule.shift_start) ?? "09:00",
-            end: timeValue(schedule.shift_end) ?? "17:00",
+            arrangement: schedule.arrangement === "flexible" ? "flexible" as const : "scheduled" as const,
+            start: schedule.arrangement === "flexible" ? "" : timeValue(schedule.shift_start) ?? "09:00",
+            end: schedule.arrangement === "flexible" ? "" : timeValue(schedule.shift_end) ?? "17:00",
             daysOfWeek: Array.isArray(schedule.days_of_week) ? schedule.days_of_week.map(Number) : [1, 2, 3, 4, 5],
             timezone: String(schedule.timezone ?? "UTC"),
           }

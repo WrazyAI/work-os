@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { currentWorkArrangement } from "@/lib/work-os-current-arrangement";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { listPersonTasks } from "@/lib/work-os";
 import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
@@ -112,6 +113,8 @@ export async function activeSession(access: WorkOsAccess) {
 }
 
 async function unscheduledSessionContext(access: WorkOsAccess, at: Date) {
+  const official = await currentWorkArrangement(access, at);
+  if (official) return { timezone: official.timezone, shiftDate: localDateForTimezone(at, official.timezone) };
   const { data, error } = await db().from("work_employee_onboarding").select("timezone")
     .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).maybeSingle();
   if (error) throw new Error(`load employee timezone: ${error.message}`);
@@ -333,7 +336,9 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     firstFollowUpMinutes: cadence.firstFollowUpMinutes,
     storedCheckInIntervalMinutes: session?.check_in_interval_minutes as number | null,
   });
-  return { session, plan, prompt: promptDecision, cadence, shift, shiftDate: context.shiftDate, at: at.toISOString() };
+  const official = await currentWorkArrangement(access, at);
+  const arrangement = official ? { kind: official.arrangement ?? "scheduled", daysOfWeek: official.days_of_week, timezone: official.timezone } : null;
+  return { session, plan, prompt: promptDecision, cadence, shift, arrangement, shiftDate: context.shiftDate, at: at.toISOString() };
 }
 
 /** Claims a due notification after a companion has decided to display it.
@@ -359,7 +364,8 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   const observedAt = value(body.observed_at) ?? new Date().toISOString();
   const observed = new Date(observedAt); if (Number.isNaN(observed.getTime())) throw new Error("observed_at must be a valid timestamp");
   const shift = await shiftFor(access, observed, "startable");
-  const unscheduled = !shift;
+  const official = await currentWorkArrangement(access, observed);
+  const unscheduled = !shift && official?.arrangement !== "flexible";
   const exceptionAcknowledged = body.exception_acknowledged === true || body.unscheduled_acknowledged === true;
   const exceptionReason = value(body.exception_reason);
   if (unscheduled && !exceptionAcknowledged) throw new Error("Exception clock-in acknowledgement is required.");
