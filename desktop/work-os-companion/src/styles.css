@@ -916,7 +916,7 @@ button:disabled {
 .task-state.sync-issue {
   border-color: transparent;
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-ink);
 }
 .evidence-list h3 {
   font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;

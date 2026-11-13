@@ -453,6 +453,10 @@ describe("operational visualizations", () => {
     expect(app).toContain("blocked: baseModalOpen || themePromptOpen");
     expect(app).toContain("const otherOverlaysOpen = baseModalOpen || openPageGuide !== null");
     expect(app).toContain("if (!themePromptSaving) dismissThemePrompt()");
+    expect(app).toContain("themeRequestRef.current !== request");
+    expect(app).toContain("if (themePromptSaving) return");
+    expect(app).toContain("if (themePromptOpen || !themePromptSeen) return");
+    expect(themePrompt).toContain("if (saving) return");
     expect(themePrompt).toContain("How should Work OS look?");
     expect(appearanceSettings).toContain("Appearance");
     expect(appearanceSettings).toContain('label="Theme"');

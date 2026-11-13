@@ -77,10 +77,10 @@ export function systemPrefersDark(): boolean {
 }
 
 function defaultStorage(): ThemeStorage | null {
-  if (typeof localStorage === "undefined") return null;
   try {
-    return localStorage;
+    return typeof localStorage === "undefined" ? null : localStorage;
   } catch {
+    // Blocked storage can throw from the getter itself.
     return null;
   }
 }

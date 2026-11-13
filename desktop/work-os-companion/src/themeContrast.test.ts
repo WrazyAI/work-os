@@ -44,7 +44,7 @@ const pairs: [string, string, number][] = [
   ["ink-soft", "surface", 4.5], ["muted", "canvas", 4.5], ["muted", "surface", 4.5],
   ["muted", "raised", 4.5], ["danger", "surface", 4.5], ["warning", "surface", 4.5],
   ["observed", "surface", 4.5], ["signal", "surface", 4.5], ["ink-on-signal", "signal", 4.5],
-  ["focus", "surface", 3.0],
+  ["focus", "surface", 3.0], ["warning-ink", "warning-soft", 4.5], ["ink", "canvas", 4.5],
 ];
 
 describe("soft ash theme tokens", () => {
@@ -86,8 +86,12 @@ describe("soft ash theme tokens", () => {
     expect(dark.get("chart-ink")).not.toBe(dark.get("chart-4"));
   });
 
+  it("sets the inherited foreground for dark surfaces", () => {
+    expect(darkBlock).toContain("color: var(--ink);");
+  });
+
   it("never scales text or mascot art from the theme block", () => {
-    expect(dark.has("text-scale")).toBe(false);
-    expect(dark.has("mascot-scale")).toBe(false);
+    expect(darkNames.has("text-scale")).toBe(false);
+    expect(darkNames.has("mascot-scale")).toBe(false);
   });
 });

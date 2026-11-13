@@ -14,6 +14,7 @@
   --ink-on-signal: #182018;
   --danger-soft: #f9e5e1;
   --warning: #c88918;
+  --warning-ink: #6f500d;
   --warning-soft: #fff5dc;
   --observed: #2e617d;
   --observed-soft: #edf6fb;
@@ -37,6 +38,7 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  color: var(--ink);
 
   --canvas: #242527;
   --surface: #242527;
@@ -58,6 +60,7 @@
   --danger: #f09a93;
   --danger-soft: #3b2b2b;
   --warning: #e3b15f;
+  --warning-ink: #e3b15f;
   --warning-soft: #3a3223;
   --observed: #8fbdd8;
   --observed-soft: #26343c;

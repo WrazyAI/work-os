@@ -3981,7 +3981,7 @@ button:not(:disabled):active {
 
 .sync-chip.degraded {
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-ink);
 }
 
 /* Historical read-only state */

@@ -388,7 +388,7 @@ Expected: FAIL because the component does not exist.
 
 - [ ] **Step 3: Build the component**
 
-One `role="dialog"` labelled by the title and described by the lede. A close button (`aria-label="Close theme preview"`, 32px target), the split light/dark mark, the title, the lede, a `role="radiogroup"` with three `role="radio"` cards, a polite preview line, an error line, and one primary button that reads `Use Light|Dark|System` or `Saving…`. The preview line resolves System through `systemPrefersDark()` so it can say `Previewing System. This device is set to Dark.` The button is disabled only while saving, so an error state is retryable. Each card carries its icon (sun, moon, monitor from `lucide-react`), an `aria-hidden` CSS-only miniature, the name, and the one-line description from the spec. The radiogroup uses roving tabindex: the selected card is `tabIndex={0}`, the others `-1`; arrow keys, Home, and End move selection and preview. Focus the selected card on mount. Backdrop press and the close button call `onDismiss`; Escape is handled by the App's global modal trap, so do not add a second document listener.
+One `role="dialog"` labelled by the title and described by the lede. A close button (`aria-label="Close theme preview"`, 32px target), the split light/dark mark, the title, the lede, a `role="radiogroup"` with three `role="radio"` cards, a polite preview line, an error line, and one primary button that reads `Use Light|Dark|System` or `Saving…`. The preview line resolves System through `systemPrefersDark()` so it can say `Previewing System. This device is set to Dark.` The button is disabled only while saving, so an error state is retryable. Each card carries its icon (sun, moon, monitor from `lucide-react`), an `aria-hidden` CSS-only miniature, the name, and the one-line description from the spec. The radiogroup uses roving tabindex: the selected card is `tabIndex={0}`, the others `-1`; arrow keys, Home, and End move selection and preview. While `saving` is true, the choices and close control are inert so the persisted selection cannot change mid-save. Focus the selected card on mount. Backdrop press and the close button call `onDismiss`; Escape is handled by the App's global modal trap, so do not add a second document listener.
 
 - [ ] **Step 4: Write `theme-prompt.css`**
 
@@ -455,6 +455,7 @@ Add `theme`, `themePreview`, `themePromptSeen`, `themePromptOpen`, `themePromptS
 
 ```ts
 async function chooseTheme(next: ThemePreference, options: { markSeen?: boolean } = {}) {
+  const request = ++themeRequestRef.current;
   const previous = theme;
   setTheme(next);
   setThemePreview(next);
@@ -462,9 +463,11 @@ async function chooseTheme(next: ThemePreference, options: { markSeen?: boolean 
   rememberTheme(next);
   try {
     await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
+    if (themeRequestRef.current !== request) return;
     if (options.markSeen) setThemePromptSeen(true);
     void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
   } catch (value) {
+    if (themeRequestRef.current !== request) return;
     setTheme(previous);
     setThemePreview(previous);
     applyAppearance({ textSize, mascotSize, theme: previous });
@@ -474,7 +477,7 @@ async function chooseTheme(next: ThemePreference, options: { markSeen?: boolean 
 }
 ```
 
-`selectThemePreview(next)` applies the candidate without persisting or writing the mirror. `dismissThemePrompt()` restores the committed theme, closes, clears the error, sets `themePromptSeen` true optimistically so the trigger cannot re-open it this session, and best-effort saves `themePromptSeen: true`. `useThemePrompt()` sets `themePromptSaving`, saves `{ theme: themePreview, themePromptSeen: true }` in one call, and only on success sets the committed theme, seen, `rememberTheme(themePreview)`, broadcasts, and closes. On failure it clears saving, keeps the dialog open with the preview and the chosen card intact, and sets `themePromptError` from `errorMessage(value, "The theme could not be saved.")` so the same button can retry. The initial `themePromptSeen` state is `true` until settings load, so the prompt cannot flash before the vault answers.
+`selectThemePreview(next)` applies the candidate without persisting or writing the mirror. `dismissThemePrompt()` returns while `themePromptSaving` is true; otherwise it restores the committed theme, closes, clears the error, sets `themePromptSeen` true optimistically so the trigger cannot re-open it this session, and best-effort saves `themePromptSeen: true`. The close control and backdrop are inert while saving, and Escape is guarded by the same state. `useThemePrompt()` sets `themePromptSaving`, saves `{ theme: themePreview, themePromptSeen: true }` in one call, and only on success sets the committed theme, seen, `rememberTheme(themePreview)`, broadcasts, and closes. On failure it clears saving, keeps the dialog open with the preview and the chosen card intact, and sets `themePromptError` from `errorMessage(value, "The theme could not be saved.")` so the same button can retry. The initial `themePromptSeen` state is `true` until settings load, so the prompt cannot flash before the vault answers.
 
 Compute `otherOverlaysOpen` from the current overlay flags, including the task finder and excluding the theme prompt; then `globalOverlaysOpen = otherOverlaysOpen || themePromptOpen`. Keep the finder's own inertness intact. Add the prompt first in `dismissTopLayer`. Add a 600ms trigger effect guarded by `shouldOpenThemePrompt` and a DEV-only `?theme-prompt` override.
 

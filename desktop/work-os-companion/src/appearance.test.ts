@@ -79,6 +79,23 @@ describe("appearance", () => {
     expect(fallback.dataset.themePreference).toBe("system");
   });
 
+  it("boots when storage access throws", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() { throw new Error("Storage is blocked"); },
+    });
+    try {
+      const root = { dataset: {}, style: {} } as unknown as HTMLElement;
+      expect(() => applyBootTheme({ root, prefersDark: true })).not.toThrow();
+      expect(root.dataset.theme).toBe("dark");
+      expect(root.dataset.themePreference).toBe("system");
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+      else Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  });
+
   it("watches the system preference and cleans up", () => {
     let listener: (() => void) | null = null;
     const match = {

@@ -42,6 +42,7 @@ export default function ThemePrompt({ selected, saving = false, error = null, on
   }, []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (saving) return;
     const keys = ["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "Home", "End"];
     if (!keys.includes(event.key)) return;
     event.preventDefault();
@@ -90,7 +91,7 @@ export default function ThemePrompt({ selected, saving = false, error = null, on
           tabIndex={selected === value ? 0 : -1}
           data-theme-choice={value}
           className={`theme-prompt-choice${selected === value ? " is-selected" : ""}`}
-          onClick={() => onSelect(value)}
+          onClick={() => { if (!saving) onSelect(value); }}
         >
           <span className="theme-prompt-choice-head">
             <Icon size={17} aria-hidden="true" />

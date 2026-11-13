@@ -555,6 +555,7 @@ export default function App() {
   const [themePromptOpen, setThemePromptOpen] = useState(false);
   const [themePromptSaving, setThemePromptSaving] = useState(false);
   const [themePromptError, setThemePromptError] = useState<string | null>(null);
+  const themeRequestRef = useRef(0);
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
@@ -1314,6 +1315,7 @@ export default function App() {
     if (!isAdminGuideView(guide)) setView(guide);
   }, []);
   const chooseTheme = useCallback(async (next: ThemePreference, options: { markSeen?: boolean } = {}) => {
+    const request = ++themeRequestRef.current;
     const previous = theme;
     setTheme(next);
     setThemePreview(next);
@@ -1321,9 +1323,13 @@ export default function App() {
     rememberTheme(next);
     try {
       await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
+      if (themeRequestRef.current !== request) return;
       if (options.markSeen) setThemePromptSeen(true);
       void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
     } catch (value) {
+      // A newer choice owns the visible theme; an older failure must not roll
+      // it back or announce the stale value.
+      if (themeRequestRef.current !== request) return;
       setTheme(previous);
       setThemePreview(previous);
       applyAppearance({ textSize, mascotSize, theme: previous });
@@ -1339,13 +1345,14 @@ export default function App() {
   }, [mascotSize, textSize]);
 
   const dismissThemePrompt = useCallback(() => {
+    if (themePromptSaving) return;
     setThemePreview(theme);
     applyAppearance({ textSize, mascotSize, theme });
     setThemePromptOpen(false);
     setThemePromptError(null);
     setThemePromptSeen(true);
     void secureState.saveSettings({ themePromptSeen: true }).catch(() => undefined);
-  }, [mascotSize, textSize, theme]);
+  }, [mascotSize, textSize, theme, themePromptSaving]);
 
   const useThemePrompt = useCallback(async () => {
     const next = themePreview;
@@ -4183,6 +4190,7 @@ export default function App() {
   const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
+    if (themePromptOpen || !themePromptSeen) return;
     const autoOpen = shouldAutoOpenPlanning({
       active,
       dayLive,
@@ -4202,7 +4210,7 @@ export default function App() {
       openPlanningSession();
     }
     if (!debugScenario.enabled || debugScenario.dayState !== "shift_start") shiftStartScenarioOpened.current = false;
-  }, [active, dayLive, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
+  }, [active, dayLive, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, themePromptOpen, themePromptSeen, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
 
   // The launch snapshot can auto-open the modal for a plan that the live read
   // then proves confirmed; close it again instead of leaving a stale demand.

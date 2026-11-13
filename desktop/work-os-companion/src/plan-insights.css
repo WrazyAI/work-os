@@ -55,7 +55,7 @@
 }
 .save-state.saving {
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-ink);
 }
 .save-state.offline {
   background: var(--inset);
