@@ -193,13 +193,36 @@
   --wc-destructive-soft: var(--danger-soft);
   --wc-focus: var(--focus);
 
+  /* Components that redeclare their light group tokens locally. */
+  .onboarding-workspace {
+    --ob-field: var(--paper);
+    --ob-line: var(--line);
+    --ob-line-strong: var(--line-strong);
+    --ob-inset: var(--inset);
+    --ob-hairline: var(--line);
+    --ob-ink-soft: var(--ink-soft);
+    --ob-faint: var(--faint);
+    --ob-signal-deep: var(--signal-deep);
+    --ob-danger: var(--danger);
+  }
+  .otto-view-menu {
+    --conversation-paper: var(--paper);
+    --conversation-surface: var(--surface);
+    --conversation-ink: var(--ink);
+    --conversation-muted: var(--muted);
+    --conversation-line: var(--line);
+    --conversation-focus: var(--focus);
+    --conversation-signal-deep: var(--signal-deep);
+    --color-danger-soft: var(--danger-soft);
+  }
+
   /* Chart series tuned for #303133 */
-  --chart-ink: #b4a6d8;
-  --chart-1: #9bd45a;
-  --chart-2: #d99a72;
-  --chart-3: #d9c27a;
+  --chart-ink: #c6c8ce;
+  --chart-1: #7fbf3a;
+  --chart-2: #c97f5a;
+  --chart-3: #b8a34e;
   --chart-4: #b4a6d8;
-  --chart-5: #8fb6cc;
+  --chart-5: #6f9ec4;
   --chart-6: #d97a70;
   --chart-7: #79c2b0;
   --chart-8: #c294bd;

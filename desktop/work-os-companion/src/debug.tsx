@@ -3,10 +3,13 @@ import ReactDOM from "react-dom/client";
 import DebugWindow from "./DebugWindow";
 import ErrorBoundary from "./ErrorBoundary";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
+import { applyBootTheme } from "./appearance";
 import { NotificationProvider } from "./NotificationFlyouts";
 import "./styles.css";
 import "./debug.css";
+import "./theme.css";
 
+applyBootTheme();
 installDiagnosticErrorHandlers();
 diagnostics.info("app.webview.start", "Debugger WebView booting", { entry: "debug.html", userAgent: navigator.userAgent });
 

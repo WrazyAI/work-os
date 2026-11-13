@@ -62,7 +62,7 @@ export default function ThemePrompt({ selected, saving = false, error = null, on
 
   return <div
     className="theme-prompt-backdrop"
-    onMouseDown={(event) => { if (event.currentTarget === event.target) onDismiss(); }}
+    onMouseDown={(event) => { if (!saving && event.currentTarget === event.target) onDismiss(); }}
   >
     <section
       className="theme-prompt"
@@ -73,7 +73,7 @@ export default function ThemePrompt({ selected, saving = false, error = null, on
     >
       <header className="theme-prompt-head">
         <span className="theme-prompt-mark" aria-hidden="true" />
-        <button type="button" className="theme-prompt-close" aria-label="Close theme preview" onClick={onDismiss}>
+        <button type="button" className="theme-prompt-close" aria-label="Close theme preview" disabled={saving} onClick={onDismiss}>
           <X size={17} aria-hidden="true" />
         </button>
       </header>

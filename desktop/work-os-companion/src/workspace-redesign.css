@@ -161,9 +161,9 @@
 .planning-intent-heading span { color: var(--muted); font-size: 10px; }
 .planning-status, .planning-notice, .planning-confirmed { display: flex; align-items: flex-start; gap: 8px; margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
 .planning-status { color: var(--muted); background: var(--surface); }
-.planning-notice { border: 1px solid #e7c887; background: #fff8e8; color: #755515; }
-.planning-confirmed { background: #e4f4d3; color: #244513; }
-.planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: #f3f5ef; }
+.planning-notice { border: 1px solid var(--warning); background: var(--warning-soft); color: var(--warning); }
+.planning-confirmed { background: var(--tool-success-soft); color: var(--tool-success); }
+.planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
 /* The review section takes programmatic focus when its view opens, so the
    scrollable card never paints a focus ring. */
 .planning-review:focus { outline: none; }
@@ -182,8 +182,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  background: #def1ca;
-  color: #315f17;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
   font-size: 11px;
   font-weight: 800;
 }
@@ -194,7 +194,7 @@
 .planning-review article strong { font-size: 13px; }
 .planning-review article p { margin: 4px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .planning-review article ul { margin: 5px 0 0; padding-left: 17px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.planning-clarifications { margin-top: 12px; padding: 12px; border: 1px solid #ecd7a7; border-radius: 12px; background: #fff8e8; }
+.planning-clarifications { margin-top: 12px; padding: 12px; border: 1px solid var(--warning); border-radius: 12px; background: var(--warning-soft); }
 .planning-clarifications > strong { font-size: 12.5px; }
 .planning-clarifications p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; }
 .planning-clarifications label { display: grid; gap: 6px; margin-top: 10px; color: var(--ink); font-size: 12px; font-weight: 650; }
@@ -202,9 +202,9 @@
   min-height: 64px;
   resize: vertical;
   padding: 10px 12px;
-  border: 1px solid #e0cf9e;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--white);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -222,7 +222,7 @@
   padding: 12px 16px 14px 20px;
   border-top: 1px solid var(--line);
   border-bottom: 0;
-  background: #f1f3ed;
+  background: var(--paper);
 }
 /* One control-label step for every footer decision, so the primary is
    distinguished by its signal surface rather than by size or weight (§3.3,
@@ -246,24 +246,24 @@
 }
 .planning-session > footer > button:not(:disabled):active { transform: translateY(1px); }
 .planning-session > footer > button.secondary {
-  background: #fff;
+  background: var(--white);
   border-color: var(--line);
   color: var(--muted);
 }
 .planning-session > footer > button.secondary:hover:not(:disabled) {
-  border-color: #c3ccbb;
-  background: #fbfcf8;
+  border-color: var(--line-strong);
+  background: var(--inset);
   color: var(--ink);
 }
 .planning-session > footer > button.primary {
   background: var(--signal);
-  border-color: #a6e852;
-  color: #141611;
+  border-color: transparent;
+  color: var(--ink-on-signal);
   box-shadow: 0 3px 10px rgba(143, 203, 64, 0.2);
 }
 .planning-session > footer > button.primary:hover:not(:disabled) {
-  background: #b4f76c;
-  border-color: #8bd248;
+  background: var(--signal);
+  border-color: transparent;
   box-shadow: 0 6px 18px rgba(117, 187, 56, 0.24);
 }
 /* Declared last so an unavailable decision drops the live surface at every
@@ -310,8 +310,8 @@
   box-shadow: 0 3px 10px rgba(143, 203, 64, 0.2);
 }
 .planning-session > footer > button.secondary[aria-busy="true"]:disabled {
-  border-color: #c3ccbb;
-  background: #fbfcf8;
+  border-color: var(--line-strong);
+  background: var(--inset);
   color: var(--ink);
 }
 
@@ -598,8 +598,8 @@
 
 .planning-icon-button.is-active {
   border-color: var(--signal-strong);
-  background: #def1ca;
-  color: #315f17;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 .planning-icon-button.is-armed {
@@ -2203,7 +2203,7 @@ body {
 }
 
 .active-task-list article:hover {
-  background: #f3f6f0;
+  background: var(--dash-inset);
 }
 
 .task-check {
@@ -4046,7 +4046,7 @@ button:not(:disabled):active {
   width: min(460px, 100%);
   padding: 26px 26px 22px;
   border-radius: 18px;
-  background: #f7f5ed;
+  background: var(--paper);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
   display: grid;
   gap: 12px;
@@ -4059,13 +4059,13 @@ button:not(:disabled):active {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: #f8ded8;
-  color: #a03324;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .delete-confirmation.reversible > span {
-  background: var(--signal-wash, #e6f7d5);
-  color: #557d35;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 .delete-confirmation h2 {
@@ -4547,8 +4547,8 @@ button:not(:disabled):active {
 
 .task-selection-row input:checked + .task-selection-checkbox {
   border-color: #7cbd38;
-  background: #def1ca;
-  color: #315f17;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 .task-selection-row input:focus-visible + .task-selection-checkbox {

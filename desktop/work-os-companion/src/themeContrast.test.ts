@@ -70,6 +70,22 @@ describe("soft ash theme tokens", () => {
     }
   });
 
+  it("keeps chart hues distinct from each other and from semantic roles", () => {
+    const rgb = (hex: string) => [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+    const distance = (left: string, right: string) => Math.sqrt(rgb(left).reduce((sum, value, index) => sum + (value - rgb(right)[index]!) ** 2, 0));
+    const hues = [...Array(8)].map((_, index) => dark.get(`chart-${index + 1}`));
+    for (const hue of hues) expect(hue).toBeDefined();
+    for (const semantic of ["signal", "danger", "warning", "observed"]) {
+      for (const hue of hues) expect(distance(hue!, dark.get(semantic)!), `${hue} vs ${semantic}`).toBeGreaterThan(40);
+    }
+    for (let left = 0; left < hues.length; left += 1) {
+      for (let right = left + 1; right < hues.length; right += 1) {
+        expect(distance(hues[left]!, hues[right]!), `chart-${left + 1} vs chart-${right + 1}`).toBeGreaterThan(20);
+      }
+    }
+    expect(dark.get("chart-ink")).not.toBe(dark.get("chart-4"));
+  });
+
   it("never scales text or mascot art from the theme block", () => {
     expect(dark.has("text-scale")).toBe(false);
     expect(dark.has("mascot-scale")).toBe(false);

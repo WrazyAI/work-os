@@ -1116,7 +1116,7 @@ export default function App() {
     enabled: (!!session || ADMIN_SHELL_BOOT) && !syncBypass,
     organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
-    blocked: baseModalOpen,
+    blocked: baseModalOpen || themePromptOpen,
     fixture: ADMIN_SHELL_GUIDE_STATE ?? undefined,
   });
   const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
@@ -1370,7 +1370,7 @@ export default function App() {
    * The admin tour renders only in the administration branch, so it may only
    * hold the lock there. The theme prompt counts as an overlay so the guide
    * waits for it instead of opening underneath. */
-  const otherOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || taskFinderOpen || (tourScope === "admin" && adminWorkspaceBranch);
+  const otherOverlaysOpen = baseModalOpen || openPageGuide !== null;
   const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
 
   useEffect(() => {
@@ -1390,12 +1390,11 @@ export default function App() {
     });
     const forced = forceThemePrompt && workspaceOnScreen && !otherOverlaysOpen;
     if (!gateOpen && !forced) return;
-    const timer = window.setTimeout(() => {
-      setThemePreview(theme);
-      setThemePromptError(null);
-      setThemePromptOpen(true);
-    }, 600);
-    return () => window.clearTimeout(timer);
+    // Open on the first eligible paint. A delay here races the page guide's
+    // own beat, and the guide must never win that race.
+    setThemePreview(theme);
+    setThemePromptError(null);
+    setThemePromptOpen(true);
   }, [adminWorkspaceBranch, employeeWorkspaceBranch, forceThemePrompt, otherOverlaysOpen, signedIn, theme, themePromptOpen, themePromptSeen, visibleSession]);
 
   useEffect(() => {
@@ -1432,7 +1431,7 @@ export default function App() {
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
-    if (themePromptOpen) { dismissThemePrompt(); return; }
+    if (themePromptOpen) { if (!themePromptSaving) dismissThemePrompt(); return; }
     if (taskEvidenceRequest) { setTaskEvidenceRequest(null); return; }
     if (debugPageGuide) { setDebugPageGuide(null); return; }
     if (tourScope) { setTourScope(null); return; }
@@ -1451,7 +1450,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, dismissThemePrompt, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, themePromptOpen, tourScope, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, dismissThemePrompt, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, themePromptOpen, themePromptSaving, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
