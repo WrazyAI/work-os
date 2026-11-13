@@ -1,0 +1,166 @@
+/* Soft ash dark material and theme-aware chart hues.
+ *
+ * Loaded after every surface stylesheet so the dark block can override the
+ * existing variable groups without renaming them. Roles follow design.md §3.1;
+ * the light material is unchanged.
+ */
+
+:root {
+  /* New semantic aliases the light surfaces can read when they need them. */
+  --canvas: #e9e8e1;
+  --ink-soft: #304033;
+  --faint: #939c90;
+  --ink-on-signal: #182018;
+  --danger-soft: #f9e5e1;
+  --warning: #c88918;
+  --warning-soft: #fff5dc;
+  --observed: #2e617d;
+  --observed-soft: #edf6fb;
+  --focus: #4a7d22;
+
+  --chart-1: #82bd39;
+  --chart-2: #c8845a;
+  --chart-3: #c9b56a;
+  --chart-4: #9a8fbd;
+  --chart-5: #668aa0;
+  --chart-6: #983e35;
+  --chart-7: #4f9c86;
+  --chart-8: #b07fa6;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #242527;
+  --surface: #242527;
+  --paper: #303133;
+  --white: #393a3d;
+  --raised: #393a3d;
+  --surface-raised: #393a3d;
+  --inset: #414246;
+  --ink: #f0f0ef;
+  --ink-soft: #d2d3d6;
+  --muted: #bfc0c3;
+  --faint: #8f9298;
+  --line: #505256;
+  --line-strong: #686b70;
+  --signal: #a8f15b;
+  --signal-strong: #8fd24a;
+  --signal-deep: #8fd24a;
+  --ink-on-signal: #1d2815;
+  --danger: #f09a93;
+  --danger-soft: #3b2b2b;
+  --warning: #e3b15f;
+  --warning-soft: #3a3223;
+  --observed: #8fbdd8;
+  --observed-soft: #26343c;
+  --focus: #b8e794;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 7px 24px rgba(0, 0, 0, 0.22);
+  --shadow-raised: 0 16px 48px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.32);
+
+  /* Dashboard */
+  --dash-ink: var(--ink);
+  --dash-ink-soft: var(--ink-soft);
+  --dash-muted: var(--muted);
+  --dash-faint: var(--faint);
+  --dash-paper: var(--canvas);
+  --dash-card: rgba(48, 49, 51, 0.94);
+  --dash-card-solid: var(--paper);
+  --dash-inset: var(--inset);
+  --dash-line: var(--line);
+  --dash-line-strong: var(--line-strong);
+  --dash-signal: var(--signal);
+  --dash-signal-deep: var(--signal-deep);
+  --dash-warning: var(--warning);
+  --dash-danger: var(--danger);
+  --dash-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 10px 28px rgba(0, 0, 0, 0.24);
+  --dash-shadow-raised: 0 16px 48px rgba(0, 0, 0, 0.4);
+
+  /* Sidebar */
+  --sidebar-surface: rgba(41, 42, 44, 0.98);
+  --sidebar-surface-raised: var(--raised);
+  --sidebar-ink: var(--ink);
+  --sidebar-muted: var(--muted);
+  --sidebar-line: var(--line);
+  --sidebar-hover: var(--inset);
+  --sidebar-active: var(--inset);
+  --sidebar-active-ink: var(--ink);
+  --sidebar-marker: var(--signal-deep);
+  --sidebar-shadow: 14px 0 42px rgba(0, 0, 0, 0.3);
+
+  /* Conversation */
+  --conversation-paper: var(--canvas);
+  --conversation-surface: var(--paper);
+  --conversation-ink: var(--ink);
+  --conversation-graphite: #1b1c1e;
+  --conversation-signal: var(--signal);
+  --conversation-focus: var(--focus);
+  --conversation-muted: var(--muted);
+  --conversation-line: var(--line);
+  --conversation-danger: var(--danger);
+  --conversation-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+
+  /* Tool cards */
+  --tool-ink: var(--ink);
+  --tool-muted: var(--muted);
+  --tool-faint: var(--faint);
+  --tool-paper: var(--paper);
+  --tool-inset: var(--inset);
+  --tool-hover: var(--inset);
+  --tool-line: var(--line);
+  --tool-line-strong: var(--line-strong);
+  --tool-signal: var(--signal);
+  --tool-signal-strong: var(--signal-deep);
+  --tool-success: #9ed58a;
+  --tool-success-soft: #263a28;
+  --tool-warning: var(--warning);
+  --tool-warning-soft: var(--warning-soft);
+  --tool-danger: var(--danger);
+  --tool-danger-soft: var(--danger-soft);
+  --tool-info: var(--observed);
+  --tool-info-soft: var(--observed-soft);
+  --tool-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 28px rgba(0, 0, 0, 0.24);
+  --tool-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 32px rgba(0, 0, 0, 0.28);
+
+  /* Onboarding */
+  --ob-field: var(--paper);
+  --ob-inset: var(--inset);
+  --ob-line: var(--line);
+  --ob-line-strong: var(--line-strong);
+  --ob-hairline: var(--line);
+  --ob-ink-soft: var(--ink-soft);
+  --ob-faint: var(--faint);
+  --ob-signal-deep: var(--signal-deep);
+  --ob-danger: var(--danger);
+
+  /* Floating companion */
+  --avatar-ink: var(--ink);
+  --avatar-signal: var(--signal);
+  --avatar-surface: var(--raised);
+  --avatar-console: #1b1c1e;
+  --avatar-console-edge: #5c6655;
+
+  /* Caption bar (used by window-chrome.css) */
+  --wc-bar: rgba(41, 42, 44, 0.96);
+  --wc-hover: rgba(255, 255, 255, 0.08);
+  --wc-menu: var(--raised);
+  --wc-menu-hover: var(--inset);
+  --wc-border: var(--line);
+  --wc-menu-border: var(--line);
+  --wc-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  --wc-destructive: var(--danger);
+  --wc-destructive-soft: var(--danger-soft);
+  --wc-focus: var(--focus);
+
+  /* Chart series tuned for #303133 */
+  --chart-1: #9bd45a;
+  --chart-2: #d99a72;
+  --chart-3: #d9c27a;
+  --chart-4: #b4a6d8;
+  --chart-5: #8fb6cc;
+  --chart-6: #d97a70;
+  --chart-7: #79c2b0;
+  --chart-8: #c294bd;
+}
