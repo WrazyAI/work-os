@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Saved memories no longer disappear behind new proposals; counts stay accurate, and you can load older saved facts and proposals separately.
+
 ## 0.5.31 — 2026-11-13
 
 - Your saved sign-in stays put when both companion windows open together, so you do not have to connect the app again.

@@ -52,6 +52,13 @@ const manyRecent: MemoryRecent[] = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 describe("MemorySummary", () => {
+  it("shows authoritative saved and proposal totals, not the loaded page lengths", () => {
+    const html = renderToStaticMarkup(createElement(MemorySummary, {
+      facts: [candidate, confirmed], factTotals: { confirmed: 49, candidate: 654 },
+      loading: false, error: null, onOpen: noop, onRetry: noop,
+    }));
+    expect(html).toContain('aria-label="49 remembered, 654 waiting for review"');
+  });
   it("renders the mascot band with counts and the View action", () => {
     const html = renderToStaticMarkup(
       createElement(MemorySummary, { facts: [candidate, instantCandidate, confirmed], loading: false, error: null, onOpen: noop, onRetry: noop }),
@@ -106,6 +113,26 @@ describe("MemoryModal", () => {
 });
 
 describe("Memory sections", () => {
+  it("keeps the independent saved-memory paging action and complete total visible", () => {
+    const html = renderToStaticMarkup(createElement(MemoryFactsSection, {
+      facts: [confirmed], busy: false, onForget: noop,
+      paging: { total: 49, hasMore: true, loading: false, onLoadMore: noop },
+    }));
+    expect(html).toContain('aria-label="49 kept facts"');
+    expect(html).toContain("Showing 1 of 49");
+    expect(html).toContain("Load more remembered facts");
+  });
+
+  it("preserves proposals on a paging failure and offers retry without claiming an empty queue", () => {
+    const html = renderToStaticMarkup(createElement(MemoryReviewSection, {
+      facts: [candidate], busy: false, onReview: reviewNoop,
+      paging: { total: 654, hasMore: true, loading: false, error: "Could not load more memories.", onLoadMore: noop },
+    }));
+    expect(html).toContain(candidate.content);
+    expect(html).toContain("Showing 1 of 654");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Load more proposals");
+  });
   it("shows candidates for review with keep and reject actions, newest first", () => {
     const oldest: MemoryFact = { ...candidate, id: "old", content: "Oldest proposal.", occurred_at: "2026-09-01T09:00:00.000Z" };
     const newest: MemoryFact = { ...candidate, id: "new", content: "Newest proposal.", occurred_at: "2026-09-20T09:00:00.000Z" };

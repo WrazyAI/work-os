@@ -31,14 +31,26 @@ const RECENT: MemoryRecent[] = [
  * and its management modal with local review/forget, so layout and interactions
  * can be exercised without a backend. */
 export default function MemoryPreview() {
-  const [facts, setFacts] = useState(FACTS);
+  const params = new URLSearchParams(window.location.search);
+  const paginated = params.has("memory-paged");
+  const [facts, setFacts] = useState(() => paginated ? Array.from({ length: 121 }, (_, index): MemoryFact => ({
+    ...FACTS[index < 60 ? 3 : 0], id: `page-fact-${index}`, content: `${index < 60 ? "Saved" : "Proposed"} memory ${index + 1}: review migrations before deployment.`,
+    review_status: index < 60 ? "confirmed" : "candidate",
+  })) : FACTS);
+  const [loaded, setLoaded] = useState({ confirmed: 5, candidate: 5 });
   const [recent, setRecent] = useState(RECENT);
   const [variant, setVariant] = useState<"populated" | "empty">("populated");
   const [open, setOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const params = new URLSearchParams(window.location.search);
   const empty = variant === "empty";
+  const totals = { confirmed: facts.filter(fact => fact.review_status === "confirmed").length, candidate: facts.filter(fact => fact.review_status === "candidate").length };
+  const shown = paginated ? (["confirmed", "candidate"] as const).flatMap(status => facts.filter(fact => fact.review_status === status).slice(0, loaded[status])) : facts;
+  const paging = paginated && !empty ? Object.fromEntries((["confirmed", "candidate"] as const).map(status => [status, {
+    total: totals[status], hasMore: loaded[status] < totals[status], loading: false,
+    error: params.has("memory-page-fail") ? "More memories could not be loaded. Please retry." : null,
+    onLoadMore: () => { if (!params.has("memory-page-fail")) setLoaded(current => ({ ...current, [status]: current[status] + 5 })); },
+  }])) as NonNullable<Parameters<typeof MemoryModal>[0]["factPaging"]> : undefined;
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 17</p><h1>Settings</h1></div></header>
     <main className="page">
       <div className="insight-brief panel" style={{ padding: 16, marginBottom: 16 }}>
@@ -65,6 +77,7 @@ export default function MemoryPreview() {
       </div>
       <MemorySummary
         facts={empty ? [] : facts}
+        factTotals={empty ? { confirmed: 0, candidate: 0 } : totals}
         loading={false}
         error={null}
         onOpen={() => setOpen(true)}
@@ -72,7 +85,8 @@ export default function MemoryPreview() {
       />
     </main>
     {open && <MemoryModal
-      facts={empty ? [] : facts}
+      facts={empty ? [] : shown}
+      factPaging={paging}
       recent={empty ? [] : recent}
       busy={busy}
       error={error}

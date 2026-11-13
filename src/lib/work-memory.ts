@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isoDate, isoTimestamp } from "@/lib/iso-timestamp";
 import { getPool } from "@/lib/db/pool";
+import { WorkOsValidationError } from "@/lib/work-os-api";
 import {
   embedMemoryTexts,
   memoryEmbeddingConfigured,
@@ -202,8 +203,35 @@ export async function recallWorkMemory(scope: MemoryScope & { localDate?: string
     .eq("kind", "profile_fact")
     .eq("review_status", "confirmed")
     .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(12);
-  const profileFacts = (facts ?? []) as MemoryItem[];
+  let profileFacts = (facts ?? []).map(row => ({ ...row,
+    occurred_at: isoTimestamp(row.occurred_at)!, local_date: isoDate(row.local_date),
+  })) as MemoryItem[];
+
+  // Durable facts have no age cutoff. Search the complete confirmed set before
+  // filling the bounded context with recent facts; proposals/rejections never
+  // enter this lane and episodic time/kind filters do not hide durable facts.
+  const trimmed = query.replace(/\s+/g, " ").trim().slice(0, 2_000);
+  if (trimmed) {
+    const relevant = await getPool().query(
+      // Questions contain unrelated verbs; require at least one meaningful
+      // lexeme rather than every word. The tsquery is parsed/escaped by Postgres
+      // before changing conjunctions, never assembled from user SQL fragments.
+      `with terms as (select replace(plainto_tsquery('english', $3)::text, ' & ', ' | ')::tsquery as query)
+       select ${MEMORY_ITEM_COLUMNS} from work_memory_items, terms
+       where organization_id = $1 and person_id = $2
+         and kind = 'profile_fact' and review_status = 'confirmed'
+         and search @@ terms.query
+       order by ts_rank_cd(search, terms.query) desc,
+                occurred_at desc, id desc limit 12`,
+      [scope.organizationId, scope.personId, trimmed],
+    );
+    const relevantFacts = relevant.rows.map(row => ({ ...row,
+      occurred_at: isoTimestamp(row.occurred_at)!, local_date: isoDate(row.local_date),
+    })) as MemoryItem[];
+    profileFacts = [...new Map([...relevantFacts, ...profileFacts].map(fact => [fact.id, fact])).values()].slice(0, 12);
+  }
 
   let sameDayCandidates: MemoryItem[] = [];
   if (analysisLocalDate && options.includeSameDayCandidates !== false) {
@@ -217,10 +245,11 @@ export async function recallWorkMemory(scope: MemoryScope & { localDate?: string
       .eq("local_date", analysisLocalDate)
       .order("occurred_at", { ascending: false })
       .limit(8);
-    sameDayCandidates = (candidates ?? []) as MemoryItem[];
+    sameDayCandidates = (candidates ?? []).map(row => ({ ...row,
+      occurred_at: isoTimestamp(row.occurred_at)!, local_date: isoDate(row.local_date),
+    })) as MemoryItem[];
   }
 
-  const trimmed = query.replace(/\s+/g, " ").trim().slice(0, 2_000);
   if (!trimmed) return { items: [], profileFacts, sameDayCandidates, vectorUsed: false };
 
   let vectorHits: MemoryItem[] = [];
@@ -295,21 +324,67 @@ export interface MemoryRecentRow {
   created_at: string;
 }
 
-/** Self-scoped memory view for the companion: profile facts awaiting review
- * plus the most recent episodic memories. */
-export async function listWorkMemory(scope: MemoryScope, limit = 30): Promise<{ facts: MemoryFactRow[]; recent: MemoryRecentRow[] }> {
+export type MemoryFactStatus = "confirmed" | "candidate";
+
+export interface MemoryFactPage {
+  facts: MemoryFactRow[];
+  total: number;
+  nextCursor: string | null;
+}
+
+const FACT_COLUMNS = "id,content,summary,review_status,fact_key,local_date,occurred_at,created_at";
+
+/** Independent keyset pages: a flood of proposals cannot evict kept memories.
+ * The cursor is validated before it reaches SQL, and scope/status precede it. */
+export async function listWorkMemoryFacts(scope: MemoryScope, options: {
+  status: MemoryFactStatus; limit?: number; cursor?: string | null;
+}): Promise<MemoryFactPage> {
+  if (!["confirmed", "candidate"].includes(options.status)) throw new WorkOsValidationError("Invalid memory status.");
+  const limit = Number.isFinite(options.limit) ? Math.min(Math.max(Math.floor(options.limit!), 1), 50) : 50;
+  let cursor: { at: string; id: string } | null = null;
+  if (options.cursor) {
+    const [at, id, extra] = options.cursor.split("|");
+    if (extra !== undefined || !at || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3,6}Z$/.test(at)
+      || !Number.isFinite(Date.parse(at)) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id ?? "")) {
+      throw new WorkOsValidationError("Invalid memory cursor.");
+    }
+    cursor = { at, id };
+  }
+  const pool = getPool();
+  const [page, counted] = await Promise.all([
+    pool.query(`select ${FACT_COLUMNS},
+        to_char(occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_at
+      from work_memory_items
+      where organization_id=$1 and person_id=$2 and kind='profile_fact' and review_status=$3
+        ${cursor ? "and (occurred_at,id)<($4::timestamptz,$5::uuid)" : ""}
+      order by occurred_at desc,id desc limit $${cursor ? 6 : 4}`,
+    cursor ? [scope.organizationId, scope.personId, options.status, cursor.at, cursor.id, limit + 1]
+      : [scope.organizationId, scope.personId, options.status, limit + 1]),
+    pool.query(`select count(*)::integer as total from work_memory_items
+      where organization_id=$1 and person_id=$2 and kind='profile_fact' and review_status=$3`,
+    [scope.organizationId, scope.personId, options.status]),
+  ]);
+  const facts = page.rows.slice(0, limit).map(row => ({
+    id: row.id, content: row.content, summary: row.summary,
+    review_status: row.review_status, fact_key: row.fact_key,
+    local_date: isoDate(row.local_date), occurred_at: isoTimestamp(row.occurred_at)!,
+    created_at: isoTimestamp(row.created_at)!,
+  })) as MemoryFactRow[];
+  const last = facts.at(-1);
+  return {
+    facts, total: Number(counted.rows[0]?.total ?? 0),
+    nextCursor: page.rows.length > limit && last ? `${page.rows[limit - 1].cursor_at}|${last.id}` : null,
+  };
+}
+
+/** Backward-compatible summary: each status owns its quota and authoritative
+ * total. Old clients still read facts/recent; new clients can load either tail. */
+export async function listWorkMemory(scope: MemoryScope, limit = 50) {
   const db = createAdminClient();
   const capped = Math.min(Math.max(limit, 1), 100);
-  const [factsResult, recentResult] = await Promise.all([
-    db
-      .from("work_memory_items")
-      .select("id,content,summary,review_status,fact_key,local_date,occurred_at,created_at")
-      .eq("organization_id", scope.organizationId)
-      .eq("person_id", scope.personId)
-      .eq("kind", "profile_fact")
-      .neq("review_status", "rejected")
-      .order("occurred_at", { ascending: false })
-      .limit(capped),
+  const [confirmed, candidate, recentResult] = await Promise.all([
+    listWorkMemoryFacts(scope, { status: "confirmed", limit: capped }),
+    listWorkMemoryFacts(scope, { status: "candidate", limit: capped }),
     db
       .from("work_memory_items")
       .select("id,kind,content,summary,local_date,occurred_at,source_table,created_at")
@@ -320,11 +395,12 @@ export async function listWorkMemory(scope: MemoryScope, limit = 30): Promise<{ 
       .order("occurred_at", { ascending: false })
       .limit(capped),
   ]);
-  if (factsResult.error) throw new Error(`load memory facts: ${factsResult.error.message}`);
   if (recentResult.error) throw new Error(`load recent memory: ${recentResult.error.message}`);
   return {
-    facts: (factsResult.data ?? []) as MemoryFactRow[],
+    facts: [...confirmed.facts, ...candidate.facts],
     recent: (recentResult.data ?? []) as MemoryRecentRow[],
+    factTotals: { confirmed: confirmed.total, candidate: candidate.total },
+    factNextCursors: { confirmed: confirmed.nextCursor, candidate: candidate.nextCursor },
   };
 }
 

@@ -45,7 +45,7 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
-import type { MemoryView, RecapNextStepItem } from "./types";
+import type { RecapNextStepItem } from "./types";
 import type { RecapNextStepState } from "./RecapNextStepsCard";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
@@ -84,6 +84,7 @@ import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { classifyPlanSaveFailure, type PlanningConfirmResult } from "./planningSave";
 import { ActivityIntervalStream } from "./ActivityIntervalList";
+import { applyMemoryReviewToCaches, requestMemoryFactPage, useMemoryFactsQuery } from "./workOsQueries";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
 import { isMacOS, isWindows } from "./platform";
@@ -2285,12 +2286,37 @@ export default function App() {
   // Review-notification sources: what Otto remembers waiting for review, and a
   // recap waiting to be confirmed. Both poll only while the app is open.
   const memoryQuery = useMemoryQuery({ enabled: notificationReadsEnabled, pollMs: NOTIFICATION_POLL_MS });
+  const memoryPagesEnabled = memoryOpen && notificationReadsEnabled && !!memoryQuery.data?.factTotals;
+  const rememberedQuery = useMemoryFactsQuery("confirmed", memoryPagesEnabled);
+  const proposedMemoryQuery = useMemoryFactsQuery("candidate", memoryPagesEnabled);
+  const memoryModalFacts = [
+    ...new Map((rememberedQuery.data?.pages.flatMap(page => page.facts)
+      ?? memoryQuery.data?.facts.filter(fact => fact.review_status === "confirmed") ?? []).map(fact => [fact.id, fact])).values(),
+    ...new Map((proposedMemoryQuery.data?.pages.flatMap(page => page.facts)
+      ?? memoryQuery.data?.facts.filter(fact => fact.review_status === "candidate") ?? []).map(fact => [fact.id, fact])).values(),
+  ];
+  const memoryFactPaging = memoryQuery.data?.factTotals ? {
+    confirmed: {
+      total: rememberedQuery.data?.pages[0]?.total ?? memoryQuery.data.factTotals.confirmed,
+      hasMore: rememberedQuery.hasNextPage || (!rememberedQuery.data && !!memoryQuery.data.factNextCursors?.confirmed),
+      loading: rememberedQuery.isFetching,
+      error: rememberedQuery.error ? "Remembered facts could not be loaded. Please retry." : null,
+      onLoadMore: () => { void requestMemoryFactPage(rememberedQuery); },
+    },
+    candidate: {
+      total: proposedMemoryQuery.data?.pages[0]?.total ?? memoryQuery.data.factTotals.candidate,
+      hasMore: proposedMemoryQuery.hasNextPage || (!proposedMemoryQuery.data && !!memoryQuery.data.factNextCursors?.candidate),
+      loading: proposedMemoryQuery.isFetching,
+      error: proposedMemoryQuery.error ? "Proposals could not be loaded. Please retry." : null,
+      onLoadMore: () => { void requestMemoryFactPage(proposedMemoryQuery); },
+    },
+  } : undefined;
   const notificationIntervalsQuery = useActivityIntervalNotificationQuery({ enabled: notificationReadsEnabled, date: day?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
   // The bell only needs the newest ready recap, which always lives on the
   // first page; later pages stay unloaded until the stream asks for them.
   const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
-  const memoryCandidateCount = useMemo(() => memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0, [memoryQuery.data]);
+  const memoryCandidateCount = useMemo(() => memoryQuery.data?.factTotals?.candidate ?? (memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0), [memoryQuery.data]);
   // The Admin tab reads the same live overview the administration pages use.
   // Its query key is shared, so opening the bell never starts a second record;
   // in the administration workspace it also keeps the closed bell's badge
@@ -2893,10 +2919,8 @@ export default function App() {
     try {
       const result = await reviewMemoryFact(id, status);
       if (result.fact?.id !== id || result.fact.review_status !== status) throw new Error("The memory decision was not confirmed. Please retry.");
-      queryClient.setQueryData<MemoryView>(workOsKeys.memory(), (current) => current ? {
-        ...current,
-        facts: current.facts.map((fact) => fact.id === id ? { ...fact, ...result.fact } : fact),
-      } : current);
+      const fact = memoryModalFacts.find(row => row.id === id) ?? memoryQuery.data?.facts.find(row => row.id === id);
+      if (fact) applyMemoryReviewToCaches(queryClient, fact, status);
       await queryClient.invalidateQueries({ queryKey: workOsKeys.memory() });
       return true;
     } catch (value) {
@@ -5445,7 +5469,8 @@ export default function App() {
     {tourScope === "employee" && employeeWorkspaceBranch && <GuideTour onNavigate={navigateEmployeeGuide} onClose={() => setTourScope(null)} />}
     {tourScope === "admin" && adminWorkspaceBranch && <GuideTour pages={ADMIN_TOUR_PAGES} subject="the administration workspace" onNavigate={navigateAdminGuide} onClose={() => setTourScope(null)} />}
     {memoryOpen && <MemoryModal
-      facts={memoryQuery.data?.facts ?? []}
+      facts={memoryModalFacts}
+      factPaging={memoryFactPaging}
       recent={memoryQuery.data?.recent ?? []}
       busy={memoryBusy}
       error={memoryError}
@@ -5520,6 +5545,7 @@ export default function App() {
       onSignOut={() => void logout()}
       memory={{
         facts: memoryQuery.data?.facts ?? [],
+        factTotals: memoryQuery.data?.factTotals,
         loading: memoryQuery.isPending && !memoryQuery.data,
         error: !memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null,
       }}

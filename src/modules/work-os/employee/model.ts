@@ -227,6 +227,8 @@ export interface MemoryRecentItem {
 export interface WorkMemoryResponse {
   facts: MemoryFact[];
   recent: MemoryRecentItem[];
+  factTotals?: { confirmed: number; candidate: number };
+  factNextCursors?: { confirmed: string | null; candidate: string | null };
 }
 
 /* ── EOD screenshot evidence ────────────────────────────────────────────── */

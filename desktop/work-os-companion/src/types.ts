@@ -540,6 +540,8 @@ export interface MemoryRecent {
 export interface MemoryView {
   facts: MemoryFact[];
   recent: MemoryRecent[];
+  factTotals?: { confirmed: number; candidate: number };
+  factNextCursors?: { confirmed: string | null; candidate: string | null };
 }
 
 /** One task-change proposal the employee has not decided or that never
