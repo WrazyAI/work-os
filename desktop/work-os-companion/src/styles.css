@@ -1440,7 +1440,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .task-modal { border-radius: 18px; box-shadow: 0 34px 110px rgba(0, 0, 0, 0.42); }
 .task-modal-body { scrollbar-gutter: stable; }
-.task-modal > footer button:not(.primary):not(.delete-task):hover { background: #fffef8; border-color: #bbbcb2; }
+.task-modal > footer button:not(.primary):not(.delete-task):hover { background: var(--white); border-color: var(--line-strong); }
 .metric-grid { gap: 12px; }
 .metric {
   min-height: 136px;
@@ -1911,9 +1911,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-modal.profile-modal {
   width: min(800px, calc(100vw - 32px));
   max-height: min(840px, calc(100vh - 32px));
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--line);
   border-radius: 24px;
-  background: #f8f7f1;
+  background: var(--paper);
   box-shadow: 0 34px 110px rgba(0, 0, 0, 0.34);
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -1926,7 +1926,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   align-items: flex-start;
   padding: 20px 24px 17px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
-  background: rgba(248, 247, 241, 0.97);
+  background: var(--paper);
 }
 .task-modal.profile-modal > header > div {
   min-width: 0;
@@ -1956,11 +1956,11 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-color: transparent;
   border-radius: 10px;
   background: transparent;
-  color: #62675f;
+  color: var(--muted);
 }
 .task-modal.profile-modal > header button:not(:disabled):hover {
   border-color: var(--line);
-  background: #efeee8;
+  background: var(--inset);
   box-shadow: none;
   transform: none;
 }
@@ -1970,7 +1970,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   padding: 0 24px 8px;
   overflow-y: auto;
   scrollbar-gutter: auto;
-  background: #f8f7f1;
+  background: var(--paper);
 }
 .profile-modal .profile-editor-body::-webkit-scrollbar {
   width: 8px;
@@ -1979,12 +1979,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: transparent;
 }
 .profile-modal .profile-editor-body::-webkit-scrollbar-thumb {
-  border: 2px solid #f8f7f1;
+  border: 2px solid var(--paper);
   border-radius: 999px;
-  background: #aaaDA4;
+  background: var(--line-strong);
 }
 .profile-modal .profile-editor-body::-webkit-scrollbar-thumb:hover {
-  background: #8f958b;
+  background: var(--muted);
 }
 .profile-editor-section {
   display: grid;
@@ -2070,7 +2070,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   min-height: 30px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #fffef9;
+  background: var(--white);
   color: var(--ink);
   padding: 0 9px;
   font-size: 9.5px;
@@ -2081,8 +2081,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-photo-button:hover,
 .profile-remove-photo:hover,
 .profile-inline-action:hover {
-  border-color: #b7bbb1;
-  background: #f1f0e9;
+  border-color: var(--line-strong);
+  background: var(--inset);
 }
 .profile-photo-button input {
   position: absolute;
@@ -2126,34 +2126,33 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-break-row input {
   width: 100%;
   min-height: 40px;
-  border: 1px solid #d2d4ca;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fffef9;
+  background: var(--white);
   color: var(--ink);
   padding: 0 11px;
   font: 450 12px Inter, sans-serif;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 .profile-modal .profile-field input:hover,
 .profile-modal .profile-field select:hover,
 .profile-break-row input:hover {
-  border-color: #c3c7bc;
+  border-color: var(--line-strong);
 }
 .profile-modal .profile-field input:focus,
 .profile-modal .profile-field select:focus,
 .profile-break-row input:focus {
-  border-color: #8dbf54;
+  border-color: var(--focus);
   outline: 3px solid rgba(184, 255, 90, 0.18);
   box-shadow: 0 0 0 1px rgba(112, 158, 57, 0.12);
 }
 .profile-modal .profile-field input[readonly] {
-  color: #7b8076;
-  background: #f0efe9;
+  color: var(--muted);
+  background: var(--inset);
 }
 .profile-field small,
 .profile-schedule-note,
 .profile-muted {
-  color: #8b9086;
+  color: var(--muted);
   font-size: 9.5px;
   line-height: 1.45;
 }
@@ -2175,21 +2174,21 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-day-picker button {
   min-height: 32px;
-  border: 1px solid #d5d7ce;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f2f1eb;
-  color: #767c72;
+  background: var(--inset);
+  color: var(--muted);
   font-size: 9.5px;
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 150ms ease;
 }
 .profile-day-picker button:hover {
-  border-color: #bdc1b7;
-  background: #fffef9;
+  border-color: var(--line-strong);
+  background: var(--white);
 }
 .profile-day-picker button[aria-pressed="true"] {
-  border-color: #9bd457;
+  border-color: var(--signal-deep);
   background: var(--signal);
-  color: #172014;
+  color: var(--ink-on-signal);
   box-shadow: 0 2px 8px rgba(112, 164, 48, 0.12);
   font-weight: 750;
 }
@@ -2321,10 +2320,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 6px;
   min-height: 30px;
   padding: 0 5px 0 11px;
-  border: 1px solid #a3d966;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: #edf7df;
-  color: #31531d;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
   font-size: 9.5px;
   font-weight: 650;
 }
@@ -2336,15 +2335,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #5c7a41;
+  color: var(--tool-success);
   transition: background 150ms ease, color 150ms ease;
 }
 .profile-pill button:hover {
-  background: rgba(49, 83, 29, 0.12);
-  color: #26421a;
+  background: var(--inset);
+  color: var(--tool-success);
 }
 .profile-pill button:focus-visible {
-  outline: 2px solid #31531d;
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 .profile-pill-add,
@@ -2354,19 +2353,19 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 5px;
   min-height: 30px;
   padding: 0 11px;
-  border: 1px dashed #c6cbc0;
+  border: 1px dashed var(--line-strong);
   border-radius: 999px;
   background: transparent;
-  color: #5f665c;
+  color: var(--muted);
   font-size: 9.5px;
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 .profile-pill-add:hover,
 .profile-pill-custom:hover {
   border-style: solid;
-  border-color: #a9afa2;
-  background: #fffef9;
-  color: #3f463c;
+  border-color: var(--line-strong);
+  background: var(--white);
+  color: var(--ink);
 }
 .profile-pill-custom {
   border-color: transparent;
@@ -2388,7 +2387,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   font: 450 11px Inter, sans-serif;
 }
 .profile-pill-custom-form input:focus {
-  border-color: #8dbf54;
+  border-color: var(--focus);
   outline: 3px solid rgba(184, 255, 90, 0.18);
 }
 .profile-pill-custom-add {
@@ -2409,7 +2408,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-pill-empty {
   margin: 0;
-  color: #8b9086;
+  color: var(--muted);
   font-size: 9.5px;
 }
 /* Connected accounts are the workspace's mapping, not the employee's choice:
@@ -2434,7 +2433,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fffef9;
+  background: var(--white);
   color: #6e7369;
   font-size: 9.5px;
 }
@@ -2445,7 +2444,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-account-mark {
   display: grid;
   place-items: center;
-  color: #4a5248;
+  color: var(--ink-soft);
 }
 .profile-account-pill.is-worktivity .profile-account-mark {
   color: #2e617d;
@@ -2469,7 +2468,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-account-note {
   margin: 0;
-  color: #8b9086;
+  color: var(--muted);
   font-size: 9.5px;
   line-height: 1.45;
 }
@@ -2484,7 +2483,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-editor-modal > .profile-editor-actions {
   padding: 13px 24px 15px;
   border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  background: rgba(248, 247, 241, 0.96);
+  background: var(--paper);
   box-shadow: 0 -10px 24px rgba(24, 28, 22, 0.035);
   backdrop-filter: blur(10px);
 }
@@ -3126,9 +3125,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   width: min(650px, 100%);
   max-height: min(760px, calc(100vh - 48px));
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--line);
   border-radius: 20px;
-  background: #f7f5ed;
+  background: var(--paper);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -3161,7 +3160,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   height: 34px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #edebe3;
+  background: var(--inset);
   display: grid;
   place-items: center;
   flex: none;
@@ -3310,7 +3309,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   min-height: 54px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  background: #eeece5;
+  background: var(--inset);
   padding: 9px 10px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3319,11 +3318,11 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   cursor: pointer;
 }
 .assignee-grid > label.selected {
-  border-color: #9acb60;
-  background: #e4f6cd;
+  border-color: var(--line-strong);
+  background: var(--tool-success-soft);
 }
 .assignee-grid input {
-  accent-color: #74a936;
+  accent-color: var(--signal-deep);
 }
 .assignee-grid label > span {
   min-width: 0;
@@ -3343,7 +3342,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .assignee-grid svg {
   opacity: 0;
-  color: #4d7b1d;
+  color: var(--tool-success);
 }
 .assignee-grid .selected svg {
   opacity: 1;
@@ -3582,7 +3581,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  background: #f0eee6;
+  background: var(--inset);
 }
 .task-modal > footer button {
   min-height: 40px;
@@ -3593,7 +3592,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .task-modal > footer .primary {
   background: var(--signal);
-  border-color: #a6e852;
+  border-color: transparent;
 }
 .task-modal > footer.task-detail-footer {
   justify-content: space-between;
@@ -4510,9 +4509,9 @@ body.modal-open {
 .task-modal.guide-modal {
   width: min(620px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--line);
   border-radius: 22px;
-  background: #f8f7f1;
+  background: var(--paper);
 }
 /*
  * The tour carries one more row than a page guide — the rail of pages — so it
@@ -4528,7 +4527,7 @@ body.modal-open {
 .task-modal.guide-modal > header {
   align-items: flex-start;
   padding: 20px 24px 16px;
-  background: rgba(248, 247, 241, 0.97);
+  background: var(--paper);
 }
 .task-modal.guide-modal > header h2 {
   max-width: 440px;
@@ -4572,11 +4571,11 @@ body.modal-open {
   min-height: 40px;
   border-color: transparent;
   background: transparent;
-  color: #62675f;
+  color: var(--muted);
 }
 .task-modal.guide-modal > header button:not(:disabled):hover {
   border-color: var(--line);
-  background: #efeee8;
+  background: var(--inset);
   box-shadow: none;
   transform: none;
 }
@@ -4700,7 +4699,7 @@ body.modal-open {
   align-self: center;
   margin-left: auto;
   padding-left: 8px;
-  color: var(--color-muted, #687267);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
@@ -4829,13 +4828,13 @@ body.modal-open {
   transition: background 150ms ease, border-color 150ms ease;
 }
 .guide-step-control:not(:disabled):hover {
-  background: #f1f0ea;
+  background: var(--inset);
   box-shadow: none;
   transform: none;
 }
 .guide-step-control[aria-pressed="true"] {
-  border-color: #d5dfca;
-  background: #eef4e7;
+  border-color: var(--line-strong);
+  background: var(--inset);
 }
 .guide-step-mark {
   display: grid;
@@ -4850,8 +4849,8 @@ body.modal-open {
   color: var(--ink);
 }
 .guide-step-control[aria-pressed="true"] .guide-step-mark {
-  border-color: #bad49a;
-  background: #e3f6cb;
+  border-color: var(--line-strong);
+  background: var(--tool-success-soft);
 }
 .guide-step-copy {
   display: grid;

@@ -449,6 +449,7 @@ describe("operational visualizations", () => {
     expect(themeStyles).toContain("--paper: #303133");
     expect(app).toContain("<ThemePrompt");
     expect(app).toContain("themePromptSeen");
+    expect(app).toContain("watchSystemTheme");
     expect(themePrompt).toContain("How should Work OS look?");
     expect(appearanceSettings).toContain("Appearance");
     expect(appearanceSettings).toContain('label="Theme"');

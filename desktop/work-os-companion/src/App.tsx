@@ -100,7 +100,7 @@ import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
-import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, rememberTheme, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
+import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, rememberTheme, watchSystemTheme, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
 import ThemePrompt from "./ThemePrompt";
 import { shouldOpenThemePrompt } from "./themePromptState";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
@@ -1372,6 +1372,11 @@ export default function App() {
    * waits for it instead of opening underneath. */
   const otherOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || taskFinderOpen || (tourScope === "admin" && adminWorkspaceBranch);
   const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
+
+  useEffect(() => {
+    const activeTheme = themePromptOpen ? themePreview : theme;
+    return watchSystemTheme(() => applyAppearance({ textSize, mascotSize, theme: activeTheme }));
+  }, [mascotSize, textSize, theme, themePreview, themePromptOpen]);
 
   useEffect(() => {
     if (themePromptOpen) return;

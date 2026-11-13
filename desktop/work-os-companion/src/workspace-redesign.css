@@ -7568,9 +7568,9 @@ button:not(:disabled):active {
   width: min(720px, 100%);
   height: min(680px, calc(100dvh - 48px));
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--line);
   border-radius: 20px;
-  background: #f7f5ed;
+  background: var(--paper);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
   animation: modalRise 0.24s ease both;
 }
@@ -7623,10 +7623,10 @@ button:not(:disabled):active {
 }
 
 .memory-tab:hover { color: var(--ink); }
-.memory-tab.active { border-color: var(--line); background: #fffdf6; color: var(--ink); }
+.memory-tab.active { border-color: var(--line); background: var(--inset); color: var(--ink); }
 .memory-tab:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
-.memory-tab-count { min-width: 19px; padding: 1px 6px; border-radius: 999px; background: #ecebe4; color: #5f6358; font-size: 10px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
-.memory-tab-count.attention { background: #fff1cf; color: #7a5312; }
+.memory-tab-count { min-width: 19px; padding: 1px 6px; border-radius: 999px; background: var(--inset); color: var(--muted); font-size: 10px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.memory-tab-count.attention { background: var(--warning-soft); color: var(--warning); }
 
 .memory-modal-body {
   --memory-edge: 12px;
@@ -8022,9 +8022,9 @@ button:not(:disabled):active {
   width: min(680px, 100%);
   max-height: min(680px, calc(100vh - 48px));
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--line);
   border-radius: 20px;
-  background: #f7f5ed;
+  background: var(--paper);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
   animation: modalRise 0.24s ease both;
 }
