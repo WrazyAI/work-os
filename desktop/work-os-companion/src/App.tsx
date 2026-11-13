@@ -100,7 +100,7 @@ import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
-import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
+import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
 const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));
@@ -547,6 +547,7 @@ export default function App() {
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
+  const [theme, setTheme] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
@@ -2576,7 +2577,7 @@ export default function App() {
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
-    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
       // paint; the live query revalidates it in the background.
@@ -3660,13 +3661,13 @@ export default function App() {
   async function chooseTextSize(next: TextSize) {
     const previous = textSize;
     setTextSize(next);
-    applyAppearance({ textSize: next, mascotSize });
+    applyAppearance({ textSize: next, mascotSize, theme });
     try {
       await secureState.saveSettings({ textSize: next });
       void emit(APPEARANCE_EVENT, { textSize: next, mascotSize });
     } catch (value) {
       setTextSize(previous);
-      applyAppearance({ textSize: previous, mascotSize });
+      applyAppearance({ textSize: previous, mascotSize, theme });
       showError(errorMessage(value, "The text size could not be saved."), "The text size could not be saved.", "Setting not saved");
     }
   }
@@ -3674,13 +3675,13 @@ export default function App() {
   async function chooseMascotSize(next: MascotSize) {
     const previous = mascotSize;
     setMascotSize(next);
-    applyAppearance({ textSize, mascotSize: next });
+    applyAppearance({ textSize, mascotSize: next, theme });
     try {
       await secureState.saveSettings({ mascotSize: next });
       void emit(APPEARANCE_EVENT, { textSize, mascotSize: next });
     } catch (value) {
       setMascotSize(previous);
-      applyAppearance({ textSize, mascotSize: previous });
+      applyAppearance({ textSize, mascotSize: previous, theme });
       showError(errorMessage(value, "The mascot size could not be saved."), "The mascot size could not be saved.", "Setting not saved");
     }
   }

@@ -10,7 +10,7 @@ export default function SettingsPreview() {
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
 
-  useEffect(() => { applyAppearance({ textSize, mascotSize }); }, [textSize, mascotSize]);
+  useEffect(() => { applyAppearance({ textSize, mascotSize, theme: "system" }); }, [textSize, mascotSize]);
 
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 29</p><h1>Settings</h1></div></header>
     <main className="page">
