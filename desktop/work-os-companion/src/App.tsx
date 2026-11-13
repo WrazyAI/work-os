@@ -1313,6 +1313,25 @@ export default function App() {
   const navigateEmployeeGuide = useCallback((guide: GuideView) => {
     if (!isAdminGuideView(guide)) setView(guide);
   }, []);
+  const chooseTheme = useCallback(async (next: ThemePreference, options: { markSeen?: boolean } = {}) => {
+    const previous = theme;
+    setTheme(next);
+    setThemePreview(next);
+    applyAppearance({ textSize, mascotSize, theme: next });
+    rememberTheme(next);
+    try {
+      await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
+      if (options.markSeen) setThemePromptSeen(true);
+      void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
+    } catch (value) {
+      setTheme(previous);
+      setThemePreview(previous);
+      applyAppearance({ textSize, mascotSize, theme: previous });
+      rememberTheme(previous);
+      throw value;
+    }
+  }, [mascotSize, textSize, theme]);
+
   const selectThemePreview = useCallback((next: ThemePreference) => {
     setThemePreview(next);
     setThemePromptError(null);
@@ -5577,8 +5596,10 @@ export default function App() {
       onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}
       pageGuideAutoOpen={pageGuideAutoOpen}
       onPageGuideAutoOpen={setPageGuideAutoOpen}
+      theme={theme}
       textSize={textSize}
       mascotSize={mascotSize}
+      onTheme={(value) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved"))}
       onTextSize={(value) => void chooseTextSize(value)}
       onMascotSize={(value) => void chooseMascotSize(value)}
       queueCount={queueCount}

@@ -2574,7 +2574,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #efeee7;
+  background: var(--surface);
 }
 .settings-choice button {
   min-height: 28px;
@@ -2590,7 +2590,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .settings-choice button:disabled { cursor: default; opacity: 0.55; }
 .settings-choice button[aria-checked="true"] {
   background: var(--ink);
-  color: #f3f1e8;
+  color: var(--white);
   box-shadow: 0 1px 3px rgba(23, 25, 20, 0.18);
 }
 .settings-switch.on .settings-switch-state { color: #436a1c; }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { MascotPet } from "./MascotPet";
-import { applyAppearance, type MascotSize, type TextSize } from "./appearance";
+import { applyAppearance, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
 
 /** Dev-only fixture for the appearance settings: the real Reading & display
  * group wired to a live document, plus sample text and Otto so the rendered
@@ -9,14 +9,17 @@ import { applyAppearance, type MascotSize, type TextSize } from "./appearance";
 export default function SettingsPreview() {
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
+  const [theme, setTheme] = useState<ThemePreference>("system");
 
-  useEffect(() => { applyAppearance({ textSize, mascotSize, theme: "system" }); }, [textSize, mascotSize]);
+  useEffect(() => { applyAppearance({ textSize, mascotSize, theme }); }, [textSize, mascotSize, theme]);
 
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 29</p><h1>Settings</h1></div></header>
     <main className="page">
       <AppearanceSettings
+        theme={theme}
         textSize={textSize}
         mascotSize={mascotSize}
+        onTheme={setTheme}
         onTextSize={setTextSize}
         onMascotSize={setMascotSize}
       />
