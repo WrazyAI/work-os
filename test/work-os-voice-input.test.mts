@@ -347,8 +347,8 @@ test("the companion answers WebView2 microphone permission for its own origin on
 test("hold-to-talk is a stored, truthful per-device preference", () => {
   const vault = read("desktop/work-os-companion/src/vault.ts");
   assert.match(vault, /voiceHotkey: boolean;/);
-  assert.match(vault, /const voiceHotkey = settings\?\.voiceHotkey !== false;/);
-  assert.match(vault, /voiceHotkey: settings\.voiceHotkey \?\? current\?\.voiceHotkey !== false,/);
+  assert.match(vault, /voiceHotkey: settings\?\.voiceHotkey !== false,/);
+  assert.match(vault, /voiceHotkey: next\.voiceHotkey \?\? base\.voiceHotkey,/);
   const app = read("desktop/work-os-companion/src/App.tsx");
   assert.match(app, /void applyVoiceHotkey\(settings\.voiceHotkey\)/);
   assert.match(app, /invoke<\{ enabled: boolean; error: string \| null \}>\("set_voice_hotkey", \{ enabled \}\)/);

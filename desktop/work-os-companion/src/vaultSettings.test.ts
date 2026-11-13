@@ -27,6 +27,10 @@ describe("vault settings", () => {
     expect(mergeWorkOsSettings(base, { mascotSize: "small" }).themePromptSeen).toBe(false);
   });
 
+  it("keeps the voice shortcut through unrelated saves", () => {
+    expect(mergeWorkOsSettings({ ...base, voiceHotkey: false }, { theme: "dark" }).voiceHotkey).toBe(false);
+  });
+
   it("keeps the saved recap voice through unrelated saves and writes a new one", () => {
     expect(mergeWorkOsSettings({ ...base, recapVoice: "warm" }, { theme: "dark" }).recapVoice).toBe("warm");
     expect(mergeWorkOsSettings(base, { recapVoice: "calm" }).recapVoice).toBe("calm");
