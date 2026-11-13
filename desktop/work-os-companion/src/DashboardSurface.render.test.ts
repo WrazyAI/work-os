@@ -46,6 +46,22 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Older <em>2500</em>");
   });
 
+  it("shows flexible hours without a scheduled window or remaining-time reading", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const arrangement = { kind: "flexible" as const, daysOfWeek: [1, 5], timezone: "UTC" };
+    const off = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift: null, arrangement, attendance, pulse: shiftPulse(null, null, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const offMarkup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model: off, tasks: [task], currentDate: "2026-08-26" }));
+    expect(offMarkup).toContain("Flexible hours");
+    expect(offMarkup).toContain("Mon, Fri");
+    expect(offMarkup).not.toContain("Scheduled window");
+    expect(offMarkup).not.toContain("Starts in");
+    const live = { ...attendance, state: "active" as const, status: "working" as const, clockedInAt: new Date(now).toISOString() };
+    const active = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift: null, arrangement, attendance: live, pulse: shiftPulse(null, null, new Date(now), true, live), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now);
+    const activeMarkup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model: active, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26" }));
+    expect(activeMarkup).toContain("Flexible hours");
+    expect(activeMarkup).not.toContain("Remaining");
+  });
+
   it("offers a keyboard-accessible workday details entry", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "First move", focusSource: "Written by you" }, now);

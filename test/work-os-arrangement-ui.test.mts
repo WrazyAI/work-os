@@ -11,6 +11,13 @@ test("flexible setup renders workdays but no shift or hours-target inputs", () =
   assert.match(html, /Working days/);
   assert.doesNotMatch(html, /type="time"|hours target|daily hours/i);
 });
+test("scheduled settings keep every break window and legacy payloads without breaks", () => {
+  const two = renderToStaticMarkup(createElement(WorkArrangementFields, { value: { arrangement: "scheduled", daysOfWeek: [1], shiftStart: "09:00", shiftEnd: "17:00", breaks: [{ start: "12:00", end: "12:30" }, { start: "15:00", end: "15:15" }] }, onChange() {} }));
+  assert.match(two, /Break 1 starts/);
+  assert.match(two, /Break 2 starts/);
+  const legacy = renderToStaticMarkup(createElement(WorkArrangementFields, { value: { daysOfWeek: [1], shiftStart: "09:00", shiftEnd: "17:00" }, onChange() {} }));
+  assert.match(legacy, /No break windows added/);
+});
 test("only a submitted proposal offers approval, and pending review never claims an official shift", () => {
   const proposal = { status: "submitted", revision: 2, submittedAt: "2026-11-13T10:00:00Z", timezone: "UTC", schedule: { arrangement: "flexible" as const, daysOfWeek: [1], shiftStart: null, shiftEnd: null, breaks: [] }, note: null, canReview: true };
   const html = renderToStaticMarkup(createElement(ArrangementReview, { proposal, onReview: async () => ({ status: "approved" }) }));

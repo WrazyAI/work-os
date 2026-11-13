@@ -184,9 +184,32 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
   const screenshotEnd = body.screenshot_analysis_end ? validateWorkOsTime(body.screenshot_analysis_end, "screenshot_analysis_end") : null;
   if (!!screenshotStart !== !!screenshotEnd) throw new Error("screenshot_analysis_start and screenshot_analysis_end must be provided together");
   if (screenshotStart && screenshotStart === screenshotEnd) throw new Error("screenshot_analysis_start and screenshot_analysis_end must be different");
+  const scheduleId = text(body.id);
+  if (scheduleId) {
+    const existing = await db().from("work_schedules").select("arrangement")
+      .eq("organization_id", access.organizationId).eq("id", scheduleId).maybeSingle();
+    if (existing.error) throw new Error(`load Work OS schedule for update: ${existing.error.message}`);
+    if (existing.data?.arrangement === "flexible") {
+      throw new Error("A flexible arrangement is changed through its onboarding review, not the timed schedule editor.");
+    }
+  }
+  // Two active official rows for one person can disagree about clock-in and
+  // late handling. Refuse a new overlap instead of silently changing history.
+  const activeRows = await db().from("work_schedules").select("id,effective_from,effective_to")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true);
+  if (activeRows.error) throw new Error(`load active Work OS schedules: ${activeRows.error.message}`);
+  const newTo = effectiveTo ?? "9999-12-31";
+  const conflict = (activeRows.data ?? []).find((row) => {
+    if (scheduleId && String(row.id) === scheduleId) return false;
+    const from = dateOnly(row.effective_from);
+    const to = dateOnly(row.effective_to) ?? "9999-12-31";
+    return from !== null && from <= newTo && to >= effectiveFrom;
+  });
+  if (conflict) throw new Error("An official schedule already covers those dates. Close it before adding another.");
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
+    arrangement: "scheduled",
     timezone: validateWorkOsTimezone(body.timezone),
     days_of_week: days,
     shift_start: shiftStart,
@@ -203,7 +226,6 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
     created_by: access.ctx.user.id,
     updated_at: new Date().toISOString(),
   };
-  const scheduleId = text(body.id);
   const query = scheduleId
     ? db().from("work_schedules").update(payload).eq("organization_id", access.organizationId).eq("id", scheduleId)
     : db().from("work_schedules").insert(payload);

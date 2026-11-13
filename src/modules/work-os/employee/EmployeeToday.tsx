@@ -198,6 +198,8 @@ export default function EmployeeToday() {
 
   const workspace = day.data?.workspaceSummary;
   const shift = day.data?.shift;
+  const flexible = day.data?.arrangement?.kind === "flexible" ? day.data.arrangement : null;
+  const flexibleDays = flexible ? flexible.daysOfWeek.map((value) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][value]).join(", ") : "";
   const timezone = shift?.timezone;
   const attendance = day.data?.attendance;
   const workSession = day.data?.session;
@@ -288,7 +290,7 @@ export default function EmployeeToday() {
         <div className={styles.titleRow}>
           <h1>Today</h1>
           <p className={styles.schedule}>
-            {shift ? `${formatTime(shift.startsAt, timezone)} – ${formatTime(shift.endsAt, timezone)} · ${timezone}` : "No schedule is configured for today."}
+            {shift ? `${formatTime(shift.startsAt, timezone)} – ${formatTime(shift.endsAt, timezone)} · ${timezone}` : flexible ? `Flexible hours on ${flexibleDays} · ${timezone}` : "No schedule is configured for today."}
           </p>
           <div className={styles.utilities}>
             {outstandingCount > 0 ? (
@@ -405,6 +407,14 @@ export default function EmployeeToday() {
                 {pulse.breakSeconds > 0 ? ` Break ${pulse.breakLabel}.` : ""}
               </p>
               {windowEndedOpenSession ? <Link className={styles.windowEndedLink} href="/work-os/review">Open EOD review</Link> : null}
+            </div>
+          ) : flexible ? (
+            <div className={styles.window}>
+              <div className={styles.windowValues}>
+                <span className={styles.windowElapsed}><strong>{pulse.elapsedLabel}</strong><span>elapsed</span></span>
+                <span className={styles.windowLeft}>Flexible hours</span>
+              </div>
+              <p className={styles.instrumentNote}>Fixed workdays: {flexibleDays}. No required start, end, or number of hours is set.</p>
             </div>
           ) : (
             <p className={styles.stateDetail}>No schedule is configured for today.</p>

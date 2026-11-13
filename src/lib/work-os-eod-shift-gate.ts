@@ -1,6 +1,6 @@
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { db, loadShiftData } from "@/lib/work-os-internal";
-import { EOD_SHIFT_OPEN_SERVER_MESSAGE, eodDraftBlocked, eodDraftDateBlocked } from "@/lib/work-os-shift-gate";
+import { EOD_SHIFT_OPEN_SERVER_MESSAGE, eodDraftBlocked, eodDraftDateBlocked, flexibleEodDraftBlocked } from "@/lib/work-os-shift-gate";
 import { localDateForTimezone, resolveShiftWindowForDate } from "@/modules/work-os/companion";
 
 /** A Worktivity observation older than this is not evidence of an open shift. */
@@ -53,6 +53,19 @@ export async function eodDraftShiftGate(
       observedAt: attendanceResult.data.observed_at,
     }
     : null;
+  const flexibleResult = await db().from("work_schedules").select("id")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true)
+    .eq("arrangement", "flexible").lte("effective_from", date)
+    .or(`effective_to.is.null,effective_to.gte.${date}`).limit(1).maybeSingle();
+  if (flexibleResult.error) throw new Error(`load EOD flexible arrangement: ${flexibleResult.error.message}`);
+  if (flexibleResult.data) {
+    const closed = Boolean(sessionResult.data?.clocked_out_at) || ["clocked_out", "closed"].includes(String(sessionResult.data?.state ?? ""));
+    const started = Boolean(sessionResult.data?.clocked_in_at)
+      || Boolean(attendance && !attendance.stale && ["active", "paused"].includes(String(attendance.state ?? "")));
+    return flexibleEodDraftBlocked({ started, closed })
+      ? { blocked: true, message: "Your end-of-day report opens once your workday has started." }
+      : { blocked: false };
+  }
   // The mirrored session carries the scheduled end recorded at clock-in. If it
   // is missing (a provider-only session), resolve the day's schedule so the
   // final ten minutes still open on a real clock-out time.

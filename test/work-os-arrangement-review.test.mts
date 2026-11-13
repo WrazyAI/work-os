@@ -15,14 +15,16 @@ async function fixture() {
   const db = new PGlite();
   await db.exec(`
     create table work_people (id uuid primary key, organization_id uuid);
+    create table work_organizations (id uuid primary key, feature_flags jsonb default '{}');
     create table work_org_members (id uuid default gen_random_uuid(), organization_id uuid, user_id uuid, role text, active boolean);
     create table work_employee_onboarding (organization_id uuid,person_id uuid,status text check(status in ('not_started','in_progress','submitted','confirmed','changes_requested')),draft_revision integer,employee_submitted_at timestamptz,schedule_proposal jsonb,timezone text,reviewed_by uuid,reviewed_at timestamptz,review_note text,updated_at timestamptz);
     create function work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb) returns work_employee_onboarding language sql as $$update work_employee_onboarding set draft_revision=draft_revision+1 where organization_id=$1 and person_id=$2 returning *$$;
-    create table work_schedules (id uuid default gen_random_uuid(),organization_id uuid,person_id uuid,timezone text,days_of_week integer[],shift_start time not null,shift_end time not null,break_windows jsonb default '[]',effective_from date,effective_to date,active boolean,created_by uuid,updated_at timestamptz);
+    create table work_schedules (id uuid default gen_random_uuid(),organization_id uuid,person_id uuid,timezone text,days_of_week integer[],shift_start time not null,shift_end time not null,break_windows jsonb default '[]',effective_from date,effective_to date,active boolean,created_by uuid,updated_at timestamptz,screenshot_analysis_enabled boolean default true,screenshot_analysis_interval_minutes integer default 60,screenshot_analysis_start time,screenshot_analysis_end time,screenshot_analysis_eod_lead_minutes integer default 30);
     create table work_sessions (id uuid default gen_random_uuid(),organization_id uuid,person_id uuid,state text);
     create table work_audit_log (organization_id uuid,actor_user_id uuid,action text,target_type text,target_id uuid,metadata jsonb);
   `);
   await db.exec(readFileSync(new URL("../supabase/migrations/0074_work_os_flexible_arrangements.sql", import.meta.url), "utf8"));
+  await db.query("insert into work_organizations values ($1,'{}'::jsonb)", [org]);
   await db.query("insert into work_people values ($1,$2)", [person, org]);
   await db.query("insert into work_org_members(organization_id,user_id,role,active) values($1,$2,'admin',true)", [org, actor]);
   await db.query(`insert into work_employee_onboarding(organization_id,person_id,status,draft_revision,employee_submitted_at,schedule_proposal,timezone) values($1,$2,'submitted',2,$3,$4::jsonb,'UTC')`, [org, person, input.submittedAt, JSON.stringify({ arrangement: "flexible", daysOfWeek: [1, 5] })]);
@@ -79,6 +81,16 @@ test("replacement approval preserves old schedule history and starts on the next
     assert.ok(rows[0].effective_to < result.effectiveFrom!);
     assert.equal(rows[1].effective_from, result.effectiveFrom);
     assert.equal(rows[1].arrangement, "flexible");
+  } finally { await db.close(); }
+});
+test("administrator corrections become the employee's approved arrangement", async () => {
+  const { db, pool } = await fixture();
+  try {
+    await reviewWorkArrangement(access, person, { ...input, schedule: { arrangement: "flexible", daysOfWeek: [3, 5] }, timezone: "America/Chicago" }, pool);
+    const onboarding = (await db.query<any>("select schedule_proposal,timezone,status from work_employee_onboarding")).rows[0];
+    assert.equal(onboarding.status, "confirmed");
+    assert.equal(onboarding.timezone, "America/Chicago");
+    assert.deepEqual(onboarding.schedule_proposal.daysOfWeek, [3, 5]);
   } finally { await db.close(); }
 });
 test("schedule constraints reject mixed flexible/timed records", async () => {

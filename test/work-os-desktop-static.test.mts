@@ -162,7 +162,7 @@ assert.match(onboardingForm, /text-transform: none/);
 assert.match(onboarding, /function FieldError/);
 assert.match(onboarding, /aria-pressed=\{form\.archetypeId === entry\.id\}/);
 assert.match(onboarding, /aria-pressed=\{form\.specialtyIds\.includes\(specialty\.id\)\}/);
-assert.match(onboarding, /aria-pressed=\{form\.schedule\.daysOfWeek\.includes\(day\.value\)\}/);
+assert.match(onboarding, /WorkArrangementFields/);
 assert.match(onboarding, /setProblem\(issue\)/);
 assert.match(onboarding, /\[aria-invalid="true"\], \[data-invalid="true"\]/);
 assert.doesNotMatch(onboarding, /Saved · revision/);

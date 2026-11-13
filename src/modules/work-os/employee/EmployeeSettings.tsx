@@ -210,6 +210,22 @@ export default function EmployeeSettings() {
           </div>
         </section>
 
+        <section className={styles.group} aria-labelledby="settings-arrangement-title">
+          <div className={styles.groupLabel}>
+            <h2 id="settings-arrangement-title">Work arrangement</h2>
+            <p>Your official arrangement is set by your workspace. A change is sent for administrator review.</p>
+          </div>
+          <div className={styles.groupContent}>
+            <WorkArrangementFields value={{ arrangement, daysOfWeek, shiftStart, shiftEnd, breaks: breakStart || breakEnd ? [{ start: breakStart, end: breakEnd }] : [] }} authoritativeBreaks={worktivityBreaks} disabled={saveOnboarding.isPending}
+              onChange={(next) => { setArrangement(next.arrangement ?? "scheduled"); setDaysOfWeek(next.daysOfWeek); setShiftStart(next.shiftStart ?? ""); setShiftEnd(next.shiftEnd ?? ""); setBreakStart(next.breaks?.[0]?.start ?? ""); setBreakEnd(next.breaks?.[0]?.end ?? ""); }} />
+            <p className={styles.hint}>Submitted arrangements await administrator review. Your current official arrangement remains in effect until a change is approved.</p>
+            {onboarding.data?.reviewNote ? <p className={styles.hint}>Administrator note: {String(onboarding.data.reviewNote)}</p> : null}
+            {!onboardingRequired ? <div className={styles.formActions}>
+              <button type="button" className={styles.primaryButton} disabled={saveOnboarding.isPending || !daysOfWeek.length} onClick={() => saveOnboarding.mutate()}>{saveOnboarding.isPending ? "Sending…" : "Submit arrangement for review"}</button>
+            </div> : null}
+          </div>
+        </section>
+
         <section className={styles.group} aria-labelledby="settings-consent-title">
           <div className={styles.groupLabel}>
             <h2 id="settings-consent-title">{onboardingRequired ? "Complete setup" : "Privacy & consent"}</h2>
@@ -249,12 +265,6 @@ export default function EmployeeSettings() {
                   <span className={styles.fieldLabel}>Language</span>
                   <input className={styles.input} value={language} onChange={(event) => setLanguage(event.target.value)} />
                 </label>
-                <div className={styles.fieldFull}>
-                  <WorkArrangementFields value={{ arrangement, daysOfWeek, shiftStart, shiftEnd, breaks: breakStart || breakEnd ? [{ start: breakStart, end: breakEnd }] : [] }} authoritativeBreaks={worktivityBreaks} disabled={saveOnboarding.isPending}
-                    onChange={(next) => { setArrangement(next.arrangement ?? "scheduled"); setDaysOfWeek(next.daysOfWeek); setShiftStart(next.shiftStart ?? ""); setShiftEnd(next.shiftEnd ?? ""); setBreakStart(next.breaks[0]?.start ?? ""); setBreakEnd(next.breaks[0]?.end ?? ""); }} />
-                  <p className={styles.hint}>Submitted arrangements await administrator review. Your current official arrangement remains in effect until a change is approved.</p>
-                  {onboarding.data?.reviewNote ? <p className={styles.hint}>Administrator note: {String(onboarding.data.reviewNote)}</p> : null}
-                </div>
                 <label className={`${styles.field} ${styles.fieldFull}`}>
                   <span className={styles.fieldLabel}>Sensitive apps/domains to exclude <em>optional</em></span>
                   <input className={styles.input} value={exclusions} onChange={(event) => setExclusions(event.target.value)} placeholder="password manager, bank.example" />

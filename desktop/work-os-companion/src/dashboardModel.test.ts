@@ -128,7 +128,8 @@ describe("buildWorkdayDashboardModel", () => {
     const model = buildWorkdayDashboardModel(input({ arrangement: { kind: "flexible", daysOfWeek: [1, 5], timezone: "UTC" }, pulse: { ...pulse, schedulePhase: "upcoming" } }));
     expect(model.stateLabel).toBe("Flexible hours");
     expect(model.flexible).toEqual({ daysOfWeek: [1, 5], timezone: "UTC" });
-    expect(model.schedule.startsAt).toBe("2026-09-20T09:00:00Z");
+    expect(model.schedule.startsAt).toBeNull();
+    expect(model.schedule.endsAt).toBeNull();
     expect(model.schedule.phase).toBe("unavailable");
   });
 

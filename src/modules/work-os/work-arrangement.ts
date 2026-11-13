@@ -13,9 +13,9 @@ export interface WorkArrangementProposal {
 export function normalizeWorkArrangement(value: unknown): WorkArrangementProposal {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const arrangement = input.arrangement === undefined ? "scheduled" : input.arrangement;
-  if (arrangement !== "scheduled" && arrangement !== "flexible") throw new Error("invalid work arrangement");
+  if (arrangement !== "scheduled" && arrangement !== "flexible") throw new Error("arrangement must be scheduled or flexible");
   if (!Array.isArray(input.daysOfWeek) || !input.daysOfWeek.length || input.daysOfWeek.some((day) => typeof day !== "number" || !Number.isInteger(day) || day < 0 || day > 6)) {
-    throw new Error("Choose at least one valid working day.");
+    throw new Error("daysOfWeek must include at least one day from Sunday through Saturday");
   }
   const daysOfWeek = [...new Set(input.daysOfWeek as number[])].sort();
   if (arrangement === "flexible") return { arrangement, daysOfWeek, shiftStart: null, shiftEnd: null, breaks: [] };

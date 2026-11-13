@@ -173,20 +173,9 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
     setSaved(false);
   }
 
-  function updateBreak(index: number, patch: Partial<{ start: string; end: string }>) {
-    updateSchedule({ breaks: form.schedule.breaks.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) });
-  }
-
   function selectArchetype(archetypeId: string) {
     const archetype = data.catalog.archetypes.find((entry) => entry.id === archetypeId);
     patchForm({ archetypeId, specialtyIds: [], ...(archetype?.id === "custom" ? {} : { customRoleTitle: "" }) });
-  }
-
-  function toggleDay(day: number) {
-    const days = form.schedule.daysOfWeek.includes(day)
-      ? form.schedule.daysOfWeek.filter((item) => item !== day)
-      : [...form.schedule.daysOfWeek, day];
-    updateSchedule({ daysOfWeek: days.sort((left, right) => left - right) });
   }
 
   function selectAvatar(event: React.ChangeEvent<HTMLInputElement>) {

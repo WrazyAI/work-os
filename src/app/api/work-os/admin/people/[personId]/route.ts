@@ -130,7 +130,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
         submittedAt: onboardingResult.data.employee_submitted_at,
         timezone: onboardingResult.data.timezone ?? "UTC",
         schedule: onboardingResult.data.schedule_proposal,
-        note: onboardingResult.data.review_note,
+        // Review notes are administrator-only; managers still see that a
+        // proposal exists but not internal reviewer commentary.
+        note: auth.access.role === "admin" ? onboardingResult.data.review_note : null,
         canReview: auth.access.role === "admin",
       } : null,
       exceptions: exceptionsResult.data ?? [],

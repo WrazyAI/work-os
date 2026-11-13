@@ -98,6 +98,13 @@ export function eodDraftWindowOpen(input: {
   return scheduledEnd !== null && (input.now ?? Date.now()) >= scheduledEnd - EOD_EARLY_DRAFT_WINDOW_MS;
 }
 
+/** A flexible day has no scheduled clock-out, so its report opens once the
+ * workday has actually started (or already closed). Before that it stays
+ * blocked, so an early click cannot describe a day that has not happened. */
+export function flexibleEodDraftBlocked(input: { started: boolean; closed: boolean }): boolean {
+  return !input.started && !input.closed;
+}
+
 /** Whether today's EOD is still blocked by an open shift.
  *
  * An open shift blocks the report only before its final ten minutes. The

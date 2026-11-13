@@ -135,18 +135,20 @@ function zonedDateTimeToUtc(date: string, time: string, timezone: string) {
 }
 
 function profileShift(schedule: OnboardingSchedule | null | undefined, currentDate: string, timezone: string, now: Date): DashboardShift | null {
-  if (!schedule?.daysOfWeek?.length || !/^\d{2}:\d{2}/.test(schedule.shiftStart) || !/^\d{2}:\d{2}/.test(schedule.shiftEnd)) return null;
+  const shiftStart = schedule?.shiftStart;
+  const shiftEnd = schedule?.shiftEnd;
+  if (!schedule?.daysOfWeek?.length || !shiftStart || !shiftEnd || !/^\d{2}:\d{2}/.test(shiftStart) || !/^\d{2}:\d{2}/.test(shiftEnd)) return null;
   for (let offset = 0; offset <= 7; offset += 1) {
     const date = addCalendarDays(currentDate, offset);
     if (!date) continue;
     const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
     if (!schedule.daysOfWeek.includes(weekday)) continue;
-    const startsAt = zonedDateTimeToUtc(date, schedule.shiftStart, timezone);
-    let endsAt = zonedDateTimeToUtc(date, schedule.shiftEnd, timezone);
+    const startsAt = zonedDateTimeToUtc(date, shiftStart, timezone);
+    let endsAt = zonedDateTimeToUtc(date, shiftEnd, timezone);
     if (!startsAt || !endsAt) continue;
     if (Date.parse(endsAt) <= Date.parse(startsAt)) {
       const nextDate = addCalendarDays(date, 1);
-      const nextEnd = nextDate ? zonedDateTimeToUtc(nextDate, schedule.shiftEnd, timezone) : null;
+      const nextEnd = nextDate ? zonedDateTimeToUtc(nextDate, shiftEnd, timezone) : null;
       if (!nextEnd) continue;
       endsAt = nextEnd;
     }
@@ -262,8 +264,8 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
     state,
     ...meta,
     schedule: {
-      startsAt: input.shift?.startsAt ?? null,
-      endsAt: input.shift?.endsAt ?? null,
+      startsAt: flexible ? null : input.shift?.startsAt ?? null,
+      endsAt: flexible ? null : input.shift?.endsAt ?? null,
       timezone: input.shift?.timezone ?? input.timezone ?? null,
       phase: flexible ? "unavailable" : input.pulse.schedulePhase,
     },

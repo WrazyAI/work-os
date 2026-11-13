@@ -22,6 +22,8 @@ export interface EmployeeDayResponse {
    * window and rolls to tomorrow after the shift ends; the EOD window must stay
    * anchored to the day it describes. */
   dayShift?: { startsAt: string; endsAt: string } | null;
+  /** Approved flexible work: fixed days, no expected times. */
+  arrangement?: { kind: "scheduled" | "flexible"; daysOfWeek: number[]; timezone: string } | null;
   prompt: { kind: "plan" | "catch_up" | "optional" | "follow_up" | "hourly_fallback" | "eod" | null; nextPromptAt: string | null; required: boolean; reason: string };
   niftySync?: { fresh: boolean; syncing?: boolean; syncedAt: string | null; error?: string };
   signals?: {

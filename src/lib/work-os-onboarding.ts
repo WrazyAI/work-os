@@ -99,6 +99,26 @@ export function shouldPromoteSubmittedSchedule(role: WorkOsAccess["role"]) {
   return role === "admin";
 }
 
+function isoDateValue(value: unknown) {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
+  return typeof value === "string" ? value.slice(0, 10) : "";
+}
+
+/** A same-arrangement admin submission keeps the existing in-place behavior;
+ * an arrangement change is a new effective-dated row so history survives. */
+export function schedulePromotionPlan(
+  existing: { arrangement?: string; effective_from?: unknown } | null,
+  submitted: "scheduled" | "flexible",
+  today: string,
+) {
+  if (!existing) return { mode: "insert" as const, effectiveFrom: today, closeExisting: false };
+  const current = existing.arrangement === "flexible" ? "flexible" : "scheduled";
+  if (current === submitted) return { mode: "update" as const, effectiveFrom: null, closeExisting: false };
+  const startsTodayOrEarlier = isoDateValue(existing.effective_from) <= today;
+  const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+  return { mode: "replace" as const, effectiveFrom: startsTodayOrEarlier ? next.toISOString().slice(0, 10) : today, closeExisting: true };
+}
+
 async function promoteSubmittedAdminSchedule(
   access: WorkOsAccess,
   schedule: Awaited<ReturnType<typeof policyScheduleProposal>>,
@@ -124,18 +144,31 @@ async function promoteSubmittedAdminSchedule(
     active: true,
     updated_at: new Date().toISOString(),
   };
-  const saved = existing
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = schedulePromotionPlan(existing as Json | null, schedule.arrangement, today);
+  if (plan.closeExisting && existing) {
+    const replacementFrom = plan.effectiveFrom ?? today;
+    const priorEnd = new Date(`${replacementFrom}T12:00:00Z`); priorEnd.setUTCDate(priorEnd.getUTCDate() - 1);
+    const priorFrom = isoDateValue(existing.effective_from);
+    const close = priorFrom && priorFrom < replacementFrom
+      ? { effective_to: priorEnd.toISOString().slice(0, 10), active: true }
+      : { active: false };
+    const { error: closeError } = await supabase.from("work_schedules").update(close)
+      .eq("organization_id", access.organizationId).eq("id", existing.id);
+    if (closeError) throw new Error(`close prior official schedule: ${closeError.message}`);
+  }
+  const saved = plan.mode === "update" && existing
     ? await supabase.from("work_schedules").update(payload).eq("organization_id", access.organizationId).eq("id", existing.id).select("id").single()
     : await supabase.from("work_schedules").insert({
       ...payload,
-      effective_from: new Date().toISOString().slice(0, 10),
+      effective_from: plan.effectiveFrom,
       created_by: access.ctx.user.id,
     }).select("id").single();
   if (saved.error) throw new Error(`promote admin onboarding schedule: ${saved.error.message}`);
   const { error: auditError } = await supabase.from("work_audit_log").insert({
     organization_id: access.organizationId,
     actor_user_id: access.ctx.user.id,
-    action: existing ? "schedule.updated_from_admin_onboarding" : "schedule.created_from_admin_onboarding",
+    action: plan.mode === "update" ? "schedule.updated_from_admin_onboarding" : plan.mode === "replace" ? "schedule.replaced_from_admin_onboarding" : "schedule.created_from_admin_onboarding",
     target_type: "schedule",
     target_id: saved.data.id,
     metadata: {
@@ -284,7 +317,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     screenshotConsentProvided,
     profileConfirmed: !!onboarding?.profile_confirmed_at,
     timezoneProvided: !!onboarding?.timezone,
-    scheduleProvided: onboarding?.status !== "changes_requested" && (!!officialSchedule || !!proposedSchedule?.shiftStart || (proposedSchedule?.arrangement === "flexible" && Array.isArray(proposedSchedule.daysOfWeek) && proposedSchedule.daysOfWeek.length > 0)),
+    scheduleProvided: !!officialSchedule || !!proposedSchedule?.shiftStart || (proposedSchedule?.arrangement === "flexible" && Array.isArray(proposedSchedule.daysOfWeek) && proposedSchedule.daysOfWeek.length > 0),
     notificationsConfigured: typeof notifications.desktopEnabled === "boolean",
     privacyAcknowledged: !!privacy.noticeAcknowledgedAt,
   };

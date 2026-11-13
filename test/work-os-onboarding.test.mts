@@ -6,12 +6,19 @@ import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } 
 import { deriveWorktivityBreakSeconds, deriveWorktivityLastActivityAt, deriveWorktivitySessionStart, deriveWorktivitySessionWindow, normalizeWorktivityActivityLogs, worktivityLocalDayBounds } from "../src/lib/work-os-attendance";
 import { FALLBACK_TIMEZONES, supportedTimezones, timezoneLabel } from "../src/modules/work-os/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm } from "../desktop/work-os-companion/src/onboardingDraftState";
-import { shouldPromoteSubmittedSchedule } from "../src/lib/work-os-onboarding";
+import { schedulePromotionPlan, shouldPromoteSubmittedSchedule } from "../src/lib/work-os-onboarding";
 
 test("only admin onboarding submissions promote the official schedule", () => {
   assert.equal(shouldPromoteSubmittedSchedule("admin"), true);
   assert.equal(shouldPromoteSubmittedSchedule("manager"), false);
   assert.equal(shouldPromoteSubmittedSchedule("employee"), false);
+});
+
+test("an admin arrangement change starts a new effective-dated row", () => {
+  assert.deepEqual(schedulePromotionPlan({ arrangement: "scheduled", effective_from: "2026-01-01" }, "scheduled", "2026-11-13"), { mode: "update", effectiveFrom: null, closeExisting: false });
+  assert.deepEqual(schedulePromotionPlan({ arrangement: "flexible", effective_from: "2026-01-01" }, "scheduled", "2026-11-13"), { mode: "replace", effectiveFrom: "2026-11-14", closeExisting: true });
+  assert.deepEqual(schedulePromotionPlan({ arrangement: "flexible", effective_from: "2026-12-01" }, "scheduled", "2026-11-13"), { mode: "replace", effectiveFrom: "2026-11-13", closeExisting: true });
+  assert.deepEqual(schedulePromotionPlan(null, "scheduled", "2026-11-13"), { mode: "insert", effectiveFrom: "2026-11-13", closeExisting: false });
 });
 
 test("catalog exposes eight reviewed employee archetypes", () => {

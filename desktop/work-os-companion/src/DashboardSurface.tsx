@@ -356,11 +356,15 @@ function WorkdayBand({ model, currentDate, observedOnly = false, children }: { m
         <div className="workday-details-body">
           <div className="workday-details-status"><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} aria-hidden="true" /><strong>{model.stateLabel}</strong>{model.attendance?.source === "worktivity" && !model.attendance.stale && (model.state === "active" || model.state === "paused" || model.state === "observed") && <span className="workday-provider"><img src={worktivityMark} alt="" /> From Worktivity</span>}</div>
           {model.stateTone !== "signal" && <p className="workday-details-explanation">{model.stateDetail}</p>}
-          <section className="workday-details-window" aria-label="Scheduled work window">
+          {model.flexible ? <section className="workday-details-window" aria-label="Flexible work arrangement">
+            <div className="workday-details-window-heading"><div><span>Flexible hours</span><strong>{model.flexible.daysOfWeek.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ")} · {model.flexible.timezone}</strong></div></div>
+            <div className="workday-details-readings"><div><span>{active ? "Elapsed" : "Start"}</span><strong>{active ? elapsedDuration(observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel) : "When you choose"}</strong></div></div>
+            <p>No required start, end, or number of hours is set.</p>
+          </section> : <section className="workday-details-window" aria-label="Scheduled work window">
             <div className="workday-details-window-heading"><div><span>Scheduled window</span><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)} <i>to</i> {formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></div>{model.schedule.phase !== "unavailable" && <span className="workday-details-percent">{Math.round(Math.max(0, Math.min(100, model.pulse.progressPercent)))}% of window</span>}</div>
             <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} expanded />
             <div className="workday-details-readings"><div><span>{active ? "Elapsed" : "Schedule"}</span><strong>{active ? elapsedDuration(observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel) : !model.schedule.startsAt ? "Not set" : model.schedule.phase === "complete" ? "Ended" : model.schedule.phase === "upcoming" ? "Upcoming" : "Ready"}</strong></div><div><span>{model.schedule.phase === "upcoming" ? "Starts in" : "Remaining"}</span><strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong></div></div>
-          </section>
+          </section>}
           <section className="workday-details-work"><div><h3>Work on your plate</h3></div><dl><div><dt>Completed</dt><dd>{model.metrics.completed}</dd></div><div><dt>Open today</dt><dd>{model.metrics.open}</dd></div><div><dt>Overdue</dt><dd>{model.metrics.overdue}</dd></div><div><dt>Carried over</dt><dd>{model.metrics.carryover}</dd></div></dl></section>
           <div className="workday-details-focus"><span>Today’s focus</span><p>{model.focus.text}</p><small>{model.focus.source}</small></div>
         </div>
@@ -398,7 +402,13 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={14} aria-hidden="true" /> Set focus</button>
         </div>
       </div>
-      <div className="workday-band-instrument is-single">
+      {model.flexible ? <div className="workday-band-instrument is-single">
+        <div className="band-reading">
+          <small>Flexible hours</small>
+          <strong>{model.flexible.daysOfWeek.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ")}</strong>
+        </div>
+        <div className="band-window"><small className="band-window-range">No required start time · {model.flexible.timezone}</small></div>
+      </div> : <div className="workday-band-instrument is-single">
         <div className="band-reading">
           <small>{startsIn ? "Starts in" : model.schedule.phase === "complete" ? "Window" : "Schedule"}</small>
           <strong>{windowReading}</strong>
@@ -407,7 +417,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} />
           {scheduleKnown && <small className="band-window-range">{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)} – {formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</small>}
         </div>
-      </div>
+      </div>}
       <div className="workday-band-facts" aria-label="Workday counts">
         <BandFact value={model.metrics.planned} label="planned" detail="on today’s list" review="Review today’s tasks" onClick={() => onOpenTasks("today")} />
         <BandFact value={model.metrics.carryover} label="carried over" detail="older open work" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
@@ -498,11 +508,11 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
           <small>Elapsed</small>
           <strong>{elapsedDuration(observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel)}</strong>
         </div>
-        <PulseTimeline model={model} />
-        <div className="band-reading is-end">
+        {model.flexible ? <div className="band-window"><small className="band-window-range">Flexible hours · no required end time</small></div> : <PulseTimeline model={model} />}
+        {!model.flexible && <div className="band-reading is-end">
           <small>Remaining</small>
           <strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong>
-        </div>
+        </div>}
       </div>
       <div className="workday-band-facts" aria-label="Workday counts">
         <BandFact value={model.metrics.completed} label="completed" detail="outcomes today" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />

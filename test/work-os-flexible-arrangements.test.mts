@@ -4,6 +4,7 @@ import * as arrangements from "../src/modules/work-os/work-arrangement";
 import { hasScheduledShiftOnDate, resolveUpcomingShiftWindow, resolveStartableShiftWindow, resolveShiftWindowForDate } from "../src/modules/work-os/companion";
 import { worktivityConfirmationRequirement } from "../src/modules/work-os/worktivity-control";
 import { screenshotRunMode } from "../src/lib/work-os-screenshots";
+import { flexibleEodDraftBlocked } from "../src/lib/work-os-shift-gate";
 
 test("flexible proposals retain fixed days but strip hidden times and targets", () => {
   assert.deepEqual(arrangements.normalizeWorkArrangement({ arrangement: "flexible", daysOfWeek: [5, 1, 1], shiftStart: "09:00", shiftEnd: "17:00", dailyHours: 8 }), {
@@ -37,6 +38,12 @@ test("a dated working-day exception cannot resurrect an expired timed shift", ()
 test("flexible attendance starts without late or exception acknowledgment", () => {
   assert.equal(worktivityConfirmationRequirement({ action: "clock_in", now: "2026-11-13T22:00:00Z", flexible: true, body: {} }), null);
   assert.equal(worktivityConfirmationRequirement({ action: "clock_in", now: "2026-11-13T22:00:00Z", body: {} }), "exception");
+});
+test("a flexible report opens after work starts, not only after clock-out", () => {
+  assert.equal(flexibleEodDraftBlocked({ started: true, closed: false }), false);
+  assert.equal(flexibleEodDraftBlocked({ started: true, closed: true }), false);
+  assert.equal(flexibleEodDraftBlocked({ started: false, closed: true }), false);
+  assert.equal(flexibleEodDraftBlocked({ started: false, closed: false }), true);
 });
 test("flexible screenshot scheduling follows recorded sessions, not fabricated shift times", () => {
   const input = { now: new Date("2026-11-13T20:00:00Z"), timezone: "UTC", shiftStart: "", shiftEnd: "", arrangement: "flexible" as const };

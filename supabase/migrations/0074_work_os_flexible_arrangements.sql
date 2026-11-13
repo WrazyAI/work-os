@@ -55,4 +55,20 @@ begin
     p_organization_id,p_person_id,p_expected_revision,p_mutation_key,p_onboarding_patch,p_person_patch);
 end $$;
 
+-- The wrapper is a new function object, so re-apply the service-only ACL the
+-- original settings RPC carried. Without this, `security definer` would be
+-- executable by anon/authenticated callers.
+revoke all on function public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb) from public;
+do $$ begin
+  if exists(select 1 from pg_roles where rolname='anon') then
+    revoke all on function public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb) from anon;
+  end if;
+  if exists(select 1 from pg_roles where rolname='authenticated') then
+    revoke all on function public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb) from authenticated;
+  end if;
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb) to service_role;
+  end if;
+end $$;
+
 notify pgrst, 'reload schema';
