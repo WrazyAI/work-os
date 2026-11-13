@@ -15,10 +15,13 @@ export const metadata: Metadata = {
     title: "Download Work OS by Wrazy",
     description,
     url: "/work-os/downloads",
+    images: [{ url: "/work-os/opengraph-image", width: 1200, height: 630, alt: "Work OS by Wrazy" }],
   },
   twitter: {
     title: "Download Work OS by Wrazy",
     description,
+    card: "summary_large_image",
+    images: ["/work-os/opengraph-image"],
   },
   robots: { index: false, follow: false },
 };
