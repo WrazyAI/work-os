@@ -50,7 +50,7 @@ test("stale, unauthorized, cross-tenant and open-session approvals write nothing
   try {
     await assert.rejects(reviewWorkArrangement({ ...access, role: "employee" }, person, input, pool), /admin/i);
     await assert.rejects(reviewWorkArrangement({ ...access, organizationId: "44444444-4444-4444-8444-444444444444" }, person, input, pool));
-    await assert.rejects(reviewWorkArrangement(access, person, { ...input, revision: 1 }, pool), /changed|refresh/i);
+    await assert.rejects(reviewWorkArrangement(access, person, { ...input, submittedAt: "2026-11-12T10:00:00Z" }, pool), /changed|refresh/i);
     await db.query("insert into work_sessions(organization_id,person_id,state) values($1,$2,'active')", [org, person]);
     await assert.rejects(reviewWorkArrangement(access, person, input, pool), /session|clock/i);
     assert.equal((await db.query("select * from work_schedules")).rows.length, 0);

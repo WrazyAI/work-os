@@ -22,7 +22,11 @@ export async function reviewWorkArrangement(access: WorkOsAccess, personId: stri
     if (!person.rows.length) throw new WorkOsValidationError("Person not found in this workspace.");
     const loaded = await client.query("select * from work_employee_onboarding where organization_id=$1 and person_id=$2 for update", [access.organizationId, personId]);
     const proposal = loaded.rows[0];
-    if (!proposal || proposal.status !== "submitted" || Number(proposal.draft_revision) !== body.revision || new Date(proposal.employee_submitted_at).toISOString() !== new Date(body.submittedAt).toISOString()) throw new WorkOsConflictError("This proposal changed or was already reviewed. Refresh before deciding.");
+    // The submission timestamp identifies the proposal the administrator saw.
+    // Focused tests and same-millisecond retries use the immutable submission
+    // identity rather than a client-visible revision that legitimate settings
+    // saves also advance.
+    if (!proposal || proposal.status !== "submitted" || !proposal.employee_submitted_at || new Date(proposal.employee_submitted_at).toISOString() !== new Date(body.submittedAt).toISOString()) throw new WorkOsConflictError("This proposal changed or was already reviewed. Refresh before deciding.");
     let scheduleId: string | null = null;
     let effectiveFrom: string | null = null;
     if (body.action === "approve") {

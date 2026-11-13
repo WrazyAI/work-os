@@ -1725,6 +1725,16 @@ blurs them.
   Escape closes), and account pills are static text so nothing offers a control
   the employee cannot honor.
 
+### 8.15.1 Work arrangements and fixed-day flexible hours
+
+Onboarding, Settings, and the administrator person record share one arrangement control. **Scheduled hours** keeps the existing weekday, start/end, break, and prompt contracts. **Flexible hours** keeps the chosen workdays and timezone but has no shift interval, break window, or daily/weekly hours target; it is not a leave day and it is not an all-day shift.
+
+A flexible submission is a proposal until an administrator approves it. The current official arrangement remains in effect while a proposal is pending, a request for changes, or unapproved. Approval writes an effective-dated official row, ends the prior row the day before its effective date, and never rewrites recorded sessions or attendance. A replacement starts the next local day; a first arrangement may start today. Approval is refused while the person has an open work session, so a running day keeps the boundaries it started with. Request changes preserves the official row and requires a note.
+
+On flexible days, the dashboard and time surfaces never show a scheduled window, countdown, late state, missed-shift state, or required-hours progress. Clock-in needs no late or exception acknowledgement, and clock-out needs no extended-shift acknowledgement. Prompts follow the recorded session and the normal check-in cadence: one update at the first follow-up, then the configured interval; they are never anchored to invented wall-clock boundaries. Actual observed time and the selected days remain visible as facts, and work recorded outside the selected days remains recordable without being labelled a violation. Exceptions still apply: leave removes the day; a working-day or changed-shift exception makes it a working day, but a changed-shift exception on a flexible day does not create a shift window.
+
+Administration displays **Flexible hours** wherever it would otherwise print a time range, and carries the pending proposal in the person record with its days, timezone, submission time, and note. Legacy proposals without an arrangement remain scheduled.
+
 ### 8.16 EOD drafts before clock-out, and deleting a draft
 
 An end-of-day report describes the day, not a closed session. Today's report

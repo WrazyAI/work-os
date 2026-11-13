@@ -4205,11 +4205,11 @@ export default function App() {
   const dashboardShift = useMemo(() => resolveDashboardShift({
     shift: visibleDay?.shift ?? null,
     session: workSession,
-    schedule: dashboardSchedule,
+    schedule: visibleDay?.arrangement?.kind === "flexible" ? null : dashboardSchedule,
     currentDate: visibleDay?.shiftDate ?? "",
     timezone: dashboardTimezone,
     now: pulseNow,
-  }), [dashboardSchedule, dashboardTimezone, pulseNow, visibleDay?.shift, visibleDay?.shiftDate, workSession]);
+  }), [dashboardSchedule, dashboardTimezone, pulseNow, visibleDay?.arrangement?.kind, visibleDay?.shift, visibleDay?.shiftDate, workSession]);
   const pulse = shiftPulse(workSession, dashboardShift, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
   const dashboardModel = useMemo(() => buildWorkdayDashboardModel({
     active,
@@ -4218,7 +4218,8 @@ export default function App() {
     currentDate: visibleDay?.shiftDate ?? "",
     shift: dashboardShift,
     session: workSession,
-    schedule: dashboardSchedule,
+    schedule: visibleDay?.arrangement?.kind === "flexible" ? null : dashboardSchedule,
+    arrangement: visibleDay?.arrangement ?? null,
     timezone: dashboardTimezone,
     attendance: visibleDay?.attendance ?? null,
     activityWatch: attendanceWatchExpectation(attendanceWatchInput(visibleDay), pulseNow.getTime()),
@@ -5043,7 +5044,7 @@ export default function App() {
   }
 
   function confirmClockOut() {
-    const extendedAcknowledged = extendedClockOut || clockOutExtendedPrompt;
+    const extendedAcknowledged = extendedClockOut || clockOutExtendedPrompt || visibleDay?.arrangement?.kind === "flexible";
     setClockOutConfirmation(false);
     setClockOutExtendedPrompt(false);
     if (syncBypassRef.current) {
@@ -6034,7 +6035,7 @@ export default function App() {
       />)}
       {false && view === "day" && visibleDay && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}–${formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
+          <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}–${formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}.` : visibleDay?.arrangement?.kind === "flexible" ? `Flexible hours on ${visibleDay.arrangement.daysOfWeek.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ")}. Start whenever you are ready.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions"><button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button></div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay?.attendance?.message}</small>}
             <div className="hero-focus-line"><small>Today’s focus</small><button onClick={openGoalComposer} aria-label="Update today’s focus"><span>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</span></button>{planSaveState === "saving" ? <FadeArc size={13} /> : planSaveState === "offline" || planSaveState === "conflict" ? <button type="button" className="goal-retry" title={planSaveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => setPlanDirty(true)}><RefreshCw size={13} /></button> : null}<em>{planIntent ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name} · tap to update` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name} · tap to update` : goalProvenance === "accepted_suggestion" ? "Derived from your tasks · tap to update" : "Written by you · tap to update" : goalSuggestion ? "Suggested from your tasks" : "Task record · tap to set a focus"}</em></div>

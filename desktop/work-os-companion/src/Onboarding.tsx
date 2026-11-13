@@ -39,7 +39,7 @@ const PHASES = [
     id: "prepared",
     feeling: "Prepared",
     title: "When does work usually happen?",
-    line: "I use this to time my check-ins and the end-of-day nudge. If your manager has set an official schedule, theirs takes precedence.",
+    line: "Tell me which days you work and whether your hours are fixed. A flexible arrangement keeps those days and has no required start, end, or number of hours.",
   },
   {
     id: "safe",

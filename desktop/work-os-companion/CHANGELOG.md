@@ -32,11 +32,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 - Work OS opens again on Windows; the previous update could close as soon as it opened.
 - Saved memories no longer disappear behind new proposals; counts stay accurate, and you can load older saved facts and proposals separately.
-
-## 0.5.31 — 2026-11-13
-
-- Your saved sign-in stays put when both companion windows open together, so you do not have to connect the app again.
-- Work OS opens normally on some Macs that previously stopped at the loading screen.
+- If you work fixed days with flexible hours, setup now lets you choose that arrangement instead of inventing a shift or an hours target.
 - Activity recaps keep arriving while the app is closed; opening Work OS shows the newest one first, with the rest waiting in your recaps.
 - Checking off a task now marks it done right away; the confirmation offers Attach evidence, and an open task panel closes when its task is completed.
 - Activity recaps now show your GoHighLevel calls and messages with their own icon, so CRM work is never listed as GitHub activity.
@@ -44,6 +40,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 - The Mac app now has the same Work OS bar with its native window buttons, and the same menu in the system menu bar.
 - Switching to Administration now labels the window Admin mode instead of a shift state.
 - Work OS now has a dark theme, and you can choose Light, Dark, or System the first time you sign in on this device.
+
+## 0.5.31 — 2026-11-13
+
+- Your saved sign-in stays put when both companion windows open together, so you do not have to connect the app again.
+- Work OS opens normally on some Macs that previously stopped at the loading screen.
 
 ## 0.5.30 — 2026-11-12
 

@@ -73,6 +73,11 @@ describe("administration response normalizers", () => {
     expectNoLeaks(overview);
   });
 
+  it("shows a flexible arrangement without inventing shift times", () => {
+    const overview = normalizeAdminOverview({ people: [{ personId: "p-1", displayName: "Amara Okafor", schedule: { arrangement: "flexible", start: "", end: "", daysOfWeek: [1, 5], timezone: "UTC" }, attendance: { state: "unknown", source: "none", freshness: "unknown" } }] });
+    expect(overview.people[0].schedule).toMatchObject({ arrangement: "flexible", start: "", end: "" });
+  });
+
   it("keeps a present schedule and session but defaults their missing fields", () => {
     const overview = normalizeAdminOverview({
       people: [{
@@ -85,7 +90,7 @@ describe("administration response normalizers", () => {
       }],
     });
     const person = overview.people[0];
-    expect(person.schedule).toEqual({ start: "08:30", end: "17:00", daysOfWeek: [1, 2, 3, 4, 5], timezone: "UTC" });
+    expect(person.schedule).toEqual({ arrangement: "scheduled", start: "08:30", end: "17:00", daysOfWeek: [1, 2, 3, 4, 5], timezone: "UTC" });
     expect(person.session).toEqual({ state: "scheduled", clockedInAt: null, pausedSeconds: 0, observedSeconds: 5400, correctionStatus: null });
     expect(person.email).toBeNull();
     expect(person.lastUpdateAt).toBeNull();

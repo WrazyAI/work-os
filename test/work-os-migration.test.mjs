@@ -63,6 +63,7 @@ const migrations = [
     "neon/migrations/0039_work_screenshot_schedule.sql",
     "supabase/migrations/0050_work_os_profile_atomicity.sql",
     "supabase/migrations/0051_work_os_employee_schedule_settings.sql",
+    "supabase/migrations/0074_work_os_flexible_arrangements.sql",
     "supabase/migrations/0052_work_os_sorted_task_history.sql",
     "supabase/migrations/0053_work_activity_intervals.sql",
     "neon/migrations/0041_work_activity_intervals.sql",
@@ -116,6 +117,17 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and column_name = any($1)
   `, [["screenshot_analysis_enabled", "screenshot_analysis_interval_minutes", "screenshot_analysis_start", "screenshot_analysis_end", "screenshot_analysis_eod_lead_minutes"]]);
   assert.equal(screenshotScheduleColumns.rows.length, 5);
+  const arrangement = await db.query(`
+    select column_name, is_nullable, column_default from information_schema.columns
+    where table_schema='public' and table_name='work_schedules' and column_name in ('arrangement','shift_start','shift_end')
+  `);
+  assert.equal(arrangement.rows.length, 3);
+  assert.equal(arrangement.rows.find((row) => row.column_name === "arrangement").column_default, "'scheduled'::text");
+  assert.equal(arrangement.rows.find((row) => row.column_name === "shift_start").is_nullable, "YES");
+  const arrangementCheck = await db.query(`select pg_get_constraintdef(oid) as definition from pg_constraint where conrelid='public.work_schedules'::regclass and conname='work_schedules_arrangement_check'`);
+  assert.match(String(arrangementCheck.rows[0].definition), /flexible/);
+  const settingsWrapper = await db.query(`select pg_get_functiondef('public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb)'::regprocedure) as definition`);
+  assert.match(String(settingsWrapper.rows[0].definition), /work_save_employee_account_settings_scheduled/);
   const activityIntervalColumns = await db.query(`
     select column_name from information_schema.columns
     where table_schema='public' and table_name='work_activity_intervals'

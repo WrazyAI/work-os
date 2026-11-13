@@ -19,6 +19,9 @@ export interface WorkdayDashboardModel {
     timezone: string | null;
     phase: ShiftPulse["schedulePhase"];
   };
+  /** Approved flexible work has fixed days but no expected start/end, so the
+   * dashboard must not imply a missed or upcoming shift. */
+  flexible: { daysOfWeek: number[]; timezone: string } | null;
   pulse: ShiftPulse;
   attendance: AttendanceProjection | null;
   /** What the attendance watch is currently waiting to observe, if anything.
@@ -47,6 +50,7 @@ export interface DashboardModelInput {
   shift: DayData["shift"];
   session?: WorkSession | null;
   schedule?: OnboardingSchedule | null;
+  arrangement?: DayData["arrangement"];
   timezone?: string | null;
   attendance?: AttendanceProjection | null;
   pulse: ShiftPulse;
@@ -195,6 +199,7 @@ function remainingLabel(endsAt: string | null, now = Date.now()) {
 export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Date.now()): WorkdayDashboardModel {
   const attendance = input.attendance ?? null;
   const confirmedProviderState = attendance?.source === "worktivity" && !attendance.stale;
+  const flexible = input.arrangement?.kind === "flexible" ? input.arrangement : null;
   const state: DashboardState = input.observedOnly
     ? "observed"
     : input.active
@@ -249,7 +254,9 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
 
   const focusText = safeTaskText(input.focus, "Your open tasks define today’s work.");
   const focusSource = safeTaskText(input.focusSource, "Task record");
-  const meta = stateMeta[state];
+  const meta = flexible && (state === "off_shift" || state === "ready") && !input.observedOnly && !input.active
+    ? { stateLabel: "Flexible hours", stateDetail: "Choose when to begin. Your fixed workdays have no required start time.", stateTone: "quiet" as const }
+    : stateMeta[state];
   return {
     asOf: now,
     state,
@@ -258,8 +265,9 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
       startsAt: input.shift?.startsAt ?? null,
       endsAt: input.shift?.endsAt ?? null,
       timezone: input.shift?.timezone ?? input.timezone ?? null,
-      phase: input.pulse.schedulePhase,
+      phase: flexible ? "unavailable" : input.pulse.schedulePhase,
     },
+    flexible: flexible ? { daysOfWeek: flexible.daysOfWeek, timezone: flexible.timezone } : null,
     pulse: input.pulse,
     attendance,
     activityWatch: input.activityWatch ?? null,

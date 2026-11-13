@@ -124,6 +124,14 @@ describe("buildWorkdayDashboardModel", () => {
     expect(fallOverlap?.startsAt).toBe("2026-11-01T05:30:00.000Z");
   });
 
+  it("shows approved flexible hours without a fabricated shift or ready state", () => {
+    const model = buildWorkdayDashboardModel(input({ arrangement: { kind: "flexible", daysOfWeek: [1, 5], timezone: "UTC" }, pulse: { ...pulse, schedulePhase: "upcoming" } }));
+    expect(model.stateLabel).toBe("Flexible hours");
+    expect(model.flexible).toEqual({ daysOfWeek: [1, 5], timezone: "UTC" });
+    expect(model.schedule.startsAt).toBe("2026-09-20T09:00:00Z");
+    expect(model.schedule.phase).toBe("unavailable");
+  });
+
   it("carries the attendance watch expectation into the model", () => {
     expect(buildWorkdayDashboardModel(input({ activityWatch: "clock-in" }), Date.parse("2026-09-20T12:00:00Z")).activityWatch).toBe("clock-in");
     expect(buildWorkdayDashboardModel(input(), Date.parse("2026-09-20T12:00:00Z")).activityWatch).toBeNull();
