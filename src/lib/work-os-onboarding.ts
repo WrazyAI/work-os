@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { validateWorkOsTimezone } from "@/lib/work-os-schedule-validation";
 import { normalizeWorkArrangement } from "@/modules/work-os/work-arrangement";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 import {
   WORK_PROFILE_CATALOG_VERSION,
   inferArchetype,
@@ -144,33 +146,48 @@ async function promoteSubmittedAdminSchedule(
     active: true,
     updated_at: new Date().toISOString(),
   };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateForTimezone(new Date(), timezone);
   const plan = schedulePromotionPlan(existing as Json | null, schedule.arrangement, today);
-  if (plan.closeExisting && existing) {
-    const replacementFrom = plan.effectiveFrom ?? today;
-    const priorEnd = new Date(`${replacementFrom}T12:00:00Z`); priorEnd.setUTCDate(priorEnd.getUTCDate() - 1);
-    const priorFrom = isoDateValue(existing.effective_from);
-    const close = priorFrom && priorFrom < replacementFrom
-      ? { effective_to: priorEnd.toISOString().slice(0, 10), active: true }
-      : { active: false };
-    const { error: closeError } = await supabase.from("work_schedules").update(close)
-      .eq("organization_id", access.organizationId).eq("id", existing.id);
-    if (closeError) throw new Error(`close prior official schedule: ${closeError.message}`);
+  let savedId: string;
+  if (plan.mode === "replace" && existing) {
+    // Closing the old period and inserting its replacement must be one write:
+    // a failed insert may not leave the employee without an official schedule.
+    const client = await getPool().connect();
+    try {
+      await client.query("begin");
+      const replacementFrom = plan.effectiveFrom ?? today;
+      const priorEnd = new Date(`${replacementFrom}T12:00:00Z`); priorEnd.setUTCDate(priorEnd.getUTCDate() - 1);
+      const priorFrom = isoDateValue(existing.effective_from);
+      if (priorFrom && priorFrom < replacementFrom) {
+        await client.query("update work_schedules set effective_to=$3::date - 1, active=true, updated_at=now() where organization_id=$1 and id=$2", [access.organizationId, existing.id, replacementFrom]);
+      } else {
+        await client.query("update work_schedules set active=false, updated_at=now() where organization_id=$1 and id=$2", [access.organizationId, existing.id]);
+      }
+      const priorRow = existing as Json;
+      const inserted = await client.query(`insert into work_schedules (organization_id,person_id,timezone,days_of_week,arrangement,shift_start,shift_end,break_windows,active,effective_from,created_by,updated_at,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes) values ($1,$2,$3,$4::smallint[],$5,$6,$7,$8::jsonb,true,$9::date,$10,now(),$11,$12,$13,$14,$15) returning id`, [access.organizationId, access.personId, timezone, schedule.daysOfWeek, schedule.arrangement, schedule.shiftStart, schedule.shiftEnd, JSON.stringify(schedule.breaks), plan.effectiveFrom, access.ctx.user.id, priorRow.screenshot_analysis_enabled ?? true, priorRow.screenshot_analysis_interval_minutes ?? 60, priorRow.screenshot_analysis_start ?? null, priorRow.screenshot_analysis_end ?? null, priorRow.screenshot_analysis_eod_lead_minutes ?? 30]);
+      savedId = inserted.rows[0].id;
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+  } else {
+    const saved = plan.mode === "update" && existing
+      ? await supabase.from("work_schedules").update(payload).eq("organization_id", access.organizationId).eq("id", existing.id).select("id").single()
+      : await supabase.from("work_schedules").insert({
+        ...payload,
+        effective_from: plan.effectiveFrom,
+        created_by: access.ctx.user.id,
+      }).select("id").single();
+    if (saved.error) throw new Error(`promote admin onboarding schedule: ${saved.error.message}`);
+    savedId = saved.data.id;
   }
-  const saved = plan.mode === "update" && existing
-    ? await supabase.from("work_schedules").update(payload).eq("organization_id", access.organizationId).eq("id", existing.id).select("id").single()
-    : await supabase.from("work_schedules").insert({
-      ...payload,
-      effective_from: plan.effectiveFrom,
-      created_by: access.ctx.user.id,
-    }).select("id").single();
-  if (saved.error) throw new Error(`promote admin onboarding schedule: ${saved.error.message}`);
   const { error: auditError } = await supabase.from("work_audit_log").insert({
     organization_id: access.organizationId,
     actor_user_id: access.ctx.user.id,
     action: plan.mode === "update" ? "schedule.updated_from_admin_onboarding" : plan.mode === "replace" ? "schedule.replaced_from_admin_onboarding" : "schedule.created_from_admin_onboarding",
     target_type: "schedule",
-    target_id: saved.data.id,
+    target_id: savedId,
     metadata: {
       source: "employee_onboarding",
       personId: access.personId,

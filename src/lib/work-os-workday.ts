@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentWorkArrangement } from "@/lib/work-os-current-arrangement";
+import { currentWorkArrangement, isFlexibleWorkingDay } from "@/lib/work-os-current-arrangement";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { listPersonTasks } from "@/lib/work-os";
 import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
@@ -365,7 +365,10 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   const observed = new Date(observedAt); if (Number.isNaN(observed.getTime())) throw new Error("observed_at must be a valid timestamp");
   const shift = await shiftFor(access, observed, "startable");
   const official = await currentWorkArrangement(access, observed);
-  const unscheduled = !shift && official?.arrangement !== "flexible";
+  // A flexible arrangement only waives the exception acknowledgement on its
+  // own working days; an off-day or leave date still needs one.
+  const flexibleDay = !shift && official?.arrangement === "flexible" && await isFlexibleWorkingDay(access, observed, official);
+  const unscheduled = !shift && !flexibleDay;
   const exceptionAcknowledged = body.exception_acknowledged === true || body.unscheduled_acknowledged === true;
   const exceptionReason = value(body.exception_reason);
   if (unscheduled && !exceptionAcknowledged) throw new Error("Exception clock-in acknowledgement is required.");

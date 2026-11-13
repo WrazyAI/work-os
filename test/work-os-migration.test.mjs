@@ -128,8 +128,8 @@ test("Work OS companion migration is complete and idempotent", async () => {
   assert.match(String(arrangementCheck.rows[0].definition), /flexible/);
   const settingsWrapper = await db.query(`select pg_get_functiondef('public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb)'::regprocedure) as definition`);
   assert.match(String(settingsWrapper.rows[0].definition), /work_save_employee_account_settings_scheduled/);
-  const settingsAcl = await db.query(`select coalesce(proacl::text,'') as acl from pg_proc where oid='public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb)'::regprocedure`);
-  assert.doesNotMatch(String(settingsAcl.rows[0].acl), /(^|[ {,])=X\//, "the settings RPC is not executable by PUBLIC");
+  const settingsAcl = await db.query(`select count(*)::int as n from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.oid='public.work_save_employee_account_settings(uuid,uuid,integer,text,jsonb,jsonb)'::regprocedure and a.grantee=0 and a.privilege_type='EXECUTE'`);
+  assert.equal(settingsAcl.rows[0].n, 0, "the settings RPC is not executable by PUBLIC, including default privileges");
   const activityIntervalColumns = await db.query(`
     select column_name from information_schema.columns
     where table_schema='public' and table_name='work_activity_intervals'

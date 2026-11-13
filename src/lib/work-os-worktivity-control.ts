@@ -1,5 +1,5 @@
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { currentWorkArrangement } from "@/lib/work-os-current-arrangement";
+import { currentWorkArrangement, isFlexibleWorkingDay } from "@/lib/work-os-current-arrangement";
 import { activeSession, shiftFor } from "@/lib/work-os-workday";
 import { observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityConfigured } from "@/lib/worktivity";
@@ -49,7 +49,8 @@ export async function controlWorktivityAttendance(access: WorkOsAccess, input: u
       const session = observed.session ?? await activeSession(access);
       scheduledEndsAt = typeof session?.scheduled_ends_at === "string" ? session.scheduled_ends_at : null;
     }
-    const flexible = action === "clock_in" && (await currentWorkArrangement(access, now))?.arrangement === "flexible";
+    const official = action === "clock_in" ? await currentWorkArrangement(access, now) : null;
+    const flexible = action === "clock_in" && official?.arrangement === "flexible" && await isFlexibleWorkingDay(access, now, official);
     const requirement = worktivityConfirmationRequirement({ action, now: now.toISOString(), scheduledStartsAt, scheduledEndsAt, flexible, body });
     if (requirement) return { status: "confirmation_required" as const, operation_id: operationId, requirement, attendance };
     return { status: "ready" as const, operation_id: operationId, attendance };

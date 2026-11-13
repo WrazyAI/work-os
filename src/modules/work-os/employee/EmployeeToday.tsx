@@ -200,7 +200,7 @@ export default function EmployeeToday() {
   const shift = day.data?.shift;
   const flexible = day.data?.arrangement?.kind === "flexible" ? day.data.arrangement : null;
   const flexibleDays = flexible ? flexible.daysOfWeek.map((value) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][value]).join(", ") : "";
-  const timezone = shift?.timezone;
+  const timezone = shift?.timezone ?? flexible?.timezone;
   const attendance = day.data?.attendance;
   const workSession = day.data?.session;
   const lateReasonMissing = lateReasonRequired(day.data?.session);

@@ -25,8 +25,7 @@ export default function EmployeeSettings() {
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]);
   const [shiftStart, setShiftStart] = useState("09:00");
   const [shiftEnd, setShiftEnd] = useState("17:00");
-  const [breakStart, setBreakStart] = useState("");
-  const [breakEnd, setBreakEnd] = useState("");
+  const [breaks, setBreaks] = useState<Array<{ start: string; end: string }>>([]);
   const [desktopEnabled, setDesktopEnabled] = useState(true);
   const [consent, setConsent] = useState(false);
   const [exclusions, setExclusions] = useState("");
@@ -59,9 +58,7 @@ export default function EmployeeSettings() {
     setDaysOfWeek(Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [1, 2, 3, 4, 5]);
     setShiftStart(schedule.shiftStart || "09:00");
     setShiftEnd(schedule.shiftEnd || "17:00");
-    const firstBreak = Array.isArray(schedule.breaks) ? schedule.breaks[0] : null;
-    setBreakStart(firstBreak?.start || "");
-    setBreakEnd(firstBreak?.end || "");
+    setBreaks(Array.isArray(schedule.breaks) ? schedule.breaks : []);
     setDesktopEnabled(typeof profile.notifications?.desktopEnabled === "boolean" ? profile.notifications.desktopEnabled : true);
     setConsent(onboarding.data?.employeeRequirements?.consentProvided === true && onboarding.data?.employeeRequirements?.screenshotConsentProvided === true && onboarding.data?.employeeRequirements?.privacyAcknowledged === true);
     setExclusions((profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
@@ -91,7 +88,7 @@ export default function EmployeeSettings() {
           daysOfWeek,
           shiftStart,
           shiftEnd,
-          breaks: breakStart && breakEnd ? [{ start: breakStart, end: breakEnd }] : [],
+          breaks,
         },
         notifications: { desktopEnabled },
         workPreferences: buildWorkPreferences({
@@ -216,8 +213,8 @@ export default function EmployeeSettings() {
             <p>Your official arrangement is set by your workspace. A change is sent for administrator review.</p>
           </div>
           <div className={styles.groupContent}>
-            <WorkArrangementFields value={{ arrangement, daysOfWeek, shiftStart, shiftEnd, breaks: breakStart || breakEnd ? [{ start: breakStart, end: breakEnd }] : [] }} authoritativeBreaks={worktivityBreaks} disabled={saveOnboarding.isPending}
-              onChange={(next) => { setArrangement(next.arrangement ?? "scheduled"); setDaysOfWeek(next.daysOfWeek); setShiftStart(next.shiftStart ?? ""); setShiftEnd(next.shiftEnd ?? ""); setBreakStart(next.breaks?.[0]?.start ?? ""); setBreakEnd(next.breaks?.[0]?.end ?? ""); }} />
+            <WorkArrangementFields value={{ arrangement, daysOfWeek, shiftStart, shiftEnd, breaks }} authoritativeBreaks={worktivityBreaks} disabled={saveOnboarding.isPending}
+              onChange={(next) => { setArrangement(next.arrangement ?? "scheduled"); setDaysOfWeek(next.daysOfWeek); setShiftStart(next.shiftStart ?? ""); setShiftEnd(next.shiftEnd ?? ""); setBreaks(next.breaks ?? []); }} />
             <p className={styles.hint}>Submitted arrangements await administrator review. Your current official arrangement remains in effect until a change is approved.</p>
             {onboarding.data?.reviewNote ? <p className={styles.hint}>Administrator note: {String(onboarding.data.reviewNote)}</p> : null}
             {!onboardingRequired ? <div className={styles.formActions}>

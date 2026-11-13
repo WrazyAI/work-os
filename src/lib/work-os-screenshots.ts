@@ -1036,7 +1036,23 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
       .order("effective_from", { ascending: false }).limit(4);
     if (schedules.error) continue;
     const timezone = String((schedules.data ?? [])[0]?.timezone ?? "UTC");
-    const localDate = localDateForTimezone(now, timezone);
+    let localDate = localDateForTimezone(now, timezone);
+    let session = await db().from("work_sessions").select("clocked_in_at,clocked_out_at")
+      .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", localDate)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    // A flexible session that closed just before local midnight still owns its
+    // end-of-day pass. Use the previous workday when the new day has no session.
+    if (!session.data?.clocked_in_at) {
+      const priorDate = new Date(`${localDate}T12:00:00Z`); priorDate.setUTCDate(priorDate.getUTCDate() - 1);
+      const prior = await db().from("work_sessions").select("clocked_in_at,clocked_out_at")
+        .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", priorDate.toISOString().slice(0, 10))
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const closedAt = prior.data?.clocked_out_at ? Date.parse(String(prior.data.clocked_out_at)) : Number.NaN;
+      if (prior.data?.clocked_in_at && Number.isFinite(closedAt) && now.getTime() - closedAt <= 18 * 60 * 60_000) {
+        localDate = priorDate.toISOString().slice(0, 10);
+        session = prior;
+      }
+    }
     const schedule = (schedules.data ?? []).find((row: any) => {
       const from = dateOnly(row.effective_from);
       const to = dateOnly(row.effective_to);
@@ -1048,9 +1064,6 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
     if (exception.error || exception.data?.kind === "leave") continue;
     const shiftStart = String(exception.data?.shift_start ?? schedule.shift_start).slice(0, 5);
     const shiftEnd = String(exception.data?.shift_end ?? schedule.shift_end).slice(0, 5);
-    const session = await db().from("work_sessions").select("clocked_in_at,clocked_out_at")
-      .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", localDate)
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
     const target = SCHEDULE_AUDIT_TARGET(person.organization_id, person.id, localDate);
     const audits = await db().from("work_audit_log").select("action,created_at")
       .eq("organization_id", person.organization_id).eq("target_type", "workday").eq("target_id", target)

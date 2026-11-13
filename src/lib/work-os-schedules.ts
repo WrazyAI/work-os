@@ -199,7 +199,9 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true);
   if (activeRows.error) throw new Error(`load active Work OS schedules: ${activeRows.error.message}`);
   const newTo = effectiveTo ?? "9999-12-31";
-  const conflict = (activeRows.data ?? []).find((row) => {
+  // Deactivating a row is a way to resolve an existing overlap, so only an
+  // active result has to be conflict-free.
+  const conflict = body.active === false ? undefined : (activeRows.data ?? []).find((row) => {
     if (scheduleId && String(row.id) === scheduleId) return false;
     const from = dateOnly(row.effective_from);
     const to = dateOnly(row.effective_to) ?? "9999-12-31";

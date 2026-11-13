@@ -27,7 +27,7 @@ export async function reviewWorkArrangement(access: WorkOsAccess, personId: stri
     // Focused tests and same-millisecond retries use the immutable submission
     // identity rather than a client-visible revision that legitimate settings
     // saves also advance.
-    if (!proposal || proposal.status !== "submitted" || !proposal.employee_submitted_at || new Date(proposal.employee_submitted_at).toISOString() !== new Date(body.submittedAt).toISOString()) throw new WorkOsConflictError("This proposal changed or was already reviewed. Refresh before deciding.");
+    if (!proposal || proposal.status !== "submitted" || Number(proposal.draft_revision) !== Number(body.revision) || !proposal.employee_submitted_at || new Date(proposal.employee_submitted_at).toISOString() !== new Date(body.submittedAt).toISOString()) throw new WorkOsConflictError("This proposal changed or was already reviewed. Refresh before deciding.");
     let scheduleId: string | null = null;
     let effectiveFrom: string | null = null;
     let approvedSchedule: ReturnType<typeof normalizeWorkArrangement> | null = null;
@@ -41,14 +41,18 @@ export async function reviewWorkArrangement(access: WorkOsAccess, personId: stri
       const timezone = validateWorkOsTimezone(body.timezone ?? proposal.timezone);
       approvedSchedule = schedule;
       approvedTimezone = timezone;
-      const today = localDateForTimezone(new Date(), timezone);
-      const existing = await client.query("select id,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes from work_schedules where organization_id=$1 and person_id=$2 and active=true and (effective_to is null or effective_to >= $3::date) order by effective_from desc for update", [access.organizationId, personId, today]);
-      const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+      const newToday = localDateForTimezone(new Date(), timezone);
+      const existing = await client.query("select id,timezone,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes from work_schedules where organization_id=$1 and person_id=$2 and active=true and (effective_to is null or effective_to >= $3::date) order by effective_from desc for update", [access.organizationId, personId, newToday]);
+      const prior = existing.rows[0] ?? {};
+      // A timezone change can move one row's local date ahead of the other's.
+      // Use the later of the two so neither side loses coverage at the seam.
+      const oldToday = localDateForTimezone(new Date(), String(prior.timezone ?? timezone));
+      const transitionToday = oldToday > newToday ? oldToday : newToday;
+      const next = new Date(`${transitionToday}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
       // Replacements start tomorrow; today's recorded work keeps its policy.
-      effectiveFrom = existing.rows.length ? next.toISOString().slice(0, 10) : today;
+      effectiveFrom = existing.rows.length ? next.toISOString().slice(0, 10) : newToday;
       await client.query("update work_schedules set effective_to=$3::date - 1, updated_at=now() where organization_id=$1 and person_id=$2 and active=true and effective_from < $3::date and (effective_to is null or effective_to >= $3::date)", [access.organizationId, personId, effectiveFrom]);
       await client.query("update work_schedules set active=false, updated_at=now() where organization_id=$1 and person_id=$2 and active=true and effective_from >= $3::date", [access.organizationId, personId, effectiveFrom]);
-      const prior = existing.rows[0] ?? {};
       const inserted = await client.query("insert into work_schedules (organization_id,person_id,arrangement,timezone,days_of_week,shift_start,shift_end,break_windows,effective_from,active,created_by,screenshot_analysis_enabled,screenshot_analysis_interval_minutes,screenshot_analysis_start,screenshot_analysis_end,screenshot_analysis_eod_lead_minutes) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::date,true,$10,$11,$12,$13,$14,$15) returning id", [access.organizationId, personId, schedule.arrangement, timezone, schedule.daysOfWeek, schedule.shiftStart, schedule.shiftEnd, JSON.stringify(schedule.breaks), effectiveFrom, access.ctx.user.id, prior.screenshot_analysis_enabled ?? true, prior.screenshot_analysis_interval_minutes ?? 60, prior.screenshot_analysis_start ?? null, prior.screenshot_analysis_end ?? null, prior.screenshot_analysis_eod_lead_minutes ?? 30]);
       scheduleId = inserted.rows[0].id;
     }

@@ -27,26 +27,33 @@ declare
   v_existing work_employee_onboarding;
   v_row work_employee_onboarding;
   v_schedule jsonb := p_onboarding_patch->'schedule_proposal';
+  v_patch jsonb := p_onboarding_patch - 'schedule_proposal';
+  v_flexible_official boolean;
+  v_timezone_changed boolean;
   v_review boolean;
 begin
   select * into v_existing from work_employee_onboarding
     where organization_id=p_organization_id and person_id=p_person_id for update;
-  v_review := v_schedule is not null and (
+  select exists(select 1 from work_schedules where organization_id=p_organization_id and person_id=p_person_id
+    and active=true and arrangement='flexible' and (effective_to is null or effective_to >= current_date)) into v_flexible_official;
+  v_timezone_changed := p_onboarding_patch ? 'timezone'
+    and coalesce(p_onboarding_patch->>'timezone','') is distinct from coalesce(v_existing.timezone,'');
+  if v_flexible_official then v_patch := v_patch - 'timezone'; end if;
+  v_review := (v_schedule is not null and (
     v_schedule->>'arrangement' = 'flexible'
     or v_existing.schedule_proposal->>'arrangement' = 'flexible'
-    or exists(select 1 from work_schedules where organization_id=p_organization_id and person_id=p_person_id
-      and active=true and arrangement='flexible' and (effective_to is null or effective_to >= current_date))
-  );
+    or v_flexible_official
+  )) or (v_flexible_official and v_timezone_changed);
   if coalesce(v_review,false) then
     select * into v_row from work_save_employee_account_settings_scheduled(
-      p_organization_id,p_person_id,p_expected_revision,p_mutation_key,
-      p_onboarding_patch - 'schedule_proposal',p_person_patch);
+      p_organization_id,p_person_id,p_expected_revision,p_mutation_key,v_patch,p_person_patch);
     -- Idempotent replay or an unchanged profile save does not reopen review.
     if v_row.draft_revision > coalesce(v_existing.draft_revision,0)
-      and (v_schedule is distinct from v_existing.schedule_proposal
-        or coalesce(p_onboarding_patch->>'timezone',v_existing.timezone) is distinct from v_existing.timezone) then
-      update work_employee_onboarding set schedule_proposal=v_schedule,status='submitted',
-        employee_submitted_at=now(),reviewed_by=null,reviewed_at=null,review_note=null
+      and (v_schedule is distinct from v_existing.schedule_proposal or v_timezone_changed) then
+      update work_employee_onboarding set
+        schedule_proposal=coalesce(v_schedule,schedule_proposal),
+        timezone=case when v_timezone_changed then p_onboarding_patch->>'timezone' else timezone end,
+        status='submitted',employee_submitted_at=now(),reviewed_by=null,reviewed_at=null,review_note=null
         where organization_id=p_organization_id and person_id=p_person_id returning * into v_row;
     end if;
     return v_row;
