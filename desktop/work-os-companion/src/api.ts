@@ -1,3 +1,4 @@
+import "./requestAbortCompatibility";
 import { secureState } from "./vault";
 import { diagnostics } from "./diagnostics";
 import { machineCadenceHeaders } from "./localSettings";

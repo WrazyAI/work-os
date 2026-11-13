@@ -10,6 +10,17 @@ assert.match(entrypoint, /cfg_attr\(windows, windows_subsystem = "windows"\)/);
 assert.doesNotMatch(entrypoint, /cfg_attr\(not\(debug_assertions\), windows_subsystem/);
 
 const rust = read("src-tauri/src/lib.rs");
+// A first launch that fails while installing the menu, fitting the window or
+// creating the vault directories must still leave app-info.json and a log line.
+// Diagnostics therefore starts before any of that setup work.
+const setupStart = rust.indexOf(".setup(|app| {");
+assert.ok(setupStart >= 0, "the host setup block exists");
+const diagnosticsInit = rust.indexOf("diagnostics::init(app.handle())", setupStart);
+const menuInstall = rust.indexOf("app_menu::install", setupStart);
+const vaultDirectories = rust.indexOf("ensure_vault_directories", setupStart);
+assert.ok(diagnosticsInit > setupStart, "diagnostics starts inside setup");
+assert.ok(diagnosticsInit < menuInstall, "diagnostics starts before the menu install");
+assert.ok(diagnosticsInit < vaultDirectories, "diagnostics starts before the vault directories");
 assert.doesNotMatch(rust, /WebviewUrl::App\("index\.html\?debug=1"/);
 assert.doesNotMatch(rust, /get_webview_window\("debug"\)/);
 assert.match(rust, /set_focus\(\)/);

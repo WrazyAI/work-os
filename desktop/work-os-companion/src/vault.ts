@@ -73,7 +73,21 @@ async function openVault() {
   const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
   let client: Client;
   try { client = await stronghold.loadClient("work-os"); }
-  catch { client = await stronghold.createClient("work-os"); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/has already been loaded before, can not be loaded twice/.test(message)) {
+      // The main and avatar WebViews share the host's Stronghold collection.
+      // Another window already loaded this client: attach to it, never replace
+      // it with createClient (which wipes the live store, including sign-in).
+      client = new Client(path, "work-os");
+    } else if (/^error loading client data; no data present$/.test(message)) {
+      client = await stronghold.createClient("work-os");
+    } else {
+      // A read failure is not a fresh device. Preserve the vault and let the
+      // boot gate report the failure instead of silently opening an empty one.
+      throw error;
+    }
+  }
   return { stronghold, client };
 }
 
