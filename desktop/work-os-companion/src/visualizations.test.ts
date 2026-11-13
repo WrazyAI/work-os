@@ -65,10 +65,10 @@ describe("operational visualizations", () => {
   });
 
   it("uses unmistakable task-state semantics", () => {
-    expect(styles).toMatch(/\.task-state\.open \{[^}]*#edf0ea/);
-    expect(styles).toMatch(/\.task-state\.complete[\s\S]*#e8f4da/);
-    expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fbe7e3/);
-    expect(styles).toMatch(/\.task-state\.sync-issue[\s\S]*#fff3d1/);
+    expect(styles).toMatch(/\.task-state\.open \{[^}]*var\(--inset\)/);
+    expect(styles).toMatch(/\.task-state\.complete[\s\S]*var\(--tool-success-soft\)/);
+    expect(styles).toMatch(/\.task-state\.overdue[\s\S]*var\(--danger-soft\)/);
+    expect(styles).toMatch(/\.task-state\.sync-issue[\s\S]*var\(--warning-soft\)/);
     expect(app).toContain('className={`task-state ${displayState}`}');
     expect(app).toContain("taskStatusLabel(displayState)");
   });

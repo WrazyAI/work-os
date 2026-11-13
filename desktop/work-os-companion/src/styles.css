@@ -795,7 +795,7 @@ button:disabled {
   min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ecebe4;
+  background: var(--inset);
   padding: 0 9px;
 }
 .panel-actions {
@@ -891,31 +891,31 @@ button:disabled {
 }
 .task-state.open {
   border-color: transparent;
-  background: #edf0ea;
-  color: #4c554b;
+  background: var(--inset);
+  color: var(--ink-soft);
 }
 /* Manual workflow statuses share open's quiet treatment; the label carries the
    difference, and neither state competes with the overdue or done pills. */
 .task-state.pending,
 .task-state.in_progress {
   border-color: transparent;
-  background: #edf0ea;
-  color: #4c554b;
+  background: var(--inset);
+  color: var(--ink-soft);
 }
 .task-state.complete {
   border-color: transparent;
-  background: #e8f4da;
-  color: #37601a;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 .task-state.overdue {
   border-color: transparent;
-  background: #fbe7e3;
-  color: #8f2c21;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .task-state.sync-issue {
   border-color: transparent;
-  background: #fff3d1;
-  color: #6f500d;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 .evidence-list h3 {
   font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -1354,8 +1354,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-modal input:focus,
 .task-modal textarea:focus {
   outline: none;
-  border-color: #a7c982;
-  background: #fffef9;
+  border-color: var(--focus);
+  background: var(--white);
   box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
 }
 .capture-actions select {
@@ -1606,8 +1606,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   min-height: 26px;
   padding: 0 9px;
   border-radius: 999px;
-  background: #eef0e9;
-  color: #5c6456;
+  background: var(--inset);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 650;
   white-space: nowrap;
@@ -3266,9 +3266,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-modal textarea,
 .inline-subtask input {
   width: 100%;
-  border: 1px solid #d3d3ca;
+  border: 1px solid var(--line);
   border-radius: 11px;
-  background: #fffef8;
+  background: var(--white);
   color: var(--ink);
   padding: 12px;
 }
@@ -3803,7 +3803,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .quiet-action,
 .debug-trigger {
   height: 34px;
-  border: 1px solid #d8d7ce;
+  border: 1px solid var(--line);
   border-radius: 9px;
   background: transparent;
   display: flex;

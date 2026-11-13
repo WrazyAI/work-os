@@ -3970,18 +3970,18 @@ button:not(:disabled):active {
 }
 
 .sync-chip.synced {
-  background: var(--signal-wash, #e6f7d5);
-  color: #557d35;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 .sync-chip.awaiting {
-  background: #edf4ff;
-  color: #3974d8;
+  background: var(--observed-soft);
+  color: var(--observed);
 }
 
 .sync-chip.degraded {
-  background: #fff8e8;
-  color: #9b6611;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 /* Historical read-only state */
@@ -3990,14 +3990,14 @@ button:not(:disabled):active {
   align-items: baseline;
   gap: 10px;
   padding: 11px 14px;
-  border: 1px solid #c9d8f2;
+  border: 1px solid var(--observed);
   border-radius: 11px;
-  background: #edf4ff;
+  background: var(--observed-soft);
 }
 
 .task-readonly-banner strong {
   flex: 0 0 auto;
-  color: #2c5aa8;
+  color: var(--observed);
   font-size: 10px;
   font-weight: 780;
   letter-spacing: 0.06em;
@@ -4005,7 +4005,7 @@ button:not(:disabled):active {
 }
 
 .task-readonly-banner span {
-  color: #45618f;
+  color: var(--ink-soft);
   font-size: 10px;
   line-height: 1.45;
 }
