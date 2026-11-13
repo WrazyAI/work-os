@@ -49,6 +49,7 @@ import "./chat/tool-surfaces.css";
 import "./adminOtto/adminOtto.css";
 import "./window-chrome.css";
 import "./theme.css";
+import "./theme-prompt.css";
 
 installDiagnosticErrorHandlers();
 installBootTrace();
