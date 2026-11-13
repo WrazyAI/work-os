@@ -313,6 +313,13 @@
     padding: 9px 10px;
   }
   .theme-prompt-choice-head {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: block;
+    margin: 0;
+  }
+  .theme-prompt-choice-head svg {
     display: none;
   }
   .theme-prompt-mini {

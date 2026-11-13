@@ -100,7 +100,9 @@ import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
-import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
+import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, rememberTheme, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
+import ThemePrompt from "./ThemePrompt";
+import { shouldOpenThemePrompt } from "./themePromptState";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
 const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));
@@ -548,6 +550,11 @@ export default function App() {
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
   const [theme, setTheme] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const [themePreview, setThemePreview] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const [themePromptSeen, setThemePromptSeen] = useState(true);
+  const [themePromptOpen, setThemePromptOpen] = useState(false);
+  const [themePromptSaving, setThemePromptSaving] = useState(false);
+  const [themePromptError, setThemePromptError] = useState<string | null>(null);
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
@@ -809,6 +816,7 @@ export default function App() {
      the real shell reviewable in a browser without giving the web app a fake
      title bar. */
   const macChromePreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has("mac-chrome");
+  const forceThemePrompt = import.meta.env.DEV && new URLSearchParams(window.location.search).has("theme-prompt");
   const macChrome = (isTauri() && isMacOS()) || macChromePreview;
   const customWindowChrome = (isTauri() && (isWindows() || isMacOS()))
     || (import.meta.env.DEV && (new URLSearchParams(window.location.search).has("window-chrome") || macChromePreview));
@@ -1305,10 +1313,66 @@ export default function App() {
   const navigateEmployeeGuide = useCallback((guide: GuideView) => {
     if (!isAdminGuideView(guide)) setView(guide);
   }, []);
+  const selectThemePreview = useCallback((next: ThemePreference) => {
+    setThemePreview(next);
+    setThemePromptError(null);
+    applyAppearance({ textSize, mascotSize, theme: next });
+  }, [mascotSize, textSize]);
+
+  const dismissThemePrompt = useCallback(() => {
+    setThemePreview(theme);
+    applyAppearance({ textSize, mascotSize, theme });
+    setThemePromptOpen(false);
+    setThemePromptError(null);
+    setThemePromptSeen(true);
+    void secureState.saveSettings({ themePromptSeen: true }).catch(() => undefined);
+  }, [mascotSize, textSize, theme]);
+
+  const useThemePrompt = useCallback(async () => {
+    const next = themePreview;
+    setThemePromptSaving(true);
+    setThemePromptError(null);
+    try {
+      await secureState.saveSettings({ theme: next, themePromptSeen: true });
+      setTheme(next);
+      setThemePromptSeen(true);
+      rememberTheme(next);
+      applyAppearance({ textSize, mascotSize, theme: next });
+      void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
+      setThemePromptOpen(false);
+    } catch (value) {
+      setThemePromptError(errorMessage(value, "The theme could not be saved."));
+    } finally {
+      setThemePromptSaving(false);
+    }
+  }, [mascotSize, textSize, themePreview]);
+
   /** The global layer mounts from both branches; it includes the page guide.
    * The admin tour renders only in the administration branch, so it may only
-   * hold the lock there. */
-  const globalOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || (tourScope === "admin" && adminWorkspaceBranch);
+   * hold the lock there. The theme prompt counts as an overlay so the guide
+   * waits for it instead of opening underneath. */
+  const otherOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || taskFinderOpen || (tourScope === "admin" && adminWorkspaceBranch);
+  const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
+
+  useEffect(() => {
+    if (themePromptOpen) return;
+    const workspaceOnScreen = employeeWorkspaceBranch || adminWorkspaceBranch;
+    const gateOpen = shouldOpenThemePrompt({
+      signedIn,
+      themePromptSeen,
+      workspaceOnScreen,
+      otherOverlayOpen: otherOverlaysOpen,
+      hasSession: !!visibleSession,
+    });
+    const forced = forceThemePrompt && workspaceOnScreen && !otherOverlaysOpen;
+    if (!gateOpen && !forced) return;
+    const timer = window.setTimeout(() => {
+      setThemePreview(theme);
+      setThemePromptError(null);
+      setThemePromptOpen(true);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [adminWorkspaceBranch, employeeWorkspaceBranch, forceThemePrompt, otherOverlaysOpen, signedIn, theme, themePromptOpen, themePromptSeen, visibleSession]);
 
   useEffect(() => {
     let disposed = false;
@@ -1344,6 +1408,7 @@ export default function App() {
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
+    if (themePromptOpen) { dismissThemePrompt(); return; }
     if (taskEvidenceRequest) { setTaskEvidenceRequest(null); return; }
     if (debugPageGuide) { setDebugPageGuide(null); return; }
     if (tourScope) { setTourScope(null); return; }
@@ -1362,7 +1427,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, tourScope, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, dismissThemePrompt, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, themePromptOpen, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
@@ -2577,7 +2642,7 @@ export default function App() {
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
-    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
       // paint; the live query revalidates it in the background.
@@ -3664,7 +3729,7 @@ export default function App() {
     applyAppearance({ textSize: next, mascotSize, theme });
     try {
       await secureState.saveSettings({ textSize: next });
-      void emit(APPEARANCE_EVENT, { textSize: next, mascotSize });
+      void emit(APPEARANCE_EVENT, { textSize: next, mascotSize, theme });
     } catch (value) {
       setTextSize(previous);
       applyAppearance({ textSize: previous, mascotSize, theme });
@@ -3678,7 +3743,7 @@ export default function App() {
     applyAppearance({ textSize, mascotSize: next, theme });
     try {
       await secureState.saveSettings({ mascotSize: next });
-      void emit(APPEARANCE_EVENT, { textSize, mascotSize: next });
+      void emit(APPEARANCE_EVENT, { textSize, mascotSize: next, theme });
     } catch (value) {
       setMascotSize(previous);
       applyAppearance({ textSize, mascotSize: previous, theme });
@@ -5430,6 +5495,14 @@ export default function App() {
    * (design §9). Employee-only overlays stay in the employee return, and the
    * lock scoping below keeps them out of the admin branch. */
   const renderGlobalOverlays = () => <>
+    {themePromptOpen && <ThemePrompt
+      selected={themePreview}
+      saving={themePromptSaving}
+      error={themePromptError}
+      onSelect={selectThemePreview}
+      onUse={() => void useThemePrompt()}
+      onDismiss={dismissThemePrompt}
+    />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
     {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
     {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={offerWorkspaceTour ? () => { const scope = isAdminGuideView(openPageGuide) ? "admin" : "employee"; closeGuide(); setTourScope(scope); } : undefined} />}

@@ -54,6 +54,7 @@ describe("choosing how Otto reads to you", () => {
     expect(avatar).toContain("setRecapVoice(normalizeRecapVoice(event.payload?.recapVoice))");
     // The vault keeps the field, or a choice would silently vanish.
     const vault = readFileSync(new URL("./vault.ts", import.meta.url), "utf8");
-    expect(vault).toContain("recapVoice: settings.recapVoice ?? (typeof current?.recapVoice === \"string\" ? current.recapVoice : undefined)");
+    expect(vault).toContain("next.recapVoice ?? base.recapVoice");
+    expect(vault).toContain("mergeWorkOsSettings(stored, settings)");
   });
 });

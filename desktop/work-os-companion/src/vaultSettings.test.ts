@@ -26,4 +26,9 @@ describe("vault settings", () => {
   it("does not mark the prompt seen from an unrelated save", () => {
     expect(mergeWorkOsSettings(base, { mascotSize: "small" }).themePromptSeen).toBe(false);
   });
+
+  it("keeps the saved recap voice through unrelated saves and writes a new one", () => {
+    expect(mergeWorkOsSettings({ ...base, recapVoice: "warm" }, { theme: "dark" }).recapVoice).toBe("warm");
+    expect(mergeWorkOsSettings(base, { recapVoice: "calm" }).recapVoice).toBe("calm");
+  });
 });
