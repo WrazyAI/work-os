@@ -324,6 +324,12 @@
       "type": "fix",
       "summary": "Work OS opens normally on Macs that previously stopped at the loading screen.",
       "verification": "b7c0f15f: macosRuntimeCompatibility reproduces the missing AbortSignal.any and AbortSignal.timeout failures in the initial day read and session check, then verifies the fallbacks still honor the request deadline and caller cancellation (5 tests pass); companion suite 216 files/1922 tests, companion typecheck and production build pass."
+    },
+    {
+      "id": "saved-memory-independent-pages",
+      "type": "fix",
+      "summary": "Saved memories stay visible when new proposals arrive, with complete counts and separate Load more controls; Otto can retrieve relevant older saved facts.",
+      "verification": "Ledger a61c1cb8-5db6-47f3-beb2-06f760be0c63: real PGlite proposal-flood, microsecond keyset, scope and old-fact recall regression passes; Work OS 1318 passed/11 skipped; companion 215 files/1922 tests, typechecks and both builds pass. Playwright 1440/1024/390 paging, retained error rows, focus/Escape, reduced motion, no overflow/page errors. CodeRabbit CLI and GitHub findings addressed with refresh/retry, settled-decision and timeout regressions. TestSprite 60488eda run refused by workspace billing_hold/payment_failure (not a product pass)."
     }
   ],
   "emergency": null,

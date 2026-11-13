@@ -1223,6 +1223,15 @@ beneath the copy, and below 560px the modal takes the viewport inset. Keep,
 reject, and forget keep their exact existing behavior and states; nothing is
 remembered without a keep.
 
+Saved facts and proposals have independent server-side pages and complete
+counts. A new proposal can never displace a kept fact from its collection.
+Each tab appends 50 facts through its own explicit `Load more` control with
+`Showing N of M`; loaded rows stay in place and errors keep them available.
+Summary and tab counts describe the complete collection, not only loaded rows.
+Durable recall ranks relevant confirmed facts across the full saved set before
+filling its bounded context with recent facts; proposals remain a separate,
+explicitly unconfirmed lane.
+
 ### 8.6 Appearance settings: text and mascot size
 
 Reading & display sits with the Settings groups and holds exactly two

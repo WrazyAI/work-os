@@ -9,6 +9,25 @@ import type { MemoryFact, MemoryRecent } from "./types";
 
 export type { MemoryFact, MemoryRecent, MemoryView } from "./types";
 
+export type MemoryFactPaging = {
+  total: number;
+  hasMore: boolean;
+  loading: boolean;
+  error?: string | null;
+  onLoadMore: () => void;
+};
+
+function MemoryPageEdge({ loaded, paging, label, busy }: { loaded: number; paging?: MemoryFactPaging; label: string; busy: boolean }) {
+  if (!paging) return null;
+  return <div className="memory-page-edge">
+    <p className="memory-provenance" role="status">Showing {loaded} of {paging.total}</p>
+    {paging.error && <p className="memory-error" role="alert">{paging.error}</p>}
+    {(paging.hasMore || paging.error) && <button type="button" className="memory-show-all" disabled={busy || paging.loading} onClick={paging.onLoadMore}>
+      {paging.loading ? "Loading memories…" : label}
+    </button>}
+  </div>;
+}
+
 /** The activity feed shows this many rows before the Show all control. */
 const ACTIVITY_PAGE_SIZE = 8;
 
@@ -38,15 +57,16 @@ const newestFirst = (left: MemoryFact, right: MemoryFact) => String(right.occurr
  * right. Facts themselves never render here — the modal owns them, so the
  * Settings page keeps its table rhythm instead of growing a fourth section.
  */
-export function MemorySummary({ facts, loading, error, onOpen, onRetry }: {
+export function MemorySummary({ facts, factTotals, loading, error, onOpen, onRetry }: {
   facts: MemoryFact[];
+  factTotals?: { confirmed: number; candidate: number };
   loading: boolean;
   error: string | null;
   onOpen: () => void;
   onRetry: () => void;
 }) {
-  const remembered = facts.filter((fact) => fact.review_status === "confirmed").length;
-  const candidates = facts.filter((fact) => fact.review_status === "candidate").length;
+  const remembered = factTotals?.confirmed ?? facts.filter((fact) => fact.review_status === "confirmed").length;
+  const candidates = factTotals?.candidate ?? facts.filter((fact) => fact.review_status === "candidate").length;
   return <section className="memory-summary" aria-labelledby="memory-summary-title">
     <div className="memory-summary-identity">
       <span className="memory-summary-figure" aria-hidden="true"><MascotMark pose={MASCOT.idlePose} /></span>
@@ -67,10 +87,11 @@ export function MemorySummary({ facts, loading, error, onOpen, onRetry }: {
   </section>;
 }
 
-export function MemoryReviewSection({ facts, busy, onReview }: {
+export function MemoryReviewSection({ facts, busy, onReview, paging }: {
   facts: MemoryFact[];
   busy: boolean;
   onReview: (id: string, status: "confirmed" | "rejected") => Promise<boolean>;
+  paging?: MemoryFactPaging;
 }) {
   const [decision, setDecision] = useState<{ fact: MemoryFact; status: "confirmed" | "rejected"; phase: "saving" | "exiting" } | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -140,7 +161,7 @@ export function MemoryReviewSection({ facts, busy, onReview }: {
   return <section className="memory-section review" aria-labelledby="memory-review-title">
     <header className="memory-section-head">
       <h4 id="memory-review-title">Waiting for your review</h4>
-      <span className="memory-count" aria-label={`${candidates.length} waiting for review`}>{candidates.length}</span>
+      <span className="memory-count" aria-label={`${paging?.total ?? candidates.length} waiting for review`}>{paging?.total ?? candidates.length}</span>
     </header>
     {visible.length ? (
       <div className="memory-cards" ref={listRef}>
@@ -158,20 +179,22 @@ export function MemoryReviewSection({ facts, busy, onReview }: {
         ))}
       </div>
     ) : <p className="memory-empty">Nothing is waiting for your review. {MASCOT.name} asks before remembering anything new.</p>}
+    <MemoryPageEdge loaded={candidates.length} paging={paging} label="Load more proposals" busy={busy || !!decision} />
     <span className="memory-review-status" role="status">{announcement}</span>
   </section>;
 }
 
-export function MemoryFactsSection({ facts, busy, onForget }: {
+export function MemoryFactsSection({ facts, busy, onForget, paging }: {
   facts: MemoryFact[];
   busy: boolean;
   onForget: (id: string) => void;
+  paging?: MemoryFactPaging;
 }) {
   const confirmed = [...facts].filter((fact) => fact.review_status === "confirmed").sort(newestFirst);
   return <section className="memory-section facts" aria-labelledby="memory-facts-title">
     <header className="memory-section-head">
       <h4 id="memory-facts-title">Remembered facts</h4>
-      <span className="memory-count" aria-label={`${confirmed.length} kept facts`}>{confirmed.length}</span>
+      <span className="memory-count" aria-label={`${paging?.total ?? confirmed.length} kept facts`}>{paging?.total ?? confirmed.length}</span>
     </header>
     {confirmed.length ? (
       <ul className="memory-rows">
@@ -187,6 +210,7 @@ export function MemoryFactsSection({ facts, busy, onForget }: {
         ))}
       </ul>
     ) : <p className="memory-empty">No kept facts yet. Confirm a proposal above to teach {MASCOT.name} what helps.</p>}
+    <MemoryPageEdge loaded={confirmed.length} paging={paging} label="Load more remembered facts" busy={busy} />
   </section>;
 }
 
@@ -232,7 +256,7 @@ export function MemoryActivitySection({ recent, busy, onForget }: {
  * kept (with the dated activity beneath it) — so the settings summary can stay
  * compact while every fact keeps its Keep / Discard / Forget behavior.
  */
-export function MemoryModal({ facts, recent, busy, error, onReview, onForget, onClose }: {
+export function MemoryModal({ facts, recent, busy, error, onReview, onForget, onClose, factPaging }: {
   facts: MemoryFact[];
   recent: MemoryRecent[];
   busy: boolean;
@@ -240,6 +264,7 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
   onReview: (id: string, status: "confirmed" | "rejected") => Promise<boolean>;
   onForget: (id: string) => void;
   onClose: () => void;
+  factPaging?: { confirmed: MemoryFactPaging; candidate: MemoryFactPaging };
 }) {
   const [tab, setTab] = useState<"review" | "remembered">("review");
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -276,8 +301,8 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, []);
-  const candidates = facts.filter((fact) => fact.review_status === "candidate").length;
-  const confirmed = facts.filter((fact) => fact.review_status === "confirmed").length;
+  const candidates = factPaging?.candidate.total ?? facts.filter((fact) => fact.review_status === "candidate").length;
+  const confirmed = factPaging?.confirmed.total ?? facts.filter((fact) => fact.review_status === "confirmed").length;
   const selectTab = (next: "review" | "remembered") => setTab(next);
   const onTabKey = (event: ReactKeyboardEvent, index: number) => {
     if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
@@ -325,8 +350,8 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
         <div className="memory-modal-body" id={`memory-panel-${tab}`} role="tabpanel" aria-labelledby={`memory-tab-${tab}`}>
           {error && <p className="memory-error" role="alert">{error}</p>}
           {tab === "review"
-            ? <MemoryReviewSection facts={facts} busy={busy} onReview={onReview} />
-            : <><MemoryFactsSection facts={facts} busy={busy} onForget={onForget} /><MemoryActivitySection recent={recent} busy={busy} onForget={onForget} /></>}
+            ? <MemoryReviewSection facts={facts} busy={busy} onReview={onReview} paging={factPaging?.candidate} />
+            : <><MemoryFactsSection facts={facts} busy={busy} onForget={onForget} paging={factPaging?.confirmed} /><MemoryActivitySection recent={recent} busy={busy} onForget={onForget} /></>}
         </div>
       </section>
     </div>,
