@@ -460,6 +460,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("confirmedThemeRef.current = next");
     expect(app).toContain("const confirmed = confirmedThemeRef.current");
     expect(vaultSource).toContain("settings.apiBase === undefined && typeof current?.apiBase");
+    expect(vaultSource).toContain("settingsWriteQueue");
     expect(themePrompt).toContain("if (saving) return");
     expect(themePrompt).toContain("How should Work OS look?");
     expect(appearanceSettings).toContain("Appearance");

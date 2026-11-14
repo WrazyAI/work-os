@@ -232,6 +232,10 @@ async function browserSession(): Promise<DesktopSession | null> {
   return browserSessionCache;
 }
 
+/* Serialize the whole settings read/merge/write. Two appearance controls can
+ * save together; merging both from the same stale read would drop one. */
+let settingsWriteQueue: Promise<void> = Promise.resolve();
+
 export const secureState = {
   /** The stored session and why it is unusable when it is. The boot path uses
    * the reason so the employee is told to connect the device again, instead of
@@ -363,17 +367,21 @@ export const secureState = {
       return fallback;
     }
   },
-  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
-    if (!isTauri()) return;
-    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
-    const stored = mergeWorkOsSettings(null, {
-      apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
-      autoCheckUpdates: current?.autoCheckUpdates !== false,
-      voiceHotkey: current?.voiceHotkey !== false,
-      ...normalizeAppearance(current),
-      themePromptSeen: current?.themePromptSeen === true,
-      ...(typeof current?.recapVoice === "string" ? { recapVoice: current.recapVoice } : {}),
+  saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
+    if (!isTauri()) return Promise.resolve();
+    const write = settingsWriteQueue.then(async () => {
+      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+      const stored = mergeWorkOsSettings(null, {
+        apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
+        autoCheckUpdates: current?.autoCheckUpdates !== false,
+        voiceHotkey: current?.voiceHotkey !== false,
+        ...normalizeAppearance(current),
+        themePromptSeen: current?.themePromptSeen === true,
+        ...(typeof current?.recapVoice === "string" ? { recapVoice: current.recapVoice } : {}),
+      });
+      await set("settings", mergeWorkOsSettings(stored, settings));
     });
-    await set("settings", mergeWorkOsSettings(stored, settings));
+    settingsWriteQueue = write.catch(() => undefined);
+    return write;
   },
 };
