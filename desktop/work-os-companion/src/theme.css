@@ -9,6 +9,7 @@
   /* New semantic aliases the light surfaces can read when they need them. */
   --canvas: #e9e8e1;
   --ink-soft: #304033;
+  --line-strong: #c5cec1;
   --inset: #f0f3ed;
   --faint: #939c90;
   --ink-on-signal: #182018;

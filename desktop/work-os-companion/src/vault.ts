@@ -327,7 +327,7 @@ export const secureState = {
     if (!isTauri()) return;
     const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
     const stored = mergeWorkOsSettings(null, {
-      apiBase: typeof current?.apiBase === "string" ? current.apiBase : undefined,
+      apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
       autoCheckUpdates: current?.autoCheckUpdates !== false,
       voiceHotkey: current?.voiceHotkey !== false,
       ...normalizeAppearance(current),

@@ -555,7 +555,10 @@ export default function App() {
   const [themePromptOpen, setThemePromptOpen] = useState(false);
   const [themePromptSaving, setThemePromptSaving] = useState(false);
   const [themePromptError, setThemePromptError] = useState<string | null>(null);
+  const [themeSettingsLoaded, setThemeSettingsLoaded] = useState(false);
   const themeRequestRef = useRef(0);
+  const confirmedThemeRef = useRef<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const appearanceRef = useRef({ textSize, mascotSize, theme });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
@@ -1117,7 +1120,7 @@ export default function App() {
     enabled: (!!session || ADMIN_SHELL_BOOT) && !syncBypass,
     organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
-    blocked: baseModalOpen || themePromptOpen,
+    blocked: baseModalOpen || themePromptOpen || !themeSettingsLoaded,
     fixture: ADMIN_SHELL_GUIDE_STATE ?? undefined,
   });
   const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
@@ -1316,43 +1319,45 @@ export default function App() {
   }, []);
   const chooseTheme = useCallback(async (next: ThemePreference, options: { markSeen?: boolean } = {}) => {
     const request = ++themeRequestRef.current;
-    const previous = theme;
     setTheme(next);
     setThemePreview(next);
-    applyAppearance({ textSize, mascotSize, theme: next });
+    applyAppearance({ ...appearanceRef.current, theme: next });
     rememberTheme(next);
     try {
       await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
       if (themeRequestRef.current !== request) return;
+      confirmedThemeRef.current = next;
       if (options.markSeen) setThemePromptSeen(true);
-      void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
     } catch (value) {
       // A newer choice owns the visible theme; an older failure must not roll
-      // it back or announce the stale value.
+      // it back or announce the stale value. Roll back to the last confirmed
+      // theme, never an earlier optimistic choice.
       if (themeRequestRef.current !== request) return;
-      setTheme(previous);
-      setThemePreview(previous);
-      applyAppearance({ textSize, mascotSize, theme: previous });
-      rememberTheme(previous);
+      const confirmed = confirmedThemeRef.current;
+      setTheme(confirmed);
+      setThemePreview(confirmed);
+      applyAppearance({ ...appearanceRef.current, theme: confirmed });
+      rememberTheme(confirmed);
       throw value;
     }
-  }, [mascotSize, textSize, theme]);
+  }, []);
 
   const selectThemePreview = useCallback((next: ThemePreference) => {
     setThemePreview(next);
     setThemePromptError(null);
-    applyAppearance({ textSize, mascotSize, theme: next });
-  }, [mascotSize, textSize]);
+    applyAppearance({ ...appearanceRef.current, theme: next });
+  }, []);
 
   const dismissThemePrompt = useCallback(() => {
     if (themePromptSaving) return;
     setThemePreview(theme);
-    applyAppearance({ textSize, mascotSize, theme });
+    applyAppearance({ ...appearanceRef.current, theme });
     setThemePromptOpen(false);
     setThemePromptError(null);
     setThemePromptSeen(true);
     void secureState.saveSettings({ themePromptSeen: true }).catch(() => undefined);
-  }, [mascotSize, textSize, theme, themePromptSaving]);
+  }, [theme, themePromptSaving]);
 
   const useThemePrompt = useCallback(async () => {
     const next = themePreview;
@@ -1360,18 +1365,19 @@ export default function App() {
     setThemePromptError(null);
     try {
       await secureState.saveSettings({ theme: next, themePromptSeen: true });
+      confirmedThemeRef.current = next;
       setTheme(next);
       setThemePromptSeen(true);
       rememberTheme(next);
-      applyAppearance({ textSize, mascotSize, theme: next });
-      void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
+      applyAppearance({ ...appearanceRef.current, theme: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
       setThemePromptOpen(false);
     } catch (value) {
       setThemePromptError(errorMessage(value, "The theme could not be saved."));
     } finally {
       setThemePromptSaving(false);
     }
-  }, [mascotSize, textSize, themePreview]);
+  }, [themePreview]);
 
   /** The global layer mounts from both branches; it includes the page guide.
    * The admin tour renders only in the administration branch, so it may only
@@ -1381,9 +1387,13 @@ export default function App() {
   const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
 
   useEffect(() => {
+    appearanceRef.current = { textSize, mascotSize, theme };
+  }, [mascotSize, textSize, theme]);
+
+  useEffect(() => {
     const activeTheme = themePromptOpen ? themePreview : theme;
-    return watchSystemTheme(() => applyAppearance({ textSize, mascotSize, theme: activeTheme }));
-  }, [mascotSize, textSize, theme, themePreview, themePromptOpen]);
+    return watchSystemTheme(() => applyAppearance({ ...appearanceRef.current, theme: activeTheme }));
+  }, [theme, themePreview, themePromptOpen]);
 
   useEffect(() => {
     if (themePromptOpen) return;
@@ -2672,7 +2682,7 @@ export default function App() {
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
-    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); setThemeSettingsLoaded(true); confirmedThemeRef.current = appearance.theme; rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
       // paint; the live query revalidates it in the background.
@@ -3756,13 +3766,13 @@ export default function App() {
   async function chooseTextSize(next: TextSize) {
     const previous = textSize;
     setTextSize(next);
-    applyAppearance({ textSize: next, mascotSize, theme });
+    applyAppearance({ ...appearanceRef.current, textSize: next });
     try {
       await secureState.saveSettings({ textSize: next });
-      void emit(APPEARANCE_EVENT, { textSize: next, mascotSize, theme });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, textSize: next });
     } catch (value) {
       setTextSize(previous);
-      applyAppearance({ textSize: previous, mascotSize, theme });
+      applyAppearance({ ...appearanceRef.current, textSize: previous });
       showError(errorMessage(value, "The text size could not be saved."), "The text size could not be saved.", "Setting not saved");
     }
   }
@@ -3770,13 +3780,13 @@ export default function App() {
   async function chooseMascotSize(next: MascotSize) {
     const previous = mascotSize;
     setMascotSize(next);
-    applyAppearance({ textSize, mascotSize: next, theme });
+    applyAppearance({ ...appearanceRef.current, mascotSize: next });
     try {
       await secureState.saveSettings({ mascotSize: next });
-      void emit(APPEARANCE_EVENT, { textSize, mascotSize: next, theme });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, mascotSize: next });
     } catch (value) {
       setMascotSize(previous);
-      applyAppearance({ textSize, mascotSize: previous, theme });
+      applyAppearance({ ...appearanceRef.current, mascotSize: previous });
       showError(errorMessage(value, "The mascot size could not be saved."), "The mascot size could not be saved.", "Setting not saved");
     }
   }

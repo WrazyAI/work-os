@@ -2434,7 +2434,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--white);
-  color: #6e7369;
+  color: var(--muted);
   font-size: 9.5px;
 }
 .profile-account-pill strong {

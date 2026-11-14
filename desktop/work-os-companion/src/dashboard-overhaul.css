@@ -1327,12 +1327,12 @@ button.task-focus-plan-row:hover { background: var(--dash-inset); }
 .evidence-preview-heading { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
 .evidence-preview-heading > div { display: grid; min-width: 0; gap: 3px; }
 .evidence-preview-heading span { color: var(--muted); font: 700 9px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: .09em; }
-.evidence-preview-heading h2 { margin: 0; overflow-wrap: anywhere; color: #26351f; font: 700 18px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: -0.015em; }
+.evidence-preview-heading h2 { margin: 0; overflow-wrap: anywhere; color: var(--ink); font: 700 18px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: -0.015em; }
 .evidence-preview-modal > header > button { display: grid; width: 34px; height: 34px; place-items: center; flex: none; border: 1px solid #dbe2d5; border-radius: 8px; background: #fff; color: #5c6b57; cursor: pointer; }
 .evidence-preview-modal > header > button:hover { border-color: var(--line-strong); background: var(--inset); }
 .evidence-preview-modal > header > button:focus-visible { outline: 2px solid #4a7d22; outline-offset: 2px; }
-.evidence-preview-provenance { margin: 0; padding: 0 20px 12px; border-bottom: 1px solid #e1e7dc; color: #6f7d6c; font-size: 10.5px; line-height: 1.45; }
-.evidence-preview-body { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; padding: 16px 20px; background: #f5f6f1; }
+.evidence-preview-provenance { margin: 0; padding: 0 20px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.evidence-preview-body { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; padding: 16px 20px; background: var(--canvas); }
 .evidence-preview-loading { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 180px; margin: auto; color: var(--muted); font-size: 11px; }
 .evidence-preview-loading svg { color: var(--signal-deep); }
 .evidence-preview-error { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; width: min(560px, 100%); margin: auto; padding: 16px; border: 1px solid #e5c1b9; border-radius: 12px; background: #fff0ec; color: #963a2d; }

@@ -90,6 +90,11 @@ describe("soft ash theme tokens", () => {
     expect(darkBlock).toContain("color: var(--ink);");
   });
 
+  it("defines line-strong for the light material", () => {
+    const light = block(":root");
+    expect(new Set([...light.matchAll(/--([\w-]+):/g)].map((match) => match[1])).has("line-strong")).toBe(true);
+  });
+
   it("never scales text or mascot art from the theme block", () => {
     expect(darkNames.has("text-scale")).toBe(false);
     expect(darkNames.has("mascot-scale")).toBe(false);
