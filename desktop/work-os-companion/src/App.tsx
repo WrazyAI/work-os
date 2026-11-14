@@ -1103,6 +1103,11 @@ export default function App() {
    * tour renders only in the administration branch, so it blocks the admin
    * guide's auto-open without counting against the employee one. */
   const baseModalOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || employeeOnlyOverlaysOpen || tourScope === "admin";
+  /** Only the overlays the active branch actually renders may block the prompt,
+   * the guide, or the lock. */
+  const activeOverlaysOpen = adminWorkspaceBranch
+    ? !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || tourScope === "admin"
+    : baseModalOpen;
   /** The guide that answers for the page on screen: the administration
    * sections have their own guides, keyed and worded for that surface. */
   const pageGuideView = adminWorkspaceBranch ? guideViewForAdminSection(adminSection) : guideViewForSidebar(view);
@@ -1121,7 +1126,7 @@ export default function App() {
     enabled: (!!session || ADMIN_SHELL_BOOT) && !syncBypass,
     organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
-    blocked: baseModalOpen || themePromptOpen || !themeSettingsLoaded,
+    blocked: activeOverlaysOpen || themePromptOpen || !themeSettingsLoaded,
     fixture: ADMIN_SHELL_GUIDE_STATE ?? undefined,
   });
   const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
@@ -1326,9 +1331,12 @@ export default function App() {
     rememberTheme(next);
     try {
       await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
-      if (themeRequestRef.current !== request) return;
+      // A stale success still changed the persisted record, so it becomes the
+      // rollback target; it just must not change the current visible choice.
       confirmedThemeRef.current = next;
+      rememberTheme(next);
       if (options.markSeen) setThemePromptSeen(true);
+      if (themeRequestRef.current !== request) return;
       void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
     } catch (value) {
       // A newer choice owns the visible theme; an older failure must not roll
@@ -1380,11 +1388,7 @@ export default function App() {
     }
   }, [themePreview]);
 
-  /** The global layer mounts from both branches; it includes the page guide.
-   * The admin tour renders only in the administration branch, so it may only
-   * hold the lock there. The theme prompt counts as an overlay so the guide
-   * waits for it instead of opening underneath. */
-  const otherOverlaysOpen = baseModalOpen || openPageGuide !== null;
+  const otherOverlaysOpen = activeOverlaysOpen || openPageGuide !== null;
   const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
 
   useEffect(() => {
@@ -3800,7 +3804,7 @@ export default function App() {
     applyAppearance({ ...appearanceRef.current, textSize: next });
     try {
       await secureState.saveSettings({ textSize: next });
-      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, textSize: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: confirmedThemeRef.current, textSize: next });
     } catch (value) {
       setTextSize(previous);
       applyAppearance({ ...appearanceRef.current, textSize: previous });
@@ -3814,7 +3818,7 @@ export default function App() {
     applyAppearance({ ...appearanceRef.current, mascotSize: next });
     try {
       await secureState.saveSettings({ mascotSize: next });
-      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, mascotSize: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: confirmedThemeRef.current, mascotSize: next });
     } catch (value) {
       setMascotSize(previous);
       applyAppearance({ ...appearanceRef.current, mascotSize: previous });

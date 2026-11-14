@@ -90,9 +90,11 @@ describe("soft ash theme tokens", () => {
     expect(darkBlock).toContain("color: var(--ink);");
   });
 
-  it("defines line-strong for the light material", () => {
-    const light = block(":root");
-    expect(new Set([...light.matchAll(/--([\w-]+):/g)].map((match) => match[1])).has("line-strong")).toBe(true);
+  it("defines line-strong and the graphite foreground in both materials", () => {
+    const lightNames = new Set([...block(":root").matchAll(/--([\w-]+):/g)].map((match) => match[1]));
+    expect(lightNames.has("line-strong")).toBe(true);
+    expect(lightNames.has("conversation-on-graphite")).toBe(true);
+    expect(darkNames.has("conversation-on-graphite")).toBe(true);
   });
 
   it("never scales text or mascot art from the theme block", () => {

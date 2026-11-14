@@ -450,8 +450,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("<ThemePrompt");
     expect(app).toContain("themePromptSeen");
     expect(app).toContain("watchSystemTheme");
-    expect(app).toContain("blocked: baseModalOpen || themePromptOpen");
-    expect(app).toContain("const otherOverlaysOpen = baseModalOpen || openPageGuide !== null");
+    expect(app).toContain("blocked: activeOverlaysOpen || themePromptOpen || !themeSettingsLoaded");
+    expect(app).toContain("const otherOverlaysOpen = activeOverlaysOpen || openPageGuide !== null");
     expect(app).toContain("if (!themePromptSaving) dismissThemePrompt()");
     expect(app).toContain("themeRequestRef.current !== request");
     expect(app).toContain("if (themePromptSaving) return");
@@ -461,6 +461,9 @@ describe("operational visualizations", () => {
     expect(app).toContain("const confirmed = confirmedThemeRef.current");
     expect(vaultSource).toContain("settings.apiBase === undefined && typeof current?.apiBase");
     expect(vaultSource).toContain("settingsWriteQueue");
+    expect(vaultSource).toContain("const recovery = settingsWriteQueue.then");
+    expect(app).toContain("const activeOverlaysOpen");
+    expect(app).toContain("theme: confirmedThemeRef.current");
     expect(themePrompt).toContain("if (saving) return");
     expect(themePrompt).toContain("How should Work OS look?");
     expect(appearanceSettings).toContain("Appearance");

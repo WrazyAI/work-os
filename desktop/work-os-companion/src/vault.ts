@@ -362,9 +362,23 @@ export const secureState = {
     try {
       return mergeWorkOsSettings(stored, { apiBase: settings?.apiBase || defaultApiBase });
     } catch {
-      const fallback = mergeWorkOsSettings(stored, { apiBase: defaultApiBase });
-      await set("settings", fallback);
-      return fallback;
+      // A recovery write is still a settings write: queue it and re-read so it
+      // cannot overwrite a newer theme or prompt choice saved meanwhile.
+      const recovery = settingsWriteQueue.then(async () => {
+        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+        const currentRecord = mergeWorkOsSettings(null, {
+          autoCheckUpdates: latest?.autoCheckUpdates !== false,
+          voiceHotkey: latest?.voiceHotkey !== false,
+          ...normalizeAppearance(latest),
+          themePromptSeen: latest?.themePromptSeen === true,
+          ...(typeof latest?.recapVoice === "string" ? { recapVoice: latest.recapVoice } : {}),
+        });
+        const fallback = mergeWorkOsSettings(currentRecord, { apiBase: defaultApiBase });
+        await set("settings", fallback);
+        return fallback;
+      });
+      settingsWriteQueue = recovery.then(() => undefined).catch(() => undefined);
+      return recovery;
     }
   },
   saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {

@@ -456,22 +456,24 @@ Add `theme`, `themePreview`, `themePromptSeen`, `themePromptOpen`, `themePromptS
 ```ts
 async function chooseTheme(next: ThemePreference, options: { markSeen?: boolean } = {}) {
   const request = ++themeRequestRef.current;
-  const previous = theme;
   setTheme(next);
   setThemePreview(next);
-  applyAppearance({ textSize, mascotSize, theme: next });
+  applyAppearance({ ...appearanceRef.current, theme: next });
   rememberTheme(next);
   try {
     await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
-    if (themeRequestRef.current !== request) return;
+    confirmedThemeRef.current = next;
+    rememberTheme(next);
     if (options.markSeen) setThemePromptSeen(true);
-    void emit(APPEARANCE_EVENT, { textSize, mascotSize, theme: next });
+    if (themeRequestRef.current !== request) return;
+    void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
   } catch (value) {
     if (themeRequestRef.current !== request) return;
-    setTheme(previous);
-    setThemePreview(previous);
-    applyAppearance({ textSize, mascotSize, theme: previous });
-    rememberTheme(previous);
+    const confirmed = confirmedThemeRef.current;
+    setTheme(confirmed);
+    setThemePreview(confirmed);
+    applyAppearance({ ...appearanceRef.current, theme: confirmed });
+    rememberTheme(confirmed);
     throw value;
   }
 }
@@ -686,7 +688,7 @@ Run: `cd desktop/work-os-companion && npx vitest run src/themeContrast.test.ts s
 - [ ] **Step 4: Commit**
 
 ```bash
-git add desktop/work-os-companion/src/insight-charts.css desktop/work-os-companion/src/plan-insights.css desktop/work-os-companion/src/insight-dashboard.css desktop/work-os-companion/src/theme.css
+git add desktop/work-os-companion/src/insight-charts.css desktop/work-os-companion/src/plan-insights.css desktop/work-os-companion/src/insight-dashboard.css desktop/work-os-companion/src/InsightCharts.tsx desktop/work-os-companion/src/admin/charts.tsx desktop/work-os-companion/src/admin/InsightsPage.tsx desktop/work-os-companion/src/admin/admin.css desktop/work-os-companion/src/theme.css
 git commit -m "feat(companion): theme insights and chart series"
 ```
 
