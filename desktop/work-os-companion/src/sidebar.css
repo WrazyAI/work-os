@@ -312,7 +312,7 @@
 }
 
 .sidebar-row.active .sidebar-row-icon svg {
-  color: #5c9f2d;
+  color: var(--sidebar-marker);
 }
 
 .sidebar-row-copy {
@@ -338,14 +338,14 @@
 }
 
 .sidebar-new-chat {
-  background: #f0f4ec;
+  background: var(--sidebar-hover);
   color: var(--sidebar-ink);
   box-shadow: inset 0 0 0 1px rgba(106, 133, 94, 0.14);
 }
 
 .sidebar-new-chat:hover,
 .sidebar-new-chat:focus-visible {
-  background: #e7f2df;
+  background: var(--sidebar-active);
   box-shadow: inset 0 0 0 1px rgba(106, 133, 94, 0.22), 0 6px 18px rgba(56, 83, 45, 0.08);
 }
 

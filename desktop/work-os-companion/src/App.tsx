@@ -101,7 +101,9 @@ import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
-import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
+import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, rememberTheme, watchSystemTheme, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
+import ThemePrompt from "./ThemePrompt";
+import { shouldOpenThemePrompt } from "./themePromptState";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
 const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace"));
@@ -548,6 +550,16 @@ export default function App() {
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
+  const [theme, setTheme] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const [themePreview, setThemePreview] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const [themePromptSeen, setThemePromptSeen] = useState(true);
+  const [themePromptOpen, setThemePromptOpen] = useState(false);
+  const [themePromptSaving, setThemePromptSaving] = useState(false);
+  const [themePromptError, setThemePromptError] = useState<string | null>(null);
+  const [themeSettingsLoaded, setThemeSettingsLoaded] = useState(false);
+  const themeRequestRef = useRef(0);
+  const confirmedThemeRef = useRef<ThemePreference>(APPEARANCE_DEFAULTS.theme);
+  const appearanceRef = useRef({ textSize, mascotSize, theme });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
@@ -809,6 +821,7 @@ export default function App() {
      the real shell reviewable in a browser without giving the web app a fake
      title bar. */
   const macChromePreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has("mac-chrome");
+  const forceThemePrompt = import.meta.env.DEV && new URLSearchParams(window.location.search).has("theme-prompt");
   const macChrome = (isTauri() && isMacOS()) || macChromePreview;
   const customWindowChrome = (isTauri() && (isWindows() || isMacOS()))
     || (import.meta.env.DEV && (new URLSearchParams(window.location.search).has("window-chrome") || macChromePreview));
@@ -1090,6 +1103,11 @@ export default function App() {
    * tour renders only in the administration branch, so it blocks the admin
    * guide's auto-open without counting against the employee one. */
   const baseModalOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || employeeOnlyOverlaysOpen || tourScope === "admin";
+  /** Only the overlays the active branch actually renders may block the prompt,
+   * the guide, or the lock. */
+  const activeOverlaysOpen = adminWorkspaceBranch
+    ? !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || tourScope === "admin"
+    : baseModalOpen;
   /** The guide that answers for the page on screen: the administration
    * sections have their own guides, keyed and worded for that surface. */
   const pageGuideView = adminWorkspaceBranch ? guideViewForAdminSection(adminSection) : guideViewForSidebar(view);
@@ -1108,7 +1126,7 @@ export default function App() {
     enabled: (!!session || ADMIN_SHELL_BOOT) && !syncBypass,
     organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
-    blocked: baseModalOpen,
+    blocked: activeOverlaysOpen || themePromptOpen || !themeSettingsLoaded,
     fixture: ADMIN_SHELL_GUIDE_STATE ?? undefined,
   });
   const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
@@ -1305,10 +1323,101 @@ export default function App() {
   const navigateEmployeeGuide = useCallback((guide: GuideView) => {
     if (!isAdminGuideView(guide)) setView(guide);
   }, []);
-  /** The global layer mounts from both branches; it includes the page guide.
-   * The admin tour renders only in the administration branch, so it may only
-   * hold the lock there. */
-  const globalOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || (tourScope === "admin" && adminWorkspaceBranch);
+  const chooseTheme = useCallback(async (next: ThemePreference, options: { markSeen?: boolean } = {}) => {
+    const request = ++themeRequestRef.current;
+    setTheme(next);
+    setThemePreview(next);
+    applyAppearance({ ...appearanceRef.current, theme: next });
+    rememberTheme(next);
+    try {
+      await secureState.saveSettings({ theme: next, ...(options.markSeen ? { themePromptSeen: true } : {}) });
+      // A stale success still changed the persisted record, so it becomes the
+      // rollback target; it just must not change the current visible choice.
+      confirmedThemeRef.current = next;
+      rememberTheme(next);
+      if (options.markSeen) setThemePromptSeen(true);
+      if (themeRequestRef.current !== request) return;
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
+    } catch (value) {
+      // A newer choice owns the visible theme; an older failure must not roll
+      // it back or announce the stale value. Roll back to the last confirmed
+      // theme, never an earlier optimistic choice.
+      if (themeRequestRef.current !== request) return;
+      const confirmed = confirmedThemeRef.current;
+      setTheme(confirmed);
+      setThemePreview(confirmed);
+      applyAppearance({ ...appearanceRef.current, theme: confirmed });
+      rememberTheme(confirmed);
+      throw value;
+    }
+  }, []);
+
+  const selectThemePreview = useCallback((next: ThemePreference) => {
+    setThemePreview(next);
+    setThemePromptError(null);
+    applyAppearance({ ...appearanceRef.current, theme: next });
+  }, []);
+
+  const dismissThemePrompt = useCallback(() => {
+    if (themePromptSaving) return;
+    setThemePreview(theme);
+    applyAppearance({ ...appearanceRef.current, theme });
+    setThemePromptOpen(false);
+    setThemePromptError(null);
+    setThemePromptSeen(true);
+    void secureState.saveSettings({ themePromptSeen: true }).catch(() => undefined);
+  }, [theme, themePromptSaving]);
+
+  const useThemePrompt = useCallback(async () => {
+    const next = themePreview;
+    setThemePromptSaving(true);
+    setThemePromptError(null);
+    try {
+      await secureState.saveSettings({ theme: next, themePromptSeen: true });
+      confirmedThemeRef.current = next;
+      setTheme(next);
+      setThemePromptSeen(true);
+      rememberTheme(next);
+      applyAppearance({ ...appearanceRef.current, theme: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: next });
+      setThemePromptOpen(false);
+    } catch (value) {
+      setThemePromptError(errorMessage(value, "The theme could not be saved."));
+    } finally {
+      setThemePromptSaving(false);
+    }
+  }, [themePreview]);
+
+  const otherOverlaysOpen = activeOverlaysOpen || openPageGuide !== null;
+  const globalOverlaysOpen = otherOverlaysOpen || themePromptOpen;
+
+  useEffect(() => {
+    appearanceRef.current = { textSize, mascotSize, theme };
+  }, [mascotSize, textSize, theme]);
+
+  useEffect(() => {
+    const activeTheme = themePromptOpen ? themePreview : theme;
+    return watchSystemTheme(() => applyAppearance({ ...appearanceRef.current, theme: activeTheme }));
+  }, [theme, themePreview, themePromptOpen]);
+
+  useEffect(() => {
+    if (themePromptOpen) return;
+    const workspaceOnScreen = employeeWorkspaceBranch || adminWorkspaceBranch;
+    const gateOpen = shouldOpenThemePrompt({
+      signedIn,
+      themePromptSeen,
+      workspaceOnScreen,
+      otherOverlayOpen: otherOverlaysOpen,
+      hasSession: !!visibleSession,
+    });
+    const forced = forceThemePrompt && workspaceOnScreen && !otherOverlaysOpen;
+    if (!gateOpen && !forced) return;
+    // Open on the first eligible paint. A delay here races the page guide's
+    // own beat, and the guide must never win that race.
+    setThemePreview(theme);
+    setThemePromptError(null);
+    setThemePromptOpen(true);
+  }, [adminWorkspaceBranch, employeeWorkspaceBranch, forceThemePrompt, otherOverlaysOpen, signedIn, theme, themePromptOpen, themePromptSeen, visibleSession]);
 
   useEffect(() => {
     let disposed = false;
@@ -1344,6 +1453,7 @@ export default function App() {
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
+    if (themePromptOpen) { if (!themePromptSaving) dismissThemePrompt(); return; }
     if (taskEvidenceRequest) { setTaskEvidenceRequest(null); return; }
     if (debugPageGuide) { setDebugPageGuide(null); return; }
     if (tourScope) { setTourScope(null); return; }
@@ -1362,7 +1472,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, tourScope, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, dismissThemePrompt, editRequest, eodDeleteConfirmation, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, taskEvidenceRequest, themePromptOpen, themePromptSaving, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
@@ -2602,7 +2712,7 @@ export default function App() {
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
-    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); setThemeSettingsLoaded(true); confirmedThemeRef.current = appearance.theme; rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
       // paint; the live query revalidates it in the background.
@@ -3691,13 +3801,13 @@ export default function App() {
   async function chooseTextSize(next: TextSize) {
     const previous = textSize;
     setTextSize(next);
-    applyAppearance({ textSize: next, mascotSize });
+    applyAppearance({ ...appearanceRef.current, textSize: next });
     try {
       await secureState.saveSettings({ textSize: next });
-      void emit(APPEARANCE_EVENT, { textSize: next, mascotSize });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: confirmedThemeRef.current, textSize: next });
     } catch (value) {
       setTextSize(previous);
-      applyAppearance({ textSize: previous, mascotSize });
+      applyAppearance({ ...appearanceRef.current, textSize: previous });
       showError(errorMessage(value, "The text size could not be saved."), "The text size could not be saved.", "Setting not saved");
     }
   }
@@ -3705,13 +3815,13 @@ export default function App() {
   async function chooseMascotSize(next: MascotSize) {
     const previous = mascotSize;
     setMascotSize(next);
-    applyAppearance({ textSize, mascotSize: next });
+    applyAppearance({ ...appearanceRef.current, mascotSize: next });
     try {
       await secureState.saveSettings({ mascotSize: next });
-      void emit(APPEARANCE_EVENT, { textSize, mascotSize: next });
+      void emit(APPEARANCE_EVENT, { ...appearanceRef.current, theme: confirmedThemeRef.current, mascotSize: next });
     } catch (value) {
       setMascotSize(previous);
-      applyAppearance({ textSize, mascotSize: previous });
+      applyAppearance({ ...appearanceRef.current, mascotSize: previous });
       showError(errorMessage(value, "The mascot size could not be saved."), "The mascot size could not be saved.", "Setting not saved");
     }
   }
@@ -4125,6 +4235,7 @@ export default function App() {
   const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
+    if (themePromptOpen || !themePromptSeen) return;
     const autoOpen = shouldAutoOpenPlanning({
       active,
       dayLive,
@@ -4144,7 +4255,7 @@ export default function App() {
       openPlanningSession();
     }
     if (!debugScenario.enabled || debugScenario.dayState !== "shift_start") shiftStartScenarioOpened.current = false;
-  }, [active, dayLive, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
+  }, [active, dayLive, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, themePromptOpen, themePromptSeen, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
 
   // The launch snapshot can auto-open the modal for a plan that the live read
   // then proves confirmed; close it again instead of leaving a stale demand.
@@ -5460,6 +5571,14 @@ export default function App() {
    * (design §9). Employee-only overlays stay in the employee return, and the
    * lock scoping below keeps them out of the admin branch. */
   const renderGlobalOverlays = () => <>
+    {themePromptOpen && <ThemePrompt
+      selected={themePreview}
+      saving={themePromptSaving}
+      error={themePromptError}
+      onSelect={selectThemePreview}
+      onUse={() => void useThemePrompt()}
+      onDismiss={dismissThemePrompt}
+    />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
     {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
     {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={offerWorkspaceTour ? () => { const scope = isAdminGuideView(openPageGuide) ? "admin" : "employee"; closeGuide(); setTourScope(scope); } : undefined} />}
@@ -5535,8 +5654,10 @@ export default function App() {
       onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}
       pageGuideAutoOpen={pageGuideAutoOpen}
       onPageGuideAutoOpen={setPageGuideAutoOpen}
+      theme={theme}
       textSize={textSize}
       mascotSize={mascotSize}
+      onTheme={(value) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved"))}
       onTextSize={(value) => void chooseTextSize(value)}
       onMascotSize={(value) => void chooseMascotSize(value)}
       queueCount={queueCount}

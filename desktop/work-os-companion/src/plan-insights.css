@@ -43,27 +43,27 @@
   display: inline-flex;
   border-radius: 20px;
   padding: 6px 9px;
-  background: #e6e5dd;
+  background: var(--inset);
   font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.09em;
 }
 .plan-state.confirmed,
 .save-state.saved {
-  background: #ddf6bf;
-  color: #456d18;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 .save-state.saving {
-  background: #ece8cf;
-  color: #766b31;
+  background: var(--warning-soft);
+  color: var(--warning-ink);
 }
 .save-state.offline {
-  background: #e6e3d7;
-  color: #6c6552;
+  background: var(--inset);
+  color: var(--muted);
 }
 .save-state.conflict {
-  background: #fae0dc;
-  color: #983e35;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .plan-board-title {
   display: flex;
@@ -87,7 +87,7 @@
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #ecebe4;
+  background: var(--inset);
   padding: 0 11px;
   display: flex;
   align-items: center;
@@ -110,7 +110,7 @@
   color: var(--ink);
 }
 .plan-list article input:focus {
-  background: #fffef7;
+  background: var(--white);
 }
 .plan-actions {
   align-items: center;
@@ -159,7 +159,7 @@
   font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #668c38;
+  color: var(--signal-deep);
 }
 .insight-brief h3 {
   font: 600 19px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -181,7 +181,7 @@
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  background: #efeee7;
+  background: var(--inset);
 }
 .insight-brief section strong {
   font-size: 10px;
@@ -232,7 +232,7 @@
   min-height: 46px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #efeee7;
+  background: var(--inset);
   padding: 0 12px;
   text-align: left;
 }
@@ -261,7 +261,7 @@
 .attendance-context {
   display: block;
   margin-top: 14px;
-  color: #adb0a7;
+  color: var(--faint);
   font-size: 10px;
 }
 @media (max-width: 780px) {

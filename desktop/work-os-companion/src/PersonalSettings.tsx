@@ -7,7 +7,7 @@ import { VoicePicker } from "./VoicePicker";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { SuggestionReview } from "./SuggestionReview";
 import { UPDATE_CHECK_CADENCE_COPY } from "./updater";
-import type { MascotSize, TextSize } from "./appearance";
+import type { MascotSize, TextSize, ThemePreference } from "./appearance";
 import type { MemoryFact } from "./types";
 
 /** The account's own settings — the groups the employee Settings page carries.
@@ -49,8 +49,10 @@ export type PersonalSettingsProps = {
   onOpenWhatsNew: (version: string) => void;
   pageGuideAutoOpen: boolean;
   onPageGuideAutoOpen: (value: boolean) => void;
+  theme: ThemePreference;
   textSize: TextSize;
   mascotSize: MascotSize;
+  onTheme: (value: ThemePreference) => void;
   onTextSize: (value: TextSize) => void;
   onMascotSize: (value: MascotSize) => void;
   queueCount: number;
@@ -90,8 +92,10 @@ export function PersonalSettings({
   onOpenWhatsNew,
   pageGuideAutoOpen,
   onPageGuideAutoOpen,
+  theme,
   textSize,
   mascotSize,
+  onTheme,
   onTextSize,
   onMascotSize,
   queueCount,
@@ -171,8 +175,10 @@ export function PersonalSettings({
       </section>
 
       <AppearanceSettings
+        theme={theme}
         textSize={textSize}
         mascotSize={mascotSize}
+        onTheme={onTheme}
         onTextSize={onTextSize}
         onMascotSize={onMascotSize}
       />

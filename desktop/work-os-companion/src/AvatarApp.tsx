@@ -16,7 +16,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import { useDayMonitor } from "./useDayMonitor";
-import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
+import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, watchSystemTheme, type AppearanceSettings } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { avatarPlaybackAllowed } from "./avatarSpeech";
 import { avatarDayAccess } from "./avatarDay";
@@ -1559,9 +1559,20 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     if (avatarMascotFixture) return;
     let unlisten: (() => void) | undefined;
-    void secureState.settings().then((settings) => applyAppearance(normalizeAppearance(settings))).catch(() => undefined);
-    void listen<{ textSize?: unknown; mascotSize?: unknown }>(APPEARANCE_EVENT, (event) => applyAppearance(normalizeAppearance(event.payload))).then((fn) => { unlisten = fn; }).catch(() => undefined);
-    return () => unlisten?.();
+    let appearance: AppearanceSettings = APPEARANCE_DEFAULTS;
+    const apply = (next: AppearanceSettings) => {
+      appearance = next;
+      applyAppearance(next);
+    };
+    /* One watcher covers both cases: re-applying the current appearance only
+     * changes the root when its preference is System and the OS moved. */
+    const stopWatching = watchSystemTheme(() => applyAppearance(appearance));
+    void secureState.settings().then((settings) => apply(normalizeAppearance(settings))).catch(() => undefined);
+    void listen<{ textSize?: unknown; mascotSize?: unknown; theme?: unknown }>(APPEARANCE_EVENT, (event) => apply(normalizeAppearance(event.payload))).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => {
+      unlisten?.();
+      stopWatching();
+    };
   }, [avatarMascotFixture]);
 
   /* Hold-to-talk reaches whichever companion window is in use, and the event

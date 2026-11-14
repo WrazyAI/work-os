@@ -24,6 +24,7 @@ const MemoryPreview = lazy(() => import("./MemoryPreview"));
 const SettingsPreview = lazy(() => import("./SettingsPreview"));
 const ProfilePreview = lazy(() => import("./ProfilePreview"));
 import { FirstLightSurface } from "./BootHandoff";
+import { applyBootTheme } from "./appearance";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { installBootTrace } from "./bootTrace";
 import { NotificationProvider } from "./NotificationFlyouts";
@@ -48,6 +49,8 @@ import "./chat/conversation.css";
 import "./chat/tool-surfaces.css";
 import "./adminOtto/adminOtto.css";
 import "./window-chrome.css";
+import "./theme.css";
+import "./theme-prompt.css";
 
 installDiagnosticErrorHandlers();
 installBootTrace();
@@ -94,6 +97,8 @@ function frameFromSearch(): { width: number; height: number } | null {
   return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
 }
 const frame = frameFromSearch();
+
+applyBootTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={workOsQueryClient}><NotificationProvider><ErrorBoundary><Suspense fallback={params.get("window") === "avatar" ? null : <FirstLightSurface stage="Opening Work OS" />}>{frame
   ? <div

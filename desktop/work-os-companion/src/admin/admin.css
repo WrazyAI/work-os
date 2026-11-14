@@ -311,15 +311,15 @@ body:has(.admin-workspace) .notifications-card {
   min-height: 21px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: #eceee6;
+  background: var(--inset);
   color: var(--muted);
   font: 600 11px/1 Manrope, Inter, sans-serif;
   white-space: nowrap;
 }
 
 .admin-pill.ok {
-  background: rgba(184, 255, 90, 0.28);
-  color: #3d6210;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
 }
 
 .admin-pill.warn {
@@ -505,7 +505,7 @@ body:has(.admin-workspace) .notifications-card {
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
   border-radius: 999px;
-  background: #eef0e8;
+  background: var(--inset);
 }
 
 .admin-seg button {
@@ -2606,7 +2606,7 @@ body:has(.admin-workspace) .notifications-card {
   padding: 9px 18px;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  background: #f2f4ee;
+  background: var(--inset);
   color: var(--muted);
   font: 700 10.5px/1.3 Manrope, Inter, sans-serif;
   letter-spacing: 0.07em;
@@ -2787,7 +2787,7 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 .admin-toggle input:checked + span {
-  background: #82bd39;
+  background: var(--signal-deep);
 }
 
 .admin-toggle input:checked + span::after {
@@ -3006,7 +3006,7 @@ body:has(.admin-workspace) .notifications-card {
 .admin-stack:focus-visible,
 .admin-grouped:focus-visible,
 .admin-share:focus-visible {
-  outline: 2px solid #82bd39;
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
   border-radius: 8px;
 }

@@ -9,7 +9,7 @@ import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./int
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { mergeConversationTurns } from "./avatarLogic";
 import { sessionStateFrom, type SessionState } from "./sessionState";
-import { APPEARANCE_DEFAULTS, appearanceFromChange, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
+import { APPEARANCE_DEFAULTS, normalizeAppearance, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
 import type { CachedGuideState, GuideState } from "./guideState";
 
 export interface WorkOsSettings {
@@ -23,6 +23,37 @@ export interface WorkOsSettings {
   /** Accessibility appearance, per device; see `appearance.ts`. */
   textSize: TextSize;
   mascotSize: MascotSize;
+  /** Light, Dark, or follow the device. Per device, never account state. */
+  theme: ThemePreference;
+  /** The one-time first-login theme prompt has been answered or dismissed. */
+  themePromptSeen: boolean;
+}
+
+/** Merge one settings change over the stored record, normalizing appearance
+ * and preserving prompt history. The pure seam keeps the one-write contract
+ * testable without a vault. */
+export function mergeWorkOsSettings(current: WorkOsSettings | null, next: Partial<WorkOsSettings>): WorkOsSettings {
+  const base: WorkOsSettings = current ?? {
+    apiBase: httpsOrigin(defaultApiBase),
+    autoCheckUpdates: true,
+    voiceHotkey: true,
+    ...APPEARANCE_DEFAULTS,
+    themePromptSeen: false,
+  };
+  const appearance = normalizeAppearance({
+    textSize: next.textSize ?? base.textSize,
+    mascotSize: next.mascotSize ?? base.mascotSize,
+    theme: next.theme ?? base.theme,
+  });
+  const recapVoice = next.recapVoice ?? base.recapVoice;
+  return {
+    apiBase: next.apiBase === undefined ? base.apiBase : httpsOrigin(next.apiBase),
+    autoCheckUpdates: next.autoCheckUpdates ?? base.autoCheckUpdates,
+    voiceHotkey: next.voiceHotkey ?? base.voiceHotkey,
+    ...appearance,
+    ...(recapVoice === undefined ? {} : { recapVoice }),
+    themePromptSeen: next.themePromptSeen === undefined ? base.themePromptSeen === true : next.themePromptSeen === true,
+  };
 }
 
 export interface WorkOsConversationTurn {
@@ -201,6 +232,10 @@ async function browserSession(): Promise<DesktopSession | null> {
   return browserSessionCache;
 }
 
+/* Serialize the whole settings read/merge/write. Two appearance controls can
+ * save together; merging both from the same stale read would drop one. */
+let settingsWriteQueue: Promise<void> = Promise.resolve();
+
 export const secureState = {
   /** The stored session and why it is unusable when it is. The boot path uses
    * the reason so the employee is told to connect the device again, instead of
@@ -309,28 +344,65 @@ export const secureState = {
   savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => isTauri() ? set("pending-auth", value) : Promise.resolve(),
   clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
   settings: async (): Promise<WorkOsSettings> => {
-    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true, voiceHotkey: true, ...APPEARANCE_DEFAULTS };
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; recapVoice?: unknown }>("settings");
-    const autoCheckUpdates = settings?.autoCheckUpdates !== false;
-    const voiceHotkey = settings?.voiceHotkey !== false;
-    const appearance = normalizeAppearance(settings);
-    const recapVoice = typeof settings?.recapVoice === "string" ? settings.recapVoice : undefined;
-    try { return { autoCheckUpdates, voiceHotkey, recapVoice, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
-    catch {
-      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates, voiceHotkey, ...appearance };
-      await set("settings", fallback);
-      return fallback;
+    if (!isTauri()) return {
+      apiBase: httpsOrigin(defaultApiBase),
+      autoCheckUpdates: true,
+      voiceHotkey: true,
+      ...APPEARANCE_DEFAULTS,
+      themePromptSeen: true,
+    };
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+    const stored = mergeWorkOsSettings(null, {
+      autoCheckUpdates: settings?.autoCheckUpdates !== false,
+      voiceHotkey: settings?.voiceHotkey !== false,
+      ...normalizeAppearance(settings),
+      themePromptSeen: settings?.themePromptSeen === true,
+      ...(typeof settings?.recapVoice === "string" ? { recapVoice: settings.recapVoice } : {}),
+    });
+    try {
+      return mergeWorkOsSettings(stored, { apiBase: settings?.apiBase || defaultApiBase });
+    } catch {
+      // A recovery write is still a settings write: queue it and re-read so it
+      // cannot overwrite a newer theme or prompt choice saved meanwhile.
+      const recovery = settingsWriteQueue.then(async () => {
+        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+        const currentRecord = mergeWorkOsSettings(null, {
+          autoCheckUpdates: latest?.autoCheckUpdates !== false,
+          voiceHotkey: latest?.voiceHotkey !== false,
+          ...normalizeAppearance(latest),
+          themePromptSeen: latest?.themePromptSeen === true,
+          ...(typeof latest?.recapVoice === "string" ? { recapVoice: latest.recapVoice } : {}),
+        });
+        // A concurrent save may already have written a valid replacement;
+        // keep it. Fall back to the default only when the reread origin is
+        // still unusable.
+        let apiBase = defaultApiBase;
+        if (typeof latest?.apiBase === "string") {
+          try { apiBase = httpsOrigin(latest.apiBase); } catch { apiBase = defaultApiBase; }
+        }
+        const fallback = mergeWorkOsSettings(currentRecord, { apiBase });
+        await set("settings", fallback);
+        return fallback;
+      });
+      settingsWriteQueue = recovery.then(() => undefined).catch(() => undefined);
+      return recovery;
     }
   },
-  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; recapVoice?: string }) => {
-    if (!isTauri()) return;
-    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; recapVoice?: unknown }>("settings");
-    await set("settings", {
-      apiBase: httpsOrigin(settings.apiBase ?? current?.apiBase ?? defaultApiBase),
-      autoCheckUpdates: settings.autoCheckUpdates ?? current?.autoCheckUpdates !== false,
-      voiceHotkey: settings.voiceHotkey ?? current?.voiceHotkey !== false,
-      recapVoice: settings.recapVoice ?? (typeof current?.recapVoice === "string" ? current.recapVoice : undefined),
-      ...appearanceFromChange(normalizeAppearance(current), settings),
+  saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
+    if (!isTauri()) return Promise.resolve();
+    const write = settingsWriteQueue.then(async () => {
+      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+      const stored = mergeWorkOsSettings(null, {
+        apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
+        autoCheckUpdates: current?.autoCheckUpdates !== false,
+        voiceHotkey: current?.voiceHotkey !== false,
+        ...normalizeAppearance(current),
+        themePromptSeen: current?.themePromptSeen === true,
+        ...(typeof current?.recapVoice === "string" ? { recapVoice: current.recapVoice } : {}),
+      });
+      await set("settings", mergeWorkOsSettings(stored, settings));
     });
+    settingsWriteQueue = write.catch(() => undefined);
+    return write;
   },
 };
