@@ -373,7 +373,14 @@ export const secureState = {
           themePromptSeen: latest?.themePromptSeen === true,
           ...(typeof latest?.recapVoice === "string" ? { recapVoice: latest.recapVoice } : {}),
         });
-        const fallback = mergeWorkOsSettings(currentRecord, { apiBase: defaultApiBase });
+        // A concurrent save may already have written a valid replacement;
+        // keep it. Fall back to the default only when the reread origin is
+        // still unusable.
+        let apiBase = defaultApiBase;
+        if (typeof latest?.apiBase === "string") {
+          try { apiBase = httpsOrigin(latest.apiBase); } catch { apiBase = defaultApiBase; }
+        }
+        const fallback = mergeWorkOsSettings(currentRecord, { apiBase });
         await set("settings", fallback);
         return fallback;
       });
