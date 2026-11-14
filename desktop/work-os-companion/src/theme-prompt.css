@@ -344,4 +344,7 @@
     animation: none;
     transition: none;
   }
+  .theme-prompt-choice:hover {
+    transform: none;
+  }
 }

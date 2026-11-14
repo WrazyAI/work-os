@@ -138,8 +138,8 @@
 }
 
 .conversation-launcher.is-agenda {
-  border-color: rgba(99, 154, 49, 0.25);
-  background: rgba(250, 255, 244, 0.97);
+  border-color: color-mix(in srgb, var(--tool-success) 35%, transparent);
+  background: var(--tool-success-soft);
 }
 
 .conversation-launcher.is-agenda .conversation-launcher-action {
@@ -147,8 +147,8 @@
 }
 
 .conversation-launcher.is-required {
-  border-color: rgba(163, 119, 28, 0.34);
-  background: #fffaf0;
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: var(--warning-soft);
 }
 
 .conversation-launcher.is-required .conversation-launcher-action {
