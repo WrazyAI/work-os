@@ -59,7 +59,7 @@ export type PersonalSettingsProps = {
   queueAttentionCount: number;
   sessionApiBase: string;
   onSignOut: () => void;
-  memory: { facts: MemoryFact[]; loading: boolean; error: string | null };
+  memory: { facts: MemoryFact[]; factTotals?: { confirmed: number; candidate: number }; loading: boolean; error: string | null };
   onOpenMemory: () => void;
   onRetryMemory: () => void;
   onOpenDebugger: () => void;
@@ -205,6 +205,7 @@ export function PersonalSettings({
         <>
           <MemorySummary
             facts={memory.facts}
+            factTotals={memory.factTotals}
             loading={memory.loading}
             error={memory.error}
             onOpen={onOpenMemory}

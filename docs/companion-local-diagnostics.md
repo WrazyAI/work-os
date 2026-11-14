@@ -7,6 +7,22 @@ every launch. On Windows this is:
 %LOCALAPPDATA%\com.wrazy.workos.pilot\app-info.json
 ```
 
+On macOS the same snapshot is written to:
+
+```text
+~/Library/Application Support/com.wrazy.workos.pilot/app-info.json
+```
+
+The macOS diagnostics trail is **not** beside it. `app_log_dir` resolves to
+`~/Library/Logs/<bundle identifier>/`, so the event file is:
+
+```text
+~/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl
+```
+
+A support report gathered from Application Support alone can therefore look
+empty even though the app logged normally.
+
 From this WSL checkout, first inspect the installed app's files under
 `/mnt/c/Users/<Windows-user>/AppData/Local/com.wrazy.workos.pilot/` rather
 than asking the operator to upload them. Do not assume a checkout's version

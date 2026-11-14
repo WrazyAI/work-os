@@ -306,8 +306,43 @@
       "type": "feature",
       "summary": "Activity recaps show CRM work from GoHighLevel with its own icon and section, separate from GitHub.",
       "verification": "b3f41b24, 6336aaad: GHL label and recap-source tests (5 label cases, 2 render cases) plus 1300 Work OS tests pass; live GHL allowlist returns source=ghl with 20 performed items for the pilot org."
+    },
+    {
+      "id": "server-side-recap-launch",
+      "type": "feature",
+      "summary": "Activity recaps keep arriving while the app is closed; opening Work OS shows the newest one first, with the rest waiting in your recaps.",
+      "verification": "Branch codex/recap-server-schedule: scheduler, queue, latest-endpoint, launch-selection, and companion flyout suites pass; companion typecheck passes; rendered avatar and main-window states plus live timer evidence recorded in ledger 4fffb588-e129-4cf4-aa28-c3be9445889d."
+    },
+    {
+      "id": "saved-sign-in-survives-shared-vault",
+      "type": "fix",
+      "summary": "Your saved sign-in stays put when both companion windows open together.",
+      "verification": "b7c0f15f: vaultPersistence reproduces the native Stronghold ClientAlreadyLoaded response and the empty-client replacement, then verifies a restart still restores the session, including when main and avatar open together and when a client read fails (3 tests pass); a direct iota_stronghold probe confirmed create_client wipes the loaded signed-in client; companion suite 216 files/1922 tests, companion typecheck and production build pass."
+    },
+    {
+      "id": "macos-webkit-request-helpers",
+      "type": "fix",
+      "summary": "Work OS opens normally on Macs that previously stopped at the loading screen.",
+      "verification": "b7c0f15f: macosRuntimeCompatibility reproduces the missing AbortSignal.any and AbortSignal.timeout failures in the initial day read and session check, then verifies the fallbacks still honor the request deadline and caller cancellation (5 tests pass); companion suite 216 files/1922 tests, companion typecheck and production build pass."
+    },
+    {
+      "id": "saved-memory-independent-pages",
+      "type": "fix",
+      "summary": "Saved memories stay visible when new proposals arrive, with complete counts and separate Load more controls; Otto can retrieve relevant older saved facts.",
+      "verification": "Ledger a61c1cb8-5db6-47f3-beb2-06f760be0c63: real PGlite proposal-flood, microsecond keyset, scope and old-fact recall regression passes; Work OS 1318 passed/11 skipped; companion 215 files/1922 tests, typechecks and both builds pass. Playwright 1440/1024/390 paging, retained error rows, focus/Escape, reduced motion, no overflow/page errors. CodeRabbit CLI and GitHub findings addressed with refresh/retry, settled-decision and timeout regressions. TestSprite 60488eda run refused by workspace billing_hold/payment_failure (not a product pass)."
+    },
+    {
+      "id": "restore-windows-launch-rust-1-100",
+      "type": "fix",
+      "summary": "Work OS opens again on Windows after the previous update closed at startup.",
+      "verification": "WER APPCRASH for 0.5.31: c0000005 in vertdll.dll+0xdc7e reading 0x36a; minidump shows the fault in the WaitOnAddress helper with a null runtime global, reached from WebView2 startup. dumpbin: 0.5.31 imports WaitOnAddress/WakeByAddressAll from vertdll.dll, while the working 0.5.30 binary built with Rust 1.99.1 does not. CI logs show 0.5.31 built with Rust 1.100.0 (0.5.30: 1.99.1). Toolchain pinned to 1.99.1 in rust-toolchain.toml and all four workflow setups; static guard test passes; Work OS suite and companion checks run before release."
     }
   ],
-  "emergency": null,
+  "emergency": {
+    "version": "0.5.32",
+    "updateId": "restore-windows-launch-rust-1-100",
+    "brokenBehavior": "The 0.5.31 Windows build shows a blank window and closes at startup because Rust 1.100.0 imported WaitOnAddress from vertdll.dll, whose runtime state is uninitialized in an ordinary process.",
+    "restoredBehavior": "The companion is rebuilt with Rust 1.99.1, whose binary imports the synchronization API set instead and starts normally."
+  },
   "operatorOverride": null
 }

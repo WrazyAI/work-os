@@ -1,13 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { reviewedMemoryPages, reviewedMemorySummary } from "../memory-review-cache";
 import { Brain, Check, Trash2, X } from "lucide-react";
 import { calendarDateLabel, fetchJson, formatDateTimeShort, requestId, type WorkMemoryResponse } from "./model";
 import { EmptyState, Notice, PrimaryButton, SecondaryButton, Skeleton } from "./ui";
 import styles from "./EmployeeSettings.module.css";
 
 type MemoryTab = "review" | "remembered";
+type FactStatus = "candidate" | "confirmed";
+type FactPage = { facts: WorkMemoryResponse["facts"]; total: number; nextCursor: string | null };
+
+function useFactPages(status: FactStatus, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: ["work-os", "memory", "facts", status],
+    enabled, staleTime: 60_000,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => fetchJson<FactPage>(`/api/work-os/me/memory?status=${status}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`, { signal }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+  });
+}
 
 /**
  * What Otto remembers (companion parity, design.md §8.5).
@@ -17,19 +30,31 @@ type MemoryTab = "review" | "remembered";
  * companion behavior — nothing is remembered without a keep.
  */
 export default function EmployeeMemory({ enabled = true }: { enabled?: boolean }) {
+  const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const memory = useQuery<WorkMemoryResponse>({
     queryKey: ["work-os", "memory"],
-    queryFn: () => fetchJson("/api/work-os/me/memory"),
+    queryFn: async () => {
+      const result = await fetchJson<WorkMemoryResponse>("/api/work-os/me/memory");
+      await client.invalidateQueries({ queryKey: ["work-os", "memory", "facts"], refetchType: "active" });
+      return result;
+    },
     enabled,
     staleTime: 60_000,
   });
+  const confirmed = useFactPages("confirmed", enabled && open && !!memory.data?.factTotals);
+  const candidates = useFactPages("candidate", enabled && open && !!memory.data?.factTotals);
 
   if (!enabled) return null;
 
   const facts = memory.data?.facts ?? [];
   const proposed = facts.filter((fact) => fact.review_status === "candidate");
   const remembered = facts.filter((fact) => fact.review_status === "confirmed");
+  const totals = memory.data?.factTotals ?? { confirmed: remembered.length, candidate: proposed.length };
+  const modalFacts = [...new Map([
+    ...(confirmed.data?.pages.flatMap(page => page.facts) ?? remembered),
+    ...(candidates.data?.pages.flatMap(page => page.facts) ?? proposed),
+  ].map(fact => [fact.id, fact])).values()];
 
   return (
     <>
@@ -48,9 +73,9 @@ export default function EmployeeMemory({ enabled = true }: { enabled?: boolean }
               </div>
             </div>
             <div className={styles.memorySide}>
-              <span className={styles.memoryCount}>Remembered <strong>{remembered.length}</strong></span>
-              <span className={`${styles.memoryCount} ${proposed.length ? styles.memoryNeed : styles.memoryNeedQuiet}`}>
-                Need review <strong>{proposed.length}</strong>
+              <span className={styles.memoryCount}>Remembered <strong>{totals.confirmed}</strong></span>
+              <span className={`${styles.memoryCount} ${totals.candidate ? styles.memoryNeed : styles.memoryNeedQuiet}`}>
+                Need review <strong>{totals.candidate}</strong>
               </span>
               <button type="button" className={styles.secondaryButton} onClick={() => setOpen(true)}>View</button>
             </div>
@@ -59,7 +84,10 @@ export default function EmployeeMemory({ enabled = true }: { enabled?: boolean }
       </section>
       {open ? (
         <MemoryModal
-          facts={facts}
+          facts={modalFacts}
+          totals={totals}
+          confirmedPages={confirmed}
+          candidatePages={candidates}
           recent={memory.data?.recent ?? []}
           loading={memory.isLoading && !memory.data}
           error={memory.error ? (memory.error as Error).message : null}
@@ -76,12 +104,18 @@ function MemoryModal({
   loading,
   error,
   onClose,
+  totals,
+  confirmedPages,
+  candidatePages,
 }: {
   facts: WorkMemoryResponse["facts"];
   recent: WorkMemoryResponse["recent"];
   loading: boolean;
   error: string | null;
   onClose: () => void;
+  totals: { confirmed: number; candidate: number };
+  confirmedPages: ReturnType<typeof useFactPages>;
+  candidatePages: ReturnType<typeof useFactPages>;
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<MemoryTab>("review");
@@ -98,7 +132,16 @@ function MemoryModal({
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify({ status }),
     }),
-    onSuccess: refresh,
+    onSuccess: (_receipt, { id, status }) => {
+      const fact = facts.find(row => row.id === id);
+      if (fact) {
+        queryClient.setQueryData<WorkMemoryResponse>(["work-os", "memory"], current => reviewedMemorySummary(current, fact, status));
+        for (const lane of ["confirmed", "candidate"] as const) {
+          queryClient.setQueryData<InfiniteData<FactPage>>(["work-os", "memory", "facts", lane], current => reviewedMemoryPages(current, lane, fact, status));
+        }
+      }
+      refresh();
+    },
   });
   const forgetItem = useMutation({
     mutationFn: (id: string) => fetchJson(`/api/work-os/me/memory/${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -120,8 +163,8 @@ function MemoryModal({
   const proposed = facts.filter((fact) => fact.review_status === "candidate");
   const remembered = facts.filter((fact) => fact.review_status === "confirmed");
   const tabs: Array<{ id: MemoryTab; label: string; count: number }> = [
-    { id: "review", label: "Needs review", count: proposed.length },
-    { id: "remembered", label: "Remembered", count: remembered.length },
+    { id: "review", label: "Needs review", count: totals.candidate },
+    { id: "remembered", label: "Remembered", count: totals.confirmed },
   ];
   const visibleRecent = showAllRecent ? recent : recent.slice(0, 8);
   const mutationError = reviewFact.error || forgetItem.error;
@@ -201,6 +244,7 @@ function MemoryModal({
               ) : (
                 <EmptyState icon={<Brain size={20} />} title="Nothing needs review" message="When Otto proposes a fact from your updates, it waits here for you." />
               )}
+              <FactPageEdge query={candidatePages} loaded={proposed.length} total={totals.candidate} label="Load more proposals" busy={reviewFact.isPending || forgetItem.isPending} />
             </div>
           ) : (
             <div id="memory-panel-remembered" role="tabpanel">
@@ -219,6 +263,8 @@ function MemoryModal({
               ) : (
                 <p className="py-3 text-[12px] text-[var(--text-tertiary)]">Nothing kept yet.</p>
               )}
+
+              <FactPageEdge query={confirmedPages} loaded={remembered.length} total={totals.confirmed} label="Load more remembered facts" busy={reviewFact.isPending || forgetItem.isPending} />
 
               <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                 <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">Recent activity</p>
@@ -253,6 +299,18 @@ function MemoryModal({
       </div>
     </div>
   );
+}
+
+function FactPageEdge({ query, loaded, total, label, busy }: {
+  query: ReturnType<typeof useFactPages>; loaded: number; total: number; label: string; busy: boolean;
+}) {
+  return <div className="mt-3 grid gap-2">
+    <p role="status" className="text-[12px] text-[var(--text-secondary)]">Showing {loaded} of {total}</p>
+    {query.error && <Notice tone="err">Memories could not be loaded. Please retry.</Notice>}
+    {(query.hasNextPage || query.error) && <SecondaryButton disabled={busy || query.isFetching} onClick={() => {
+      if (!query.isFetching) void (query.hasNextPage && !query.isRefetchError ? query.fetchNextPage() : query.refetch());
+    }}>{query.isFetching ? "Loading memories…" : label}</SecondaryButton>}
+  </div>;
 }
 
 function QuietDelete({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {

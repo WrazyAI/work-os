@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, openTaskCountUrl } from "./workOsQueries";
+import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, latestActivityIntervalUrl, openTaskCountUrl } from "./workOsQueries";
 import { taskFinderQueryOptions, updateTaskHistoryPages } from "./workOsQueries";
+import { workOsKeys } from "./queryClient";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 
 describe("task finder query", () => {
@@ -83,6 +84,13 @@ describe("activityIntervalDecisionBody", () => {
     const body = activityIntervalDecisionBody("confirm", undefined, 3);
     expect(body).not.toHaveProperty("revision");
     expect(body.expectedReviewVersion).toBe(3);
+  });
+});
+
+describe("latestActivityIntervalUrl", () => {
+  it("reads the owner-scoped latest recap and pending count", () => {
+    expect(latestActivityIntervalUrl()).toBe("/api/work-os/me/activity-intervals/latest");
+    expect(workOsKeys.activityIntervalLatest()).toEqual(["work-os", "activity-intervals", "latest"]);
   });
 });
 

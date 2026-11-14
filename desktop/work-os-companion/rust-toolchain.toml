@@ -1,0 +1,10 @@
+# Rust 1.100.0 links the Windows futex helpers (WaitOnAddress and
+# WakeByAddressAll) against vertdll.dll instead of the synchronization API set.
+# That DLL is the VSM enclave runtime; its global state is uninitialized in an
+# ordinary process, so the packaged app crashed at startup with an access
+# violation at vertdll+0xdc7e (read of 0x36a). 1.99.1 built 0.5.30 without the
+# vertdll import, so the companion stays on it until a newer stable produces a
+# clean import table. Verify with `dumpbin /dependents work-os-companion.exe`;
+# vertdll.dll must not appear.
+[toolchain]
+channel = "1.99.1"

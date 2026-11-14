@@ -18,6 +18,15 @@ describe("application notification flyouts", () => {
     expect(markup).toContain("Dismiss Task created");
   });
 
+  it("renders the post-approval unapproved-recaps message with its queue action", () => {
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, {
+      notifications: [{ id: "recap-queue", tone: "info", title: "You have unapproved recaps", message: "Other recaps are still waiting for your review.", actions: [{ label: "View recaps", kind: "primary", onClick: () => undefined }] }],
+      onDismiss: () => undefined,
+    }));
+    expect(markup).toContain("You have unapproved recaps");
+    expect(markup).toContain("View recaps");
+  });
+
   it("keeps persistent flyouts until dismissal and reserves stack capacity", () => {
     const persistent = appendNotification([], { tone: "info", title: "Work OS ready", message: "Worktivity is syncing.", persistence: "persistent", persistenceKey: "session" }, 2, 2);
     const updated = appendNotification(persistent, { tone: "info", title: "Work OS ready", message: "Activity is still syncing.", persistence: "persistent", persistenceKey: "session" }, 2, 2);

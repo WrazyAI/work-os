@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 import {
   ACTIVITY_INTERVALS_STALE_MS,
@@ -16,9 +16,10 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalLatestData, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 import { validateTaskFinderFilters, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
+import { reviewedMemoryPages, reviewedMemorySummary } from "../../../src/modules/work-os/memory-review-cache";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -373,6 +374,29 @@ export function activityIntervalsUrl(date: string, cursor: string | null): strin
   return `/api/work-os/me/activity-intervals?date=${encodeURIComponent(date)}&days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
 }
 
+/** Owner-scoped newest ready recap plus the pending count. The floating
+ * companion can surface the latest without loading the 30-day page. */
+export function latestActivityIntervalUrl() {
+  return "/api/work-os/me/activity-intervals/latest" as const;
+}
+
+export function fetchLatestActivityInterval(signal?: AbortSignal): Promise<ActivityIntervalLatestData> {
+  const timeout = AbortSignal.timeout(20_000);
+  return apiRequest<ActivityIntervalLatestData>(latestActivityIntervalUrl(), {
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+}
+
+export function useLatestActivityIntervalQuery(options: { enabled: boolean; pollMs?: number }) {
+  return useQuery({
+    queryKey: workOsKeys.activityIntervalLatest(),
+    enabled: options.enabled,
+    staleTime: 15_000,
+    refetchInterval: options.pollMs ?? false,
+    queryFn: ({ signal }) => fetchLatestActivityInterval(signal),
+  });
+}
+
 /** Live notices own only the latest page, never the history observer. With no
  * day loaded (mapped Admin), the server resolves the employee's local date. */
 export function activityIntervalNotificationOptions(options: { enabled: boolean; date: string | null; pollMs?: number }) {
@@ -494,18 +518,60 @@ export function decideRecapNextStep(proposalId: string, decision: "accept" | "re
 /** What Otto proposed or kept, plus the dated context it drew on. Polled while
  * the app is open so a new proposal can announce itself through the
  * notifications panel. */
-export function useMemoryQuery(options: { enabled: boolean; pollMs?: number }) {
-  return useQuery({
+export function memoryQueryOptions(options: { enabled: boolean; pollMs?: number }, client: QueryClient) {
+  return {
     queryKey: workOsKeys.memory(),
     enabled: options.enabled,
     staleTime: MEMORY_STALE_MS,
-    refetchInterval: options.pollMs ?? false,
-    queryFn: () => apiRequest<MemoryView>("/api/work-os/me/memory"),
-  });
+    refetchInterval: options.pollMs ?? (false as const),
+    queryFn: async () => {
+      const memory = await apiRequest<MemoryView>("/api/work-os/me/memory");
+      await client.invalidateQueries({ queryKey: [...workOsKeys.memory(), "facts"], refetchType: "active" });
+      return memory;
+    },
+  };
+}
+
+export function useMemoryQuery(options: { enabled: boolean; pollMs?: number }) {
+  return useQuery(memoryQueryOptions(options, useQueryClient()));
+}
+
+/** A failed background refresh is not a failed next-page request. */
+export function requestMemoryFactPage(query: {
+  isFetching: boolean; hasNextPage: boolean; isRefetchError: boolean;
+  fetchNextPage: () => Promise<unknown>; refetch: () => Promise<unknown>;
+}) {
+  if (query.isFetching) return Promise.resolve();
+  return query.hasNextPage && !query.isRefetchError ? query.fetchNextPage() : query.refetch();
 }
 
 /** Keep (confirm) or reject a proposed fact. Nothing is remembered without a
  * keep, and a rejection prevents the same fact from being re-proposed. */
+export function memoryFactsQueryOptions(status: "confirmed" | "candidate", enabled: boolean) {
+  return infiniteQueryOptions({
+    queryKey: [...workOsKeys.memory(), "facts", status] as const,
+    enabled,
+    staleTime: MEMORY_STALE_MS,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => apiRequest<{ facts: MemoryFact[]; total: number; nextCursor: string | null }>(
+      `/api/work-os/me/memory?status=${status}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+export function useMemoryFactsQuery(status: "confirmed" | "candidate", enabled: boolean) {
+  return useInfiniteQuery(memoryFactsQueryOptions(status, enabled));
+}
+
+export function applyMemoryReviewToCaches(client: QueryClient, fact: MemoryFact, status: "confirmed" | "rejected") {
+  client.setQueryData<MemoryView>(workOsKeys.memory(), current => reviewedMemorySummary(current, fact, status));
+  for (const lane of ["confirmed", "candidate"] as const) {
+    client.setQueryData<InfiniteData<{ facts: MemoryFact[]; total: number; nextCursor: string | null }>>(
+      [...workOsKeys.memory(), "facts", lane], current => reviewedMemoryPages(current, lane, fact, status),
+    );
+  }
+}
+
 export function reviewMemoryFact(id: string, status: "confirmed" | "rejected") {
   return apiRequest<{ fact: Pick<MemoryFact, "id" | "review_status"> }>(`/api/work-os/me/memory/${encodeURIComponent(id)}`, {
     method: "PATCH",

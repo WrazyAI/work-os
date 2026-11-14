@@ -132,6 +132,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   return <NotificationContext.Provider value={value}>{children}<NotificationFlyouts notifications={notifications} onDismiss={dismiss} /></NotificationContext.Provider>;
 }
 
+/** Optional form for shared surfaces that are also rendered in isolated
+ * previews/tests without the app-level provider. Production always has one. */
+export function useNotificationsOrNull() {
+  return useContext(NotificationContext);
+}
+
 export function useNotifications() {
   const value = useContext(NotificationContext);
   if (!value) throw new Error("useNotifications must be used inside NotificationProvider");

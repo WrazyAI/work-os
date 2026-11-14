@@ -682,6 +682,12 @@ pub fn run() {
             diagnostics::open_logs_dir
         ])
         .setup(|app| {
+            // Start the diagnostics trail before anything that can fail. The
+            // first frame, menu install, monitor fit and vault directories all
+            // run below, and a failure there used to leave no app-info.json and
+            // no log to tell a support report where startup stopped.
+            diagnostics::init(app.handle())
+                .map_err(|error| Box::<dyn std::error::Error>::from(error))?;
             // macOS always shows a system menu bar; route its Work OS items
             // back to the window that owns the actions. Tray items carry their
             // own handler and never use the `menu:` prefix.
@@ -734,8 +740,6 @@ pub fn run() {
             let salt_path = app.path().app_local_data_dir()?.join("stronghold-salt");
             app.handle()
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
-            diagnostics::init(app.handle())
-                .map_err(|error| Box::<dyn std::error::Error>::from(error))?;
             // The vault key is read by its own worker thread: a credential-store
             // access can wait on a system dialog (macOS raises one after an
             // in-place update changes the ad-hoc signature), and that must never

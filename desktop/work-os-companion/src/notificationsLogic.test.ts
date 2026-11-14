@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import type { ActivityInterval, MemoryFact } from "./types";
 
 function fact(id: string, review_status: MemoryFact["review_status"]): MemoryFact {
@@ -26,6 +26,52 @@ function interval(id: string, windowStart: string, generationStatus: ActivityInt
     evidence: [],
   };
 }
+
+describe("recap launch selection", () => {
+  it("selects the newest ready recap even when it is already approved", () => {
+    const confirmed = interval("confirmed-newest", "2026-11-12T15:00:00.000Z", "ready", "confirmed");
+    const olderPending = interval("older-pending", "2026-11-12T14:00:00.000Z", "ready", "inferred");
+    expect(latestReadyRecap([olderPending, confirmed])?.id).toBe("confirmed-newest");
+  });
+
+  it("surfaces only an inferred newest recap that is newer than the session watermark", () => {
+    const latest = interval("latest", "2026-11-12T15:00:00.000Z", "ready", "inferred");
+    expect(recapSurfaceDecision({ latest, watermark: null, pendingRecap: null }).surface).toBe(true);
+    expect(recapSurfaceDecision({ latest, watermark: "2026-11-12T15:00:00.000Z", pendingRecap: null }).surface).toBe(false);
+    expect(recapSurfaceDecision({ latest: { ...latest, reviewStatus: "confirmed" }, watermark: null, pendingRecap: null })).toMatchObject({ surface: false, reason: "approved" });
+    expect(recapSurfaceDecision({ latest, watermark: null, pendingRecap: { ...latest, id: "newer-chat", windowStart: "2026-11-12T16:00:00.000Z" } })).toMatchObject({ surface: false, reason: "already_pending" });
+  });
+
+  it("never moves the session watermark backward", () => {
+    const approvedOlder = interval("approved-older", "2026-11-12T15:00:00.000Z", "ready", "confirmed");
+    expect(recapSurfaceDecision({ latest: approvedOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: null }).watermark).toBe("2026-11-12T16:00:00.000Z");
+    const pendingOlder = interval("pending-older", "2026-11-12T15:00:00.000Z", "ready", "inferred");
+    expect(recapSurfaceDecision({ latest: pendingOlder, watermark: "2026-11-12T16:00:00.000Z", pendingRecap: pendingOlder }).watermark).toBe("2026-11-12T16:00:00.000Z");
+  });
+});
+
+describe("post-approval recap queue bubble", () => {
+  it("stays up when the latest poll reports the approved newest recap", () => {
+    let state = reduceRecapQueueBubble({ prompt: false, awaitingBeat: false }, { type: "approved" });
+    state = reduceRecapQueueBubble(state, { type: "celebration-ended", pendingCount: 2 });
+    expect(state.prompt).toBe(true);
+    state = reduceRecapQueueBubble(state, { type: "pending-count", pendingCount: 2 });
+    expect(state.prompt).toBe(true);
+  });
+
+  it("hides when the queue is empty or the employee opens it", () => {
+    const shown = reduceRecapQueueBubble({ prompt: true, awaitingBeat: false }, { type: "pending-count", pendingCount: 0 });
+    expect(shown.prompt).toBe(false);
+    expect(reduceRecapQueueBubble({ prompt: true, awaitingBeat: false }, { type: "opened" }).prompt).toBe(false);
+    expect(reduceRecapQueueBubble({ prompt: true, awaitingBeat: false }, { type: "surfaced" }).prompt).toBe(false);
+  });
+
+  it("renders only with remaining recaps and no other bubble", () => {
+    expect(unapprovedRecapsBubbleVisible({ prompt: true, awaitingBeat: false }, 2, null)).toBe(true);
+    expect(unapprovedRecapsBubbleVisible({ prompt: true, awaitingBeat: false }, 0, null)).toBe(false);
+    expect(unapprovedRecapsBubbleVisible({ prompt: true, awaitingBeat: false }, 2, "recap")).toBe(false);
+  });
+});
 
 describe("memory candidate notifications", () => {
   it("tracks only candidates, in stable order", () => {
@@ -64,9 +110,6 @@ describe("ready recap selection", () => {
     expect(readyRecap(undefined)).toBeNull();
   });
 
-  it("keys a notification to the exact interval", () => {
-    expect(recapNotifyKey("interval-1")).toBe("recap:interval-1");
-  });
 });
 
 describe("overdue notifications", () => {

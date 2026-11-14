@@ -12,6 +12,8 @@ import {
 } from "../src/lib/work-memory-core";
 import { formatTodaySnapshot } from "../src/lib/work-memory-today";
 import { factSourceId, normalizeFactDrafts } from "../src/lib/work-memory-facts";
+import { PGlite } from "@electric-sql/pglite";
+import * as memory from "../src/lib/work-memory";
 
 function item(overrides: Partial<MemoryItem> & { id: string }): MemoryItem {
   return {
@@ -172,4 +174,61 @@ test("avatar reminder scaffolding is never persisted or replayed as conversation
   );
   assert.equal(isPromptReminderContent("assistant", "Check-in due: Record what changed since your last update."), true);
   assert.equal(isPromptReminderContent("user", "Check-in due: answering now"), false);
+});
+
+test("saved memory survives a newer proposal flood and pages independently without scope leaks", async () => {
+  const database = new PGlite();
+  const previous = globalThis.__workOsPgPool;
+  const scope = { organizationId: "10000000-0000-4000-8000-000000000001", personId: "20000000-0000-4000-8000-000000000001" };
+  try {
+    await database.exec(`create table work_memory_items (
+      id uuid primary key, organization_id uuid, person_id uuid, kind text,
+      content text, summary text, review_status text, fact_key text,
+      local_date date, occurred_at timestamptz, created_at timestamptz default now(),
+      source_table text, source_id text,
+      search tsvector generated always as (to_tsvector('english', content)) stored
+    );`);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql, values) } as never;
+    for (let index = 1; index <= 120; index++) {
+      await database.query(`insert into work_memory_items
+        (id,organization_id,person_id,kind,content,review_status,occurred_at,source_table,source_id)
+        values ($1::uuid,$2,$3,'profile_fact',$4,$5,$6,'memory_facts',$1::text)`, [
+        `30000000-0000-4000-8000-${String(index).padStart(12, "0")}`, scope.organizationId, scope.personId,
+        index === 1 ? "Prefers PostgreSQL migrations reviewed before deployment." : `Unrelated memory ${index}`,
+        index <= 60 ? "confirmed" : "candidate", index <= 60 ? "2026-09-01T12:00:00.123456Z" : "2026-11-13T12:00:00Z",
+      ]);
+    }
+    await database.exec(`insert into work_memory_items(id,organization_id,person_id,kind,content,review_status,occurred_at)
+      values ('40000000-0000-4000-8000-000000000001','${scope.organizationId}','${scope.personId}','profile_fact','Rejected PostgreSQL advice','rejected','2026-11-13'),
+      ('40000000-0000-4000-8000-000000000002','${scope.organizationId}','50000000-0000-4000-8000-000000000001','profile_fact','Other person PostgreSQL advice','confirmed','2026-11-13'),
+      ('40000000-0000-4000-8000-000000000003','60000000-0000-4000-8000-000000000001','${scope.personId}','profile_fact','Other tenant PostgreSQL advice','confirmed','2026-11-13');`);
+    const listed = await memory.listWorkMemory(scope);
+    assert.equal(listed.facts.filter(fact => fact.review_status === "confirmed").length, 50);
+    assert.deepEqual(listed.factTotals, { confirmed: 60, candidate: 60 });
+    const saved = await memory.listWorkMemoryFacts(scope, { status: "confirmed", limit: 7 });
+    assert.equal(saved.total, 60);
+    const ids = [...saved.facts.map(fact => fact.id)];
+    let cursor = saved.nextCursor;
+    while (cursor) {
+      const page = await memory.listWorkMemoryFacts(scope, { status: "confirmed", limit: 7, cursor });
+      assert.equal(page.total, 60);
+      assert.ok(page.facts.every(fact => fact.review_status === "confirmed"));
+      ids.push(...page.facts.map(fact => fact.id));
+      cursor = page.nextCursor;
+    }
+    assert.equal(ids.length, 60);
+    assert.equal(new Set(ids).size, 60, "equal timestamps must not cause duplicate or missing pages");
+    assert.ok(ids.includes("30000000-0000-4000-8000-000000000001"));
+    await assert.rejects(() => memory.listWorkMemoryFacts(scope, { status: "confirmed", cursor: "bad,or(filter)" }), /cursor/i);
+
+    const recalled = await memory.recallWorkMemory(scope, "PostgreSQL migrations");
+    assert.equal(recalled.profileFacts[0]?.id, "30000000-0000-4000-8000-000000000001", "relevant old confirmed memory must precede newer unrelated facts");
+    assert.ok(recalled.profileFacts.every(fact => !fact.content.includes("advice")), "rejected, other-person and other-tenant facts stay out");
+    assert.match(formatMemoryContext(recalled), /Prefers PostgreSQL migrations/);
+    const question = await memory.recallWorkMemory(scope, "How should I handle PostgreSQL migrations?");
+    assert.equal(question.profileFacts[0]?.id, "30000000-0000-4000-8000-000000000001");
+  } finally {
+    globalThis.__workOsPgPool = previous;
+    await database.close();
+  }
 });
