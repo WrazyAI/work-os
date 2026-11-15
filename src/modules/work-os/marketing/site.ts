@@ -46,6 +46,8 @@ export function isWorkOsSitePath(pathname: string | null | undefined): boolean {
   // Next canonicalizes a trailing slash after the proxy runs. Classify it here
   // too so `/work-os/` reaches that redirect instead of /login.
   const candidate = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  // Public preview image used by anonymous social crawlers.
+  if (candidate === "/work-os/opengraph-image") return true;
   if (
     candidate === WORK_OS_SITE.home
     || candidate === WORK_OS_SITE.downloads
