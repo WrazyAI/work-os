@@ -23,6 +23,11 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.33 — 2026-11-16
+
+- Work OS has a new Soft ash theme that covers every page, including Administration, Insights, and the floating mascot.
+- Choose Light, Dark, or System in Settings, or pick one the first time you sign in on this device; your choice is remembered here.
+
 ## 0.5.32 — 2026-11-13
 
 - Work OS opens again on Windows; the previous update could close as soon as it opened.

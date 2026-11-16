@@ -336,13 +336,20 @@
       "type": "fix",
       "summary": "Work OS opens again on Windows after the previous update closed at startup.",
       "verification": "WER APPCRASH for 0.5.31: c0000005 in vertdll.dll+0xdc7e reading 0x36a; minidump shows the fault in the WaitOnAddress helper with a null runtime global, reached from WebView2 startup. dumpbin: 0.5.31 imports WaitOnAddress/WakeByAddressAll from vertdll.dll, while the working 0.5.30 binary built with Rust 1.99.1 does not. CI logs show 0.5.31 built with Rust 1.100.0 (0.5.30: 1.99.1). Toolchain pinned to 1.99.1 in rust-toolchain.toml and all four workflow setups; static guard test passes; Work OS suite and companion checks run before release."
+    },
+    {
+      "id": "soft-ash-theme-across-companion",
+      "type": "feature",
+      "summary": "Work OS has a new Soft ash theme with Light, Dark, and System choices, a first-sign-in picker, and themed Administration and Insights pages.",
+      "verification": "PR #171 merged as 8960fbae: main CI verify 8m23s, companion 1m47s, Windows release policy 26s, browser and CodeQL pass. Companion 222 files/1959 tests, typecheck, and production build pass; Work OS 1329 tests with 1318 pass, 0 fail, 11 skipped. Eighteen CodeRabbit findings across the PR and three local passes were fixed. Rendered on the 0.5.33 tree at 1440/720/390: Administration Overview, People, Tasks, EOD Review, Insights, Evidence, and Settings; employee My Day, Tasks, EOD Review, Insights, and Settings; the first-login theme prompt; live Light/Dark/System switching; the Admin mode chip; and the Windows/macOS chrome menus."
     }
   ],
-  "emergency": {
-    "version": "0.5.32",
-    "updateId": "restore-windows-launch-rust-1-100",
-    "brokenBehavior": "The 0.5.31 Windows build shows a blank window and closes at startup because Rust 1.100.0 imported WaitOnAddress from vertdll.dll, whose runtime state is uninitialized in an ordinary process.",
-    "restoredBehavior": "The companion is rebuilt with Rust 1.99.1, whose binary imports the synchronization API set instead and starts normally."
-  },
-  "operatorOverride": null
+  "emergency": null,
+  "operatorOverride": {
+    "version": "0.5.33",
+    "updateId": "soft-ash-theme-across-companion",
+    "approvedBy": "operator",
+    "reason": "The operator explicitly requested the merged Soft ash theme be released now for immediate installation and verification, ahead of the five-outcome threshold.",
+    "approvedAt": "2026-11-16"
+  }
 }
