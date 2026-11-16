@@ -161,7 +161,6 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
       <div className="stage admin-stage">
         <header className="masthead admin-masthead">
           <div className="admin-masthead-copy">
-            <p>Work OS · Administration</p>
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
           <div className="mast-actions">

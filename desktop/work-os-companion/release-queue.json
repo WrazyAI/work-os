@@ -360,6 +360,18 @@
       "type": "fix",
       "summary": "Onboarding stays fully dark in dark mode, with readable fields, labels, selected workdays, and consent.",
       "verification": "Local companion preview: rendered all five setup steps in light and dark; dark text contrast 6.7-18.4:1 on the setup panel; theme contrast suite 8/8; light-mode layout unchanged."
+    },
+    {
+      "id": "admin-panel-quieter-header-and-task-record",
+      "type": "fix",
+      "summary": "Administration pages drop the repeated “Work OS · Administration” line, and the organization task list gives titles more room with quieter row rules.",
+      "verification": "Rendered ?preview-admin and ?preview-admin&section=tasks at 1004 and 1280 in Light and Dark: no eyebrow text remains on any section, the Task column grows 170→224px at 1004px, and the header rule is the only strong table line. Companion typecheck clean; companion 222 files/1962 tests pass."
+    },
+    {
+      "id": "focus-plan-dialog-grouped-list",
+      "type": "fix",
+      "summary": "The Today’s focus dialog’s plan reads as one grouped list with a thin scrollbar at the dialog edge instead of a stack of rules.",
+      "verification": "Rendered ?preview-tasks&many at 1280x900, 1004x430, and 560x820 in Light and Dark: no per-row borders, symmetric 39px/39px content insets with a 10px edge scrollbar, expanded subtasks and keyboard focus intact. Companion typecheck clean; companion 222 files/1962 tests pass."
     }
   ],
   "emergency": null,

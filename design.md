@@ -688,9 +688,14 @@ not carry a plan-linked task row (the plan can exceed the day page), the plan
 item's recorded success criteria stand in as its subtasks and are labelled
 "Planned"; loaded task children always win over that fallback, so an edited
 task never shows a stale criteria list. The plan heading states how many
-items are recorded done. The strip's existing review and retry buttons retain
-their own actions; a visible details trigger supports keyboard access and the
-focus sentence remains a convenience press target. Current-day focus offers Edit
+items are recorded done. The plan's parent rows form one grouped surface — a
+single boundary with no per-row rules — so a long plan reads as a record rather
+than a stack of lines; each row keeps its disclosure and focus state. The dialog
+body is the scroll region: it spans the dialog's full width, the header and
+footer stay fixed, and its thin themed scrollbar sits at the dialog's edge
+rather than inside the content column. The strip's existing review and retry
+buttons retain their own actions; a visible details trigger supports keyboard
+access and the focus sentence remains a convenience press target. Current-day focus offers Edit
 focus, while historical focus is read-only. Escape, the close control, and a
 backdrop press dismiss the dialog and restore focus; long text wraps, the body
 scrolls within the viewport, and the header and footer stay put. The dialog
@@ -2757,6 +2762,11 @@ directions, and ties break by title then id so the list never jitters. The
 sorted column's `th` carries `aria-sort` with an always-visible direction
 indicator, inactive columns reveal a quiet affordance on hover or keyboard
 focus, and the empty actions column is never sortable.
+
+The task record's title column takes the remaining measure: the card keeps its
+outer inset while the middle gutters tighten, the header rule alone separates
+the column labels, and the body dividers stay faint so the row content — not
+the rules — carries the structure.
 
 ### 16.3 Data and provenance
 

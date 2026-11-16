@@ -36,9 +36,9 @@
 
 /* --- Masthead ------------------------------------------------------------ */
 
-/* One calm header per page: eyebrow, title, and the page's purpose read as a
-   single block above the rule, the switch button sits on the title's line, and
-   the masthead grows with its copy instead of clipping it at a fixed height. */
+/* One calm header per page: the title and the page's purpose read as a single
+   block above the rule, the switch button sits on the title's line, and the
+   masthead grows with its copy instead of clipping it at a fixed height. */
 .admin-workspace .masthead {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -934,6 +934,54 @@ body:has(.admin-workspace) .notifications-card {
   color: var(--muted);
   text-decoration: line-through;
   font-weight: 560;
+}
+
+/* The tasks record is the one dense table: tighten the middle gutters so the
+   title keeps its measure, keep the card's outer inset, and let the header rule
+   carry the structure instead of competing with every row. */
+.admin-task-record-card .admin-table thead th,
+.admin-task-record-card .admin-table tbody td {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.admin-task-record-card .admin-table thead th:first-child,
+.admin-task-record-card .admin-table tbody td:first-child {
+  padding-left: 18px;
+}
+
+.admin-task-record-card .admin-table thead th:last-child,
+.admin-task-record-card .admin-table tbody td:last-child {
+  padding-right: 18px;
+}
+
+.admin-task-record-card .admin-table thead th.admin-sort-head {
+  padding: 0;
+}
+
+.admin-task-record-card .admin-table thead th.admin-sort-head .admin-sort-button {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.admin-task-record-card .admin-table thead th.admin-sort-head:first-child .admin-sort-button {
+  padding-left: 18px;
+}
+
+.admin-task-record-card .admin-table thead th.admin-sort-head:last-child .admin-sort-button {
+  padding-right: 18px;
+}
+
+.admin-task-record-card .admin-table thead th {
+  border-top: 0;
+}
+
+.admin-task-record-card .admin-table tbody td {
+  border-bottom-color: color-mix(in srgb, var(--line) 42%, transparent);
+}
+
+.admin-task-record-card .admin-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 /* A task's attachment stack sits beside its status. The cards are deliberately

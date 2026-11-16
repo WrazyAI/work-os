@@ -456,21 +456,25 @@ body {
 .task-focus-dialog > header small, .task-focus-dialog-body > span, .task-focus-dialog-body > small { color: var(--dash-muted); font-size: 11px; }
 .task-focus-dialog h2 { margin: 6px 0 0; font-size: 25px; letter-spacing: -.035em; }
 .task-focus-dialog > header button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--dash-line); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
-.task-focus-dialog-body { min-height: 0; margin: 0 28px; padding: 0 0 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.task-focus-dialog-body { min-height: 0; margin: 0; padding: 16px 28px 22px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--dash-line-strong) 78%, transparent) transparent; }
+.task-focus-dialog-body::-webkit-scrollbar { width: 10px; }
+.task-focus-dialog-body::-webkit-scrollbar-track { background: transparent; }
+.task-focus-dialog-body::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: content-box; background-color: color-mix(in srgb, var(--dash-line-strong) 78%, transparent); }
+.task-focus-dialog-body::-webkit-scrollbar-thumb:hover { background-color: var(--dash-line-strong); }
 .task-focus-date-separator { margin: 0 6px; color: var(--dash-line-strong); }
-.task-focus-statement { padding: 22px 24px; border: 1px solid var(--dash-line); border-radius: 14px; background: var(--paper); }
+.task-focus-statement { padding: 22px 24px; border: 0; border-radius: 14px; background: var(--dash-inset); }
 .task-focus-statement-heading { display: flex; align-items: center; gap: 10px; color: var(--dash-muted); font-size: 11px; font-weight: 700; }
 .task-focus-target { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--dash-inset); color: var(--dash-signal-deep); }
 .task-focus-statement p { margin: 16px 0 13px; color: var(--dash-ink); font-size: 20px; font-weight: 700; letter-spacing: -.025em; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
 .task-focus-statement small { color: var(--dash-muted); font-size: 11px; }
-.task-focus-plan { padding: 25px 0 0; }
+.task-focus-plan { padding: 24px 0 0; }
 .task-focus-plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .task-focus-plan-heading h3 { margin: 0; font-size: 15px; }
 .task-focus-plan-heading p { margin: 4px 0 0; color: var(--dash-muted); font-size: 11px; }
 .task-focus-plan-heading > span { display: grid; place-items: center; min-width: 27px; height: 27px; border-radius: 50%; background: var(--dash-inset); color: var(--dash-muted); font-size: 11px; font-weight: 700; }
-.task-focus-plan-list { list-style: none; margin: 15px 0 0; padding: 0; border-top: 1px solid var(--dash-line); }
-.task-focus-plan-group { border-bottom: 1px solid var(--dash-line); }
-.task-focus-plan-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 9px 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; text-align: left; }
+.task-focus-plan-list { list-style: none; margin: 14px 0 0; padding: 4px; border: 1px solid var(--dash-line); border-radius: 14px; }
+.task-focus-plan-group + .task-focus-plan-group { margin-top: 2px; }
+.task-focus-plan-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 650; text-align: left; }
 button.task-focus-plan-row { cursor: pointer; }
 button.task-focus-plan-row:hover { background: var(--dash-inset); }
 .task-focus-plan-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -495,7 +499,7 @@ button.task-focus-plan-row:hover { background: var(--dash-inset); }
 .task-focus-subtask.is-planned .task-focus-subtask-mark { border: 1px dashed #c9d5c2; background: transparent; }
 .task-focus-subtask.is-planned > small { color: #6f8067; }
 .task-focus-subtask-more { margin: 0 0 8px 35px; color: var(--dash-muted); font-size: 10px; }
-.task-focus-plan-empty { margin: 15px 0 0; padding: 14px 0; border-top: 1px solid var(--dash-line); color: var(--dash-muted); font-size: 12px; }
+.task-focus-plan-empty { margin: 14px 0 0; padding: 15px 16px; border: 0; border-radius: 12px; background: var(--dash-inset); color: var(--dash-muted); font-size: 12px; }
 .task-focus-dialog footer { flex: none; padding: 18px 28px 26px; border-top: 1px solid var(--dash-line); }
 .task-focus-dialog footer button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--dash-ink); color: var(--dash-card-solid); font-weight: 700; cursor: pointer; }
 .task-focus-dialog button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }

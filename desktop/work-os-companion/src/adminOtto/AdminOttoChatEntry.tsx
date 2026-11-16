@@ -103,7 +103,6 @@ export function AdminOttoChatEntry({ scope, initialConversationId = null, initia
       >
         <header>
           <div>
-            <span>Work OS · Administration</span>
             <h2 id="admin-otto-entry-title">Ask Otto about the team</h2>
           </div>
           <button type="button" aria-label="Close admin Otto" onClick={onClose}><X size={18} /></button>

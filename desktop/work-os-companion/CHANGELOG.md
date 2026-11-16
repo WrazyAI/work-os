@@ -26,6 +26,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - The dark theme now keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.
+- Administration pages drop the repeated “Work OS · Administration” line, and the organization task list gives titles more room with quieter row dividers.
+- Today’s focus shows its plan as one grouped list with a slim scrollbar at the dialog edge.
 
 ## 0.5.33 — 2026-11-16
 
