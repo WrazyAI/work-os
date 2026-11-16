@@ -2,7 +2,7 @@
 
 Ledger: d8ccca72-8b4e-41ea-885f-1cd0cb9ef6eb
 
-Scope: approved design and implementation planning. This turn authorizes writing the plan only; no product code, payroll data mutation, approval/export, deployment or packaging has been performed.
+Scope: approved design and Native inline implementation authorized. Local product code/tests are in progress. No production mutation, approval/export, deployment, push/merge or packaging is authorized by this execution.
 
 ## Checklist
 - [x] Capture initial requirements and payroll rules in conversation.
@@ -20,7 +20,7 @@ Scope: approved design and implementation planning. This turn authorizes writing
 - [x] Obtain approval: rounding, 30-day retention, and payroll recap auto-approval approved.
 - [x] After approval only: write implementation plan.
 - [x] Main-agent planning self-review: spec coverage, steps, shared types/signatures, five risk classes and document proportion.
-- [ ] User reviews plan and chooses execution approach before implementation.
+- [x] User reviews plan and chooses Native inline execution before implementation.
 
 ## Confirmed requirements
 Admin only; Work OS is the export source, no Worktivity payroll writes. Distinguish tracked, recommended and approved hours. Work OS screenshots/recaps/intervals primary; Worktivity attendance, app usage and productivity signals supplementary. Productivity is not authoritative pay evidence.
@@ -47,7 +47,9 @@ Composition: navigation | employee + period / hours reconciliation / Week 1 + We
 Critique: removed generic donut/KPI-tile dashboard and decorative confidence scores. The distinctive instrument is a transparent tracked-to-recommended reconciliation, with uncertain minutes separate and unapproved state explicit. Existing Work OS palette overrides the reference's suggestion to invent a new brand.
 
 ## Next action
-User reviews `docs/superpowers/plans/2026-11-16-work-os-payroll-review.md` and chooses Native or Subagent-driven execution. Recommended Native: nineteen tightly coupled tasks with one independent whole-surface security/data-integrity review and one CodeRabbit pass per completed task batch. No agents dispatched during plan writing.
+Continue authorized inline execution. Task 1 committed as `9976f1b2`: periods/contracts, missing-module RED then 33/33 payroll/workday tests GREEN and typecheck PASS. Task 2 schema/fixtures in progress; first three SQL/service tests pass, added legal-hold/helper tests had expected RED and await GREEN. Baseline full Work OS suite: 1,340 passed, 11 opt-in PG skipped, zero failures (920 seconds under load). Execution record: `.superpowers/sdd/2026-11-16-work-os-payroll-review/progress.md`.
+
+Rebased execution base is `d7a1e10f`. New flexible arrangements are preserved and block fixed-shift payroll approval without a separately defined pay rule. Migration numbers now `0075_work_payroll_review.sql` and `0076_work_payroll_recap_provenance.sql`; existing `0074` is flexible arrangements. Payroll purge uses an isolated NOLOGIN retention executor; migration requires CREATEROLE and does not grant runtime membership. Documented operator holds are server/operator-only, never client JSON.
 
 The worktree was rebased on `origin/main` `152711c0` before planning. Design commits now: `74fbefc8` (initial), `c35f2646` (builder fixes), `cfa11b02` (Sol medium review), `897c6f8c` (final owner decisions). This replaces pre-rebase identifiers in earlier ledger descriptions; content is preserved.
 
