@@ -149,4 +149,11 @@ describe("Otto chat cards", () => {
     expect(body).toContain("var(--warning-ink)");
     expect(body).not.toContain("#7b6b45");
   });
+
+  it("keeps the prompt-bubble action dark-on-signal in both materials", () => {
+    const action = rule(avatar, ".avatar-prompt-action");
+    expect(action).toContain("background: var(--signal, #a8f15b)");
+    expect(action).toContain("color: var(--ink-on-signal, #182018)");
+    expect(action).not.toContain("color: var(--ink, #182018)");
+  });
 });
