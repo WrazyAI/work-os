@@ -2,23 +2,25 @@
 
 Ledger: d8ccca72-8b4e-41ea-885f-1cd0cb9ef6eb
 
-Scope: visual brainstorming only. No product code, payroll approval, export, or deployment authorized yet.
+Scope: approved design and implementation planning. This turn authorizes writing the plan only; no product code, payroll data mutation, approval/export, deployment or packaging has been performed.
 
 ## Checklist
 - [x] Capture initial requirements and payroll rules in conversation.
-- [x] Read Agent OS WORKTIVITY.md (historical implementation account; code verification still needed before architecture design).
+- [x] Read Agent OS WORKTIVITY.md and verify the existing audit and Work OS evidence paths against code before architecture design.
 - [x] Read Work OS design.md and requested Anthropic frontend guidance.
 - [x] Create dedicated origin/main worktree and ledger.
 - [x] Define visual direction and critique against brief.
 - [x] Serve interactive illustrative mockup and verify current-width layout and interactions.
 - [ ] Capture visual screenshots and inspect narrow rendering (desktop screenshot tool reports no visible tab).
 - [x] Get user feedback on visual direction: structure approved; "fine, not premium"; design polish deferred.
-- [x] Resolve remaining policy and evidence access questions: breaks unpaid; other defaults pending doc review.
+- [x] Resolve policy and evidence access decisions: unpaid breaks, hours-only export, reviewed-source provenance and guarded image access; approved full spec controls.
 - [x] Write full design.
 - [x] Independent builder check.
 - [x] GPT-6.1 Sol (medium) review.
 - [x] Obtain approval: rounding, 30-day retention, and payroll recap auto-approval approved.
-- [ ] After approval only: write implementation plan.
+- [x] After approval only: write implementation plan.
+- [x] Main-agent planning self-review: spec coverage, steps, shared types/signatures, five risk classes and document proportion.
+- [ ] User reviews plan and chooses execution approach before implementation.
 
 ## Confirmed requirements
 Admin only; Work OS is the export source, no Worktivity payroll writes. Distinguish tracked, recommended and approved hours. Work OS screenshots/recaps/intervals primary; Worktivity attendance, app usage and productivity signals supplementary. Productivity is not authoritative pay evidence.
@@ -45,12 +47,18 @@ Composition: navigation | employee + period / hours reconciliation / Week 1 + We
 Critique: removed generic donut/KPI-tile dashboard and decorative confidence scores. The distinctive instrument is a transparent tracked-to-recommended reconciliation, with uncertain minutes separate and unapproved state explicit. Existing Work OS palette overrides the reference's suggestion to invent a new brand.
 
 ## Next action
-Await user feedback on the first illustrative payroll mockup.
+User reviews `docs/superpowers/plans/2026-11-16-work-os-payroll-review.md` and chooses Native or Subagent-driven execution. Recommended Native: nineteen tightly coupled tasks with one independent whole-surface security/data-integrity review and one CodeRabbit pass per completed task batch. No agents dispatched during plan writing.
+
+The worktree was rebased on `origin/main` `152711c0` before planning. Design commits now: `74fbefc8` (initial), `c35f2646` (builder fixes), `cfa11b02` (Sol medium review), `897c6f8c` (final owner decisions). This replaces pre-rebase identifiers in earlier ledger descriptions; content is preserved.
+
+Implementation plan: nineteen ordered, test-first tasks with exact paths/interfaces, focused commands, real disposable PostgreSQL race tests, cutoff provenance through all clients, off-by-default automation, snapshot export, fenced 30-day purge and separate integration/release authorization. Shared-code differences against `agentos/main` were compared by content during planning; its newer screenshot/arrangement implementations must be preserved on any port.
 
 Preview: `.superpowers/brainstorm/117148-1794847490/content/payroll-review.html`.
-Server port 51957; keyed connection details in that session's `state/server-info` (do not commit session keys).
+The visual mockup server was canceled by a server restart. Its old port 51957 is not a live-preview claim; use persisted mockup content if another preview is requested. Keyed connection details in that session's `state/server-info` must not be committed.
 Browser tab: tab_736ef65a-880a-4245-8e11-f4e008934f4b.
 Browser accessibility snapshot confirms page loaded. At current 1000px viewport, document content width 985px (no horizontal overflow). Review dialog opens/closes and sample question renders its explicitly labelled sample answer. Screenshot capture blocked by browser visibility even after focus. Attempted iframe-based responsive check was unavailable (null frame document); temporary iframe removed. No claim of complete visual/responsive acceptance.
 
-## Open questions for later
-Paid breaks; missing activity samples versus confirmed zero; schedule exceptions/no schedule/overnight cutoff attribution; payroll timezone; permission to expand raw admin screenshot access beyond currently flagged/disputed evidence; approval revision/invalidation policy; currency/pay rates versus hours-only export; analysis timing and reruns.
+## Verification / outstanding execution gates
+Planning verification is document-only: task/checkbox/path/contract consistency checks and `git diff --check`. No product tests, live deductions, provider capture proof, AI readiness calls or deployment were run as part of plan writing.
+
+At execution: verify Worktivity capture start/end semantics and complete paging read-only; verify selected OpenRouter model/provider/high effort using minimal non-sensitive calls; exercise multi-connection PostgreSQL locks; render desktop/narrow/Light/Dark states and TestSprite flows. Do not enable payroll auto-approval until supported employee clients show system provenance and notice. Export/retention changes never erase the employee recap ledger. Installed companion release cadence remains mandatory.
