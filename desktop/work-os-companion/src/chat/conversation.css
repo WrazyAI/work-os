@@ -541,7 +541,7 @@
 .conversation-surface .chat-copy.is-copied {
   border-color: rgba(93, 137, 41, 0.28);
   background: rgba(213, 255, 84, 0.26);
-  color: #456d18;
+  color: var(--conversation-focus);
 }
 
 /* The hover clock closes the action row: quiet, numeric, and never a pill. */
@@ -620,7 +620,7 @@
 .conversation-surface .chat-markdown ul,
 .conversation-surface .chat-markdown ol { margin: 9px 0; padding-left: 22px; }
 .conversation-surface .chat-markdown li + li { margin-top: 5px; }
-.conversation-surface .chat-markdown a { color: #385c85; text-decoration: underline; text-underline-offset: 3px; }
+.conversation-surface .chat-markdown a { color: var(--conversation-focus); text-decoration: underline; text-underline-offset: 3px; }
 .conversation-surface .chat-markdown blockquote { margin: 12px 0; border-left: 3px solid var(--conversation-line); padding-left: 14px; color: var(--conversation-muted); }
 .conversation-surface .chat-markdown blockquote p { margin: 0; }
 .conversation-surface .chat-markdown-code {

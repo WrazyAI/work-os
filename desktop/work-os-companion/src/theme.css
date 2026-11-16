@@ -13,6 +13,40 @@
   --inset: #f0f3ed;
   --faint: #939c90;
   --ink-on-signal: #182018;
+
+  /* Shared surface aliases. The chat, guide, and tool styles read these
+     names; each one resolves against the material's own ink and surface
+     steps, so nothing keeps a light-only fallback. */
+  --ink-2: var(--muted);
+  --ink-3: var(--muted);
+  --color-ink-2: var(--muted);
+  --color-ink-3: var(--muted);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-raised: var(--white);
+  --color-signal-deep: var(--signal-deep);
+  --color-warning: var(--warning);
+  --color-observed: var(--observed);
+  --color-observed-soft: var(--observed-soft);
+  --color-observed-ink: var(--observed);
+  --tool-ink: var(--ink);
+  --tool-muted: var(--muted);
+  --tool-faint: var(--faint);
+  --tool-paper: var(--paper);
+  --tool-inset: var(--inset);
+  --tool-hover: var(--inset);
+  --tool-line: var(--line);
+  --tool-line-strong: var(--line-strong);
+  --tool-signal: var(--signal);
+  --tool-signal-strong: var(--signal-deep);
+  --tool-success: var(--signal-deep);
+  --tool-success-soft: #edf7df;
+  --tool-warning: var(--warning);
+  --tool-warning-soft: var(--warning-soft);
+  --tool-danger: var(--danger);
+  --tool-danger-soft: var(--danger-soft);
+  --tool-info: var(--observed);
+  --tool-info-soft: var(--observed-soft);
   --danger-soft: #f9e5e1;
   --warning: #c88918;
   --warning-ink: #6f500d;
@@ -84,7 +118,7 @@
   --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-ink-2: var(--muted);
-  --color-ink-3: var(--faint);
+  --color-ink-3: var(--muted);
   --color-signal: var(--signal);
   --color-signal-strong: var(--signal-deep);
   --color-focus: var(--focus);

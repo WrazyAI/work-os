@@ -1576,7 +1576,7 @@ body {
   min-height: 64px;
   padding: 12px 20px;
   border-bottom: 1px solid #e3e7df;
-  background: #f4f6f1;
+  background: var(--inset);
 }
 
 .active-shift-status,
@@ -2372,7 +2372,7 @@ body {
   min-height: 48px;
   padding: 8px 12px 8px 14px;
   border-bottom: 1px solid #e4e8e0;
-  background: #f4f6f1;
+  background: var(--inset);
 }
 
 .progress-flyout .workos-chat-head .progress-header-actions span {
@@ -4916,18 +4916,18 @@ button:not(:disabled):active {
 }
 
 .progress-input-shell textarea::placeholder {
-  color: #8a9288;
+  color: var(--muted);
 }
 
 .progress-input-shell:focus-within textarea::placeholder {
-  color: #6f786e;
+  color: var(--muted);
 }
 
 .composer-hint {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #8a9288;
+  color: var(--muted);
   font-size: 9px;
   white-space: nowrap;
 }
@@ -7014,7 +7014,7 @@ button:not(:disabled):active {
 }
 
 .notifications-list > li + li {
-  border-top: 1px solid #e8ebe4;
+  border-top: 1px solid var(--line);
 }
 
 .notifications-row {
@@ -7039,7 +7039,7 @@ button:not(:disabled):active {
 }
 
 .notifications-row:hover {
-  background: #f4f6f1;
+  background: var(--inset);
 }
 
 .notifications-row:focus-visible {
@@ -7188,8 +7188,8 @@ button:not(:disabled):active {
 }
 
 .notifications-tab[aria-selected="true"] .notifications-tab-count {
-  background: #263026;
-  color: #f7fbf5;
+  background: var(--ink);
+  color: var(--white);
 }
 
 .notifications-row.admin-notification-decision {
@@ -7308,7 +7308,7 @@ button:not(:disabled):active {
 .notifications-admin-foot {
   margin-top: 3px;
   padding: 9px 16px 13px;
-  border-top: 1px solid #e8ebe4;
+  border-top: 1px solid var(--line);
 }
 
 .notifications-admin-foot button {
@@ -7382,7 +7382,7 @@ button:not(:disabled):active {
   justify-content: space-between;
   gap: 10px;
   padding: 9px 14px;
-  border-bottom: 1px solid #e8ebe4;
+  border-bottom: 1px solid var(--line);
   background: #fff8e8;
   text-align: left;
 }
@@ -7494,9 +7494,9 @@ button:not(:disabled):active {
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  border: 1px solid #dfe6d6;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: radial-gradient(120% 120% at 30% 20%, #f4f9ec 0%, #e8f0dd 100%);
+  background: var(--inset);
 }
 
 .memory-summary-figure .chat-mascot-mark,
@@ -7528,23 +7528,23 @@ button:not(:disabled):active {
 .memory-summary-stats > span { display: grid; justify-items: end; gap: 1px; }
 .memory-summary-stats b { color: var(--ink); font-size: 19px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .memory-summary-stats small { color: var(--muted); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-.memory-summary-stats > span.attention b { color: #7a5312; }
-.memory-summary-stats > span.attention small { color: #8a6417; }
+.memory-summary-stats > span.attention b { color: var(--warning-ink); }
+.memory-summary-stats > span.attention small { color: var(--warning-ink); }
 .memory-summary-loading { color: var(--muted); font-size: 11.5px; }
 .memory-summary-error { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--danger); font-size: 11.5px; }
-.memory-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #f7f6ef; color: var(--ink); font-size: 11px; font-weight: 650; }
+.memory-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--inset); color: var(--ink); font-size: 11px; font-weight: 650; }
 .memory-summary-view {
   min-height: 36px;
   padding: 0 18px;
   border: 0;
   border-radius: 10px;
-  background: #263026;
-  color: #f7fbf5;
+  background: var(--ink);
+  color: var(--white);
   font: 750 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   cursor: pointer;
 }
 
-.memory-summary-view:hover { background: #31402f; }
+.memory-summary-view:hover { background: var(--ink-soft); }
 .memory-summary-view:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
 
 /* Management modal: the settings band stays compact; every fact decision
@@ -7602,7 +7602,7 @@ button:not(:disabled):active {
   cursor: pointer;
 }
 
-.memory-modal-close:hover { background: #ecebe4; color: var(--ink); }
+.memory-modal-close:hover { background: var(--inset); color: var(--ink); }
 .memory-modal-close:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
 
 .memory-tabs { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -7672,7 +7672,7 @@ button:not(:disabled):active {
   min-width: 20px;
   padding: 2px 6px;
   border-radius: 999px;
-  background: #ecebe4;
+  background: var(--inset);
   color: #5f6358;
   font-size: 9.5px;
   font-weight: 700;
@@ -7984,23 +7984,23 @@ button:not(:disabled):active {
 .suggestion-summary-stats > span { display: grid; justify-items: end; gap: 1px; }
 .suggestion-summary-stats b { color: var(--ink); font-size: 19px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .suggestion-summary-stats small { color: var(--muted); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-.suggestion-summary-stats > span.attention b { color: #7a5312; }
-.suggestion-summary-stats > span.attention small { color: #8a6417; }
+.suggestion-summary-stats > span.attention b { color: var(--warning-ink); }
+.suggestion-summary-stats > span.attention small { color: var(--warning-ink); }
 .suggestion-summary-loading { color: var(--muted); font-size: 11.5px; }
 .suggestion-summary-error { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--danger); font-size: 11.5px; }
-.suggestion-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #f7f6ef; color: var(--ink); font-size: 11px; font-weight: 650; }
+.suggestion-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--inset); color: var(--ink); font-size: 11px; font-weight: 650; }
 .suggestion-summary-view {
   min-height: 36px;
   padding: 0 18px;
   border: 0;
   border-radius: 10px;
-  background: #263026;
-  color: #f7fbf5;
+  background: var(--ink);
+  color: var(--white);
   font: 750 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   cursor: pointer;
 }
 
-.suggestion-summary-view:hover { background: #31402f; }
+.suggestion-summary-view:hover { background: var(--ink-soft); }
 .suggestion-summary-view:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
 
 .suggestion-modal {
@@ -8056,7 +8056,7 @@ button:not(:disabled):active {
   cursor: pointer;
 }
 
-.suggestion-modal-close:hover { background: #ecebe4; color: var(--ink); }
+.suggestion-modal-close:hover { background: var(--inset); color: var(--ink); }
 .suggestion-modal-close:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
 
 .suggestion-modal-body {
@@ -8104,7 +8104,7 @@ button:not(:disabled):active {
   min-width: 20px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: #ecebe4;
+  background: var(--inset);
   color: #5f6358;
   font-size: 10px;
   font-weight: 800;
@@ -8209,22 +8209,12 @@ button:not(:disabled):active {
 
 .suggestion-card-foot small { color: var(--muted); font-size: 10px; }
 .suggestion-card-actions { display: flex; gap: 8px; }
-.suggestion-card-actions button {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
+.suggestion-card-actions button { min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); color: var(--ink); font-size: 11px; font-weight: 700; cursor: pointer; }
 
-.suggestion-card-actions button:hover { background: #f4f6f1; }
+.suggestion-card-actions button:hover { background: var(--inset); }
 .suggestion-card-actions button:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
-.suggestion-card-actions button.primary { display: inline-flex; align-items: center; gap: 6px; border-color: #263026; background: #263026; color: #f7fbf5; }
-.suggestion-card-actions button.primary:hover { background: #31402f; }
+.suggestion-card-actions button.primary { display: inline-flex; align-items: center; gap: 6px; border-color: var(--ink); background: var(--ink); color: var(--white); }
+.suggestion-card-actions button.primary:hover { background: var(--ink-soft); }
 .suggestion-card-actions button:disabled { opacity: 0.55; cursor: default; }
 
 @media (max-width: 640px) {
@@ -8299,7 +8289,7 @@ button:not(:disabled):active {
   justify-content: space-between;
   gap: 8px;
   padding: 10px 14px;
-  border-bottom: 1px solid #e8ebe4;
+  border-bottom: 1px solid var(--line);
   background: var(--surface-raised, #fbfcf8);
 }
 
@@ -8319,7 +8309,7 @@ button:not(:disabled):active {
 }
 
 .eod-start-earlier li + li {
-  border-top: 1px solid #e8ebe4;
+  border-top: 1px solid var(--line);
 }
 
 .eod-start-earlier li > button {
@@ -8337,9 +8327,7 @@ button:not(:disabled):active {
   cursor: pointer;
 }
 
-.eod-start-earlier li > button:hover {
-  background: #f4f6f1;
-}
+.eod-start-earlier li > button:hover { background: var(--inset); }
 
 .eod-start-earlier-main {
   min-width: 0;
@@ -8363,7 +8351,7 @@ button:not(:disabled):active {
   width: 100%;
   padding: 9px 14px;
   border: 0;
-  border-top: 1px solid #e8ebe4;
+  border-top: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
   font-size: 10px;

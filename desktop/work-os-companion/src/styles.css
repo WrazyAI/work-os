@@ -1946,7 +1946,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-modal.profile-modal > header p {
   max-width: 560px;
   margin: 7px 0 0;
-  color: #74796f;
+  color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -4560,7 +4560,7 @@ body.modal-open {
 .task-modal.guide-modal > header p {
   max-width: 440px;
   margin: 7px 0 0;
-  color: #74796f;
+  color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -4612,8 +4612,8 @@ body.modal-open {
   aspect-ratio: 2 / 1;
   border-radius: 14px;
   overflow: hidden;
-  background: var(--color-inset, #f0f3ed);
-  border: 1px solid var(--color-line, #d9ded5);
+  background: var(--inset);
+  border: 1px solid var(--line);
   outline: 1px solid rgba(24, 32, 24, 0.05);
   outline-offset: -3px;
 }
@@ -4643,10 +4643,10 @@ body.modal-open {
   gap: 7px;
   min-height: 36px;
   padding: 0 15px;
-  border: 1px solid var(--color-line, #d9ded5);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
-  color: var(--color-ink, #182018);
+  color: var(--ink-on-signal);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -4654,7 +4654,7 @@ body.modal-open {
   box-shadow: 0 1px 2px rgba(20, 30, 18, 0.08), 0 8px 24px rgba(20, 30, 18, 0.12);
 }
 .guide-film-play:hover {
-  background: var(--white);
+  background: #fff;
 }
 .guide-film-progress {
   position: absolute;
@@ -4667,7 +4667,7 @@ body.modal-open {
 .guide-film-progress > span {
   display: block;
   height: 100%;
-  background: var(--color-signal-deep, #5e9d27);
+  background: var(--signal-deep);
   transform-origin: left center;
   transform: scaleX(0);
 }
@@ -4678,7 +4678,7 @@ body.modal-open {
 }
 .guide-film.is-missing p {
   margin: 0;
-  color: var(--color-muted, #687267);
+  color: var(--muted);
   font-size: 12px;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4730,7 +4730,7 @@ body.modal-open {
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
-  color: var(--color-muted, #687267);
+  color: var(--muted);
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
@@ -4742,34 +4742,34 @@ body.modal-open {
   width: 17px;
   height: 17px;
   border-radius: 999px;
-  border: 1px solid var(--color-line, #d9ded5);
-  background: var(--color-raised, #ffffff);
-  color: var(--color-muted, #687267);
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--muted);
   font-size: 9.5px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
 .guide-tour-rail button:hover {
-  color: var(--color-ink, #182018);
-  background: var(--color-inset, #f0f3ed);
+  color: var(--ink);
+  background: var(--inset);
 }
 .guide-tour-rail button.is-done {
-  color: var(--color-ink-soft, #304033);
+  color: var(--ink-soft);
 }
 .guide-tour-rail button.is-done > span {
   border-color: transparent;
-  background: var(--color-inset, #f0f3ed);
-  color: var(--color-signal-deep, #5e9d27);
+  background: var(--inset);
+  color: var(--signal-deep);
 }
 .guide-tour-rail button.is-current {
-  border-color: var(--color-line, #d9ded5);
-  background: var(--color-raised, #ffffff);
-  color: var(--color-ink, #182018);
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
 }
 .guide-tour-rail button.is-current > span {
   border-color: transparent;
-  background: var(--color-signal, #a8f15b);
-  color: var(--color-ink, #182018);
+  background: var(--signal);
+  color: var(--ink-on-signal);
 }
 .guide-tour-footer {
   align-items: center;
@@ -4786,10 +4786,10 @@ body.modal-open {
   width: 16px;
   height: 3px;
   border-radius: 999px;
-  background: var(--color-line, #d9ded5);
+  background: var(--line);
 }
 .guide-tour-track > i.is-past {
-  background: var(--color-signal-deep, #5e9d27);
+  background: var(--signal-deep);
 }
 /* The invitation reads as an offer, not as the decision. */
 .guide-tour-invite::before {
@@ -4799,7 +4799,7 @@ body.modal-open {
   height: 6px;
   margin-right: 7px;
   border-radius: 999px;
-  background: var(--color-signal, #a8f15b);
+  background: var(--signal);
   box-shadow: 0 0 0 3px rgba(168, 241, 91, 0.22);
 }
 @media (max-width: 560px) {
@@ -4864,7 +4864,7 @@ body.modal-open {
   font-weight: 650;
 }
 .guide-step-copy small {
-  color: #6f7369;
+  color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -4880,7 +4880,7 @@ body.modal-open {
   border: 0;
   padding: 10px 0;
   background: transparent;
-  color: #6f7369;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   text-decoration: underline;
@@ -4892,7 +4892,7 @@ body.modal-open {
 }
 .guide-auto-note {
   max-width: 280px;
-  color: #6f7369;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
 }
