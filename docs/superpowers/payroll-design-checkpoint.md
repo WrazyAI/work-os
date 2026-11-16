@@ -15,8 +15,9 @@ Scope: visual brainstorming only. No product code, payroll approval, export, or 
 - [x] Get user feedback on visual direction: structure approved; "fine, not premium"; design polish deferred.
 - [x] Resolve remaining policy and evidence access questions: breaks unpaid; other defaults pending doc review.
 - [x] Write full design.
-- [ ] Independent builder check.
-- [ ] Obtain approval.
+- [x] Independent builder check.
+- [x] GPT-6.1 Sol (medium) review.
+- [x] Obtain approval: rounding, 30-day retention, and payroll recap auto-approval approved.
 - [ ] After approval only: write implementation plan.
 
 ## Confirmed requirements
@@ -31,6 +32,8 @@ Breaks are unpaid and excluded as their own period; a recorded break is never al
 Models: OpenRouter only. Default payroll synthesis/briefs/Q&A DeepSeek V4.1 Flash at high reasoning effort; default frame classification GPT-6 Luna. Either can be overridden through the payroll model variables. No Codex CLI. Work OS already has legacy `audit_profiles`/`audit_runs` and `worktivityAudit.ts` copied from Agent OS; do not revive them (per-user, UTC, Codex-oriented). Reuse only timezone-neutral provider helpers.
 
 Full design: `docs/superpowers/specs/2026-11-16-work-os-payroll-review-design.md`.
+
+Final owner decisions: rounding approved (exact duration, whole-day largest remainder, half-up, payable-first ties). Retention approved as 30 days after the later of pay date, approval, or first export; raw screenshots keep their existing expiry; the exported CSV/print is the durable record. Pending recaps are auto-approved for payroll on the pay date (default 06:00 employee-local) with `payroll_auto` provenance, never employee confirmation; a missed cron is covered by the on-demand ensure. The auto-approval is an hourly `CRON_SECRET` route and records a new immutable `work_recap_reviews` version; it does not generate next steps or check-ins. Employee recap surfaces show the auto-approval notice and provenance.
 
 ## Visual direction
 Use existing Work OS roles: canvas #eef1eb, raised #ffffff, ink #182018, muted #62685f, observed #2e617d, warning text #805611; signal #a8f15b reserved for the forward action. Local Segoe UI/system sans with tabular time readings; no remote font requests.

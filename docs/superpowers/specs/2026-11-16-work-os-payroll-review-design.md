@@ -1,6 +1,6 @@
 # Work OS payroll review — design
 
-**Status:** Reviewed design — product-owner questions in §19
+**Status:** Approved design — auto-approval and retention decisions recorded in §19
 **Date:** 2026-11-16
 **Audience:** Work OS administrators
 **Scope:** A new admin-only payroll evidence and hours-review surface for Work OS.
@@ -96,6 +96,16 @@ These came from the product conversation and are fixed for this design:
 - **Approval:** snapshots the period; later evidence requires an explicit,
   audited reopen.
 - **Screenshots:** flagged or disputed evidence only, with a recorded reason.
+- **Pending recap review at payroll:** an unreviewed recap whose working day
+  falls inside the pay period is auto-approved for payroll on the pay date. It
+  is recorded with `payroll_auto` provenance, never presented as an employee
+  confirmation. The employee is told that unreviewed recaps will be
+  auto-approved. The approval unit is the recap; screenshots are its evidence,
+  not separately approved artifacts.
+- **Retention:** payroll-specific analysis is retained for 30 days after the
+  later of the pay date, approval, or first export, then purged. Raw screenshots keep
+  their existing per-row expiry and are never re-fetched. The exported CSV/print
+  is the durable payroll record.
 
 ## 4. Product shape
 
@@ -144,7 +154,8 @@ Its structure is the approved mockup:
    the largest number in the surface, and it is text, not a ring.
 3. **Progress.** Week 1 and Week 2 briefs side by side, each with its dates,
    theme, 2–4 short paragraphs or themed bullets, source count, and `Read source
-   recaps`.
+   recaps`. A quiet provenance line states how many source recaps were employee
+   reviewed vs payroll-auto-approved.
 4. **Daily record.** One flat table of workdays: date, tracked, recommended,
    unresolved, evidence state, recap count. A row opens the day review.
 5. **App context.** App distribution and Worktivity productivity labels as
@@ -188,6 +199,8 @@ Approval is available only when:
 - every material finding is resolved;
 - every workday has an effective schedule (a missing schedule is corrected in
   the person's schedule, not bypassed);
+- every ready recap whose working day falls in the period is either employee
+  reviewed or payroll-auto-approved;
 - no included session has `correction_status` of `needs_correction` or `invalid`,
   or an open/unresolved clock boundary;
 - the administrator has reviewed the totals, including any manual adjustment.
@@ -659,7 +672,8 @@ Each review stores a `source_hash` over:
   correction status;
 - the selected activity log sample ids and their source fields;
 - the screenshot summary ids, prompt versions, and processing statuses;
-- the activity interval ids, revisions, and review statuses;
+- the activity interval ids, revisions, review statuses, and `review_source`
+  (including any `payroll_auto` approval and its pay date);
 - the payroll context revision.
 
 Also hash the verified provider identity/connection scope, normalized source
@@ -790,8 +804,9 @@ Source selection:
 - `work_activity_intervals` with `generation_status = 'ready'`, assigned to the
   week by their session `shift_date` (otherwise their stored `local_date`);
   never duplicate an overnight/cross-week recap into both briefs;
-- prefer `confirmed` and `amended` recaps; include `inferred` recaps with their
-  provenance;
+- prefer employee-reviewed `confirmed` and `amended` recaps; include
+  `payroll_auto` recaps with that provenance and include any remaining `inferred`
+  recap only with its unapproved provenance;
 - include the recap's headline, detail, activity bullets, uncertainties, app
   context, and recorded GitHub activity when present;
 - include separately recorded outcomes (completed tasks, output evidence) only
@@ -885,6 +900,49 @@ per-admin/organization rate limits, input/context limits, and a total call/token
 budget across the tool loop (not eight independent 90-second calls). Suggested
 questions are optional; failure does not block analysis or approval.
 
+### 8.6 Payroll auto-approval of pending recaps
+
+The employee is expected to review their recaps. If a ready recap's working day
+falls inside the pay period and it is still `inferred` when payroll is due, Work
+OS auto-approves it for payroll. The approval unit is the recap; screenshots are
+its evidence. There is no separate employee frame-approval step. A frame whose
+recap never generated remains available to the payroll analysis under existing
+retention and is treated as evidence, not as an approved recap. Auto-approval
+does not re-analyze, re-retain, or individually approve raw frames.
+
+**When.** A `CRON_SECRET` route
+`POST /api/work-os/evidence/activity-intervals/auto-approve-payroll` runs hourly.
+For each person with a mapping and ready recaps in a period whose local date is
+a pay date (the 1st or 16th) and whose local time is at or after
+`WORK_OS_PAYROLL_AUTO_APPROVE_HOUR` (default 06:00), it resolves the period and
+processes ready `inferred` intervals whose session `shift_date` (or stored
+`local_date`) falls in that period. Current active status is not a filter: a
+person terminated after the period still gets their period recaps approved.
+Creating or analyzing a payroll review on or after the pay date calls the same
+idempotent ensure first, so a missed cron cannot leave the policy unapplied.
+Nothing is auto-approved before the pay date. A missing timezone is a setup
+warning; the cron skips that person and the review's frozen period timezone is
+used by the on-demand ensure.
+
+**Effect.** The interval becomes `review_status='confirmed'` with
+`review_source='payroll_auto'`, and a new immutable `work_recap_reviews` version
+records `reviewSource='payroll_auto'`, the `payrollDate`, and the coverage line
+`Auto-approved for payroll; no employee review recorded. Not task completion or
+attendance.` `next_steps_status` becomes `skipped`; auto-approval never
+generates task suggestions. The employee can still amend later; that appends a
+new version and marks any payroll review stale/reopened. The operation is
+idempotent per interval and pay date, bounded per run, uses the organization
+clock lock and a per-interval transaction, and writes
+`activity_interval.payroll_auto_approved` to the audit log with the system
+actor, pay date, and recap version. Failed or unavailable recaps are skipped and
+remain evidence gaps; consent and feature flags are respected.
+
+**Employee notice.** The recap review surface states, in one quiet line,
+`Unreviewed recaps are auto-approved for payroll on <next pay date>.` It is
+informational, not a second approval control. A payroll-auto recap's provenance
+chip reads `Auto-approved for payroll`, never `Confirmed`, so the record never
+claims the employee reviewed it.
+
 ## 9. Data model
 
 All new tables are organization-scoped and use `organization_id` on every row.
@@ -926,6 +984,7 @@ One row per person per pay date.
 | `current_approval_id uuid` | points at the latest immutable approval row |
 | `approved_minutes int`, `approved_by uuid`, `approved_at timestamptz`, `approval_note text` | current approval quick read |
 | `evidence_changed_since_approval boolean` | derived marker; set when the approved snapshot hash no longer matches current sources |
+| `retention_expires_at timestamptz` | 30 days after the later of pay date, approval, or first export |
 | `last_analyzed_at`, `last_exported_at` | freshness |
 | `created_at`, `updated_at` | |
 
@@ -1134,7 +1193,29 @@ Durable analysis state.
 Unique partial index on `review_id` where `status in ('queued','running')`;
 index on `(status, lease_until)`.
 
-### 9.10 Legacy tables
+### 9.10 Existing recap review additions
+
+Auto-approval must be real provenance, not a fake employee confirmation.
+
+- `work_activity_intervals` gains nullable `review_source text` with values
+  `employee`, `admin`, or `payroll_auto`; it is null while `review_status` is
+  `inferred`. Existing confirmed/amended rows backfill to `employee`.
+- `work_recap_reviews` gains `review_source text not null default 'employee'`
+  and nullable `payroll_date date`; existing rows backfill to `employee`. The
+  immutable trigger stays; auto-approval only inserts a new version.
+- `ReviewedRecap` gains `reviewSource` and optional `payrollDate`. The content
+  hash includes both, so an auto-approval and an employee confirmation of the
+  same text are distinct versions.
+- The employee decision path writes `employee`; an explicit administrator
+  review writes `admin`; auto-approval writes `payroll_auto`. The existing
+  `review_status='confirmed'` means "approved for use," and `review_source`
+  says who approved it.
+- The auto-approval uses a system-scoped transaction; it reuses the
+  organization clock lock and review-ledger append path but never impersonates
+  an employee. The employee projection and any recap UI must read
+  `review_source` before rendering `Confirmed`.
+
+### 9.11 Legacy tables
 
 The repository contains an unused Agent OS-era `audit_profiles` /
 `audit_runs` pair and `worktivityAudit.ts`. Payroll does **not** revive them:
@@ -1145,7 +1226,7 @@ its UI. `fetchAllLogs` and `fetchAppsSummary` use UTC-date query assumptions;
 they are not employee-timezone-neutral as written. Adapt their boundaries and
 pagination explicitly as required in §10.3 rather than importing legacy rollups.
 
-### 9.11 Analysis revision manifest
+### 9.12 Analysis revision manifest
 
 Add `work_payroll_analysis_revisions` with organization/review/person scope,
 unique `(organization_id, review_id, revision)`, originating run, frozen `as_of`,
@@ -1211,7 +1292,11 @@ run never mutates an approved review: require audited reopen first.
 
 ### 10.3 Phases
 
-1. **Activity.** Fetch complete Worktivity `ActivityLogs` once per run/person,
+1. **Recaps.** Run the idempotent payroll auto-approval ensure for this person
+   and pay date before reading recaps. On or after the pay date it approves
+   ready `inferred` recaps in the period with `payroll_auto` provenance; before
+   the pay date it is a no-op.
+2. **Activity.** Fetch complete Worktivity `ActivityLogs` once per run/person,
    using exact UTC bounds covering all owned shifts/grace plus provider padding,
    then filter locally by verified EmployeeId and bounds. Persist each page and
    completeness watermark in the run input artifact; an in-memory cache is not
@@ -1224,19 +1309,19 @@ run never mutates an approved review: require audited reopen first.
    concurrency to two active person runs and one provider request per advancer,
    with a shared credential-scoped limiter honoring 5/sec, 100/min, 1000/hour
    across browser/cron runs; per-request sleep is not a global limiter.
-2. **Evidence.** For each day, find processed screenshot summaries and recaps.
+3. **Evidence.** For each day, find processed screenshot summaries and recaps.
    Trigger the existing bounded screenshot preparation only for frames allowed
    by its existing consent, feature, date and exclusion policy; payroll does not
    authorize historical backfill or re-retention of expired frames. Do not block
    on every frame. Record
    `screenshots_pending`, `frames_available`, and `evidence_expired`.
-3. **Classify.** For each day, build candidate intervals and classify only the
+4. **Classify.** For each day, build candidate intervals and classify only the
    ambiguous frames. Reuse `work_payroll_frame_findings`.
-4. **Days.** Compute deterministic totals and findings; upsert days and findings;
+5. **Days.** Compute deterministic totals and findings; upsert days and findings;
    compute the period totals.
-5. **Briefs.** Generate Week 1 and Week 2 briefs from the selected recaps. A
+6. **Briefs.** Generate Week 1 and Week 2 briefs from the selected recaps. A
    brief failure does not fail the day analysis.
-6. **Done.** Set `ready` or `needs_review`, update `source_hash` and
+7. **Done.** Set `ready` or `needs_review`, update `source_hash` and
    `analysis_revision`, and mark the run done (retain its provenance).
 
 Phases are idempotent within the run's target revision. Upsert by the natural
@@ -1298,6 +1383,8 @@ Approval is refused unless:
   corrected in the person's schedule, not bypassed);
 - every scheduled working day with no session and no activity has been
   acknowledged as `No work recorded`;
+- every ready recap whose working day falls in the period is employee reviewed
+  or payroll-auto-approved;
 - no included session has `correction_status` of `needs_correction` or `invalid`,
   and all clock/pause boundaries are closed and valid;
 - the administrator confirms the totals.
@@ -1482,6 +1569,7 @@ Write `work_audit_log` rows for:
 
 - payroll review created;
 - analysis started, completed, failed, canceled;
+- recap payroll-auto-approved, with pay date, interval, and review version;
 - finding resolved, reopened, or bulk-resolved;
 - manual adjustment added or removed;
 - review approved, reopened;
@@ -1491,25 +1579,33 @@ Write `work_audit_log` rows for:
 
 ### 13.3 Retention
 
-- Screenshot bytes: existing per-row `expires_at`/`deleted_at` retention; no
+- **Payroll-specific artifacts:** reviews, days, findings, decisions, week
+  briefs, Q&A turns, run inputs/manifests, approval snapshots, and payroll audit
+  entries are retained for **30 days after the later of the pay date, approval,
+  or first export**. If a review is never approved or exported, the anchor is the
+  pay date.
+  A daily purge job removes those rows and their targeted audit entries.
+- **Raw screenshots:** existing per-row `expires_at`/`deleted_at` retention; no
   payroll-specific extension or re-fetch of expired evidence. Current ingestion
   sets expiry 30 days after processing, not necessarily capture time. The
   retention job removes bytes and old hourly rollups, not retained per-frame
   summary/recap text. Payroll must respect actual row availability and not
   promise a new 30 days at each pay-period analysis.
-- Screenshot summaries, recaps, findings, briefs, approvals, Q&A turns, and
-  exports metadata: retained as payroll records; no automatic deletion in v1.
+- **Employee recaps and reviews are not payroll-specific:** the auto-approval
+  provenance remains part of the employee's recap record under its existing
+  retention. The payroll purge does not delete employee recaps or their review
+  ledger.
+- **Durable record:** the exported CSV and print view are the durable payroll
+  record; the operator archives them outside Work OS before the 30-day purge.
+- **Legal deletion/correction:** do not silently rewrite an approval receipt.
+  Preserve an audited tombstone where lawful, and honor a documented legal hold
+  instead of the normal purge.
 - The UI states when image evidence has expired and relies on the stored text.
-- A future retention policy must preserve approval snapshots and audit history.
 
-Do not disable existing source-retention jobs to retain payroll evidence. Freeze
-only the minimal sanitized explanation/citations required by a receipt, and keep
-provider input artifacts access-restricted (no signed URLs) until the review is
-superseded and its provenance requirements are met. Indefinite payroll retention
-and processing purpose require operator/legal sign-off before production (§19);
-withdrawal of screenshot consent is not blanket permission to copy sensitive
-content indefinitely. Legal deletion/correction procedures must be explicit and
-must never silently rewrite a receipt; preserve an audited tombstone where lawful.
+Do not disable existing source-retention jobs to retain payroll evidence. Keep
+provider input artifacts access-restricted (no signed URLs). Withdrawal of
+screenshot consent is not blanket permission to copy sensitive content beyond
+the 30-day payroll window.
 
 ## 14. Failure modes
 
@@ -1528,6 +1624,10 @@ must never silently rewrite a receipt; preserve an audited tombstone where lawfu
 | Concurrent review | Optimistic revision check; 409 conflict; reload. |
 | Duplicate run | Unique active-run index; return the existing run. |
 | Server restart | Lease expires; next advance/cron resumes; partial rows are idempotent. |
+| Auto-approval cron missed | Creating or analyzing the payroll review on/after the pay date runs the same idempotent ensure; the policy is still applied. |
+| Employee amends after auto-approval | A new review version is appended; the payroll review's source hash changes and it becomes stale/reopened. |
+| Recap not ready at pay date | It is skipped; the recap gap stays visible and the payroll brief reports no recap for that window. |
+| Auto-approval retried hourly | Idempotent per interval/pay date; no duplicate review versions or next-step generation. |
 | DST/timezone change | UTC elapsed durations, explicit offsets; ambiguous/nonexistent unstamped boundaries block; `timezone_changed` notice. |
 | Overnight shift | Attributed to `shift_date`; window crosses midnight correctly. |
 | Split shift | Multiple sessions summed; overlaps deduped. |
@@ -1555,9 +1655,14 @@ must never silently rewrite a receipt; preserve an audited tombstone where lawfu
   permutation/duplicate invariance, decision retry invariance; largest-remainder
   ties/subminute slices, 179/180/181 seconds, sparse samples and leading/trailing gaps.
 - Findings: auto vs review vs resolved, manual adjustments.
+- Auto-approval: pay-date scope, employee-local 06:00 boundary, inferred-only,
+  payroll_auto provenance, idempotent hourly retries, no next steps/check-ins,
+  failed/unavailable recaps skipped, employee amendment after auto-approval.
 - Approval: blocked conditions, snapshot immutability, reopen versioning.
 - Export: stable headers, minutes/hours, snapshot-only, sanitization.
 - Staleness: each source change flips the hash.
+- Retention: 30-day anchor, purge of payroll rows only, employee recap/review
+  ledger preserved, export remains the durable record.
 
 ### 15.2 API tests
 
@@ -1570,6 +1675,8 @@ must never silently rewrite a receipt; preserve an audited tombstone where lawfu
   crash between row write/cursor update, and out-of-order retries. A mocked
   in-memory lease or static SQL match is not concurrency evidence.
 - Finding resolution and bulk resolution.
+- Auto-approval cron auth, bounded batch, pay-date/timezone selection, idempotency,
+  and on-demand ensure from review creation.
 - Approval refusal and success.
 - Reopen and revision history.
 - CSV content type, disposition, row counts, no raw paths.
@@ -1590,6 +1697,8 @@ must never silently rewrite a receipt; preserve an audited tombstone where lawfu
 - Design tokens only; no new palette.
 - Accessibility and responsive checks at the four reference widths.
 - Empty/loading/dense/error/stale/approved/reopened states rendered.
+- Auto-approved recap provenance reads `Auto-approved for payroll`, never
+  `Confirmed`; the employee notice and brief provenance line render.
 - TestSprite when a reusable fixture exists or is needed.
 
 ### 15.4 Live acceptance
@@ -1599,6 +1708,9 @@ must never silently rewrite a receipt; preserve an audited tombstone where lawfu
   counts, and totals.
 - Verify one full flow: analyze → review a finding → approve → export → reopen.
 - Verify the cron advance route with a queued run.
+- Verify payroll auto-approval on a disposable fixture: pending recap → cron /
+  on-demand ensure → `payroll_auto` version → brief provenance → employee
+  amendment makes the payroll review stale.
 - Stop the browser, expire a worker lease/restart the app, resume via service
   scheduler, and prove old fenced writes cannot publish. Verify provider pagination,
   capture direction/duration, person filtering and rate limits read-only before
@@ -1637,6 +1749,8 @@ reinterpret the time/state/security rules above. To avoid contradictory options:
 - Zero-work scheduled dates and zero-work approvals require explicit notes/
   acknowledgements as defined above; an empty data fetch is not proof of zero.
 - Re-analysis preserves only source/span/rule-identical decisions with provenance.
+- Payroll auto-approval runs hourly with a 06:00 employee-local default hour;
+  the same idempotent ensure runs from payroll review creation/analysis.
 - The Work OS cron workflow invokes the Agent OS-hosted service; verify secrets
   and scheduler wiring in deployment, not a new durable-worker platform.
 
@@ -1651,18 +1765,20 @@ reinterpret the time/state/security rules above. To avoid contradictory options:
 - A week brief that reads like generic filler or claims work that the recaps do
   not support.
 
-## 19. Remaining product-owner questions
+## 19. Resolved owner decisions
 
-1. **Rounding:** approve the proposed exact-duration/whole-day largest-remainder
-   minute allocation in §6.8, including half-up day rounding and employee-fair
-   payable-first ties, or specify the required payroll rounding policy. This can
-   change an exported minute and must not be chosen implicitly by a builder.
-2. **Retention and lawful processing:** approve the v1 indefinite retention of
-   minimal sanitized payroll receipts, decisions, Q&A and audit metadata, and
-   confirm the payroll-processing purpose/consent and deletion obligations with
-   the operator's legal/privacy owner. If indefinite retention is not permitted,
-   provide the retention period and lawful exception rules before production.
-   Existing 30-day raw-image retention must not be extended either way.
+1. **Rounding:** approved. Use exact-duration calculation, whole-day
+   largest-remainder allocation to integer minutes, half-up day rounding, and
+   payable-first ties. Period totals sum displayed days.
+2. **Retention:** approved as 30 days. Retain the full payroll analysis until
+   30 days after the later of the pay date, approval, or first export; if never
+   approved or exported, 30 days after the pay date. Raw screenshots keep their existing
+   per-row expiry and are never re-fetched. The exported CSV/print is the
+   durable payroll record.
+3. **Pending recaps:** approved. Pending recaps in the period are auto-approved
+   for payroll on the pay date with `payroll_auto` provenance, never employee
+   confirmation. The default auto-approval hour is 06:00 employee-local and is
+   configurable; a missed cron is covered by the on-demand ensure.
 
 Provider capture semantics/capabilities, historical correction paths and cron
 wiring are engineering verification gates, not product questions. Until proven,
