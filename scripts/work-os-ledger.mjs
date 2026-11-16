@@ -352,7 +352,7 @@ Usage: node scripts/work-os-ledger.mjs <command> [options]
 
 Commands:
   create   --file <path> | --json '<doc>'   Create tasks and subtasks
-  list     [--query <text>] [--limit N]     List open ledger tasks (--include-archived for tombstones) (--include-archived for tombstones)
+  list     [--query <text>] [--limit N]     List open ledger tasks (--include-archived for tombstones)
   get      <taskId> [--include-archived]   Show one task with subtasks
   describe <taskId> --description <text>    Update a task description
   complete <taskId> [<taskId>...]           Complete tasks and read back
@@ -364,7 +364,6 @@ Options:
   --label <name>          Extra label besides ${LEDGER_LABEL}
   --dry-run               Validate and print without writing
   --include-completed     Include completed tasks in list
-  --include-archived      Include archived and deleted tasks
   --include-archived      Include archived and deleted tasks
   --json-output           Machine-readable result
   --token-file <path>     Read the bearer token from a file
