@@ -62,12 +62,17 @@ export type PayrollFrameResult = {
   confidence: number; reason: string; app: string | null;
   sourceHash: string; model: string; promptVersion: string; classificationKey: string;
 };
+export type PayrollFrameSignal = {
+  span: Span; category: PayrollFrameResult["category"]; confidence: number;
+  citations: PayrollCitation[]; findingKey?: string;
+};
 export type PayrollDayInput = {
   scope: PayrollScope; date: string; week: 1 | 2; timezone: string;
   sessions: { id: string; recorded: Span | null; eligible: Span | null; closed: boolean;
     scheduleSource: string; correctionStatus: string }[];
   breaks: { span: Span; source: string }[]; pauseResidualMs: number; captures: NormalizedActivity[];
   exceptions: { span: Span; kind: "meeting" | "training" | "reading" | "work"; citations: PayrollCitation[] }[];
+  frameSignals?: PayrollFrameSignal[];
   frameCandidates: PayrollFrameContext[]; blockers: string[]; sourceHash: string;
 };
 export type PayrollPartition = { span: Span; category: Category; findingKey: string | null }[];
@@ -79,6 +84,8 @@ export type PayrollDayResult = {
   id: string | null; scope: PayrollScope; date: string; week: 1 | 2;
   partition: PayrollPartition; exactMs: Record<Category, number>; minutes: PayrollTotals;
   findings: PayrollFinding[]; blockers: string[]; sourceHash: string; decisionKeys: string[];
+  decisionState?: Record<string, "payable" | "excluded" | "acknowledged">;
+  decisionAmounts?: Record<string, number>;
 };
 export type PayrollWeekSources = {
   scope: PayrollScope; week: 1 | 2; from: string; through: string; sourceHash: string;
