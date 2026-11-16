@@ -64,6 +64,24 @@ describe("soft ash theme tokens", () => {
     }
   });
 
+  it("re-materializes every onboarding surface that carries a light literal", () => {
+    for (const selector of [
+      ".guided-onboarding",
+      ".onboarding-workspace > header",
+      ".profile-board section > header",
+      ".phase-actions",
+      ".day-selector button[aria-pressed=\"true\"]",
+      ".archetype-grid button[aria-pressed=\"true\"]",
+      ".provider-line .ok",
+      ".suggestion-note",
+      ".consent-box",
+      ".consent-box small",
+    ]) {
+      expect(darkBlock).toContain(selector);
+    }
+    expect(darkBlock).toContain("background: var(--canvas)");
+  });
+
   it("defines all eight chart hues in both materials", () => {
     for (let index = 1; index <= 8; index += 1) {
       expect(css.match(new RegExp(`--chart-${index}:`, "g"))?.length ?? 0).toBeGreaterThanOrEqual(2);

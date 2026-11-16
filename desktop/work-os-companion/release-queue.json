@@ -354,6 +354,10 @@
       "type": "fix",
       "summary": "The Soft ash theme keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.",
       "verification": "Branch codex/theme-contrast-fixes: themeSurfaceContrast 13/13; companion 223 files/1972 tests; companion typecheck and production build; Work OS 1329 tests with 1318 pass, 0 fail, 11 skipped; rendered dark and light screenshots at 1440 and 420 for the dashboard count hover, completion evidence, memory band, full tour, EOD earlier-day hover, activity card, floating task footer and receipt, and agenda card; computed dark ink and hover steps confirmed on each surface."
+      "id": "onboarding-dark-mode",
+      "type": "fix",
+      "summary": "Onboarding stays fully dark in dark mode, with readable fields, labels, selected workdays, and consent.",
+      "verification": "Local companion preview: rendered all five setup steps in light and dark; dark text contrast 6.7-18.4:1 on the setup panel; theme contrast suite 8/8; light-mode layout unchanged."
     }
   ],
   "emergency": null,

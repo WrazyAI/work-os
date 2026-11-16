@@ -243,6 +243,69 @@
     --ob-signal-deep: var(--signal-deep);
     --ob-danger: var(--danger);
   }
+  /* The setup panel and its footer carry light literals in the base sheet.
+     Re-material them here so dark mode is one surface, not light paper with
+     light text. Selection stays quiet: a signal-tinted inset, not a neon card. */
+  .guided-onboarding {
+    background: var(--canvas);
+    color: var(--ink);
+  }
+  .onboarding-workspace > header {
+    border-bottom-color: var(--line);
+  }
+  .onboarding-workspace > header > span,
+  .phase-intro > span {
+    color: var(--muted);
+  }
+  .profile-board section > header {
+    background: var(--inset);
+  }
+  .phase-actions {
+    background: color-mix(in srgb, var(--canvas) 96%, transparent);
+    border-top-color: var(--line);
+  }
+  .day-selector {
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+  }
+  .day-selector button:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .day-selector button[aria-pressed="true"],
+  .archetype-grid button[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--signal) 14%, var(--paper));
+    border-color: var(--signal-deep);
+    color: var(--ink);
+  }
+  .archetype-grid button[aria-pressed="true"] strong {
+    color: var(--ink);
+  }
+  .archetype-grid button[aria-pressed="true"] small {
+    color: var(--muted);
+  }
+  .provider-line .ok {
+    color: var(--signal-deep);
+  }
+  .suggestion-note {
+    background: color-mix(in srgb, var(--signal) 12%, var(--paper));
+    color: var(--ink-soft);
+  }
+  .consent-box {
+    background: color-mix(in srgb, var(--signal) 7%, var(--paper));
+    border-color: color-mix(in srgb, var(--signal-deep) 34%, var(--line));
+  }
+  .consent-box input[type="checkbox"] {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .consent-box input[type="checkbox"]:checked {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231d2815' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  }
+  .consent-box small {
+    color: var(--faint);
+  }
+  .stale-status {
+    color: var(--warning-ink);
+    background: var(--warning-soft);
+  }
   .otto-view-menu {
     --conversation-paper: var(--paper);
     --conversation-surface: var(--surface);
