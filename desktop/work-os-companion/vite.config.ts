@@ -7,7 +7,19 @@ import { textScalePlugin } from "./src/textScale";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  resolve: { dedupe: ["react", "react-dom"] },
+  resolve: {
+    dedupe: ["react", "react-dom"],
+    // Shared modules under the repository's src/modules/work-os resolve their
+    // React imports from this package. The companion CI installs only its own
+    // dependencies, so point every React entry at the companion copy instead
+    // of walking up to a root node_modules that is not installed there.
+    alias: [
+      { find: /^react$/, replacement: resolve(__dirname, "node_modules/react/index.js") },
+      { find: /^react\/jsx-runtime$/, replacement: resolve(__dirname, "node_modules/react/jsx-runtime.js") },
+      { find: /^react-dom$/, replacement: resolve(__dirname, "node_modules/react-dom/index.js") },
+      { find: /^react-dom\/client$/, replacement: resolve(__dirname, "node_modules/react-dom/client.js") },
+    ],
+  },
   // The monorepo root has its own postcss.config.mjs (for the web app). This
   // inline config stops Vite/Vitest from searching upward and trying to load
   // plugins that the companion package does not install. Tailwind here comes
