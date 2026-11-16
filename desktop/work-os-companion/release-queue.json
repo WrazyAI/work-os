@@ -372,14 +372,14 @@
       "type": "fix",
       "summary": "The Today’s focus dialog’s plan reads as one grouped list with a thin scrollbar at the dialog edge instead of a stack of rules.",
       "verification": "Rendered ?preview-tasks&many at 1280x900, 1004x430, and 560x820 in Light and Dark: no per-row borders, symmetric 39px/39px content insets with a 10px edge scrollbar, expanded subtasks and keyboard focus intact. Companion typecheck clean; companion 222 files/1962 tests pass."
+    },
+    {
+      "id": "floating-eod-action-contrast",
+      "type": "fix",
+      "summary": "The floating companion’s EOD shortcut stays dark-on-green in every theme, so it remains readable in dark mode.",
+      "verification": "Dark-theme render of ?window=avatar&avatar-fixture=eod-bubble: .avatar-prompt-action contrast 1.20:1 before, 11.27:1 after (ink-on-signal #1d2815 on signal #a8f15b); bubble 15.54:1, body 10.62:1, elapsed pill 15.36:1. themeSurfaceContrast 14/14; AvatarPromptBubble 3/3."
     }
   ],
   "emergency": null,
-  "operatorOverride": {
-    "version": "0.5.33",
-    "updateId": "soft-ash-theme-across-companion",
-    "approvedBy": "operator",
-    "reason": "The operator explicitly requested the merged Soft ash theme be released now for immediate installation and verification, ahead of the five-outcome threshold.",
-    "approvedAt": "2026-11-16"
-  }
+  "operatorOverride": null
 }
