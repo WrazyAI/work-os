@@ -268,19 +268,27 @@ For each `work_sessions` row:
 - Pre-shift time is excluded even when the employee clocked in early.
 - Post-shift recorded activity inside the 60-minute grace is eligible.
 - Time at or beyond `scheduled_end + 60 minutes` is outside the window.
-- A day with no effective schedule or session schedule is `no_schedule`; it
-  cannot be approved until corrected.
-- A day with activity but no mirrored session is `no_session`; it cannot be
-  approved until the session is reconciled.
+- A scheduled working day with no effective schedule or session schedule is
+  `no_schedule`; it cannot be approved until corrected.
+- A scheduled working day with activity but no mirrored session is `no_session`;
+  it cannot be approved until the session is reconciled.
+- A scheduled working day with no session and no activity is still materialized
+  as a `no_work` day. The administrator acknowledges `No work recorded`; it does
+  not block the rest of the period and it does not disappear from the daily
+  record.
+- A leave day is materialized as `leave` with zero payable time and no approval
+  block.
 
 The effective schedule for a date comes from the active `work_schedules` row,
 overridden by a `work_schedule_exceptions` row for that date. `leave` means no
 workday. `changed_shift` replaces the times. `working_day` adds a day.
 
-Split shifts and multiple sessions on one local date are summed in the same day
-record. Overnight sessions are attributed to the session's `shift_date`, not to
-the calendar date of each activity sample. Overlapping session or activity
-intervals are unioned by minute so no minute is counted twice.
+Every scheduled working day in the period gets a day row, whether or not a
+session was mirrored. Split shifts and multiple sessions on one local date are
+summed in the same day record. Overnight sessions are attributed to the
+session's `shift_date`, not to the calendar date of each activity sample.
+Overlapping session or activity intervals are unioned by minute so no minute is
+counted twice.
 
 ### 6.3 Tracked time
 
@@ -308,11 +316,16 @@ Sources, in order:
 1. Scheduled `break_windows` on the effective schedule.
 2. Worktivity activity logs with `Status = 2` (OnBreak), grouped into continuous
    runs using the inferred cadence.
-3. The session's `provider_break_seconds` as a cross-check.
+3. Manual session pauses: `work_session_events` pause/resume intervals when they
+   exist; otherwise the session's accumulated `paused_seconds` as a day-level
+   break total. Manual pause is a real break whether or not Worktivity's
+   authoritative-break flag is enabled.
+4. The session's `provider_break_seconds` as a cross-check.
 
-A derived break run becomes a `break` finding with its time range and source. It
-is deducted from tracked time and excluded from the inactivity analysis, so the
-same minutes cannot be deducted twice.
+Overlapping break sources are unioned, so a scheduled break and a provider break
+covering the same minutes deduct once. A derived break run becomes a `break`
+finding with its time range and source. It is deducted from tracked time and
+excluded from the inactivity analysis.
 
 If recorded activity appears during a scheduled break, or the derived break
 total disagrees materially with the provider's break seconds, the interval is
@@ -344,11 +357,23 @@ Exception evidence:
   person's payroll context, or a confirmed/amended recap;
 - an explicit administrator decision.
 
-If an exception is established, the run is `auto_payable` and visible but not
-deducted. If the evidence is ambiguous, missing, or a vision classification
-fails, the run is `needs_review`; it is not deducted and it is not included in
-the recommended total until resolved. If the run is confirmed zero with no
-exception, it is `auto_excluded`.
+The decision table is deliberately conservative:
+
+| Evidence on the qualifying run | Result |
+|---|---|
+| Frame or stored summary establishes meeting, training, or work-related reading | `auto_payable` — visible, not deducted |
+| Frame classified `work` at or above the confidence floor | `auto_payable` — visible, not deducted |
+| Frame classified `idle` or `nonwork` at or above the confidence floor, and no exception evidence | `auto_excluded` — deducted, visible, reversible in review |
+| No frame, summary expired, consent withdrawn, policy-excluded frame, or vision failure | `needs_review` — held out of the recommended total, never auto-deducted |
+| Frame classified `unclear`, or confidence below the floor | `needs_review` — held out, never auto-deducted |
+| Person context names the app as legitimate, but the frame is `idle`/`nonwork` | `needs_review` — context explains a flag, it does not override a clear non-work frame |
+
+`auto_excluded` is therefore available only when the provider confirms 0%
+activity and an available, non-excluded frame positively shows idleness or
+non-work. Every other missing or ambiguous case is a human decision. A
+consent-withdrawn or image-expired employee can still reach a ready review, but
+their qualifying runs are held and must be resolved by the administrator rather
+than silently deducted.
 
 A single 0% sample whose slice is at least 3 minutes can qualify. A series of
 short 0% slices qualifies only when their combined continuous duration reaches
@@ -386,21 +411,34 @@ tracked          = union(session intervals, activity intervals) ∩ eligible win
 break            = union(break intervals) ∩ tracked
 inactivity       = confirmed 0% runs ∩ tracked ∩ not break ∩ no exception
 outside          = union(recorded time) − eligible window
-unresolved       = findings still in needs_review
-recommended      = tracked − break − inactivity − unresolved
+held             = findings whose effect is "hold"
+recommended      = tracked − break − inactivity − held
                    + resolved_payable + manual_inclusions − manual_exclusions
 approved         = recommended at the moment of approval
 ```
 
-`resolved_payable` is the sum of review findings the administrator counted as
-work. A finding resolved as excluded simply leaves `unresolved` and is not added
-back; it is not subtracted a second time. Manual exclusions are subtracted
-separately and always carry a reason. `unresolved` is not deducted; it is held
-out of the recommended total until decided.
+Every finding carries an `effect` so a decision moves the total exactly once:
 
-"Material finding" in the approval rules means any finding currently in
-`needs_review` or `low_evidence`. `auto_payable` and `auto_excluded` findings are
-visible but do not block approval.
+| Finding | Effect | What a decision does |
+|---|---|---|
+| `break` | `exclude` | Already deducted; no further change |
+| `inactivity` with `auto_excluded` | `exclude` | Already deducted; resolving payable adds the run back |
+| `inactivity` with `auto_payable` | `payable` | Already included; visible only |
+| `inactivity` with `needs_review` | `hold` | Held out; payable resolution adds it, exclusion resolution leaves it out |
+| `activity_during_break` | `hold` | The break is already deducted; paying the disputed work adds those minutes back |
+| `unverified_gap` | `acknowledge` | Minutes remain in recommended; a manual exclusion subtracts them |
+| `low_evidence` | `acknowledge` | Minutes remain in recommended; a manual exclusion subtracts them |
+| `break_mismatch` | `acknowledge` | No automatic total change; the administrator may adjust |
+| `manual_adjustment` | `include_adjustment` or `exclude_adjustment` | Applies the signed adjustment once |
+
+`resolved_payable` is the sum of held findings the administrator counted as
+work. A held finding resolved as excluded simply leaves `held` and is not added
+back; it is not subtracted a second time. Manual exclusions are subtracted
+separately and always carry a reason.
+
+"Material finding" in the approval rules means any finding whose effect is
+`hold` or `acknowledge`, plus any `low_evidence` finding. `auto_payable` and
+`auto_excluded` findings are visible but do not block approval.
 
 The review displays both the calculated total and the reviewed total so an
 administrator can see exactly what changed.
@@ -409,13 +447,13 @@ administrator can see exactly what changed.
 
 Scheduled 15:00–21:00. Tracked 15:00–21:10 = 370 minutes. A 20-minute break, a
 45-minute confirmed 0% run with no meeting/training/reading evidence, and 10
-minutes still unresolved.
+minutes held for review.
 
 ```
 tracked      370m
 break        −20m
 inactivity   −45m
-unresolved   −10m (held out, not deducted)
+held         −10m (out of the recommended total, not deducted)
 recommended  295m = 4h 55m
 ```
 
@@ -684,28 +722,48 @@ One row per person per pay date.
 | `analysis_revision int` | increments on each completed analysis |
 | `source_hash text` | evidence freshness |
 | `model text`, `prompt_version text` | synthesis provenance |
-| `totals jsonb` | tracked, break, inactivity, outside, unresolved, recommended, approved; raw and reviewed |
-| `approved_minutes int`, `approved_by uuid`, `approved_at timestamptz`, `approval_note text` | approval |
-| `approved_snapshot jsonb` | immutable snapshot used by exports |
+| `totals jsonb` | tracked, break, inactivity, outside, held, recommended, approved; raw and reviewed |
+| `current_approval_id uuid` | points at the latest immutable approval row |
+| `approved_minutes int`, `approved_by uuid`, `approved_at timestamptz`, `approval_note text` | current approval quick read |
 | `last_analyzed_at`, `last_exported_at` | freshness |
 | `created_at`, `updated_at` | |
 
 Constraints: unique `(organization_id, person_id, pay_date)`; index
 `(organization_id, pay_date, status)`; check `period_start <= period_end`.
 
-### 9.2 `work_payroll_days`
+### 9.2 `work_payroll_approvals`
+
+Append-only approval history. A review can be approved more than once after a
+reopen; every approval remains addressable and exportable.
+
+| Column | Purpose |
+|---|---|
+| `id uuid pk`, `organization_id uuid`, `review_id uuid` | scope |
+| `revision int` | approval sequence for this review |
+| `snapshot jsonb` | immutable totals, days, findings, decisions, adjustments, sources |
+| `approved_minutes int` | approved total at this revision |
+| `approved_by uuid`, `approved_at timestamptz`, `note text` | decision |
+| `superseded_at timestamptz` | set when a later approval exists |
+| `export_hash text` | stable hash of the snapshot used by exports |
+| `created_at` | |
+
+Unique `(review_id, revision)`; index `(organization_id, review_id, approved_at desc)`.
+Exports name an `approval_id`, so re-exporting an older approval is possible and
+produces the same bytes.
+
+### 9.3 `work_payroll_days`
 
 One row per workday in a review.
 
 | Column | Purpose |
 |---|---|
 | `id uuid pk`, `organization_id`, `review_id`, `person_id` | scope |
-| `local_date date` | the session's `shift_date` |
+| `local_date date` | the scheduled workday or session `shift_date` |
 | `week smallint` | 1 or 2 |
-| `session_ids jsonb` | sessions included |
+| `session_ids jsonb` | sessions included; empty for a no-work day |
 | `schedule_snapshot jsonb` | effective start/end, exception, source |
-| `status text` | `calculated`, `needs_review`, `resolved`, `no_schedule`, `no_session`, `no_work` |
-| `tracked_minutes`, `break_minutes`, `inactivity_minutes`, `outside_minutes`, `unresolved_minutes`, `recommended_minutes`, `approved_minutes int` | totals |
+| `status text` | `calculated`, `needs_review`, `resolved`, `no_schedule`, `no_session`, `no_work`, `leave` |
+| `tracked_minutes`, `break_minutes`, `inactivity_minutes`, `outside_minutes`, `held_minutes`, `recommended_minutes`, `approved_minutes int` | totals |
 | `activity_summary jsonb` | compact runs, apps, statuses, productivity, cadence |
 | `findings_summary jsonb` | counts and kinds |
 | `source_hash text` | day-level freshness |
@@ -713,7 +771,7 @@ One row per workday in a review.
 
 Unique `(review_id, local_date)`; index `(organization_id, person_id, local_date)`.
 
-### 9.3 `work_payroll_findings`
+### 9.4 `work_payroll_findings`
 
 The review queue.
 
@@ -723,6 +781,7 @@ The review queue.
 | `kind text` | `inactivity`, `break`, `outside_window`, `unverified_gap`, `low_evidence`, `activity_during_break`, `break_mismatch`, `possible_work`, `manual_adjustment` |
 | `start_at`, `end_at timestamptz`, `minutes int` | interval |
 | `status text` | `auto_payable`, `auto_excluded`, `needs_review`, `resolved_payable`, `resolved_excluded` |
+| `effect text` | `exclude`, `payable`, `hold`, `acknowledge`, `include_adjustment`, `exclude_adjustment` |
 | `reason text` | human-readable explanation |
 | `evidence jsonb` | activity log ids, screenshot summary ids, interval ids, app/title, classification |
 | `resolution_note text`, `resolved_by uuid`, `resolved_at timestamptz` | decision |
@@ -735,7 +794,7 @@ A finding is the unit of human decision. A 0% run, a break, an outside-window
 stretch, a gap, or a manual adjustment is one finding. Per-minute rows are not
 created.
 
-### 9.4 `work_payroll_frame_findings`
+### 9.5 `work_payroll_frame_findings`
 
 Targeted vision cache.
 
@@ -752,7 +811,7 @@ Targeted vision cache.
 Unique `(organization_id, screenshot_summary_id, classification_key)`; index
 `(review_id, day_id)`.
 
-### 9.5 `work_payroll_week_briefs`
+### 9.6 `work_payroll_week_briefs`
 
 | Column | Purpose |
 |---|---|
@@ -768,7 +827,7 @@ Unique `(organization_id, screenshot_summary_id, classification_key)`; index
 
 Unique `(review_id, week)`.
 
-### 9.6 `work_payroll_questions`
+### 9.7 `work_payroll_questions`
 
 | Column | Purpose |
 |---|---|
@@ -780,7 +839,7 @@ Unique `(review_id, week)`.
 
 Index `(review_id, created_at desc)`.
 
-### 9.7 `work_payroll_person_context`
+### 9.8 `work_payroll_person_context`
 
 Optional per-person rubric, seeded from the person's role profile and work
 profile signals.
@@ -797,7 +856,7 @@ Unique `(organization_id, person_id)`.
 If empty, the analysis still runs but routes more ambiguous intervals to review;
 it never assumes a role.
 
-### 9.8 `work_payroll_runs`
+### 9.9 `work_payroll_runs`
 
 Durable analysis state.
 
@@ -817,7 +876,7 @@ Durable analysis state.
 Unique partial index on `review_id` where `status in ('queued','running')`;
 index on `(status, lease_until)`.
 
-### 9.9 Legacy tables
+### 9.10 Legacy tables
 
 The repository contains an unused Agent OS-era `audit_profiles` /
 `audit_runs` pair and `worktivityAudit.ts`. Payroll does **not** revive them:
@@ -915,7 +974,10 @@ Approval is refused unless:
 
 - the review is `ready` or `needs_review` with every material finding resolved;
 - `source_hash` matches;
-- every day has a schedule or an explicit no-schedule resolution;
+- every scheduled working day has an effective schedule (a missing schedule is
+  corrected in the person's schedule, not bypassed);
+- every scheduled working day with no session and no activity has been
+  acknowledged as `No work recorded`;
 - no session is `needs_correction` or `invalid`;
 - the administrator confirms the totals.
 
@@ -924,19 +986,22 @@ the client's numbers.
 
 ### 11.2 Snapshot
 
-`approved_snapshot` contains:
+Each approval writes one append-only `work_payroll_approvals` row. Its snapshot
+contains:
 
 - review id, person id, organization id, period, pay date, timezone;
 - analysis revision, model, prompt version, source hash;
-- period totals (tracked, break, inactivity, outside, unresolved, recommended,
+- period totals (tracked, break, inactivity, outside, held, recommended,
   approved);
 - every day's approved minutes and status;
-- every resolved finding with its decision, reason, actor, and timestamp;
+- every resolved finding with its decision, effect, reason, actor, and timestamp;
 - every manual adjustment with its reason;
 - the approver, approval timestamp, and note.
 
-The snapshot is immutable. A reopen creates a new revision and a new snapshot;
-the old snapshot remains in the audit history.
+The snapshot is immutable and addressable by `approval_id`. A reopen creates a
+new revision and a new approval row; the old approval remains viewable and
+exportable under its original `approval_id`. `work_payroll_reviews.current_approval_id`
+points at the latest one.
 
 ### 11.3 Export
 
@@ -1063,7 +1128,7 @@ Write `work_audit_log` rows for:
 |---|---|
 | Worktivity unavailable or rate-limited | Run retries with backoff; review stays `analyzing` or `failed`; no partial total is shown as final. |
 | No schedule | Day is `no_schedule`; approval blocked; link to fix the schedule. |
-| No session | Day is `no_session`; approval blocked unless resolved as no work. |
+| No session | Scheduled day is `no_work` (acknowledged) when there is no activity; `no_session` and blocking when activity exists but the session is missing. |
 | Missing screenshots | Time stays tracked; `low_evidence` or `unverified_gap` finding; never auto-deducted. |
 | Consent withdrawn | No image analysis; metadata-only review; explicit notice. |
 | Sensitive-content exclusion | Frame never sent to the model; absence is not idleness. |
