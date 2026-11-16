@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- The dark theme now keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.
+
 ## 0.5.33 — 2026-11-16
 
 - Work OS has a new Soft ash theme that covers every page, including Administration, Insights, and the floating mascot.

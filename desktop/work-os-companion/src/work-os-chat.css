@@ -136,9 +136,9 @@
   transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
-.workos-plus:hover { background: rgba(24, 32, 24, 0.06); color: var(--ink, #182018); }
+.workos-plus:hover { background: var(--hover, rgba(24, 32, 24, 0.06)); color: var(--ink, #182018); }
 .workos-plus:active { transform: scale(0.94); }
-.workos-plus.open { background: rgba(24, 32, 24, 0.08); color: var(--ink, #182018); }
+.workos-plus.open { background: var(--hover, rgba(24, 32, 24, 0.08)); color: var(--ink, #182018); }
 .workos-plus.open svg { transform: rotate(45deg); }
 .workos-plus svg { transition: transform 150ms ease; }
 .workos-plus:focus-visible {
@@ -160,7 +160,7 @@
   overflow-wrap: anywhere;
 }
 
-.workos-input::placeholder { color: #8a9288; }
+.workos-input::placeholder { color: var(--muted); }
 
 /* The dock shell already carries the focus ring (border + halo +
  * lift); an inner textarea ring would double it. The avatar shell
