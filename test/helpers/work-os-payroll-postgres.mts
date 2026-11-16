@@ -49,7 +49,12 @@ export async function withDisposablePayrollPostgres<T>(fn: (f: { pool: Pool; dat
         if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
       end $$;
       alter table work_screenshot_summaries add organization_id uuid,add person_id uuid,add evidence_event_id uuid;
+      alter table work_people add worktivity_employee_id text;
       create table work_evidence_events(id uuid primary key,organization_id uuid not null,person_id uuid not null,unique(organization_id,person_id,id));
+      create table work_provider_connections(id uuid primary key default gen_random_uuid(),organization_id uuid not null,provider text not null,
+        external_workspace_id text not null,active boolean not null default true,config jsonb not null default '{}');
+      create table work_source_accounts(id uuid primary key default gen_random_uuid(),organization_id uuid not null,provider text not null,
+        external_account_id text not null,person_id uuid,verified boolean not null default false);
     `);
     await pool.query(await payrollMigration());
     return await fn({pool,database});

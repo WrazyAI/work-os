@@ -193,11 +193,50 @@ create table if not exists work_payroll_recap_settlements (
   foreign key(organization_id,person_id) references work_people(organization_id,id),
   check((lease_token is null)=(lease_until is null))
 );
+create unique index if not exists work_provider_connections_org_id_key on work_provider_connections(organization_id,id);
 create table if not exists work_payroll_provider_budgets (
   organization_id uuid not null references work_organizations(id), connection_id uuid not null,
-  next_available_at timestamptz not null, updated_at timestamptz not null default now(),
-  primary key(organization_id,connection_id)
+  next_available_at timestamptz not null default now(),
+  minute_window timestamptz, minute_count int not null default 0 check(minute_count>=0),
+  hour_window timestamptz, hour_count int not null default 0 check(hour_count>=0),
+  updated_at timestamptz not null default now(),
+  primary key(organization_id,connection_id),
+  foreign key(organization_id,connection_id) references work_provider_connections(organization_id,id)
 );
+-- Conservative payroll sub-budget: provider allows 5/sec,100/min,1000/hour;
+-- payroll reserves 4/sec spacing with 80/min and 800/hour so neighboring
+-- attendance/screenshot reads retain headroom. All process instances serialize
+-- on this row, which a per-run sleep cannot do.
+create or replace function work_payroll_reserve_provider_slot(p_organization_id uuid,p_connection_id uuid)
+returns integer language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare slot timestamptz; minute_start timestamptz; hour_start timestamptz;
+  next_minute int; next_hour int; bucket public.work_payroll_provider_budgets%rowtype;
+begin
+  insert into public.work_payroll_provider_budgets(organization_id,connection_id,next_available_at)
+    values(p_organization_id,p_connection_id,clock_timestamp()) on conflict do nothing;
+  select * into bucket from public.work_payroll_provider_budgets
+    where organization_id=p_organization_id and connection_id=p_connection_id for update;
+  if not found then raise exception 'Provider budget not found'; end if;
+  slot := greatest(clock_timestamp(),bucket.next_available_at);
+  minute_start := date_trunc('minute',slot); hour_start := date_trunc('hour',slot);
+  next_minute := case when bucket.minute_window is not distinct from minute_start then bucket.minute_count else 0 end;
+  next_hour := case when bucket.hour_window is not distinct from hour_start then bucket.hour_count else 0 end;
+  if next_minute>=80 then
+    slot := greatest(slot,minute_start+interval '1 minute');
+    minute_start:=date_trunc('minute',slot); hour_start:=date_trunc('hour',slot);
+    next_minute:=0; next_hour:=case when bucket.hour_window is not distinct from hour_start then bucket.hour_count else 0 end;
+  end if;
+  if next_hour>=800 then
+    slot := greatest(slot,hour_start+interval '1 hour');
+    minute_start:=date_trunc('minute',slot); hour_start:=date_trunc('hour',slot); next_minute:=0; next_hour:=0;
+  end if;
+  update public.work_payroll_provider_budgets set next_available_at=slot+interval '250 milliseconds',
+    minute_window=minute_start,minute_count=next_minute+1,hour_window=hour_start,hour_count=next_hour+1,
+    updated_at=clock_timestamp()
+    where organization_id=p_organization_id and connection_id=p_connection_id;
+  return greatest(0,ceil(extract(epoch from slot-clock_timestamp())*1000))::int;
+end $$;
+revoke all on function work_payroll_reserve_provider_slot(uuid,uuid) from public;
 create table if not exists work_payroll_audit_events (
   id uuid primary key default gen_random_uuid(), organization_id uuid not null, review_id uuid not null, person_id uuid not null,
   actor_user_id uuid, action text not null, request_key text not null, metadata jsonb not null default '{}', created_at timestamptz not null default now(),

@@ -1,0 +1,92 @@
+# Work OS payroll review operations
+
+Status: implementation in progress; payroll is **off** by default. This runbook
+covers readiness and enablement gates. Deployment, cron activation, auto-approval
+and companion release remain separate operator decisions.
+
+## Safety posture
+
+- Payroll writes only to `work_payroll_*` tables. It never writes Worktivity,
+  employee recaps, check-ins, task proposals, or attendance sessions.
+- Work OS is the approved-hours and export authority. No rates, currency, or
+  payment provider integration exists.
+- The analysis is unavailable unless `work_payroll_settings.enabled` is true.
+  Automatic recap approval additionally requires `auto_approve_enabled`.
+- Payroll rows expire 30 days after the later of pay date, approval, or first
+  export. A documented operator hold blocks the expiry purge.
+
+## Read-only readiness
+
+Run without a probe first. It performs no network or database write:
+
+```bash
+export PATH=/home/zahemen/.nvm/versions/node/v24.20.0/bin:$PATH
+node --import tsx scripts/verify-work-os-payroll.mts
+```
+
+The default output states that live verification is pending. That is the
+truthful state until the probe below is reviewed and the adapter's
+`CaptureSemantics` is versioned.
+
+A bounded probe takes one explicit organization, person and pay date:
+
+```bash
+node --import tsx scripts/verify-work-os-payroll.mts --probe \
+  --org <organization-uuid> --person <person-uuid> --period 2026-11-16
+```
+
+It reads the first activity page for the payroll period only. It prints
+aggregate counts: status codes, productivity codes, activity range, null and
+exact-zero samples, page/watermark completeness. It does not print titles,
+URLs, summaries, signed screenshot links, API keys or payloads. It reserves one
+slot in the shared provider budget table, which is internal pacing, not a
+payroll record.
+
+## Provider gates
+
+The adapter must not claim verified coverage until all of these are recorded:
+
+1. **Capture direction and duration.** Work OS documents one-minute captures but
+   has not established whether `CreateDate` marks the start or end of the
+   observation. The default `worktivity-activitylog-v1` semantics keeps
+   `verified=false`, `direction=unknown`, `durationMs=60000`; normalized spans
+   are therefore null and `zeroEligible` stays false. No automatic inactivity
+   deduction is possible in this state.
+2. **Complete paging.** The adapter repeats the employee and exact half-open UTC
+   bounds locally, deduplicates by provider log ID, treats conflicting duplicate
+   values as a blocking source conflict, and only marks a page complete when the
+   provider page count is exhausted. An inconsistent `TotalCount`/`PageCount`
+   pairing throws rather than reporting partial coverage as complete.
+3. **Application units.** `Insights/AppsSummary` currently follows the existing
+   Work OS interpretation (`Working + Idle` as minutes). Application usage is
+   context only and never payable time; malformed rows are omitted and counted
+   in coverage notes.
+4. **Productivity labels.** No enum label map is verified. Codes are preserved
+   as numbers for context and render as `unrated`. Never guess a label.
+5. **Connection entitlement.** The deployment-global `WORKTIVITY_API_KEY` does
+   not authorize every organization. Payroll requires exactly one active
+   `work_provider_connections` row for the organization and a person mapping in
+   `work_people.worktivity_employee_id`. If `work_source_accounts` rows exist for
+   that person, a verified row must match; an unverified or foreign mapping
+   fails closed. The client never supplies the employee mapping or connection.
+
+## Rate budget
+
+The provider allows 5 requests/second, 100/minute and 1000/hour. Payroll
+reserves a conservative sub-budget: 4 requests/second spacing, 80/minute and
+800/hour, serialized in PostgreSQL per organization/connection. This leaves
+headroom for attendance and screenshot reads, which are not retrofitted onto
+the payroll limiter. If 429s still appear during payroll analysis, pause bulk
+syncs or lower the payroll batch size; do not increase the sub-budget from a
+single process.
+
+## Failure behavior
+
+- Provider fetch failure: the page is incomplete; publication and approvals
+  must wait.
+- Unknown capture semantics: samples remain visible, gaps remain uncovered,
+  inactivity deductions do not run automatically.
+- Conflicting duplicates: the run fails with a source conflict; do not choose a
+  winner.
+- Withdrawn tracking consent or screenshot consent: no new provider ingestion or
+  frame processing; existing payroll receipts stay under retention policy.
