@@ -53,10 +53,10 @@ const VPS_ENV_FILES = ["/home/dev/agent-os/.env.local", "/home/dev/agent-os/.env
 /** Parse argv into the flags this tool understands. */
 export function parseArgs(argv) {
   const flags = { _: [] };
-  const takesValue = new Set(["--file", "--json", "--project", "--project-name", "--parent", "--label", "--query", "--limit", "--description", "--token-file", "--api-base"]);
+  const takesValue = new Set(["--file", "--json", "--project", "--project-name", "--parent", "--label", "--query", "--limit", "--description", "--mode", "--token-file", "--api-base"]);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--dry-run" || arg === "--include-completed" || arg === "--include-archived" || arg === "--json-output" || arg === "--help") {
+    if (arg === "--dry-run" || arg === "--include-completed" || arg === "--include-archived" || arg === "--json-output" || arg === "--yes" || arg === "--help") {
       flags[arg.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = true;
     } else if (takesValue.has(arg) && argv[i + 1] !== undefined) {
       flags[arg.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++i];
@@ -329,6 +329,23 @@ async function describeCommand(api, token, flags) {
   return task;
 }
 
+async function deleteCommand(api, token, flags) {
+  if (!flags._.length) throw new Error("delete needs at least one task id");
+  const mode = String(flags.mode ?? "");
+  if (mode !== "archive" && mode !== "delete") throw new Error("delete needs --mode archive|delete");
+  if (flags.yes !== true) throw new Error("delete needs --yes to confirm the change");
+  const results = [];
+  for (const taskId of flags._) {
+    const result = await request(api, token, "DELETE", `/tasks/${encodeURIComponent(taskId)}?mode=${encodeURIComponent(mode)}`, {});
+    const task = result?.task ?? result;
+    const status = task?.status ?? null;
+    console.log(`  [OK] ${taskId} mode=${mode} status=${status ?? "unknown"}`);
+    results.push({ id: taskId, mode, status, completed: task?.completed ?? null });
+  }
+  if (flags.jsonOutput) console.log(JSON.stringify(results, null, 2));
+  return results;
+}
+
 async function completeCommand(api, token, flags) {
   if (!flags._.length) throw new Error("complete needs at least one task id");
   const results = [];
@@ -356,6 +373,7 @@ Commands:
   get      <taskId> [--include-archived]   Show one task with subtasks
   describe <taskId> --description <text>    Update a task description
   complete <taskId> [<taskId>...]           Complete tasks and read back
+  delete   <taskId> [<taskId>...] --mode archive|delete --yes
 
 Options:
   --project <uuid>        Work OS project id
@@ -365,6 +383,8 @@ Options:
   --dry-run               Validate and print without writing
   --include-completed     Include completed tasks in list
   --include-archived      Include archived and deleted tasks
+  --mode <archive|delete> Required with delete
+  --yes                   Required to confirm delete
   --json-output           Machine-readable result
   --token-file <path>     Read the bearer token from a file
   --api-base <url>        Override the API base
@@ -393,6 +413,7 @@ async function main() {
     case "get": await getCommand(api, token, flags); break;
     case "describe": await describeCommand(api, token, flags); break;
     case "complete": await completeCommand(api, token, flags); break;
+    case "delete": await deleteCommand(api, token, flags); break;
     default: throw new Error(`Unknown command: ${command}`);
   }
 }
