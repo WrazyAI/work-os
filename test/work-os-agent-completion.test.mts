@@ -24,11 +24,21 @@ test("agent completion and evidence carry token provenance", async () => {
   assert.match(day, /options\.provenance === "employee_explicit"/);
 });
 
+test("agent completion may close an archived task but never a deleted one", async () => {
+  const employee = await read("src/lib/work-os-employee-tasks.ts");
+  const agent = await read("src/lib/work-agent-tasks.ts");
+  assert.match(employee, /options: \{ allowArchived\?: boolean \} = \{\}/);
+  assert.match(agent, /allowArchived: completed === true/);
+  assert.match(employee, /task\.status === "deleted"\) throw new WorkOsNotFoundError\(\)/);
+});
+
 test("the agent completion and evidence routes enforce their scopes", async () => {
   const complete = await read("src/app/api/agent/v1/tasks/[taskId]/complete/route.ts");
+  const detail = await read("src/app/api/agent/v1/tasks/[taskId]/route.ts");
   const reopen = await read("src/app/api/agent/v1/tasks/[taskId]/reopen/route.ts");
   const evidence = await read("src/app/api/agent/v1/tasks/[taskId]/evidence/route.ts");
   assert.match(complete, /requireAgentAccess\(req, "tasks:write"\)/);
+  assert.match(detail, /include_archived/);
   assert.match(reopen, /requireAgentAccess\(req, "tasks:write"\)/);
   assert.match(evidence, /requireAgentAccess\(req, "evidence:write"\)/);
   for (const source of [complete, reopen, evidence]) assert.match(source, /withAgentIdempotency/);

@@ -142,6 +142,10 @@ paths:
       x-required-scope: tasks:read
       parameters:
         - $ref: "#/components/parameters/TaskId"
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+          description: Read an archived task. Deleted tombstones remain unavailable.
       responses:
         "200":
           description: Task detail
@@ -208,6 +212,7 @@ paths:
   /tasks/{taskId}/complete:
     post:
       summary: Complete a task
+      description: Completes an active or archived task. Deleted tombstones remain unavailable.
       operationId: completeTask
       x-required-scope: tasks:write
       parameters:

@@ -84,8 +84,8 @@ export async function listAgentTasks(
   return { tasks: page, nextCursor };
 }
 
-export async function getAgentTask(agent: AgentAccess, taskId: string) {
-  const details = await getWorkOsEmployeeTaskDetails(agent.access, taskId);
+export async function getAgentTask(agent: AgentAccess, taskId: string, options: { allowArchived?: boolean } = {}) {
+  const details = await getWorkOsEmployeeTaskDetails(agent.access, taskId, options);
   const localTaskId = String((details.task as Json).id);
   const blockers = await db().from("work_task_blockers")
     .select("id,description,status,created_at,resolved_at,agent_token_id")
@@ -188,7 +188,13 @@ export async function updateAgentTask(agent: AgentAccess, taskId: string, body: 
 }
 
 export async function completeAgentTask(agent: AgentAccess, taskId: string, completed: boolean) {
-  return setWorkOsEmployeeTaskCompletion(agent.access, taskId, completed, { tokenId: agent.tokenId, tokenName: agent.tokenName });
+  return setWorkOsEmployeeTaskCompletion(
+    agent.access,
+    taskId,
+    completed,
+    { tokenId: agent.tokenId, tokenName: agent.tokenName },
+    { allowArchived: completed === true },
+  );
 }
 
 /** A progress note is employee-authored context, never completion proof. It is

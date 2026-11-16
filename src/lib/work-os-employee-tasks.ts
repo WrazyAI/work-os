@@ -457,8 +457,14 @@ async function openSubtaskRows(input: { organizationId: string; task: Json }): P
   return (data ?? []) as Json[];
 }
 
-export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean, actor?: AgentActor) {
-  const { ownerId, task } = await employeeTaskContext(access, taskId);
+export async function setWorkOsEmployeeTaskCompletion(
+  access: WorkOsAccess,
+  taskId: string,
+  completed: boolean,
+  actor?: AgentActor,
+  options: { allowArchived?: boolean } = {},
+) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId, options);
   // Check the actor against the requested transition even on a retry: the
   // state-dependent capability flags otherwise reject an already-applied write.
   const capabilities = taskCapabilities({ ...task, completed: !completed }, taskActor(access), await employeeTaskToday(access));

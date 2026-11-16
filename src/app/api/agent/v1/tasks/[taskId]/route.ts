@@ -15,7 +15,8 @@ export async function GET(req: Request, context: { params: Promise<{ taskId: str
     if (auth.response) return auth.response;
     assertAgentRateLimit(auth.agent.tokenId, false);
     const { taskId } = await context.params;
-    return NextResponse.json(await getAgentTask(auth.agent, taskId));
+    const includeArchived = new URL(req.url).searchParams.get("include_archived") === "true";
+    return NextResponse.json(await getAgentTask(auth.agent, taskId, { allowArchived: includeArchived }));
   } catch (error) {
     return agentRouteError(error);
   }

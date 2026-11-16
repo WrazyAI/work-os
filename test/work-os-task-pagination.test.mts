@@ -32,6 +32,7 @@ async function createDatabase() {
       completed boolean not null default false,
       assignee_provider_ids text[] not null default '{}',
       assignee_person_ids uuid[] not null default '{}',
+      assigned_by_person_id uuid,
       due_date date,
       completed_at timestamptz,
       provider_created_at timestamptz,
@@ -42,6 +43,7 @@ async function createDatabase() {
     );
   `);
   await db.exec(await readFile(new URL("../supabase/migrations/0059_work_os_task_cursor_pagination.sql", import.meta.url), "utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/0067_work_task_assigner_visibility.sql", import.meta.url), "utf8"));
   return db;
 }
 
@@ -55,11 +57,12 @@ async function insertTask(db: PGlite, task: {
   description?: string;
   project?: string | null;
   raw?: Record<string, unknown>;
+  status?: "open" | "archived" | "deleted" | "completed";
 }) {
   await db.query(
-    `insert into work_tasks (id,user_id,organization_id,title,completed,due_date,provider_created_at,created_at,description,project_id,assignee_person_ids,raw)
-     values ($1,$2,$3,$4,$5,$6,$7,coalesce($7::timestamptz,now()),$8,$9,array[$10::uuid],$11::jsonb)`,
-    [task.id, USER, task.organization ?? ORGANIZATION, task.title, task.completed ?? false, task.due ?? null, task.created ?? null, task.description ?? null, task.project ?? null, PERSON, JSON.stringify(task.raw ?? {})],
+    `insert into work_tasks (id,user_id,organization_id,title,completed,due_date,provider_created_at,created_at,description,project_id,assignee_person_ids,raw,status)
+     values ($1,$2,$3,$4,$5,$6,$7,coalesce($7::timestamptz,now()),$8,$9,array[$10::uuid],$11::jsonb,$12)`,
+    [task.id, USER, task.organization ?? ORGANIZATION, task.title, task.completed ?? false, task.due ?? null, task.created ?? null, task.description ?? null, task.project ?? null, PERSON, JSON.stringify(task.raw ?? {}), task.status ?? "open"],
   );
 }
 
@@ -231,6 +234,25 @@ test("SQL keeps created-by and subscriber attribution alongside the assignee pat
     assert.deepEqual(titles, ["Assigned directly", "Created by member", "Subscribed member"]);
     assert.equal(Number(rows[0]?.total_count), 3);
     assert.equal(Number(rows[0]?.total_open), 3);
+  } finally {
+    await db.close();
+  }
+});
+
+test("archived and deleted tasks stay out of unfinished counts", async () => {
+  const db = await createDatabase();
+  try {
+    await insertTask(db, { id: "00000000-0000-4000-8000-000000000401", title: "Open task", due: "2026-10-09" });
+    await insertTask(db, { id: "00000000-0000-4000-8000-000000000402", title: "Archived task", status: "archived" });
+    await insertTask(db, { id: "00000000-0000-4000-8000-000000000403", title: "Deleted task", status: "deleted" });
+    await insertTask(db, { id: "00000000-0000-4000-8000-000000000404", title: "Completed task", completed: true, status: "completed", due: "2026-10-08" });
+
+    const rows = await page(db, { limit: 10 });
+    const titles = rows.flatMap((row) => row.task ? [row.task.title] : []).sort();
+    assert.deepEqual(titles, ["Completed task", "Open task"]);
+    assert.equal(Number(rows[0]?.total_open), 1, "archived and deleted rows must not inflate Unfinished");
+    assert.equal(Number(rows[0]?.total_all), 2, "archived and deleted rows are not part of the active board");
+    assert.equal(Number(rows[0]?.total_completed), 1);
   } finally {
     await db.close();
   }
