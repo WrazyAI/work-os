@@ -15,6 +15,11 @@ test("the ledger parses positional ids and value flags", () => {
   assert.equal(create.projectName, "EOD Report");
   assert.equal(create.dryRun, true);
 
+  const archived = parseArgs(["list", "--include-archived"]);
+  assert.equal(archived.includeArchived, true);
+  const get = parseArgs(["get", "abc-1", "--include-archived"]);
+  assert.equal(get.includeArchived, true);
+
   assert.throws(() => parseArgs(["create", "--nope", "x"]), /Unknown flag/);
 });
 
@@ -85,4 +90,11 @@ test("the ledger never prints or persists the token", () => {
   assert.doesNotMatch(scriptSource, /console\.(log|error)\([^)]*\btoken\b/i);
   assert.doesNotMatch(scriptSource, /writeFileSync\([^)]*token/i);
   assert.match(scriptSource, /Authorization: `Bearer \$\{token\}`/);
+});
+
+test("archived task reads and listing are explicit", () => {
+  assert.match(scriptSource, /params\.set\("include_archived", "true"\)/);
+  assert.match(scriptSource, /include_archived=true/);
+  assert.match(scriptSource, /\/complete`, \{\}\);\n    \/\/ An already-completed archived task stays archived/);
+  assert.match(scriptSource, /task\.status !== "open"/);
 });

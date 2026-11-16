@@ -56,7 +56,7 @@ export function parseArgs(argv) {
   const takesValue = new Set(["--file", "--json", "--project", "--project-name", "--parent", "--label", "--query", "--limit", "--description", "--token-file", "--api-base"]);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--dry-run" || arg === "--include-completed" || arg === "--json-output" || arg === "--help") {
+    if (arg === "--dry-run" || arg === "--include-completed" || arg === "--include-archived" || arg === "--json-output" || arg === "--help") {
       flags[arg.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = true;
     } else if (takesValue.has(arg) && argv[i + 1] !== undefined) {
       flags[arg.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++i];
@@ -270,6 +270,7 @@ async function listCommand(api, token, flags) {
   let cursor = null;
   for (let page = 0; page < 5 && collected.length < 200; page += 1) {
     const params = new URLSearchParams({ limit: "100" });
+    if (flags.includeArchived) params.set("include_archived", "true");
     if (cursor) params.set("cursor", cursor);
     const result = await request(api, token, "GET", `/tasks?${params}`);
     const tasks = Array.isArray(result?.tasks) ? result.tasks : [];
@@ -283,7 +284,7 @@ async function listCommand(api, token, flags) {
     .slice(0, limit);
   if (flags.jsonOutput) {
     console.log(JSON.stringify(rows.map((task) => ({
-      id: task.id, title: task.title, completed: task.completed, labels: task.labels, projectId: task.project_id,
+      id: task.id, title: task.title, completed: task.completed, status: task.status, labels: task.labels, projectId: task.project_id,
     })), null, 2));
     return rows;
   }
@@ -293,7 +294,8 @@ async function listCommand(api, token, flags) {
   }
   for (const task of rows) {
     const mark = task.completed === true ? "x" : " ";
-    console.log(`  [${mark}] ${task.id}  ${task.title}`);
+    const suffix = task.status && task.status !== "open" ? `  [${task.status}]` : "";
+    console.log(`  [${mark}] ${task.id}${suffix}  ${task.title}`);
   }
   console.log(`\n${rows.length} task(s).`);
   return rows;
@@ -302,7 +304,8 @@ async function listCommand(api, token, flags) {
 async function getCommand(api, token, flags) {
   const [taskId] = flags._;
   if (!taskId) throw new Error("get needs a task id");
-  const result = await request(api, token, "GET", `/tasks/${encodeURIComponent(taskId)}`);
+  const suffix = flags.includeArchived ? "?include_archived=true" : "";
+  const result = await request(api, token, "GET", `/tasks/${encodeURIComponent(taskId)}${suffix}`);
   const task = result?.task ?? result;
   if (flags.jsonOutput) { console.log(JSON.stringify(task, null, 2)); return task; }
   console.log(`  ${taskId}  ${task.title ?? task.name ?? ""}`);
@@ -332,6 +335,8 @@ async function completeCommand(api, token, flags) {
   for (const taskId of flags._) {
     // Completing a parent also closes its open subtasks, so one call is enough.
     await request(api, token, "POST", `/tasks/${encodeURIComponent(taskId)}/complete`, {});
+    // An already-completed archived task stays archived; include it so the
+    // idempotent call still gets a readback instead of a misleading 404.
     const readBack = await request(api, token, "GET", `/tasks/${encodeURIComponent(taskId)}?include_archived=true`);
     const task = readBack?.task ?? readBack;
     console.log(`  [OK] ${taskId} completed=${task.completed === true}`);
@@ -347,8 +352,8 @@ Usage: node scripts/work-os-ledger.mjs <command> [options]
 
 Commands:
   create   --file <path> | --json '<doc>'   Create tasks and subtasks
-  list     [--query <text>] [--limit N]     List open ledger tasks
-  get      <taskId>                         Show one task with subtasks
+  list     [--query <text>] [--limit N]     List open ledger tasks (--include-archived for tombstones) (--include-archived for tombstones)
+  get      <taskId> [--include-archived]   Show one task with subtasks
   describe <taskId> --description <text>    Update a task description
   complete <taskId> [<taskId>...]           Complete tasks and read back
 
@@ -359,6 +364,8 @@ Options:
   --label <name>          Extra label besides ${LEDGER_LABEL}
   --dry-run               Validate and print without writing
   --include-completed     Include completed tasks in list
+  --include-archived      Include archived and deleted tasks
+  --include-archived      Include archived and deleted tasks
   --json-output           Machine-readable result
   --token-file <path>     Read the bearer token from a file
   --api-base <url>        Override the API base
