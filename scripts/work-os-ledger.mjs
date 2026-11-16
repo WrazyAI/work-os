@@ -332,7 +332,7 @@ async function completeCommand(api, token, flags) {
   for (const taskId of flags._) {
     // Completing a parent also closes its open subtasks, so one call is enough.
     await request(api, token, "POST", `/tasks/${encodeURIComponent(taskId)}/complete`, {});
-    const readBack = await request(api, token, "GET", `/tasks/${encodeURIComponent(taskId)}`);
+    const readBack = await request(api, token, "GET", `/tasks/${encodeURIComponent(taskId)}?include_archived=true`);
     const task = readBack?.task ?? readBack;
     console.log(`  [OK] ${taskId} completed=${task.completed === true}`);
     results.push({ id: taskId, completed: task.completed === true, title: task.title });
