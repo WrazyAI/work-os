@@ -165,8 +165,6 @@ async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string
 
 export type WorkdayPromptSlot = { sessionId: string; promptDueAt: string };
 
-export type WorkdayPromptSlot = { sessionId: string; promptDueAt: string };
-
 export async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date, cadence: ResolvedWorkOsCadence, expectedSlot?: WorkdayPromptSlot) {
   if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);

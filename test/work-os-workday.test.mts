@@ -456,11 +456,11 @@ test("expected recap delivery uses a session-scoped database CAS", async () => {
     assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, { ...expected, promptDueAt: "2026-11-06T16:31:00Z" })).delivered, false);
     await f.database.query("update work_sessions set snoozed_until='2026-11-06T17:20Z' where id=$1", [planSession]);
     assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)).delivered, false);
-    assert.equal((await f.database.query("select next_fallback_at from work_sessions where id=$1", [planSession])).rows[0].next_fallback_at, null);
+    assert.equal((await f.database.query<{ next_fallback_at: unknown }>("select next_fallback_at from work_sessions where id=$1", [planSession])).rows[0].next_fallback_at, null);
     await f.database.query("update work_sessions set snoozed_until=null where id=$1", [planSession]);
     const results = await Promise.all([1, 2].map(() => recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)));
     assert.equal(results.filter(r => r.delivered).length, 1);
-    const fresh = (await f.database.query("select * from work_sessions where id=$1", [planSession])).rows[0];
+    const fresh = (await f.database.query<Record<string, any>>("select * from work_sessions where id=$1", [planSession])).rows[0];
     assert.equal((await recordPromptDelivery(planAccess, fresh, { ...prompt, kind: "plan" }, at, cadence, expected)).delivered, false, "a still-held goal question cannot advance");
   } finally { await f.close(); }
 });

@@ -495,9 +495,11 @@ export type ActivityIntervalCard = Pick<
 > & Partial<Pick<ActivityInterval, "evidence" | "evidenceExpired" | "evidenceCount" | "coverage">>;
 
 export interface ActivityIntervalEnsureResult {
-  status: "ready" | "preparing" | "unavailable" | "failed" | "no_prompt";
+  status: "ready" | "preparing" | "unavailable" | "failed" | "no_prompt" | "awaiting_evidence";
   reason: string | null;
   interval: ActivityIntervalCard | null;
+  slot?: { sessionId: string; promptDueAt: string } | null;
+  mayAdvance?: boolean;
 }
 
 /** One recap-sourced next-step suggestion shown in the mascot chat moment. */

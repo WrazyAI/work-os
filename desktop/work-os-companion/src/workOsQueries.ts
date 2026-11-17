@@ -453,6 +453,14 @@ export function ensureActivityIntervalReview(promptDueAt: string | null, signal?
   });
 }
 
+export function deliverActivityIntervalPrompt(result: Pick<ActivityIntervalEnsureResult, "status" | "slot" | "mayAdvance"> | null, key: string) {
+  if (result?.mayAdvance === false || result?.status === "awaiting_evidence" || result?.status === "preparing") return Promise.resolve({ delivered: false });
+  return apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
+    method: "POST", headers: { "Idempotency-Key": key },
+    body: JSON.stringify(result?.slot ? { expectedSlot: result.slot } : {}),
+  });
+}
+
 /** Request body for an employee recap decision. `expectedReviewVersion` comes
  * from the interval's immutable review version (0 while inferred), never from
  * the generation `revision`; it is omitted for older servers that do not expose

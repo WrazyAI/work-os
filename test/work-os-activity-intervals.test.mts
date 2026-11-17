@@ -23,6 +23,7 @@ import {
 import * as intervalEngine from "../src/lib/work-os-activity-intervals";
 import type { ScreenshotWindowCandidate, ScreenshotWindowPreparation } from "../src/lib/work-os-screenshots";
 import type { WorkOsAccess } from "../src/lib/work-os-api";
+import { usableScreenshotSummary } from "../src/lib/work-os-screenshots";
 
 const candidate = (id: string, capturedAt: string, app: string | null, retained = true, confidence = 0.8): ScreenshotWindowCandidate => ({
   summaryId: `summary-${id}`,
@@ -35,6 +36,13 @@ const candidate = (id: string, capturedAt: string, app: string | null, retained 
   possibleTaskReference: null,
   confidence,
   retained,
+});
+
+test("pending screenshot summaries cannot become usable recap candidates", () => {
+  assert.equal(usableScreenshotSummary({ processing_status: "pending" }), false);
+  assert.equal(usableScreenshotSummary({ processing_status: "failed", summary: "Failure" }), false);
+  assert.equal(usableScreenshotSummary({ processing_status: "processed", summary: "  " }), false);
+  assert.equal(usableScreenshotSummary({ processing_status: "processed", summary: "Read the project" }), true);
 });
 
 /** The config reads only the keys it knows; a partial env is the point. */
@@ -122,6 +130,96 @@ test("a prompt slot has one deterministic identity", () => {
 
 test("a client hint 30 seconds off does not create a second slot", () => {
   assert.equal(intervalEngine.resolveActivityIntervalDueAt("2026-11-12T15:00:00.000Z", "2026-11-12T15:00:30.000Z"), "2026-11-12T15:00:00.000Z");
+});
+
+test("late evidence waits before deadline and incomplete evidence never counts as empty", () => {
+  const base = { hasUsableEvidence: false, hasIncompleteEvidence: false, deadlineMs: 900_000 };
+  assert.equal(intervalEngine.classifyRecapEvidence({ ...base, nowMs: 899_999 }), "awaiting_evidence");
+  assert.equal(intervalEngine.classifyRecapEvidence({ ...base, nowMs: 900_000 }), "empty");
+  assert.equal(intervalEngine.classifyRecapEvidence({ ...base, hasIncompleteEvidence: true, nowMs: 900_000 }), "evidence_timeout");
+  assert.equal(intervalEngine.classifyRecapEvidence({ ...base, hasUsableEvidence: true, nowMs: 900_000 }), "usable");
+});
+
+test("awaiting evidence uses five-minute retries rather than the synthesis backoff", () => {
+  const row = { generation_status: "unavailable", failure_reason: "awaiting_evidence", updated_at: "2026-11-12T15:00:00Z" };
+  assert.equal(intervalEngine.activityIntervalRetryBlocked(row, Date.parse("2026-11-12T15:04:59Z")), true);
+  assert.equal(intervalEngine.activityIntervalRetryBlocked(row, Date.parse("2026-11-12T15:05:00Z")), false);
+});
+
+test("legacy delivery cannot consume missing, preparing or awaiting recap rows", () => {
+  assert.equal(intervalEngine.activityIntervalMayAdvance(null), false);
+  for (const row of [
+    { generation_status: "preparing" },
+    { generation_status: "unavailable", failure_reason: "awaiting_evidence" },
+    { generation_status: "failed" },
+    { generation_status: "unavailable", failure_reason: "provider threw" },
+  ]) assert.equal(intervalEngine.activityIntervalMayAdvance(row), false);
+  assert.equal(intervalEngine.activityIntervalMayAdvance({ generation_status: "ready" }), true);
+  assert.equal(intervalEngine.activityIntervalMayAdvance({ generation_status: "unavailable", failure_reason: "no_usable_frames" }), true);
+  assert.equal(intervalEngine.activityIntervalMayAdvance({ generation_status: "unavailable", failure_reason: "evidence_timeout" }), true);
+});
+
+test("late frames retain the hidden slot and stale evidence retries cannot overwrite ready rows", async () => {
+  const database = new PGlite();
+  const previous = globalThis.__workOsPgPool;
+  try {
+    await database.exec(`create table work_activity_intervals(id text primary key, generation_status text, review_status text,
+      failure_reason text, coverage jsonb, window_start timestamptz, window_end timestamptz, created_at timestamptz, updated_at timestamptz);
+      insert into work_activity_intervals values ('slot','preparing','inferred',null,'{}','2026-11-12T14:00Z','2026-11-12T15:00Z','2026-11-12T15:00Z','2026-11-12T15:00Z');`);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql, values) } as never;
+    const row = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const awaiting = await intervalEngine.settleActivityIntervalEvidence(row, { pending: 0, unavailable: 0 }, new Date("2026-11-12T15:00Z"));
+    assert.equal(awaiting.failure_reason, "awaiting_evidence");
+    assert.equal(intervalEngine.activityIntervalMayAdvance(awaiting), false);
+    assert.equal(isoInstant(awaiting.window_end), "2026-11-12T15:00:00.000Z");
+    const empty = await intervalEngine.settleActivityIntervalEvidence(awaiting, { pending: 0, unavailable: 0 }, new Date("2026-11-12T15:15Z"));
+    assert.equal(empty.failure_reason, "no_usable_frames");
+    assert.equal(intervalEngine.activityIntervalMayAdvance(empty), true);
+    const stale = await intervalEngine.settleActivityIntervalEvidence(awaiting, null, new Date("2026-11-12T15:15Z"));
+    assert.equal(stale.failure_reason, "no_usable_frames", "a stale attempt cannot replace the winner");
+    await database.exec("update work_activity_intervals set failure_reason='awaiting_evidence'");
+    const retry = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const expired = await intervalEngine.settleActivityIntervalEvidence(retry, null, new Date("2026-11-12T15:15Z"));
+    assert.equal(expired.failure_reason, "evidence_timeout");
+    await database.exec("update work_activity_intervals set generation_status='ready',review_status='confirmed',failure_reason=null");
+    const winner = await intervalEngine.settleActivityIntervalEvidence(awaiting, null, new Date("2026-11-12T15:20Z"));
+    assert.equal(winner.generation_status, "ready");
+    assert.equal(winner.review_status, "confirmed");
+    assert.equal((await database.query<{ n: number }>("select count(*)::int n from work_activity_intervals")).rows[0].n, 1);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+test("read-only delivery inspection cannot synthesize or consume missing evidence", async () => {
+  const database = new PGlite();
+  const previous = globalThis.__workOsPgPool;
+  const organizationId = "10000000-0000-4000-8000-000000000001";
+  const personId = "20000000-0000-4000-8000-000000000001";
+  const at = new Date("2026-11-12T15:00:00Z");
+  try {
+    await database.exec(`create table work_people(id uuid,organization_id uuid,worktivity_employee_id text);
+      insert into work_people values ('${personId}','${organizationId}','wt-1');
+      create table work_consent_records(organization_id uuid,person_id uuid,purpose text,decision text,policy_version text,occurred_at timestamptz);
+      create table work_activity_intervals(id text,organization_id uuid,person_id uuid,work_session_id text,slot_key text,generation_status text,review_status text,failure_reason text,
+      window_end timestamptz,local_date date);`);
+    for (const purpose of ["Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.", "Neutral screenshot summaries for approved Work OS activity context only."]) {
+      await database.query("insert into work_consent_records values ($1,$2,$3,'accepted','work-tracking-v1',now())", [organizationId, personId, purpose]);
+    }
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql, values) } as never;
+    const access = { organizationId, personId, featureFlags: { screenshot_summaries: true }, ctx: { profile: {} } } as unknown as WorkOsAccess;
+    const deps = { getWorkday: async () => ({ session: { id: "session", timezone: "UTC", clocked_in_at: "2026-11-12T14:00Z", shift_date: "2026-11-12" },
+      plan: { freeform_intent: "Ship" }, prompt: { kind: "follow_up", nextPromptAt: at.toISOString() }, cadence: { checkInIntervalMinutes: 60 } }) as any,
+      prepareScreenshotWindow: async () => { throw new Error("Inspection must not fetch evidence"); } };
+    assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps)).mayAdvance, false);
+    assert.equal((await database.query<{ n: number }>("select count(*)::int n from work_activity_intervals")).rows[0].n, 0);
+    await database.query("insert into work_activity_intervals values ('slot',$1,$2,'session','session:2026-11-12T15:00:00.000Z','unavailable','inferred','awaiting_evidence',$3,'2026-11-12')", [organizationId, personId, at.toISOString()]);
+    assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps)).mayAdvance, false);
+    await database.exec("update work_activity_intervals set generation_status='ready',failure_reason=null");
+    const ready = await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps);
+    assert.equal(ready.mayAdvance, true);
+    assert.deepEqual(ready.slot, { sessionId: "session", promptDueAt: at.toISOString() });
+    assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect", expectedSlot: { sessionId: "other", promptDueAt: at.toISOString() } }, deps)).mayAdvance, false);
+    assert.equal((await intervalEngine.ensureActivityInterval({ ...access, featureFlags: {} }, { at, mode: "inspect" }, deps)).mayAdvance, true);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
 });
 
 

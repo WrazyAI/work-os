@@ -89,12 +89,13 @@ export async function settleDueActivityRecaps(
 
     const expectedSlot = { sessionId: String(workday.session?.id), promptDueAt: new Date(dueMs).toISOString() };
     const result = await deps.ensure(access, { promptDueAt: prompt.nextPromptAt, at, expectedSlot });
-    if (result.status === "no_prompt") break;
+    if (result.status === "no_prompt" || result.status === "awaiting_evidence") break;
     if (result.status === "failed") {
       failed += 1;
       results.push({ slotKey, status: "failed", advanced: false });
       break;
     }
+    if (!result.mayAdvance || result.slot?.sessionId !== expectedSlot.sessionId || Date.parse(result.slot.promptDueAt) !== dueMs) break;
     if (result.status === "ready") generated += 1;
     else if (result.status === "unavailable") skipped += 1;
 

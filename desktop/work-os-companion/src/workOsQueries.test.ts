@@ -1,8 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACTIVITY_INTERVAL_ENSURE_TIMEOUT_MS, ACTIVITY_INTERVALS_PAGE_SIZE, activityIntervalDecisionBody, activityIntervalsUrl, dashboardInsightsUrl, latestActivityIntervalUrl, openTaskCountUrl } from "./workOsQueries";
-import { taskFinderQueryOptions, updateTaskHistoryPages } from "./workOsQueries";
+import { deliverActivityIntervalPrompt, taskFinderQueryOptions, updateTaskHistoryPages } from "./workOsQueries";
 import { workOsKeys } from "./queryClient";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
+vi.mock("./vault", () => ({ secureState: { session: async () => ({ token: "fixture", apiBase: "https://fixture.invalid", organizationId: "org", expiresAt: "2099-01-01" }) } }));
+afterEach(() => vi.unstubAllGlobals());
+
+it("delivers only a settled recap and sends its exact observed slot", async () => {
+  const bodies: unknown[] = [];
+  vi.stubGlobal("fetch", async (_url: unknown, init: RequestInit) => { bodies.push(JSON.parse(String(init.body))); return Response.json({ delivered: true }); });
+  const slot = { sessionId: "session", promptDueAt: "2026-11-12T15:00:00Z" };
+  const pending = await deliverActivityIntervalPrompt({ status: "awaiting_evidence", slot, mayAdvance: false }, "slot-key");
+  expect(pending.delivered).toBe(false);
+  expect(bodies).toEqual([]);
+  await deliverActivityIntervalPrompt({ status: "ready", slot, mayAdvance: true }, "slot-key");
+  expect(bodies).toEqual([{ expectedSlot: slot }]);
+});
 
 describe("task finder query", () => {
   it("does not insert an unfiltered optimistic task into a filtered finder", () => {

@@ -42,7 +42,7 @@ import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from
 import { presentAdminRecapArrival } from "./adminOtto/notifications";
 import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
+import { decideActivityIntervalReview, decideRecapNextStep, deliverActivityIntervalPrompt, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
 import { recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapQueueBubbleState } from "./notificationsLogic";
 import { RecapQueueBubble } from "./RecapQueueBubble";
 import { resolveDashboardShift } from "./dashboardModel";
@@ -1771,18 +1771,16 @@ export default function AvatarApp(): React.ReactElement {
         // recap is ready. Any failure falls back to the generic prompt.
         void (async () => {
           let recap: ActivityIntervalCardData | null = null;
+          let ensuredResult: Awaited<ReturnType<typeof ensureActivityIntervalReview>> | null = null;
           try {
             setActivityPreparing(true);
             const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
+            ensuredResult = ensured;
             if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
           } catch { /* recap is optional; the generic prompt still fires */ }
           finally { setActivityPreparing(false); }
           try {
-            const { delivered } = await apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
-              method: "POST",
-              headers: { "Idempotency-Key": nudge.key },
-              body: JSON.stringify({}),
-            });
+            const { delivered } = await deliverActivityIntervalPrompt(ensuredResult, nudge.key);
             if (!delivered || notifiedKeys.current.has(nudge.key)) return;
             notifiedKeys.current.add(nudge.key);
             writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
