@@ -155,10 +155,10 @@ describe("operational visualizations", () => {
     expect(app).toContain('title="Open profile settings"');
     expect(app).toContain('setProfileOpen(true)');
     expect(app).toContain('mode="modal"');
+    expect(app).toContain('mode="page"');
     expect(app).toContain('<span>Workspace settings</span>');
     expect(app).toContain('Identity, schedule, privacy, notifications, and work context.');
-    expect(app).toContain('Open profile settings');
-    expect(app).not.toContain('mode="page"');
+    expect(settingsSections).toContain('Open profile settings');
     expect(profileSettings).toContain('title="Identity"');
     expect(profileSettings).toContain('title="Region &amp; time"');
     expect(profileSettings).toContain('title="Workday"');
@@ -554,7 +554,8 @@ describe("operational visualizations", () => {
 
   it("keeps the settings page calm, editorial, and control-consistent", () => {
     expect(app).toContain('className="page settings-page settings-workspace-page"');
-    expect(app).toContain("<SettingsWorkspace");
+    expect(app).toContain("<SettingsSidebar");
+    expect(app).toContain("<SettingsContent");
     expect(app).not.toContain('className="settings-lead"');
     expect(app).not.toContain("Your companion, your boundaries.");
     // The groups themselves live in the shared personal-settings component,
@@ -582,9 +583,9 @@ describe("operational visualizations", () => {
     expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-page");
     expect(styles).toContain(".settings-lead");
-    expect(settingsWorkspaceStyles).toContain(".settings-workspace");
-    expect(settingsWorkspaceStyles).toContain(".settings-rail");
-    expect(settingsWorkspaceStyles).toContain(".settings-content");
+    expect(settingsWorkspaceStyles).toContain(".settings-sidebar");
+    expect(settingsWorkspaceStyles).toContain(".settings-sidebar-nav");
+    expect(settingsWorkspaceStyles).toContain(".settings-content-page");
     expect(styles).toMatch(/\.settings-group \{[\s\S]*?grid-template-columns: minmax\(128px, 164px\) minmax\(0, 1fr\);/);
     expect(styles).toMatch(/\.settings-group-head h3 \{[\s\S]*?font: 750 13px\/1\.25/);
     expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
@@ -844,9 +845,9 @@ describe("operational visualizations", () => {
     // shell's Settings section mount the same component shape.
     expect(personalSettings).toContain("export function PersonalSettings");
     expect(app).toContain('import { PersonalSettings } from "./PersonalSettings"');
-    expect(app).toContain('const renderPersonalSettings = (surface: "employee" | "admin")');
-    expect(app).toContain('renderPersonalSettings("employee")');
-    expect(app).toContain('personalSettings={renderPersonalSettings("admin")}');
+    expect(app).toContain('const settingsPropsFor = (surface: "employee" | "admin")');
+    expect(app).toContain('settingsPropsFor("employee")');
+    expect(app).toContain('<PersonalSettings {...settingsPropsFor("admin")} />');
     expect(adminWorkspace).toContain("personalSettings?: ReactNode");
     expect(adminWorkspace).toContain("<SettingsPage personalSettings={personalSettings} />");
     // The tour replay follows the surface it was rendered on.

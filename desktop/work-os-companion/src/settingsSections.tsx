@@ -105,6 +105,7 @@ export function SettingsBlock({ block, ...props }: { block: SettingsBlockId } & 
   switch (block) {
     case "profile":
       if (!props.hasPersonalRecord) return null;
+      if (props.profileSettings) return props.profileSettings;
       return <section className="settings-group" aria-labelledby="settings-profile-title">
         <header className="settings-group-head"><h3 id="settings-profile-title">Profile settings</h3></header>
         <section className="settings-panel">

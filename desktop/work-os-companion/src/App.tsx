@@ -95,7 +95,9 @@ import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
-import { SettingsWorkspace } from "./SettingsWorkspace";
+import { SettingsContent } from "./SettingsContent";
+import { SettingsSidebar } from "./SettingsSidebar";
+import { useSettingsNavigation } from "./settingsNavigation";
 import PageGuide from "./PageGuide";
 import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
@@ -342,6 +344,13 @@ export default function App() {
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
+  // The settings rail replaces the app rail while Settings is on screen; Back
+  // to app returns to whichever workspace page opened it.
+  const lastNonSettingsView = useRef<View>("day");
+  function navigateToView(nextView: View) {
+    if (nextView !== "settings") lastNonSettingsView.current = nextView;
+    setView(nextView);
+  }
   const [workspace, setWorkspace] = useState<"employee" | "admin">(() => (ADMIN_SHELL_BOOT || localStorage.getItem(WORKSPACE_MODE_KEY) === "admin" ? "admin" : "employee"));
   const [input, setInput] = useState("");
   const [progressComposerOpen, setProgressComposerOpen] = useState(false);
@@ -657,6 +666,7 @@ export default function App() {
    * which workspace branch is on screen decides which overlays mount, and that
    * decision feeds the App-level scroll lock below (design §9). */
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
+  const settingsNav = useSettingsNavigation(!!visibleOnboarding);
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
@@ -5629,7 +5639,7 @@ export default function App() {
    * modal the row opens, whose tour the replay launches, and whether the
    * changelog action goes through the administration menu's fallback-aware
    * opener. */
-  const renderPersonalSettings = (surface: "employee" | "admin") => {
+  const settingsPropsFor = (surface: "employee" | "admin") => {
     const settingsProps = {
       hasPersonalRecord: !!visibleOnboarding,
       adminOttoSettings: surface === "admin" && followSettingsScope ? (
@@ -5639,6 +5649,9 @@ export default function App() {
           {...(adminOttoFollowFixture ? { transport: adminOttoFollowFixture.transport } : {})}
         /></Suspense>
       ) : undefined,
+      profileSettings: surface === "employee" && visibleOnboarding
+        ? <ProfileSettings data={visibleOnboarding} mode="page" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} />
+        : undefined,
       tourScope: surface,
       onReplayTour: () => setTourScope(surface),
       onOpenProfile: surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true),
@@ -5683,9 +5696,7 @@ export default function App() {
       onResetOnboarding: () => void resetOnboarding(),
       busy,
     };
-    return surface === "employee"
-      ? <SettingsWorkspace {...settingsProps} />
-      : <PersonalSettings {...settingsProps} />;
+    return settingsProps;
   };
 
   /* Only a branch that mounts an overlay may hold the lock or trap focus for
@@ -5841,7 +5852,7 @@ export default function App() {
           : adminContextState?.status === "loading"
             ? "Loading the administration context…"
             : null}
-        personalSettings={renderPersonalSettings("admin")}
+        personalSettings={<PersonalSettings {...settingsPropsFor("admin")} />}
         profile={visibleOnboarding
           ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }
           : adminOttoContextQuery.data?.displayName
@@ -5938,14 +5949,24 @@ export default function App() {
   };
   return <div className={`workspace${bootRise ? " boot-rise" : ""}`}>
     <a className="skip-link" href="#work-os-main">Skip to content</a>
-    <SidebarNav
+    {view === "settings" ? <SettingsSidebar
+      active={settingsNav.active}
+      visiblePages={settingsNav.visiblePages}
+      query={settingsNav.query}
+      onQuery={settingsNav.setQuery}
+      onSelect={settingsNav.selectPage}
+      onBack={() => setView(lastNonSettingsView.current)}
+      hasPersonalRecord={!!visibleOnboarding}
+      displayName={visibleOnboarding?.profile.displayName}
+      avatarUrl={visibleOnboarding?.profile.avatarUrl}
+    /> : <SidebarNav
       activeView={view}
-      onNavigate={(nextView) => setView(nextView)}
+      onNavigate={navigateToView}
       onNewChat={startNewChat}
       onSignOut={() => { void logout(); }}
       onSwitchWorkspace={workSessionQuery.data?.role === "admin" ? () => setWorkspaceMode("admin") : undefined}
       switchLabel="Open administration"
-    />
+    />}
     <div className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{workSessionQuery.data?.role === "admin" && <button type="button" className="admin-switch-ghost" title="Open the administration workspace" onClick={() => setWorkspaceMode("admin")}><LayoutDashboard size={15} aria-hidden />Administration</button>}{signedIn && !syncBypass && <NotificationsBell
         memoryCandidates={memoryCandidateCount}
@@ -6264,7 +6285,14 @@ export default function App() {
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
        {view === "settings" && (
         <main className="page settings-page settings-workspace-page">
-          {renderPersonalSettings("employee")}
+          <SettingsContent
+            {...settingsPropsFor("employee")}
+            active={settingsNav.active}
+            visiblePages={settingsNav.visiblePages}
+            query={settingsNav.query}
+            onSelect={settingsNav.selectPage}
+            onQuery={settingsNav.setQuery}
+          />
         </main>
       )}
       {dockVisible && <ProgressComposer

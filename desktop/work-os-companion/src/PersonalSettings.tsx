@@ -17,6 +17,10 @@ export type PersonalSettingsProps = {
    * outside `hasPersonalRecord`: an administrator with no mapped employee day
    * still chooses which reviewed recaps alert them. */
   adminOttoSettings?: ReactNode;
+  /** The employee Settings workspace renders the profile form inline on its
+   * Profile page. The admin flat page omits this and keeps the row that opens
+   * the profile modal. */
+  profileSettings?: ReactNode;
   /** Which workspace's tour the Page guides group replays. */
   tourScope: "employee" | "admin";
   onReplayTour: () => void;

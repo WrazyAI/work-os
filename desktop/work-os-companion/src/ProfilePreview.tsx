@@ -9,14 +9,14 @@ import { workProfileCatalog } from "../../../src/modules/work-os/onboarding";
  * shared preview person, with the reviewed catalog and mapped evidence
  * accounts, so the pill groups and the connected-account group can be reviewed
  * without a signed-in workspace. */
-function profilePreviewData(): OnboardingData {
+export function profilePreviewData(): OnboardingData {
   const catalog = workProfileCatalog();
   const engineering = catalog.archetypes.find((entry) => entry.id === "engineering") ?? catalog.archetypes[0];
-  const pick = (label: string) => {
-    const found = engineering.items.find((entry) => entry.label === label);
-    if (!found) throw new Error(`preview catalog lost ${label}`);
-    return found;
-  };
+  const pick = (label: string) => engineering.items.find((entry) => entry.label === label);
+  const picked = ["Design and implement software", "Review and improve code", "Maintain technical quality", "Code changes", "Pull requests", "Work OS", "GitHub", "Build and deployment systems"]
+    .map(pick)
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .filter((entry, index, all) => all.findIndex((candidate) => candidate.id === entry.id) === index);
   return {
     ...PREVIEW_DATA,
     catalog,
@@ -27,7 +27,7 @@ function profilePreviewData(): OnboardingData {
         inferredArchetypeId: engineering.id,
         customRoleTitle: "",
         specialtyIds: ["engineering:frontend", "engineering:platform"],
-        items: ["Design and implement software", "Review and improve code", "Maintain technical quality", "Code changes", "Pull requests", "Work OS", "GitHub", "Build and deployment systems"].map(pick),
+        items: picked,
         responsibilities: ["Design and implement software", "Review and improve code", "Maintain technical quality"],
         outputTypes: ["Code changes", "Pull requests"],
         evidenceSources: ["Work OS", "GitHub", "Build and deployment systems"],
