@@ -6,6 +6,7 @@ import {
   MAX_ATTEMPTS,
   classifyTimebotDelivery,
   cosmosTimebotConfigured,
+  describeTimebotFailure,
   formatTimebotTime,
   postTimebotMessage,
   renderTimebotMessage,
@@ -94,12 +95,19 @@ test("a dead integration surfaces as a status, not a throw", async () => {
   assert.equal(classifyTimebotDelivery(result.status), "dead");
 });
 
-test("a network failure stays retryable and never leaks the webhook", async () => {
+test("a network failure stays retryable", async () => {
   const result = await postTimebotMessage("17:06 David — in", "https://cosmos.test/hook", (async () => {
-    throw new Error("connect timeout https://cosmos.test/hook");
+    throw new Error("connect timeout");
   }) as unknown as typeof fetch);
   assert.equal(result.status, null);
   assert.match(result.error ?? "", /connect timeout/);
+});
+
+test("the stored failure reason never contains the webhook URL", () => {
+  const reason = describeTimebotFailure(null, "connect timeout at https://cosmos.video/api/v2/chat/integrations/secret-id");
+  assert.doesNotMatch(reason, /secret-id/);
+  assert.doesNotMatch(reason, /cosmos\.video/);
+  assert.match(reason, /\[url\]/);
 });
 
 test("needs both the webhook and the organization binding", () => {
@@ -133,10 +141,11 @@ test("the dispatch route is cron-authenticated", () => {
   assert.match(route, /flushTimebotOutbox/);
 });
 
-test("the attendance sync flushes the queue without failing the sync", () => {
+test("the attendance sync schedules the flush after the response", () => {
   const route = readFileSync("src/app/api/work-os/attendance/sync-due/route.ts", "utf8");
+  assert.match(route, /after\(async \(\) => \{/);
   assert.match(route, /flushTimebotOutbox/);
-  assert.match(route, /try \{\s*\n\s*timebot = await flushTimebotOutbox/);
+  assert.doesNotMatch(route, /=\s*await flushTimebotOutbox/, "a slow Cosmos must not hold the sweep open");
 });
 
 test("the migration can never break a clock transition", () => {
@@ -149,13 +158,21 @@ test("the migration can never break a clock transition", () => {
   assert.match(sql, /for update skip locked/, "two dispatchers cannot send the same row");
   assert.match(
     sql,
-    /\(earlier\.created_at, earlier\.id\) < \(o\.created_at, o\.id\)/,
-    "the predecessor check is a total order: now() ties inside one transaction",
+    /\(earlier\.observed_at, earlier\.enqueue_seq\) < \(o\.observed_at, o\.enqueue_seq\)/,
+    "ordering follows event time, with insertion order breaking ties",
   );
-  assert.match(sql, /order by o\.created_at, o\.id/, "the total order is used for claiming too");
+  assert.match(sql, /order by o\.observed_at, o\.enqueue_seq/, "the same key is used for claiming");
+  assert.match(sql, /generated always as identity/, "created_at and uuid order cannot sequence one transaction");
+  assert.match(sql, /e\.recorded_at > now\(\)/, "work_session_events has no created_at column");
+  assert.match(sql, /set_config\('lock_timeout'/, "a queue lock must not wait out the clock transaction");
   assert.match(
     sql,
     /revoke all on function public\.work_claim_notification_outbox\(integer\) from public/,
     "PostgreSQL grants EXECUTE to PUBLIC by default; the RPC must not be public",
+  );
+  assert.match(
+    sql,
+    /revoke all on function public\.work_enqueue_timebot_notification\(\) from public/,
+    "the security-definer trigger function must not be callable by ordinary roles",
   );
 });

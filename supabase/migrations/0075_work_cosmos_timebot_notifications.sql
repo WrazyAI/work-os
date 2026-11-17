@@ -31,6 +31,10 @@ create table if not exists work_notification_outbox (
   last_error text,
   sent_at timestamptz,
   created_at timestamptz not null default now(),
+  -- Insertion order as a total order. created_at alone cannot order two events
+  -- written in one transaction (now() is the transaction time) and uuid order is
+  -- random, so a break could be claimed before the clock-in that precedes it.
+  enqueue_seq bigint generated always as identity,
   -- One post per session event. A retry adopts this row instead of creating a
   -- second message in the channel.
   unique (session_event_id)
@@ -46,7 +50,7 @@ create or replace function work_enqueue_timebot_notification()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_name text;
@@ -57,10 +61,15 @@ begin
     return new;
   end if;
 
+  -- This runs inside the clock transaction. Bound any wait on the outbox unique
+  -- index so a competing writer can delay the insert by milliseconds, not until
+  -- the statement timeout. A lock failure falls through to the reconciler.
+  perform set_config('lock_timeout', '250ms', true);
+
   select p.display_name, coalesce(s.timezone, 'UTC')
     into v_name, v_timezone
-    from work_people p
-    left join work_sessions s on s.id = new.session_id
+    from public.work_people p
+    left join public.work_sessions s on s.id = new.session_id
    where p.id = new.person_id;
 
   if v_name is null or btrim(v_name) = '' then
@@ -71,7 +80,7 @@ begin
   -- so reconciliation can see it was deliberately skipped, but never send it.
   v_stale := new.observed_at < now() - interval '15 minutes';
 
-  insert into work_notification_outbox (
+  insert into public.work_notification_outbox (
     organization_id, session_event_id, person_id, person_name, timezone,
     event_type, observed_at, status, last_error
   ) values (
@@ -98,32 +107,32 @@ create trigger work_session_events_timebot
 -- Claim a bounded batch with row locks so two dispatchers cannot send the same
 -- row. Head-of-line: only the oldest eligible row per organization is claimed,
 -- which keeps in/break/back/out in order even when one send keeps failing.
--- `now()` is the transaction time, so two events written in one transaction
--- share created_at; the id tie-breaker makes the order total and prevents a
--- break from overtaking the clock-in it belongs to.
+-- The order key is the event's own time plus its insertion sequence: created_at
+-- is the transaction time (two events in one transaction tie) and uuid order is
+-- random, so neither can tell a clock-in from the break that follows it.
 create or replace function work_claim_notification_outbox(p_limit integer default 20)
 returns setof work_notification_outbox
 language sql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
   with due as (
     select o.id
-      from work_notification_outbox o
+      from public.work_notification_outbox o
      where o.status in ('pending','failed')
        and o.next_attempt_at <= now()
        and not exists (
          select 1
-           from work_notification_outbox earlier
+           from public.work_notification_outbox earlier
           where earlier.organization_id = o.organization_id
-            and (earlier.created_at, earlier.id) < (o.created_at, o.id)
+            and (earlier.observed_at, earlier.enqueue_seq) < (o.observed_at, o.enqueue_seq)
             and earlier.status in ('pending','sending','failed')
        )
-     order by o.created_at, o.id
+     order by o.observed_at, o.enqueue_seq
      limit greatest(1, least(coalesce(p_limit, 20), 100))
      for update skip locked
   )
-  update work_notification_outbox o
+  update public.work_notification_outbox o
      set status = 'sending',
          attempts = o.attempts + 1,
          attempted_at = now()
@@ -139,24 +148,26 @@ create or replace function work_reconcile_timebot_outbox(p_limit integer default
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   v_inserted integer;
 begin
   with missing as (
-    select e.id, e.organization_id, e.person_id, e.event_type, e.observed_at, e.session_id
-      from work_session_events e
+    select e.id, e.organization_id, e.person_id, e.event_type, e.observed_at, e.session_id, e.recorded_at
+      from public.work_session_events e
      where e.event_type in ('clock_in','pause','resume','clock_out')
-       and e.created_at > now() - interval '7 days'
+       -- work_session_events has no created_at; recorded_at is when the row
+       -- was written, and observed_at is when the transition happened.
+       and e.recorded_at > now() - interval '7 days'
        and not exists (
-         select 1 from work_notification_outbox o where o.session_event_id = e.id
+         select 1 from public.work_notification_outbox o where o.session_event_id = e.id
        )
-     order by e.created_at, e.id
+     order by e.observed_at, e.recorded_at, e.id
      limit greatest(1, least(coalesce(p_limit, 50), 500))
   ),
   inserted as (
-    insert into work_notification_outbox (
+    insert into public.work_notification_outbox (
       organization_id, session_event_id, person_id, person_name, timezone,
       event_type, observed_at, status, last_error
     )
@@ -167,8 +178,8 @@ begin
            case when m.observed_at < now() - interval '15 minutes' then 'dead' else 'pending' end,
            case when m.observed_at < now() - interval '15 minutes' then 'stale' else null end
       from missing m
-      join work_people p on p.id = m.person_id
-      left join work_sessions s on s.id = m.session_id
+      join public.work_people p on p.id = m.person_id
+      left join public.work_sessions s on s.id = m.session_id
      where btrim(p.display_name) <> ''
     on conflict (session_event_id) do nothing
     returning 1
@@ -180,22 +191,29 @@ $$;
 
 -- Both functions are service-role only. PostgreSQL grants EXECUTE to PUBLIC by
 -- default, which would expose other organizations' rows through PostgREST.
+-- The trigger function is revoked too: it is SECURITY DEFINER and an ordinary
+-- role could otherwise attach it to a table it owns and forge an outbox row.
+-- Trigger firing does not check EXECUTE, so revoking does not affect the trigger.
 -- Legacy Supabase databases carry anon/authenticated/service_role; Neon carries
 -- none of them, so each role-specific statement is applied only where it exists.
 do $$
 begin
   revoke all on function public.work_claim_notification_outbox(integer) from public;
   revoke all on function public.work_reconcile_timebot_outbox(integer) from public;
+  revoke all on function public.work_enqueue_timebot_notification() from public;
   if exists (select 1 from pg_roles where rolname = 'anon') then
     revoke all on function public.work_claim_notification_outbox(integer) from anon;
     revoke all on function public.work_reconcile_timebot_outbox(integer) from anon;
+    revoke all on function public.work_enqueue_timebot_notification() from anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
     revoke all on function public.work_claim_notification_outbox(integer) from authenticated;
     revoke all on function public.work_reconcile_timebot_outbox(integer) from authenticated;
+    revoke all on function public.work_enqueue_timebot_notification() from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.work_claim_notification_outbox(integer) to service_role;
     grant execute on function public.work_reconcile_timebot_outbox(integer) to service_role;
+    grant execute on function public.work_enqueue_timebot_notification() to service_role;
   end if;
 end $$;
