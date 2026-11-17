@@ -24,7 +24,7 @@ function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettings
     onAutoCheckUpdates: noop,
     updateDetail: "You're on the latest version.",
     updateStatus: "idle",
-    installedVersion: "0.5.33",
+    installedVersion: "0.5.34",
     onCheckForUpdates: noop,
     onDownloadUpdate: noop,
     onInstallUpdate: noop,

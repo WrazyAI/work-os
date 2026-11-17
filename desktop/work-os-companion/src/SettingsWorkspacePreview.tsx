@@ -43,9 +43,9 @@ export default function SettingsWorkspacePreview() {
           onRecapVoice={() => undefined}
           autoCheckUpdates
           onAutoCheckUpdates={() => undefined}
-          updateDetail="Installed version 0.5.33 · up to date"
+          updateDetail="Installed version 0.5.34 · up to date"
           updateStatus="idle"
-          installedVersion="0.5.33"
+          installedVersion="0.5.34"
           onCheckForUpdates={() => undefined}
           onDownloadUpdate={() => undefined}
           onInstallUpdate={() => undefined}
