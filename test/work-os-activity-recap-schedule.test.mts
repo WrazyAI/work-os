@@ -57,6 +57,29 @@ test("a future or missing prompt does nothing", async () => {
   assert.equal(result.generated, 0);
 });
 
+test("a scheduler finishing slot A cannot advance B", async () => {
+  const due = "2026-11-12T14:30:00.000Z";
+  const receipts: unknown[] = [];
+  let reads = 0;
+  const result = await settleDueActivityRecaps(access, { at, maxSlots: 1, deps: {
+    getWorkday: async () => workday("hourly_fallback", reads++ === 0 ? due : "2026-11-12T15:30:00.000Z"),
+    loadSlot: async () => null,
+    ensure: async (_access, input) => {
+      receipts.push(input.expectedSlot);
+      return { status: "ready" };
+    },
+    deliver: async (_access, _at, slot) => {
+      receipts.push(slot);
+      return { delivered: slot?.promptDueAt === "2026-11-12T15:30:00.000Z" } as any;
+    },
+  } });
+  assert.equal(result.advanced, 0);
+  assert.deepEqual(receipts, [
+    { sessionId: "session-1", promptDueAt: due },
+    { sessionId: "session-1", promptDueAt: due },
+  ]);
+});
+
 test("a failed synthesis stops without advancing and is not retried inside the run", async () => {
   let delivered = 0;
   const result = await settleDueActivityRecaps(access, { at, deps: {

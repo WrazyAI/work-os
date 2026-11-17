@@ -10,7 +10,7 @@ import {
 } from "@/lib/work-os-activity-intervals";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { dailyPlanGoalText, deliverWorkdayPrompt, getWorkday } from "@/lib/work-os-workday";
+import { dailyPlanGoalText, deliverWorkdayPrompt, getWorkday, type WorkdayPromptSlot } from "@/lib/work-os-workday";
 
 export const SCHEDULED_RECAP_MAX_SLOTS = 4;
 export const SCHEDULED_RECAP_FAILURE_BACKOFF_MS = 15 * 60_000;
@@ -21,8 +21,8 @@ type DeliverResult = Awaited<ReturnType<typeof deliverWorkdayPrompt>>;
 
 export type ScheduledRecapDeps = {
   getWorkday: (access: WorkOsAccess, at: Date) => Promise<Workday>;
-  ensure: (access: WorkOsAccess, input: { promptDueAt?: string; at?: Date }) => Promise<EnsureResult>;
-  deliver: (access: WorkOsAccess, at: Date) => Promise<DeliverResult>;
+  ensure: (access: WorkOsAccess, input: { promptDueAt?: string; at?: Date; expectedSlot?: WorkdayPromptSlot }) => Promise<EnsureResult>;
+  deliver: (access: WorkOsAccess, at: Date, expectedSlot: WorkdayPromptSlot) => Promise<DeliverResult>;
   loadSlot: (access: WorkOsAccess, slotKey: string) => Promise<ActivityIntervalRecord | null>;
 };
 
@@ -87,7 +87,8 @@ export async function settleDueActivityRecaps(
       planHasGoal: Boolean(dailyPlanGoalText(workday.plan)),
     })) break;
 
-    const result = await deps.ensure(access, { promptDueAt: prompt.nextPromptAt, at });
+    const expectedSlot = { sessionId: String(workday.session?.id), promptDueAt: new Date(dueMs).toISOString() };
+    const result = await deps.ensure(access, { promptDueAt: prompt.nextPromptAt, at, expectedSlot });
     if (result.status === "no_prompt") break;
     if (result.status === "failed") {
       failed += 1;
@@ -106,10 +107,11 @@ export async function settleDueActivityRecaps(
       break;
     }
 
-    const delivery = await deps.deliver(access, at);
+    const delivery = await deps.deliver(access, at, expectedSlot);
     if (delivery.delivered) advanced += 1;
     results.push({ slotKey, status: result.status, advanced: delivery.delivered });
     lastSlotKey = slotKey;
+    if (!delivery.delivered) break;
 
     const nextMs = Date.parse(after.prompt.nextPromptAt ?? "");
     if (!Number.isFinite(nextMs) || nextMs > at.getTime() + 60_000 || nextMs === dueMs) break;

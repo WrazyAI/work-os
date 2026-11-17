@@ -120,6 +120,11 @@ test("a prompt slot has one deterministic identity", () => {
   assert.notEqual(activityIntervalSlotKey("session-1", "2026-09-28T16:19:29.446Z"), key);
 });
 
+test("a client hint 30 seconds off does not create a second slot", () => {
+  assert.equal(intervalEngine.resolveActivityIntervalDueAt("2026-11-12T15:00:00.000Z", "2026-11-12T15:00:30.000Z"), "2026-11-12T15:00:00.000Z");
+});
+
+
 test("recap page cursors round-trip and reject malformed values", () => {
   const cursor = activityIntervalCursor({ window_end: "2026-09-28T15:17:00.000Z", id: "interval-1" });
   assert.equal(cursor, "2026-09-28T15:17:00.000Z|interval-1");

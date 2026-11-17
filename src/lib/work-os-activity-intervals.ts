@@ -6,7 +6,7 @@ import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, 
 import { getPool } from "@/lib/db/pool";
 import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { dailyPlanGoalText, getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
+import { dailyPlanGoalText, getWorkday, workOsCadenceFor, type WorkdayPromptSlot } from "@/lib/work-os-workday";
 import { suggestWorkOsDayGoal } from "@/lib/work-os-goal-suggestion";
 import {
   personTimezone,
@@ -776,7 +776,11 @@ async function persistEvidence(intervalId: string, organizationId: string, selec
 /** Ensures the recap for one authoritative prompt slot. Idempotent per slot,
  * coalesces concurrent calls, never touches employee check-ins or the
  * substantive-update cadence, and never rewrites a reviewed recap. */
-export async function ensureActivityInterval(access: WorkOsAccess, input: { promptDueAt?: string; at?: Date } = {}) {
+export function resolveActivityIntervalDueAt(authoritative: string, _hint?: string) {
+  return new Date(authoritative).toISOString();
+}
+
+export async function ensureActivityInterval(access: WorkOsAccess, input: { promptDueAt?: string; at?: Date; expectedSlot?: WorkdayPromptSlot } = {}) {
   const gate = selectable(access);
   if (!gate.ok) return { status: "unavailable" as const, reason: gate.reason };
   const { config } = gate;
@@ -800,12 +804,12 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     return { status: "no_prompt" as const, reason: "no_activity_prompt_due" };
   }
   const dueMs = Date.parse(prompt.nextPromptAt);
-  const requestedMs = input.promptDueAt ? Date.parse(input.promptDueAt) : Number.NaN;
   // The server's recomputed due time is authoritative; the client value is only
   // accepted as a matching slot hint (within clock-skew tolerance).
-  const promptDueAt = Number.isFinite(requestedMs) && Math.abs(requestedMs - dueMs) <= 90_000
-    ? new Date(requestedMs).toISOString()
-    : prompt.nextPromptAt;
+  const promptDueAt = resolveActivityIntervalDueAt(prompt.nextPromptAt, input.promptDueAt);
+  if (input.expectedSlot && (String(session.id) !== input.expectedSlot.sessionId || Date.parse(input.expectedSlot.promptDueAt) !== dueMs)) {
+    return { status: "no_prompt" as const, reason: "slot_changed" };
+  }
   if (Date.parse(promptDueAt) > at.getTime() + 60_000) return { status: "no_prompt" as const, reason: "prompt_not_due" };
 
   // The row records the cadence slot, and the goal question's hold is the

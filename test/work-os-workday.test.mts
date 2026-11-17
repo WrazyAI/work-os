@@ -441,6 +441,30 @@ async function recapSessionFixture() {
   return f;
 }
 
+test("expected recap delivery uses a session-scoped database CAS", async () => {
+  const f = await recapSessionFixture();
+  try {
+    const { recordPromptDelivery } = await import("../src/lib/work-os-workday");
+    await f.database.query(`update work_sessions set state='active',
+      first_follow_up_at='2026-11-06T16:30Z' where id=$1`, [planSession]);
+    const snapshot = (await f.database.query("select * from work_sessions where id=$1", [planSession])).rows[0] as any;
+    const prompt = { kind: "follow_up", nextPromptAt: "2026-11-06T16:30:00.000Z" } as any;
+    const cadence = { checkInIntervalMinutes: 60 } as any;
+    const expected = { sessionId: planSession, promptDueAt: prompt.nextPromptAt };
+    const at = new Date("2026-11-06T17:00Z");
+    assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, { ...expected, sessionId: "another" })).delivered, false);
+    assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, { ...expected, promptDueAt: "2026-11-06T16:31:00Z" })).delivered, false);
+    await f.database.query("update work_sessions set snoozed_until='2026-11-06T17:20Z' where id=$1", [planSession]);
+    assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)).delivered, false);
+    assert.equal((await f.database.query("select next_fallback_at from work_sessions where id=$1", [planSession])).rows[0].next_fallback_at, null);
+    await f.database.query("update work_sessions set snoozed_until=null where id=$1", [planSession]);
+    const results = await Promise.all([1, 2].map(() => recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)));
+    assert.equal(results.filter(r => r.delivered).length, 1);
+    const fresh = (await f.database.query("select * from work_sessions where id=$1", [planSession])).rows[0];
+    assert.equal((await recordPromptDelivery(planAccess, fresh, { ...prompt, kind: "plan" }, at, cadence, expected)).delivered, false, "a still-held goal question cannot advance");
+  } finally { await f.close(); }
+});
+
 const resumedProjection = {
   source: "worktivity", stale: false, state: "active", status: "working",
   clockedInAt: "2026-11-06T15:32:12Z", observedAt: "2026-11-06T17:45:00Z",
