@@ -5626,7 +5626,7 @@ export default function App() {
    * release there; the desktop reports one and opens exactly that. */
   const openProfileFromAdmin = () => {
     setNotificationsOpen(false);
-    setProfileOpen(true);
+    navigateAdmin("settings", { settingsPage: "profile" });
   };
   const openChangelogFromAdmin = () => {
     setNotificationsOpen(false);
@@ -5985,7 +5985,7 @@ export default function App() {
         onRetry={() => void outstandingQuery.refetch()}
         admin={adminNotificationFeed}
         defaultTab="employee"
-      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
+      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => { navigateToView("settings"); settingsNav.selectPage("profile"); }}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       <div id="work-os-notification-region" className="notification-region" />
       <div id="work-os-main" className="skip-target" tabIndex={-1} />
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}

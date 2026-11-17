@@ -836,7 +836,7 @@ describe("operational visualizations", () => {
     // Both handlers close the bell panel first: in administration that panel
     // owns the layer above the receipt stack while open, so it could otherwise
     // float above the modal scrim.
-    expect((app.match(/setNotificationsOpen\(false\);\n    set(?:ProfileOpen\(true\)|WhatsNew\()/g) ?? []).length).toBe(2);
+    expect((app.match(/setNotificationsOpen\(false\);\n    (?:navigateAdmin\("settings", \{ settingsPage: "profile" \}\)|setWhatsNew\()/g) ?? []).length).toBe(2);
   });
 
   it("leads the administration settings with the account's own settings", () => {

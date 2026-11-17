@@ -102,12 +102,17 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** Settings props for the administration settings takeover. */
   personalSettingsProps?: PersonalSettingsProps;
 }) {
-  const [settingsPage, setSettingsPage] = useState<AdminSettingsPageId>("workspace-settings");
+  const [settingsPage, setSettingsPage] = useState<AdminSettingsPageId>("workspace-status");
   const [settingsQuery, setSettingsQuery] = useState("");
   const lastNonSettingsSection = useRef<AdminSection>("overview");
   useEffect(() => {
     if (section !== "settings") lastNonSettingsSection.current = section;
   }, [section]);
+  useEffect(() => {
+    if (section !== "settings" || !focus.settingsPage) return;
+    setSettingsPage(focus.settingsPage as AdminSettingsPageId);
+    setSettingsQuery("");
+  }, [focus.settingsPage, section]);
   const settingsPages = useMemo(
     () => adminSettingsPages(!!personalSettingsProps?.hasPersonalRecord, !!personalSettingsProps?.adminOttoSettings),
     [personalSettingsProps?.adminOttoSettings, personalSettingsProps?.hasPersonalRecord],
@@ -118,7 +123,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   );
   const activeSettingsPage = visibleSettingsPages.some((page) => page.id === settingsPage)
     ? settingsPage
-    : visibleSettingsPages[0]?.id ?? "workspace-settings";
+    : visibleSettingsPages[0]?.id ?? "workspace-status";
   const navigate = (next: AdminSection, nextFocus?: Focus) => {
     if (next !== "settings") lastNonSettingsSection.current = next;
     onNavigate(next, nextFocus);

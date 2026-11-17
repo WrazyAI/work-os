@@ -52,7 +52,7 @@ function props(): PersonalSettingsProps {
   };
 }
 
-function render(active: "workspace-settings" | "general") {
+function render(active: "workspace-status" | "general") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(NotificationProvider, null, createElement(AdminSettingsContent, {
@@ -71,14 +71,17 @@ describe("administration settings takeover", () => {
     const ids = adminSettingsPages(true, true).map((page) => page.id);
     expect(ids).toContain("profile");
     expect(ids).toContain("general");
-    expect(ids).toContain("workspace-settings");
+    expect(ids).toContain("workspace-status");
+    expect(ids).toContain("features");
+    expect(ids).toContain("connections");
     expect(ids).toContain("recap-follows");
     expect(ids).toContain("about");
   });
 
   it("renders the workspace cards on Workspace settings", () => {
-    const markup = render("workspace-settings");
-    expect(markup).toContain("Workspace settings");
+    const markup = render("workspace-status");
+    expect(markup).toContain("Workspace status");
+    expect(markup).toContain('data-active-card="status"');
     expect(markup).toContain("Workspace status");
     expect(markup).toContain("Features");
   });

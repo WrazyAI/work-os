@@ -1,21 +1,29 @@
-import { Bell, ShieldCheck } from "lucide-react";
-import SettingsPage from "./admin/SettingsPage";
+import { Bell, Cable, PlugZap, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
+import SettingsPage, { type AdminSettingsCardId } from "./admin/SettingsPage";
 import { SettingsContent } from "./SettingsContent";
 import { SETTINGS_PAGES, type SettingsNavPage, type SettingsPageId } from "./settingsSections";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 
-export type AdminSettingsPageId = SettingsPageId | "workspace-settings" | "recap-follows";
+export type AdminSettingsPageId = SettingsPageId | "workspace-status" | "features" | "members" | "teams" | "connections" | "mappings" | "blueprints" | "recap-follows";
 
-/** The one workspace-configuration page in the administration settings rail.
- * The admin cards keep their existing component and order; the sidebar gives
- * them a stable destination while the personal settings pages stay shared. */
-export const ADMIN_WORKSPACE_PAGE: SettingsNavPage<AdminSettingsPageId> = {
-  id: "workspace-settings",
-  label: "Workspace settings",
-  group: "Workspace",
-  icon: ShieldCheck,
-  description: "Workspace status, features, members, teams, provider connections, mappings, and blueprints.",
-  keywords: ["workspace", "status", "features", "members", "teams", "connections", "mappings", "blueprints", "providers"],
+const ADMIN_PAGES: SettingsNavPage<AdminSettingsPageId>[] = [
+  { id: "workspace-status", label: "Workspace status", group: "Workspace", icon: ShieldCheck, description: "Schema readiness and the workspace database.", keywords: ["status", "schema", "database", "workspace"] },
+  { id: "features", label: "Features", group: "Workspace", icon: SlidersHorizontal, description: "One switch per workspace capability; changes apply to every member.", keywords: ["features", "capabilities", "switches"] },
+  { id: "members", label: "Members", group: "Workspace", icon: Users, description: "Who belongs to the workspace and the role each person can open.", keywords: ["members", "roles", "access", "people"] },
+  { id: "teams", label: "Teams", group: "Workspace", icon: UsersRound, description: "Teams scope what managers can review and what planning groups.", keywords: ["teams", "managers", "groups"] },
+  { id: "connections", label: "Connections", group: "Integrations", icon: Cable, description: "Provider connections and mapped evidence accounts.", keywords: ["connections", "providers", "github", "worktivity", "nifty"] },
+  { id: "mappings", label: "Field mappings", group: "Integrations", icon: Cable, description: "How provider fields land in the task record.", keywords: ["mappings", "fields", "providers"] },
+  { id: "blueprints", label: "Blueprints", group: "Integrations", icon: PlugZap, description: "Reusable task templates the workspace can generate from.", keywords: ["blueprints", "templates", "tasks"] },
+];
+
+const ADMIN_CARD_BY_PAGE: Partial<Record<AdminSettingsPageId, AdminSettingsCardId>> = {
+  "workspace-status": "status",
+  features: "features",
+  members: "members",
+  teams: "teams",
+  connections: "connections",
+  mappings: "mappings",
+  blueprints: "blueprints",
 };
 
 export const ADMIN_RECAP_PAGE: SettingsNavPage<AdminSettingsPageId> = {
@@ -36,12 +44,12 @@ export function adminSettingsPages(hasPersonalRecord: boolean, hasRecapSettings 
   const withRecap = hasRecapSettings
     ? [...beforeData.slice(0, sessionIndex + 1), ADMIN_RECAP_PAGE, ...beforeData.slice(sessionIndex + 1)]
     : beforeData;
-  return [...withRecap, ADMIN_WORKSPACE_PAGE, ...data, ...(about ? [about] : [])];
+  return [...withRecap, ...ADMIN_PAGES, ...data, ...(about ? [about] : [])];
 }
 
 /** The stage half of the administration settings takeover. Personal pages
- * render through the same SettingsContent as the employee workspace; the
- * workspace page keeps the existing admin cards. */
+ * render through the same SettingsContent as the employee workspace; each
+ * workspace card is its own page. */
 export function AdminSettingsContent({ active, visiblePages, query, onSelect, onQuery, personalSettingsProps }: {
   active: AdminSettingsPageId;
   visiblePages: SettingsNavPage<AdminSettingsPageId>[];
@@ -50,8 +58,8 @@ export function AdminSettingsContent({ active, visiblePages, query, onSelect, on
   onQuery: (value: string) => void;
   personalSettingsProps: PersonalSettingsProps;
 }) {
-  const workspacePage = visiblePages.find((page) => page.id === "workspace-settings");
   const recapPage = visiblePages.find((page) => page.id === "recap-follows");
+  const adminPage = visiblePages.find((page) => page.id === active && ADMIN_CARD_BY_PAGE[page.id]);
   const normalized = query.trim();
 
   if (active === "recap-follows" && recapPage && personalSettingsProps.adminOttoSettings) {
@@ -67,20 +75,20 @@ export function AdminSettingsContent({ active, visiblePages, query, onSelect, on
     </section>;
   }
 
-  if (active === "workspace-settings" && workspacePage) {
+  if (adminPage) {
     return <section className="settings-content-page admin-settings-content" aria-labelledby="settings-page-title">
       <header className="settings-content-head">
-        <p className="settings-content-eyebrow">Workspace</p>
-        <h2 id="settings-page-title">{workspacePage.label}</h2>
-        <p>{workspacePage.description}</p>
+        <p className="settings-content-eyebrow">{adminPage.group}</p>
+        <h2 id="settings-page-title">{adminPage.label}</h2>
+        <p>{adminPage.description}</p>
       </header>
       <div className="settings-content-body admin-settings-body">
-        <SettingsPage personalSettings={undefined} />
+        <SettingsPage personalSettings={undefined} activeCard={ADMIN_CARD_BY_PAGE[adminPage.id]} />
       </div>
     </section>;
   }
 
-  const personalVisible = visiblePages.filter((page) => page.id !== "workspace-settings");
+  const personalVisible = visiblePages.filter((page) => !ADMIN_CARD_BY_PAGE[page.id] && page.id !== "recap-follows");
   const personalPage = SETTINGS_PAGES.find((page) => page.id === active);
   if (personalPage && personalVisible.some((page) => page.id === active)) {
     return <SettingsContent
