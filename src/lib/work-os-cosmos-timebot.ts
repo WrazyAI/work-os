@@ -25,14 +25,21 @@ export const MAX_ATTEMPTS = 8;
 /** 1m, 5m, 15m, 1h, 6h — then hold at 6h until MAX_ATTEMPTS. */
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
 
-type TimebotEnv = { COSMOS_TIMEBOT_WEBHOOK_URL?: string };
+type TimebotEnv = { COSMOS_TIMEBOT_WEBHOOK_URL?: string; COSMOS_TIMEBOT_ORGANIZATION_ID?: string };
 
 function timebotWebhookUrl(env?: TimebotEnv) {
   return (env ?? (process.env as unknown as TimebotEnv)).COSMOS_TIMEBOT_WEBHOOK_URL?.trim() ?? "";
 }
 
+/** The destination is one global channel, so the deployment must name the
+ * organization it speaks for. Without this, a second tenant's attendance would
+ * land in the same channel under the same bot name. */
+function timebotOrganizationId(env?: TimebotEnv) {
+  return (env ?? (process.env as unknown as TimebotEnv)).COSMOS_TIMEBOT_ORGANIZATION_ID?.trim() ?? "";
+}
+
 export function cosmosTimebotConfigured(env?: TimebotEnv) {
-  return Boolean(timebotWebhookUrl(env));
+  return Boolean(timebotWebhookUrl(env) && timebotOrganizationId(env));
 }
 
 /** `17:06` in the employee's own timezone. The channel timestamp is the
@@ -118,6 +125,10 @@ interface OutboxRow {
 
 export interface TimebotFlushSummary {
   configured: boolean;
+  /** The webhook and the organization binding must both be set; one without the
+   * other is a configuration error, not a reason to post. */
+  misconfigured: boolean;
+  reconciled: number;
   claimed: number;
   sent: number;
   retried: number;
@@ -125,11 +136,15 @@ export interface TimebotFlushSummary {
   released: number;
 }
 
+const MAX_CLAIM_ROUNDS = 8;
+
 /** Drain the queue. Called inline after an attendance sync for immediacy, and
  * from the scheduled dispatch route for retries. */
 export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetch): Promise<TimebotFlushSummary> {
   const summary: TimebotFlushSummary = {
     configured: false,
+    misconfigured: false,
+    reconciled: 0,
     claimed: 0,
     sent: 0,
     retried: 0,
@@ -138,7 +153,11 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
   };
 
   const url = timebotWebhookUrl();
-  if (!url) return summary;
+  const organizationId = timebotOrganizationId();
+  if (!url || !organizationId) {
+    summary.misconfigured = Boolean(url) !== Boolean(organizationId);
+    return summary;
+  }
   summary.configured = true;
 
   const db = createAdminClient();
@@ -151,91 +170,115 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
     .eq("status", "sending")
     .lt("attempted_at", new Date(now.getTime() - STALE_SENDING_MS).toISOString());
 
-  const claimed = await db.rpc("work_claim_notification_outbox", { p_limit: limit });
-  if (claimed.error) throw new Error(`claim timebot outbox: ${claimed.error.message}`);
-  const rows = (claimed.data ?? []) as OutboxRow[];
-  summary.claimed = rows.length;
+  // Re-create rows for session events whose enqueue the trigger swallowed. A
+  // recovery error must not stop the drain that already has work to do.
+  const reconciled = await db.rpc("work_reconcile_timebot_outbox", { p_limit: 50 });
+  if (!reconciled.error) summary.reconciled = Number(reconciled.data) || 0;
 
   let blocked = false;
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index];
-    if (blocked) {
-      // Release rows we never attempted so the next run sees them as due.
-      const rest = rows.slice(index).map((unused) => unused.id);
-      await db
-        .from("work_notification_outbox")
-        .update({ status: "pending", next_attempt_at: now.toISOString() })
-        .in("id", rest);
-      summary.released = rest.length;
-      break;
-    }
+  // The predecessor rule makes at most one row per organization claimable at a
+  // time, so one claim per run would drain a backlog at a single event per run.
+  for (let round = 0; round < MAX_CLAIM_ROUNDS && !blocked; round += 1) {
+    const claimed = await db.rpc("work_claim_notification_outbox", { p_limit: limit });
+    if (claimed.error) throw new Error(`claim timebot outbox: ${claimed.error.message}`);
+    const rows = (claimed.data ?? []) as OutboxRow[];
+    if (!rows.length) break;
+    summary.claimed += rows.length;
 
-    const message = renderTimebotMessage({
-      displayName: row.person_name,
-      eventType: row.event_type,
-      observedAt: row.observed_at,
-      timezone: row.timezone,
-    });
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      if (blocked) {
+        // Release rows we never attempted so the next run sees them as due.
+        const rest = rows.slice(index).map((unused) => unused.id);
+        await db
+          .from("work_notification_outbox")
+          .update({ status: "pending", next_attempt_at: now.toISOString() })
+          .in("id", rest);
+        summary.released += rest.length;
+        break;
+      }
 
-    if (!message) {
-      await db
-        .from("work_notification_outbox")
-        .update({ status: "dead", last_error: "unrenderable event", next_attempt_at: now.toISOString() })
-        .eq("id", row.id);
-      summary.dead += 1;
-      continue;
-    }
+      if (row.organization_id !== organizationId) {
+        // Never post another organization's attendance into this channel.
+        await db
+          .from("work_notification_outbox")
+          .update({
+            status: "dead",
+            last_error: "organization is not bound to this timebot destination",
+            next_attempt_at: now.toISOString(),
+          })
+          .eq("id", row.id);
+        summary.dead += 1;
+        continue;
+      }
 
-    const result = await postTimebotMessage(message, url, fetchImpl);
-    const outcome = classifyTimebotDelivery(result.status);
+      const message = renderTimebotMessage({
+        displayName: row.person_name,
+        eventType: row.event_type,
+        observedAt: row.observed_at,
+        timezone: row.timezone,
+      });
 
-    if (outcome === "sent") {
-      await db
-        .from("work_notification_outbox")
-        .update({ status: "sent", sent_at: new Date().toISOString(), last_error: null })
-        .eq("id", row.id);
-      summary.sent += 1;
-      continue;
-    }
+      if (!message) {
+        await db
+          .from("work_notification_outbox")
+          .update({ status: "dead", last_error: "unrenderable event", next_attempt_at: now.toISOString() })
+          .eq("id", row.id);
+        summary.dead += 1;
+        continue;
+      }
 
-    if (outcome === "dead") {
+      const result = await postTimebotMessage(message, url, fetchImpl);
+      const outcome = classifyTimebotDelivery(result.status);
+
+      if (outcome === "sent") {
+        await db
+          .from("work_notification_outbox")
+          .update({ status: "sent", sent_at: new Date().toISOString(), last_error: null })
+          .eq("id", row.id);
+        summary.sent += 1;
+        continue;
+      }
+
+      if (outcome === "dead") {
+        await db
+          .from("work_notification_outbox")
+          .update({
+            status: "dead",
+            last_error: describeFailure(result.status, result.error),
+            next_attempt_at: now.toISOString(),
+          })
+          .eq("id", row.id);
+        summary.dead += 1;
+        continue;
+      }
+
+      const attempts = Number(row.attempts) || 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        await db
+          .from("work_notification_outbox")
+          .update({
+            status: "dead",
+            last_error: `gave up after ${attempts} attempts: ${describeFailure(result.status, result.error)}`,
+            next_attempt_at: now.toISOString(),
+          })
+          .eq("id", row.id);
+        summary.dead += 1;
+        continue;
+      }
+
       await db
         .from("work_notification_outbox")
         .update({
-          status: "dead",
+          status: "failed",
           last_error: describeFailure(result.status, result.error),
-          next_attempt_at: now.toISOString(),
+          next_attempt_at: new Date(now.getTime() + timebotBackoffMs(attempts)).toISOString(),
         })
         .eq("id", row.id);
-      summary.dead += 1;
-      continue;
+      summary.retried += 1;
+      // Keep the channel in order: nothing later may overtake a failed event.
+      blocked = true;
     }
-
-    const attempts = Number(row.attempts) || 1;
-    if (attempts >= MAX_ATTEMPTS) {
-      await db
-        .from("work_notification_outbox")
-        .update({
-          status: "dead",
-          last_error: `gave up after ${attempts} attempts: ${describeFailure(result.status, result.error)}`,
-          next_attempt_at: now.toISOString(),
-        })
-        .eq("id", row.id);
-      summary.dead += 1;
-      continue;
-    }
-
-    await db
-      .from("work_notification_outbox")
-      .update({
-        status: "failed",
-        last_error: describeFailure(result.status, result.error),
-        next_attempt_at: new Date(now.getTime() + timebotBackoffMs(attempts)).toISOString(),
-      })
-      .eq("id", row.id);
-    summary.retried += 1;
-    // Keep the channel in order: nothing later may overtake a failed event.
-    blocked = true;
   }
 
   return summary;

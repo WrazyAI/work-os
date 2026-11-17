@@ -305,7 +305,7 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 | Flush after the scheduled attendance sweep | `src/app/api/work-os/attendance/sync-due/route.ts` |
 | Tests | `test/work-os-cosmos-timebot.test.mts` |
 
-**Environment.** `COSMOS_TIMEBOT_WEBHOOK_URL` enables the feature; unset means the queue fills and nothing is sent, which is a safe default. `CRON_SECRET` already exists for the scheduled routes.
+**Environment.** `COSMOS_TIMEBOT_WEBHOOK_URL` and `COSMOS_TIMEBOT_ORGANIZATION_ID` together enable the feature. One without the other is treated as a configuration error and nothing is sent: the destination is a single channel, so the deployment must name the organization it speaks for, or a second tenant's attendance would land in the same channel. `CRON_SECRET` already exists for the scheduled routes.
 
 **Behaviour.** Only `clock_in`, `pause`, `resume` and `clock_out` are posted. The trigger snapshots the person's name and the session timezone at enqueue time, so a later rename or timezone change cannot rewrite history. Events older than 15 minutes at enqueue are stored as `dead`/`stale`, so a provider recovery never posts a morning clock-in at dinner time. The queue is ordered per organization: a failed send blocks later events until it is sent or dead, keeping `in → break → back → out` readable.
 
@@ -342,7 +342,7 @@ The `performed` vs `triggered` distinction cannot come from Cosmos. Cosmos activ
 
 1. **Decide the destination.** Because Cosmos no longer allows message deletion, verify in a private `work-os-test` channel first if the format or the integration name is still in question. Otherwise the first real transition is the test, permanently.
 2. **Apply the migration.** `npm run db:apply -- supabase/migrations/0075_work_cosmos_timebot_notifications.sql`. Additive only; it creates one table, one trigger, one function.
-3. **Set `COSMOS_TIMEBOT_WEBHOOK_URL`** in the server environment. Unset is a no-op, so this is the moment the feature becomes live.
+3. **Set `COSMOS_TIMEBOT_WEBHOOK_URL` and `COSMOS_TIMEBOT_ORGANIZATION_ID`** in the server environment. Either one alone is a no-op, so this pair is the moment the feature becomes live.
 4. **Redeploy** through the normal Work OS path.
 5. **Verify with one real transition.** Clock in, then confirm the line appears in the channel within a few seconds. Check `work_notification_outbox` shows `sent`.
 6. **Watch the first day.** A `dead` row with `integration missing or rotated (404)` means the Cosmos integration was deleted. A `failed` row retries on the 1m/5m/15m/1h/6h schedule for eight attempts.

@@ -102,10 +102,28 @@ test("a network failure stays retryable and never leaks the webhook", async () =
   assert.match(result.error ?? "", /connect timeout/);
 });
 
-test("is disabled until the webhook env var is set", () => {
+test("needs both the webhook and the organization binding", () => {
   assert.equal(cosmosTimebotConfigured({}), false);
-  assert.equal(cosmosTimebotConfigured({ COSMOS_TIMEBOT_WEBHOOK_URL: "   " }), false);
-  assert.equal(cosmosTimebotConfigured({ COSMOS_TIMEBOT_WEBHOOK_URL: "https://cosmos.test/hook" }), true);
+  assert.equal(cosmosTimebotConfigured({ COSMOS_TIMEBOT_WEBHOOK_URL: "https://cosmos.test/hook" }), false);
+  assert.equal(cosmosTimebotConfigured({ COSMOS_TIMEBOT_ORGANIZATION_ID: "org-1" }), false);
+  assert.equal(cosmosTimebotConfigured({ COSMOS_TIMEBOT_WEBHOOK_URL: "   ", COSMOS_TIMEBOT_ORGANIZATION_ID: "org-1" }), false);
+  assert.equal(
+    cosmosTimebotConfigured({ COSMOS_TIMEBOT_WEBHOOK_URL: "https://cosmos.test/hook", COSMOS_TIMEBOT_ORGANIZATION_ID: "org-1" }),
+    true,
+  );
+});
+
+test("the dispatcher never posts another organization's attendance", () => {
+  const lib = readFileSync("src/lib/work-os-cosmos-timebot.ts", "utf8");
+  assert.match(lib, /row\.organization_id !== organizationId/);
+  assert.match(lib, /organization is not bound to this timebot destination/);
+});
+
+test("a swallowed enqueue has a recovery path", () => {
+  const lib = readFileSync("src/lib/work-os-cosmos-timebot.ts", "utf8");
+  assert.match(lib, /work_reconcile_timebot_outbox/);
+  const sql = readFileSync("supabase/migrations/0075_work_cosmos_timebot_notifications.sql", "utf8");
+  assert.match(sql, /create or replace function work_reconcile_timebot_outbox/);
 });
 
 test("the dispatch route is cron-authenticated", () => {
@@ -129,4 +147,15 @@ test("the migration can never break a clock transition", () => {
   assert.match(sql, /exception when others then[\s\S]*return new;/, "a queue failure must not abort the clock write");
   assert.match(sql, /unique \(session_event_id\)/, "a retry adopts the row instead of posting twice");
   assert.match(sql, /for update skip locked/, "two dispatchers cannot send the same row");
+  assert.match(
+    sql,
+    /\(earlier\.created_at, earlier\.id\) < \(o\.created_at, o\.id\)/,
+    "the predecessor check is a total order: now() ties inside one transaction",
+  );
+  assert.match(sql, /order by o\.created_at, o\.id/, "the total order is used for claiming too");
+  assert.match(
+    sql,
+    /revoke all on function public\.work_claim_notification_outbox\(integer\) from public/,
+    "PostgreSQL grants EXECUTE to PUBLIC by default; the RPC must not be public",
+  );
 });

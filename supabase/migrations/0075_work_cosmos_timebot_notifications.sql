@@ -98,6 +98,9 @@ create trigger work_session_events_timebot
 -- Claim a bounded batch with row locks so two dispatchers cannot send the same
 -- row. Head-of-line: only the oldest eligible row per organization is claimed,
 -- which keeps in/break/back/out in order even when one send keeps failing.
+-- `now()` is the transaction time, so two events written in one transaction
+-- share created_at; the id tie-breaker makes the order total and prevents a
+-- break from overtaking the clock-in it belongs to.
 create or replace function work_claim_notification_outbox(p_limit integer default 20)
 returns setof work_notification_outbox
 language sql
@@ -113,10 +116,10 @@ as $$
          select 1
            from work_notification_outbox earlier
           where earlier.organization_id = o.organization_id
-            and earlier.created_at < o.created_at
+            and (earlier.created_at, earlier.id) < (o.created_at, o.id)
             and earlier.status in ('pending','sending','failed')
        )
-     order by o.created_at
+     order by o.created_at, o.id
      limit greatest(1, least(coalesce(p_limit, 20), 100))
      for update skip locked
   )
@@ -128,3 +131,71 @@ as $$
    where o.id = due.id
   returning o.*;
 $$;
+
+-- Recovery for an enqueue the trigger swallowed. A session event that never got
+-- a row would otherwise be silent forever. Newest seven days only, and anything
+-- already stale is stored dead/stale rather than posted late.
+create or replace function work_reconcile_timebot_outbox(p_limit integer default 50)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inserted integer;
+begin
+  with missing as (
+    select e.id, e.organization_id, e.person_id, e.event_type, e.observed_at, e.session_id
+      from work_session_events e
+     where e.event_type in ('clock_in','pause','resume','clock_out')
+       and e.created_at > now() - interval '7 days'
+       and not exists (
+         select 1 from work_notification_outbox o where o.session_event_id = e.id
+       )
+     order by e.created_at, e.id
+     limit greatest(1, least(coalesce(p_limit, 50), 500))
+  ),
+  inserted as (
+    insert into work_notification_outbox (
+      organization_id, session_event_id, person_id, person_name, timezone,
+      event_type, observed_at, status, last_error
+    )
+    select m.organization_id, m.id, m.person_id,
+           p.display_name,
+           coalesce(s.timezone, 'UTC'),
+           m.event_type, m.observed_at,
+           case when m.observed_at < now() - interval '15 minutes' then 'dead' else 'pending' end,
+           case when m.observed_at < now() - interval '15 minutes' then 'stale' else null end
+      from missing m
+      join work_people p on p.id = m.person_id
+      left join work_sessions s on s.id = m.session_id
+     where btrim(p.display_name) <> ''
+    on conflict (session_event_id) do nothing
+    returning 1
+  )
+  select count(*) into v_inserted from inserted;
+  return v_inserted;
+end;
+$$;
+
+-- Both functions are service-role only. PostgreSQL grants EXECUTE to PUBLIC by
+-- default, which would expose other organizations' rows through PostgREST.
+-- Legacy Supabase databases carry anon/authenticated/service_role; Neon carries
+-- none of them, so each role-specific statement is applied only where it exists.
+do $$
+begin
+  revoke all on function public.work_claim_notification_outbox(integer) from public;
+  revoke all on function public.work_reconcile_timebot_outbox(integer) from public;
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on function public.work_claim_notification_outbox(integer) from anon;
+    revoke all on function public.work_reconcile_timebot_outbox(integer) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on function public.work_claim_notification_outbox(integer) from authenticated;
+    revoke all on function public.work_reconcile_timebot_outbox(integer) from authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.work_claim_notification_outbox(integer) to service_role;
+    grant execute on function public.work_reconcile_timebot_outbox(integer) to service_role;
+  end if;
+end $$;
