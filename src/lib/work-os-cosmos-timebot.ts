@@ -115,16 +115,15 @@ export function renderTimebotMessage(input: {
   const delivered = input.now === undefined ? new Date() : new Date(input.now);
   const timezone = input.timezone ?? null;
   const observedStamp = localStamp(observed, timezone);
+  const deliveredStamp = localStamp(delivered, timezone);
   const lateMs = Number.isNaN(delivered.getTime()) ? 0 : delivered.getTime() - observed.getTime();
   const delayed = lateMs >= DELAY_MARKER_MS;
 
-  let prefix = "";
-  let suffix = "";
-  if (delayed) {
-    const deliveredStamp = localStamp(delivered, timezone);
-    if (observedStamp.date !== deliveredStamp.date) prefix = `${observedStamp.day} `;
-    suffix = ` (delayed ${humanDelay(lateMs)})`;
-  }
+  // The date is independent of the delay marker: a 23:58 clock-in delivered at
+  // 00:02 is only four minutes late, but Cosmos's "Today" divider would file it
+  // under the wrong day, so it still needs the absolute date.
+  const prefix = observedStamp.date !== deliveredStamp.date ? `${observedStamp.day} ` : "";
+  const suffix = delayed ? ` (delayed ${humanDelay(lateMs)})` : "";
   return `${prefix}${observedStamp.time} ${name} — ${word}${suffix}`;
 }
 
@@ -179,6 +178,39 @@ interface OutboxRow {
 }
 
 type Db = ReturnType<typeof createAdminClient>;
+
+/** The moment this organization's integration became active. Reconciliation is
+ * bounded by it rather than by a rolling window: a rolling window would expire a
+ * swallowed enqueue, and no boundary at all would replay the manual
+ * punch-clock history from before rollout. */
+async function ensureTimebotActivation(db: Db, organizationId: string): Promise<string> {
+  const existing = await db
+    .from("work_notification_state")
+    .select("timebot_activated_at")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (existing.error) throw new Error(`load timebot activation: ${existing.error.message}`);
+  const value = (existing.data as { timebot_activated_at?: string } | null)?.timebot_activated_at;
+  if (value) return value;
+
+  const inserted = await db
+    .from("work_notification_state")
+    .insert({ organization_id: organizationId })
+    .select("timebot_activated_at")
+    .single();
+  const created = (inserted.data as { timebot_activated_at?: string } | null)?.timebot_activated_at;
+  if (created) return created;
+
+  // Two dispatchers may have raced to activate. Adopt the row that won.
+  const retry = await db
+    .from("work_notification_state")
+    .select("timebot_activated_at")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  const adopted = (retry.data as { timebot_activated_at?: string } | null)?.timebot_activated_at;
+  if (adopted) return adopted;
+  throw new Error(`activate timebot: ${inserted.error?.message ?? "no activation row"}`);
+}
 
 /** The query shim reports failures as `{ error }` instead of throwing. Ignoring
  * that after a successful POST leaves the row in `sending`, so it is reclaimed
@@ -236,10 +268,12 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
     .lt("attempted_at", new Date(now.getTime() - STALE_SENDING_MS).toISOString());
   if (sweep.error) throw new Error(`reset timebot outbox: ${sweep.error.message}`);
 
-  // Re-create rows for session events whose enqueue the trigger swallowed. A
-  // recovery error must not stop the drain that already has work to do, but it
-  // must be reported: a silent failure here loses transitions permanently.
-  const reconciled = await db.rpc("work_reconcile_timebot_outbox", { p_limit: 50 });
+  // Re-create rows for session events whose enqueue the trigger swallowed,
+  // bounded by the activation moment. A recovery error must not stop the drain
+  // that already has work to do, but it must be reported: a silent failure here
+  // loses transitions permanently.
+  const activatedAt = await ensureTimebotActivation(db, organizationId);
+  const reconciled = await db.rpc("work_reconcile_timebot_outbox", { p_since: activatedAt, p_limit: 50 });
   if (reconciled.error) {
     console.error("[work-os] timebot reconcile failed", { message: reconciled.error.message });
   } else {

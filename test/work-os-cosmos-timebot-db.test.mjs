@@ -123,7 +123,7 @@ test("the reconciler actually runs and rebuilds a missing row", async () => {
     await addEvent(db, ids, "pause", ago(8));
     // Simulate the trigger being swallowed.
     await db.query("delete from work_notification_outbox");
-    const rebuilt = await db.query("select work_reconcile_timebot_outbox(50) as inserted");
+    const rebuilt = await db.query("select work_reconcile_timebot_outbox(now() - interval '1 hour', 50) as inserted");
     assert.equal(Number(rebuilt.rows[0].inserted), 2, "the reconciler must not fail on a column that does not exist");
     const rows = await db.query("select event_type from work_notification_outbox order by observed_at");
     assert.deepEqual(
@@ -131,7 +131,7 @@ test("the reconciler actually runs and rebuilds a missing row", async () => {
       ["clock_in", "pause"],
     );
     // Idempotent: a second pass inserts nothing.
-    const again = await db.query("select work_reconcile_timebot_outbox(50) as inserted");
+    const again = await db.query("select work_reconcile_timebot_outbox(now() - interval '1 hour', 50) as inserted");
     assert.equal(Number(again.rows[0].inserted), 0);
   } finally {
     await db.close();
@@ -151,7 +151,7 @@ test("the trigger cannot abort the parent event insert", async () => {
     assert.equal(outbox.rows[0].n, 0, "the failed enqueue is left to the reconciler");
     // With the constraint gone, reconciliation fills the gap.
     await db.exec("alter table work_notification_outbox drop constraint test_only");
-    const reconciled = await db.query("select work_reconcile_timebot_outbox(50) as inserted");
+    const reconciled = await db.query("select work_reconcile_timebot_outbox(now() - interval '1 hour', 50) as inserted");
     assert.equal(Number(reconciled.rows[0].inserted), 1);
   } finally {
     await db.close();
@@ -172,6 +172,36 @@ test("ordinary roles cannot execute the queue functions", async () => {
       assert.ok(row.acl, `${row.proname} must carry an explicit ACL after the revokes`);
       assert.doesNotMatch(row.acl, /(^|,)=X\//, `${row.proname} must not be executable by PUBLIC`);
     }
+  } finally {
+    await db.close();
+  }
+});
+
+test("recovery is bounded by activation, not by a rolling window", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    await addEvent(db, ids, "clock_in", ago(60));
+    // Pretend the row was written eight days ago: a swallowed enqueue must not
+    // expire just because it was not noticed within a week.
+    await db.query("update work_session_events set recorded_at = now() - interval '8 days'");
+    await db.query("delete from work_notification_outbox");
+    const rebuilt = await db.query("select work_reconcile_timebot_outbox(now() - interval '30 days', 50) as inserted");
+    assert.equal(Number(rebuilt.rows[0].inserted), 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test("recovery never backfills history from before activation", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    await addEvent(db, ids, "clock_in", ago(60));
+    await db.query("update work_session_events set recorded_at = now() - interval '2 days'");
+    await db.query("delete from work_notification_outbox");
+    const rebuilt = await db.query("select work_reconcile_timebot_outbox(now() - interval '1 hour', 50) as inserted");
+    assert.equal(Number(rebuilt.rows[0].inserted), 0, "pre-rollout manual history must not be replayed");
   } finally {
     await db.close();
   }

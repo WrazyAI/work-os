@@ -297,7 +297,7 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 
 | Piece | File |
 | --- | --- |
-| Outbox table, enqueue trigger, claim function | `supabase/migrations/0075_work_cosmos_timebot_notifications.sql` |
+| Outbox table, enqueue trigger, claim function, activation marker | `supabase/migrations/0075_work_cosmos_timebot_notifications.sql` |
 | Renderer, delivery classifier, backoff, queue drain | `src/lib/work-os-cosmos-timebot.ts` |
 | Scheduled drain and retry | `src/app/api/work-os/integrations/cosmos/timebot/dispatch/route.ts` |
 | Retry safety net every 10 minutes | `.github/workflows/work-os-timebot-dispatch.yml` |
@@ -319,6 +319,8 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 The date appears only when the event's local day differs from the delivery day, because Cosmos's `Today`/`Yesterday` dividers describe posting time. The marker is attached per event, so a delayed `break` does not make the following `back` look delayed.
 
 **Deferred by decision.** Compressing anything older than 24 hours into one per-person recovery line was considered and deliberately postponed: the team is small, multi-day outages are rare, and dated individual lines degrade honestly. Revisit only if a real backlog proves noisy.
+
+**Recovery is bounded by activation, not a rolling window.** `work_notification_state` records the first moment the integration runs for an organization. The reconciler covers everything recorded since that moment — a swallowed enqueue must not expire just because nobody noticed within a week — and nothing before it, so the manual punch-clock history from before rollout is never replayed. The boundary is written on the first dispatch, not at deploy, so events queued between deploy and first send still post normally.
 
 **Deliberately deferred.** Per-org admin configuration and a test-send button. The URL is global, so every organization posts into the same channel — fine for a single-company deployment, wrong the moment a second tenant exists. Upgrading means adding a channel table and joining it in the trigger; the outbox and dispatcher do not change.
 

@@ -46,6 +46,16 @@ create index if not exists work_notification_outbox_due_idx
 alter table work_notification_outbox enable row level security;
 -- Service-role only. Admin reads go through the server, never the browser.
 
+-- When the integration first became active for an organization. The reconciler
+-- must cover everything recorded since this moment, and nothing before it:
+-- a rolling window would silently expire a swallowed enqueue, while no boundary
+-- at all would replay the manual punch-clock history from before rollout.
+create table if not exists work_notification_state (
+  organization_id uuid primary key references work_organizations(id) on delete cascade,
+  timebot_activated_at timestamptz not null default now()
+);
+alter table work_notification_state enable row level security;
+
 create or replace function work_enqueue_timebot_notification()
 returns trigger
 language plpgsql
@@ -138,9 +148,12 @@ as $$
 $$;
 
 -- Recovery for an enqueue the trigger swallowed. A session event that never got
--- a row would otherwise be silent forever. Newest seven days only; age is not a
--- reason to drop it, because the dispatcher marks late deliveries instead.
-create or replace function work_reconcile_timebot_outbox(p_limit integer default 50)
+-- a row would otherwise be silent forever. `p_since` is the activation moment:
+-- everything recorded after it is in scope, however old, and nothing before it
+-- is drawn in. Age is not a reason to drop a transition; the dispatcher marks
+-- late deliveries instead.
+drop function if exists work_reconcile_timebot_outbox(integer);
+create or replace function work_reconcile_timebot_outbox(p_since timestamptz, p_limit integer default 50)
 returns integer
 language plpgsql
 security definer
@@ -155,7 +168,7 @@ begin
      where e.event_type in ('clock_in','pause','resume','clock_out')
        -- work_session_events has no created_at; recorded_at is when the row
        -- was written, and observed_at is when the transition happened.
-       and e.recorded_at > now() - interval '7 days'
+       and e.recorded_at >= p_since
        and not exists (
          select 1 from public.work_notification_outbox o where o.session_event_id = e.id
        )
@@ -193,21 +206,21 @@ $$;
 do $$
 begin
   revoke all on function public.work_claim_notification_outbox(integer) from public;
-  revoke all on function public.work_reconcile_timebot_outbox(integer) from public;
+  revoke all on function public.work_reconcile_timebot_outbox(timestamptz, integer) from public;
   revoke all on function public.work_enqueue_timebot_notification() from public;
   if exists (select 1 from pg_roles where rolname = 'anon') then
     revoke all on function public.work_claim_notification_outbox(integer) from anon;
-    revoke all on function public.work_reconcile_timebot_outbox(integer) from anon;
+    revoke all on function public.work_reconcile_timebot_outbox(timestamptz, integer) from anon;
     revoke all on function public.work_enqueue_timebot_notification() from anon;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
     revoke all on function public.work_claim_notification_outbox(integer) from authenticated;
-    revoke all on function public.work_reconcile_timebot_outbox(integer) from authenticated;
+    revoke all on function public.work_reconcile_timebot_outbox(timestamptz, integer) from authenticated;
     revoke all on function public.work_enqueue_timebot_notification() from authenticated;
   end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.work_claim_notification_outbox(integer) to service_role;
-    grant execute on function public.work_reconcile_timebot_outbox(integer) to service_role;
+    grant execute on function public.work_reconcile_timebot_outbox(timestamptz, integer) to service_role;
     grant execute on function public.work_enqueue_timebot_notification() to service_role;
   end if;
 end $$;
