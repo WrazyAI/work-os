@@ -847,10 +847,11 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: Ensure
       reason: row?.failure_reason ?? "awaiting_evidence", interval: row ?? undefined, slot, mayAdvance: activityIntervalMayAdvance(row) };
   }
   const result = await ensureActivityIntervalForSlot(access, { ...input, expectedSlot: slot }, deps);
-  return { ...result, slot, mayAdvance: result.status === "ready" || (result.status === "unavailable" && (activityIntervalMayAdvance(result.interval ?? null) || result.reason === "daily_cap")) || result.reason === "no_reviewable_interval" };
+  return { ...result, slot, readyTransition: result.status === "ready" ? result.readyTransition ?? "existing" : undefined,
+    mayAdvance: result.status === "ready" || (result.status === "unavailable" && (activityIntervalMayAdvance(result.interval ?? null) || result.reason === "daily_cap")) || result.reason === "no_reviewable_interval" };
 }
 
-async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: EnsureInput, deps: IntervalEnsureDeps) {
+async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: EnsureInput, deps: IntervalEnsureDeps): Promise<Omit<ActivityIntervalEnsureResult, "slot" | "mayAdvance">> {
   const gate = selectable(access);
   if (!gate.ok) return { status: "unavailable" as const, reason: gate.reason };
   const { config } = gate;
@@ -924,7 +925,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
 
   const coalesceKey = `${access.organizationId}:${personId}:${slotKey}`;
   const inFlight = ensureInFlight.get(coalesceKey);
-  if (inFlight && input.mode !== "inspect") return inFlight;
+  if (inFlight && input.mode !== "inspect") return { ...await inFlight, readyTransition: "existing" as const };
 
   const run = (async () => {
     const timezone = String(session.timezone ?? "UTC");
@@ -1230,7 +1231,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       githubChars: githubBlock.length,
       revision: saved?.revision ?? 1,
     });
-    return { status: "ready" as const, interval: saved as ActivityIntervalRecord };
+    return { status: "ready" as const, interval: saved as ActivityIntervalRecord, readyTransition: "new" as const };
   })().finally(() => { if (input.mode !== "inspect") ensureInFlight.delete(coalesceKey); });
   if (input.mode !== "inspect") ensureInFlight.set(coalesceKey, run);
   return run;
