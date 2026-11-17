@@ -397,14 +397,20 @@
       "type": "fix",
       "summary": "Dark mode covers every page and dialog, and light-mode review cards and tool cards use the selected theme instead of light-only panels.",
       "verification": "Playwright audit of 51 preview routes plus 9 interactions in light and dark (102 captures) with an automated contrast scan: production surfaces report zero failures; the remaining findings are the dev-only Mascot Lab and TaskDesignGallery previews and the visually clipped workday-details trigger. Rendered EOD raw, planning Loom, notifications, carry-over, task menu, memory, settings, insights, admin pages, and the light batch card. Companion 223 files/1979 tests; typecheck clean."
+    },
+    {
+      "id": "recaps-tab-labels-and-tool-card-corners",
+      "type": "fix",
+      "summary": "The in-app and floating companion tabs that show recaps are now named Recaps, and tool cards stay rounded in dark mode.",
+      "verification": "Companion 225 files/1996 tests, typecheck clean; Work OS typecheck and desktop-static pass. Playwright dark/light renders: in-app Chat/Recaps, floating Chat/Recaps, .chat-task-card computed border-radius 16px, .goal-card 9.97:1 dark / 16.19:1 light, goal textarea 8.8:1 dark, placeholder 5.52:1; Recaps panel hairlines resolve var(--line)."
     }
   ],
   "emergency": null,
   "operatorOverride": {
-    "version": "0.5.35",
-    "updateId": "companion-theme-audit",
+    "version": "0.5.36",
+    "updateId": "recaps-tab-labels-and-tool-card-corners",
     "approvedBy": "operator",
-    "reason": "The operator explicitly asked for these theme fixes to be merged and deployed before completing the implementation.",
+    "reason": "The operator asked for the Recaps tab labels, the squared tool-card corners, and the remaining dark-theme gaps to be fixed after testing 0.5.35.",
     "approvedAt": "2026-11-17"
   }
 }

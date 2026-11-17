@@ -23,6 +23,13 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.36 — 2026-11-17
+
+- The in-app and floating companion tabs that show recaps are now named Recaps.
+- Tool cards keep their rounded corners in dark mode.
+- The focus card and editor follow the theme, so the focus text is readable in dark mode.
+- The Recaps panel's hairlines and hover states follow the theme.
+
 ## 0.5.35 — 2026-11-17
 
 - Dark mode now covers every page and dialog, including EOD, planning, memory, notifications, insights, task menus, and tool cards.
