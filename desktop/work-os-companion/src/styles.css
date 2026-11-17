@@ -4565,67 +4565,178 @@ body.modal-open {
 /* ── Page guides ─────────────────────────────────────────────────────────
    One short first-visit guide per workspace page (design §8: one modal, one
    primary action, Escape/backdrop/close all dismiss, focus returns to the
-   header). The scene is inline SVG on the workspace palette. It plays one
-   bounded three-step sequence and each numbered step can drive it directly. */
+   header).
+
+   The guide is split like a page of a field guide: the film plate on the left
+   is the evidence, the script on the right says what to notice. The plate sits
+   on the companion's ink so the real, light interface in the clip reads as
+   something projected rather than another card in the stack. The split is the
+   default; below 880px the plate returns to the top and the script follows in
+   one readable column. */
 .task-modal.guide-modal {
-  width: min(620px, calc(100vw - 32px));
-  max-height: min(720px, calc(100vh - 32px));
+  width: min(1060px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--paper);
+  grid-template-columns: minmax(0, 1.24fr) minmax(330px, 0.86fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "screen head"
+    "screen steps"
+    "screen foot";
+  animation: guideModalIn 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 /*
- * The tour carries one more row than a page guide — the rail of pages — so it
- * needs a taller cap to fit its own content. Without this it fit by exactly the
- * amount it overlapped the step list, which the row fix above removed: the last
- * step then sat a few pixels below the fold and the guide looked crammed again
- * for a different reason. Below this cap the body scrolls, which §8.11 allows,
- * and at every window shorter than the tour the cap still tracks the viewport.
+ * The tour carries the page rail, so it has one more row. It is also allowed a
+ * taller cap: the rail is content, not chrome, and truncating a page name to
+ * fit a shorter box would be the wrong trade.
  */
 .task-modal.guide-modal.guide-tour {
-  max-height: min(780px, calc(100vh - 32px));
+  max-height: min(800px, calc(100vh - 32px));
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "screen head"
+    "screen rail"
+    "screen steps"
+    "screen foot";
 }
-.task-modal.guide-modal > header {
+
+/* The plate. Its own height follows the modal, which follows the script; the
+   film stays 2:1 and is centred in whatever room that leaves. */
+.guide-screen {
+  grid-area: screen;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  gap: clamp(14px, 2.4vh, 24px);
+  min-height: 0;
+  padding: 30px 30px 26px;
+  border-radius: 21px 0 0 21px;
+  /* Fixed ink, not a theme token: the plate is the same screening room in
+     light and dark, and the real interface in the clip is what changes. */
+  background:
+    radial-gradient(120% 90% at 18% 0%, rgba(168, 241, 91, 0.1), transparent 58%),
+    #121712;
+  color: #fafaf6;
+  overflow: hidden;
+}
+.guide-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-right: 1px solid rgba(250, 250, 246, 0.08);
+  pointer-events: none;
+}
+.guide-screen-slate,
+.guide-screen-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.guide-screen-slate {
+  align-items: center;
+  color: #98a397;
+  font: 700 9px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.guide-screen-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.guide-screen-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 0 0 3px rgba(168, 241, 91, 0.16);
+}
+.guide-screen-count {
+  color: #c5cec1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+.guide-screen-plate {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d120d;
+  box-shadow: 0 2px 0 rgba(250, 250, 246, 0.07), 0 26px 60px rgba(0, 0, 0, 0.46);
+  animation: guidePlateIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s both;
+}
+.guide-screen-plate .guide-film {
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+}
+.guide-screen-foot {
+  color: #98a397;
+  font-size: 11px;
+}
+.guide-screen-foot strong {
+  overflow: hidden;
+  color: #fafaf6;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-screen-foot span {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The script column. The mascot and eyebrow name the speaker once; title and
+   promise take a row each, exactly as a guide's opening page would. */
+.task-modal.guide-modal > header.guide-head {
+  grid-area: head;
   align-items: flex-start;
-  padding: 20px 24px 16px;
-  background: var(--paper);
+  padding: 24px 26px 18px 30px;
+  border-bottom: 0;
+  background: transparent;
+  animation: guideCopyIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) 0.05s both;
 }
-.task-modal.guide-modal > header h2 {
-  max-width: 440px;
-  font-size: 23px;
+.task-modal.guide-modal > header.guide-head h2 {
+  max-width: 380px;
+  font-size: 25px;
 }
-/* The guide header names its speaker once, with the same identity the chat
-   surfaces use. The eyebrow and mark share the first row; title and promise
-   take a row each. */
-.task-modal.guide-modal > header .guide-header-copy {
+.task-modal.guide-modal > header.guide-head .guide-header-copy {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 9px;
 }
-.task-modal.guide-modal > header .guide-mascot {
+.task-modal.guide-modal > header.guide-head .guide-mascot {
   flex: 0 0 auto;
   width: 26px;
   height: 26px;
 }
-.task-modal.guide-modal > header .guide-mascot .chat-mascot-art {
+.task-modal.guide-modal > header.guide-head .guide-mascot .chat-mascot-art {
   display: block;
   width: 100%;
   height: 100%;
 }
-.task-modal.guide-modal > header .guide-header-copy h2,
-.task-modal.guide-modal > header .guide-header-copy p {
+.task-modal.guide-modal > header.guide-head .guide-header-copy h2,
+.task-modal.guide-modal > header.guide-head .guide-header-copy p {
   flex: 1 0 100%;
   min-width: 0;
 }
-.task-modal.guide-modal > header p {
-  max-width: 440px;
+.task-modal.guide-modal > header.guide-head p {
+  max-width: 380px;
   margin: 7px 0 0;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;
 }
-.task-modal.guide-modal > header button {
+.task-modal.guide-modal > header.guide-head button {
   width: 40px;
   height: 40px;
   min-width: 40px;
@@ -4634,39 +4745,20 @@ body.modal-open {
   background: transparent;
   color: var(--muted);
 }
-.task-modal.guide-modal > header button:not(:disabled):hover {
+.task-modal.guide-modal > header.guide-head button:not(:disabled):hover {
   border-color: var(--line);
   background: var(--inset);
   box-shadow: none;
   transform: none;
 }
-/*
- * The guide body is a definite-height scroll region, and the film is the only
- * row in it whose item clips — `overflow: hidden` is what rounds its corners —
- * so it is also the only row with an automatic minimum size of zero. Left on
- * `auto`, that made the film's row the one track that could absorb a shortfall
- * whenever the modal's max-height could not hold the whole guide: the track
- * collapsed below the film's 2:1 frame, the frame kept its own height and
- * overflowed the row, and — being positioned above the static step buttons — it
- * painted over the active step's tinted background by the size of the
- * shortfall, worst where a step's copy wraps to two lines. `max-content` rows
- * cannot be squeezed: the frame keeps its height, the 16px above the first step
- * holds, and a guide taller than its cap scrolls the body instead, which §8.11
- * already makes the only scroll region.
- */
-.task-modal.guide-modal > .task-modal-body.guide-modal-body {
-  padding: 18px 24px 20px;
-  gap: 16px;
-  grid-auto-rows: max-content;
-}
+
 /*
  * The guide film.
  *
  * The frame is 2:1 — wider than a video player and closer to a letterbox —
  * because what it shows is a dense, wide interface being travelled over rather
- * than a scene being watched. On the workspace palette the still keeps a hairline
- * so an unusually pale frame does not dissolve into the modal, and the clip
- * sits above it so the still is the guaranteed first paint.
+ * than a scene being watched. The still is the guaranteed first paint; the clip
+ * sits above it and fades in when it is ready.
  */
 .guide-film {
   position: relative;
@@ -4677,6 +4769,9 @@ body.modal-open {
   border: 1px solid var(--line);
   outline: 1px solid rgba(24, 32, 24, 0.05);
   outline-offset: -3px;
+  /* The frame itself is a picture. Only its transport control is a target, so
+     a click on the still can never be swallowed by the frame. */
+  pointer-events: none;
 }
 .guide-film-still,
 .guide-film-video {
@@ -4684,6 +4779,11 @@ body.modal-open {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The still and clip are the frame, not controls. The only control over the
+     film is the play button (and chapter list), so the clip must not eat its
+     clicks — especially under reduced motion, where the button is the only
+     way to start a chapter. */
+  pointer-events: none;
 }
 .guide-film-video {
   position: absolute;
@@ -4696,10 +4796,14 @@ body.modal-open {
 }
 .guide-film-play {
   position: absolute;
-  left: 50%;
+  z-index: 2;
+  left: 0;
+  right: 0;
   bottom: 14px;
-  transform: translateX(-50%);
-  display: inline-flex;
+  width: fit-content;
+  margin: 0 auto;
+  pointer-events: auto;
+  display: flex;
   align-items: center;
   gap: 7px;
   min-height: 36px;
@@ -4713,6 +4817,8 @@ body.modal-open {
   font-weight: 650;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(20, 30, 18, 0.08), 0 8px 24px rgba(20, 30, 18, 0.12);
+  backdrop-filter: blur(10px);
+  transition: background 150ms ease, transform 150ms ease;
 }
 .guide-film-play:hover {
   background: #fff;
@@ -4724,13 +4830,15 @@ body.modal-open {
   bottom: 0;
   height: 2px;
   background: rgba(24, 32, 24, 0.1);
+  pointer-events: none;
 }
 .guide-film-progress > span {
   display: block;
   height: 100%;
-  background: var(--signal-deep);
+  background: var(--signal);
   transform-origin: left center;
   transform: scaleX(0);
+  transition: transform 180ms linear;
 }
 .guide-film.is-missing {
   display: grid;
@@ -4742,17 +4850,90 @@ body.modal-open {
   color: var(--muted);
   font-size: 12px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .guide-film-video {
-    transition: none;
-  }
-}
+
+/* The chapters. The active one owns an inset surface, a hairline border, and a
+   filled mark; the others stay quiet so the list reads as a sequence rather
+   than a stack of competing cards. The selection never adds a rail beside a
+   content row — that marker belongs to the primary navigation only (§4.2). */
 .guide-steps {
+  grid-area: steps;
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px 24px 10px 30px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   display: grid;
-  gap: 4px;
+  align-content: start;
+  gap: 6px;
+}
+.guide-step {
+  min-width: 0;
+  animation: guideStepIn 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.guide-step:nth-child(1) { animation-delay: 0.1s; }
+.guide-step:nth-child(2) { animation-delay: 0.16s; }
+.guide-step:nth-child(3) { animation-delay: 0.22s; }
+.guide-step:nth-child(n + 4) { animation-delay: 0.27s; }
+.guide-step-control {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  padding: 10px 10px 10px 13px;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.guide-step-control:not(:disabled):hover {
+  background: var(--inset);
+  box-shadow: none;
+  transform: none;
+}
+.guide-step-control[aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--inset);
+}
+.guide-step-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-top: 1px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--ink);
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.guide-step-control[aria-pressed="true"] .guide-step-mark {
+  border-color: transparent;
+  background: var(--signal);
+  color: var(--ink-on-signal);
+}
+.guide-step-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  align-content: start;
+}
+.guide-step-copy strong {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.guide-step-copy small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.guide-step-control[aria-pressed="true"] .guide-step-copy small {
+  color: var(--ink-soft);
 }
 /* How long the step's clip runs. Quiet, but it sets an honest expectation. */
 .guide-step-time {
@@ -4771,16 +4952,18 @@ body.modal-open {
  *
  * The rail answers "where am I in this walk" without spending a second surface
  * on it, and every stop is a real control: choosing one moves the film and takes
- * the application with it. Wrapping is allowed because the five names are the
+ * the application with it. Wrapping is allowed because the names are the
  * content and none of them may be truncated to fit.
  */
 .guide-tour-rail {
+  grid-area: rail;
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 24px 8px 30px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  animation: guideCopyIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s both;
 }
 .guide-tour-rail button {
   display: inline-flex;
@@ -4863,80 +5046,19 @@ body.modal-open {
   background: var(--signal);
   box-shadow: 0 0 0 3px rgba(168, 241, 91, 0.22);
 }
-@media (max-width: 560px) {
-  .guide-tour-rail button {
-    padding-right: 9px;
-  }
-  .guide-tour-track {
-    display: none;
-  }
-}
-.guide-step {
-  min-width: 0;
-}
-.guide-step-control {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 7px 8px;
-  background: transparent;
-  color: inherit;
-  display: flex;
-  gap: 11px;
-  align-items: flex-start;
-  text-align: left;
-  transition: background 150ms ease, border-color 150ms ease;
-}
-.guide-step-control:not(:disabled):hover {
-  background: var(--inset);
-  box-shadow: none;
-  transform: none;
-}
-.guide-step-control[aria-pressed="true"] {
-  border-color: var(--line-strong);
-  background: var(--inset);
-}
-.guide-step-mark {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin-top: 1px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--white);
-  color: var(--ink);
-}
-.guide-step-control[aria-pressed="true"] .guide-step-mark {
-  border-color: var(--line-strong);
-  background: var(--tool-success-soft);
-}
-.guide-step-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  align-content: start;
-}
-.guide-step-copy strong {
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 650;
-}
-.guide-step-copy small {
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-.task-modal.guide-modal > footer {
+
+/* The actions close the script column rather than floating over the plate. */
+.task-modal.guide-modal > footer.guide-modal-footer {
+  grid-area: foot;
   justify-content: space-between;
-  padding: 14px 24px 18px;
+  padding: 15px 26px 19px 30px;
+  border-top: 1px solid var(--line);
+  animation: guideCopyIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) 0.24s both;
 }
-.task-modal.guide-modal > footer .primary {
+.task-modal.guide-modal > footer.guide-modal-footer .primary {
   min-height: 40px;
 }
-.task-modal.guide-modal > footer .guide-quiet-action {
+.task-modal.guide-modal > footer.guide-modal-footer .guide-quiet-action {
   min-height: 40px;
   border: 0;
   padding: 10px 0;
@@ -4947,27 +5069,127 @@ body.modal-open {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.task-modal.guide-modal > footer .guide-quiet-action:hover {
+.task-modal.guide-modal > footer.guide-modal-footer .guide-quiet-action:hover {
   background: transparent;
   color: var(--ink);
 }
 .guide-auto-note {
-  max-width: 280px;
+  max-width: 260px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+@keyframes guideModalIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes guideCopyIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes guidePlateIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes guideStepIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Below this width the plate and the script cannot both hold a readable
+   measure, so the guide returns to its original one-column order: header,
+   film, (tour rail), chapters, actions. */
+@media (max-width: 880px) {
+  .task-modal.guide-modal,
+  .task-modal.guide-modal.guide-tour {
+    width: min(680px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head"
+      "screen"
+      "rail"
+      "steps"
+      "foot";
+  }
+  .task-modal.guide-modal:not(.guide-tour) {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head"
+      "screen"
+      "steps"
+      "foot";
+  }
+  .guide-screen {
+    border-radius: 0;
+    padding: 16px 18px 14px;
+    gap: 10px;
+  }
+  .guide-screen::after {
+    border-right: 0;
+    border-bottom: 1px solid rgba(250, 250, 246, 0.08);
+  }
+  .task-modal.guide-modal > header.guide-head {
+    padding: 20px 20px 14px;
+  }
+  .task-modal.guide-modal > header.guide-head h2 {
+    max-width: none;
+    font-size: 23px;
+  }
+  .task-modal.guide-modal > header.guide-head p {
+    max-width: none;
+  }
+  .task-modal.guide-modal > .guide-steps {
+    padding: 2px 16px 10px;
+  }
+  .task-modal.guide-modal > .guide-tour-rail {
+    padding: 0 16px 6px;
+  }
+  .task-modal.guide-modal > footer.guide-modal-footer {
+    padding: 14px 20px 16px;
+  }
 }
 @media (max-width: 560px) {
   .task-modal.guide-modal {
     width: 100%;
     max-height: calc(100vh - 24px);
+    border-radius: 18px;
   }
-  .task-modal.guide-modal > footer {
+  .guide-screen {
+    padding: 12px 14px;
+  }
+  .guide-screen-slate {
+    display: none;
+  }
+  .task-modal.guide-modal > footer.guide-modal-footer {
     flex-wrap: wrap;
+  }
+  .task-modal.guide-modal > footer.guide-modal-footer .guide-quiet-action {
+    max-width: 100%;
+  }
+  .guide-tour-track {
+    display: none;
+  }
+  .guide-tour-rail button {
+    padding-right: 9px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .guide-step-control {
+  .task-modal.guide-modal,
+  .task-modal.guide-modal > header.guide-head,
+  .task-modal.guide-modal > .guide-steps .guide-step,
+  .task-modal.guide-modal > .guide-tour-rail,
+  .task-modal.guide-modal > footer.guide-modal-footer,
+  .guide-screen-plate {
+    animation: none;
+  }
+  .guide-film-video,
+  .guide-film-play,
+  .guide-film-progress > span,
+  .guide-step-control,
+  .guide-step-mark {
     transition: none;
   }
 }

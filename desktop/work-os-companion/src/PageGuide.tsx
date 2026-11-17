@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { guideFilmsFor } from "./guideFilms";
-import GuideFilm, { clockLabel } from "./GuideFilm";
+import { GuideScreen, clockLabel } from "./GuideFilm";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
@@ -79,10 +79,8 @@ export default function PageGuide({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      const target = event.target as HTMLElement | null;
-      // The step list is a set of buttons, so arrows are left to it unless the
-      // reader is not in it.
-      if (target?.closest(".guide-steps")) return;
+      // The chapter buttons themselves do not own left/right; the guide does,
+      // so the same keys step the film wherever focus is inside the dialog.
       event.preventDefault();
       setActiveStep((current) => {
         const next = event.key === "ArrowRight" ? current + 1 : current - 1;
@@ -106,7 +104,17 @@ export default function PageGuide({
         aria-labelledby="page-guide-title"
         aria-describedby="page-guide-promise"
       >
-        <header>
+        <GuideScreen
+          view={view}
+          film={films[chapter] ?? null}
+          chapter={chapter}
+          total={guide.steps.length}
+          chapterKey={`${view}:${chapter}`}
+          autoplay={!reduced}
+          fallbackTitle={guide.steps[chapter]?.title ?? guide.title}
+          onEnded={advance}
+        />
+        <header className="guide-head">
           <div className="guide-header-copy">
             {/* The guide is the same companion the employee just met in setup,
                 so it speaks with his identity rather than a page icon. */}
@@ -117,39 +125,30 @@ export default function PageGuide({
           </div>
           <button type="button" aria-label="Close page guide" title="Close page guide" onClick={onClose}><X size={17} /></button>
         </header>
-        <div className="task-modal-body guide-modal-body">
-          <GuideFilm
-            view={view}
-            film={films[chapter] ?? null}
-            chapterKey={`${view}:${chapter}`}
-            autoplay={!reduced}
-            onEnded={advance}
-          />
-          <ol className="guide-steps">
-            {guide.steps.map((step, index) => {
-              const active = activeStep === index;
-              const seconds = films[index]?.seconds;
-              return (
-                <li key={step.title} className="guide-step">
-                  <button
-                    type="button"
-                    className="guide-step-control"
-                    aria-controls="page-guide-art"
-                    aria-pressed={active}
-                    onClick={() => setActiveStep(index)}
-                  >
-                    <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
-                    <span className="guide-step-copy">
-                      <strong>{index + 1}. {step.title}</strong>
-                      <small>{step.body}</small>
-                    </span>
-                    {seconds ? <span className="guide-step-time" aria-hidden="true">{clockLabel(seconds)}</span> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+        <ol className="guide-steps">
+          {guide.steps.map((step, index) => {
+            const active = activeStep === index;
+            const seconds = films[index]?.seconds;
+            return (
+              <li key={step.title} className="guide-step">
+                <button
+                  type="button"
+                  className="guide-step-control"
+                  aria-controls="page-guide-art"
+                  aria-pressed={active}
+                  onClick={() => setActiveStep(index)}
+                >
+                  <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
+                  <span className="guide-step-copy">
+                    <strong>{index + 1}. {step.title}</strong>
+                    <small>{step.body}</small>
+                  </span>
+                  {seconds ? <span className="guide-step-time" aria-hidden="true">{clockLabel(seconds)}</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
         <footer className="guide-modal-footer">
           {developerPreview ? (
             <small className="guide-auto-note">Guide state stays unchanged. Close this replay when you are done testing it.</small>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { guideFilmsFor } from "./guideFilms";
-import GuideFilm, { clockLabel } from "./GuideFilm";
+import { GuideScreen, clockLabel } from "./GuideFilm";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { ADMIN_GUIDE_VIEWS, EMPLOYEE_GUIDE_VIEWS, type GuideView } from "./guideState";
@@ -81,7 +81,17 @@ export default function GuideTour({
         aria-labelledby="guide-tour-title"
         aria-describedby="guide-tour-promise"
       >
-        <header>
+        <GuideScreen
+          view={view}
+          film={films[chapter] ?? null}
+          chapter={chapter}
+          total={guide.steps.length}
+          chapterKey={`${view}:${chapter}`}
+          autoplay
+          fallbackTitle={guide.steps[chapter]?.title ?? guide.title}
+          onEnded={advance}
+        />
+        <header className="guide-head">
           <div className="guide-header-copy">
             <MascotMark className="guide-mascot" />
             <span>{MASCOT.name}&rsquo;s tour of {subject}</span>
@@ -91,54 +101,44 @@ export default function GuideTour({
           <button type="button" aria-label="Close the tour" title="Close the tour" onClick={onClose}><X size={17} /></button>
         </header>
 
-        <div className="task-modal-body guide-modal-body">
-          {/* Where this page sits in the walk. Choosing one jumps the tour and
-              takes the application with it. */}
-          <ol className="guide-tour-rail" aria-label="Pages in this tour">
-            {pages.map((step, index) => (
-              <li key={step}>
-                <button
-                  type="button"
-                  className={index === page ? "is-current" : index < page ? "is-done" : ""}
-                  aria-current={index === page ? "step" : undefined}
-                  onClick={() => goTo(index)}
-                >
-                  <span aria-hidden="true">{index < page ? <Check size={11} strokeWidth={3} /> : index + 1}</span>
-                  {shortTitle(step)}
-                </button>
-              </li>
-            ))}
-          </ol>
+        {/* Where this page sits in the walk. Choosing one jumps the tour and
+            takes the application with it. */}
+        <ol className="guide-tour-rail" aria-label="Pages in this tour">
+          {pages.map((step, index) => (
+            <li key={step}>
+              <button
+                type="button"
+                className={index === page ? "is-current" : index < page ? "is-done" : ""}
+                aria-current={index === page ? "step" : undefined}
+                onClick={() => goTo(index)}
+              >
+                <span aria-hidden="true">{index < page ? <Check size={11} strokeWidth={3} /> : index + 1}</span>
+                {shortTitle(step)}
+              </button>
+            </li>
+          ))}
+        </ol>
 
-          <GuideFilm
-            view={view}
-            film={films[chapter] ?? null}
-            chapterKey={`${view}:${chapter}`}
-            autoplay
-            onEnded={advance}
-          />
-
-          <ol className="guide-steps">
-            {guide.steps.map((step, index) => (
-              <li key={step.title} className="guide-step">
-                <button
-                  type="button"
-                  className="guide-step-control"
-                  aria-controls="page-guide-art"
-                  aria-pressed={chapter === index}
-                  onClick={() => setChapter(index)}
-                >
-                  <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
-                  <span className="guide-step-copy">
-                    <strong>{index + 1}. {step.title}</strong>
-                    <small>{step.body}</small>
-                  </span>
-                  {films[index]?.seconds ? <span className="guide-step-time" aria-hidden="true">{clockLabel(films[index]!.seconds)}</span> : null}
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
+        <ol className="guide-steps">
+          {guide.steps.map((step, index) => (
+            <li key={step.title} className="guide-step">
+              <button
+                type="button"
+                className="guide-step-control"
+                aria-controls="page-guide-art"
+                aria-pressed={chapter === index}
+                onClick={() => setChapter(index)}
+              >
+                <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
+                <span className="guide-step-copy">
+                  <strong>{index + 1}. {step.title}</strong>
+                  <small>{step.body}</small>
+                </span>
+                {films[index]?.seconds ? <span className="guide-step-time" aria-hidden="true">{clockLabel(films[index]!.seconds)}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ol>
 
         <footer className="guide-modal-footer guide-tour-footer">
           <span className="guide-tour-track" aria-hidden="true">

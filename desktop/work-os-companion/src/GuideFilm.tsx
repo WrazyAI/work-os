@@ -108,3 +108,61 @@ export default function GuideFilm({
     </div>
   );
 }
+
+/**
+ * The screen half of a split-view guide.
+ *
+ * The modal reads like a page of a field guide: the plate on the left is the
+ * evidence, the script on the right is what to notice in it. The plate sits on
+ * the companion's ink rather than the paper, so the real, light interface in
+ * the clip reads as something being projected instead of another card in the
+ * stack.
+ *
+ * The slate and caption are part of the plate's frame, not new meaning: they
+ * are hidden from assistive technology because the numbered steps already
+ * state everything the film shows, in words. The film's own wrapper is left
+ * visible so the reduced-motion `Play this step` control is still reachable;
+ * only the still and the clip inside it are hidden.
+ */
+export function GuideScreen({
+  view,
+  film,
+  chapter,
+  total,
+  chapterKey,
+  autoplay,
+  fallbackTitle,
+  onEnded,
+}: {
+  view: string;
+  film: Film | null;
+  chapter: number;
+  total: number;
+  chapterKey: string;
+  autoplay: boolean;
+  fallbackTitle: string;
+  onEnded: () => void;
+}) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    <div className="guide-screen">
+      <div className="guide-screen-slate" aria-hidden="true">
+        <span className="guide-screen-label"><span className="guide-screen-dot" />Recorded in the app</span>
+        <span className="guide-screen-count">{pad(chapter + 1)} / {pad(total)}</span>
+      </div>
+      <div className="guide-screen-plate">
+        <GuideFilm
+          view={view}
+          film={film}
+          chapterKey={chapterKey}
+          autoplay={autoplay}
+          onEnded={onEnded}
+        />
+      </div>
+      <div className="guide-screen-foot" aria-hidden="true">
+        <strong>{film?.chapter ?? fallbackTitle}</strong>
+        <span>{film ? clockLabel(film.seconds) : `Step ${chapter + 1}`}</span>
+      </div>
+    </div>
+  );
+}
