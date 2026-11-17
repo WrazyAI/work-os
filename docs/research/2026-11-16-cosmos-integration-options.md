@@ -338,6 +338,17 @@ The existing `work_evidence_events` shape already supports this: `provider = 'co
 
 The `performed` vs `triggered` distinction cannot come from Cosmos. Cosmos activity is presence and communication; it does not know whether the employee produced an artifact or merely triggered a downstream event. Work OS's artifact-level providers (GitHub, GHL, a review tool) can support that distinction with evidence.
 
+## Rollout checklist
+
+1. **Decide the destination.** Because Cosmos no longer allows message deletion, verify in a private `work-os-test` channel first if the format or the integration name is still in question. Otherwise the first real transition is the test, permanently.
+2. **Apply the migration.** `npm run db:apply -- supabase/migrations/0075_work_cosmos_timebot_notifications.sql`. Additive only; it creates one table, one trigger, one function.
+3. **Set `COSMOS_TIMEBOT_WEBHOOK_URL`** in the server environment. Unset is a no-op, so this is the moment the feature becomes live.
+4. **Redeploy** through the normal Work OS path.
+5. **Verify with one real transition.** Clock in, then confirm the line appears in the channel within a few seconds. Check `work_notification_outbox` shows `sent`.
+6. **Watch the first day.** A `dead` row with `integration missing or rotated (404)` means the Cosmos integration was deleted. A `failed` row retries on the 1m/5m/15m/1h/6h schedule for eight attempts.
+
+**Rollback.** Unset `COSMOS_TIMEBOT_WEBHOOK_URL` and redeploy. Rows keep queueing but nothing is sent; set the variable again and the backlog drains. The migration can stay in place indefinitely — an unused outbox is inert.
+
 ## Recommendation
 
 **Do the notification-only integration now.** It is small, it matches the boss's actual ask, and it uses the only capability Cosmos documents. The concrete goal is narrower than "integrate Cosmos": **retire manual `#timebot` typing** by having Work OS post the four transitions. Keep it behind a per-org feature flag; do not describe it as evidence, attendance verification, or productivity measurement.
