@@ -9,9 +9,7 @@ import { PGlite } from "@electric-sql/pglite";
 // until they run.
 const migration = readFileSync("supabase/migrations/0075_work_cosmos_timebot_notifications.sql", "utf8");
 
-async function freshDb() {
-  const db = new PGlite();
-  await db.exec(`
+const SCHEMA = `
     create table work_organizations (id uuid primary key default gen_random_uuid(), name text not null, slug text not null);
     create table work_people (id uuid primary key default gen_random_uuid(), display_name text not null);
     create table work_sessions (id uuid primary key default gen_random_uuid(), organization_id uuid not null, person_id uuid not null, timezone text not null);
@@ -25,9 +23,22 @@ async function freshDb() {
       observed_at timestamptz not null,
       recorded_at timestamptz not null default now()
     );
-  `);
+  `;
+
+async function freshDb() {
+  const db = new PGlite();
+  await db.exec(SCHEMA);
   await db.exec(migration);
   return db;
+}
+
+/** An organization that existed before the migration, to exercise the seed. */
+async function freshDbWithOrg() {
+  const db = new PGlite();
+  await db.exec(SCHEMA);
+  const org = await db.query("insert into work_organizations (name, slug) values ('Wrazy', 'wrazy') returning id");
+  await db.exec(migration);
+  return { db, organizationId: org.rows[0].id };
 }
 
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -202,6 +213,32 @@ test("recovery never backfills history from before activation", async () => {
     await db.query("delete from work_notification_outbox");
     const rebuilt = await db.query("select work_reconcile_timebot_outbox(now() - interval '1 hour', 50) as inserted");
     assert.equal(Number(rebuilt.rows[0].inserted), 0, "pre-rollout manual history must not be replayed");
+  } finally {
+    await db.close();
+  }
+});
+
+test("the migration seeds the cutover for an organization that already exists", async () => {
+  const { db, organizationId } = await freshDbWithOrg();
+  try {
+    const state = await db.query("select timebot_activated_at from work_notification_state where organization_id = $1", [organizationId]);
+    assert.equal(state.rows.length, 1, "existing organizations get a cutover at migration time");
+    const before = await db.query("select count(*)::int as n from work_session_events");
+    assert.equal(before.rows[0].n, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test("a new organization gets its cutover from its first transition", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    await addEvent(db, ids, "clock_in", ago(2));
+    const state = await db.query("select timebot_activated_at from work_notification_state where organization_id = $1", [ids.organizationId]);
+    assert.equal(state.rows.length, 1, "the trigger writes the cutover in the same transaction as the event");
+    const rows = await db.query("select count(*)::int as n from work_notification_outbox");
+    assert.equal(rows.rows[0].n, 1);
   } finally {
     await db.close();
   }

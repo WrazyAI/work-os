@@ -100,6 +100,13 @@ test("a cross-midnight line is dated even when it is not late", () => {
   assert.equal(message, "16 Nov 23:58 David — in");
 });
 
+test("an invalid delivery time does not throw", () => {
+  assert.equal(
+    renderTimebotMessage({ displayName: "David", eventType: "clock_in", observedAt, timezone: "UTC", now: "bad-date" }),
+    "17:06 David — in",
+  );
+});
+
 test("a multi-day delay is dated and expressed in days", () => {
   const message = renderTimebotMessage({
     displayName: "David",
@@ -260,6 +267,7 @@ test("the migration can never break a clock transition", () => {
   assert.match(sql, /generated always as identity/, "created_at and uuid order cannot sequence one transaction");
   assert.match(sql, /e\.recorded_at >= p_since/, "recovery is bounded by activation, not a rolling window");
   assert.match(sql, /create table if not exists work_notification_state/, "the activation moment is durable");
+  assert.match(sql, /insert into work_notification_state \(organization_id, timebot_activated_at\)/, "existing organizations are seeded at migration time");
   assert.match(sql, /set_config\('lock_timeout'/, "a queue lock must not wait out the clock transaction");
   assert.doesNotMatch(sql, /interval '15 minutes'/, "age must not decide whether a transition exists");
   assert.doesNotMatch(sql, /'stale'/, "there is no stale dead-letter path");
