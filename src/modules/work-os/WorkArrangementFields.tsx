@@ -7,7 +7,6 @@ export type ArrangementDraft = Omit<WorkArrangementProposal, "arrangement" | "br
   breaks?: WorkArrangementProposal["breaks"];
 };
 const group: CSSProperties = { border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 10 };
-const input: CSSProperties = { minHeight: 42, maxWidth: "100%", padding: "8px 10px", border: "1px solid currentColor", borderRadius: 8, background: "transparent", color: "inherit", font: "inherit" };
 const action: CSSProperties = { minHeight: 40, padding: "8px 12px", border: "1px solid currentColor", borderRadius: 8, background: "transparent", color: "inherit", font: "inherit" };
 
 /** The same accessible work-pattern controls in onboarding, Settings, and
@@ -23,30 +22,30 @@ export function WorkArrangementFields({ value, onChange, disabled = false, autho
   const setBreak = (index: number, next: Partial<{ start: string; end: string }>) => {
     patch({ breaks: breaks.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item) });
   };
-  return <div style={{ display: "grid", gap: 18 }}>
-    <fieldset disabled={disabled} style={group}>
+  return <div className="work-arrangement-fields">
+    <fieldset disabled={disabled} className="work-arrangement-group">
       <legend>Work arrangement</legend>
-      <label><input name="work-os-arrangement" type="radio" checked={!flexible} onChange={() => patch({ arrangement: "scheduled", shiftStart: value.shiftStart || "09:00", shiftEnd: value.shiftEnd || "17:00" })} /> Scheduled hours</label>
-      <label><input name="work-os-arrangement" type="radio" checked={flexible} onChange={() => patch({ arrangement: "flexible" })} /> Contractor / flexible hours</label>
+      <label className="work-arrangement-choice"><input name="work-os-arrangement" type="radio" checked={!flexible} onChange={() => patch({ arrangement: "scheduled", shiftStart: value.shiftStart || "09:00", shiftEnd: value.shiftEnd || "17:00" })} /> Scheduled hours</label>
+      <label className="work-arrangement-choice"><input name="work-os-arrangement" type="radio" checked={flexible} onChange={() => patch({ arrangement: "flexible" })} /> Contractor / flexible hours</label>
     </fieldset>
-    <fieldset disabled={disabled} style={group}>
+    <fieldset disabled={disabled} className="work-arrangement-group">
       <legend>Working days</legend>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => <label key={day} style={{ minHeight: 40, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => <label className="work-arrangement-day" key={day}>
           <input type="checkbox" checked={days.includes(index)} onChange={() => patch({ daysOfWeek: days.includes(index) ? days.filter((item) => item !== index) : [...days, index].sort() })} /> {day}
         </label>)}
       </div>
     </fieldset>
     {flexible ? <p style={{ margin: 0 }}>Your workdays are fixed. Choose when to work on those days; no shift times or required number of hours are set.</p> : <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(135px,1fr))", gap: 12 }}>
-        <label style={group}>Shift starts<input disabled={disabled} style={input} type="time" value={value.shiftStart ?? ""} onChange={(event) => patch({ shiftStart: event.target.value })} /></label>
-        <label style={group}>Shift ends<input disabled={disabled} style={input} type="time" value={value.shiftEnd ?? ""} onChange={(event) => patch({ shiftEnd: event.target.value })} /></label>
+        <label style={group}>Shift starts<input className="work-arrangement-input" disabled={disabled} type="time" value={value.shiftStart ?? ""} onChange={(event) => patch({ shiftStart: event.target.value })} /></label>
+        <label style={group}>Shift ends<input className="work-arrangement-input" disabled={disabled} type="time" value={value.shiftEnd ?? ""} onChange={(event) => patch({ shiftEnd: event.target.value })} /></label>
       </div>
-      {!authoritativeBreaks && <fieldset disabled={disabled} style={group}>
+      {!authoritativeBreaks && <fieldset disabled={disabled} className="work-arrangement-group">
         <legend>Break windows</legend>
         {breaks.length ? breaks.map((item, index) => <div key={index} style={{ display: "flex", flexWrap: "wrap", alignItems: "end", gap: 8 }}>
-          <label style={group}>Break {index + 1} starts<input style={input} type="time" value={item.start} onChange={(event) => setBreak(index, { start: event.target.value })} /></label>
-          <label style={group}>Break {index + 1} ends<input style={input} type="time" value={item.end} onChange={(event) => setBreak(index, { end: event.target.value })} /></label>
+          <label style={group}>Break {index + 1} starts<input className="work-arrangement-input" type="time" value={item.start} onChange={(event) => setBreak(index, { start: event.target.value })} /></label>
+          <label style={group}>Break {index + 1} ends<input className="work-arrangement-input" type="time" value={item.end} onChange={(event) => setBreak(index, { end: event.target.value })} /></label>
           <button type="button" style={action} aria-label={`Remove break ${index + 1}`} onClick={() => patch({ breaks: breaks.filter((_, itemIndex) => itemIndex !== index) })}>Remove</button>
         </div>) : <p style={{ margin: 0 }}>No break windows added.</p>}
         <button type="button" style={{ ...action, justifySelf: "start" }} onClick={() => patch({ breaks: [...breaks, { start: "12:00", end: "12:30" }] })}>Add break</button>

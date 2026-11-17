@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SETTINGS_PAGES, type SettingsPageId, type SettingsPageMeta } from "./settingsSections";
+import { SETTINGS_PAGES, type SettingsNavPage, type SettingsPageId, type SettingsPageMeta } from "./settingsSections";
 
 const STORAGE_KEY = "work-os.settings-page";
 
@@ -12,7 +12,7 @@ function storedPage(): SettingsPageId | null {
   }
 }
 
-export function filterSettingsPages(pages: SettingsPageMeta[], query: string): SettingsPageMeta[] {
+export function filterSettingsPages<T extends SettingsNavPage>(pages: T[], query: string): T[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return pages;
   return pages.filter((page) => [page.label, page.group, page.description, ...page.keywords]

@@ -1,14 +1,14 @@
 import { useRef, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowUpRight, Search, X } from "lucide-react";
 import { ProfileAvatar } from "./ProfileSettings";
-import type { SettingsPageId, SettingsPageMeta } from "./settingsSections";
+import type { SettingsNavPage } from "./settingsSections";
 
-type SettingsSidebarProps = {
-  active: SettingsPageId;
-  visiblePages: SettingsPageMeta[];
+type SettingsSidebarProps<T extends string> = {
+  active: T;
+  visiblePages: SettingsNavPage<T>[];
   query: string;
   onQuery: (value: string) => void;
-  onSelect: (page: SettingsPageId) => void;
+  onSelect: (page: T) => void;
   onBack: () => void;
   hasPersonalRecord: boolean;
   displayName?: string | null;
@@ -18,14 +18,14 @@ type SettingsSidebarProps = {
 /** The Work OS sidebar becomes this rail while Settings is on screen. The
  * content page is a sibling in the stage; this rail owns only navigation,
  * search, and the way back to the app. */
-export function SettingsSidebar({ active, visiblePages, query, onQuery, onSelect, onBack, hasPersonalRecord, displayName, avatarUrl }: SettingsSidebarProps) {
+export function SettingsSidebar<T extends string>({ active, visiblePages, query, onQuery, onSelect, onBack, hasPersonalRecord, displayName, avatarUrl }: SettingsSidebarProps<T>) {
   const navRef = useRef<HTMLElement | null>(null);
   const aboutPage = visiblePages.find((page) => page.id === "about") ?? null;
   const navPages = visiblePages.filter((page) => page.id !== "about" && page.id !== "profile");
   const groups = Array.from(new Set(navPages.map((page) => page.group))).filter(Boolean);
   const tabStop = visiblePages.some((page) => page.id === active) ? active : visiblePages[0]?.id;
 
-  const onNavKeyDown = (event: KeyboardEvent<HTMLButtonElement>, pageId: SettingsPageId) => {
+  const onNavKeyDown = (event: KeyboardEvent<HTMLButtonElement>, pageId: T) => {
     const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
     if (!keys.includes(event.key)) return;
     const buttons = Array.from(navRef.current?.querySelectorAll<HTMLButtonElement>("[data-settings-nav]") ?? []);
@@ -41,7 +41,7 @@ export function SettingsSidebar({ active, visiblePages, query, onQuery, onSelect
     button.click();
   };
 
-  const navButton = (page: SettingsPageMeta) => <button
+  const navButton = (page: SettingsNavPage<T>) => <button
     key={page.id}
     type="button"
     className={`settings-nav-item${page.id === active ? " is-active" : ""}`}
@@ -75,7 +75,7 @@ export function SettingsSidebar({ active, visiblePages, query, onQuery, onSelect
       </label>
       <label className="settings-mobile-select">
         <span>Section</span>
-        <select value={visiblePages.some((page) => page.id === active) ? active : visiblePages[0]?.id ?? ""} onChange={(event) => onSelect(event.target.value as SettingsPageId)}>
+        <select value={visiblePages.some((page) => page.id === active) ? active : visiblePages[0]?.id ?? ""} onChange={(event) => onSelect(event.target.value as T)}>
           {visiblePages.map((page) => <option key={page.id} value={page.id}>{page.group ? `${page.group} · ${page.label}` : page.label}</option>)}
         </select>
       </label>
@@ -90,8 +90,8 @@ export function SettingsSidebar({ active, visiblePages, query, onQuery, onSelect
           data-settings-nav="profile"
           aria-current={active === "profile" ? "page" : undefined}
           tabIndex={active === "profile" ? 0 : -1}
-          onClick={() => onSelect("profile")}
-          onKeyDown={(event) => onNavKeyDown(event, "profile")}
+          onClick={() => onSelect("profile" as T)}
+          onKeyDown={(event) => onNavKeyDown(event, "profile" as T)}
         >
           <ProfileAvatar name={displayName ?? "Your profile"} avatarUrl={avatarUrl} />
           <span className="settings-profile-copy"><strong>{displayName ?? "Your profile"}</strong><small>Profile settings</small></span>

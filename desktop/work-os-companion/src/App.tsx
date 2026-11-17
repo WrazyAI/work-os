@@ -5649,7 +5649,7 @@ export default function App() {
           {...(adminOttoFollowFixture ? { transport: adminOttoFollowFixture.transport } : {})}
         /></Suspense>
       ) : undefined,
-      profileSettings: surface === "employee" && visibleOnboarding
+      profileSettings: visibleOnboarding
         ? <ProfileSettings data={visibleOnboarding} mode="page" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} />
         : undefined,
       tourScope: surface,
@@ -5852,7 +5852,7 @@ export default function App() {
           : adminContextState?.status === "loading"
             ? "Loading the administration context…"
             : null}
-        personalSettings={<PersonalSettings {...settingsPropsFor("admin")} />}
+        personalSettingsProps={settingsPropsFor("admin")}
         profile={visibleOnboarding
           ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }
           : adminOttoContextQuery.data?.displayName

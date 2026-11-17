@@ -1988,10 +1988,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-editor-section {
   display: grid;
-  grid-template-columns: minmax(120px, 148px) minmax(0, 1fr);
-  gap: 26px;
+  grid-template-columns: minmax(132px, 164px) minmax(0, 1fr);
+  gap: 32px;
   align-items: start;
-  padding: 25px 0 27px;
+  padding: 32px 0 34px;
   border-top: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
 }
 .profile-editor-section:first-child {
@@ -2013,15 +2013,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-editor-section > header p {
   margin: 0;
-  max-width: 148px;
-  color: #858a80;
-  font-size: 10.5px;
-  line-height: 1.45;
+  max-width: 164px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 .profile-section-content {
   display: grid;
   min-width: 0;
-  gap: 15px;
+  gap: 18px;
 }
 .profile-identity {
   display: grid;
@@ -2103,7 +2103,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px 14px;
+  gap: 16px 18px;
 }
 .profile-field-grid.compact {
   max-width: 360px;
@@ -2116,36 +2116,54 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .profile-field > span,
 .profile-specialties legend,
 .profile-pill-group legend {
-  color: #6e7369;
-  font: 700 8.5px Manrope, Inter, sans-serif;
+  color: var(--muted);
+  font: 700 9px Manrope, Inter, sans-serif;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
-.profile-modal .profile-field input,
-.profile-modal .profile-field select,
-.profile-break-row input {
+.profile-editor .profile-field input,
+.profile-editor .profile-field select,
+.profile-editor .profile-break-row input,
+.profile-editor .profile-schedule input:not([type="radio"]):not([type="checkbox"]) {
   width: 100%;
-  min-height: 40px;
+  min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--white);
   color: var(--ink);
-  padding: 0 11px;
+  padding: 0 12px;
   font: 450 12px Inter, sans-serif;
 }
-.profile-modal .profile-field input:hover,
-.profile-modal .profile-field select:hover,
-.profile-break-row input:hover {
+.profile-editor .profile-field select {
+  appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 11px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+}
+.profile-editor .profile-field input[type="time"] {
+  padding-right: 10px;
+}
+.profile-editor .profile-field input:hover,
+.profile-editor .profile-field select:hover,
+.profile-editor .profile-break-row input:hover,
+.profile-editor .profile-schedule input:not([type="radio"]):not([type="checkbox"]):hover {
   border-color: var(--line-strong);
 }
-.profile-modal .profile-field input:focus,
-.profile-modal .profile-field select:focus,
-.profile-break-row input:focus {
+.profile-editor .profile-field input:focus,
+.profile-editor .profile-field select:focus,
+.profile-editor .profile-break-row input:focus,
+.profile-editor .profile-schedule input:not([type="radio"]):not([type="checkbox"]):focus {
   border-color: var(--focus);
-  outline: 3px solid rgba(184, 255, 90, 0.18);
-  box-shadow: 0 0 0 1px rgba(112, 158, 57, 0.12);
+  outline: 3px solid color-mix(in srgb, var(--focus) 20%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 14%, transparent);
 }
-.profile-modal .profile-field input[readonly] {
+.profile-editor .profile-field input[readonly] {
   color: var(--muted);
   background: var(--inset);
 }
@@ -2166,6 +2184,47 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-schedule-note {
   margin-bottom: -2px;
+}
+.work-arrangement-fields { display: grid; gap: 18px; }
+.work-arrangement-group { display: grid; min-width: 0; gap: 10px; border: 0; padding: 0; margin: 0; }
+.work-arrangement-group legend {
+  color: var(--muted);
+  font: 700 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.work-arrangement-choice,
+.work-arrangement-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.work-arrangement-choice input,
+.work-arrangement-day input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--signal-deep);
+}
+.work-arrangement-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--ink);
+  font: 450 12px Inter, sans-serif;
+}
+.work-arrangement-input:focus-visible {
+  border-color: var(--focus);
+  outline: 3px solid color-mix(in srgb, var(--focus) 20%, transparent);
+  outline-offset: 0;
 }
 .profile-day-picker {
   display: grid;

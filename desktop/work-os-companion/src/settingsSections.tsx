@@ -14,8 +14,8 @@ import type { PersonalSettingsProps } from "./PersonalSettings";
 export type SettingsPageId = "profile" | "workday" | "session" | "general" | "appearance" | "voice" | "otto" | "guides" | "diagnostics" | "reset" | "about";
 export type SettingsBlockId = SettingsPageId | "recap" | "memory";
 
-export type SettingsPageMeta = {
-  id: SettingsPageId;
+export type SettingsNavPage<T extends string = string> = {
+  id: T;
   label: string;
   group: string;
   icon: typeof UserRound;
@@ -24,6 +24,9 @@ export type SettingsPageMeta = {
   requiresPersonalRecord?: boolean;
   /** The page title already names the first group; hide its duplicate head. */
   hideFirstGroupHead?: boolean;
+};
+
+export type SettingsPageMeta = SettingsNavPage<SettingsPageId> & {
   blocks: SettingsBlockId[];
 };
 

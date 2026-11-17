@@ -176,7 +176,7 @@ describe("operational visualizations", () => {
     expect(styles).toContain(".task-modal.profile-modal");
     expect(styles).toContain(".task-modal-backdrop.profile-backdrop");
     expect(styles).toContain(".profile-section-content");
-    expect(styles).toMatch(/\.profile-editor-section \{[\s\S]*?grid-template-columns: minmax\(120px, 148px\) minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.profile-editor-section \{[\s\S]*?grid-template-columns: minmax\(132px, 164px\) minmax\(0, 1fr\);/);
     expect(styles).toMatch(/\.profile-schedule \{[\s\S]*?border: 0;[\s\S]*?background: transparent;/);
     expect(styles).toContain(".profile-modal .profile-editor-body::-webkit-scrollbar");
     expect(styles).toContain(".profile-editor-modal > .profile-editor-actions .primary");
@@ -847,7 +847,7 @@ describe("operational visualizations", () => {
     expect(app).toContain('import { PersonalSettings } from "./PersonalSettings"');
     expect(app).toContain('const settingsPropsFor = (surface: "employee" | "admin")');
     expect(app).toContain('settingsPropsFor("employee")');
-    expect(app).toContain('<PersonalSettings {...settingsPropsFor("admin")} />');
+    expect(app).toContain('personalSettingsProps={settingsPropsFor("admin")}');
     expect(adminWorkspace).toContain("personalSettings?: ReactNode");
     expect(adminWorkspace).toContain("<SettingsPage personalSettings={personalSettings} />");
     // The tour replay follows the surface it was rendered on.
