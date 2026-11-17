@@ -23,6 +23,13 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.35 — 2026-11-17
+
+- Dark mode now covers every page and dialog, including EOD, planning, memory, notifications, insights, task menus, and tool cards.
+- The Administration switch looks right from the moment Work OS opens instead of appearing as a plain button.
+- The light theme's review cards are readable again, and selected filters show their labels.
+- Tool cards keep their rounded surfaces in both themes instead of drawing light-only borders.
+
 ## 0.5.34 — 2026-11-16
 
 - The dark theme now keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.

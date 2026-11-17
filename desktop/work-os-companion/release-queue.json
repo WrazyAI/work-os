@@ -384,8 +384,27 @@
       "type": "feature",
       "summary": "Settings uses its own sidebar in both workspaces, with search, one page at a time, and an inline Profile page; Back to app restores the app sidebar.",
       "verification": "Branch codex/settings-subpages: themeSurfaceContrast 13/13; companion 224 files/1982 tests, typecheck, and production build; Work OS 1352 tests with 1341 pass, 0 fail, 11 skipped; rendered employee and admin Settings at 1440/420 in dark and light, including the sidebar takeover, Back to app, search results, the inline Profile form, and the polished profile fields; AdminSettingsWorkspace 3/3 and SettingsWorkspace 5/5."
+
+    },
+    {
+      "id": "admin-switch-launch-styling",
+      "type": "fix",
+      "summary": "The Administration switch looks right from the moment Work OS opens instead of appearing as a plain button until it is clicked.",
+      "verification": "Moved the switch material from the lazily loaded admin.css into workspace-redesign.css and pinned it in themeSurfaceContrast. Companion 223 files/1979 tests and typecheck clean; rendered the employee masthead at first paint."
+    },
+    {
+      "id": "companion-theme-audit",
+      "type": "fix",
+      "summary": "Dark mode covers every page and dialog, and light-mode review cards and tool cards use the selected theme instead of light-only panels.",
+      "verification": "Playwright audit of 51 preview routes plus 9 interactions in light and dark (102 captures) with an automated contrast scan: production surfaces report zero failures; the remaining findings are the dev-only Mascot Lab and TaskDesignGallery previews and the visually clipped workday-details trigger. Rendered EOD raw, planning Loom, notifications, carry-over, task menu, memory, settings, insights, admin pages, and the light batch card. Companion 223 files/1979 tests; typecheck clean."
     }
   ],
   "emergency": null,
-  "operatorOverride": null
+  "operatorOverride": {
+    "version": "0.5.35",
+    "updateId": "companion-theme-audit",
+    "approvedBy": "operator",
+    "reason": "The operator explicitly asked for these theme fixes to be merged and deployed before completing the implementation.",
+    "approvedAt": "2026-11-17"
+  }
 }
