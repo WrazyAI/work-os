@@ -145,7 +145,7 @@
 }
 .range-switch button.active {
   background: var(--ink);
-  color: #fff;
+  color: var(--paper);
 }
 .insight-brief {
   margin-top: 12px;
@@ -216,6 +216,17 @@
   color: var(--muted);
   font-weight: 500;
 }
+.insight-table-wrap td button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
 .insight-drilldown {
   margin-top: 12px;
 }
@@ -224,6 +235,8 @@
   gap: 6px;
   padding-bottom: 10px;
 }
+.drilldown-list > button,
+.drilldown-list button { color: var(--ink); }
 .insight-drilldown .drilldown-list > button {
   display: grid;
   grid-template-columns: 90px 1fr auto;
@@ -233,6 +246,7 @@
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--inset);
+  color: var(--ink);
   padding: 0 12px;
   text-align: left;
 }

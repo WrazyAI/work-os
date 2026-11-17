@@ -116,38 +116,9 @@ body:has(.admin-workspace) .notifications-card {
 
 /* --- Masthead switch ---------------------------------------------------- */
 
-.admin-switch,
-.admin-switch-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 0 13px;
-  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
-  border-radius: 10px;
-  background: var(--surface-raised, #fbfcf8);
-  color: var(--ink);
-  font: 650 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  cursor: pointer;
-  transition: border-color 160ms var(--ease-product), background-color 160ms var(--ease-product);
-}
-
-.admin-switch:hover,
-.admin-switch-ghost:hover {
-  border-color: var(--line-strong, #c5cec1);
-  background: #f2f4ee;
-}
-
-.admin-switch-ghost {
-  min-height: 32px;
-  padding: 0 11px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.admin-switch-ghost:hover {
-  color: var(--ink);
-}
+/* `.admin-switch` and `.admin-switch-ghost` live in workspace-redesign.css:
+   the employee masthead renders the switch before this lazily loaded sheet is
+   requested, so its material must ship with the always-loaded styles. */
 
 /* The masthead's labeled admin Otto entry: same control material as the
    workspace switch, but it keeps its label on one line when the utility row
@@ -1673,7 +1644,7 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 .admin-kv b.is-warn {
-  color: #9a670c;
+  color: var(--warning-ink);
 }
 
 .admin-block {

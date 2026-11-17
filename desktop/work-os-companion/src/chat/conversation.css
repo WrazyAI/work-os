@@ -16,7 +16,7 @@
    * 4.5:1 on paper, so keyboard focus is always visible. The bright signal
    * lime stays reserved for actions, progress, and confirmed states. */
   --conversation-focus: #4a7d22;
-  --conversation-muted: #71766f;
+  --conversation-muted: #666e64;
   --conversation-line: #d9dad2;
   --conversation-danger: #b94343;
   --conversation-shadow: 0 24px 70px rgba(18, 21, 18, 0.18);

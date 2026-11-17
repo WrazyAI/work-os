@@ -156,4 +156,18 @@ describe("Otto chat cards", () => {
     expect(action).toContain("color: var(--ink-on-signal, #182018)");
     expect(action).not.toContain("color: var(--ink, #182018)");
   });
+
+  it("ships the employee masthead switch before the administration chunk loads", () => {
+    const admin = read("admin/admin.css");
+    expect(workspace).toContain(".admin-switch,\n.admin-switch-ghost {");
+    expect(workspace).toContain("border-radius: 10px;");
+    expect(admin).not.toContain(".admin-switch,\n.admin-switch-ghost {");
+  });
+
+  it("keeps the light tool paper light and its primaries paired", () => {
+    expect(toolSurfaces).toContain("--tool-paper: #fbfaf5;");
+    expect(toolSurfaces).toContain('[data-workos-tool-surface="batch"] .task-batch-foot button.primary {');
+    expect(toolSurfaces).toContain("color: var(--tool-paper);");
+    expect(toolSurfaces).not.toContain("--tool-paper: var(--ink-on-signal);");
+  });
 });

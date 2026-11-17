@@ -99,7 +99,7 @@
   --color-accent-ink: #3f7d20;
   --color-accent-tint: #e4f4d3;
   --color-orange: #d99216;
-  --color-danger: #d4493f;
+  --color-danger: #b83a2f;
   --color-danger-tint: #f8ded8;
 
   /* Geometry */
@@ -1163,7 +1163,7 @@ body {
 .chat-activity-flow-label { color: var(--ink-3, #7b8278); font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .chat-activity-flow-track { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .chat-activity-flow-chip { border-radius: 999px; padding: 2px 8px; background: var(--inset, #edf0ea); color: var(--ink-2, #626a61); font-size: 10px; font-weight: 650; }
-.chat-activity-flow-sep { color: var(--line-strong, #c5cec1); font-size: 10px; }
+.chat-activity-flow-sep { color: var(--muted); font-size: 10px; }
 .chat-activity-github { display: grid; gap: 4px; }
 .chat-activity-github ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .chat-activity-github li { display: flex; align-items: baseline; gap: 6px; color: var(--ink-2, #626a61); font-size: 11px; line-height: 1.45; }

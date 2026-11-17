@@ -139,7 +139,7 @@ The desktop companion's dark variant is **Soft ash**: the same roles on a
 lighter graphite ladder so every surface step stays legible without glow.
 Reference values: canvas `#242527`, navigation `#292a2c`, paper `#303133`,
 raised `#393a3d`, inset `#414246`, line `#505256`, line-strong `#686b70`,
-ink `#f0f0ef`, ink-soft `#d2d3d6`, muted `#bfc0c3`, faint `#8f9298`, signal
+ink `#f0f0ef`, ink-soft `#d2d3d6`, muted `#bfc0c3`, faint `#b0b3b8`, signal
 `#a8f15b`, signal-deep `#8fd24a`, danger `#f09a93`, warning `#e3b15f`,
 observed `#8fbdd8`, focus `#b8e794`. The ladder is
 `navigation < paper < raised < inset`, with the canvas beneath it; a dialog is
@@ -150,7 +150,17 @@ a light-paper hue turning sandy on graphite. The web workspace keeps its own
 dark scope (§4.3); the two materials are reconciled by role, not by copying
 hex values.
 
-Known gaps: `--color-faint` (2.7:1 on paper) must not carry text.
+**Theme completeness.** Every surface, dialog, menu, and field follows the
+selected material; a light-only panel never appears inside Soft ash. The tool
+palette's paper is a paper, never an ink: `#fbfaf5` in the light material and
+the paper step in the dark material, with ink-on-signal reserved for text on
+signal green. Controls that render before a lazily loaded workspace chunk (the
+employee masthead's Administration switch) carry their material in the
+always-loaded sheet, so the first frame is styled before the admin bundle
+arrives.
+
+Known gaps: `--color-faint` (2.7:1 on paper) must not carry text in the light
+material; the dark faint step is `#b0b3b8` and passes on paper and inset.
 `--color-warning` (3.0:1 on white) still fails AA as text on light surfaces,
 and the signal focus outline is 1.3:1 on paper. The muted and danger roles now
 use text-safe steps: `--color-muted` passes on canvas and paper, and

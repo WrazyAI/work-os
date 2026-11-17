@@ -8,9 +8,9 @@
 
 :root:not([data-theme="dark"]) {
   --tool-ink: #182018;
-  --tool-muted: #697267;
-  --tool-faint: #6d766b;
-  --tool-paper: var(--ink-on-signal);
+  --tool-muted: #5f685d;
+  --tool-faint: #677065;
+  --tool-paper: #fbfaf5;
   --tool-inset: #f2f5ee;
   --tool-hover: #eef3e9;
   --tool-line: #d8ded4;
@@ -21,7 +21,7 @@
   --tool-success-soft: #e8f4da;
   --tool-warning: #8a6410;
   --tool-warning-soft: #fff3d1;
-  --tool-danger: #ad463c;
+  --tool-danger: #9f3f35;
   --tool-danger-soft: #f8ded8;
   --tool-info: #376b8c;
   --tool-info-soft: #e8f1f7;
@@ -427,7 +427,7 @@
   min-height: 32px;
   border-bottom: 1px solid var(--tool-line);
   background: var(--tool-inset);
-  color: var(--tool-faint);
+  color: var(--tool-muted);
   font-size: 9px;
   letter-spacing: .07em;
 }
@@ -644,7 +644,7 @@
 [data-workos-tool-surface="approval"] .approval-actions .approval-approve {
   border-color: var(--tool-ink);
   background: var(--tool-ink);
-  color: var(--ink-on-signal);
+  color: var(--tool-paper);
   box-shadow: 0 2px 6px rgba(24, 32, 24, .12);
 }
 
@@ -1073,7 +1073,7 @@
 [data-workos-tool-surface="batch"] .task-batch-foot button.primary {
   border-color: var(--tool-ink);
   background: var(--tool-ink);
-  color: var(--ink-on-signal);
+  color: var(--tool-paper);
   box-shadow: 0 2px 6px rgba(24, 32, 24, .12);
 }
 

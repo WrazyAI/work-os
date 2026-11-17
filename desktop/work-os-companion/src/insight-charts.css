@@ -1879,7 +1879,7 @@
 }
 
 .insight-attention-list p.active.amber strong {
-  color: #9a670c;
+  color: var(--warning-ink);
 }
 
 .insight-attention-list .attention-copy {
@@ -2155,6 +2155,11 @@
   background: transparent;
   padding: 0;
   text-align: left;
+}
+
+.insight-drilldown-flat .drilldown-list button,
+.insight-drilldown-flat .drilldown-list button strong {
+  color: var(--dash-ink);
 }
 
 .insight-drilldown-flat .drilldown-list button:first-child {

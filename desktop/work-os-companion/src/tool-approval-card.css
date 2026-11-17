@@ -179,7 +179,7 @@
   padding: 0 10px;
   border: 1px solid var(--tool-success);
   border-radius: 8px;
-  background: #f2f9e8;
+  background: var(--tool-success-soft);
   color: var(--tool-success);
   font-size: 10px;
   font-weight: 750;

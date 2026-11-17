@@ -36,7 +36,7 @@ export default function InsightsSynthesisPreview() {
             style={{
               minHeight: 34, border: "1px solid var(--line)", borderRadius: 9, padding: "6px 12px",
               background: active === entry.key ? "var(--ink)" : "transparent",
-              color: active === entry.key ? "#f3f1e8" : "var(--ink)",
+              color: active === entry.key ? "var(--paper)" : "var(--ink)",
               fontWeight: active === entry.key ? 600 : 500,
             }}
           >{entry.label}</button>)}
