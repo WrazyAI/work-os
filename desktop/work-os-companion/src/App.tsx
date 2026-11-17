@@ -95,6 +95,7 @@ import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
+import { SettingsWorkspace } from "./SettingsWorkspace";
 import PageGuide from "./PageGuide";
 import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
@@ -5628,61 +5629,64 @@ export default function App() {
    * modal the row opens, whose tour the replay launches, and whether the
    * changelog action goes through the administration menu's fallback-aware
    * opener. */
-  const renderPersonalSettings = (surface: "employee" | "admin") => (
-    <PersonalSettings
-      hasPersonalRecord={!!visibleOnboarding}
-      adminOttoSettings={surface === "admin" && followSettingsScope ? (
+  const renderPersonalSettings = (surface: "employee" | "admin") => {
+    const settingsProps = {
+      hasPersonalRecord: !!visibleOnboarding,
+      adminOttoSettings: surface === "admin" && followSettingsScope ? (
         <Suspense fallback={null}><AdminOttoSettings
           key={`admin-otto-follows:${followSettingsScope.userId}:${followSettingsScope.organizationId}`}
           scope={followSettingsScope}
           {...(adminOttoFollowFixture ? { transport: adminOttoFollowFixture.transport } : {})}
         /></Suspense>
-      ) : undefined}
-      tourScope={surface}
-      onReplayTour={() => setTourScope(surface)}
-      onOpenProfile={surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true)}
-      autoStart={autoStart}
-      onAutoStart={(value) => void toggleAutoStart(value)}
-      voiceHotkeyEnabled={voiceHotkeyEnabled}
-      voiceHotkeyError={voiceHotkeyError}
-      onVoiceHotkey={(value) => void toggleVoiceHotkey(value)}
-      recapVoice={recapVoice}
-      onRecapVoice={(next) => void chooseRecapVoice(next)}
-      autoCheckUpdates={autoCheckUpdates}
-      onAutoCheckUpdates={(value) => void toggleAutoCheckUpdates(value)}
-      updateDetail={updateRowCopy(updateRowSummary, installedVersion)}
-      updateStatus={updateFlow.status}
-      installedVersion={installedVersionRaw}
-      onCheckForUpdates={() => void checkForUpdates()}
-      onDownloadUpdate={() => void beginUpdateDownload()}
-      onInstallUpdate={() => void installDownloadedUpdate()}
-      onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}
-      pageGuideAutoOpen={pageGuideAutoOpen}
-      onPageGuideAutoOpen={setPageGuideAutoOpen}
-      theme={theme}
-      textSize={textSize}
-      mascotSize={mascotSize}
-      onTheme={(value) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved"))}
-      onTextSize={(value) => void chooseTextSize(value)}
-      onMascotSize={(value) => void chooseMascotSize(value)}
-      queueCount={queueCount}
-      queueAttentionCount={queueAttentionCount}
-      sessionApiBase={visibleSession?.apiBase ?? ""}
-      onSignOut={() => void logout()}
-      memory={{
+      ) : undefined,
+      tourScope: surface,
+      onReplayTour: () => setTourScope(surface),
+      onOpenProfile: surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true),
+      autoStart,
+      onAutoStart: (value: boolean) => void toggleAutoStart(value),
+      voiceHotkeyEnabled,
+      voiceHotkeyError,
+      onVoiceHotkey: (value: boolean) => void toggleVoiceHotkey(value),
+      recapVoice,
+      onRecapVoice: (next: string) => void chooseRecapVoice(next),
+      autoCheckUpdates,
+      onAutoCheckUpdates: (value: boolean) => void toggleAutoCheckUpdates(value),
+      updateDetail: updateRowCopy(updateRowSummary, installedVersion),
+      updateStatus: updateFlow.status,
+      installedVersion: installedVersionRaw,
+      onCheckForUpdates: () => void checkForUpdates(),
+      onDownloadUpdate: () => void beginUpdateDownload(),
+      onInstallUpdate: () => void installDownloadedUpdate(),
+      onOpenWhatsNew: surface === "admin" ? openChangelogFromAdmin : (version: string) => setWhatsNew({ version }),
+      pageGuideAutoOpen,
+      onPageGuideAutoOpen: setPageGuideAutoOpen,
+      theme,
+      textSize,
+      mascotSize,
+      onTheme: (value: typeof theme) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved")),
+      onTextSize: (value: typeof textSize) => void chooseTextSize(value),
+      onMascotSize: (value: typeof mascotSize) => void chooseMascotSize(value),
+      queueCount,
+      queueAttentionCount,
+      sessionApiBase: visibleSession?.apiBase ?? "",
+      onSignOut: () => void logout(),
+      memory: {
         facts: memoryQuery.data?.facts ?? [],
         factTotals: memoryQuery.data?.factTotals,
         loading: memoryQuery.isPending && !memoryQuery.data,
         error: !memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null,
-      }}
-      onOpenMemory={() => setMemoryOpen(true)}
-      onRetryMemory={() => void memoryQuery.refetch()}
-      onOpenDebugger={() => void openDebugger()}
-      onExportDiagnostics={() => void exportAppDiagnostics()}
-      onResetOnboarding={() => void resetOnboarding()}
-      busy={busy}
-    />
-  );
+      },
+      onOpenMemory: () => setMemoryOpen(true),
+      onRetryMemory: () => void memoryQuery.refetch(),
+      onOpenDebugger: () => void openDebugger(),
+      onExportDiagnostics: () => void exportAppDiagnostics(),
+      onResetOnboarding: () => void resetOnboarding(),
+      busy,
+    };
+    return surface === "employee"
+      ? <SettingsWorkspace {...settingsProps} />
+      : <PersonalSettings {...settingsProps} />;
+  };
 
   /* Only a branch that mounts an overlay may hold the lock or trap focus for
    * it: nothing counts on the boot screens, and within a workspace branch the
@@ -6259,9 +6263,8 @@ export default function App() {
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onOpenToday={() => setView("day")} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
        {view === "settings" && (
-        <main className="page settings-page">
-           <p className="settings-lead">Personalize Work OS on this device and keep account, sync, and privacy controls in one calm place.</p>
-           {renderPersonalSettings("employee")}
+        <main className="page settings-page settings-workspace-page">
+          {renderPersonalSettings("employee")}
         </main>
       )}
       {dockVisible && <ProgressComposer
