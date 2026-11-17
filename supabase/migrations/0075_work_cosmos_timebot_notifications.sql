@@ -92,13 +92,6 @@ begin
     return new;
   end if;
 
-  -- A new organization gets its cutover at its first transition. Existing ones
-  -- were seeded by the migration, so there is no window where an event can be
-  -- recorded but never recoverable.
-  insert into public.work_notification_state (organization_id)
-  values (new.organization_id)
-  on conflict (organization_id) do nothing;
-
   -- Age never decides whether a transition exists. A late event is still
   -- posted; the dispatcher measures lateness at delivery and marks the line,
   -- so a provider recovery at 18:00 cannot silently erase a 09:00 clock-in.

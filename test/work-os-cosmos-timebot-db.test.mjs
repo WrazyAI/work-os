@@ -230,15 +230,25 @@ test("the migration seeds the cutover for an organization that already exists", 
   }
 });
 
-test("a new organization gets its cutover from its first transition", async () => {
+test("a failed first enqueue still leaves the event that becomes the cutover", async () => {
   const db = await freshDb();
   try {
     const ids = await seed(db);
+    // Force the outbox insert to fail for this organization. The clock event
+    // must still commit, and the state row must not be required for recovery.
+    await db.exec("alter table work_notification_outbox add constraint test_first check (person_name <> 'David Zawadi')");
     await addEvent(db, ids, "clock_in", ago(2));
-    const state = await db.query("select timebot_activated_at from work_notification_state where organization_id = $1", [ids.organizationId]);
-    assert.equal(state.rows.length, 1, "the trigger writes the cutover in the same transaction as the event");
-    const rows = await db.query("select count(*)::int as n from work_notification_outbox");
-    assert.equal(rows.rows[0].n, 1);
+    const events = await db.query("select count(*)::int as n from work_session_events");
+    assert.equal(events.rows[0].n, 1, "the clock event commits");
+    const outbox = await db.query("select count(*)::int as n from work_notification_outbox");
+    assert.equal(outbox.rows[0].n, 0, "the failed enqueue is left to the reconciler");
+    const state = await db.query("select count(*)::int as n from work_notification_state where organization_id = $1", [ids.organizationId]);
+    assert.equal(state.rows[0].n, 0, "no cutover row can be written in the same transaction that failed");
+    const boundary = await db.query("select min(recorded_at)::text as at from work_session_events where organization_id = $1", [ids.organizationId]);
+    assert.ok(boundary.rows[0].at, "the earliest event supplies the derived cutover");
+    await db.exec("alter table work_notification_outbox drop constraint test_first");
+    const rebuilt = await db.query("select work_reconcile_timebot_outbox($1::timestamptz, 50) as inserted", [boundary.rows[0].at]);
+    assert.equal(Number(rebuilt.rows[0].inserted), 1, "recovery from the derived boundary closes the gap");
   } finally {
     await db.close();
   }

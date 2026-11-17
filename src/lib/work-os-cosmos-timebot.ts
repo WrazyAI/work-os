@@ -183,10 +183,14 @@ interface OutboxRow {
 
 type Db = ReturnType<typeof createAdminClient>;
 
-/** The cutover for this organization. The migration seeds it for organizations
- * that already exist, and the enqueue trigger writes it for a new one on its
- * first transition. A missing row means nothing has been recorded yet, so there
- * is nothing to reconcile. */
+/** The cutover for this organization.
+ *
+ * The migration seeds it for organizations that already exist. A newer
+ * organization may have no row yet, and the trigger cannot write one: an
+ * enqueue that fails would roll the state insert back with it, leaving the
+ * event recorded but permanently outside recovery. So the boundary is derived
+ * from the event log itself — the earliest recorded transition — which is the
+ * one fact that survives a failed enqueue. */
 async function readTimebotActivation(db: Db, organizationId: string): Promise<string | null> {
   const state = await db
     .from("work_notification_state")
@@ -194,7 +198,30 @@ async function readTimebotActivation(db: Db, organizationId: string): Promise<st
     .eq("organization_id", organizationId)
     .maybeSingle();
   if (state.error) throw new Error(`load timebot activation: ${state.error.message}`);
-  return (state.data as { timebot_activated_at?: string } | null)?.timebot_activated_at ?? null;
+  const recorded = (state.data as { timebot_activated_at?: string } | null)?.timebot_activated_at;
+  if (recorded) return recorded;
+
+  const earliest = await db
+    .from("work_session_events")
+    .select("recorded_at")
+    .eq("organization_id", organizationId)
+    .order("recorded_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (earliest.error) throw new Error(`derive timebot activation: ${earliest.error.message}`);
+  const derived = (earliest.data as { recorded_at?: string } | null)?.recorded_at;
+  if (!derived) return null;
+
+  // Best effort: caching the derived boundary is an optimisation, not a
+  // correctness requirement, so a failed write must not stop the drain.
+  try {
+    await db
+      .from("work_notification_state")
+      .insert({ organization_id: organizationId, timebot_activated_at: derived });
+  } catch {
+    // ignored on purpose
+  }
+  return derived;
 }
 
 /** The query shim reports failures as `{ error }` instead of throwing. Ignoring
