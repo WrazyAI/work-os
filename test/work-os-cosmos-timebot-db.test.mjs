@@ -79,14 +79,18 @@ test("the trigger enqueues the four employee transitions and nothing else", asyn
   }
 });
 
-test("a stale event is stored dead rather than posted hours late", async () => {
+test("an old event is still enqueued: age never drops a transition", async () => {
   const db = await freshDb();
   try {
     const ids = await seed(db);
-    await addEvent(db, ids, "clock_in", ago(60));
+    // More than a day late. It must still be queued and claimable; only the
+    // rendered line changes, and that is covered by the unit tests.
+    await addEvent(db, ids, "clock_in", ago(26 * 60));
     const row = await db.query("select status, last_error from work_notification_outbox");
-    assert.equal(row.rows[0].status, "dead");
-    assert.equal(row.rows[0].last_error, "stale");
+    assert.equal(row.rows[0].status, "pending");
+    assert.equal(row.rows[0].last_error, null);
+    const claimed = await db.query("select event_type from work_claim_notification_outbox(10)");
+    assert.equal(claimed.rows.length, 1);
   } finally {
     await db.close();
   }

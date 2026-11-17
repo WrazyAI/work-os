@@ -20,9 +20,11 @@ export type CosmosDeliveryOutcome = "sent" | "retry" | "dead";
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const STALE_SENDING_MS = 5 * 60_000;
-export const MAX_ATTEMPTS = 8;
+/** Lines delivered within this window are not marked; beyond it they are. */
+export const DELAY_MARKER_MS = 15 * 60_000;
 
-/** 1m, 5m, 15m, 1h, 6h — then hold at 6h until MAX_ATTEMPTS. */
+/** 1m, 5m, 15m, 1h, 6h — then hold at 6h. A valid transition is never discarded
+ * for running out of attempts; only a permanent rejection makes it dead. */
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
 
 type TimebotEnv = { COSMOS_TIMEBOT_WEBHOOK_URL?: string; COSMOS_TIMEBOT_ORGANIZATION_ID?: string };
@@ -42,35 +44,88 @@ export function cosmosTimebotConfigured(env?: TimebotEnv) {
   return Boolean(timebotWebhookUrl(env) && timebotOrganizationId(env));
 }
 
-/** `17:06` in the employee's own timezone. The channel timestamp is the
- * reader's clock, which is wrong for anyone outside that zone; and because
- * Cosmos groups consecutive posts under one timestamp, each line has to carry
- * its own time or the events become unreadable. */
-export function formatTimebotTime(observedAt: string, timezone: string | null) {
-  const date = new Date(observedAt);
-  if (Number.isNaN(date.getTime())) return "--:--";
-  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
-  try {
-    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: timezone || "UTC" }).format(date);
-  } catch {
-    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(date);
-  }
+interface LocalStamp {
+  date: string;
+  time: string;
+  day: string;
 }
 
-/** Cosmos shows the integration's name as the author, so the employee's name
- * has to live in the body. First name only: the channel is read at a glance and
- * the team uses first names. */
+function localStamp(date: Date, timezone: string | null): LocalStamp {
+  const format = (zone: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = format(timezone || "UTC");
+  } catch {
+    parts = format("UTC");
+  }
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const month = Number(get("month"));
+  const dayOfMonth = Number(get("day"));
+  const monthName = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(
+    new Date(Date.UTC(2026, Math.max(month, 1) - 1, 1)),
+  );
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour")}:${get("minute")}`,
+    day: `${dayOfMonth} ${monthName}`,
+  };
+}
+
+/** `20m`, `3h`, `3d` — a reader needs the size of the delay, not seconds. */
+export function humanDelay(ms: number) {
+  const minutes = Math.max(1, Math.floor(ms / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/** Render one channel line.
+ *
+ * Age never removes a transition: the line is always posted. What age changes is
+ * whether the reader is told the delivery was late, and — when the event falls
+ * on an earlier local day — whether the absolute date is shown, because Cosmos's
+ * Today/Yesterday dividers describe the posting time, not the event time.
+ */
 export function renderTimebotMessage(input: {
   displayName: string;
   eventType: string;
   observedAt: string;
   timezone?: string | null;
+  /** Delivery time. Defaults to now; tests pass it explicitly. */
+  now?: string | Date;
 }): string | null {
   if (!(COSMOS_TIMEBOT_EVENTS as readonly string[]).includes(input.eventType)) return null;
   const word = EVENT_WORD[input.eventType as CosmosTimebotEvent];
   const name = input.displayName.trim().split(/\s+/)[0];
   if (!name) return null;
-  return `${formatTimebotTime(input.observedAt, input.timezone ?? null)} ${name} — ${word}`;
+
+  const observed = new Date(input.observedAt);
+  if (Number.isNaN(observed.getTime())) return `--:-- ${name} — ${word}`;
+
+  const delivered = input.now === undefined ? new Date() : new Date(input.now);
+  const timezone = input.timezone ?? null;
+  const observedStamp = localStamp(observed, timezone);
+  const lateMs = Number.isNaN(delivered.getTime()) ? 0 : delivered.getTime() - observed.getTime();
+  const delayed = lateMs >= DELAY_MARKER_MS;
+
+  let prefix = "";
+  let suffix = "";
+  if (delayed) {
+    const deliveredStamp = localStamp(delivered, timezone);
+    if (observedStamp.date !== deliveredStamp.date) prefix = `${observedStamp.day} `;
+    suffix = ` (delayed ${humanDelay(lateMs)})`;
+  }
+  return `${prefix}${observedStamp.time} ${name} — ${word}${suffix}`;
 }
 
 /** Cosmos documents no idempotency key and no delivery receipt, so a retry of an
@@ -237,6 +292,9 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
         eventType: row.event_type,
         observedAt: row.observed_at,
         timezone: row.timezone,
+        // Lateness is measured when the line is actually about to be sent, so a
+        // long retry loop is reported as late even though it was enqueued on time.
+        now: new Date(),
       });
 
       if (!message) {
@@ -265,16 +323,9 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
       }
 
       const attempts = Number(row.attempts) || 1;
-      if (attempts >= MAX_ATTEMPTS) {
-        await settle(db, row.id, {
-          status: "dead",
-          last_error: `gave up after ${attempts} attempts: ${describeTimebotFailure(result.status, result.error)}`,
-          next_attempt_at: now.toISOString(),
-        });
-        summary.dead += 1;
-        continue;
-      }
-
+      // A valid transition is never discarded for age or for running out of
+      // attempts. Only a permanent rejection (4xx, unrenderable, wrong
+      // organization) is dead; everything transient keeps retrying at six hours.
       await settle(db, row.id, {
         status: "failed",
         last_error: describeTimebotFailure(result.status, result.error),

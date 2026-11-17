@@ -55,7 +55,6 @@ as $$
 declare
   v_name text;
   v_timezone text;
-  v_stale boolean;
 begin
   if new.event_type not in ('clock_in','pause','resume','clock_out') then
     return new;
@@ -76,18 +75,15 @@ begin
     return new;
   end if;
 
-  -- A provider recovery at 18:00 must not post a 09:00 clock-in. Keep the row
-  -- so reconciliation can see it was deliberately skipped, but never send it.
-  v_stale := new.observed_at < now() - interval '15 minutes';
-
+  -- Age never decides whether a transition exists. A late event is still
+  -- posted; the dispatcher measures lateness at delivery and marks the line,
+  -- so a provider recovery at 18:00 cannot silently erase a 09:00 clock-in.
   insert into public.work_notification_outbox (
     organization_id, session_event_id, person_id, person_name, timezone,
-    event_type, observed_at, status, last_error
+    event_type, observed_at, status
   ) values (
     new.organization_id, new.id, new.person_id, v_name, v_timezone,
-    new.event_type, new.observed_at,
-    case when v_stale then 'dead' else 'pending' end,
-    case when v_stale then 'stale' else null end
+    new.event_type, new.observed_at, 'pending'
   )
   on conflict (session_event_id) do nothing;
 
@@ -142,8 +138,8 @@ as $$
 $$;
 
 -- Recovery for an enqueue the trigger swallowed. A session event that never got
--- a row would otherwise be silent forever. Newest seven days only, and anything
--- already stale is stored dead/stale rather than posted late.
+-- a row would otherwise be silent forever. Newest seven days only; age is not a
+-- reason to drop it, because the dispatcher marks late deliveries instead.
 create or replace function work_reconcile_timebot_outbox(p_limit integer default 50)
 returns integer
 language plpgsql
@@ -169,14 +165,12 @@ begin
   inserted as (
     insert into public.work_notification_outbox (
       organization_id, session_event_id, person_id, person_name, timezone,
-      event_type, observed_at, status, last_error
+      event_type, observed_at, status
     )
     select m.organization_id, m.id, m.person_id,
            p.display_name,
            coalesce(s.timezone, 'UTC'),
-           m.event_type, m.observed_at,
-           case when m.observed_at < now() - interval '15 minutes' then 'dead' else 'pending' end,
-           case when m.observed_at < now() - interval '15 minutes' then 'stale' else null end
+           m.event_type, m.observed_at, 'pending'
       from missing m
       join public.work_people p on p.id = m.person_id
       left join public.work_sessions s on s.id = m.session_id

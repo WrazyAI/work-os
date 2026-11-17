@@ -174,7 +174,7 @@ Two consequences:
 
 ### Cutover risk
 
-Until manual posting stops, the channel gets **double entries** — one human, one bot. Plan a short overlap: announce the switch, then have the team stop typing. Do not backfill history; only live transitions, and skip events older than 15 minutes.
+Until manual posting stops, the channel gets **double entries** — one human, one bot. Plan a short overlap: announce the switch, then have the team stop typing. Do not backfill weeks of history from the database; the queue only carries transitions that occur from the moment it is enabled.
 
 **Test in a private channel, never in `#timebot`.** Since messages can no longer be deleted, a bad test post is permanent. Create a private `work-os-test` channel, point a separate webhook at it, and verify there. Only create the production integration against `#timebot` once the format and rendering are settled — and give it a real name, because that name becomes the author label.
 
@@ -235,7 +235,7 @@ Use an `after insert` trigger on `work_session_events`, not four call sites. It 
 Two guards matter:
 
 - **Never break the clock write.** Wrap the trigger body in `exception when others then raise warning ...; return new;`. A missing outbox table or a bad channel row must not fail the clock-in transaction.
-- **Do not spam history.** Skip events whose `observed_at` is older than 15 minutes at enqueue time. A Worktivity recovery at 18:00 must not post a 09:00 clock-in. Insert the skipped row as `dead` with `last_error = 'stale'` so the reconciliation scan sees it and does not retry it.
+- **Never drop a transition for age.** Age changes the presentation, not whether the line exists. A Worktivity recovery at 18:00 still posts the 09:00 clock-in, marked `(delayed 8h)` and dated. Silently omitting it would leave a break or a return with no matching half. See the decision note below.
 
 Add a small reconciliation job (same `CRON_SECRET` pattern as `src/app/api/work-os/attendance/sync-due/route.ts`) that finds `work_session_events` of the four types with no outbox row for an active channel and inserts them. This covers a swallowed trigger failure without making the clock path fragile.
 
@@ -252,7 +252,7 @@ Add a small reconciliation job (same `CRON_SECRET` pattern as `src/app/api/work-
 | --- | --- |
 | `2xx` | `sent`, `sent_at = now()` |
 | `400`, `401`, `403`, `404` | `dead`; the URL or payload is wrong. Surface to admins; do not retry. |
-| `408`, `429`, `5xx`, network timeout | `failed`; exponential backoff `1m, 5m, 15m, 1h, 6h`, max 8 attempts, then `dead`. |
+| `408`, `429`, `5xx`, network timeout | `failed`; exponential backoff `1m, 5m, 15m, 1h, 6h`, then hold at 6h. A valid transition is never dead-lettered for running out of attempts. |
 | Other `4xx` | `dead`; log the body. |
 
 5. Keep the last error but redact the URL. A `404` after a working period usually means the Cosmos integration was deleted; show "Cosmos integration missing or rotated" to admins.
@@ -307,7 +307,18 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 
 **Environment.** `COSMOS_TIMEBOT_WEBHOOK_URL` and `COSMOS_TIMEBOT_ORGANIZATION_ID` together enable the feature. One without the other is treated as a configuration error and nothing is sent: the destination is a single channel, so the deployment must name the organization it speaks for, or a second tenant's attendance would land in the same channel. `CRON_SECRET` already exists for the scheduled routes.
 
-**Behaviour.** Only `clock_in`, `pause`, `resume` and `clock_out` are posted. The trigger snapshots the person's name and the session timezone at enqueue time, so a later rename or timezone change cannot rewrite history. Events older than 15 minutes at enqueue are stored as `dead`/`stale`, so a provider recovery never posts a morning clock-in at dinner time. The queue is ordered per organization: a failed send blocks later events until it is sent or dead, keeping `in → break → back → out` readable.
+**Behaviour.** Only `clock_in`, `pause`, `resume` and `clock_out` are posted. The trigger snapshots the person's name and the session timezone at enqueue time, so a later rename or timezone change cannot rewrite history. The queue is ordered per organization on `(observed_at, enqueue_seq)`: a failed send blocks later events until it is sent or dead, keeping `in → break → back → out` readable.
+
+**Late lines are marked, never dropped.** An independent review of an earlier revision found that the first version discarded events older than 15 minutes at enqueue. That was incoherent: an event received promptly but delivered late by the retry loop was posted bare, while the same event first seen 16 minutes late was deleted. Two identical transitions produced different channel histories depending only on where the delay happened. Lateness is now measured at **delivery** (`attempt time − observed_at`) and only changes the text:
+
+- under 15 minutes: `17:06 David — in`
+- 15 minutes to a day: `17:06 David — in (delayed 20m)`
+- an earlier local day: `16 Nov 23:50 David — in (delayed 20m)`
+- multi-day: `14 Nov 17:06 David — out (delayed 3d)`
+
+The date appears only when the event's local day differs from the delivery day, because Cosmos's `Today`/`Yesterday` dividers describe posting time. The marker is attached per event, so a delayed `break` does not make the following `back` look delayed.
+
+**Deferred by decision.** Compressing anything older than 24 hours into one per-person recovery line was considered and deliberately postponed: the team is small, multi-day outages are rare, and dated individual lines degrade honestly. Revisit only if a real backlog proves noisy.
 
 **Deliberately deferred.** Per-org admin configuration and a test-send button. The URL is global, so every organization posts into the same channel — fine for a single-company deployment, wrong the moment a second tenant exists. Upgrading means adding a channel table and joining it in the trigger; the outbox and dispatcher do not change.
 
@@ -345,7 +356,7 @@ The `performed` vs `triggered` distinction cannot come from Cosmos. Cosmos activ
 3. **Set `COSMOS_TIMEBOT_WEBHOOK_URL` and `COSMOS_TIMEBOT_ORGANIZATION_ID`** in the server environment. Either one alone is a no-op, so this pair is the moment the feature becomes live.
 4. **Redeploy** through the normal Work OS path.
 5. **Verify with one real transition.** Clock in, then confirm the line appears in the channel within a few seconds. Check `work_notification_outbox` shows `sent`.
-6. **Watch the first day.** A `dead` row with `integration missing or rotated (404)` means the Cosmos integration was deleted. A `failed` row retries on the 1m/5m/15m/1h/6h schedule for eight attempts.
+6. **Watch the first day.** A `dead` row with `integration missing or rotated (404)` means the Cosmos integration was deleted. A `failed` row retries on the 1m/5m/15m/1h/6h schedule and then holds at six hours until it succeeds; late deliveries are marked in the channel rather than discarded.
 
 **Rollback.** Unset `COSMOS_TIMEBOT_WEBHOOK_URL` and redeploy. Rows keep queueing but nothing is sent; set the variable again and the backlog drains. The migration can stay in place indefinitely — an unused outbox is inert.
 
