@@ -21,6 +21,8 @@ export interface AdminSectionFocus {
   recapId?: string;
   workdayId?: string;
   updateId?: string;
+  /** The settings page an administration entry should open, e.g. profile. */
+  settingsPage?: string;
 }
 
 export type WorkOsOrgRole = "employee" | "manager" | "admin";

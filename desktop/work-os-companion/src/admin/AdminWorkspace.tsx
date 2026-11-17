@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeftRight, CircleHelp, MessageCircle, RefreshCw } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import SidebarNav from "../SidebarNav";
@@ -13,6 +13,10 @@ import ReviewPage from "./ReviewPage";
 import InsightsPage from "./InsightsPage";
 import EvidencePage from "./EvidencePage";
 import SettingsPage from "./SettingsPage";
+import { AdminSettingsContent, adminSettingsPages, type AdminSettingsPageId } from "../AdminSettingsWorkspace";
+import { SettingsSidebar } from "../SettingsSidebar";
+import { filterSettingsPages } from "../settingsNavigation";
+import type { PersonalSettingsProps } from "../PersonalSettings";
 import { AdminCard, Notice } from "./ui";
 import type { GuideView } from "../guideState";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
@@ -60,7 +64,7 @@ export type AdminProfileEntry = {
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenOtto, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onNewChat, onOpenOtto, onOpenRecaps, ottoNotice, onSignOut, guideView, onOpenGuide, personalSettings, personalSettingsProps }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
@@ -95,8 +99,35 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   /** The signed-in account's own settings, rendered at the top of the
    * administration Settings page (see SettingsPage). */
   personalSettings?: ReactNode;
+  /** Settings props for the administration settings takeover. */
+  personalSettingsProps?: PersonalSettingsProps;
 }) {
-  const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
+  const [settingsPage, setSettingsPage] = useState<AdminSettingsPageId>("workspace-status");
+  const [settingsQuery, setSettingsQuery] = useState("");
+  const lastNonSettingsSection = useRef<AdminSection>("overview");
+  useEffect(() => {
+    if (section !== "settings") lastNonSettingsSection.current = section;
+  }, [section]);
+  useEffect(() => {
+    if (section !== "settings" || !focus.settingsPage) return;
+    setSettingsPage(focus.settingsPage as AdminSettingsPageId);
+    setSettingsQuery("");
+  }, [focus.settingsPage, section]);
+  const settingsPages = useMemo(
+    () => adminSettingsPages(!!personalSettingsProps?.hasPersonalRecord, !!personalSettingsProps?.adminOttoSettings),
+    [personalSettingsProps?.adminOttoSettings, personalSettingsProps?.hasPersonalRecord],
+  );
+  const visibleSettingsPages = useMemo(
+    () => filterSettingsPages(settingsPages, settingsQuery),
+    [settingsPages, settingsQuery],
+  );
+  const activeSettingsPage = visibleSettingsPages.some((page) => page.id === settingsPage)
+    ? settingsPage
+    : visibleSettingsPages[0]?.id ?? "workspace-status";
+  const navigate = (next: AdminSection, nextFocus?: Focus) => {
+    if (next !== "settings") lastNonSettingsSection.current = next;
+    onNavigate(next, nextFocus);
+  };
   // Ask Otto reopens the retained conversation. Only the explicit New chat
   // control (sidebar or sheet header) owns the durable discard.
   const openOtto = onOpenOtto ?? onNewChat;
@@ -141,12 +172,31 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
                   initialPersonId={focus.personId}
                   viewerPersonId={session.personId ?? ""}
                 />
-              : <SettingsPage personalSettings={personalSettings} />;
+              : section === "settings" && personalSettingsProps
+                ? <AdminSettingsContent
+                    active={activeSettingsPage}
+                    visiblePages={visibleSettingsPages}
+                    query={settingsQuery}
+                    onSelect={(page) => { setSettingsPage(page); setSettingsQuery(""); }}
+                    onQuery={setSettingsQuery}
+                    personalSettingsProps={personalSettingsProps}
+                  />
+                : <SettingsPage personalSettings={personalSettings} />;
 
   return (
     <div className="workspace admin-workspace">
       <a className="skip-link" href="#work-os-main">Skip to content</a>
-      <SidebarNav
+      {section === "settings" && personalSettingsProps ? <SettingsSidebar<AdminSettingsPageId>
+        active={activeSettingsPage}
+        visiblePages={visibleSettingsPages}
+        query={settingsQuery}
+        onQuery={setSettingsQuery}
+        onSelect={(page) => { setSettingsPage(page); setSettingsQuery(""); }}
+        onBack={() => navigate(lastNonSettingsSection.current)}
+        hasPersonalRecord={personalSettingsProps.hasPersonalRecord}
+        displayName={profile?.name}
+        avatarUrl={profile?.avatarUrl}
+      /> : <SidebarNav
         mode="admin"
         activeView="day"
         onNavigate={() => undefined}
@@ -157,7 +207,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
         switchLabel="Switch to employee view"
         onWhatsNew={onOpenWhatsNew}
         onSignOut={onSignOut}
-      />
+      />}
       <div className="stage admin-stage">
         <header className="masthead admin-masthead">
           <div className="admin-masthead-copy">

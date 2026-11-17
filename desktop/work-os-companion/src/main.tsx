@@ -22,6 +22,7 @@ const SkeletonsPreview = lazy(() => import("./SkeletonsPreview"));
 const OttoPreview = lazy(() => import("./OttoPreview"));
 const MemoryPreview = lazy(() => import("./MemoryPreview"));
 const SettingsPreview = lazy(() => import("./SettingsPreview"));
+const SettingsWorkspacePreview = lazy(() => import("./SettingsWorkspacePreview"));
 const ProfilePreview = lazy(() => import("./ProfilePreview"));
 import { FirstLightSurface } from "./BootHandoff";
 import { applyBootTheme } from "./appearance";
@@ -33,6 +34,7 @@ import { startWorkOsQueryPersistence, workOsQueryClient } from "./queryClient";
 import "./styles.css";
 import "./sessionGate.css";
 import "./workspace-redesign.css";
+import "./settings-workspace.css";
 import "./dashboard-overhaul.css";
 import "./sidebar.css";
 import "./task-design-gallery.css";
@@ -73,6 +75,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
               : import.meta.env.DEV && params.has("preview-skeletons") ? SkeletonsPreview
                 : import.meta.env.DEV && (params.has("preview-otto") || params.has("preview-mascot") || params.has("preview-signal-spirit")) ? OttoPreview
                 : import.meta.env.DEV && params.has("preview-memory") ? MemoryPreview
+                : import.meta.env.DEV && params.has("preview-settings-workspace") ? SettingsWorkspacePreview
                 : import.meta.env.DEV && params.has("preview-settings") ? SettingsPreview
                   : import.meta.env.DEV && params.has("preview-profile") ? ProfilePreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview

@@ -1842,6 +1842,33 @@ voices in a 164px rail.
   a group that moves, or a group that arrives, cannot leave the film showing
   the wrong band or filming empty canvas.
 
+### 8.18 Settings as a category workspace
+
+Settings is a category workspace, not one long page. While Settings is on
+screen, the Work OS sidebar becomes the Settings rail; **Back to app** returns
+to the previous workspace and restores the app rail. The rail carries one
+search field, the signed-in account's profile row, and grouped destinations:
+Account (Profile, Workday, Session, and administration's Recap follows), App
+(General, Appearance, Voice, Otto memory, Page guides), Workspace (Workspace
+status, Features, Members, Teams), Integrations (Connections, Field mappings,
+Blueprints), Data & privacy (Diagnostics, Reset), and About.
+
+Choosing a destination reveals one page in the stage: one title, one purpose
+line, and the existing label/detail/control group rows. Settings groups keep
+their one-label/one-content shape inside the page; the page title replaces the
+duplicated group heading. Search filters the destinations and offers matching
+pages as results. Arrow keys move through the rail with roving focus, and at
+narrow widths the rail becomes a top Back/search/section picker rather than a
+second column.
+
+The Profile page renders the profile form inline — Identity, Region & time,
+Workday, Privacy, and Work profile — using the same two-column section layout
+as the former modal. The masthead avatar opens Settings → Profile; the modal is
+not the entry point. Administration's workspace configuration is split the
+same way: Workspace status, Features, Members, Teams, Connections, Field
+mappings, and Blueprints are separate destination pages, each rendering its
+own card. Personal settings pages are shared by both workspaces.
+
 ### 8.17 The goal question and the suggested goal
 
 The day opens by asking what the employee is working on. That question is the
