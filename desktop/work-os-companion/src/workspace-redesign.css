@@ -2123,7 +2123,7 @@ body {
 .active-task-toolbar {
   justify-content: space-between;
   padding: 12px 20px 10px;
-  border-top: 1px solid #e4e8e0;
+  border-top: 1px solid var(--line);
 }
 
 .active-task-tabs {
@@ -2423,7 +2423,7 @@ body {
   justify-content: space-between;
   min-height: 48px;
   padding: 8px 12px 8px 14px;
-  border-bottom: 1px solid #e4e8e0;
+  border-bottom: 1px solid var(--line);
   background: var(--inset);
 }
 
@@ -2558,7 +2558,10 @@ body {
 }
 
 .focus-goal-disclosure:hover {
-  background: rgba(24, 32, 24, 0.09);
+  /* The resting surface is already --inset; --line is the next step in both
+     materials (it matches the old light tint at ~#dadfd6) and stays visible
+     in dark, where a translucent ink tint would disappear. */
+  background: var(--line);
   color: var(--ink);
 }
 
@@ -2590,11 +2593,15 @@ body {
   resize: vertical;
   border: 1px solid var(--line, #d9ded5);
   border-radius: 10px;
-  background: #fff;
+  background: var(--inset);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.goal-editor-field > textarea::placeholder {
+  color: var(--muted);
 }
 
 .goal-editor-field > textarea:focus {
@@ -2607,7 +2614,7 @@ body {
    through the field's radius and breaks the focus ring. A smaller, centred
    mark keeps the resize affordance inside the rounded corner. */
 .goal-editor-field > textarea::-webkit-resizer {
-  background: linear-gradient(135deg, transparent 0 42%, #bcc5b6 42% 58%, transparent 58% 100%) center / 9px 9px no-repeat;
+  background: linear-gradient(135deg, transparent 0 42%, var(--muted) 42% 58%, transparent 58% 100%) center / 9px 9px no-repeat;
 }
 
 .goal-editor-field > small {
@@ -2697,7 +2704,7 @@ body {
   position: relative;
   border: 1px solid var(--line, #d9ded5);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface-raised);
   padding: 13px 44px 13px 14px;
 }
 
@@ -2717,7 +2724,7 @@ body {
 }
 
 .goal-card-edit:hover {
-  background: var(--hover, rgba(24, 32, 24, 0.055));
+  background: var(--inset);
   color: var(--ink);
 }
 
@@ -2779,7 +2786,7 @@ body {
 
 .goal-editor-actions button.secondary {
   border: 1px solid var(--line, #d9ded5);
-  background: #fff;
+  background: var(--white);
   color: var(--ink-2, #626a61);
 }
 
@@ -2787,10 +2794,10 @@ body {
   color: var(--ink);
 }
 
-/* The Focus tab carries the interval check-ins beneath the daily goal. */
+/* The Recaps tab carries the interval check-ins beneath the daily goal. */
 .goal-composer-panel .chat-activity-stream {
   margin-bottom: 0;
-  border-top: 1px solid #e4e8e0;
+  border-top: 1px solid var(--line);
   padding-top: 12px;
 }
 

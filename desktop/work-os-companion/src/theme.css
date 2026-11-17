@@ -198,6 +198,9 @@
   --tool-danger-soft: var(--danger-soft);
   --tool-info: var(--observed);
   --tool-info-soft: var(--observed-soft);
+  /* Card geometry is material-independent; without it the dark theme's
+     `var(--tool-radius)` computes to 0 and every tool card squares off. */
+  --tool-radius: 16px;
   --tool-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 28px rgba(0, 0, 0, 0.24);
   --tool-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 32px rgba(0, 0, 0, 0.28);
 
@@ -315,6 +318,17 @@
     --conversation-focus: var(--focus);
     --conversation-signal-deep: var(--signal-deep);
     --color-danger-soft: var(--danger-soft);
+  }
+
+  /* The "View in app" action is an ink pill in light; an ink fill would read
+     as a white block in dark, so it becomes a raised chip on the material. */
+  .chat-activity-view {
+    border-color: var(--line);
+    background: var(--surface-raised);
+    color: var(--ink);
+  }
+  .chat-activity-view:hover {
+    background: var(--inset);
   }
 
   /* Chart series tuned for #303133 */

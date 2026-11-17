@@ -570,7 +570,7 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
               <ChatTabs
                 tabs={[
                   { id: "chat", label: "Chat" },
-                  { id: "tasks", label: "Tasks", count: AVATAR_TASKS.length },
+                  { id: "tasks", label: "Recaps", count: AVATAR_TASKS.length },
                 ]}
                 active={tab}
                 onSelect={(id) => setTab(id as "chat" | "tasks")}

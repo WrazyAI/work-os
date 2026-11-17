@@ -171,3 +171,87 @@ describe("Otto chat cards", () => {
     expect(toolSurfaces).not.toContain("--tool-paper: var(--ink-on-signal);");
   });
 });
+
+describe("tool card geometry", () => {
+  it("defines the shared radius in the dark material, not only the light one", () => {
+    const dark = rule(theme, ':root[data-theme="dark"]');
+    expect(dark).toContain("--tool-radius: 16px;");
+    expect(dark).toContain("--tool-shadow-hover:");
+  });
+
+  it("rounds both card surfaces with that token", () => {
+    for (const selector of [
+      '[data-workos-tool-surface="task-selection"].chat-task-card',
+      '[data-workos-tool-surface="batch"].task-batch-card',
+    ]) {
+      expect(rule(toolSurfaces, selector), selector).toContain("border-radius: var(--tool-radius)");
+    }
+  });
+});
+
+describe("focus goal surfaces", () => {
+  it("paints the saved goal card on the theme raised surface", () => {
+    const card = rule(workspace, ".goal-card");
+    expect(card).toContain("background: var(--surface-raised)");
+    expect(card).toContain("border-radius: 12px");
+    expect(card).not.toContain("background: #fff");
+  });
+
+  it("paints the editor on the theme inset with a muted placeholder", () => {
+    const field = rule(workspace, ".goal-editor-field > textarea");
+    expect(field).toContain("background: var(--inset)");
+    expect(field).not.toContain("background: #fff");
+    expect(rule(workspace, ".goal-editor-field > textarea::placeholder")).toContain("var(--muted)");
+    expect(rule(workspace, ".goal-card-edit:hover")).toContain("var(--inset)");
+  });
+
+  it("keeps the editor's cancel action off a hardcoded white block", () => {
+    const secondary = rule(workspace, ".goal-editor-actions button.secondary");
+    expect(secondary).toContain("background: var(--white)");
+    expect(secondary).not.toContain("background: #fff");
+  });
+
+  it("follows the material for the activity hairline and disclosure hover", () => {
+    const stream = rule(workspace, ".goal-composer-panel .chat-activity-stream");
+    expect(stream).toContain("border-top: 1px solid var(--line)");
+    expect(stream).not.toContain("#e4e8e0");
+    const disclosure = rule(workspace, ".focus-goal-disclosure:hover");
+    expect(disclosure).toContain("background: var(--line)");
+    expect(disclosure).not.toContain("rgba(24, 32, 24, 0.09)");
+  });
+
+  it("draws the textarea resize mark in theme ink", () => {
+    const resizer = rule(workspace, ".goal-editor-field > textarea::-webkit-resizer");
+    expect(resizer).toContain("var(--muted)");
+    expect(resizer).not.toContain("#bcc5b6");
+  });
+
+  it("draws every Recaps panel hairline with the material line token", () => {
+    expect(workspace).not.toContain("#e4e8e0");
+    expect(rule(workspace, ".active-task-toolbar")).toContain("border-top: 1px solid var(--line)");
+    expect(rule(workspace, ".progress-flyout .workos-chat-head")).toContain("border-bottom: 1px solid var(--line)");
+  });
+});
+
+describe("activity stream view-in-app action", () => {
+  it("keeps the light ink pill and swaps it for a raised chip in dark", () => {
+    const view = rule(chat, ".chat-activity-view");
+    expect(view).toContain("background: var(--ink)");
+    expect(view).toContain("color: var(--white)");
+    expect(view).not.toContain("--color-ink");
+
+    const dark = theme.slice(theme.indexOf(':root[data-theme="dark"]'));
+    const darkStart = dark.indexOf(".chat-activity-view {");
+    expect(darkStart, "the dark material must re-material the view-in-app action").toBeGreaterThan(-1);
+    const darkRule = dark.slice(darkStart);
+    const body = darkRule.slice(0, darkRule.indexOf("}"));
+    expect(body).toContain("background: var(--surface-raised)");
+    expect(body).toContain("color: var(--ink)");
+    expect(body).toContain("border-color: var(--line)");
+
+    const hoverStart = darkRule.indexOf(".chat-activity-view:hover {");
+    expect(hoverStart).toBeGreaterThan(-1);
+    const hover = darkRule.slice(hoverStart);
+    expect(hover.slice(0, hover.indexOf("}"))).toContain("background: var(--inset)");
+  });
+});

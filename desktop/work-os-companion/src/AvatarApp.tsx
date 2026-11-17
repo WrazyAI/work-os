@@ -2224,7 +2224,7 @@ export default function AvatarApp(): React.ReactElement {
     await toggleExpanded(false);
   }, [toggleExpanded]);
 
-  // "View in app" on the Recent activity header opens the dock's Focus tab,
+  // "View in app" on the Recent activity header opens the dock's Recaps tab,
   // where the same recaps live beneath the daily goal.
   const openFocusInApp = useCallback(async (): Promise<void> => {
     void emit("work-os://avatar-open-focus");
@@ -3466,7 +3466,7 @@ export default function AvatarApp(): React.ReactElement {
                 <ChatTabs
                   tabs={[
                     { id: "chat", label: "Chat" },
-                    { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
+                    { id: "tasks", label: "Recaps", count: facts.taskOptions.filter((task) => !task.completed).length },
                   ]}
                   active={avatarTab}
                   onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
