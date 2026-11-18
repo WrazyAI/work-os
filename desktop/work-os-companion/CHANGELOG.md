@@ -23,9 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.37 — 2026-11-18
 
-- Settings now has its own sidebar with search and one page at a time; your profile opens there, and Back to app returns you where you were.
+- Recap, EOD, and goal reminders now have a dismiss button in the bubble and the chat.
+- A dismissed reminder returns only when a genuinely new recap, EOD, or goal event arrives.
 - Page guides now open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings film shows the new layout.
 
 ## 0.5.36 — 2026-11-17
@@ -41,6 +42,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 - The Administration switch looks right from the moment Work OS opens instead of appearing as a plain button.
 - The light theme's review cards are readable again, and selected filters show their labels.
 - Tool cards keep their rounded surfaces in both themes instead of drawing light-only borders.
+- Settings now has its own sidebar with search and one page at a time; your profile opens there, and Back to app returns you where you were.
 
 ## 0.5.34 — 2026-11-16
 
