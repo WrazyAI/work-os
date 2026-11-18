@@ -23,12 +23,18 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.38 — 2026-11-19
+
+- Admin Otto now tells you when someone submits an EOD report or sends a reviewed recap, with a bubble you can dismiss.
+- Switching between Employee and Admin changes Otto's state right away, and a reminder you left pending returns when you switch back.
+- A new EOD or recap now switches the companion to the workspace that needs you.
+- Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.
+
 ## 0.5.37 — 2026-11-18
 
 - Recap, EOD, and goal reminders now have a dismiss button in the bubble and the chat.
 - A dismissed reminder returns only when a genuinely new recap, EOD, or goal event arrives.
 - Page guides now open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings film shows the new layout.
-- Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.
 
 ## 0.5.36 — 2026-11-17
 
