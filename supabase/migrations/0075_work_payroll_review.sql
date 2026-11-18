@@ -180,7 +180,7 @@ create unique index if not exists work_payroll_runs_active_idx on work_payroll_r
 create index if not exists work_payroll_runs_due_idx on work_payroll_runs(status,next_attempt_at,lease_until);
 create table if not exists work_payroll_exports (
   id uuid primary key default gen_random_uuid(), organization_id uuid not null, review_id uuid not null, person_id uuid not null,
-  approval_id uuid not null, kind text not null check(kind in ('csv','print')), schema_version text not null,
+  approval_id uuid not null, kind text not null check(kind in ('summary','daily','csv','print')), schema_version text not null,
   snapshot_hash text not null, payload bytea not null, payload_hash text not null, actor_user_id uuid not null,
   created_at timestamptz not null default now(),
   foreign key(organization_id,review_id,person_id,approval_id) references work_payroll_approvals(organization_id,review_id,person_id,id),
