@@ -702,6 +702,10 @@ export async function mapWithConcurrency<T, R>(items: T[], limit: number, run: (
   return results;
 }
 
+export function usableScreenshotSummary(row: { processing_status?: unknown; summary?: unknown }) {
+  return row.processing_status === "processed" && typeof row.summary === "string" && row.summary.trim().length > 0;
+}
+
 export async function prepareScreenshotWindow(input: {
   organizationId: string;
   personId: string;
@@ -772,6 +776,7 @@ export async function prepareScreenshotWindow(input: {
       continue;
     }
     if (status === "failed") { counts.unavailable += 1; continue; }
+    if (!usableScreenshotSummary(row)) { counts.unavailable += 1; continue; }
     const context = (row.visible_context ?? {}) as Record<string, unknown>;
     const retained = isRetainedScreenshotAvailable(row);
     if (!retained) counts.unavailable += 1;
