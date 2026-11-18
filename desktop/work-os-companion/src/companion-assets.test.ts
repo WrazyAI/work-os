@@ -256,8 +256,9 @@ describe("floating companion integration", () => {
 
   it("pages the debugger trace from a 1,000-event ring and destroys the debugger on close", () => {
     const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
-    expect(debugWindow).toContain("getCurrentWindow().close()");
-    expect(debugWindow).not.toContain("getCurrentWindow().hide()");
+    expect(debugWindow).toContain("getCurrentWindow()");
+    expect(debugWindow).toContain("appWindow.close()");
+    expect(debugWindow).not.toContain("appWindow.hide()");
     const trace = readFileSync(resolve(root, "src/DebugTrace.tsx"), "utf8");
     expect(trace).toContain('"work-os://diagnostics-changed"');
     expect(trace).not.toContain('"work-os://diagnostics"');

@@ -75,8 +75,9 @@ export function MascotDebugControls({ scenario, onChange }: { scenario: DebugSce
   // The live window is authoritative in Auto. Before the handshake, explicitly
   // label this isolated sample instead of suggesting it reflects platform truth.
   const preview = resolved ?? resolveMascotRuntime({ connected: false }, {}, scenario);
-  return <section className="debug-group" aria-labelledby="mascot-debug-heading">
-    <header className="debug-group-head"><h2 id="mascot-debug-heading">Mascot</h2><small>{MASCOT.name}: dashboard, launcher and floating companion</small></header>
+  return <section className="debug-panel" aria-labelledby="mascot-debug-heading">
+    <header className="debug-panel-head"><h2 id="mascot-debug-heading">Mascot</h2><small>{MASCOT.name}: dashboard, launcher and floating companion</small></header>
+    <div className="debug-panel-body">
     <div className="debug-mascot-preview" style={dark ? { background: "#182018", color: "#fafaf6" } : undefined}>
       <MascotPet isolated agent={preview.activity} workday={preview.workday} reducedMotion={preview.reducedMotion} replayKey={preview.replay} />
       <div><strong>{resolved ? scenario.enabled ? "Window-reported simulation" : "Window-reported live state" : "Sample - waiting for window"}</strong><p>{preview.label}</p><code>{preview.pose} / {preview.tone}</code><p>{preview.reason}</p></div>
@@ -105,5 +106,6 @@ export function MascotDebugControls({ scenario, onChange }: { scenario: DebugSce
     <div className="debug-mascot-actions"><button type="button" aria-pressed={dark} onClick={() => setDark((value) => !value)}>Dark preview surface</button><button type="button" aria-expanded={matrix} onClick={() => setMatrix((value) => !value)}>All 35 combinations</button></div>
     {matrix && <div className="mascot-lab-state-grid" style={{ marginTop: 16 }}>{MASCOT_WORKDAYS.flatMap((workday) => MASCOT_ACTIVITIES.map((agent) => <div className="mascot-lab-state" key={`${workday}-${agent}`}><MascotPet isolated agent={agent} workday={workday} reducedMotion={preview.reducedMotion} replayKey={preview.replay} /><small>{label(workday)} / {ACTIVITY_LABELS[agent]}</small></div>))}</div>}
     <div className="debug-mascot-readout" aria-label="Reported mascot states"><strong>Last reported by each window</strong>{(["main", "avatar"] as const).map((windowName) => <div key={windowName}>{windowName}: {reported[windowName] ? `${reported[windowName]!.activity} / ${reported[windowName]!.workday} / ${reported[windowName]!.pose} (${reported[windowName]!.source})` : "No response yet - open this window to verify."}</div>)}</div>
+    </div>
   </section>;
 }

@@ -506,7 +506,8 @@ assert.match(notificationFlyouts, /clearPersistent/);
 assert.match(notificationFlyouts, /persistence === "persistent"/);
 
 const debugWindow = read("src/DebugWindow.tsx");
-assert.match(debugWindow, /if \(!isTauri\(\)\)/);
+assert.match(debugWindow, /if \(!appWindow\) \{ window\.close\(\); return; \}/);
+assert.match(debugWindow, /appWindow\.close\(\)/);
 for (const event of ["work-os://debug-request", "work-os://debug-current", "work-os://debug-scenario"]) {
   assert.match(debugWindow, new RegExp(event.replaceAll("/", "\\/")));
 }

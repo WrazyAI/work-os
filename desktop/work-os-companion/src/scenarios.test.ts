@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO, activePresetId, presetScenarioMatches } from "./scenarios";
+import { DEBUG_PRESET_GROUPS, DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO, activePresetId, presetScenarioMatches } from "./scenarios";
 
 function loaded(presetId: string) {
   const preset = DEBUG_PRESETS.find((entry) => entry.id === presetId);
@@ -41,5 +41,13 @@ describe("active preset marker", () => {
   it("matches a preset's own scenario through the shared helper", () => {
     expect(presetScenarioMatches(DEBUG_PRESETS[0], loaded(DEBUG_PRESETS[0].id))).toBe(true);
     expect(presetScenarioMatches(DEBUG_PRESETS[0], loaded(DEBUG_PRESETS[1].id))).toBe(false);
+  });
+
+  it("groups every preset into the gallery order", () => {
+    const groups = new Set(DEBUG_PRESETS.map((preset) => preset.group));
+    expect([...groups].sort()).toEqual([...DEBUG_PRESET_GROUPS].sort());
+    for (const group of DEBUG_PRESET_GROUPS) {
+      expect(DEBUG_PRESETS.filter((preset) => preset.group === group).length, `${group} has no presets`).toBeGreaterThan(0);
+    }
   });
 });
