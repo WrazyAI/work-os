@@ -123,12 +123,14 @@ describe("admin Otto shell wiring", () => {
       expect(source).toContain("startDeliveryOwnership({");
     }
     expect(avatar).toContain("OTTO_CONTEXT_EVENT");
-    expect(avatar).toContain("presentAdminRecapArrival");
+    expect(avatar).toContain("OTTO_ADMIN_ATTENTION_EVENT");
+    expect(avatar).toContain("AdminAttentionBubble");
     expect(avatar).toContain("adminOttoChangedEvent");
     expect(app).toContain("listen<Record<string, unknown>>(OTTO_CHANGED_EVENT");
     expect(app).toContain("presentAdminOttoArrival");
-    expect(app).toContain("notifications.persistent(\"admin-otto-recap-arrival\"");
-    expect(app).toContain("openAdminOttoSurface({ tab: \"recaps\", recap, listen: true })");
+    expect(app).toContain("announceAdminAttention");
+    expect(app).toContain("notifications.persistent(key");
+    expect(app).toContain("openAdminOttoSurface({ tab: \"recaps\", recap: options.recap ?? null })");
     expect(app).toContain("deliveryOwnershipKey(snapshot)");
     expect(avatar).toContain("createAvatarContextController({");
     expect(avatar).toContain("avatarContextController.isCurrent(context)");

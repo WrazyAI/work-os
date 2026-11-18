@@ -28,6 +28,8 @@ import { AdminRecapView, useReducedMotion, type AdminRecapPlayback } from "./Adm
 import { RecapPrompter } from "../RecapPrompter";
 import { adminCalendarDate, adminRecapDate, adminReviewStatusLabel } from "./labels";
 import { safeAdminRecordHref } from "./recordLinks";
+import { AdminAttentionCard } from "./AdminAttentionCard";
+import type { AdminAttentionItem } from "./attention";
 
 type AdminTab = "chat" | "recaps";
 
@@ -212,6 +214,11 @@ export type AdminOttoChatProps = {
   initialInbox?: InboxPage | null;
   arrival?: AdminArrivalView | null;
   arrivalRevision?: number;
+  /** One grounded administration arrival (a submitted EOD or reviewed recap).
+   * The compact bubble and this card are two views of the same event. */
+  attention?: AdminAttentionItem | null;
+  onOpenAttention?: (item: AdminAttentionItem) => void;
+  onDismissAttention?: (item: AdminAttentionItem) => void;
   /** A saved follow filter changes the reviewed arrivals; the shell bumps this
    * to refresh the open inbox without reloading the conversation. */
   followRevision?: number;
@@ -262,6 +269,9 @@ export function AdminOttoChat({
   initialInbox = null,
   arrival = null,
   arrivalRevision = 0,
+  attention = null,
+  onOpenAttention,
+  onDismissAttention,
   followRevision = 0,
   playback = null,
   recapUpdates = {},
@@ -543,6 +553,13 @@ export function AdminOttoChat({
     ? recapUpdates[selectedRecap.intervalId] ?? selectedRecap
     : null;
   const arrivalRecap = arrival?.recap ? recapUpdates[arrival.recap.intervalId] ?? arrival.recap : null;
+  const attentionCard = attention ? (
+    <AdminAttentionCard
+      item={attention}
+      onAction={() => onOpenAttention?.(attention)}
+      onDismiss={() => onDismissAttention?.(attention)}
+    />
+  ) : null;
 
   const tabs: ChatTab[] = [
     { id: "chat", label: "Chat" },
@@ -686,6 +703,7 @@ export function AdminOttoChat({
         {state.tab === "chat" ? (
           <>
             <div className="conversation-scroll-region admin-otto-thread" role="log" aria-live="polite" aria-label="Conversation">
+              {attentionCard}
               {chat.hydration === "loading" ? <p className="admin-otto-status" role="status">Opening the conversation…</p> : null}
               {chat.hydration === "failed" ? (
                 <div className="admin-otto-error" role="alert">
@@ -776,6 +794,7 @@ export function AdminOttoChat({
           </>
         ) : (
           <div className="conversation-scroll-region admin-otto-recaps">
+            {attentionCard}
             {playback?.error && !activeRecap ? <p className="admin-otto-error" role="alert">{playback.error}</p> : null}
             {!activeRecap && playback && (playback.status === "loading" || playback.status === "playing") ? (
               <section className="admin-otto-reading admin-otto-inbox-reading" aria-label="Reading aloud">

@@ -87,6 +87,22 @@ describe("admin Otto chat", () => {
     expect(html).toContain("Showing 12 of 25");
   });
 
+  it("a_grounded_admin_attention_card_sits_above_both_tabs", () => {
+    const attention = {
+      id: "eod:fixture", kind: "eod_submitted" as const, count: 1,
+      title: "EOD report submitted", body: "Maya Chen's report is waiting for your review.",
+      section: "review" as const, personId: "person-1", at: "2026-11-18T17:04:00.000Z",
+    };
+    const chat = render({ attention });
+    expect(chat).toContain("admin-otto-attention");
+    expect(chat).toContain("EOD report submitted");
+    expect(chat).toContain("Review reports");
+    expect(chat).toContain("Dismiss admin reminder");
+    const recaps = render({ attention, initialTab: "recaps", initialInbox: fixtureInboxPage({ count: 1, total: 1, nextCursor: null }) });
+    expect(recaps).toContain("admin-otto-attention");
+    expect(recaps).toContain("EOD report submitted");
+  });
+
   it("admin_view_has_no_employee_confirm_controls", () => {
     const html = render({
       initialTab: "recaps",

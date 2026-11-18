@@ -261,6 +261,19 @@ body.avatar-window {
   cursor: pointer;
 }
 .avatar-prompt-action:hover { filter: brightness(1.03); }
+
+/* Administration arrivals use the gold workspace accent, not the employee
+   signal green: the bubble is still Otto, but the mode is legible at a glance. */
+.avatar-admin-attention-bubble { border-color: #b08a42; background: #26231b; }
+.avatar-admin-attention-bubble::after { background: #26231b; border-color: #b08a42; }
+.avatar-admin-attention-bubble .avatar-prompt-action {
+  border-color: #b08a42;
+  background: #f3e7c8;
+  color: #4a3a18;
+}
+.avatar-admin-attention-bubble .avatar-prompt-action:hover,
+.avatar-admin-attention-bubble .avatar-prompt-action:focus-visible { background: #fff4d9; }
+.avatar-admin-attention-bubble .avatar-prompt-open span { -webkit-line-clamp: 2; }
 /* A ready recap floats above the figure like every other bubble. The figure
    never moves, so the copy clamps to the space above the visible head: the
    headline keeps two lines, the detail one, and View more stays reachable. */
