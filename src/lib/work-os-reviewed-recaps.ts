@@ -7,7 +7,7 @@ import type { ActivityIntervalRecord } from "@/lib/work-os-activity-intervals";
 import { buildRecapSpeechLines } from "@/lib/work-os-recap-speech";
 import type { PersonRef, ReviewedRecap } from "@/modules/work-os/admin-otto/contracts";
 import {
-  normalizeReviewedRecap, recapCoverageLine, recapReviewSource, recapSpeechProvenanceLine,
+  normalizeReviewedRecap, payrollDateKey, recapCoverageLine, recapReviewSource, recapSpeechProvenanceLine,
 } from "@/modules/work-os/recap-review";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -20,7 +20,7 @@ export function buildReviewedRecap(row: ActivityIntervalRecord, version: number,
   const status = row.review_status as "confirmed" | "amended";
   const reviewSource = recapReviewSource(status, row.review_source);
   if (!reviewSource) throw new WorkOsConflictError("This recap has no review source.");
-  const payrollDate = row.payroll_date ? String(row.payroll_date).slice(0, 10) : null;
+  const payrollDate = payrollDateKey(row.payroll_date);
   if (reviewSource === "payroll_auto" && !payrollDate) throw new Error("A payroll auto-approval requires its pay date");
   const source = intervalSpeechSource({ ...row, final_detail: row.ai_detail });
   const original = { headline: source.headline ?? "", detail: source.detail ?? "", activities: source.activities };
@@ -61,11 +61,21 @@ function contentHash(row: ActivityIntervalRecord, recap: ReviewedRecap) {
 }
 
 async function transaction<T>(access: WorkOsAccess, run: (client: PoolClient) => Promise<T>): Promise<T> {
+  return organizationTransaction(access.organizationId, run);
+}
+
+/** System writers (payroll cutoff) use the same organization clock lock but no
+ * employee identity. Never fabricate a WorkOsAccess for a system decision. */
+export async function withReviewedRecapSystem<T>(organizationId: string, run: (client: PoolClient) => Promise<T>): Promise<T> {
+  return organizationTransaction(organizationId, run);
+}
+
+async function organizationTransaction<T>(organizationId: string, run: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    await client.query("INSERT INTO work_admin_otto_clock (organization_id, sequence) VALUES ($1, 0) ON CONFLICT (organization_id) DO NOTHING", [access.organizationId]);
-    await client.query("SELECT sequence FROM work_admin_otto_clock WHERE organization_id = $1 FOR UPDATE", [access.organizationId]);
+    await client.query("INSERT INTO work_admin_otto_clock (organization_id, sequence) VALUES ($1, 0) ON CONFLICT (organization_id) DO NOTHING", [organizationId]);
+    await client.query("SELECT sequence FROM work_admin_otto_clock WHERE organization_id = $1 FOR UPDATE", [organizationId]);
     const result = await run(client);
     await client.query("COMMIT");
     return result;
@@ -100,6 +110,33 @@ async function personFor(client: PoolClient, row: ActivityIntervalRecord): Promi
 }
 
 type ReviewEvent = { version: number; content_hash: string; payload: ReviewedRecap };
+
+function automaticEventId(row: ActivityIntervalRecord, payrollDate: string, version: number): string {
+  const digest = hash([row.organization_id, row.id, "payroll-auto-v1", payrollDate, version]);
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+}
+
+/** Append one payroll-auto version for an already-updated interval row. The
+ * caller owns the transaction/clock lock; this only writes the immutable event. */
+export async function appendAutomaticReviewedRecap(
+  client: PoolClient, row: ActivityIntervalRecord, input: { payDate: string; version: number },
+): Promise<ReviewEvent> {
+  if (row.review_status !== "confirmed" || row.review_source !== "payroll_auto") {
+    throw new Error("A payroll auto-approval requires a confirmed payroll_auto interval");
+  }
+  const payrollDate = payrollDateKey(row.payroll_date) ?? input.payDate;
+  if (payrollDate !== input.payDate) throw new Error("The payroll auto-approval pay date does not match the interval");
+  const eventId = automaticEventId(row, payrollDate, input.version);
+  const recap = buildReviewedRecap(row, input.version, eventId, await personFor(client, row));
+  const content = contentHash(row, recap);
+  const { rows } = await client.query("UPDATE work_admin_otto_clock SET sequence = sequence + 1 WHERE organization_id = $1 RETURNING sequence", [row.organization_id]);
+  await client.query(`INSERT INTO work_recap_reviews
+    (id, organization_id, interval_id, person_id, version, event_sequence, review_key, source_revision, content_hash, script_hash, payload, reviewed_at, arrival_eligible, review_source, payroll_date)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,false,'payroll_auto',$13)`,
+  [eventId, row.organization_id, row.id, row.person_id, input.version, rows[0].sequence, recap.reviewKey, recap.sourceRevision, content, recap.scriptHash, JSON.stringify(recap), recap.reviewedAt, payrollDate]);
+  return { version: input.version, content_hash: content, payload: recap };
+}
+
 async function latest(client: PoolClient, row: ActivityIntervalRecord): Promise<ReviewEvent | undefined> {
   const { rows } = await client.query("SELECT version, content_hash, payload FROM work_recap_reviews WHERE organization_id = $1 AND interval_id = $2 ORDER BY version DESC LIMIT 1", [row.organization_id, row.id]);
   return rows[0];

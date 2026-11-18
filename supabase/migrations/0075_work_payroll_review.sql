@@ -14,6 +14,7 @@ create table if not exists work_payroll_settings (
   cutoff_hour smallint not null default 6 check(cutoff_hour between 0 and 23),
   provider_ready boolean not null default false,
   models_ready boolean not null default false,
+  auto_approve_activated_at timestamptz,
   updated_at timestamptz not null default now()
 );
 create table if not exists work_payroll_reviews (

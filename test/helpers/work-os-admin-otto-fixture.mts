@@ -51,7 +51,7 @@ create table work_activity_intervals (
  local_date text default '2026-10-21', prompt_kind text default 'hourly_fallback',
  failure_reason text, evidence_expired_at timestamptz,
  window_start timestamptz, window_end timestamptz, timezone text default 'UTC',
- generated_at timestamptz, reviewed_at timestamptz, updated_at timestamptz, next_steps_status text default 'not_requested');
+ generated_at timestamptz, reviewed_at timestamptz, updated_at timestamptz, next_steps_status text default 'not_requested', next_steps_error text);
 create table work_audit_log (id bigint generated always as identity primary key, organization_id uuid not null references work_organizations(id), actor_user_id uuid, action text not null, target_type text not null, target_id text, metadata jsonb default '{}');
 create table work_check_ins (id int primary key);
 create table work_sessions (id int primary key, last_substantive_update_at timestamptz);
