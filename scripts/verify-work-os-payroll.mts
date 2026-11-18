@@ -28,6 +28,7 @@ const { values } = parseArgs({
     org: { type: "string" },
     person: { type: "string" },
     period: { type: "string" },
+    "verify-models": { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
   allowPositionals: false,
@@ -53,6 +54,49 @@ say(`  adapter: ${unverifiedSemantics.version}`);
 say(`  verified: ${unverifiedSemantics.verified} (direction ${unverifiedSemantics.direction}, ${unverifiedSemantics.durationMs} ms)`);
 say("  automatic inactivity deductions: DISABLED until a documented probe confirms");
 say("  the meaning of CreateDate and the capture duration.");
+if (values["verify-models"]) {
+  const { payrollTextRequestBody, payrollVisionRequestBody, resolvePayrollAiPolicy } = await import("../src/lib/work-os-payroll-ai");
+  try {
+    const policy = resolvePayrollAiPolicy();
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const tool = {
+      type: "function",
+      function: {
+        name: "confirmReadiness", description: "Confirm this non-sensitive readiness probe.",
+        parameters: { type: "object", additionalProperties: false, required: ["ready"], properties: { ready: { type: "boolean" } } },
+      },
+    };
+    const probe = async (kind: "text" | "vision") => {
+      const model = kind === "text" ? policy.textModel : policy.visionModel;
+      if (!apiKey) return { ok: false, model, status: "OPENROUTER_API_KEY is not configured" };
+      const body = kind === "text"
+        ? payrollTextRequestBody(policy, "question", { messages: [{ role: "user", content: "Non-sensitive readiness probe. Return ready=true." }], tools: [tool], tool_choice: { type: "function", function: { name: "confirmReadiness" } } })
+        : payrollVisionRequestBody(policy, { max_tokens: 200, messages: [{ role: "user", content: "Non-sensitive readiness probe. Return ready=true." }], tools: [tool], tool_choice: { type: "function", function: { name: "confirmReadiness" } } });
+      try {
+        const response = await fetch(process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body), signal: AbortSignal.timeout(30_000),
+        });
+        if (!response.ok) return { ok: false, model, status: `HTTP ${response.status}` };
+        const json = await response.json() as { choices?: Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> };
+        const args = json.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+        const parsed = args ? JSON.parse(args) as { ready?: unknown } : {};
+        return { ok: parsed.ready === true, model, status: parsed.ready === true ? "structured response received" : "structured response missing" };
+      } catch (error) {
+        return { ok: false, model, status: error instanceof Error ? error.message.slice(0, 120) : "probe failed" };
+      }
+    };
+    say("");
+    say("Model readiness (non-sensitive structured probe)");
+    for (const kind of ["text", "vision"] as const) {
+      const result = await probe(kind);
+      say(`  ${kind}: ${result.model} effort=${policy.effort} ok=${result.ok} (${result.status})`);
+    }
+  } catch (error) {
+    say(`  MODEL CONFIGURATION BLOCKED: ${error instanceof Error ? error.message : "invalid payroll model policy"}`);
+    process.exitCode = 1;
+  }
+}
 
 if (!values.probe) {
   say("");

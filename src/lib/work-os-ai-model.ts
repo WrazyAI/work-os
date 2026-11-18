@@ -129,13 +129,40 @@ export function aiRequestBody(
   env: AiEnvironment = process.env,
 ): Record<string, unknown> {
   const route = providerRoute(model, env);
-  const reasoning = reasoningControl(model, env);
+  // A caller that has already chosen an effort (payroll high/max) owns that
+  // decision; the global low default must not overwrite it.
+  const reasoning = body.reasoning ?? reasoningControl(model, env);
   return {
     ...body,
     model,
     ...(route ? { provider: { ...route, require_parameters: true } } : {}),
     ...(reasoning ? { reasoning } : {}),
   };
+}
+
+/** Payroll text/vision policy. Text defaults to DeepSeek at high effort; vision
+ * defaults to Luna. `max` is accepted only when the configured text model has a
+ * verified capability entry and the operator has confirmed it. */
+export type PayrollAiPolicy = {
+  textModel: string;
+  visionModel: string;
+  effort: "high" | "max";
+  version: string;
+};
+
+/** No configured model has yet passed a max-effort capability probe. Adding a
+ * model here is a deliberate, evidence-backed change, not an env shortcut. */
+const PAYROLL_MAX_VERIFIED = new Set<string>();
+
+export function resolvePayrollAiPolicy(env: AiEnvironment = process.env): PayrollAiPolicy {
+  const textModel = envModel(env, "WORK_OS_PAYROLL_TEXT_MODEL") ?? DEEPSEEK_MODEL;
+  const visionModel = envModel(env, "WORK_OS_PAYROLL_VISION_MODEL") ?? SCREENSHOT_PERCEPTION_MODEL;
+  const raw = (env.WORK_OS_PAYROLL_REASONING_EFFORT ?? "high").trim().toLowerCase();
+  if (raw !== "high" && raw !== "max") throw new Error("Payroll reasoning effort must be high or max");
+  if (raw === "max" && !(env.WORK_OS_PAYROLL_MAX_VERIFIED === "1" && PAYROLL_MAX_VERIFIED.has(textModel))) {
+    throw new Error(`Payroll model ${textModel} has no verified max reasoning capability`);
+  }
+  return { textModel, visionModel, effort: raw, version: "payroll-ai-v1" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +222,8 @@ export type AiModelMap = {
   conversationSummary: string;
   goalSuggestion: string;
   screenshot: string;
+  payroll: string;
+  payrollVision: string;
 };
 
 /**
@@ -224,6 +253,8 @@ export function resolveAiModels(env: AiEnvironment = process.env): AiModelMap {
     // Preserve the automatic goal's existing model and nullish precedence.
     goalSuggestion: env.WORK_OS_GOAL_SUGGESTION_MODEL ?? env.WORK_OS_PLAN_MODEL ?? env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna",
     screenshot: envModel(env, "WORK_OS_SCREENSHOT_MODEL", "WORK_OS_INTERPRET_MODEL") ?? SCREENSHOT_PERCEPTION_MODEL,
+    payroll: envModel(env, "WORK_OS_PAYROLL_TEXT_MODEL") ?? DEEPSEEK_MODEL,
+    payrollVision: envModel(env, "WORK_OS_PAYROLL_VISION_MODEL") ?? SCREENSHOT_PERCEPTION_MODEL,
   };
 }
 
@@ -242,6 +273,8 @@ export const CHECK_IN_MODEL = MODELS.checkIn;
 export const SCREENSHOT_MODEL = MODELS.screenshot;
 export const CONVERSATION_SUMMARY_MODEL = MODELS.conversationSummary;
 export const GOAL_SUGGESTION_MODEL = MODELS.goalSuggestion;
+export const PAYROLL_MODEL = MODELS.payroll;
+export const PAYROLL_VISION_MODEL = MODELS.payrollVision;
 
 /* ------------------------------------------------------------------ */
 /* Completion budgets                                                  */
@@ -271,6 +304,11 @@ export const AI_TOKEN_BUDGETS = {
   screenshotVision: 2_000,
   checkIn: 4_000,
   conversationSummary: 1_500,
+  // Payroll text includes hours explanations, week briefs and cited answers.
+  payrollSynthesis: 12_000,
+  payrollBrief: 6_000,
+  payrollQuestion: 6_000,
+  payrollVision: 2_000,
   // The legacy non-reasoning goal needs only one sentence. A deployment that
   // explicitly selects DeepSeek also needs room for its reasoning pass.
   goalSuggestion: REASONING_MODELS.has(GOAL_SUGGESTION_MODEL) ? 1_500 : 200,
@@ -297,5 +335,9 @@ export const AI_TIMEOUTS = {
   screenshotVision: 30_000,
   checkIn: 60_000,
   conversationSummary: 30_000,
+  payrollSynthesis: 120_000,
+  payrollBrief: 90_000,
+  payrollQuestion: 90_000,
+  payrollVision: 30_000,
   goalSuggestion: 15_000,
 } as const;

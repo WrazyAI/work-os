@@ -33,6 +33,8 @@ export async function payrollFixture() {
         add schedule_id uuid,add correction_status text,add paused_seconds int not null default 0,add provider_break_seconds int not null default 0;
       create table work_session_events(id uuid primary key default gen_random_uuid(),organization_id uuid not null,person_id uuid not null,
         session_id int,event_type text not null,observed_at timestamptz,from_state text,to_state text,metadata jsonb not null default '{}');
+      create table work_consent_records(id uuid primary key default gen_random_uuid(),organization_id uuid not null,person_id uuid not null,
+        purpose text not null,policy_version text not null,decision text not null,occurred_at timestamptz not null default now());
     `);
     await f.db.exec(await payrollMigration());
     return f;

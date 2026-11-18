@@ -303,6 +303,7 @@ do $$ declare t text; c text; p text; o text; begin
     ('work_activity_intervals','review_status,review_source,payroll_date,generated_at,final_detail,ai_detail,employee_feedback,structured_summary,source_hash,revision,window_start,window_end,local_date,timezone,generation_status,headline','person_id','organization_id'),
     ('work_recap_reviews','','person_id','organization_id'),
     ('work_employee_onboarding','timezone,privacy_preferences','person_id','organization_id'),
+    ('work_consent_records','purpose,policy_version,decision,occurred_at,person_id','person_id','organization_id'),
     ('work_source_accounts','external_account_id,verified,person_id','person_id','organization_id'),
     ('work_people','display_name,active,timezone,worktivity_employee_id','id','organization_id'),
     ('work_org_members','person_id,role,active,feature_flags','person_id','organization_id'),

@@ -80,6 +80,27 @@ the payroll limiter. If 429s still appear during payroll analysis, pause bulk
 syncs or lower the payroll batch size; do not increase the sub-budget from a
 single process.
 
+## Model readiness
+
+Payroll text defaults to `deepseek/deepseek-v4.1-flash-1017` at `high` effort; frame
+classification defaults to `openai/gpt-6-luna`. The scoped policy does not change
+other surfaces' low effort. `max` is rejected unless the configured text model has a
+verified capability entry and `WORK_OS_PAYROLL_MAX_VERIFIED=1`; no model is currently
+verified for max, so it fails loudly rather than silently downgrading.
+
+Run one non-sensitive structured probe per configured model only when explicitly authorized:
+
+```bash
+node --import tsx scripts/verify-work-os-payroll.mts --verify-models
+```
+
+It records model/effort and success/failure, never keys or request payloads. Without a
+successful probe, automatic exclusion remains blocked; metadata review can still run.
+Frame classification is one point observation: malformed output, length truncation,
+timeout, missing consent and missing image all become `unclear`, never `idle`, and it
+cannot allocate minutes. First/middle/last frames are selected (at most three per
+ambiguous run); the durable run owns the 48-frame per-person cap.
+
 ## Failure behavior
 
 - Provider fetch failure: the page is incomplete; publication and approvals
