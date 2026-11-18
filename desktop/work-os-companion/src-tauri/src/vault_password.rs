@@ -102,13 +102,6 @@ impl VaultPasswordWorker {
         await_reply(receiver).await
     }
 
-    async fn reset(&self) -> Result<(), VaultPasswordError> {
-        let (reply, receiver) = channel();
-        self.sender
-            .send(VaultRequest::Reset { reply })
-            .map_err(|_| VaultPasswordError::unavailable())?;
-        await_reply(receiver).await
-    }
 }
 
 /// Waits for the worker without occupying the app's main thread.
@@ -198,6 +191,18 @@ fn worker(app: &tauri::AppHandle) -> Result<tauri::State<'_, VaultPasswordWorker
         .ok_or_else(VaultPasswordError::unavailable)
 }
 
+// Only the dedicated vault-store thread uses these blocking entry points.
+pub fn read_blocking(app: &tauri::AppHandle) -> Result<String, VaultPasswordError> {
+    let (reply, receiver) = channel();
+    worker(app)?.sender.send(VaultRequest::Read { reply }).map_err(|_| VaultPasswordError::unavailable())?;
+    receiver.recv().map_err(|_| VaultPasswordError::unavailable())?
+}
+pub fn reset_blocking(app: &tauri::AppHandle) -> Result<(), VaultPasswordError> {
+    let (reply, receiver) = channel();
+    worker(app)?.sender.send(VaultRequest::Reset { reply }).map_err(|_| VaultPasswordError::unavailable())?;
+    receiver.recv().map_err(|_| VaultPasswordError::unavailable())?
+}
+
 /// The password for this device's vault, creating one on first run.
 #[tauri::command]
 pub async fn get_vault_password(app: tauri::AppHandle) -> Result<String, VaultPasswordError> {
@@ -207,6 +212,6 @@ pub async fn get_vault_password(app: tauri::AppHandle) -> Result<String, VaultPa
 /// Starts fresh on this device: replaces the local vault and its key. Data
 /// already filed with the server is untouched.
 #[tauri::command]
-pub async fn reset_local_vault(app: tauri::AppHandle) -> Result<(), VaultPasswordError> {
-    worker(&app)?.reset().await
+pub async fn reset_local_vault(window: tauri::WebviewWindow) -> Result<(), crate::vault_backend::VaultStoreError> {
+    crate::vault_store::reset(window).await
 }

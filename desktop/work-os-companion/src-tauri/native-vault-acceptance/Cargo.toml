@@ -1,0 +1,17 @@
+[package]
+name = "work-os-native-vault-acceptance"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Synthetic-only native harness for the production snapshot adapter and shared
+# lifecycle. It never reads an installed profile or OS credential store.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri-plugin-stronghold = "=2.3.1"
+uuid = { version = "1", features = ["v4"] }
+zeroize = "1"
+work-os-vault-runtime-core = { path = "../vault-runtime-core" }
+
+[profile.dev.package.scrypt]
+opt-level = 3

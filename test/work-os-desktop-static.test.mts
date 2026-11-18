@@ -783,8 +783,8 @@ assert.match(planner, /if \(result === "rebuild"\)/);
 assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
 assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);
 assert.match(vaultSource, /const CHAT_SCOPE_KEYS = "chat-scope-keys";/);
-assert.match(vaultSource, /for \(const key of scopes\) await remove\(key\);/);
-assert.match(vaultSource, /rememberChatScope\(scope\)/);
+assert.match(vaultSource, /for \(const key of scopes\) await remove\(key, lease\);/);
+assert.match(vaultSource, /rememberChatScope\(scope, lease\)/);
 
 // ── Post-install announcement and changelog convention ──
 const whatsNew = read("src/whatsNew.ts");

@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.
+- Work OS now unlocks its saved local data once and shares it between the main and floating windows, so opening the app does less repeated work.
 
 ## 0.5.40 — 2026-11-19
 

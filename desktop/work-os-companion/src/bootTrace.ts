@@ -1,5 +1,42 @@
 import { diagnostics } from "./diagnostics";
 
+type StartupWindow = "main" | "avatar" | "debug";
+type StartupPhase = "vault_wait" | "cache_restore" | "content_frame" | "overlay_exit" | "avatar_frame";
+export interface StartupMeasurement { window: StartupWindow; phase: StartupPhase; elapsedMs: number; durationMs: number; reused?: boolean }
+export function startupWindowLabel(search: string): StartupWindow {
+  const label = new URLSearchParams(search).get("window");
+  return label === "avatar" || label === "debug" ? label : "main";
+}
+export function createStartupTimings(window: StartupWindow, now: () => number, emit: (event: StartupMeasurement) => void) {
+  const started = now();
+  const recorded = new Set<StartupPhase>();
+  return { mark(phase: StartupPhase, startedAt = started, reused?: boolean) {
+    if (recorded.has(phase)) return;
+    recorded.add(phase);
+    try {
+      const end = now();
+      emit({ window, phase, elapsedMs: Math.max(0, Math.round(end - started)), durationMs: Math.max(0, Math.round(end - startedAt)), ...(reused === undefined ? {} : { reused }) });
+    } catch { /* Support measurements must never block the startup gate. */ }
+  } };
+}
+
+const startupTimings = createStartupTimings(
+  startupWindowLabel(typeof window === "undefined" ? "" : window.location?.search ?? ""),
+  () => performance.now(),
+  event => diagnostics.info(`app.startup.${event.phase}`, "Startup measurement", { ...event }, { durationMs: event.durationMs }),
+);
+export const markStartupTiming = startupTimings.mark;
+
+/** A post-commit frame, not a provider/auth verification or a browser TTI metric.
+ * Two animation frames permit the committed content to paint before reporting.
+ * Hidden WebViews may delay this observation; they never delay application boot. */
+export function scheduleStartupFrame(phase: "content_frame" | "overlay_exit" | "avatar_frame"): () => void {
+  let frame = window.requestAnimationFrame(() => {
+    frame = window.requestAnimationFrame(() => markStartupTiming(phase));
+  });
+  return () => window.cancelAnimationFrame(frame);
+}
+
 /** A tiny boot breadcrumb kept outside React, so a crash or a force-kill during
  * startup still leaves a trail behind.
  *

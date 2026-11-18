@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bench } from "./LoadingUi";
 import { MascotPet } from "./MascotPet";
 import type { BootSurface } from "./bootSurface";
+import { scheduleStartupFrame } from "./bootTrace";
 
 /** Exact stage copy for the two loading phases; the apostrophe is U+2019
  * exactly as the boot screen has always used. */
@@ -67,6 +68,12 @@ export function BootOverlay({ surface, children, onExitStart }: {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const lastStageRef = useRef<string>("");
   const loading = isLoadingSurface(surface);
+  useEffect(() => {
+    if (!loading) return scheduleStartupFrame("content_frame");
+  }, [loading]);
+  useEffect(() => {
+    if (exit === "done") return scheduleStartupFrame("overlay_exit");
+  }, [exit]);
   const stage = loading ? BOOT_STAGE_COPY[surface] : lastStageRef.current;
   const onExitStartRef = useRef(onExitStart);
   onExitStartRef.current = onExitStart;

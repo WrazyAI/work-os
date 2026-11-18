@@ -14,6 +14,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Check, History, RotateCcw, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
+import { scheduleStartupFrame } from "./bootTrace";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import { useDayMonitor } from "./useDayMonitor";
 import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, watchSystemTheme, type AppearanceSettings } from "./appearance";
@@ -204,6 +205,7 @@ function fireNotification(nudge: CompanionNudge, permission: boolean): void {
 }
 
 export default function AvatarApp(): React.ReactElement {
+  useEffect(() => scheduleStartupFrame("avatar_frame"), []);
   // Browser dev fixture (?window=avatar&token=…): there is no native window to
   // position, so window-management calls stay no-ops instead of crashing.
   const win = useMemo(() => {

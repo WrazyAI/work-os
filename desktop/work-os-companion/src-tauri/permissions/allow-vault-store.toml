@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-vault-store"
+description = "Allow local main and avatar windows to attach to the process-owned vault."
+commands.allow = ["open_local_vault", "read_local_vault", "write_local_vault", "remove_local_vault"]
