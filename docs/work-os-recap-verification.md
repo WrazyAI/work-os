@@ -1,7 +1,7 @@
 # Recap reliability verification
 
-Implementation: `c7d177ab`, `8fff4bb4`, `0e78412f`, `d1a09bb5`.
-Review fixes: `44ab8072`; operational contract: `c973667b`.
+Implementation (rebased onto `origin/main`): `3c02d690`, `d7a8e118`, `f3d34681`,
+`4f82a923`. Review fixes: `7639811a`; operational contract: `abe708d3`.
 Tracking task: `30f3e792-1975-474d-b6ec-5d96542b03c7`.
 
 ## Observed checks
@@ -20,19 +20,21 @@ Tracking task: `30f3e792-1975-474d-b6ec-5d96542b03c7`.
 - Six rendered fixtures: desktop and narrow main window, ready recap, pending
   queue, preparing and empty mascot. No page errors or horizontal overflow;
   keyboard-focused “View recaps” opened the recap queue.
-- Full companion suite: **2,003 passed, 0 failed** (225 files, two workers).
-  An earlier unbounded attempt timed out two existing vault-persistence tests
-  at five seconds under host load; the same tests pass in the bounded run.
-- Companion production build: `tsc --noEmit && vite build` completed.
+- Full companion suite after rebasing onto the guide split-view change:
+  **2,005 passed, 0 failed** (225 files, two workers). An earlier unbounded
+  attempt timed out two existing vault-persistence tests at five seconds under
+  host load; the same tests pass in the bounded run.
+- Companion production build after rebase: `tsc --noEmit && vite build`
+  completed.
 - Web production build with the documented Webpack fallback completed; the
   default Turbopack path cannot follow the cross-worktree dependency symlink.
 - Work OS typecheck and full suite: **1,396 passed, 0 failed, 11 skipped**
   (1,407 tests). The 11 skipped tests are the opt-in PostgreSQL suites, which
   require a disposable database and were not enabled. An earlier full attempt
   had one native V8/WASM crash; the isolated suite passed all 12 tests.
-- Companion release queue now carries one pending outcome for this fix; the
-  published version remains 0.5.36 and four more verified outcomes are needed
-  before a companion release.
+- Companion release queue now carries this pending outcome alongside the
+  guide split-view entry; the published version remains 0.5.36, so three more
+  verified outcomes are needed before a companion release.
 
 ## Review disposition
 
@@ -60,8 +62,8 @@ The independent findings overlap the account-state and overdue-recovery rows.
 
 TestSprite run `a15daf21-e993-449c-8cf3-d6f1520fe9fc` was refused before
 execution with `FEATURE_GATED` / `billing_hold`. No billing changes were made.
-Default Turbopack rejects the cross-worktree dependency symlink; an isolated
-Webpack build was started without changing production configuration.
+Default Turbopack rejects the cross-worktree dependency symlink; the isolated
+Webpack build completed without changing production configuration.
 
 No push, merge, deployment, installer release or production fixture mutation
 has been performed. Closed-companion/provider/timer acceptance in
