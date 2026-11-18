@@ -69,6 +69,13 @@ export const workOsQueryClient = createWorkOsQueryClient();
 const PERSIST_DEBOUNCE_MS = 2_500;
 const persistenceBarriers = new WeakMap<QueryClient, () => Promise<() => void>>();
 
+/** A new sign-in must not let the previous account's session or recap scope
+ * answer for the new one while the session read is still pending. */
+export function resetSessionScopedReads(client: QueryClient): void {
+  client.removeQueries({ queryKey: ["work-os", "session"] });
+  client.removeQueries({ queryKey: ["work-os", "activity-intervals", "latest"] });
+}
+
 /** Sign-out is ordered after an already-started vault save, not raced with it.
  * Cancel reads (never mutations), retire queued snapshots, then erase storage. */
 export async function clearWorkOsAccountCache(client: QueryClient): Promise<void> {

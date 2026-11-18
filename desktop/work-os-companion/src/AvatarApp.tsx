@@ -1547,6 +1547,10 @@ export default function AvatarApp(): React.ReactElement {
     void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       daySessionRevision.current += 1;
+      // A re-sign-in may resolve to the same account: retiring the card must
+      // also retire its watermark so the latest read can present it again.
+      recapSurfaceWatermark.current = null;
+      recapAccountRef.current = null;
       setActivityPrompt(null);
       setRecapOwnerScope(null);
       setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
@@ -2896,6 +2900,7 @@ export default function AvatarApp(): React.ReactElement {
     setRecapOwnerScope(null);
     setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
     stopRecapRead();
+    stopNextStepsRead();
     setRecapSurfaceBlocked(false);
     setRecapQueueBubble({ prompt: false, awaitingBeat: false });
     setPendingUnapprovedRecaps(0);

@@ -20,18 +20,19 @@ Tracking task: `30f3e792-1975-474d-b6ec-5d96542b03c7`.
 - Six rendered fixtures: desktop and narrow main window, ready recap, pending
   queue, preparing and empty mascot. No page errors or horizontal overflow;
   keyboard-focused “View recaps” opened the recap queue.
-- Full companion suite after rebasing onto the guide split-view change:
-  **2,005 passed, 0 failed** (225 files, two workers). An earlier unbounded
+- Full companion suite after the PR review fixes: **2,008 passed, 0 failed**
+  (226 files, two workers). An earlier unbounded
   attempt timed out two existing vault-persistence tests at five seconds under
   host load; the same tests pass in the bounded run.
 - Companion production build after rebase: `tsc --noEmit && vite build`
   completed.
 - Web production build with the documented Webpack fallback completed; the
   default Turbopack path cannot follow the cross-worktree dependency symlink.
-- Work OS typecheck and full suite: **1,396 passed, 0 failed, 11 skipped**
-  (1,407 tests). The 11 skipped tests are the opt-in PostgreSQL suites, which
-  require a disposable database and were not enabled. An earlier full attempt
-  had one native V8/WASM crash; the isolated suite passed all 12 tests.
+- Work OS typecheck and full suite after the PR review fixes: **1,399 passed,
+  0 failed, 11 skipped** (1,410 tests). The 11 skipped tests are the opt-in
+  PostgreSQL suites, which require a disposable database and were not enabled.
+  An earlier full attempt had one native V8/WASM crash; the isolated suite
+  passed all 12 tests.
 - Companion release queue now carries this pending outcome alongside the
   guide split-view entry; the published version remains 0.5.36, so three more
   verified outcomes are needed before a companion release.
@@ -57,6 +58,21 @@ The independent findings overlap the account-state and overdue-recovery rows.
 | Terminal outcome suffers a second scheduler backoff | Existing terminal fast path retained, with overdue-recovery exception; focused backend suite passes. |
 | Legacy route drops inspected slot | Refuted by route handoff: `deliverWorkdayPrompt(auth.access, at, inspected.slot)` retains the inspected receipt. |
 | Correction races delivery CAS | Fixed: correction status participates in “expected recap delivery uses a session-scoped database CAS.” |
+
+## Pull request review (PR #178)
+
+CI passed (site tests, production build, companion, Rust, release policy,
+CodeQL) and CodeRabbit completed a fresh review of the rebased branch.
+
+| Finding | Disposition and regression evidence |
+| --- | --- |
+| Previous account's session can still supply the recap scope during sign-in | Fixed: a new sign-in removes the session and latest-recap query data before the session read; covered by “drops the previous account's session and recap scope on a new sign-in.” |
+| Delivery CAS rounds stored instants to milliseconds | Fixed: compared session instants travel with exact stored text; covered by “delivery CAS keeps the stored microsecond precision of session instants” (observed RED, then GREEN). |
+| Failed synthesis can demote a recap another worker published | Fixed: the failure UPDATE repeats the attempt ownership, review and generation conditions and reloads the winner without a failure audit; covered by “a failed synthesis cannot demote a recap another worker published” (observed RED, then GREEN). |
+| Re-sign-in leaves the recap watermark, so the card cannot return | Fixed: the session-change handler retires the watermark and account marker with the card; covered by the account-boundary source check. |
+| Person boundary leaves next-step playback running | Fixed: the account reset stops next-step playback too; covered by the account-boundary source check. |
+| Delivery failure after generation loses coverage | Fixed: the scheduler records `delivery_failed` and returns the earned counters; covered by “a delivery failure after generation keeps its coverage” (observed RED, then GREEN). |
+| Overdue empty row can be recovered between inspection and delivery | Deferred: closing this atomically needs the session update and the interval state in one database transaction or a new SQL function. The race needs a concurrent recovery in the seconds between inspection and delivery, the recovery path already refuses processed or reviewed rows, and the employee still receives the one prompt the inspection allowed. The current code does not claim atomic protection it lacks; the cost of deferring is a rare late recap for an already-notified slot. |
 
 ## Acceptance and rollout limits
 

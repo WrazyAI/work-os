@@ -468,6 +468,25 @@ test("expected recap delivery uses a session-scoped database CAS", async () => {
   } finally { await f.close(); }
 });
 
+test("delivery CAS keeps the stored microsecond precision of session instants", async () => {
+  const f = await recapSessionFixture();
+  try {
+    const { recordPromptDelivery } = await import("../src/lib/work-os-workday");
+    await f.database.query(`update work_sessions set state='active', clocked_in_at='2026-11-06T15:32:12.123456Z',
+      first_follow_up_at='2026-11-06T16:30Z' where id=$1`, [planSession]);
+    const snapshot = (await f.database.query(`select *, clocked_in_at::text as clocked_in_at_exact,
+      first_follow_up_at::text as first_follow_up_at_exact, last_prompt_at::text as last_prompt_at_exact,
+      next_fallback_at::text as next_fallback_at_exact, last_substantive_update_at::text as last_substantive_update_at_exact,
+      snoozed_until::text as snoozed_until_exact, scheduled_ends_at::text as scheduled_ends_at_exact
+      from work_sessions where id=$1`, [planSession])).rows[0] as any;
+    const prompt = { kind: "follow_up", nextPromptAt: "2026-11-06T16:30:00.000Z" } as any;
+    const cadence = { checkInIntervalMinutes: 60 } as any;
+    const at = new Date("2026-11-06T17:00Z");
+    const delivery = await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, { sessionId: planSession, promptDueAt: prompt.nextPromptAt });
+    assert.equal(delivery.delivered, true, "an unchanged session with microsecond instants still matches its own row");
+  } finally { await f.close(); }
+});
+
 const resumedProjection = {
   source: "worktivity", stale: false, state: "active", status: "working",
   clockedInAt: "2026-11-06T15:32:12Z", observedAt: "2026-11-06T17:45:00Z",

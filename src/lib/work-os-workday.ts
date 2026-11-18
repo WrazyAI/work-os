@@ -104,8 +104,14 @@ export async function isScheduledWorkday(access: WorkOsAccess, date: string) {
   return hasScheduledShiftOnDate(rules, (exceptions ?? []) as WorkOsScheduleException[], date);
 }
 
+/* Delivery compares the loaded session back to its own row. Postgres keeps
+ * microseconds while a JavaScript Date keeps only milliseconds, so every
+ * compared instant travels beside the exact stored text. */
+const PROMPT_CAS_INSTANTS = ["clocked_in_at", "last_prompt_at", "first_follow_up_at", "next_fallback_at", "last_substantive_update_at", "snoozed_until", "scheduled_ends_at"] as const;
+const SESSION_CAS_SELECT = ["*", ...PROMPT_CAS_INSTANTS.map((column) => `${column}::text AS ${column}_exact`)].join(",");
+
 export async function activeSession(access: WorkOsAccess) {
-  const { data, error } = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId)
+  const { data, error } = await db().from("work_sessions").select(SESSION_CAS_SELECT).eq("organization_id", access.organizationId)
     .eq("person_id", access.personId as string).in("state", ["clocked_in", "active", "paused", "eod_due"])
     .neq("correction_status", "needs_correction").maybeSingle();
   if (error) throw new Error(`load active work session: ${error.message}`);
@@ -152,13 +158,13 @@ async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string
     state: "eod_due",
     updated_at: at.toISOString(),
   }).eq("organization_id", access.organizationId).eq("id", session.id as string)
-    .in("state", ["clocked_in", "active", "paused"]).select("*").maybeSingle();
+    .in("state", ["clocked_in", "active", "paused"]).select(SESSION_CAS_SELECT).maybeSingle();
   if (error) throw new Error(`persist EOD session state: ${error.message}`);
   if (data) {
     await audit(access, session.id as string, "eod_due", session.state as string, "eod_due", `eod_due:${session.id}:${session.scheduled_ends_at}`, at.toISOString(), { dueAt }, "system");
     return data;
   }
-  const current = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId).eq("id", session.id as string).maybeSingle();
+  const current = await db().from("work_sessions").select(SESSION_CAS_SELECT).eq("organization_id", access.organizationId).eq("id", session.id as string).maybeSingle();
   if (current.error) throw new Error(`reload EOD session state: ${current.error.message}`);
   return current.data ?? session;
 }
@@ -180,7 +186,8 @@ export async function recordPromptDelivery(access: WorkOsAccess, session: Record
   }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", session.id as string);
   for (const column of ["state", "correction_status", "last_prompt_at", "last_prompt_kind", "next_fallback_at", "first_follow_up_at", "last_substantive_update_at", "snoozed_until", "clocked_in_at", "check_in_interval_minutes", "scheduled_ends_at"]) {
     const value = session[column];
-    query = value == null ? query.is(column, null) : query.eq(column, value);
+    const exact = (PROMPT_CAS_INSTANTS as readonly string[]).includes(column) ? session[`${column}_exact`] : null;
+    query = exact != null ? query.eq(column, exact) : value == null ? query.is(column, null) : query.eq(column, value);
   }
   const { data, error } = await query.select("*").maybeSingle();
   if (error) throw new Error(`persist Work OS prompt schedule: ${error.message}`);

@@ -16,7 +16,7 @@ export const SCHEDULED_RECAP_MAX_SLOTS = 4;
 export const SCHEDULED_RECAP_FAILURE_BACKOFF_MS = 15 * 60_000;
 
 export type RecapOutcome = "nothing_due" | "ineligible" | "awaiting_evidence" | "empty" | "generated" | "already_ready" | "failed" | "slot_changed";
-export type RecapReason = "feature_disabled" | "consent_required" | "no_mapping" | "inactive" | "leave" | "missing_actor" | "nothing_due" | "plan_hold" | "retry_backoff" | "no_usable_frames" | "evidence_timeout" | "daily_cap" | "no_reviewable_interval" | "candidate_lookup_failed" | "generation_failed" | "slot_changed";
+export type RecapReason = "feature_disabled" | "consent_required" | "no_mapping" | "inactive" | "leave" | "missing_actor" | "nothing_due" | "plan_hold" | "retry_backoff" | "no_usable_frames" | "evidence_timeout" | "daily_cap" | "no_reviewable_interval" | "candidate_lookup_failed" | "generation_failed" | "delivery_failed" | "slot_changed";
 type RecapCoverage = {
   scanned: number; eligible: number; dueSlotsObserved: number;
   outcomes: Record<RecapOutcome, number>;
@@ -155,14 +155,30 @@ export async function settleDueActivityRecaps(
     /* A goal-less plan hold is the day's first prompt. Once its recap exists,
        the hold is not a delivery slot; stop and let the next run retry the
        goal suggestion after the backoff. */
-    const after = await deps.getWorkday(access, at);
+    /* Generation already happened. A later read or delivery failure must not
+       throw away the coverage that generation earned. */
+    let after: Workday;
+    try {
+      after = await deps.getWorkday(access, at);
+    } catch {
+      failed += 1; coverage.outcomes.failed++; recordReason(coverage, "delivery_failed");
+      results.push({ slotKey, status: result.status, advanced: false });
+      break;
+    }
     if (after.prompt.kind === "plan" && after.prompt.nextPromptAt === prompt.nextPromptAt) {
       recordReason(coverage, "plan_hold");
       results.push({ slotKey, status: result.status, advanced: false });
       break;
     }
 
-    const delivery = await deps.deliver(access, at, expectedSlot);
+    let delivery: DeliverResult;
+    try {
+      delivery = await deps.deliver(access, at, expectedSlot);
+    } catch {
+      failed += 1; coverage.outcomes.failed++; recordReason(coverage, "delivery_failed");
+      results.push({ slotKey, status: result.status, advanced: false });
+      break;
+    }
     if (delivery.delivered) advanced += 1;
     results.push({ slotKey, status: result.status, advanced: delivery.delivered });
     lastSlotKey = slotKey;

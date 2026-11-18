@@ -673,14 +673,6 @@ export async function recoverEmptyActivityInterval(access: WorkOsAccess, row: Ac
 
 /** A worker may finish after its row was rebased. Only persist results that
  * still belong to the frozen window this attempt processed. */
-async function intervalAttemptCurrent(id: string, windowStart: string, windowEnd: string) {
-  const current = await db().from("work_activity_intervals").select("window_start,window_end,review_status")
-    .eq("id", id).maybeSingle();
-  return Boolean(current.data && isoInstant(current.data.window_start) === isoInstant(windowStart)
-    && isoInstant(current.data.window_end) === isoInstant(windowEnd)
-    && !["confirmed", "amended"].includes(String(current.data.review_status)));
-}
-
 export const ACTIVITY_INTERVAL_RETRY_BACKOFF_MS = 15 * 60_000;
 const EVIDENCE_RETRY_MS = 5 * 60_000;
 const EVIDENCE_WAIT_MS = 15 * 60_000;
@@ -839,12 +831,12 @@ export type ActivityIntervalEnsureResult = {
   readyTransition?: "new" | "existing";
 };
 type EnsureInput = { promptDueAt?: string; at?: Date; expectedSlot?: WorkdayPromptSlot; mode?: "generate" | "inspect" };
-type IntervalEnsureDeps = { getWorkday: typeof getWorkday; prepareScreenshotWindow: typeof prepareScreenshotWindow };
+type IntervalEnsureDeps = { getWorkday: typeof getWorkday; prepareScreenshotWindow: typeof prepareScreenshotWindow; synthesizeInterval: typeof synthesizeInterval };
 
 /** The receipt binds generation and read-only inspection to one authoritative slot.
  * Legacy clients cannot consume a slot while another request is preparing it. */
 export async function ensureActivityInterval(access: WorkOsAccess, input: EnsureInput = {}, overrides: Partial<IntervalEnsureDeps> = {}): Promise<ActivityIntervalEnsureResult> {
-  const deps = { getWorkday, prepareScreenshotWindow, ...overrides };
+  const deps = { getWorkday, prepareScreenshotWindow, synthesizeInterval, ...overrides };
   if (!access.personId) return { status: "unavailable", reason: "person_required", slot: null, mayAdvance: false };
   const at = input.at ?? new Date();
   const day = await deps.getWorkday(access, at);
@@ -1178,7 +1170,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
     };
     let synthesis: IntervalSynthesis;
     try {
-      synthesis = await synthesizeInterval({
+      synthesis = await deps.synthesizeInterval({
         windowLabel,
         observations,
         images,
@@ -1196,10 +1188,10 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "activity interval synthesis failed";
-      if (!(await intervalAttemptCurrent(String(row.id), attemptStart, attemptEnd))) {
-        const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
-        return { status: "failed" as const, reason, interval: (current.data ?? row) as ActivityIntervalRecord };
-      }
+      /* The failure write must not demote a winner another worker published
+       * after this attempt started. The UPDATE repeats every attempt-ownership
+       * condition, so a missed write reloads and reports the real row instead
+       * of auditing a failure that never landed. */
       const { data } = await db().from("work_activity_intervals").update({
         generation_status: "failed",
         failure_reason: reason.slice(0, 500),
@@ -1209,9 +1201,16 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
         coverage: { ...preparation.counts, rawImagesLoaded: images.length, memoryUsed: Boolean(contextBlock), memoryChars: contextBlock.length, ...githubCoverage,
         ...ghlCoverage },
         updated_at: new Date().toISOString(),
-      }).eq("id", row.id).eq("window_start", attemptStart).eq("window_end", attemptEnd).select("*").maybeSingle();
+      }).eq("id", row.id).eq("window_start", attemptStart).eq("window_end", attemptEnd)
+        .eq("review_status", "inferred").neq("generation_status", "ready")
+        .select("*").maybeSingle();
+      if (!data) {
+        const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
+        const winner = (current.data ?? row) as ActivityIntervalRecord;
+        return { status: winner.generation_status === "ready" ? "ready" as const : "failed" as const, reason, interval: winner };
+      }
       await auditInterval(access, "activity_interval.failed", String(row.id), { reason: reason.slice(0, 200), slotKey });
-      return { status: "failed" as const, reason, interval: (data as ActivityIntervalRecord | null) ?? row };
+      return { status: "failed" as const, reason, interval: data as ActivityIntervalRecord };
     }
 
     const coverage = {

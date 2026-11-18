@@ -70,7 +70,7 @@ import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, 
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
-import { clearWorkOsAccountCache, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
+import { clearWorkOsAccountCache, resetSessionScopedReads, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
@@ -2804,9 +2804,9 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void listenForAuthentication((saved) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); resetSessionScopedReads(queryClient); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
-  }, [notifications, refresh, showError]);
+  }, [notifications, queryClient, refresh, showError]);
 
   // The workspace can reject this device's session at any time (revoked in the
   // browser, or expired while the clocks disagreed). Following it out of the

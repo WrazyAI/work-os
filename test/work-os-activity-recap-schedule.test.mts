@@ -202,6 +202,20 @@ test("slot lost after ready preserves generation and reports the lost delivery",
   assert.equal(settled.advanced, 0);
 });
 
+test("a delivery failure after generation keeps its coverage", async () => {
+  const due = "2026-11-12T15:00:00.000Z";
+  const settled = await settleDueActivityRecaps(access, { at, maxSlots: 1, deps: {
+    getWorkday: async () => workday("follow_up", due), loadSlot: async () => null,
+    ensure: async () => ({ ...receipt(due), readyTransition: "new", interval: { generated_at: "2026-11-12T15:02:00Z", prompt_due_at: due } }),
+    deliver: async () => { throw new Error("transport down"); },
+  } });
+  assert.equal(settled.generated, 1);
+  assert.equal(settled.coverage.outcomes.generated, 1);
+  assert.equal(settled.failed, 1);
+  assert.equal(settled.coverage.reasons.delivery_failed, 1);
+  assert.equal(settled.coverage.readyLatencyMs.count, 1);
+});
+
 test("consent lookup failure leaves later scheduler candidates runnable and the summary private", async () => {
   const database = new PGlite();
   const previous = globalThis.__workOsPgPool;

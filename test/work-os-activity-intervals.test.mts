@@ -294,6 +294,60 @@ test("readiness is published atomically with evidence and its system audit", asy
 });
 
 
+test("a failed synthesis cannot demote a recap another worker published", async () => {
+  const database = new PGlite(), previous = globalThis.__workOsPgPool;
+  const organizationId = "10000000-0000-4000-8000-000000000001";
+  const personId = "20000000-0000-4000-8000-000000000001";
+  try {
+    await database.exec(`create table work_people(id uuid,organization_id uuid,worktivity_employee_id text);
+      insert into work_people values ('${personId}','${organizationId}','wt-1');
+      create table work_consent_records(organization_id uuid,person_id uuid,purpose text,decision text,policy_version text,occurred_at timestamptz);
+      create table work_activity_intervals(id uuid primary key default gen_random_uuid(),organization_id uuid,person_id uuid,work_session_id text,local_date date,
+        slot_key text,prompt_kind text,prompt_due_at timestamptz,window_start timestamptz,window_end timestamptz,timezone text,
+        generation_status text default 'preparing',review_status text default 'inferred',failure_reason text,headline text,ai_detail text,final_detail text,
+        structured_summary jsonb,coverage jsonb,source_hash text,model text,prompt_version text,revision int,generated_at timestamptz,
+        created_at timestamptz,updated_at timestamptz);
+      create table work_activity_interval_evidence(interval_id uuid,organization_id uuid,screenshot_summary_id text,evidence_event_id text,captured_at timestamptz,
+        ordinal int,used_in_model boolean,raw_image_shown boolean,selection_reason text,visible_app_snapshot text,frame_summary_snapshot text);
+      create table work_audit_log(organization_id uuid,actor_user_id uuid,action text,target_type text,target_id text,metadata jsonb);`);
+    for (const purpose of ["Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.", "Neutral screenshot summaries for approved Work OS activity context only."]) {
+      await database.query("insert into work_consent_records values ($1,$2,$3,'accepted','work-tracking-v1',now())", [organizationId, personId, purpose]);
+    }
+    const query = (sql: string, values?: unknown[]) => database.query(sql, values);
+    globalThis.__workOsPgPool = { query, connect: async () => ({ query, release() {} }) } as never;
+    const access = { organizationId, personId, membershipId: "system-activity-recap-schedule:person", featureFlags: { screenshot_summaries: true }, ctx: { profile: {} } } as unknown as WorkOsAccess;
+    const frame = candidate("frame", "2026-11-12T14:30Z", "Editor");
+    let synthesisEntered!: () => void;
+    let releaseSynthesis!: (error: Error) => void;
+    const entered = new Promise<void>((resolve) => { synthesisEntered = resolve; });
+    const synth = new Promise<never>((_, reject) => { releaseSynthesis = reject; });
+    const pending = intervalEngine.ensureActivityInterval(access, { at: new Date("2026-11-12T15:05:00Z") }, {
+      getWorkday: async () => ({ session: { id: "session-1", timezone: "UTC", clocked_in_at: "2026-11-12T14:00Z", shift_date: "2026-11-12" },
+        plan: { freeform_intent: "Ship the recap", confirmed_at: "2026-11-12T14:10Z" }, prompt: { kind: "follow_up", nextPromptAt: "2026-11-12T15:00:00.000Z" },
+        cadence: { checkInIntervalMinutes: 60 } }) as any,
+      prepareScreenshotWindow: async () => ({ window: { startIso: "2026-11-12T14:00:00.000Z", endIso: "2026-11-12T15:00:00.000Z", timezone: "UTC" },
+        candidates: [frame], counts: { providerFrames: 1, processed: 1, retained: 1, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, analyzedThisCall: 0 } }),
+      synthesizeInterval: async () => { synthesisEntered(); return synth; },
+    });
+    await entered;
+    const row = (await database.query<Record<string, any>>("select * from work_activity_intervals")).rows[0];
+    assert.equal(row.generation_status, "preparing");
+    const selected = [{ ordinal: 0, rawImageShown: false, selectionReason: "first", candidate: frame }];
+    const fields = { headline: "Worked", ai_detail: "Read code", final_detail: "Read code", structured_summary: {}, coverage: {}, source_hash: "hash",
+      model: "policy", prompt_version: "v3", revision: 1, generated_at: "2026-11-12T15:02:00Z", updated_at: "2026-11-12T15:02:00Z" };
+    assert.equal((await intervalEngine.commitActivityIntervalGeneration(access, row, fields, selected, {})).published, true);
+    releaseSynthesis(new Error("model unavailable"));
+    const result = await pending;
+    assert.equal(result.status, "ready", "a concurrent published winner is reported as ready");
+    assert.equal(result.mayAdvance, true);
+    const current = (await database.query<Record<string, any>>("select * from work_activity_intervals")).rows[0];
+    assert.equal(current.generation_status, "ready");
+    assert.equal(current.failure_reason, null);
+    assert.deepEqual((await database.query<{ action: string }>("select action from work_audit_log")).rows.map((entry) => entry.action), ["activity_interval.generated"],
+      "the losing attempt writes no failure audit over the winner");
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
 test("recap page cursors round-trip and reject malformed values", () => {
   const cursor = activityIntervalCursor({ window_end: "2026-09-28T15:17:00.000Z", id: "interval-1" });
   assert.equal(cursor, "2026-09-28T15:17:00.000Z|interval-1");
