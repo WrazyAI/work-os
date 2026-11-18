@@ -23,9 +23,18 @@ instant. The same receipt must survive generation through cadence advancement.
   An unresolved provider or analysis failure settles as `evidence_timeout`, not
   empty. Both allow the cadence to continue without an employee-facing card.
 - Synthesis failures remain non-advancing with the existing 15-minute backoff.
+- Publishing a recap, its selected evidence and its generation audit is one
+  transaction. A persistence failure cannot leave a consumable ready row.
+- Pending retries keep their original window even if a plan is confirmed while
+  they wait. Eligible, never-generated old empty rows retain the existing bounded
+  overdue recovery; a processed or employee-reviewed recap is not rebased.
 - A pending or failed eligible row cannot be consumed by an installed companion's
   legacy empty prompt-delivery payload. Deterministically disabled recap paths
   retain generic prompts; the notification endpoint does no model work.
+- Latest reads are scoped by both organization and person and checked against
+  the authoritative response identity. A sign-in change clears the previous
+  account's active recap and stops its playback; a transport timeout is not an
+  excuse for a new client to send an unbound delivery request.
 
 ## Coverage, not just a successful timer
 
