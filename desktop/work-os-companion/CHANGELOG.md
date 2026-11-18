@@ -23,6 +23,11 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Settings now has its own sidebar with search and one page at a time; your profile opens there, and Back to app returns you where you were.
+- Page guides now open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings film shows the new layout.
+
 ## 0.5.36 — 2026-11-17
 
 - The in-app and floating companion tabs that show recaps are now named Recaps.

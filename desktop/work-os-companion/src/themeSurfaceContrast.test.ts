@@ -86,11 +86,23 @@ describe("page guide and tour", () => {
     expect(play).toContain("rgba(255, 255, 255, 0.94)");
   });
 
+  it("keeps the screening plate ink in both themes", () => {
+    // A theme token would invert the plate in dark mode and put light paper
+    // behind the light interface in the clip. The plate is fixed ink; only the
+    // product inside the film changes with the theme.
+    const screen = rule(styles, ".guide-screen");
+    expect(screen).toContain("background:");
+    expect(screen).toContain("#121712");
+    expect(screen).not.toContain("var(--ink)");
+    const caption = rule(styles, ".guide-screen-foot strong");
+    expect(caption).toContain("#fafaf6");
+  });
+
   it("uses the muted ink step for guide copy and quiet actions", () => {
     for (const [source, selector] of [
-      [styles, ".task-modal.guide-modal > header p"],
+      [styles, ".task-modal.guide-modal > header.guide-head p"],
       [styles, ".guide-step-copy small"],
-      [styles, ".task-modal.guide-modal > footer .guide-quiet-action"],
+      [styles, ".task-modal.guide-modal > footer.guide-modal-footer .guide-quiet-action"],
       [styles, ".guide-auto-note"],
     ] as const) {
       expect(rule(source, selector), selector).toContain("var(--muted)");

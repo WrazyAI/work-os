@@ -1497,7 +1497,13 @@ there is never more than one guide per page.
     one clip per step, both files on disk, and each chapter label matching its
     step title. A guide whose steps changed without a re-shoot fails the build.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
-  described by its promise. Its header names the speaker once, with the
+  described by its promise. It is a split view by default: the film plate is
+  the left column and the script — header, chapters, actions — is the right.
+  The plate sits on the companion's ink so the real, light interface reads as
+  something projected rather than another card; its slate names the source and
+  the current chapter, and its caption names the clip and its length. Below
+  880px the guide returns to one column in reading order: header, film,
+  (tour rail), chapters, actions. Its header names the speaker once, with the
   configured companion mark for sighted readers and the configured name for
   assistive technology, so a guide reads as the same companion the employee met
   in setup. It plays straight through on open: step one's clip runs and its end
@@ -1510,8 +1516,15 @@ there is never more than one guide per page.
   states that automatic guides are off and points at the `?` instead.
   - Hovering a step does not start it. Hover is how you read a list, not how you
     ask to watch six seconds of film.
-  - The film is `aria-hidden`: the step copy states everything the clip shows, in
-    words, and that is the accessible path. No meaning is film-only.
+  - The active chapter is stated in place by an inset surface, a hairline
+    border, and a filled mark, not by colour alone; the list stays a sequence
+    rather than a stack of competing cards. It never adds a rail beside a
+    content row: that marker belongs to the primary navigation only (§4.2).
+  - The footage is `aria-hidden`: the step copy states everything the clip shows,
+    in words, and that is the accessible path. No meaning is film-only. The
+    plate's slate and caption are part of that frame and are hidden with it; the
+    reduced-motion `Play this step` control is not, because it is the employee's
+    way into the clip.
 - **The tour** — `GuideTour` plays all five films as one pass, started either by
   the first guide a new workspace shows (`Show me the whole workspace`) or by
   `Replay the full tour` in Settings. Choosing a page in its rail navigates the
@@ -1519,10 +1532,11 @@ there is never more than one guide per page.
   carousel laid over it, and closing it leaves the employee on the last page it
   showed. It never changes page on its own; within a page its chapters advance as
   the page guide's do.
-- **Dismissal** — Escape, backdrop press, and the close control dismiss it; the
-  body is the only scroll region; focus lands inside on open and returns to the
-  `?` after. Below 560px the modal takes the viewport inset, and on the tour the
-  progress track is dropped before any page name is truncated.
+- **Dismissal** — Escape, backdrop press, and the close control dismiss it; in
+  the split view the chapter list is the only scroll region (in the narrow
+  layout it scrolls under the film); focus lands inside on open and returns to
+  the `?` after. Below 560px the modal takes the viewport inset, and on the tour
+  the progress track is dropped before any page name is truncated.
 - **Reduced motion** — nothing plays. The still frame stands in for the clip,
   every chapter stays selectable, and one control plays a chapter on request.
   Labels, order, and copy are unchanged.

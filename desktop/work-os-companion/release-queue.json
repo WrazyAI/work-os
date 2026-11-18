@@ -384,7 +384,6 @@
       "type": "feature",
       "summary": "Settings uses its own sidebar in both workspaces, with search, one page at a time, and an inline Profile page; Back to app restores the app sidebar.",
       "verification": "Branch codex/settings-subpages: themeSurfaceContrast 13/13; companion 224 files/1982 tests, typecheck, and production build; Work OS 1352 tests with 1341 pass, 0 fail, 11 skipped; rendered employee and admin Settings at 1440/420 in dark and light, including the sidebar takeover, Back to app, search results, the inline Profile form, and the polished profile fields; AdminSettingsWorkspace 3/3 and SettingsWorkspace 5/5."
-
     },
     {
       "id": "admin-switch-launch-styling",
@@ -403,6 +402,12 @@
       "type": "fix",
       "summary": "The in-app and floating companion tabs that show recaps are now named Recaps, and tool cards stay rounded in dark mode.",
       "verification": "Companion 225 files/1996 tests, typecheck clean; Work OS typecheck and desktop-static pass. Playwright dark/light renders: in-app Chat/Recaps, floating Chat/Recaps, .chat-task-card computed border-radius 16px, .goal-card 9.97:1 dark / 16.19:1 light, goal textarea 8.8:1 dark, placeholder 5.52:1; Recaps panel hairlines resolve var(--line)."
+    },
+    {
+      "id": "guide-split-view-and-settings-film",
+      "type": "feature",
+      "summary": "Page guides open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings guides show the new Settings rail and inline profile.",
+      "verification": "Re-shot the Settings and administration Settings films from the offline film build at 1000×500 H.264 (settings 7.67/7.80/11.17s; admin 5.07/4.27/5.90s). Guide assets total 7.91 MiB, inside the 8 MiB budget. Companion 225 files/1998 tests, typecheck, and production build pass; Work OS suite 1352 tests with 1341 pass, 0 fail, 11 skipped. Rendering: split modal at 1440×900, 900×800, 420×820, and 420×600, light and dark; reduced-motion still with Play this step; tour split with its page rail; arrow-key chapters and Escape focus restore checked through the real modal."
     }
   ],
   "emergency": null,
