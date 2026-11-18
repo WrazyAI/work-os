@@ -20,12 +20,19 @@ Tracking task: `30f3e792-1975-474d-b6ec-5d96542b03c7`.
 - Six rendered fixtures: desktop and narrow main window, ready recap, pending
   queue, preparing and empty mascot. No page errors or horizontal overflow;
   keyboard-focused “View recaps” opened the recap queue.
-- Full companion attempt: **2,001 passed, 2 failed**, both existing vault
-  persistence tests exceeding their five-second timeout under host load.
-  The bounded-worker retry is not yet recorded as passing.
-- Full backend and build gates remain pending; partial logs are not passes.
-  An earlier full backend attempt had one native V8/WASM crash; its isolated
-  suite passed all 12 tests. The 11 opt-in PostgreSQL tests were not enabled.
+- Full companion suite: **2,003 passed, 0 failed** (225 files, two workers).
+  An earlier unbounded attempt timed out two existing vault-persistence tests
+  at five seconds under host load; the same tests pass in the bounded run.
+- Companion production build: `tsc --noEmit && vite build` completed.
+- Web production build with the documented Webpack fallback completed; the
+  default Turbopack path cannot follow the cross-worktree dependency symlink.
+- Work OS typecheck and full suite: **1,396 passed, 0 failed, 11 skipped**
+  (1,407 tests). The 11 skipped tests are the opt-in PostgreSQL suites, which
+  require a disposable database and were not enabled. An earlier full attempt
+  had one native V8/WASM crash; the isolated suite passed all 12 tests.
+- Companion release queue now carries one pending outcome for this fix; the
+  published version remains 0.5.36 and four more verified outcomes are needed
+  before a companion release.
 
 ## Review disposition
 

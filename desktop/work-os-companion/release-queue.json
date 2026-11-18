@@ -414,6 +414,12 @@
       "type": "feature",
       "summary": "Recap, EOD, and goal reminders now have a dismiss control in the floating bubble and the expanded chat, and return only for a genuinely new event.",
       "verification": "Companion 225 files/2004 tests, typecheck clean; Work OS typecheck, surface and desktop-static pass. Playwright dark/light: EOD, agenda, and recap bubbles dismiss to 0, persist across reload, and the expanded EOD card dismisses; stored tokens eod:2026-11-18, agenda:2026-11-18::, recap:2026-11-18:. Pure tests cover next-day, new plan revision, and newer-recap-watermark re-arm."
+    },
+    {
+      "id": "recap-evidence-retries-and-account-fencing",
+      "type": "fix",
+      "summary": "Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.",
+      "verification": "Branch codex/recap-reliability-plan at 44ab8072: Work OS typecheck and full suite 1407 tests/1396 pass/0 fail/11 opt-in PG skipped; focused backend 110/110; companion 225 files/2003 tests, typecheck, and production build; Webpack production build; changed-file ESLint 0 errors; six rendered desktop/narrow fixtures with no overflow or page errors. Recorded in docs/work-os-recap-verification.md."
     }
   ],
   "emergency": null,
