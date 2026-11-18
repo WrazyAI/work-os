@@ -146,6 +146,36 @@ describe("debug window contract", () => {
     expect(debugStyles).toContain(".export-result.error");
   });
 
+  it("repaints the window on theme tokens and gives it a workable default size", () => {
+    const debugStyles = readFileSync(resolve(root, "src/debug.css"), "utf8");
+    const debugWindow = readFileSync(resolve(root, "src-tauri/src/debug_window.rs"), "utf8");
+    // The header is a fixed ink instrument. Painting it with --ink turned it
+    // near-white in the dark material, which is what made the old window look broken.
+    const headerRule = debugStyles.match(/\.debug-header\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(headerRule).toContain("background: #1b1c1e");
+    expect(headerRule).not.toContain("var(--ink)");
+    // Fields and panels follow the selected material instead of a hard-coded white.
+    expect(debugStyles).not.toMatch(/background:\s*#fff(?:fff)?\b/);
+    expect(debugStyles.match(/background: var\(--white\)/g)?.length ?? 0).toBeGreaterThan(4);
+    expect(debugStyles).toContain("var(--danger-soft)");
+    expect(debugStyles).toContain("var(--warning-soft)");
+    // The rail and the content-query trace layout are part of the new shell.
+    expect(debugStyles).toContain(".debug-rail");
+    expect(debugStyles).toContain("@container");
+    // The ink header is the caption bar: Windows drops the native frame, macOS
+    // keeps its traffic lights, and both keep the drag region.
+    expect(debugStyles).toContain(".debug-window-controls");
+    expect(debugStyles).toContain('data-platform="mac"');
+    expect(debugWindow).toContain("decorations(false)");
+    expect(debugWindow).toContain("TitleBarStyle::Overlay");
+    expect(debugWindow).toContain(".inner_size(1000.0, 800.0)");
+    expect(debugWindow).toContain(".min_inner_size(620.0, 520.0)");
+    const debugPermissions = readFileSync(resolve(root, "src-tauri/capabilities/debug.json"), "utf8");
+    expect(debugPermissions).toContain("core:window:allow-minimize");
+    expect(debugPermissions).toContain("core:window:allow-toggle-maximize");
+    expect(debugPermissions).toContain("core:window:allow-start-dragging");
+  });
+
   it("splits debug capabilities away from Stronghold", () => {
     const debug = readFileSync(resolve(root, "src-tauri/capabilities/debug.json"), "utf8");
     const mainCap = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");

@@ -35,11 +35,25 @@ fn open_debug_window_locked(app: AppHandle) -> Result<(), String> {
 
     let mut builder = WebviewWindowBuilder::new(&app, DEBUG_LABEL, WebviewUrl::App("debug.html".into()))
         .title("Work OS Debugger")
-        .inner_size(760.0, 860.0)
-        .min_inner_size(520.0, 560.0)
+        .inner_size(1000.0, 800.0)
+        .min_inner_size(620.0, 520.0)
         .resizable(true)
         .visible(true)
         .use_https_scheme(true);
+    // The in-app header is the caption bar: Windows drops the native frame and
+    // draws minimize, maximize/restore, and close in the ink header. macOS keeps
+    // its native traffic lights over the content, like the main window.
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.decorations(false);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .traffic_light_position(tauri::LogicalPosition::new(18.0, 19.0));
+    }
     // All windows share the default WebView2 data directory. Its environment
     // options must match: different browser arguments fail with 0x8007139F,
     // dropping the native window while leaving a detached Tauri handle behind.
@@ -54,7 +68,7 @@ fn open_debug_window_locked(app: AppHandle) -> Result<(), String> {
 
     match result {
         Ok(window) => {
-            // The debugger's configured 860-point height also overflows a
+            // The debugger's configured 800-point height also overflows a
             // 13-inch MacBook's work area, so it gets the same fit. This
             // command is async, so it runs on a worker thread, while the
             // fit's monitor read reaches NSScreen::screens on macOS, which is
