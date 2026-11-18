@@ -451,7 +451,7 @@ describe("recap queue navigation", () => {
 
   it("announces recaps from the session watermark instead of the old persistent registry", () => {
     const source = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-    expect(source).toContain("latestReadyRecap");
+    expect(source).toContain("recapSurfaceDecision");
     expect(source).not.toContain("RECAP_NOTIFIED_KEY");
   });
 });

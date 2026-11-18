@@ -42,8 +42,8 @@ import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from
 import { presentAdminRecapArrival } from "./adminOtto/notifications";
 import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
-import { recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapQueueBubbleState } from "./notificationsLogic";
+import { decideActivityIntervalReview, decideRecapNextStep, deliverActivityIntervalPrompt, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
+import { recapSurfaceDecision, scopedPendingRecap, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapWatermark, type RecapQueueBubbleState } from "./notificationsLogic";
 import { RecapQueueBubble } from "./RecapQueueBubble";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
@@ -75,8 +75,8 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, planHoldExpired, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
-  type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, dismissPrompt, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, isPromptDismissed, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, planHoldExpired, promptDismissalToken, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge, type DismissiblePromptKind, type PromptDismissals,
 } from "./avatarLogic";
 import "./avatar.css";
 
@@ -157,6 +157,9 @@ const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";
 const SNOOZE_KEY = "work-os.avatar.snooze.v1";
+/** Device-local prompt dismissals, scoped to the local workday and the event
+ * that was dismissed. A genuinely new event re-arms the prompt. */
+const PROMPT_DISMISSALS_KEY = "work-os.avatar.dismissed-prompts.v1";
 /** Device-local memory for the Tasks tab's Open tasks card (§7.3). */
 const AVATAR_TASKS_COLLAPSE_KEY = "work-os.avatar.tasks-collapsed.v1";
 
@@ -340,7 +343,8 @@ export default function AvatarApp(): React.ReactElement {
   const [pendingUnapprovedRecaps, setPendingUnapprovedRecaps] = useState(avatarUnapprovedRecapsFixture ? 2 : 0);
   const [recapSurfaceBlocked, setRecapSurfaceBlocked] = useState(false);
   const recapAnnouncedIds = useRef<Set<string>>(new Set());
-  const recapSurfaceWatermark = useRef<string | null>(null);
+  const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
+  const [recapOwnerScope, setRecapOwnerScope] = useState<string | null>(avatarFixture ? "fixture" : null);
   const recapAccountRef = useRef<string | null>(null);
   const celebrationSeen = useRef(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
@@ -784,6 +788,7 @@ export default function AvatarApp(): React.ReactElement {
   const workspaceViewRef = useRef(workspaceView);
   workspaceViewRef.current = workspaceView;
   const latestRecapQuery = useLatestActivityIntervalQuery({
+    scope: desktopSession?.organizationId && facts.personId ? { organizationId: desktopSession.organizationId, personId: facts.personId } : null,
     enabled: workspaceView === "employee" && facts.loaded && connected !== false && !avatarFixture,
     pollMs: 60_000,
   });
@@ -1149,6 +1154,7 @@ export default function AvatarApp(): React.ReactElement {
     return typeof s.count === "number" ? s.count : 0;
   });
   const [snoozeReplayId, setSnoozeReplayId] = useState(0);
+  const [promptDismissals, setPromptDismissals] = useState<PromptDismissals>(() => readJson<PromptDismissals>(PROMPT_DISMISSALS_KEY, {}));
   const [missed, setMissed] = useState(false);
   const notifiedKeys = useRef<Set<string>>(new Set(readJson<string[]>(NOTIFIED_KEY, [])));
   const deliveryKeys = useRef<Set<string>>(new Set());
@@ -1541,6 +1547,15 @@ export default function AvatarApp(): React.ReactElement {
     void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       daySessionRevision.current += 1;
+      // A re-sign-in may resolve to the same account: retiring the card must
+      // also retire its watermark so the latest read can present it again.
+      recapSurfaceWatermark.current = null;
+      recapAccountRef.current = null;
+      setActivityPrompt(null);
+      setRecapOwnerScope(null);
+      setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+      stopRecapRead();
+      stopNextStepsRead();
       void secureState.session().then((session) => {
         setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
@@ -1766,33 +1781,25 @@ export default function AvatarApp(): React.ReactElement {
         // prompt before claiming delivery, so the notification can say the
         // recap is ready. Any failure falls back to the generic prompt.
         void (async () => {
+          const sessionRevision = daySessionRevision.current;
           let recap: ActivityIntervalCardData | null = null;
+          let ensuredResult: Awaited<ReturnType<typeof ensureActivityIntervalReview>> | null = null;
           try {
             setActivityPreparing(true);
             const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
+            ensuredResult = ensured;
             if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
           } catch { /* recap is optional; the generic prompt still fires */ }
           finally { setActivityPreparing(false); }
           try {
-            const { delivered } = await apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
-              method: "POST",
-              headers: { "Idempotency-Key": nudge.key },
-              body: JSON.stringify({}),
-            });
+            if (sessionRevision !== daySessionRevision.current) return;
+            const { delivered } = await deliverActivityIntervalPrompt(ensuredResult, nudge.key, facts.nextPromptAt);
+            if (sessionRevision !== daySessionRevision.current) return;
             if (!delivered || notifiedKeys.current.has(nudge.key)) return;
             notifiedKeys.current.add(nudge.key);
             writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
             if (recap) {
-              setActivityPrompt(recap);
-              if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
-                recapAnnouncedIds.current.add(recap.id);
-                fireNotification({
-                  kind: "hourly",
-                  key: `recap:${recap.id}`,
-                  title: "Your activity recap is ready",
-                  body: `${recap.label}: ${(recap.headline ?? "Review what your screenshots show.").slice(0, 140)}`,
-                }, notificationPermission.current);
-              }
+              void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervalLatest() });
             } else {
               fireNotification(nudge, notificationPermission.current);
             }
@@ -1835,16 +1842,7 @@ export default function AvatarApp(): React.ReactElement {
         deliveryKeys.current.delete(key);
       }
       if (recap) {
-        setActivityPrompt(recap);
-        if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
-          recapAnnouncedIds.current.add(recap.id);
-          fireNotification({
-            kind: "hourly",
-            key: `recap:${recap.id}`,
-            title: "Your recap is ready",
-            body: `${recap.label}: ${(recap.headline ?? "Review what your screenshots show.").slice(0, 140)}`,
-          }, notificationPermission.current);
-        }
+        void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervalLatest() });
       }
       void loadDay();
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
@@ -2224,7 +2222,7 @@ export default function AvatarApp(): React.ReactElement {
     await toggleExpanded(false);
   }, [toggleExpanded]);
 
-  // "View in app" on the Recent activity header opens the dock's Focus tab,
+  // "View in app" on the Recent activity header opens the dock's Recaps tab,
   // where the same recaps live beneath the daily goal.
   const openFocusInApp = useCallback(async (): Promise<void> => {
     void emit("work-os://avatar-open-focus");
@@ -2861,33 +2859,59 @@ export default function AvatarApp(): React.ReactElement {
   // The EOD alert owns the compact bubble while the day's wrap-up window is
   // open, so the mandatory report never hides behind an undecided recap.
   const eodDue = contextualPrompt.kind === "eod";
-  const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
+  // Dismissals last for the local workday and re-arm on a genuinely new event:
+  // a newer recap watermark, the next workday, or a new plan revision.
+  const promptDay = facts.shiftDate || new Date().toISOString().slice(0, 10);
+  const recapWatermark = latestRecapQuery.data?.interval?.windowStart ?? null;
+  const recapDismissalToken = promptDismissalToken("recap", { day: promptDay, recapWatermark });
+  const eodDismissalToken = promptDismissalToken("eod", { day: promptDay });
+  const agendaDismissalToken = promptDismissalToken("agenda", { day: promptDay, planRevision: facts.planRevision, planIntent: facts.planIntent });
+  const dismissibleKind: DismissiblePromptKind | null = contextualPrompt.kind === "eod" ? "eod" : contextualPrompt.kind === "agenda" ? "agenda" : null;
+  const currentPromptToken = dismissibleKind === "eod" ? eodDismissalToken : dismissibleKind === "agenda" ? agendaDismissalToken : null;
+  const promptDismissed = dismissibleKind !== null && currentPromptToken !== null && isPromptDismissed(promptDismissals, dismissibleKind, currentPromptToken, promptDay);
+  const recapDismissed = isPromptDismissed(promptDismissals, "recap", recapDismissalToken, promptDay);
+  const dismissPromptFor = useCallback((kind: DismissiblePromptKind, token: string) => {
+    setPromptDismissals((current) => {
+      const next = dismissPrompt(current, kind, token, promptDay);
+      writeJson(PROMPT_DISMISSALS_KEY, next);
+      return next;
+    });
+  }, [promptDay]);
+  const dismissCurrentPrompt = useCallback(() => {
+    if (dismissibleKind && currentPromptToken) dismissPromptFor(dismissibleKind, currentPromptToken);
+  }, [dismissibleKind, currentPromptToken, dismissPromptFor]);
+  const promptTurnId = attentionDue && !promptDismissed ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
   // The recap the compact bubble and the chat card treat as current: the live
   // one from the nudge, or the latest undecided recap already in the chat.
+  const recapScope = avatarFixture ? "fixture" : desktopSession?.organizationId && facts.personId ? `${desktopSession.organizationId}:${facts.personId}` : null;
   const pendingRecap = useMemo(() => {
     if (recapSurfaceBlocked) return null;
-    if (activityPrompt && activityPrompt.reviewStatus === "inferred") return activityPrompt;
-    const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
-    return entry?.activityInterval ?? null;
-  }, [activityPrompt, chat, recapSurfaceBlocked]);
+    return scopedPendingRecap(recapScope, recapOwnerScope, activityPrompt, chat.flatMap(item => item.activityInterval ? [item.activityInterval] : []));
+  }, [activityPrompt, chat, recapSurfaceBlocked, recapScope, recapOwnerScope]);
 
   useEffect(() => {
     if (avatarFixture) return;
-    const account = facts.personId ?? null;
+    const account = desktopSession?.organizationId && facts.personId ? `${desktopSession.organizationId}:${facts.personId}` : null;
     if (recapAccountRef.current === account) return;
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
     recapAnnouncedIds.current.clear();
+    setActivityPrompt(null);
+    setRecapOwnerScope(null);
+    setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+    stopRecapRead();
+    stopNextStepsRead();
     setRecapSurfaceBlocked(false);
     setRecapQueueBubble({ prompt: false, awaitingBeat: false });
     setPendingUnapprovedRecaps(0);
-  }, [facts.personId, avatarFixture]);
+  }, [desktopSession?.organizationId, facts.personId, avatarFixture]);
 
   /* The server may create the newest recap while this window is closed. This
      effect is the launch surface: newest ready recap only, re-announced on a
      new launch, and never an older recap after the newest is approved. */
   useEffect(() => {
     const latest = latestRecapQuery.data?.interval ?? null;
+    if (latestRecapQuery.data) setRecapOwnerScope(recapScope);
     if (!latest) return;
     const decision = recapSurfaceDecision({
       latest,
@@ -2899,9 +2923,9 @@ export default function AvatarApp(): React.ReactElement {
       setRecapSurfaceBlocked(true);
       return;
     }
+    if (decision.reason === "not_newer" || latest.reviewStatus !== "inferred") return;
     setRecapSurfaceBlocked(false);
-    if (latest.reviewStatus !== "inferred") return;
-    if (notificationPermission.current && !recapAnnouncedIds.current.has(latest.id)) {
+    if ((decision.surface || decision.reason === "already_pending") && notificationPermission.current && !recapAnnouncedIds.current.has(latest.id)) {
       recapAnnouncedIds.current.add(latest.id);
       fireNotification({
         kind: "hourly",
@@ -2914,7 +2938,7 @@ export default function AvatarApp(): React.ReactElement {
       setActivityPrompt(latest);
       setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "surfaced" }));
     }
-  }, [latestRecapQuery.data, pendingRecap]);
+  }, [latestRecapQuery.data, pendingRecap, recapScope]);
 
   useEffect(() => {
     if (!latestRecapQuery.data) return;
@@ -2948,13 +2972,14 @@ export default function AvatarApp(): React.ReactElement {
     recapReady: pendingRecap !== null,
     promptDue: attentionDue,
     nextSteps: nextStepsMoment !== null,
+    promptDismissed,
   });
   // While the next-steps card owns the bubble, a queued day prompt is not
   // something the employee can act on: it is deliberately behind the card.
   // Letting it drive the pose made the orb alert for an ask that was not on
   // screen. The prompt takes the pose back the moment the card closes.
   const nextStepsOpen = nextStepsMoment !== null;
-  const promptLeads = attentionDue && !nextStepsOpen;
+  const promptLeads = attentionDue && !nextStepsOpen && !promptDismissed;
   /* The last read of this recap was cancelled while it was still preparing, or
      failed: the control offers another try instead of pretending it never ran. */
   const recapRetry = pendingRecap !== null && recapSpeech.retryIntervalId === pendingRecap.id;
@@ -3307,8 +3332,8 @@ export default function AvatarApp(): React.ReactElement {
       {!expanded && (
         <div className="avatar-compact">
         {workspaceView === "employee" && bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
-        {workspaceView === "employee" && unapprovedRecapsBubbleVisible(recapQueueBubble, pendingUnapprovedRecaps, bubble) && (
-          <RecapQueueBubble onViewRecaps={openUnapprovedRecaps} />
+        {workspaceView === "employee" && !recapDismissed && unapprovedRecapsBubbleVisible(recapQueueBubble, pendingUnapprovedRecaps, bubble) && (
+          <RecapQueueBubble onViewRecaps={openUnapprovedRecaps} onDismiss={() => dismissPromptFor("recap", recapDismissalToken)} />
         )}
         {workspaceView === "employee" && bubble === "recap" && pendingRecap && (
           <div className="avatar-prompt-bubble avatar-recap-bubble">
@@ -3402,6 +3427,7 @@ export default function AvatarApp(): React.ReactElement {
             compact={contextualPrompt.compact}
             onOpen={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}
             onAction={(action) => { void (action === "open_eod" ? openEodReview() : openGoalPlan()); }}
+            onDismiss={dismissibleKind ? dismissCurrentPrompt : undefined}
           />
         )}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); stopNextStepsRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
@@ -3466,7 +3492,7 @@ export default function AvatarApp(): React.ReactElement {
                 <ChatTabs
                   tabs={[
                     { id: "chat", label: "Chat" },
-                    { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
+                    { id: "tasks", label: "Recaps", count: facts.taskOptions.filter((task) => !task.completed).length },
                   ]}
                   active={avatarTab}
                   onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
@@ -3482,7 +3508,7 @@ export default function AvatarApp(): React.ReactElement {
           </header>
            <div className="conversation-scroll-region">
            <div className="avatar-chat" ref={chatScroll}>
-            {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={activityPreparing ? "Reviewing your last hour" : contextualPrompt.heading}><strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><small>{activityPreparing ? "Otto is analyzing your recent Worktivity frames to summarize the interval." : contextualPrompt.body}</small>{!activityPreparing && contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
+            {attentionDue && !promptDismissed && <section className={`avatar-context ${contextualPrompt.kind}${dismissibleKind ? " is-dismissible" : ""}`} aria-label={activityPreparing ? "Reviewing your last hour" : contextualPrompt.heading}>{dismissibleKind ? <button type="button" className="avatar-context-dismiss" aria-label="Dismiss reminder" title="Dismiss" onClick={dismissCurrentPrompt}><X size={14} aria-hidden="true" /></button> : null}<strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><small>{activityPreparing ? "Otto is analyzing your recent Worktivity frames to summarize the interval." : contextualPrompt.body}</small>{!activityPreparing && contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
           {avatarTab === "tasks" ? (<>
             <TaskSelectionCard
               title="Open tasks"

@@ -33,6 +33,8 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     return NextResponse.json({
       status: result.status,
       reason: result.reason ?? null,
+      slot: result.slot,
+      mayAdvance: result.mayAdvance,
       // The prompt turn renders the full recap card in the chat, so it carries
       // the exact evidence list, its true count, and the coverage line — not a
       // compact placeholder that reads "0 screenshots".

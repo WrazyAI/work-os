@@ -20,6 +20,10 @@ test("the ledger parses positional ids and value flags", () => {
   const get = parseArgs(["get", "abc-1", "--include-archived"]);
   assert.equal(get.includeArchived, true);
 
+  const deletion = parseArgs(["delete", "abc-1", "--mode", "delete", "--yes"]);
+  assert.equal(deletion.mode, "delete");
+  assert.equal(deletion.yes, true);
+
   assert.throws(() => parseArgs(["create", "--nope", "x"]), /Unknown flag/);
 });
 
@@ -97,4 +101,11 @@ test("archived task reads and listing are explicit", () => {
   assert.match(scriptSource, /include_archived=true/);
   assert.match(scriptSource, /\/complete`, \{\}\);\n    \/\/ An already-completed archived task stays archived/);
   assert.match(scriptSource, /task\.status !== "open"/);
+});
+
+test("delete is guarded by an explicit mode and confirmation", () => {
+  assert.match(scriptSource, /delete needs --mode archive\|delete/);
+  assert.match(scriptSource, /delete needs --yes to confirm the change/);
+  assert.match(scriptSource, /DELETE.*\?mode=/);
+  assert.match(scriptSource, /case "delete"/);
 });

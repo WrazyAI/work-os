@@ -17,6 +17,7 @@ describe("admin Otto shell wiring", () => {
   const adminOttoChat = read("./AdminOttoChat.tsx");
   const adminPreview = read("../admin/AdminPreview.tsx");
   const personalSettings = read("../PersonalSettings.tsx");
+  const settingsSections = read("../settingsSections.tsx");
   const sidebar = read("../SidebarNav.tsx");
 
   it("admin notice copy states a count but never a recap body", () => {
@@ -76,9 +77,9 @@ describe("admin Otto shell wiring", () => {
 
   it("mounts the follow group in the account settings slot on both admin hosts", () => {
     expect(app).toContain("<AdminOttoSettings");
-    expect(app).toContain("adminOttoSettings={surface === \"admin\"");
+    expect(app).toContain("adminOttoSettings: surface === \"admin\"");
     expect(personalSettings).toContain("adminOttoSettings?: ReactNode");
-    expect(personalSettings).toContain("{adminOttoSettings}");
+    expect(settingsSections).toContain("props.adminOttoSettings");
     expect(adminPreview).toContain("<AdminOttoSettings");
     expect(adminPreview).toContain("personalSettings={(");
   });

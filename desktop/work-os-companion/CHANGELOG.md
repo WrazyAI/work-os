@@ -23,6 +23,35 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.37 — 2026-11-18
+
+- Recap, EOD, and goal reminders now have a dismiss button in the bubble and the chat.
+- A dismissed reminder returns only when a genuinely new recap, EOD, or goal event arrives.
+- Page guides now open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings film shows the new layout.
+- Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.
+
+## 0.5.36 — 2026-11-17
+
+- The in-app and floating companion tabs that show recaps are now named Recaps.
+- Tool cards keep their rounded corners in dark mode.
+- The focus card and editor follow the theme, so the focus text is readable in dark mode.
+- The Recaps panel's hairlines and hover states follow the theme.
+
+## 0.5.35 — 2026-11-17
+
+- Dark mode now covers every page and dialog, including EOD, planning, memory, notifications, insights, task menus, and tool cards.
+- The Administration switch looks right from the moment Work OS opens instead of appearing as a plain button.
+- The light theme's review cards are readable again, and selected filters show their labels.
+- Tool cards keep their rounded surfaces in both themes instead of drawing light-only borders.
+- Settings now has its own sidebar with search and one page at a time; your profile opens there, and Back to app returns you where you were.
+
+## 0.5.34 — 2026-11-16
+
+- The dark theme now keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.
+- Administration pages drop the repeated “Work OS · Administration” line, and the organization task list gives titles more room with quieter row dividers.
+- Today’s focus shows its plan as one grouped list with a slim scrollbar at the dialog edge.
+- The floating companion’s EOD shortcut is readable in dark mode.
+
 ## 0.5.33 — 2026-11-16
 
 - Work OS has a new Soft ash theme that covers every page, including Administration, Insights, and the floating mascot.

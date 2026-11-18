@@ -45,4 +45,28 @@ describe("AvatarPromptBubble", () => {
     expect(markup).toContain("Check-in due");
     expect(markup).not.toContain("avatar-prompt-action");
   });
+
+  it("offers a dismiss control when the surface can dismiss it", () => {
+    const markup = renderToStaticMarkup(createElement(AvatarPromptBubble, {
+      kind: "eod",
+      heading: "EOD review is due",
+      compact: "Open EOD review to prepare and submit your report.",
+      onOpen: noop,
+      onAction: noop,
+      onDismiss: noop,
+    }));
+    expect(markup).toContain("avatar-prompt-dismiss");
+    expect(markup).toContain('aria-label="Dismiss reminder"');
+  });
+
+  it("omits the dismiss control when no dismissal is wired", () => {
+    const markup = renderToStaticMarkup(createElement(AvatarPromptBubble, {
+      kind: "check_in",
+      heading: "Check-in due",
+      compact: "Tell Work OS what changed.",
+      onOpen: noop,
+      onAction: noop,
+    }));
+    expect(markup).not.toContain("avatar-prompt-dismiss");
+  });
 });

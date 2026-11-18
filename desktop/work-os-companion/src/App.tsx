@@ -61,7 +61,7 @@ import { TaskFinder } from "./TaskFinder";
 import { buildFocusPlan } from "./focusPlan";
 import { filterFinderTasks } from "./taskFinderFilters";
 import type { TaskFinderSource } from "./workOsQueries";
-import { updateTaskHistoryPages } from "./workOsQueries";
+import { updateTaskHistoryPages, useLatestActivityIntervalQuery } from "./workOsQueries";
 import { SortHeaderRow } from "./SortHeaderRow";
 import { taskViewTabIndex } from "./taskViewTabs";
 import { ProgressRing } from "./ProgressRing";
@@ -70,12 +70,12 @@ import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, 
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
-import { clearWorkOsAccountCache, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalNotificationQuery, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { clearWorkOsAccountCache, resetSessionScopedReads, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
-import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, recapSurfaceDecision, type RecapWatermark, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
@@ -95,6 +95,9 @@ import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
+import { SettingsContent } from "./SettingsContent";
+import { SettingsSidebar } from "./SettingsSidebar";
+import { useSettingsNavigation } from "./settingsNavigation";
 import PageGuide from "./PageGuide";
 import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
@@ -341,6 +344,13 @@ export default function App() {
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
+  // The settings rail replaces the app rail while Settings is on screen; Back
+  // to app returns to whichever workspace page opened it.
+  const lastNonSettingsView = useRef<View>("day");
+  function navigateToView(nextView: View) {
+    if (nextView !== "settings") lastNonSettingsView.current = nextView;
+    setView(nextView);
+  }
   const [workspace, setWorkspace] = useState<"employee" | "admin">(() => (ADMIN_SHELL_BOOT || localStorage.getItem(WORKSPACE_MODE_KEY) === "admin" ? "admin" : "employee"));
   const [input, setInput] = useState("");
   const [progressComposerOpen, setProgressComposerOpen] = useState(false);
@@ -656,6 +666,7 @@ export default function App() {
    * which workspace branch is on screen decides which overlays mount, and that
    * decision feeds the App-level scroll lock below (design §9). */
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
+  const settingsNav = useSettingsNavigation(!!visibleOnboarding);
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
@@ -2421,10 +2432,13 @@ export default function App() {
       onLoadMore: () => { void requestMemoryFactPage(proposedMemoryQuery); },
     },
   } : undefined;
-  const notificationIntervalsQuery = useActivityIntervalNotificationQuery({ enabled: notificationReadsEnabled, date: day?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
-  // The bell only needs the newest ready recap, which always lives on the
-  // first page; later pages stay unloaded until the stream asks for them.
-  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
+  const latestRecapQuery = useLatestActivityIntervalQuery({ enabled: notificationReadsEnabled,
+    scope: workSessionQuery.data?.organizationId && workSessionQuery.data.personId
+      ? { organizationId: workSessionQuery.data.organizationId, personId: workSessionQuery.data.personId } : null,
+    pollMs: NOTIFICATION_POLL_MS });
+  // Notices read only the authoritative latest recap; history pages are owned
+  // by the stream and cannot influence which recap is announced.
+  const readyRecapInterval = latestRecapQuery.data?.interval?.reviewStatus === "inferred" ? latestRecapQuery.data.interval : null;
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data?.factTotals?.candidate ?? (memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0), [memoryQuery.data]);
   // The Admin tab reads the same live overview the administration pages use.
@@ -2790,9 +2804,9 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void listenForAuthentication((saved) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); resetSessionScopedReads(queryClient); setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true, source: "sign_in" }); }, (value) => { authResolutionHandledRef.current = true; setAwaitingApproval(false); showError(value, "Desktop authorization failed.", "Authorization failed"); }).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
-  }, [notifications, refresh, showError]);
+  }, [notifications, queryClient, refresh, showError]);
 
   // The workspace can reject this device's session at any time (revoked in the
   // browser, or expired while the clocks disagreed). Following it out of the
@@ -2883,7 +2897,7 @@ export default function App() {
     return () => unlisten?.();
   }, [refresh]);
 
-  // The floating Tasks tab's "View in app" jumps straight to the dock's Focus
+  // The floating Tasks tab's "View in app" jumps straight to the dock's Recaps
   // tab, where the same interval stream lives beneath the daily goal.
   useEffect(() => {
     if (!isTauri()) return;
@@ -2938,21 +2952,20 @@ export default function App() {
   // Once that newest is approved an older recap never cascades into a flyout;
   // the floating companion keeps owning system-level delivery so one recap
   // never fires two system toasts.
-  const latestRecapInterval = useMemo(() => latestReadyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
-  const recapSurfaceWatermark = useRef<string | null>(null);
+  const latestRecapInterval = latestRecapQuery.data?.interval ?? null;
+  const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
   const recapAccountRef = useRef<string | null>(null);
   useEffect(() => {
-    const account = workSessionQuery.data?.personId ?? workSessionQuery.data?.userId ?? null;
+    const account = workSessionQuery.data ? `${workSessionQuery.data.organizationId}:${workSessionQuery.data.personId ?? workSessionQuery.data.userId}` : null;
     if (recapAccountRef.current === account) return;
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
-  }, [workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
+  }, [workSessionQuery.data?.organizationId, workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
   useEffect(() => {
     if (!latestRecapInterval) return;
-    const previous = recapSurfaceWatermark.current;
-    if (previous !== null && latestRecapInterval.windowStart <= previous) return;
-    recapSurfaceWatermark.current = latestRecapInterval.windowStart;
-    if (latestRecapInterval.reviewStatus !== "inferred") return;
+    const decision = recapSurfaceDecision({ latest: latestRecapInterval, watermark: recapSurfaceWatermark.current, pendingRecap: null });
+    recapSurfaceWatermark.current = decision.watermark;
+    if (!decision.surface) return;
     notifications.info(
       "Confirm or correct what Otto saw during your last interval.",
       "Your recap is ready",
@@ -5615,7 +5628,7 @@ export default function App() {
    * release there; the desktop reports one and opens exactly that. */
   const openProfileFromAdmin = () => {
     setNotificationsOpen(false);
-    setProfileOpen(true);
+    navigateAdmin("settings", { settingsPage: "profile" });
   };
   const openChangelogFromAdmin = () => {
     setNotificationsOpen(false);
@@ -5628,61 +5641,65 @@ export default function App() {
    * modal the row opens, whose tour the replay launches, and whether the
    * changelog action goes through the administration menu's fallback-aware
    * opener. */
-  const renderPersonalSettings = (surface: "employee" | "admin") => (
-    <PersonalSettings
-      hasPersonalRecord={!!visibleOnboarding}
-      adminOttoSettings={surface === "admin" && followSettingsScope ? (
+  const settingsPropsFor = (surface: "employee" | "admin") => {
+    const settingsProps = {
+      hasPersonalRecord: !!visibleOnboarding,
+      adminOttoSettings: surface === "admin" && followSettingsScope ? (
         <Suspense fallback={null}><AdminOttoSettings
           key={`admin-otto-follows:${followSettingsScope.userId}:${followSettingsScope.organizationId}`}
           scope={followSettingsScope}
           {...(adminOttoFollowFixture ? { transport: adminOttoFollowFixture.transport } : {})}
         /></Suspense>
-      ) : undefined}
-      tourScope={surface}
-      onReplayTour={() => setTourScope(surface)}
-      onOpenProfile={surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true)}
-      autoStart={autoStart}
-      onAutoStart={(value) => void toggleAutoStart(value)}
-      voiceHotkeyEnabled={voiceHotkeyEnabled}
-      voiceHotkeyError={voiceHotkeyError}
-      onVoiceHotkey={(value) => void toggleVoiceHotkey(value)}
-      recapVoice={recapVoice}
-      onRecapVoice={(next) => void chooseRecapVoice(next)}
-      autoCheckUpdates={autoCheckUpdates}
-      onAutoCheckUpdates={(value) => void toggleAutoCheckUpdates(value)}
-      updateDetail={updateRowCopy(updateRowSummary, installedVersion)}
-      updateStatus={updateFlow.status}
-      installedVersion={installedVersionRaw}
-      onCheckForUpdates={() => void checkForUpdates()}
-      onDownloadUpdate={() => void beginUpdateDownload()}
-      onInstallUpdate={() => void installDownloadedUpdate()}
-      onOpenWhatsNew={surface === "admin" ? openChangelogFromAdmin : (version) => setWhatsNew({ version })}
-      pageGuideAutoOpen={pageGuideAutoOpen}
-      onPageGuideAutoOpen={setPageGuideAutoOpen}
-      theme={theme}
-      textSize={textSize}
-      mascotSize={mascotSize}
-      onTheme={(value) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved"))}
-      onTextSize={(value) => void chooseTextSize(value)}
-      onMascotSize={(value) => void chooseMascotSize(value)}
-      queueCount={queueCount}
-      queueAttentionCount={queueAttentionCount}
-      sessionApiBase={visibleSession?.apiBase ?? ""}
-      onSignOut={() => void logout()}
-      memory={{
+      ) : undefined,
+      profileSettings: visibleOnboarding
+        ? <ProfileSettings data={visibleOnboarding} mode="page" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} />
+        : undefined,
+      tourScope: surface,
+      onReplayTour: () => setTourScope(surface),
+      onOpenProfile: surface === "admin" ? openProfileFromAdmin : () => setProfileOpen(true),
+      autoStart,
+      onAutoStart: (value: boolean) => void toggleAutoStart(value),
+      voiceHotkeyEnabled,
+      voiceHotkeyError,
+      onVoiceHotkey: (value: boolean) => void toggleVoiceHotkey(value),
+      recapVoice,
+      onRecapVoice: (next: string) => void chooseRecapVoice(next),
+      autoCheckUpdates,
+      onAutoCheckUpdates: (value: boolean) => void toggleAutoCheckUpdates(value),
+      updateDetail: updateRowCopy(updateRowSummary, installedVersion),
+      updateStatus: updateFlow.status,
+      installedVersion: installedVersionRaw,
+      onCheckForUpdates: () => void checkForUpdates(),
+      onDownloadUpdate: () => void beginUpdateDownload(),
+      onInstallUpdate: () => void installDownloadedUpdate(),
+      onOpenWhatsNew: surface === "admin" ? openChangelogFromAdmin : (version: string) => setWhatsNew({ version }),
+      pageGuideAutoOpen,
+      onPageGuideAutoOpen: setPageGuideAutoOpen,
+      theme,
+      textSize,
+      mascotSize,
+      onTheme: (value: typeof theme) => void chooseTheme(value, { markSeen: true }).catch((error) => showError(error, "The theme could not be saved.", "Setting not saved")),
+      onTextSize: (value: typeof textSize) => void chooseTextSize(value),
+      onMascotSize: (value: typeof mascotSize) => void chooseMascotSize(value),
+      queueCount,
+      queueAttentionCount,
+      sessionApiBase: visibleSession?.apiBase ?? "",
+      onSignOut: () => void logout(),
+      memory: {
         facts: memoryQuery.data?.facts ?? [],
         factTotals: memoryQuery.data?.factTotals,
         loading: memoryQuery.isPending && !memoryQuery.data,
         error: !memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null,
-      }}
-      onOpenMemory={() => setMemoryOpen(true)}
-      onRetryMemory={() => void memoryQuery.refetch()}
-      onOpenDebugger={() => void openDebugger()}
-      onExportDiagnostics={() => void exportAppDiagnostics()}
-      onResetOnboarding={() => void resetOnboarding()}
-      busy={busy}
-    />
-  );
+      },
+      onOpenMemory: () => setMemoryOpen(true),
+      onRetryMemory: () => void memoryQuery.refetch(),
+      onOpenDebugger: () => void openDebugger(),
+      onExportDiagnostics: () => void exportAppDiagnostics(),
+      onResetOnboarding: () => void resetOnboarding(),
+      busy,
+    };
+    return settingsProps;
+  };
 
   /* Only a branch that mounts an overlay may hold the lock or trap focus for
    * it: nothing counts on the boot screens, and within a workspace branch the
@@ -5837,7 +5854,7 @@ export default function App() {
           : adminContextState?.status === "loading"
             ? "Loading the administration context…"
             : null}
-        personalSettings={renderPersonalSettings("admin")}
+        personalSettingsProps={settingsPropsFor("admin")}
         profile={visibleOnboarding
           ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }
           : adminOttoContextQuery.data?.displayName
@@ -5934,14 +5951,24 @@ export default function App() {
   };
   return <div className={`workspace${bootRise ? " boot-rise" : ""}`}>
     <a className="skip-link" href="#work-os-main">Skip to content</a>
-    <SidebarNav
+    {view === "settings" ? <SettingsSidebar
+      active={settingsNav.active}
+      visiblePages={settingsNav.visiblePages}
+      query={settingsNav.query}
+      onQuery={settingsNav.setQuery}
+      onSelect={settingsNav.selectPage}
+      onBack={() => setView(lastNonSettingsView.current)}
+      hasPersonalRecord={!!visibleOnboarding}
+      displayName={visibleOnboarding?.profile.displayName}
+      avatarUrl={visibleOnboarding?.profile.avatarUrl}
+    /> : <SidebarNav
       activeView={view}
-      onNavigate={(nextView) => setView(nextView)}
+      onNavigate={navigateToView}
       onNewChat={startNewChat}
       onSignOut={() => { void logout(); }}
       onSwitchWorkspace={workSessionQuery.data?.role === "admin" ? () => setWorkspaceMode("admin") : undefined}
       switchLabel="Open administration"
-    />
+    />}
     <div className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{workSessionQuery.data?.role === "admin" && <button type="button" className="admin-switch-ghost" title="Open the administration workspace" onClick={() => setWorkspaceMode("admin")}><LayoutDashboard size={15} aria-hidden />Administration</button>}{signedIn && !syncBypass && <NotificationsBell
         memoryCandidates={memoryCandidateCount}
@@ -5960,7 +5987,7 @@ export default function App() {
         onRetry={() => void outstandingQuery.refetch()}
         admin={adminNotificationFeed}
         defaultTab="employee"
-      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
+      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => { navigateToView("settings"); settingsNav.selectPage("profile"); }}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       <div id="work-os-notification-region" className="notification-region" />
       <div id="work-os-main" className="skip-target" tabIndex={-1} />
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
@@ -6259,9 +6286,15 @@ export default function App() {
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onOpenToday={() => setView("day")} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
        {view === "settings" && (
-        <main className="page settings-page">
-           <p className="settings-lead">Personalize Work OS on this device and keep account, sync, and privacy controls in one calm place.</p>
-           {renderPersonalSettings("employee")}
+        <main className="page settings-page settings-workspace-page">
+          <SettingsContent
+            {...settingsPropsFor("employee")}
+            active={settingsNav.active}
+            visiblePages={settingsNav.visiblePages}
+            query={settingsNav.query}
+            onSelect={settingsNav.selectPage}
+            onQuery={settingsNav.setQuery}
+          />
         </main>
       )}
       {dockVisible && <ProgressComposer
@@ -6967,7 +7000,7 @@ export function ProgressComposer({ headerLeading, mode = "progress", displayName
   >
     {open ? <div className="chat-surface is-open" id="conversation-panel">
     <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
-      <header className="workos-chat-head">{headerLeading ?? <span className="conversation-pane-title">{MASCOT.name}</span>}<ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
+      <header className="workos-chat-head">{headerLeading ?? <span className="conversation-pane-title">{MASCOT.name}</span>}<ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Recaps" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
         {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">
           <section className={`focus-goal${goalCollapsed ? " is-collapsed" : ""}`} aria-labelledby="focus-goal-heading">

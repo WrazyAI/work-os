@@ -34,6 +34,20 @@ describe("page guide modal", () => {
     expect(markup).toContain(`src="${GUIDE_FILMS.day![0]!.poster}"`);
     expect(markup).toContain('aria-controls="page-guide-art"');
 
+    // Split view: the plate is the left column and the copy is the script
+    // beside it. The slate and caption are decorative; the film's wrapper is
+    // not, so the reduced-motion playback control stays reachable.
+    expect(markup).toContain('class="guide-screen"');
+    expect(markup).not.toContain('class="guide-screen" aria-hidden');
+    expect(markup).toContain('class="guide-screen-slate" aria-hidden="true"');
+    expect(markup).toContain('class="guide-screen-foot" aria-hidden="true"');
+    expect(markup).toContain('class="guide-screen-plate"');
+    expect(markup).toContain("Recorded in the app");
+    expect(markup).toContain("01 / 03");
+    expect(markup).toContain('class="guide-head"');
+    expect(markup).toContain('class="guide-steps"');
+    expect(markup).toContain('class="guide-modal-footer"');
+
     // The film is decorative to assistive technology: the steps state
     // everything it shows, in words, and that is the accessible path.
     const video = markup.slice(markup.indexOf("<video"));
@@ -111,6 +125,7 @@ describe("the workspace tour", () => {
     expect(markup).toContain("tour of the administration workspace");
     expect(markup).toContain("How Overview works");
     expect(markup).toContain('data-guide-view="admin_overview"');
+    expect(markup).toContain('class="guide-screen"');
     expect((markup.match(/class="guide-tour-rail"/g) ?? []).length).toBe(1);
     // Every stop is named in the rail, in the workspace's own order.
     for (const title of ["Overview", "People", "Tasks", "EOD Review", "Insights", "Evidence", "Settings"]) {

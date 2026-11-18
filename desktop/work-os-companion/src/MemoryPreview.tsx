@@ -64,7 +64,7 @@ export default function MemoryPreview() {
             style={{
               minHeight: 34, border: "1px solid var(--line)", borderRadius: 9, padding: "6px 12px",
               background: variant === entry ? "var(--ink)" : "transparent",
-              color: variant === entry ? "#f3f1e8" : "var(--ink)",
+              color: variant === entry ? "var(--paper)" : "var(--ink)",
               fontWeight: variant === entry ? 600 : 500,
             }}
           >{entry === "populated" ? "Populated" : "Empty"}</button>)}

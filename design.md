@@ -139,7 +139,7 @@ The desktop companion's dark variant is **Soft ash**: the same roles on a
 lighter graphite ladder so every surface step stays legible without glow.
 Reference values: canvas `#242527`, navigation `#292a2c`, paper `#303133`,
 raised `#393a3d`, inset `#414246`, line `#505256`, line-strong `#686b70`,
-ink `#f0f0ef`, ink-soft `#d2d3d6`, muted `#bfc0c3`, faint `#8f9298`, signal
+ink `#f0f0ef`, ink-soft `#d2d3d6`, muted `#bfc0c3`, faint `#b0b3b8`, signal
 `#a8f15b`, signal-deep `#8fd24a`, danger `#f09a93`, warning `#e3b15f`,
 observed `#8fbdd8`, focus `#b8e794`. The ladder is
 `navigation < paper < raised < inset`, with the canvas beneath it; a dialog is
@@ -150,7 +150,17 @@ a light-paper hue turning sandy on graphite. The web workspace keeps its own
 dark scope (§4.3); the two materials are reconciled by role, not by copying
 hex values.
 
-Known gaps: `--color-faint` (2.7:1 on paper) must not carry text.
+**Theme completeness.** Every surface, dialog, menu, and field follows the
+selected material; a light-only panel never appears inside Soft ash. The tool
+palette's paper is a paper, never an ink: `#fbfaf5` in the light material and
+the paper step in the dark material, with ink-on-signal reserved for text on
+signal green. Controls that render before a lazily loaded workspace chunk (the
+employee masthead's Administration switch) carry their material in the
+always-loaded sheet, so the first frame is styled before the admin bundle
+arrives.
+
+Known gaps: `--color-faint` (2.7:1 on paper) must not carry text in the light
+material; the dark faint step is `#b0b3b8` and passes on paper and inset.
 `--color-warning` (3.0:1 on white) still fails AA as text on light surfaces,
 and the signal focus outline is 1.3:1 on paper. The muted and danger roles now
 use text-safe steps: `--color-muted` passes on canvas and paper, and
@@ -403,11 +413,33 @@ appearance settings, and device sessions.
 
 ### 4.4 Developer diagnostics window
 
-The companion debugger (Scenarios, Live trace, Export) is an opt-in developer
-window. It is destroyed when closed and recreated on demand, so it holds no
-history and no subscriptions while closed. The Live trace tab releases its rows
-and listener when another tab is selected. Its tabs follow the peer-view contract
-in §8.13.
+The companion debugger is an opt-in developer window and a category workspace,
+not one scrolling page of controls. Its rail groups eight destinations —
+Overview, Presets, Session, Workday, and Companion under Scenario; Backend &
+writes under Safety; Live trace and Export under Diagnostics — and one category
+owns the content stage at a time. Overview states the master switch, the active
+preset, and a five-row summary (Preset, Session, Workday, Companion, Reach) that
+opens the category owning each value. Presets are grouped by scenario kind, not
+presented as one undifferentiated grid.
+
+The window opens at about 1000×800 with a 620×520 minimum so the rail and the
+content keep their own columns; below 760px the rail becomes one section picker
+instead of a second column. The rail follows §4.2: one roving tab stop, a quiet
+inset active destination, and ↑/↓ with Home/End. A fixed ink header carries the
+window identity, the risky-state chips, and the window controls; it is
+instrument chrome and does not follow the material. On Windows the header is
+the caption bar: the native frame is removed, the header is the drag region, and
+minimize, maximize/restore, and close sit at its trailing edge. macOS keeps its
+native traffic lights over the content and reserves their track in the header.
+Every field, panel, status, and button inside follows the selected material — a
+hard-coded white field is never allowed in the dark variant. A persistent action
+bar keeps Copy scenario JSON and Reset all overrides reachable from every
+category and states whether the active scenario is a preset or custom overrides.
+
+It is destroyed when closed and recreated on demand, so it holds no history and
+no subscriptions while closed. Selecting another category releases the Live
+trace rows and its listener. The tab strip's peer-view contract does not apply;
+the rail is a navigation list (§8.13).
 
 Rows are intentionally dense at 34px. This desktop-only developer surface is an
 exception to touch-sized controls; every action remains keyboard accessible and
@@ -688,9 +720,14 @@ not carry a plan-linked task row (the plan can exceed the day page), the plan
 item's recorded success criteria stand in as its subtasks and are labelled
 "Planned"; loaded task children always win over that fallback, so an edited
 task never shows a stale criteria list. The plan heading states how many
-items are recorded done. The strip's existing review and retry buttons retain
-their own actions; a visible details trigger supports keyboard access and the
-focus sentence remains a convenience press target. Current-day focus offers Edit
+items are recorded done. The plan's parent rows form one grouped surface — a
+single boundary with no per-row rules — so a long plan reads as a record rather
+than a stack of lines; each row keeps its disclosure and focus state. The dialog
+body is the scroll region: it spans the dialog's full width, the header and
+footer stay fixed, and its thin themed scrollbar sits at the dialog's edge
+rather than inside the content column. The strip's existing review and retry
+buttons retain their own actions; a visible details trigger supports keyboard
+access and the focus sentence remains a convenience press target. Current-day focus offers Edit
 focus, while historical focus is read-only. Escape, the close control, and a
 backdrop press dismiss the dialog and restore focus; long text wraps, the body
 scrolls within the viewport, and the header and footer stay put. The dialog
@@ -1482,7 +1519,13 @@ there is never more than one guide per page.
     one clip per step, both files on disk, and each chapter label matching its
     step title. A guide whose steps changed without a re-shoot fails the build.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
-  described by its promise. Its header names the speaker once, with the
+  described by its promise. It is a split view by default: the film plate is
+  the left column and the script — header, chapters, actions — is the right.
+  The plate sits on the companion's ink so the real, light interface reads as
+  something projected rather than another card; its slate names the source and
+  the current chapter, and its caption names the clip and its length. Below
+  880px the guide returns to one column in reading order: header, film,
+  (tour rail), chapters, actions. Its header names the speaker once, with the
   configured companion mark for sighted readers and the configured name for
   assistive technology, so a guide reads as the same companion the employee met
   in setup. It plays straight through on open: step one's clip runs and its end
@@ -1495,8 +1538,15 @@ there is never more than one guide per page.
   states that automatic guides are off and points at the `?` instead.
   - Hovering a step does not start it. Hover is how you read a list, not how you
     ask to watch six seconds of film.
-  - The film is `aria-hidden`: the step copy states everything the clip shows, in
-    words, and that is the accessible path. No meaning is film-only.
+  - The active chapter is stated in place by an inset surface, a hairline
+    border, and a filled mark, not by colour alone; the list stays a sequence
+    rather than a stack of competing cards. It never adds a rail beside a
+    content row: that marker belongs to the primary navigation only (§4.2).
+  - The footage is `aria-hidden`: the step copy states everything the clip shows,
+    in words, and that is the accessible path. No meaning is film-only. The
+    plate's slate and caption are part of that frame and are hidden with it; the
+    reduced-motion `Play this step` control is not, because it is the employee's
+    way into the clip.
 - **The tour** — `GuideTour` plays all five films as one pass, started either by
   the first guide a new workspace shows (`Show me the whole workspace`) or by
   `Replay the full tour` in Settings. Choosing a page in its rail navigates the
@@ -1504,10 +1554,11 @@ there is never more than one guide per page.
   carousel laid over it, and closing it leaves the employee on the last page it
   showed. It never changes page on its own; within a page its chapters advance as
   the page guide's do.
-- **Dismissal** — Escape, backdrop press, and the close control dismiss it; the
-  body is the only scroll region; focus lands inside on open and returns to the
-  `?` after. Below 560px the modal takes the viewport inset, and on the tour the
-  progress track is dropped before any page name is truncated.
+- **Dismissal** — Escape, backdrop press, and the close control dismiss it; in
+  the split view the chapter list is the only scroll region (in the narrow
+  layout it scrolls under the film); focus lands inside on open and returns to
+  the `?` after. Below 560px the modal takes the viewport inset, and on the tour
+  the progress track is dropped before any page name is truncated.
 - **Reduced motion** — nothing plays. The still frame stands in for the clip,
   every chapter stays selectable, and one control plays a chapter on request.
   Labels, order, and copy are unchanged.
@@ -1611,10 +1662,12 @@ Shortcut inventory:
 | Hold `Ctrl + M` | Hold-to-talk | System-wide in the companion; in the browser while the page has focus (§8.8) |
 | `Escape` | Dismiss the topmost menu, drawer, sheet, or modal and return focus to its trigger | Every detached surface (§8.3) |
 
-Peer views (tabs, the memory modal's tabs, the debugger's tabs) share one
-contract. The tablist is reachable through its selected tab. ←/→ move and
-activate, Home and End jump to the ends, and each tab's accessible name includes
-its count when it has one. Lists of rows use ↑/↓ and Home/End to move focus
+Peer views (tabs and the memory modal's tabs) share one contract. The tablist is
+reachable through its selected tab. ←/→ move and activate, Home and End jump to
+the ends, and each tab's accessible name includes its count when it has one.
+The debugger's category rail is a vertical navigation list: ↑/↓ move and
+activate, Home/End jump to the ends, and the active destination carries
+`aria-current="page"`. Lists of rows use ↑/↓ and Home/End to move focus
 between rows, and Enter expands. Radio groups use ←/→ with roving tabindex (§8.6).
 
 Focus is visible on every interactive element. A focus outline must reach 3:1
@@ -1836,6 +1889,33 @@ voices in a 164px rail.
   page aims its camera at the group it names by that group's own heading, so
   a group that moves, or a group that arrives, cannot leave the film showing
   the wrong band or filming empty canvas.
+
+### 8.18 Settings as a category workspace
+
+Settings is a category workspace, not one long page. While Settings is on
+screen, the Work OS sidebar becomes the Settings rail; **Back to app** returns
+to the previous workspace and restores the app rail. The rail carries one
+search field, the signed-in account's profile row, and grouped destinations:
+Account (Profile, Workday, Session, and administration's Recap follows), App
+(General, Appearance, Voice, Otto memory, Page guides), Workspace (Workspace
+status, Features, Members, Teams), Integrations (Connections, Field mappings,
+Blueprints), Data & privacy (Diagnostics, Reset), and About.
+
+Choosing a destination reveals one page in the stage: one title, one purpose
+line, and the existing label/detail/control group rows. Settings groups keep
+their one-label/one-content shape inside the page; the page title replaces the
+duplicated group heading. Search filters the destinations and offers matching
+pages as results. Arrow keys move through the rail with roving focus, and at
+narrow widths the rail becomes a top Back/search/section picker rather than a
+second column.
+
+The Profile page renders the profile form inline — Identity, Region & time,
+Workday, Privacy, and Work profile — using the same two-column section layout
+as the former modal. The masthead avatar opens Settings → Profile; the modal is
+not the entry point. Administration's workspace configuration is split the
+same way: Workspace status, Features, Members, Teams, Connections, Field
+mappings, and Blueprints are separate destination pages, each rendering its
+own card. Personal settings pages are shared by both workspaces.
 
 ### 8.17 The goal question and the suggested goal
 
@@ -2140,6 +2220,13 @@ prompt offers `Set today's goal` (the SOD `Plan your day` modal). Check-in
 prompts keep the tap-to-expand behavior alone. The action never replaces the
 tap target — both are one click away.
 
+The prompt bubble and the expanded attention card each carry a dismiss control.
+Dismissing silences that prompt for the local workday without hiding the record
+behind it: the EOD draft, the focus editor, and the recaps tab stay reachable.
+It re-arms on a genuinely new event: the next workday, a new plan revision for
+the goal, or a newer recap watermark for the queue. Check-ins keep their snooze;
+EOD, goal, and recap reminders are dismissible.
+
 The EOD alert opens ten minutes before the scheduled shift end and outranks a
 ready recap in the compact bubble: the mandatory wrap-up never hides behind an
 undecided recap, which stays reachable in the chat and the notifications
@@ -2417,7 +2504,7 @@ Each surface states its budgets, and visual QA checks them.
   100 rows in the DOM.
 - Page size: one request returns at most 100 rows.
 - A closed debugger window holds no subscriptions and no rows. Selecting another
-  tab releases the trace rows and its event listener.
+  category releases the trace rows and its event listener.
 - Diagnostic change notices target only the debugger window, never the main or
   avatar windows. Bursts coalesce to the latest sequence at most every 250ms; the
   trace pulls the rows it shows instead of receiving whole events.
@@ -2757,6 +2844,11 @@ directions, and ties break by title then id so the list never jitters. The
 sorted column's `th` carries `aria-sort` with an always-visible direction
 indicator, inactive columns reveal a quiet affordance on hover or keyboard
 focus, and the empty actions column is never sortable.
+
+The task record's title column takes the remaining measure: the card keeps its
+outer inset while the middle gutters tighten, the header rule alone separates
+the column labels, and the body dividers stay faint so the row content — not
+the rules — carries the structure.
 
 ### 16.3 Data and provenance
 

@@ -59,7 +59,7 @@ Types live under `src/modules/work-os/payroll/`; server behavior is flat `src/li
 |---|---|
 | `src/modules/work-os/payroll/contracts.ts`, `recap-policy.ts`; `src/modules/work-os/recap-review.ts` | browser-safe contracts, cutoff/labels, source-aware recap provenance; 1, 5 |
 | `src/lib/work-os-payroll-period.ts`, `-intervals.ts`, `-hours.ts` | period/date resolution, interval algebra, partition/rounding; 1, 4 |
-| `supabase/migrations/0075_work_payroll_review.sql`, `0076_work_payroll_recap_provenance.sql` | new org-scoped schema and additive source provenance; 2, 5 |
+| `supabase/migrations/0076_work_payroll_review.sql`, `0077_work_payroll_recap_provenance.sql` | new org-scoped schema and additive source provenance; 2, 5 |
 | `src/lib/work-os-payroll-provider.ts`, `-sources.ts`, `-freshness.ts` | verified provider adapter, scoped source manifest and local writer fence; 3, 7 |
 | `src/lib/work-os-payroll-store.ts`, `-runs.ts` | SQL transactions, revision/run/lease/checkpoint/publish; 2, 10 |
 | `src/lib/work-os-payroll-ai.ts`, `-vision.ts`, `-briefs.ts`, `-questions.ts` | single model-policy consumer, classification, cited text; 8, 9, 17 |
@@ -178,7 +178,7 @@ assert.throws(() => resolvePayrollPeriod('2026-11-02', 'UTC'));
 
 ### Task 2: Add tenant-safe payroll persistence and disposable fixtures
 
-**Files:** Create `supabase/migrations/0075_work_payroll_review.sql`, `src/lib/work-os-payroll-store.ts`, `test/helpers/work-os-payroll-fixture.mts`, `test/helpers/work-os-payroll-postgres.mts`, `test/work-os-payroll-schema.test.mts`; modify `test/work-os-migration.test.mjs`, `package.json`.
+**Files:** Create `supabase/migrations/0076_work_payroll_review.sql`, `src/lib/work-os-payroll-store.ts`, `test/helpers/work-os-payroll-fixture.mts`, `test/helpers/work-os-payroll-postgres.mts`, `test/work-os-payroll-schema.test.mts`; modify `test/work-os-migration.test.mjs`, `package.json`.
 
 **Interfaces:** Produces `withPayrollTransaction<T>(scope: PayrollScope, fn: (client: PoolClient) => Promise<T>): Promise<T>` and `assertPayrollOwner(client, scope, reviewId): Promise<void>`. Fixture exports `payrollFixture()` for real service SQL in PGlite and `withDisposablePayrollPostgres(fn)` for multi-client locks. No dependency on production env in ordinary tests.
 
@@ -244,7 +244,7 @@ assert.equal(calculatePayrollDay(sparseZeroCapture()).minutes.inactivity, 0);
 
 ### Task 5: Preserve source-aware recap provenance throughout the product
 
-**Files:** Create `supabase/migrations/0076_work_payroll_recap_provenance.sql`, `src/modules/work-os/recap-review.ts`, `test/work-os-payroll-recap-provenance.test.mts`; modify:
+**Files:** Create `supabase/migrations/0077_work_payroll_recap_provenance.sql`, `src/modules/work-os/recap-review.ts`, `test/work-os-payroll-recap-provenance.test.mts`; modify:
 
 - `src/lib/work-os-reviewed-recaps.ts`, `src/lib/work-os-activity-intervals.ts`, `src/lib/work-os-activity-interval-projection.ts`, `src/lib/work-os-next-steps.ts`;
 - `src/modules/work-os/admin-otto/contracts.ts`, `src/lib/work-os-admin-otto-{reads,summary,chat}.ts`, `src/lib/work-os-admin-overview.ts`, `src/lib/work-os-eod.ts`, `src/lib/work-os-eod-report.ts`;
@@ -287,7 +287,7 @@ assert.equal(await fixture.reviewVersionCount(), 1);
 
 ### Task 7: Capture historical source manifests and a writer-version fence
 
-**Files:** Create `src/lib/work-os-payroll-sources.ts`, `src/lib/work-os-payroll-freshness.ts`, `test/work-os-payroll-sources.test.mts`, `test/work-os-payroll-freshness.test.mts`; extend `0075_work_payroll_review.sql` while unshipped (otherwise next additive migration).
+**Files:** Create `src/lib/work-os-payroll-sources.ts`, `src/lib/work-os-payroll-freshness.ts`, `test/work-os-payroll-sources.test.mts`, `test/work-os-payroll-freshness.test.mts`; extend `0076_work_payroll_review.sql` while unshipped (otherwise next additive migration).
 
 **Interfaces:** `loadPayrollSources(scope: PayrollScope, period: PayrollPeriod, asOf: Date): Promise<PayrollSourceManifest>`, `buildPayrollDayInputs(manifest: PayrollSourceManifest, provider: PayrollProviderInput): PayrollDayInput[]`, `hashPayrollSources(manifest): string`, `loadPayrollSourceToken(client, scope): Promise<string>`, `verifyPayrollSourceToken(client, scope, expected): Promise<void>`.
 

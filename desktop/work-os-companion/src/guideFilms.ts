@@ -33,9 +33,9 @@ export const GUIDE_FILMS: Record<GuideView, GuideFilm[]> = {
     { file: "guides/insights-3.mp4", poster: "guides/insights-3.jpg", chapter: "Keep the labels", seconds: 5.1 },
   ],
   settings: [
-    { file: "guides/settings-1.mp4", poster: "guides/settings-1.jpg", chapter: "Workspace settings", seconds: 6.13 },
-    { file: "guides/settings-2.mp4", poster: "guides/settings-2.jpg", chapter: "This device", seconds: 4.23 },
-    { file: "guides/settings-3.mp4", poster: "guides/settings-3.jpg", chapter: "Workday", seconds: 4.6 },
+    { file: "guides/settings-1.mp4", poster: "guides/settings-1.jpg", chapter: "Find any setting", seconds: 7.67 },
+    { file: "guides/settings-2.mp4", poster: "guides/settings-2.jpg", chapter: "Profile in place", seconds: 7.8 },
+    { file: "guides/settings-3.mp4", poster: "guides/settings-3.jpg", chapter: "Device and workday", seconds: 11.17 },
   ],
   admin_overview: [
     { file: "guides/admin_overview-1.mp4", poster: "guides/admin_overview-1.jpg", chapter: "See who is working", seconds: 6.37 },
@@ -68,9 +68,9 @@ export const GUIDE_FILMS: Record<GuideView, GuideFilm[]> = {
     { file: "guides/admin_evidence-3.mp4", poster: "guides/admin_evidence-3.jpg", chapter: "Open a flagged frame", seconds: 3.47 },
   ],
   admin_settings: [
-    { file: "guides/admin_settings-1.mp4", poster: "guides/admin_settings-1.jpg", chapter: "Your settings first", seconds: 3.97 },
-    { file: "guides/admin_settings-2.mp4", poster: "guides/admin_settings-2.jpg", chapter: "Features and status", seconds: 4.03 },
-    { file: "guides/admin_settings-3.mp4", poster: "guides/admin_settings-3.jpg", chapter: "Members, teams, and connections", seconds: 5.87 },
+    { file: "guides/admin_settings-1.mp4", poster: "guides/admin_settings-1.jpg", chapter: "Your settings first", seconds: 5.07 },
+    { file: "guides/admin_settings-2.mp4", poster: "guides/admin_settings-2.jpg", chapter: "Features and status", seconds: 4.27 },
+    { file: "guides/admin_settings-3.mp4", poster: "guides/admin_settings-3.jpg", chapter: "Members, teams, and connections", seconds: 5.9 },
   ],
 };
 

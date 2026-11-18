@@ -1,0 +1,493 @@
+/* Settings is a sidebar takeover: the Work OS rail becomes the settings rail,
+   and the selected page renders directly in the stage. */
+:root {
+  --settings-sidebar-width: 248px;
+}
+
+.settings-workspace-page {
+  width: min(100%, 1100px);
+}
+
+.workspace:has(> .settings-sidebar) {
+  grid-template-columns: var(--settings-sidebar-width) minmax(0, 1fr);
+}
+
+.settings-sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  width: var(--settings-sidebar-width);
+  height: 100vh;
+  min-height: 100vh;
+  align-self: start;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 16px 12px 18px;
+  border-right: 1px solid var(--sidebar-line);
+  background: var(--sidebar-surface);
+  color: var(--sidebar-ink);
+}
+
+.settings-sidebar-head {
+  display: grid;
+  gap: 12px;
+  padding: 0 4px 14px;
+}
+
+.settings-back {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  font: 600 12px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.settings-back:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-ink);
+}
+
+.settings-back:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-search {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--sidebar-line);
+  border-radius: 10px;
+  background: var(--sidebar-surface-raised);
+  color: var(--sidebar-muted);
+}
+
+.settings-search:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent);
+}
+
+.settings-search input {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sidebar-ink);
+  font: 500 12px/1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  outline: none;
+}
+
+.settings-search input::placeholder {
+  color: var(--sidebar-muted);
+}
+
+.settings-search-clear {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+}
+
+.settings-search-clear:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-ink);
+}
+
+.settings-sidebar-nav {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-nav-group-label {
+  margin: 0 0 4px;
+  padding: 0 9px;
+  color: var(--sidebar-muted);
+  font: 750 9.5px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settings-nav-item {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  font: 600 12px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-ink);
+}
+
+.settings-nav-item.is-active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-ink);
+}
+
+.settings-nav-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-nav-profile {
+  gap: 4px;
+}
+
+.settings-profile-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sidebar-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-profile-row:hover {
+  background: var(--sidebar-hover);
+}
+
+.settings-profile-row.is-active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-ink);
+}
+
+.settings-profile-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-profile-row .profile-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 10px;
+}
+
+.settings-profile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-profile-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-profile-copy small {
+  color: var(--sidebar-muted);
+  font-size: 10px;
+}
+
+.settings-nav-about {
+  padding-top: 14px;
+  border-top: 1px solid var(--sidebar-line);
+}
+
+.settings-content-page {
+  width: min(100%, 940px);
+  padding-top: 8px;
+}
+
+.settings-content-head {
+  max-width: 680px;
+}
+
+.settings-content-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font: 750 10px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settings-content-head h2 {
+  margin: 5px 0 7px;
+  color: var(--ink);
+  font: 720 28px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.settings-content-head > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-content-body {
+  max-width: 760px;
+  margin-top: 24px;
+}
+
+/* The page title owns the page identity; group heads become quiet labels
+   above their rows instead of a second two-column shell. */
+.settings-content-body .settings-group {
+  display: block;
+  padding: 26px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+}
+
+.settings-content-body .settings-group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-content-body .settings-group-head {
+  padding: 0 0 10px;
+}
+
+.settings-content-body .settings-group-head h3 {
+  font-size: 13px;
+}
+
+.settings-content-body .settings-group-head small {
+  max-width: none;
+}
+
+.settings-content-body[data-hide-first-head="true"] > .settings-group:first-child > .settings-group-head {
+  display: none;
+}
+
+.settings-content-body .settings-voice {
+  padding-top: 0;
+}
+
+.settings-content-body .memory-summary {
+  padding: 26px 0 22px;
+}
+
+.settings-content-body .suggestion-summary {
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-search-results {
+  display: grid;
+  max-width: 760px;
+  gap: 6px;
+  margin-top: 24px;
+}
+
+.settings-result {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-result:hover {
+  background: var(--inset);
+}
+
+.settings-result:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-result-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--inset);
+  color: var(--ink);
+}
+
+.settings-result-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settings-result-copy strong {
+  font-size: 12px;
+}
+
+.settings-result-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-result-group {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.settings-empty {
+  display: grid;
+  max-width: 520px;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 34px;
+  color: var(--muted);
+}
+
+.settings-empty h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.settings-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-mobile-select {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --settings-sidebar-width: 220px;
+  }
+  .stage {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+  .settings-content-page {
+    max-width: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace:has(> .settings-sidebar) {
+    display: block;
+  }
+  .settings-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 14px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--sidebar-line);
+  }
+  .settings-sidebar-head {
+    padding-bottom: 0;
+  }
+  .settings-sidebar-nav {
+    display: none;
+  }
+  .settings-mobile-select {
+    display: grid;
+    gap: 6px;
+  }
+  .settings-mobile-select > span {
+    color: var(--sidebar-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .settings-mobile-select select {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--sidebar-line);
+    border-radius: 10px;
+    background: var(--sidebar-surface-raised);
+    color: var(--sidebar-ink);
+    font: 600 12px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  }
+  .settings-content-page {
+    padding-top: 0;
+  }
+  .settings-content-head h2 {
+    font-size: 24px;
+  }
+  .settings-result {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .settings-result-group {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .stage {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-item,
+  .settings-search,
+  .settings-result,
+  .settings-profile-row {
+    transition: none;
+  }
+}
+
+/* One administration settings page at a time. The cards keep their one
+   component and query ownership; the active page only chooses which card is
+   on screen. */
+.admin-grid[data-active-card="status"] .admin-card:not(.admin-card-status),
+.admin-grid[data-active-card="features"] .admin-card:not(.admin-card-features),
+.admin-grid[data-active-card="members"] .admin-card:not(.admin-card-members),
+.admin-grid[data-active-card="teams"] .admin-card:not(.admin-card-teams),
+.admin-grid[data-active-card="connections"] .admin-card:not(.admin-card-connections),
+.admin-grid[data-active-card="mappings"] .admin-card:not(.admin-card-mappings),
+.admin-grid[data-active-card="blueprints"] .admin-card:not(.admin-card-blueprints) {
+  display: none;
+}
+.admin-grid[data-active-card]:not([data-active-card="all"]):not([data-active-card="connections"]):not([data-active-card="mappings"]) .admin-band {
+  display: none;
+}

@@ -64,7 +64,7 @@ html[data-mascot-size="small"] .avatar-compact .avatar-day-time {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--surface-elevated, #fbfaf5);
+  background: var(--surface-raised);
 }
 .settings-preview-card h4 {
   margin: 0;

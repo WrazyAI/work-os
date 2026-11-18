@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -233,7 +233,7 @@
       "id": "admin-otto-motion-eod-document",
       "type": "feature",
       "summary": "Admin Otto shows what it is doing while it works, streams the reply, and renders submitted EOD reports as readable documents.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion \u2192 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion → 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
     },
     {
       "id": "employee-inapp-otto-view-switch",
@@ -251,7 +251,7 @@
       "id": "admin-record-time-and-evidence-frames",
       "type": "fix",
       "summary": "A teammate's admin record shows recorded time and update counts again, Worktivity evidence shows its retained frame, and reports read as one tidy list.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` \u2192 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` → 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
     },
     {
       "id": "insights-loads-after-pg-date-normalization",
@@ -263,7 +263,7 @@
       "id": "scroll-past-lists-and-tool-tables",
       "type": "fix",
       "summary": "The mouse wheel keeps moving the page when the pointer is over a task table, list, or Otto tool card.",
-      "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0\u2192400px, the in-app Otto approval card 0\u2192300px, the plan review body 200\u2192500px, and the Tasks page to its limit."
+      "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0→400px, the in-app Otto approval card 0→300px, the plan review body 200→500px, and the Tasks page to its limit."
     },
     {
       "id": "plan-build-refine-spinners-and-single-delete-check",
@@ -281,7 +281,7 @@
       "id": "employee-unified-task-finder",
       "type": "feature",
       "summary": "Find tasks across all views with search, status pills and dates in one window; compact search, calendar and add controls keep column labels clear.",
-      "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED\u2192GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search\u2192status\u2192dates\u2192drawer. Server migration0073 and API deployment remain pending before installer publication."
+      "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED→GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search→status→dates→drawer. Server migration0073 and API deployment remain pending before installer publication."
     },
     {
       "id": "focus-plan-hierarchy-and-motion",
@@ -348,14 +348,86 @@
       "type": "feature",
       "summary": "People who work fixed days with flexible hours can choose that setup during onboarding, without shift times or an hours target; an administrator reviews it.",
       "verification": "7eb693f1 plus flexible-arrangement revision: focused arrangement/review/onboarding/workday/screenshot tests 92/92, PGlite review tests 6/6, root typecheck clean; final full-suite and rendered checks recorded before release."
+    },
+    {
+      "id": "soft-ash-dark-surface-contrast",
+      "type": "fix",
+      "summary": "The Soft ash theme keeps dashboard, evidence, guide, settings, EOD, and Otto chat surfaces readable; hover and disabled states no longer flash white.",
+      "verification": "Branch codex/theme-contrast-fixes: themeSurfaceContrast 13/13; companion 223 files/1972 tests; companion typecheck and production build; Work OS 1329 tests with 1318 pass, 0 fail, 11 skipped; rendered dark and light screenshots at 1440 and 420 for the dashboard count hover, completion evidence, memory band, full tour, EOD earlier-day hover, activity card, floating task footer and receipt, and agenda card; computed dark ink and hover steps confirmed on each surface."
+    },
+    {
+      "id": "onboarding-dark-mode",
+      "type": "fix",
+      "summary": "Onboarding stays fully dark in dark mode, with readable fields, labels, selected workdays, and consent.",
+      "verification": "Local companion preview: rendered all five setup steps in light and dark; dark text contrast 6.7-18.4:1 on the setup panel; theme contrast suite 8/8; light-mode layout unchanged."
+    },
+    {
+      "id": "admin-panel-quieter-header-and-task-record",
+      "type": "fix",
+      "summary": "Administration pages drop the repeated “Work OS · Administration” line, and the organization task list gives titles more room with quieter row rules.",
+      "verification": "Rendered ?preview-admin and ?preview-admin&section=tasks at 1004 and 1280 in Light and Dark: no eyebrow text remains on any section, the Task column grows 170→224px at 1004px, and the header rule is the only strong table line. Companion typecheck clean; companion 222 files/1962 tests pass."
+    },
+    {
+      "id": "focus-plan-dialog-grouped-list",
+      "type": "fix",
+      "summary": "The Today’s focus dialog’s plan reads as one grouped list with a thin scrollbar at the dialog edge instead of a stack of rules.",
+      "verification": "Rendered ?preview-tasks&many at 1280x900, 1004x430, and 560x820 in Light and Dark: no per-row borders, symmetric 39px/39px content insets with a 10px edge scrollbar, expanded subtasks and keyboard focus intact. Companion typecheck clean; companion 222 files/1962 tests pass."
+    },
+    {
+      "id": "floating-eod-action-contrast",
+      "type": "fix",
+      "summary": "The floating companion’s EOD shortcut stays dark-on-green in every theme, so it remains readable in dark mode.",
+      "verification": "Dark-theme render of ?window=avatar&avatar-fixture=eod-bubble: .avatar-prompt-action contrast 1.20:1 before, 11.27:1 after (ink-on-signal #1d2815 on signal #a8f15b); bubble 15.54:1, body 10.62:1, elapsed pill 15.36:1. themeSurfaceContrast 14/14; AvatarPromptBubble 3/3."
+    },
+    {
+      "id": "settings-sidebar-workspace",
+      "type": "feature",
+      "summary": "Settings uses its own sidebar in both workspaces, with search, one page at a time, and an inline Profile page; Back to app restores the app sidebar.",
+      "verification": "Branch codex/settings-subpages: themeSurfaceContrast 13/13; companion 224 files/1982 tests, typecheck, and production build; Work OS 1352 tests with 1341 pass, 0 fail, 11 skipped; rendered employee and admin Settings at 1440/420 in dark and light, including the sidebar takeover, Back to app, search results, the inline Profile form, and the polished profile fields; AdminSettingsWorkspace 3/3 and SettingsWorkspace 5/5."
+    },
+    {
+      "id": "admin-switch-launch-styling",
+      "type": "fix",
+      "summary": "The Administration switch looks right from the moment Work OS opens instead of appearing as a plain button until it is clicked.",
+      "verification": "Moved the switch material from the lazily loaded admin.css into workspace-redesign.css and pinned it in themeSurfaceContrast. Companion 223 files/1979 tests and typecheck clean; rendered the employee masthead at first paint."
+    },
+    {
+      "id": "companion-theme-audit",
+      "type": "fix",
+      "summary": "Dark mode covers every page and dialog, and light-mode review cards and tool cards use the selected theme instead of light-only panels.",
+      "verification": "Playwright audit of 51 preview routes plus 9 interactions in light and dark (102 captures) with an automated contrast scan: production surfaces report zero failures; the remaining findings are the dev-only Mascot Lab and TaskDesignGallery previews and the visually clipped workday-details trigger. Rendered EOD raw, planning Loom, notifications, carry-over, task menu, memory, settings, insights, admin pages, and the light batch card. Companion 223 files/1979 tests; typecheck clean."
+    },
+    {
+      "id": "recaps-tab-labels-and-tool-card-corners",
+      "type": "fix",
+      "summary": "The in-app and floating companion tabs that show recaps are now named Recaps, and tool cards stay rounded in dark mode.",
+      "verification": "Companion 225 files/1996 tests, typecheck clean; Work OS typecheck and desktop-static pass. Playwright dark/light renders: in-app Chat/Recaps, floating Chat/Recaps, .chat-task-card computed border-radius 16px, .goal-card 9.97:1 dark / 16.19:1 light, goal textarea 8.8:1 dark, placeholder 5.52:1; Recaps panel hairlines resolve var(--line)."
+    },
+    {
+      "id": "guide-split-view-and-settings-film",
+      "type": "feature",
+      "summary": "Page guides open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings guides show the new Settings rail and inline profile.",
+      "verification": "Re-shot the Settings and administration Settings films from the offline film build at 1000×500 H.264 (settings 7.67/7.80/11.17s; admin 5.07/4.27/5.90s). Guide assets total 7.91 MiB, inside the 8 MiB budget. Companion 225 files/1998 tests, typecheck, and production build pass; Work OS suite 1352 tests with 1341 pass, 0 fail, 11 skipped. Rendering: split modal at 1440×900, 900×800, 420×820, and 420×600, light and dark; reduced-motion still with Play this step; tour split with its page rail; arrow-key chapters and Escape focus restore checked through the real modal."
+    },
+    {
+      "id": "dismissible-recap-eod-goal-prompts",
+      "type": "feature",
+      "summary": "Recap, EOD, and goal reminders now have a dismiss control in the floating bubble and the expanded chat, and return only for a genuinely new event.",
+      "verification": "Companion 225 files/2004 tests, typecheck clean; Work OS typecheck, surface and desktop-static pass. Playwright dark/light: EOD, agenda, and recap bubbles dismiss to 0, persist across reload, and the expanded EOD card dismisses; stored tokens eod:2026-11-18, agenda:2026-11-18::, recap:2026-11-18:. Pure tests cover next-day, new plan revision, and newer-recap-watermark re-arm."
+    },
+    {
+      "id": "recap-evidence-retries-and-account-fencing",
+      "type": "fix",
+      "summary": "Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.",
+      "verification": "Branch codex/recap-reliability-plan at 44ab8072: Work OS typecheck and full suite 1407 tests/1396 pass/0 fail/11 opt-in PG skipped; focused backend 110/110; companion 225 files/2003 tests, typecheck, and production build; Webpack production build; changed-file ESLint 0 errors; six rendered desktop/narrow fixtures with no overflow or page errors. Recorded in docs/work-os-recap-verification.md."
     }
   ],
   "emergency": null,
   "operatorOverride": {
-    "version": "0.5.33",
-    "updateId": "soft-ash-theme-across-companion",
+    "version": "0.5.37",
+    "updateId": "dismissible-recap-eod-goal-prompts",
     "approvedBy": "operator",
-    "reason": "The operator explicitly requested the merged Soft ash theme be released now for immediate installation and verification, ahead of the five-outcome threshold.",
-    "approvedAt": "2026-11-16"
+    "reason": "The operator asked for dismiss controls on the persistent recap, EOD, and goal prompts.",
+    "approvedAt": "2026-11-18"
   }
 }

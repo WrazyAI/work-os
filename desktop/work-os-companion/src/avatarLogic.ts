@@ -69,6 +69,62 @@ export function bubbleAction(kind: AvatarPromptKind): { kind: BubbleActionKind; 
   return null;
 }
 
+/** Prompt kinds an employee may dismiss. Check-ins keep their snooze because
+ * they are a workday obligation; the EOD, agenda, and recap reminders are
+ * navigational prompts whose records stay reachable after dismissal. */
+export type DismissiblePromptKind = "recap" | "eod" | "agenda";
+
+/** One device-local dismissal. `day` scopes it to the local workday; `token`
+ * names the event it silenced, so a genuinely new event re-arms the prompt. */
+export type PromptDismissals = Partial<Record<DismissiblePromptKind, { day: string; token: string }>>;
+
+/** The event identity a dismissal is scoped to. EOD and agenda are per day;
+ * the agenda also re-arms on a new plan revision, and the recap queue uses the
+ * newest recap watermark so reviewing an older queue never re-arms it. */
+export function promptDismissalToken(
+  kind: DismissiblePromptKind,
+  input: { day: string; recapWatermark?: string | null; planRevision?: number | null; planIntent?: string | null },
+): string {
+  if (kind === "recap") return `recap:${input.day}:${input.recapWatermark ?? ""}`;
+  if (kind === "eod") return `eod:${input.day}`;
+  return `agenda:${input.day}:${input.planRevision ?? ""}:${(input.planIntent ?? "").trim()}`;
+}
+
+/** Whether the prompt is still silenced for this workday. A recap dismissal
+ * uses the watermark: a newer recap re-arms it, while an older pending queue
+ * (after the newest recap is approved) stays dismissed. */
+export function isPromptDismissed(
+  dismissals: PromptDismissals,
+  kind: DismissiblePromptKind,
+  token: string,
+  day: string,
+): boolean {
+  const entry = dismissals[kind];
+  if (!entry || entry.day !== day) return false;
+  if (kind !== "recap") return entry.token === token;
+  const prefix = `recap:${day}:`;
+  const current = token.startsWith(prefix) ? token.slice(prefix.length) : "";
+  const dismissed = entry.token.startsWith(prefix) ? entry.token.slice(prefix.length) : "";
+  // No watermark on either side still means the same day's queue; a later
+  // watermark is a genuinely new recap and re-arms the prompt.
+  return current <= dismissed;
+}
+
+/** Record a dismissal, keeping only the entries for the current workday. */
+export function dismissPrompt(
+  dismissals: PromptDismissals,
+  kind: DismissiblePromptKind,
+  token: string,
+  day: string,
+): PromptDismissals {
+  const next: PromptDismissals = {};
+  for (const [key, value] of Object.entries(dismissals) as Array<[DismissiblePromptKind, { day: string; token: string }]>) {
+    if (value.day === day) next[key] = value;
+  }
+  next[kind] = { day, token };
+  return next;
+}
+
 /** Clears only the locally displayed due state after the server confirms an
  * employee response. The next poll remains the authoritative schedule. */
 export function clearRecordedUpdatePrompt<T extends CompanionDayFacts>(facts: T): T {
@@ -323,14 +379,17 @@ export function avatarBubble(input: {
   promptDue: boolean;
   /** An approved recap's suggestions are drafting or waiting for a decision. */
   nextSteps?: boolean;
+  /** The current prompt was dismissed for this workday: skip it and let the
+   * next bubble (processing, recap, next steps) take the compact slot. */
+  promptDismissed?: boolean;
 }): "processing" | "next-steps" | "recap" | "prompt" | null {
-  if (input.eodDue) return "prompt";
+  if (input.eodDue && !input.promptDismissed) return "prompt";
   if (input.preparing) return "processing";
   // The suggestions belong to the recap the employee just approved: they take
   // the bubble ahead of a newer prompt, and never open the panel by themselves.
   if (input.nextSteps) return "next-steps";
   if (input.recapReady) return "recap";
-  if (input.promptDue) return "prompt";
+  if (input.promptDue && !input.promptDismissed) return "prompt";
   return null;
 }
 

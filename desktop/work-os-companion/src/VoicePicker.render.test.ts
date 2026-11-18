@@ -43,10 +43,10 @@ describe("choosing how Otto reads to you", () => {
   it("is reachable from the voice setting, saved and announced to the companion", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     // The picker lives in the shared personal settings; the app owns the state.
-    const personal = readFileSync(new URL("./PersonalSettings.tsx", import.meta.url), "utf8");
-    expect(personal).toContain("<VoicePicker value={recapVoice} onChange={onRecapVoice} />");
-    expect(app).toContain("recapVoice={recapVoice}");
-    expect(app).toContain("onRecapVoice={(next) => void chooseRecapVoice(next)}");
+    const settings = readFileSync(new URL("./settingsSections.tsx", import.meta.url), "utf8");
+    expect(settings).toContain("<VoicePicker value={props.recapVoice} onChange={props.onRecapVoice} />");
+    expect(app).toContain("recapVoice,");
+    expect(app).toContain("onRecapVoice: (next: string) => void chooseRecapVoice(next)");
     expect(app).toContain("await secureState.saveSettings({ recapVoice: next });");
     expect(app).toContain("void emit(RECAP_VOICE_EVENT, { recapVoice: next });");
     const avatar = readFileSync(new URL("./AvatarApp.tsx", import.meta.url), "utf8");

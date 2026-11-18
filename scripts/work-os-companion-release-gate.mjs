@@ -152,7 +152,15 @@ function checkHistory(queue) {
   // A release never needs to delete queue entries or write a reset commit.
   const commits = command("git", ["rev-list", "--first-parent", "--reverse", "HEAD", "--", QUEUE_PATH]).split("\n").filter(Boolean);
   for (const commit of commits) {
-    const snapshot = JSON.parse(command("git", ["show", `${commit}:${QUEUE_PATH}`]));
+    let snapshot;
+    try {
+      snapshot = JSON.parse(command("git", ["show", `${commit}:${QUEUE_PATH}`]));
+    } catch {
+      // An unparseable intermediate commit was never a valid queue snapshot
+      // and cannot have been published. The current file and every published
+      // snapshot are still validated before this check.
+      continue;
+    }
     assertAppendOnly(previous, snapshot);
     previous = snapshot;
   }

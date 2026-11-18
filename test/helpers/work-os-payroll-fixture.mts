@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fixture, org, otherOrg, person, otherPerson } from "./work-os-admin-otto-fixture.mts";
 export { org, otherOrg, person, otherPerson };
-export const payrollMigration = () => readFile(new URL("../../supabase/migrations/0075_work_payroll_review.sql", import.meta.url), "utf8");
+export const payrollMigration = () => readFile(new URL("../../supabase/migrations/0076_work_payroll_review.sql", import.meta.url), "utf8");
 
 /** Real SQL, isolated memory DB. This fixture cannot prove row-lock races. */
 export async function payrollFixture() {

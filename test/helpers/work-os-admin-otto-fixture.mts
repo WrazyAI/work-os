@@ -78,7 +78,7 @@ values ('${interval}', '${org}', '${person}', 'Review work', 'Reviewed the queue
 export const migration = () => readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8");
 /** Source-aware recap provenance is additive and required by every review
  * writer, so the shared service fixture applies it with 0065. */
-export const provenanceMigration = () => readFile(new URL("../../supabase/migrations/0076_work_payroll_recap_provenance.sql", import.meta.url), "utf8");
+export const provenanceMigration = () => readFile(new URL("../../supabase/migrations/0077_work_payroll_recap_provenance.sql", import.meta.url), "utf8");
 
 export async function fixture() {
   const db = new PGlite();

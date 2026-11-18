@@ -46,7 +46,9 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * device, appearance, or guide preferences. The shell's node also carries the
  * account's recap-follow group, which stays present without a personal
  * workday record; this page only hosts it above the workspace configuration. */
-export default function SettingsPage({ personalSettings }: { personalSettings?: ReactNode }) {
+export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "mappings" | "blueprints";
+
+export default function SettingsPage({ personalSettings, activeCard }: { personalSettings?: ReactNode; activeCard?: AdminSettingsCardId }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [memberEmail, setMemberEmail] = useState("");
@@ -131,12 +133,13 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
   const teamOptions = teams.map((team) => ({ value: String(team.id), label: String(team.name ?? "Team") }));
 
   return (
-    <div className="admin-grid">
+    <div className="admin-grid" data-active-card={activeCard ?? "all"}>
       <h2 className="sr-only">Workspace settings</h2>
       {personalSettings ? <div className="admin-personal-settings">{personalSettings}</div> : null}
       {error ? <Notice tone="err">{(error as Error).message}</Notice> : null}
 
       <AdminCard
+        className="admin-card-status"
         icon={ShieldCheck}
         title="Workspace status"
         detail="Schema readiness and the workspace database"
@@ -152,7 +155,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
         )}
       </AdminCard>
 
-      <AdminCard icon={PlugZap} title="Features" detail="One switch per workspace capability; changes apply to every member">
+      <AdminCard className="admin-card-features" icon={PlugZap} title="Features" detail="One switch per workspace capability; changes apply to every member">
         <ul className="admin-feature-list">
           {FEATURES.map((feature) => (
             <li key={feature.key}>
@@ -172,7 +175,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
         </ul>
       </AdminCard>
 
-      <AdminCard icon={Users} title="Members" detail={`${memberships.length} member${memberships.length === 1 ? "" : "s"} · roles decide which workspace each person can open`}>
+      <AdminCard className="admin-card-members" icon={Users} title="Members" detail={`${memberships.length} member${memberships.length === 1 ? "" : "s"} · roles decide which workspace each person can open`}>
         <div className="admin-inline-fields">
           <TextField label="Email" value={memberEmail} onChange={setMemberEmail} ariaLabel="New member email" placeholder="teammate@company.com" />
           <SelectField
@@ -233,7 +236,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
         {action.error ? <Notice tone="err">{(action.error as Error).message}</Notice> : null}
       </AdminCard>
 
-      <AdminCard icon={UsersRound} title="Teams" detail="Teams scope what managers can review and what the planning surfaces group">
+      <AdminCard className="admin-card-teams" icon={UsersRound} title="Teams" detail="Teams scope what managers can review and what the planning surfaces group">
         <div className="admin-inline-fields">
           <TextField label="New team" value={teamName} onChange={setTeamName} ariaLabel="New team name" placeholder="Team name" />
           <AdminButton
@@ -275,7 +278,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
       </AdminCard>
 
       <div className="admin-band">
-        <AdminCard icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
+        <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
           {connections.isLoading ? (
             <Skeleton className="h-20" />
           ) : (connections.data?.connections ?? []).length ? (
@@ -293,7 +296,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
           <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
         </AdminCard>
 
-        <AdminCard icon={Cable} title="Field mappings" detail="How provider fields land in the task record">
+        <AdminCard className="admin-card-mappings" icon={Cable} title="Field mappings" detail="How provider fields land in the task record">
           {mappings.isLoading ? (
             <Skeleton className="h-20" />
           ) : (mappings.data?.mappings ?? []).length ? (
@@ -310,7 +313,7 @@ export default function SettingsPage({ personalSettings }: { personalSettings?: 
         </AdminCard>
       </div>
 
-      <AdminCard icon={PlugZap} title="Blueprints" detail="Reusable task templates the workspace can generate from" padded={false}>
+      <AdminCard className="admin-card-blueprints" icon={PlugZap} title="Blueprints" detail="Reusable task templates the workspace can generate from" padded={false}>
         {(blueprints.data?.blueprints ?? []).length ? (
           <div className="admin-table-wrap">
             <table className="admin-table">

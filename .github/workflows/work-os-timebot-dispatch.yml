@@ -1,0 +1,35 @@
+name: Work OS Cosmos timebot dispatch
+
+# Safety net for the #timebot post queue. The attendance-observe route flushes
+# inline so a clock-in appears in Cosmos immediately; this run drains anything
+# that was left behind by a failed inline send, a restart, or Cosmos downtime.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: work-os-timebot-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Drain pending #timebot notifications
+        env:
+          WORK_OS_BASE_URL: ${{ secrets.WORK_OS_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$WORK_OS_BASE_URL"
+          test -n "$CRON_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            --header "Content-Type: application/json" \
+            --data '{"limit":20}' \
+            "${WORK_OS_BASE_URL%/}/api/work-os/integrations/cosmos/timebot/dispatch"

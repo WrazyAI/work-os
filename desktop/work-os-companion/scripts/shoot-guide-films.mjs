@@ -35,7 +35,11 @@
  * Usage:
  *   node scripts/shoot-guide-films.mjs                 # every guide
  *   node scripts/shoot-guide-films.mjs day review      # only these guides
+ *   node scripts/shoot-guide-films.mjs settings --clip=2  # one chapter
  *   node scripts/shoot-guide-films.mjs --keep-frames   # leave the raw frames
+ *
+ * `FILM_CRF` overrides the encoder's quality target for a re-shoot; the
+ * generated manifest records the encoded length either way.
  */
 
 import { chromium } from "playwright";
@@ -69,6 +73,8 @@ const TAIL_MS = 420;
 
 const args = process.argv.slice(2);
 const keepFrames = args.includes("--keep-frames");
+/** Re-shoot one chapter without re-rendering the rest of its guide. */
+const onlyClip = args.find((arg) => arg.startsWith("--clip="))?.slice("--clip=".length) ?? null;
 const wanted = args.filter((arg) => !arg.startsWith("--"));
 const guides = (wanted.length ? wanted : Object.keys(GUIDE_SHOTS)).filter((id) => GUIDE_SHOTS[id]);
 
@@ -211,28 +217,40 @@ async function compile(page, clip) {
 
   hold(clip.hold ?? LEAD_MS);
 
-  const aim = async (selector, { focus, dx = 0, dy = 0 } = {}) => {
+  /**
+   * A pointer target may not exist yet. Search results, a page a rail click
+   * reveals, and a dialog a button opens all arrive after the click that makes
+   * them — but the timeline is compiled before a single frame is drawn. Those
+   * targets are recorded as a selector and resolved on the first frame of their
+   * approach, exactly the way a camera shot of the same thing is.
+   */
+  let approachTo = null;
+
+  const aim = async (selector) => {
     if (typeof selector === "object") {
       pointerPage = null;
       pointerScreen = { x: selector.x, y: selector.y };
+      approachTo = null;
       return;
     }
     const box = await page.evaluate((value) => window.__film.pageBox(value), selector);
-    if (!box) throw new Error(`pointer target not found: ${selector}`);
-    pointerPage = { x: box.cx, y: box.cy };
-    void focus;
-    void dx;
-    void dy;
+    approachTo = box ? { page: { x: box.cx, y: box.cy } } : { resolve: selector };
+    pointerPage = box ? { x: box.cx, y: box.cy } : null;
   };
 
   const approach = (ms) => {
-    if (pointerPage === null || ms <= 0) return;
-    const to = screenFor(pointerPage, camera);
-    // The page anchor travels with the segment so the pointer keeps riding
-    // whatever it is resting on after the approach has finished.
-    segments.push({ kind: "pointer", start: now, end: now + ms, from: { ...pointerScreen }, to, page: pointerPage });
+    if (!approachTo || ms <= 0) return;
+    if (approachTo.page) {
+      const to = screenFor(approachTo.page, camera);
+      // The page anchor travels with the segment so the pointer keeps riding
+      // whatever it is resting on after the approach has finished.
+      segments.push({ kind: "pointer", start: now, end: now + ms, from: { ...pointerScreen }, to, page: approachTo.page });
+      pointerScreen = to;
+    } else {
+      segments.push({ kind: "pointer", start: now, end: now + ms, from: { ...pointerScreen }, to: null, resolve: approachTo.resolve });
+    }
     now += ms;
-    pointerScreen = to;
+    approachTo = null;
   };
 
   for (const [index, op] of clip.shots.entries()) {
@@ -274,6 +292,23 @@ async function compile(page, clip) {
     if (op.hover !== undefined) {
       await aim(op.hover, op);
       approach(op.ms ?? 620);
+      continue;
+    }
+    if (op.type !== undefined) {
+      // Typing is a real press, then real key events on the page's own clock.
+      // The interval is part of the shot: a field that fills itself reads as a
+      // mock, while characters arriving at a hand's pace read as an action.
+      const { selector, text, interval = 55, after = 900 } = op.type;
+      const chars = [...text];
+      await aim(selector, op);
+      approach(op.ms ?? 620);
+      events.push({ kind: "press", at: now });
+      events.push({ kind: "click", at: now + PRESS_MS, selector, index });
+      const start = now + PRESS_MS + 90;
+      chars.forEach((char, charIndex) => {
+        events.push({ kind: "type", at: start + charIndex * interval, text: char });
+      });
+      hold(PRESS_MS + 90 + chars.length * interval + after);
       continue;
     }
     if (op.wait !== undefined) {
@@ -363,6 +398,22 @@ async function render(page, timeline, dir) {
 
     const camera = cameraAt(timeline, at);
 
+    // A pointer segment aimed at something the page had not built yet is
+    // measured here, on its first frame, and then travels normally.
+    for (const segment of timeline.segments) {
+      if (segment.kind !== "pointer" || segment.to || !segment.resolve || at < segment.start) continue;
+      const box = await page.evaluate((selector) => window.__film.pageBox(selector), segment.resolve);
+      if (!box) throw new Error(`pointer target never appeared: ${segment.resolve}`);
+      const pagePoint = { x: box.cx, y: box.cy };
+      // The pointer is wherever the previous segment left it when this
+      // approach begins. A deferred segment has no compile-time start point;
+      // taking the stale one would make the cursor jump back to the input
+      // before travelling to a result it already reached.
+      segment.from = { ...pointerAt(timeline, segment.start, cameraAt(timeline, segment.start)) };
+      segment.page = pagePoint;
+      segment.to = screenFor(pagePoint, camera);
+    }
+
     // Perform any input that has come due, before the frame is drawn, so the
     // picture shows what the interface did about it.
     while (fired < timeline.events.length && timeline.events[fired].at <= at) {
@@ -374,6 +425,8 @@ async function render(page, timeline, dir) {
         await page.mouse.down();
         await page.mouse.up();
         clickResults.push({ step: event.index, selector: event.selector, at: Math.round(at) });
+      } else if (event.kind === "type") {
+        await page.keyboard.type(event.text);
       }
       fired += 1;
     }
@@ -486,7 +539,7 @@ async function capture(browser, guideId, clipId, clip) {
     "-framerate", String(OUTPUT_FPS),
     "-i", resolve(staged, "f%05d.jpg"),
     "-vf", `scale=${FRAME.width}:${FRAME.height}:flags=lanczos`,
-    "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p",
+    "-c:v", "libx264", "-preset", "slow", "-crf", process.env.FILM_CRF ?? "24", "-pix_fmt", "yuv420p",
     "-g", String(OUTPUT_FPS * 2),
     "-movflags", "+faststart",
     out,
@@ -530,6 +583,7 @@ let failed = false;
 
 for (const guideId of guides) {
   for (const [clipId, clip] of Object.entries(GUIDE_SHOTS[guideId])) {
+    if (onlyClip && clipId !== onlyClip) continue;
     process.stdout.write(`  ${guideId}/${clipId} … `);
     try {
       const result = await capture(browser, guideId, clipId, clip);

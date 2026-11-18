@@ -70,6 +70,20 @@
   color: var(--ob-ink-soft);
 }
 
+.onboarding-workspace input[type="checkbox"],
+.onboarding-workspace input[type="radio"] {
+  accent-color: var(--ob-signal-deep);
+}
+
+/* The timezone field sits outside the two-column grid; keep its label above
+   the control instead of letting both inline boxes collide. */
+.onboarding-workspace .timezone-combobox {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 340px);
+  margin-top: 16px;
+}
+
 .onboarding-workspace input:not([type="checkbox"]):not([type="radio"]),
 .onboarding-workspace select {
   height: 46px;

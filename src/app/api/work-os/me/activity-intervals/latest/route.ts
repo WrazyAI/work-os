@@ -18,7 +18,7 @@ export async function GET(req: Request) {
       feature: "employee_companion",
     });
     if (auth.response) return auth.response;
-    return NextResponse.json(await latestActivityInterval(auth.access), { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ ...await latestActivityInterval(auth.access), scope: { organizationId: auth.access.organizationId, personId: auth.access.personId } }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error);
   }
