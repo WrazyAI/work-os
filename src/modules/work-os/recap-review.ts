@@ -66,6 +66,14 @@ export function recapCoverageLine(status: unknown, source: unknown = undefined):
   return "AI-inferred activity, employee reviewed; not task completion or attendance.";
 }
 
+export function payrollDateKey(value: unknown): string | null {
+  if (value == null) return null;
+  const text = value instanceof Date
+    ? (Number.isFinite(value.getTime()) ? value.toISOString() : "")
+    : String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
+}
+
 /** Compatibility projection for immutable snapshots written before
  * `reviewSource`/`payrollDate` existed. Returns a copy; never rewrites history. */
 export function normalizeReviewedRecap<T extends {

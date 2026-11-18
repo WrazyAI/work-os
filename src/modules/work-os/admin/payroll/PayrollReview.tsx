@@ -6,7 +6,6 @@ import { Notice, Skeleton } from "../ui";
 import { payrollApi, payrollKeys } from "./api";
 import { PayrollReviewView } from "./PayrollReviewView";
 import { PayrollQuestions } from "./PayrollQuestions";
-import { PayrollQuestions } from "./PayrollQuestions";
 
 export default function PayrollReview({ personId, payDate }: { personId: string; payDate: string }) {
   const [busy, setBusy] = useState(false);

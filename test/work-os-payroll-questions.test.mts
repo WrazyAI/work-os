@@ -40,11 +40,11 @@ test("a cited answer is read-only, idempotent and refuses invalid citations", as
     const first = await answerPayrollQuestion(adminAccess, reviewId, { token, threadId: "", approvalId: null, question: "Why is this held?", requestKey: "q-1" }, { fetch: success as typeof fetch });
     assert.equal(first.status, "ready");
     assert.ok(first.blocks.every((block) => block.citations.length > 0));
-    const approvals = (await f.db.query("select count(*)::int as n from work_payroll_approvals")).rows[0].n;
+    const approvals = ((await f.db.query("select count(*)::int as n from work_payroll_approvals")).rows[0] as { n: number }).n;
     const retry = await answerPayrollQuestion(adminAccess, reviewId, { token, threadId: first.threadId, approvalId: null, question: "Why is this held?", requestKey: "q-1" }, { fetch: success as typeof fetch });
     assert.equal(retry.id, first.id);
     assert.equal(calls, 1);
-    assert.equal((await f.db.query("select count(*)::int as n from work_payroll_approvals")).rows[0].n, approvals);
+    assert.equal(((await f.db.query("select count(*)::int as n from work_payroll_approvals")).rows[0] as { n: number }).n, approvals);
     const invalid = await answerPayrollQuestion(adminAccess, reviewId, { token, threadId: "", approvalId: null, question: "Approve it", requestKey: "q-2" }, {
       fetch: (async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ blocks: [{ text: "Approved.", citations: [{ type: "approval", id: "foreign", revision: 1 }] }] }) } }] }), { status: 200 })) as typeof fetch,
     });

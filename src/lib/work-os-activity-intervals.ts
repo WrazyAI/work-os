@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { decideReviewedRecap } from "@/lib/work-os-reviewed-recaps";
 import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, reviewVersionForRow } from "@/lib/work-os-activity-interval-projection";
-import { recapReviewSource } from "@/modules/work-os/recap-review";
+import { recapReviewSource, payrollDateKey } from "@/modules/work-os/recap-review";
 import { getPool } from "@/lib/db/pool";
 import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
@@ -1221,7 +1221,7 @@ export function activityIntervalCardView(row: ActivityIntervalRecord, reviewVers
     generationStatus: String(row.generation_status),
     reviewStatus: String(row.review_status),
     reviewSource: recapReviewSource(row.review_status, row.review_source),
-    payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
+    payrollDate: payrollDateKey(row.payroll_date),
     reviewVersion,
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
@@ -1288,7 +1288,7 @@ function intervalView(row: ActivityIntervalProjectionRow, evidence: ActivityInte
     reviewVersion: reviewVersionForRow(row),
     reviewStatus: String(row.review_status) as ActivityIntervalView["reviewStatus"],
     reviewSource: recapReviewSource(row.review_status, row.review_source),
-    payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
+    payrollDate: payrollDateKey(row.payroll_date),
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
     ...intervalStructure(row),
@@ -1595,7 +1595,7 @@ export async function listActivityIntervalActivityLines(organizationId: string, 
       label: formatIntervalRange(startIso, endIso, timezone),
       provenance: String(row.review_status) as ActivityIntervalActivityLine["provenance"],
       reviewSource: recapReviewSource(row.review_status, row.review_source),
-      payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
+      payrollDate: payrollDateKey(row.payroll_date),
       detail,
       headline: row.headline ? String(row.headline) : null,
       hourStarts: intervalHourStarts(startIso, endIso, timezone),
