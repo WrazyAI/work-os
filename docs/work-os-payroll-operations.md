@@ -103,6 +103,13 @@ ambiguous run); the durable run owns the 48-frame per-person cap.
 
 ## Failure behavior
 
+- Payroll artifacts expire 30 days after the latest of local pay-date start,
+  explicit approval, or first durable export. Reopen/read/re-export/Q&A/retry
+  never move the anchor. The purge is service-only (CRON_SECRET), bounded 50 by
+  default/100 maximum, and leaves employee recaps, review ledgers, source
+  screenshots and unrelated audit rows intact. A content-free tombstone blocks
+  regenerating the expired period. A documented operator hold postpones purge.
+
 - Provider fetch failure: the page is incomplete; publication and approvals
   must wait.
 - Unknown capture semantics: samples remain visible, gaps remain uncovered,

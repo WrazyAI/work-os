@@ -262,6 +262,13 @@ create table if not exists work_payroll_source_versions (
   updated_at timestamptz not null default now(),
   primary key(organization_id,person_id)
 );
+-- A content-free marker prevents an expired period from being regenerated or
+-- re-ingested after its 30-day payroll artifacts are purged.
+create table if not exists work_payroll_retention_tombstones (
+  organization_id uuid not null, person_id uuid not null, pay_date date not null,
+  expired_at timestamptz not null default now(), tombstone_hash text not null,
+  primary key(organization_id,person_id,pay_date)
+);
 create or replace function work_payroll_source_touch() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$
 declare new_row jsonb; old_row jsonb; org uuid; person uuid; cols text[]; col text;
@@ -350,7 +357,7 @@ do $$ declare t text; begin
     execute format('drop trigger if exists work_payroll_immutable on %I',t);
     execute format('create trigger work_payroll_immutable before update or delete on %I for each row execute function work_payroll_immutable()',t);
   end loop;
-  foreach t in array array['work_payroll_settings','work_payroll_reviews','work_payroll_analysis_revisions','work_payroll_days','work_payroll_findings','work_payroll_decisions','work_payroll_approvals','work_payroll_frame_findings','work_payroll_week_briefs','work_payroll_questions','work_payroll_person_context','work_payroll_runs','work_payroll_exports','work_payroll_recap_settlements','work_payroll_provider_budgets','work_payroll_audit_events','work_payroll_operator_holds','work_payroll_source_versions'] loop
+  foreach t in array array['work_payroll_settings','work_payroll_reviews','work_payroll_analysis_revisions','work_payroll_days','work_payroll_findings','work_payroll_decisions','work_payroll_approvals','work_payroll_frame_findings','work_payroll_week_briefs','work_payroll_questions','work_payroll_person_context','work_payroll_runs','work_payroll_exports','work_payroll_recap_settlements','work_payroll_provider_budgets','work_payroll_audit_events','work_payroll_operator_holds','work_payroll_source_versions','work_payroll_retention_tombstones'] loop
     execute format('alter table %I enable row level security',t);
     execute format('revoke all on %I from public',t);
     if exists(select 1 from pg_roles where rolname='anon') then execute format('revoke all on %I from anon',t); end if;
@@ -360,6 +367,12 @@ do $$ declare t text; begin
     execute format('create policy work_payroll_retention_policy on %I to work_payroll_retention using(true) with check(true)',t);
   end loop;
 end $$;
+-- The retention executor owns the purge function; it needs insert on the
+-- tombstone and targeted delete on payroll audit rows only.
+grant insert on work_payroll_retention_tombstones to work_payroll_retention;
+grant select,delete on work_audit_log to work_payroll_retention;
+drop policy if exists work_payroll_retention_audit_policy on work_audit_log;
+create policy work_payroll_retention_audit_policy on work_audit_log to work_payroll_retention using(true) with check(true);
 create or replace function work_payroll_purge_expired(p_organization_id uuid,p_review_id uuid) returns void
 language plpgsql security definer set search_path=pg_catalog,public,pg_temp as $$
 declare r public.work_payroll_reviews%rowtype;
@@ -370,6 +383,11 @@ begin
   if exists(select 1 from public.work_payroll_operator_holds where organization_id=r.organization_id and review_id=r.id and released_at is null) then
     raise exception 'Payroll review has a documented legal hold';
   end if;
+  insert into public.work_payroll_retention_tombstones(organization_id,person_id,pay_date,tombstone_hash)
+    values(r.organization_id,r.person_id,r.pay_date,md5(r.organization_id::text||':'||r.person_id::text||':'||r.pay_date::text||':payroll-retention-v1'))
+    on conflict (organization_id,person_id,pay_date) do nothing;
+  delete from public.work_audit_log where organization_id=r.organization_id and action like 'payroll.%'
+    and (target_id=r.id::text or target_id in (select id::text from public.work_payroll_approvals where organization_id=r.organization_id and review_id=r.id));
   -- Lock parent then fence all worker leases before deleting sensitive copies.
   update public.work_payroll_runs set status='canceled',lease_token=null,lease_until=null where organization_id=r.organization_id and review_id=r.id;
   update public.work_payroll_reviews set current_approval_id=null where id=r.id;

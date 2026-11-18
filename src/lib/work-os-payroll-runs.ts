@@ -7,6 +7,7 @@ import { ensurePayrollRecapApproval } from "@/lib/work-os-payroll-recap-approval
 import { fetchPayrollProviderPage, payrollProviderDeps, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
 import { buildPayrollDayInputs, loadPayrollSources } from "@/lib/work-os-payroll-sources";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
+import { payrollPeriodExpired } from "@/lib/work-os-payroll-retention";
 import { calculatePayrollDay } from "@/lib/work-os-payroll-hours";
 import { classifyPayrollFrame, selectPayrollFrames } from "@/lib/work-os-payroll-vision";
 import { advancePayrollWeekBrief, type BriefCheckpoint } from "@/lib/work-os-payroll-briefs";
@@ -114,6 +115,9 @@ export async function startPayrollRun(access: WorkOsAccess, input: { personId: s
   if (!person.rows.length) throw new WorkOsValidationError("Payroll person not found");
   const timezone = String(person.rows[0].timezone ?? "UTC");
   const period = resolvePayrollPeriod(input.payDate, timezone);
+  if (await payrollPeriodExpired(access.organizationId, input.personId, input.payDate)) {
+    throw new WorkOsConflictError("This payroll period expired and cannot be regenerated.", "payroll_period_expired");
+  }
   return transaction(async (client) => {
     const review = await client.query(`INSERT INTO work_payroll_reviews
       (organization_id,person_id,period_start,period_end,pay_date,timezone,status,retention_expires_at)
