@@ -45,6 +45,10 @@ export function readyRecap(intervals: readonly ActivityInterval[] | undefined): 
 }
 
 export type RecapWatermark = Pick<ActivityInterval, "windowEnd" | "id">;
+export function scopedPendingRecap<T extends { reviewStatus: string }>(scope: string | null, owner: string | null, prompt: T | null, turns: readonly T[]): T | null {
+  if (!scope || owner !== scope) return null;
+  return prompt?.reviewStatus === "inferred" ? prompt : [...turns].reverse().find(item => item.reviewStatus === "inferred") ?? null;
+}
 function compareRecaps(a: RecapWatermark, b: RecapWatermark) {
   return Date.parse(a.windowEnd) - Date.parse(b.windowEnd) || (a.id > b.id ? 1 : a.id < b.id ? -1 : 0);
 }

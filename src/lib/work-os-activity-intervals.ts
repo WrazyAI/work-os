@@ -624,10 +624,9 @@ function selectable(access: WorkOsAccess) {
 }
 
 async function loadIntervalBySlot(organizationId: string, personId: string, slotKey: string) {
-  const { data, error } = await db().from("work_activity_intervals").select("*")
-    .eq("organization_id", organizationId).eq("person_id", personId).eq("slot_key", slotKey).maybeSingle();
-  if (error) throw new Error(`load activity interval: ${error.message}`);
-  return data as ActivityIntervalRecord | null;
+  const { rows } = await getPool().query(`SELECT *, updated_at::text AS attempt_version FROM work_activity_intervals
+    WHERE organization_id = $1 AND person_id = $2 AND slot_key = $3`, [organizationId, personId, slotKey]);
+  return (rows[0] as ActivityIntervalRecord | undefined) ?? null;
 }
 
 /** An empty, never-reviewed historical attempt may retry against the recent
@@ -704,6 +703,11 @@ export function activityIntervalMayAdvance(row: ActivityIntervalRecord | null) {
     && ["no_usable_frames", "evidence_timeout"].includes(String(row.failure_reason)));
 }
 
+export function activityIntervalResultMayAdvance(result: { status: string; interval?: ActivityIntervalRecord; reason?: string }) {
+  if (result.interval) return activityIntervalMayAdvance(result.interval);
+  return result.reason === "daily_cap" || result.reason === "no_reviewable_interval";
+}
+
 /** A failed or empty interval is not re-analysed on every client poll. The
  * scheduler and the employee ensure path share the same retry window. */
 export function activityIntervalRetryBlocked(
@@ -766,7 +770,7 @@ async function markIntervalUnavailable(row: ActivityIntervalRecord, reason: stri
     .eq("window_start", isoInstant(row.window_start) as string).eq("window_end", isoInstant(row.window_end) as string)
     .eq("review_status", "inferred")
     .in("generation_status", ["preparing", "failed", "unavailable"]);
-  if (row.updated_at) query = query.eq("updated_at", isoInstant(row.updated_at) as string);
+  if (row.updated_at) query = query.eq("updated_at", row.attempt_version ?? isoInstant(row.updated_at) as string);
   const { data, error } = await query.select("*").maybeSingle();
   if (error) throw new Error(`mark activity interval unavailable: ${error.message}`);
   if (!data) {
@@ -782,24 +786,41 @@ export async function settleActivityIntervalEvidence(row: ActivityIntervalRecord
   return markIntervalUnavailable(row, outcome === "empty" ? "no_usable_frames" : outcome, counts ?? {}, at);
 }
 
-async function persistEvidence(intervalId: string, organizationId: string, selected: IntervalEvidenceEntry[]) {
-  const { error: deleteError } = await db().from("work_activity_interval_evidence").delete().eq("interval_id", intervalId);
-  if (deleteError) throw new Error(`replace activity interval evidence: ${deleteError.message}`);
-  if (!selected.length) return;
-  const { error } = await db().from("work_activity_interval_evidence").insert(selected.map((entry) => ({
-    interval_id: intervalId,
-    organization_id: organizationId,
-    screenshot_summary_id: entry.candidate.summaryId,
-    evidence_event_id: entry.candidate.evidenceEventId,
-    captured_at: entry.candidate.capturedAt,
-    ordinal: entry.ordinal,
-    used_in_model: true,
-    raw_image_shown: entry.rawImageShown,
-    selection_reason: entry.selectionReason,
-    visible_app_snapshot: entry.candidate.visibleApp?.slice(0, 160) ?? null,
-    frame_summary_snapshot: entry.candidate.summary.slice(0, 500) ?? null,
-  })));
-  if (error) throw new Error(`save activity interval evidence: ${error.message}`);
+/** Readiness, evidence and its audit become visible together, under the same
+ * row lock used by employee review. A rebased/reviewed winner is never replaced. */
+export async function commitActivityIntervalGeneration(access: WorkOsAccess, row: ActivityIntervalRecord, fields: Record<string, unknown>, selected: IntervalEvidenceEntry[], metadata: Json) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const loaded = await client.query(`SELECT * FROM work_activity_intervals
+      WHERE id = $1 AND organization_id = $2 AND person_id = $3 FOR UPDATE`, [row.id, access.organizationId, access.personId]);
+    const current = loaded.rows[0] as ActivityIntervalRecord | undefined;
+    if (!current) throw new Error("activity interval no longer available");
+    if (current.review_status !== "inferred" || current.generation_status === "ready"
+      || isoInstant(current.window_start) !== isoInstant(row.window_start) || isoInstant(current.window_end) !== isoInstant(row.window_end)) {
+      await client.query("COMMIT");
+      return { row: current, published: false };
+    }
+    await client.query("DELETE FROM work_activity_interval_evidence WHERE interval_id = $1 AND organization_id = $2", [row.id, access.organizationId]);
+    for (const entry of selected) {
+      await client.query(`INSERT INTO work_activity_interval_evidence
+        (interval_id,organization_id,screenshot_summary_id,evidence_event_id,captured_at,ordinal,used_in_model,raw_image_shown,selection_reason,visible_app_snapshot,frame_summary_snapshot)
+        VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10)`, [row.id, access.organizationId, entry.candidate.summaryId, entry.candidate.evidenceEventId,
+        entry.candidate.capturedAt, entry.ordinal, entry.rawImageShown, entry.selectionReason, entry.candidate.visibleApp?.slice(0,160) ?? null, entry.candidate.summary.slice(0,500)]);
+    }
+    const saved = await client.query(`UPDATE work_activity_intervals SET generation_status = 'ready',
+      headline=$2, ai_detail=$3, final_detail=$4, structured_summary=$5, coverage=$6, source_hash=$7, model=$8, prompt_version=$9,
+      revision=$10, generated_at=$11, failure_reason=null, updated_at=$12 WHERE id=$1 RETURNING *`,
+    [row.id, fields.headline, fields.ai_detail, fields.final_detail, JSON.stringify(fields.structured_summary), JSON.stringify(fields.coverage),
+      fields.source_hash ?? null, fields.model ?? null, fields.prompt_version ?? null, fields.revision, fields.generated_at, fields.updated_at]);
+    await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
+      VALUES ($1,$2,'activity_interval.generated','activity_interval',$3,$4)`, [access.organizationId, intervalAuditActorId(access), row.id, JSON.stringify(metadata)]);
+    await client.query("COMMIT");
+    return { row: saved.rows[0] as ActivityIntervalRecord, published: true };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
 }
 
 /** Ensures the recap for one authoritative prompt slot. Idempotent per slot,
@@ -847,8 +868,9 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: Ensure
       reason: row?.failure_reason ?? "awaiting_evidence", interval: row ?? undefined, slot, mayAdvance: activityIntervalMayAdvance(row) };
   }
   const result = await ensureActivityIntervalForSlot(access, { ...input, expectedSlot: slot }, deps);
-  return { ...result, slot, readyTransition: result.status === "ready" ? result.readyTransition ?? "existing" : undefined,
-    mayAdvance: result.status === "ready" || (result.status === "unavailable" && (activityIntervalMayAdvance(result.interval ?? null) || result.reason === "daily_cap")) || result.reason === "no_reviewable_interval" };
+  const status = result.status === "ready" && result.interval?.generation_status !== "ready" ? "awaiting_evidence" : result.status;
+  return { ...result, status, slot, readyTransition: status === "ready" ? result.readyTransition ?? "existing" : undefined,
+    mayAdvance: activityIntervalResultMayAdvance(result) };
 }
 
 async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: EnsureInput, deps: IntervalEnsureDeps): Promise<Omit<ActivityIntervalEnsureResult, "slot" | "mayAdvance">> {
@@ -875,8 +897,8 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
     return { status: "no_prompt" as const, reason: "no_activity_prompt_due" };
   }
   const dueMs = Date.parse(prompt.nextPromptAt);
-  // The server's recomputed due time is authoritative; the client value is only
-  // accepted as a matching slot hint (within clock-skew tolerance).
+  // A client's old due-time hint must never mint a second slot. Only a matching
+  // explicit receipt can bind the caller to this authoritative due instant.
   const promptDueAt = resolveActivityIntervalDueAt(prompt.nextPromptAt, input.promptDueAt);
   if (input.expectedSlot && (String(session.id) !== input.expectedSlot.sessionId || Date.parse(input.expectedSlot.promptDueAt) !== dueMs)) {
     return { status: "no_prompt" as const, reason: "slot_changed" };
@@ -892,7 +914,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
     const status = existing.generation_status === "ready" ? "ready" as const : existing.generation_status === "failed" ? "failed" as const : "unavailable" as const;
     return { status, reason: String(existing.failure_reason ?? "awaiting_evidence"), interval: existing };
   }
-  if (existing?.generation_status === "unavailable" && ["no_usable_frames", "evidence_timeout"].includes(String(existing.failure_reason)) && promptKind !== "plan") {
+  if (existing?.generation_status === "unavailable" && existing.failure_reason === "evidence_timeout" && promptKind !== "plan") {
     return { status: "unavailable" as const, reason: String(existing.failure_reason), interval: existing };
   }
   if (existing && ["confirmed", "amended"].includes(String(existing.review_status))) {
@@ -915,7 +937,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
   if (existing?.generation_status === "unavailable" && existing.failure_reason === "awaiting_evidence" && activityIntervalRetryBlocked(existing, at.getTime())) {
     return { status: "awaiting_evidence" as const, reason: "awaiting_evidence", interval: existing };
   }
-  if (activityIntervalRetryBlocked(existing, at.getTime())) {
+  if (activityIntervalRetryBlocked(existing, at.getTime()) && !(existing?.failure_reason === "no_usable_frames" && promptKind !== "plan")) {
     return {
       status: activityIntervalRetryStatus(existing),
       reason: String(existing?.failure_reason ?? "retry_backoff"),
@@ -937,7 +959,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       .neq("slot_key", slotKey)
       .order("window_end", { ascending: false }).limit(1).maybeSingle();
     if (previous.error) throw new Error(`load previous activity interval: ${previous.error.message}`);
-    const window = resolveActivityIntervalWindow({
+    const proposedWindow = resolveActivityIntervalWindow({
       promptDueAt,
       observedAt: at.toISOString(),
       cadenceMinutes: workday.cadence.checkInIntervalMinutes,
@@ -948,6 +970,9 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       dayStartIso: dayBounds.startIso,
       maxMinutes: config.maxMinutes,
     });
+    const window = existing && (existing.failure_reason === "awaiting_evidence" || !proposedWindow)
+      ? { startIso: isoInstant(existing.window_start) as string, endIso: isoInstant(existing.window_end) as string }
+      : proposedWindow;
     if (!window) return { status: "no_prompt" as const, reason: "no_reviewable_interval" };
 
     let row = existing;
@@ -955,6 +980,10 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       && Date.parse(window.endIso) > Date.parse(isoInstant(row.window_end) ?? "")
       && await canRecoverEmptyActivityInterval(access, row)) {
       row = await recoverEmptyActivityInterval(access, row, window);
+      row = await loadIntervalBySlot(access.organizationId, personId, slotKey) ?? row;
+    }
+    if (row?.generation_status === "unavailable" && row.failure_reason === "no_usable_frames" && promptKind !== "plan") {
+      return { status: "unavailable" as const, reason: "no_usable_frames", interval: row };
     }
     const attemptStart = row ? isoInstant(row.window_start) as string : window.startIso;
     const attemptEnd = row ? isoInstant(row.window_end) as string : window.endIso;
@@ -976,6 +1005,8 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
         window_end: window.endIso,
         timezone,
         generation_status: "preparing",
+        created_at: at.toISOString(),
+        updated_at: at.toISOString(),
       }).select("*").single();
       if (inserted.error) {
         if (!/duplicate|unique/i.test(inserted.error.message)) throw new Error(`create activity interval: ${inserted.error.message}`);
@@ -1192,7 +1223,7 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       ...ghlCoverage,
       modelCoverage: synthesis.coverage,
     };
-    const { data: saved, error: saveError } = await db().from("work_activity_intervals").update({
+    const fields = {
       generation_status: "ready",
       headline: synthesis.headline,
       ai_detail: synthesis.detail,
@@ -1206,22 +1237,8 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       generated_at: new Date().toISOString(),
       failure_reason: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", row.id).eq("review_status", "inferred")
-      .eq("window_start", attemptStart).eq("window_end", attemptEnd)
-      .select("*").maybeSingle();
-    if (saveError) throw new Error(`save activity interval: ${saveError.message}`);
-    if (!saved) {
-      const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
-      return { status: "ready" as const, interval: (current.data ?? row) as ActivityIntervalRecord };
-    }
-    // Evidence is deleted and re-inserted, so prove this attempt still owns the
-    // frozen window before touching what a newer attempt may already serve.
-    if (!(await intervalAttemptCurrent(String(row.id), attemptStart, attemptEnd))) {
-      const current = await db().from("work_activity_intervals").select("*").eq("id", row.id).maybeSingle();
-      return { status: "ready" as const, interval: (current.data ?? row) as ActivityIntervalRecord };
-    }
-    await persistEvidence(String(row.id), access.organizationId, selection.selected);
-    await auditInterval(access, "activity_interval.generated", String(row.id), {
+    };
+    const committed = await commitActivityIntervalGeneration(access, row, fields, selection.selected, {
       slotKey,
       frames: preparation.counts.providerFrames,
       analyzed: preparation.counts.processed,
@@ -1229,9 +1246,10 @@ async function ensureActivityIntervalForSlot(access: WorkOsAccess, input: Ensure
       rawImages: images.length,
       memoryChars: contextBlock.length,
       githubChars: githubBlock.length,
-      revision: saved?.revision ?? 1,
+      revision: fields.revision,
     });
-    return { status: "ready" as const, interval: saved as ActivityIntervalRecord, readyTransition: "new" as const };
+    return { status: committed.row.generation_status === "ready" ? "ready" as const : "awaiting_evidence" as const,
+      interval: committed.row, readyTransition: committed.published ? "new" as const : "existing" as const };
   })().finally(() => { if (input.mode !== "inspect") ensureInFlight.delete(coalesceKey); });
   if (input.mode !== "inspect") ensureInFlight.set(coalesceKey, run);
   return run;

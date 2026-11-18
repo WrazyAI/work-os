@@ -15,6 +15,10 @@ it("delivers only a settled recap and sends its exact observed slot", async () =
   expect(bodies).toEqual([]);
   await deliverActivityIntervalPrompt({ status: "ready", slot, mayAdvance: true }, "slot-key");
   expect(bodies).toEqual([{ expectedSlot: slot }]);
+  await deliverActivityIntervalPrompt(null, "timed-out-original-slot");
+  expect(bodies, "a transport timeout must not claim a later slot").toEqual([{ expectedSlot: slot }]);
+  await deliverActivityIntervalPrompt({ status: "ready", slot, mayAdvance: true }, "older-nudge", "2026-11-12T14:00:00Z");
+  expect(bodies).toHaveLength(1);
 });
 
 describe("task finder query", () => {

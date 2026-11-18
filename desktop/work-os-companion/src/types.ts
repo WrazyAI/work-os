@@ -483,6 +483,7 @@ export interface ActivityIntervalsData {
 export interface ActivityIntervalLatestData {
   interval: ActivityInterval | null;
   pendingCount: number;
+  scope?: { organizationId: string; personId: string };
 }
 
 /** Card shape returned by the activity-interval routes. The prompt turn and

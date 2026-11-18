@@ -43,7 +43,7 @@ import { presentAdminRecapArrival } from "./adminOtto/notifications";
 import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { decideActivityIntervalReview, decideRecapNextStep, deliverActivityIntervalPrompt, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
-import { recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapWatermark, type RecapQueueBubbleState } from "./notificationsLogic";
+import { recapSurfaceDecision, scopedPendingRecap, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapWatermark, type RecapQueueBubbleState } from "./notificationsLogic";
 import { RecapQueueBubble } from "./RecapQueueBubble";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
@@ -344,6 +344,7 @@ export default function AvatarApp(): React.ReactElement {
   const [recapSurfaceBlocked, setRecapSurfaceBlocked] = useState(false);
   const recapAnnouncedIds = useRef<Set<string>>(new Set());
   const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
+  const [recapOwnerScope, setRecapOwnerScope] = useState<string | null>(avatarFixture ? "fixture" : null);
   const recapAccountRef = useRef<string | null>(null);
   const celebrationSeen = useRef(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
@@ -1546,6 +1547,11 @@ export default function AvatarApp(): React.ReactElement {
     void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       daySessionRevision.current += 1;
+      setActivityPrompt(null);
+      setRecapOwnerScope(null);
+      setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+      stopRecapRead();
+      stopNextStepsRead();
       void secureState.session().then((session) => {
         setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
@@ -1771,6 +1777,7 @@ export default function AvatarApp(): React.ReactElement {
         // prompt before claiming delivery, so the notification can say the
         // recap is ready. Any failure falls back to the generic prompt.
         void (async () => {
+          const sessionRevision = daySessionRevision.current;
           let recap: ActivityIntervalCardData | null = null;
           let ensuredResult: Awaited<ReturnType<typeof ensureActivityIntervalReview>> | null = null;
           try {
@@ -1781,7 +1788,9 @@ export default function AvatarApp(): React.ReactElement {
           } catch { /* recap is optional; the generic prompt still fires */ }
           finally { setActivityPreparing(false); }
           try {
-            const { delivered } = await deliverActivityIntervalPrompt(ensuredResult, nudge.key);
+            if (sessionRevision !== daySessionRevision.current) return;
+            const { delivered } = await deliverActivityIntervalPrompt(ensuredResult, nudge.key, facts.nextPromptAt);
+            if (sessionRevision !== daySessionRevision.current) return;
             if (!delivered || notifiedKeys.current.has(nudge.key)) return;
             notifiedKeys.current.add(nudge.key);
             writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
@@ -2870,12 +2879,11 @@ export default function AvatarApp(): React.ReactElement {
   const promptTurnId = attentionDue && !promptDismissed ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
   // The recap the compact bubble and the chat card treat as current: the live
   // one from the nudge, or the latest undecided recap already in the chat.
+  const recapScope = avatarFixture ? "fixture" : desktopSession?.organizationId && facts.personId ? `${desktopSession.organizationId}:${facts.personId}` : null;
   const pendingRecap = useMemo(() => {
     if (recapSurfaceBlocked) return null;
-    if (activityPrompt && activityPrompt.reviewStatus === "inferred") return activityPrompt;
-    const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
-    return entry?.activityInterval ?? null;
-  }, [activityPrompt, chat, recapSurfaceBlocked]);
+    return scopedPendingRecap(recapScope, recapOwnerScope, activityPrompt, chat.flatMap(item => item.activityInterval ? [item.activityInterval] : []));
+  }, [activityPrompt, chat, recapSurfaceBlocked, recapScope, recapOwnerScope]);
 
   useEffect(() => {
     if (avatarFixture) return;
@@ -2884,6 +2892,10 @@ export default function AvatarApp(): React.ReactElement {
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
     recapAnnouncedIds.current.clear();
+    setActivityPrompt(null);
+    setRecapOwnerScope(null);
+    setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+    stopRecapRead();
     setRecapSurfaceBlocked(false);
     setRecapQueueBubble({ prompt: false, awaitingBeat: false });
     setPendingUnapprovedRecaps(0);
@@ -2894,6 +2906,7 @@ export default function AvatarApp(): React.ReactElement {
      new launch, and never an older recap after the newest is approved. */
   useEffect(() => {
     const latest = latestRecapQuery.data?.interval ?? null;
+    if (latestRecapQuery.data) setRecapOwnerScope(recapScope);
     if (!latest) return;
     const decision = recapSurfaceDecision({
       latest,
@@ -2920,7 +2933,7 @@ export default function AvatarApp(): React.ReactElement {
       setActivityPrompt(latest);
       setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "surfaced" }));
     }
-  }, [latestRecapQuery.data, pendingRecap]);
+  }, [latestRecapQuery.data, pendingRecap, recapScope]);
 
   useEffect(() => {
     if (!latestRecapQuery.data) return;

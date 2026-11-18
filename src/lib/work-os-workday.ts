@@ -178,7 +178,7 @@ export async function recordPromptDelivery(access: WorkOsAccess, session: Record
     check_in_interval_minutes: cadence.checkInIntervalMinutes,
     updated_at: at.toISOString(),
   }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", session.id as string);
-  for (const column of ["state", "last_prompt_at", "last_prompt_kind", "next_fallback_at", "first_follow_up_at", "last_substantive_update_at", "snoozed_until", "clocked_in_at", "check_in_interval_minutes", "scheduled_ends_at"]) {
+  for (const column of ["state", "correction_status", "last_prompt_at", "last_prompt_kind", "next_fallback_at", "first_follow_up_at", "last_substantive_update_at", "snoozed_until", "clocked_in_at", "check_in_interval_minutes", "scheduled_ends_at"]) {
     const value = session[column];
     query = value == null ? query.is(column, null) : query.eq(column, value);
   }

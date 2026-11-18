@@ -389,6 +389,8 @@ export async function fetchLatestActivityInterval(signal?: AbortSignal, scope?: 
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (scope) {
+    const identity = result.scope ?? await apiRequest<LatestRecapScope>("/api/work-os/session", { signal });
+    if (identity.organizationId !== scope.organizationId || identity.personId !== scope.personId) throw new DOMException("Workspace identity changed", "AbortError");
     const current = await secureState.session();
     if (!current || current.token !== before?.token || current.organizationId !== scope.organizationId) throw new DOMException("Workspace changed", "AbortError");
   }
@@ -471,8 +473,9 @@ export function ensureActivityIntervalReview(promptDueAt: string | null, signal?
   });
 }
 
-export function deliverActivityIntervalPrompt(result: Pick<ActivityIntervalEnsureResult, "status" | "slot" | "mayAdvance"> | null, key: string) {
-  if (result?.mayAdvance === false || result?.status === "awaiting_evidence" || result?.status === "preparing") return Promise.resolve({ delivered: false });
+export function deliverActivityIntervalPrompt(result: Pick<ActivityIntervalEnsureResult, "status" | "slot" | "mayAdvance"> | null, key: string, originalDueAt?: string | null) {
+  if (!result || result.mayAdvance === false || result.status === "awaiting_evidence" || result.status === "preparing") return Promise.resolve({ delivered: false });
+  if (originalDueAt && result.slot && Date.parse(originalDueAt) !== Date.parse(result.slot.promptDueAt)) return Promise.resolve({ delivered: false });
   return apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
     method: "POST", headers: { "Idempotency-Key": key },
     body: JSON.stringify(result?.slot ? { expectedSlot: result.slot } : {}),

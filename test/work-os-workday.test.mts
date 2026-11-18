@@ -458,6 +458,9 @@ test("expected recap delivery uses a session-scoped database CAS", async () => {
     assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)).delivered, false);
     assert.equal((await f.database.query<{ next_fallback_at: unknown }>("select next_fallback_at from work_sessions where id=$1", [planSession])).rows[0].next_fallback_at, null);
     await f.database.query("update work_sessions set snoozed_until=null where id=$1", [planSession]);
+    await f.database.query("update work_sessions set correction_status='needs_correction' where id=$1", [planSession]);
+    assert.equal((await recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)).delivered, false, "a concurrent correction excludes the session");
+    await f.database.query("update work_sessions set correction_status='valid' where id=$1", [planSession]);
     const results = await Promise.all([1, 2].map(() => recordPromptDelivery(planAccess, snapshot, prompt, at, cadence, expected)));
     assert.equal(results.filter(r => r.delivered).length, 1);
     const fresh = (await f.database.query<Record<string, any>>("select * from work_sessions where id=$1", [planSession])).rows[0];

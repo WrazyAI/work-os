@@ -159,6 +159,12 @@ test("legacy delivery cannot consume missing, preparing or awaiting recap rows",
   assert.equal(intervalEngine.activityIntervalMayAdvance({ generation_status: "unavailable", failure_reason: "evidence_timeout" }), true);
 });
 
+test("a stale ready response cannot authorize a preparing replacement row", () => {
+  assert.equal(intervalEngine.activityIntervalResultMayAdvance({ status: "ready", interval: { generation_status: "preparing" } }), false);
+  assert.equal(intervalEngine.activityIntervalResultMayAdvance({ status: "ready", interval: { generation_status: "ready" } }), true);
+});
+
+
 test("late frames retain the hidden slot and stale evidence retries cannot overwrite ready rows", async () => {
   const database = new PGlite();
   const previous = globalThis.__workOsPgPool;
@@ -200,7 +206,7 @@ test("read-only delivery inspection cannot synthesize or consume missing evidenc
       insert into work_people values ('${personId}','${organizationId}','wt-1');
       create table work_consent_records(organization_id uuid,person_id uuid,purpose text,decision text,policy_version text,occurred_at timestamptz);
       create table work_activity_intervals(id text,organization_id uuid,person_id uuid,work_session_id text,slot_key text,generation_status text,review_status text,failure_reason text,
-      window_end timestamptz,local_date date);`);
+      window_end timestamptz,local_date date,updated_at timestamptz);`);
     for (const purpose of ["Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.", "Neutral screenshot summaries for approved Work OS activity context only."]) {
       await database.query("insert into work_consent_records values ($1,$2,$3,'accepted','work-tracking-v1',now())", [organizationId, personId, purpose]);
     }
@@ -211,7 +217,7 @@ test("read-only delivery inspection cannot synthesize or consume missing evidenc
       prepareScreenshotWindow: async () => { throw new Error("Inspection must not fetch evidence"); } };
     assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps)).mayAdvance, false);
     assert.equal((await database.query<{ n: number }>("select count(*)::int n from work_activity_intervals")).rows[0].n, 0);
-    await database.query("insert into work_activity_intervals values ('slot',$1,$2,'session','session:2026-11-12T15:00:00.000Z','unavailable','inferred','awaiting_evidence',$3,'2026-11-12')", [organizationId, personId, at.toISOString()]);
+    await database.query("insert into work_activity_intervals values ('slot',$1,$2,'session','session:2026-11-12T15:00:00.000Z','unavailable','inferred','awaiting_evidence',$3,'2026-11-12',now())", [organizationId, personId, at.toISOString()]);
     assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps)).mayAdvance, false);
     await database.exec("update work_activity_intervals set generation_status='ready',failure_reason=null");
     const ready = await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect" }, deps);
@@ -219,6 +225,71 @@ test("read-only delivery inspection cannot synthesize or consume missing evidenc
     assert.deepEqual(ready.slot, { sessionId: "session", promptDueAt: at.toISOString() });
     assert.equal((await intervalEngine.ensureActivityInterval(access, { at, mode: "inspect", expectedSlot: { sessionId: "other", promptDueAt: at.toISOString() } }, deps)).mayAdvance, false);
     assert.equal((await intervalEngine.ensureActivityInterval({ ...access, featureFlags: {} }, { at, mode: "inspect" }, deps)).mayAdvance, true);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+test("an existing awaiting slot keeps its frozen window after plan confirmation", async () => {
+  const database = new PGlite(), previous = globalThis.__workOsPgPool;
+  const org = "10000000-0000-4000-8000-000000000001", person = "20000000-0000-4000-8000-000000000001";
+  try {
+    await database.exec(`create table work_people(id uuid,organization_id uuid,worktivity_employee_id text);
+      insert into work_people values ('${person}','${org}','wt');
+      create table work_consent_records(organization_id uuid,person_id uuid,purpose text,decision text,policy_version text,occurred_at timestamptz);
+      create table work_activity_intervals(id text,organization_id uuid,person_id uuid,work_session_id text,slot_key text,
+      generation_status text,review_status text,failure_reason text,window_start timestamptz,window_end timestamptz,created_at timestamptz,updated_at timestamptz,coverage jsonb,ai_detail text,generated_at timestamptz);
+      insert into work_activity_intervals values ('slot','${org}','${person}','session','session:2026-11-12T15:00:00.000Z','unavailable','inferred','awaiting_evidence',
+      '2026-11-12T14:00Z','2026-11-12T15:00Z','2026-11-12T15:00Z','2026-11-12T15:00:00.123456Z','{}',null,null);`);
+    for (const purpose of ["Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.", "Neutral screenshot summaries for approved Work OS activity context only."]) await database.query("insert into work_consent_records values ($1,$2,$3,'accepted','work-tracking-v1',now())", [org,person,purpose]);
+    globalThis.__workOsPgPool = { query: (sql: string, values?: unknown[]) => database.query(sql, values) } as never;
+    const access = { organizationId: org, personId: person, featureFlags: { screenshot_summaries: true }, ctx: { profile: {} } } as unknown as WorkOsAccess;
+    const windows: string[] = [];
+    const deps = { getWorkday: async () => ({ session: { id: "session", timezone: "UTC", clocked_in_at: "2026-11-12T14:00Z", shift_date: "2026-11-12" }, plan: { freeform_intent: "Ship", confirmed_at: "2026-11-12T15:00Z" },
+      shiftDate: "2026-11-12", prompt: { kind: "follow_up", nextPromptAt: "2026-11-12T15:00:00Z" }, cadence: { checkInIntervalMinutes: 60 } }) as any,
+      prepareScreenshotWindow: async (input: { windowStart: string }) => { windows.push(isoInstant(input.windowStart)!); throw new Error("provider outage"); } };
+    const result = await intervalEngine.ensureActivityInterval(access, { at: new Date("2026-11-12T15:06Z") }, deps);
+    assert.equal(result.mayAdvance, false);
+    assert.equal(result.status, "awaiting_evidence");
+    assert.deepEqual(windows, ["2026-11-12T14:00:00.000Z"]);
+    assert.equal(isoInstant(result.interval?.updated_at), "2026-11-12T15:06:00.000Z", "microsecond version must round-trip without missing the unchanged row");
+    await database.exec("update work_activity_intervals set failure_reason='no_usable_frames',updated_at='2026-11-12T15:16Z'");
+    const recovered = await intervalEngine.ensureActivityInterval(access, { at: new Date("2026-11-12T19:15Z") }, deps);
+    assert.equal(isoInstant(recovered.interval?.window_end), "2026-11-12T19:15:00.000Z");
+    assert.equal(recovered.mayAdvance, false);
+  } finally { globalThis.__workOsPgPool = previous; await database.close(); }
+});
+
+test("readiness is published atomically with evidence and its system audit", async () => {
+  const database = new PGlite(), previous = globalThis.__workOsPgPool;
+  try {
+    await database.exec(`create table work_activity_intervals(id text primary key,organization_id text,person_id text,review_status text,generation_status text,
+      window_start timestamptz,window_end timestamptz, headline text,ai_detail text,final_detail text,structured_summary jsonb,coverage jsonb,source_hash text,model text,
+      prompt_version text,revision int,generated_at timestamptz,updated_at timestamptz,failure_reason text);
+      insert into work_activity_intervals(id,organization_id,person_id,review_status,generation_status,window_start,window_end)
+      values ('slot','org','person','inferred','preparing','2026-11-12T14:00Z','2026-11-12T15:00Z');
+      create table work_activity_interval_evidence(interval_id text,organization_id text,screenshot_summary_id text check(screenshot_summary_id <> 'bad'),
+      evidence_event_id text,captured_at timestamptz,ordinal int,used_in_model boolean,raw_image_shown boolean,selection_reason text,visible_app_snapshot text,frame_summary_snapshot text);
+      create table work_audit_log(organization_id text,actor_user_id text,action text,target_type text,target_id text,metadata jsonb);`);
+    const query = (sql: string, values?: unknown[]) => database.query(sql, values);
+    globalThis.__workOsPgPool = { query, connect: async () => ({ query, release() {} }) } as never;
+    const row = (await database.query("select * from work_activity_intervals")).rows[0] as any;
+    const access = { organizationId: "org", personId: "person", membershipId: "system-activity-recap-schedule:person" } as WorkOsAccess;
+    const selected = [{ ordinal: 0, rawImageShown: false, selectionReason: "first", candidate: { ...candidate("frame", "2026-11-12T14:30Z", "Editor"), summaryId: "bad" } }];
+    const fields = { headline: "Worked", ai_detail: "Read code", final_detail: "Read code", structured_summary: {}, coverage: {}, source_hash: "hash", model: "policy", prompt_version: "v3", revision: 1, generated_at: "2026-11-12T15:02:00Z", updated_at: "2026-11-12T15:02:00Z" };
+    await assert.rejects(intervalEngine.commitActivityIntervalGeneration(access, row, fields, selected, { slotKey: "session:due" }));
+    const failed = (await database.query<Record<string, any>>("select * from work_activity_intervals")).rows[0];
+    assert.equal(failed.generation_status, "preparing", "failed evidence persistence must roll back ready");
+    assert.equal((await database.query<{ n: number }>("select count(*)::int n from work_audit_log")).rows[0].n, 0);
+    selected[0].candidate.summaryId = "good";
+    const saved = await intervalEngine.commitActivityIntervalGeneration(access, row, fields, selected, { slotKey: "session:due" });
+    assert.equal(saved.published, true);
+    assert.equal(saved.row.generation_status, "ready");
+    assert.equal((await database.query<{ n: number }>("select count(*)::int n from work_activity_interval_evidence")).rows[0].n, 1);
+    assert.equal((await database.query<{ actor_user_id: unknown }>("select actor_user_id from work_audit_log")).rows[0].actor_user_id, null);
+    await database.exec("update work_activity_intervals set generation_status='preparing',window_end='2026-11-12T16:00Z'");
+    const moved = await intervalEngine.commitActivityIntervalGeneration(access, row, fields, selected, {});
+    assert.equal(moved.published, false);
+    assert.equal(moved.row.generation_status, "preparing");
+    assert.equal(intervalEngine.activityIntervalMayAdvance(moved.row), false);
   } finally { globalThis.__workOsPgPool = previous; await database.close(); }
 });
 

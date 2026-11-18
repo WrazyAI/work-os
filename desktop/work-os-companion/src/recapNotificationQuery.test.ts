@@ -23,7 +23,7 @@ it("refreshes one live recap page without touching three loaded history pages", 
 
 it("both notice observers read latest without touching three history pages", async () => {
   const urls: string[] = [];
-  vi.stubGlobal("fetch", async (url: string) => { urls.push(url); return Response.json({ interval: null, pendingCount: 0 }); });
+  vi.stubGlobal("fetch", async (url: string) => { urls.push(url); return Response.json({ interval: null, pendingCount: 0, scope: { organizationId: "org", personId: "person" } }); });
   const scope = { organizationId: "org", personId: "person" };
   for (const window of ["main", "avatar"]) {
     const client = createWorkOsQueryClient();
@@ -64,4 +64,9 @@ it("a latest read refuses a different organization before sending the request", 
   vi.stubGlobal("fetch", async () => { requests++; return Response.json({ interval: null, pendingCount: 0 }); });
   await expect(fetchLatestActivityInterval(undefined, { organizationId: "different-org", personId: "person" })).rejects.toThrow(/workspace/i);
   expect(requests).toBe(0);
+});
+
+it("same-organization credentials cannot cache another person's latest under an old key", async () => {
+  vi.stubGlobal("fetch", async () => Response.json({ interval: { id: "private-b" }, pendingCount: 1, scope: { organizationId: "org", personId: "b" } }));
+  await expect(fetchLatestActivityInterval(undefined, { organizationId: "org", personId: "a" })).rejects.toThrow(/workspace|identity/i);
 });

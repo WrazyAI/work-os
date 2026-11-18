@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, overdueNotifyKey, overdueSummary, readyRecap, recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import type { ActivityInterval, MemoryFact } from "./types";
+import { scopedPendingRecap } from "./notificationsLogic";
 
 function fact(id: string, review_status: MemoryFact["review_status"]): MemoryFact {
   return { id, content: `Fact ${id}`, review_status, fact_key: null, local_date: null, occurred_at: "2026-10-07T09:00:00Z" };
@@ -28,6 +29,12 @@ function interval(id: string, windowStart: string, generationStatus: ActivityInt
 }
 
 describe("recap launch selection", () => {
+  it("an account boundary fences the previous prompt and restored recap turns", () => {
+    const prompt = interval("private-a", "2026-11-12T15:00Z", "ready", "inferred");
+    expect(scopedPendingRecap("org:a", "org:a", prompt, [prompt])?.id).toBe("private-a");
+    expect(scopedPendingRecap("org:b", "org:a", prompt, [prompt])).toBeNull();
+    expect(scopedPendingRecap("org:b", null, null, [prompt])).toBeNull();
+  });
   it("uses server window-end and ID order and suppresses older pending recaps", () => {
     const older = { ...interval("a", "2026-11-12T14:30Z", "ready", "inferred"), windowEnd: "2026-11-12T15:00:00Z" };
     const approved = { ...interval("b", "2026-11-12T14:00Z", "ready", "confirmed"), windowEnd: "2026-11-12T15:00:00Z" };

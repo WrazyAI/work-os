@@ -2436,8 +2436,8 @@ export default function App() {
     scope: workSessionQuery.data?.organizationId && workSessionQuery.data.personId
       ? { organizationId: workSessionQuery.data.organizationId, personId: workSessionQuery.data.personId } : null,
     pollMs: NOTIFICATION_POLL_MS });
-  // The bell only needs the newest ready recap, which always lives on the
-  // first page; later pages stay unloaded until the stream asks for them.
+  // Notices read only the authoritative latest recap; history pages are owned
+  // by the stream and cannot influence which recap is announced.
   const readyRecapInterval = latestRecapQuery.data?.interval?.reviewStatus === "inferred" ? latestRecapQuery.data.interval : null;
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data?.factTotals?.candidate ?? (memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0), [memoryQuery.data]);
