@@ -232,7 +232,7 @@ export default function DebugWindow() {
   const sessionValue = `${scenario.authState === "unauthenticated" ? "Not authenticated" : "Saved session"} · ${scenario.onboardingState === "real" ? "Server onboarding" : optionLabel(ONBOARDING_OPTIONS, scenario.onboardingState)}`;
   const workdayValue = `${SHIFT_SUMMARY[scenario.dayState]} · Planning ${scenario.planningState ? PLANNING_SUMMARY[scenario.planningState].toLowerCase() : "live"}${scenario.queuedUpdates > 0 ? ` · ${scenario.queuedUpdates} queued` : ""}`;
   const companionValue = `${scenario.companionForce ? optionLabel(COMPANION_FORCE_OPTIONS, scenario.companionForce) : "Auto"}${scenario.mascotActivity ? ` · Mascot ${MASCOT_ACTIVITY_LABELS[scenario.mascotActivity] ?? scenario.mascotActivity}` : ""}`;
-  const reachValue = `${scenario.syncBypass ? "Offline only" : "Backend reachable"} · ${scenario.liveWrites ? "Live writes on" : "Live writes off"}`;
+  const reachValue = `${scenario.syncBypass ? "Offline only" : "Backend access allowed"} · ${scenario.liveWrites ? "Live writes on" : "Live writes off"}`;
   const summaryRows: Array<{ id: DebugSectionId; label: string; value: string }> = [
     { id: "presets", label: "Preset", value: currentPreset?.label ?? (scenario.enabled ? "Custom overrides — no preset matches" : "No scenario loaded") },
     { id: "session", label: "Session", value: sessionValue },
