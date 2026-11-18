@@ -191,6 +191,28 @@ body.avatar-window {
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 11px; line-height: 1.4; }
 .avatar-unapproved-bubble { cursor: default; padding-right: 28px; }
 .avatar-unapproved-bubble .avatar-bubble-more { width: 100%; margin-top: 8px; }
+
+/* The corner control silences the reminder for the workday; the record behind
+   it (recaps, EOD draft, goal) stays reachable in its tab and the bell. */
+.avatar-prompt-dismiss {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #c8cec4;
+  cursor: pointer;
+}
+.avatar-prompt-dismiss:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.avatar-prompt-dismiss:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
+.avatar-prompt-bubble.has-dismiss { padding-right: 32px; }
 /* Every compact bubble clamps to the space above a figure that never moves, so
    the mascot and the elapsed pill keep their default positions and the bubble
    never reaches the head. The headline keeps two lines where it has room (the
@@ -633,6 +655,27 @@ body.avatar-window {
   cursor: pointer;
 }
 .avatar-context button:hover, .avatar-context button:focus-visible { background: var(--inset); }
+
+/* The expanded attention card carries the same dismissal as the bubble. */
+.avatar-context.is-dismissible { position: relative; padding-right: 38px; }
+.avatar-context-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.avatar-context-dismiss:hover { background: var(--inset); color: var(--ink); }
+.avatar-context.eod .avatar-context-dismiss { color: var(--warning-ink); }
+.avatar-context-dismiss:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
 
 .chat-entry { display: flex; }
 .chat-entry.user { justify-content: flex-end; }

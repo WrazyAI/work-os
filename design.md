@@ -2196,6 +2196,13 @@ prompt offers `Set today's goal` (the SOD `Plan your day` modal). Check-in
 prompts keep the tap-to-expand behavior alone. The action never replaces the
 tap target — both are one click away.
 
+The prompt bubble and the expanded attention card each carry a dismiss control.
+Dismissing silences that prompt for the local workday without hiding the record
+behind it: the EOD draft, the focus editor, and the recaps tab stay reachable.
+It re-arms on a genuinely new event: the next workday, a new plan revision for
+the goal, or a newer recap watermark for the queue. Check-ins keep their snooze;
+EOD, goal, and recap reminders are dismissible.
+
 The EOD alert opens ten minutes before the scheduled shift end and outranks a
 ready recap in the compact bubble: the mandatory wrap-up never hides behind an
 undecided recap, which stays reachable in the chat and the notifications

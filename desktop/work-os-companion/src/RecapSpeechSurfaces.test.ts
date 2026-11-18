@@ -148,7 +148,7 @@ describe("the next-steps card is never cut off", () => {
     // The prompt is behind the card, so it must not make the orb alert for an
     // ask that is not on screen; it takes the pose back when the card closes.
     expect(avatar).toContain("const nextStepsOpen = nextStepsMoment !== null;");
-    expect(avatar).toContain("const promptLeads = attentionDue && !nextStepsOpen;");
+    expect(avatar).toContain("const promptLeads = attentionDue && !nextStepsOpen && !promptDismissed;");
     expect(avatar).toContain("promptRequired: promptLeads, eodOutstanding: eodDue");
     expect(avatar).toContain("avatarAttentionFixture || promptLeads");
   });

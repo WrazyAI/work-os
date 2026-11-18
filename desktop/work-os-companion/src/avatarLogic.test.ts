@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, planHoldExpired, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
-  avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
+  avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, dismissPrompt, isPromptDismissed, nextSnoozeDelayMs, promptDismissalToken, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand, overdueTasks,
   type CompanionDayFacts,
 } from "./avatarLogic";
@@ -538,6 +538,41 @@ describe("mergeNextStepsMoment", () => {
   });
 });
 
+describe("prompt dismissals", () => {
+  const day = "2026-11-18";
+
+  it("scopes EOD and agenda dismissals to the workday and plan revision", () => {
+    const eodToken = promptDismissalToken("eod", { day });
+    const store = dismissPrompt({}, "eod", eodToken, day);
+    expect(isPromptDismissed(store, "eod", eodToken, day)).toBe(true);
+    expect(isPromptDismissed(store, "eod", eodToken, "2026-11-19")).toBe(false);
+
+    const agendaToken = promptDismissalToken("agenda", { day, planRevision: 3, planIntent: "Ship it" });
+    const nextRevision = promptDismissalToken("agenda", { day, planRevision: 4, planIntent: "Ship it" });
+    const agendaStore = dismissPrompt({}, "agenda", agendaToken, day);
+    expect(isPromptDismissed(agendaStore, "agenda", agendaToken, day)).toBe(true);
+    expect(isPromptDismissed(agendaStore, "agenda", nextRevision, day)).toBe(false);
+  });
+
+  it("re-arms the recap queue only for a newer recap", () => {
+    const older = promptDismissalToken("recap", { day, recapWatermark: "2026-11-18T09:00:00Z" });
+    const newer = promptDismissalToken("recap", { day, recapWatermark: "2026-11-18T11:00:00Z" });
+    const noWatermark = promptDismissalToken("recap", { day, recapWatermark: null });
+    const store = dismissPrompt({}, "recap", older, day);
+    expect(isPromptDismissed(store, "recap", older, day)).toBe(true);
+    expect(isPromptDismissed(store, "recap", noWatermark, day)).toBe(true);
+    expect(isPromptDismissed(store, "recap", newer, day)).toBe(false);
+    expect(isPromptDismissed(store, "recap", newer, "2026-11-19")).toBe(false);
+  });
+
+  it("drops yesterday's entries when a new day is dismissed", () => {
+    const old = dismissPrompt({}, "eod", promptDismissalToken("eod", { day }), day);
+    const next = dismissPrompt(old, "agenda", promptDismissalToken("agenda", { day: "2026-11-19", planRevision: 1 }), "2026-11-19");
+    expect(next.eod).toBeUndefined();
+    expect(next.agenda?.day).toBe("2026-11-19");
+  });
+});
+
 describe("avatarBubble", () => {
   it("shows processing while the recap is being analyzed, even with a due prompt", () => {
     expect(avatarBubble({ preparing: true, eodDue: false, recapReady: false, promptDue: true })).toBe("processing");
@@ -565,6 +600,12 @@ describe("avatarBubble", () => {
   it("falls back to the prompt, then to nothing", () => {
     expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: true })).toBe("prompt");
     expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: false })).toBe(null);
+  });
+
+  it("lets the next bubble take the slot when the prompt is dismissed", () => {
+    expect(avatarBubble({ preparing: false, eodDue: true, recapReady: false, promptDue: true, promptDismissed: true })).toBe(null);
+    expect(avatarBubble({ preparing: false, eodDue: true, recapReady: true, promptDue: true, promptDismissed: true })).toBe("recap");
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: true, promptDismissed: true })).toBe(null);
   });
 });
 
