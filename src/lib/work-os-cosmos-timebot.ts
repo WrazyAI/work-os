@@ -8,13 +8,10 @@ export const COSMOS_TIMEBOT_EVENTS = ["clock_in", "pause", "resume", "clock_out"
 export type CosmosTimebotEvent = (typeof COSMOS_TIMEBOT_EVENTS)[number];
 
 /** Channel vocabulary. `pause`/`resume` are Work OS's names for a break; the
- * team writes `break` and `back`. */
-const EVENT_WORD: Record<CosmosTimebotEvent, string> = {
-  clock_in: "in",
-  pause: "break",
-  resume: "back",
-  clock_out: "out",
-};
+ * team writes `break` and `back`. `inactive` is not a Work OS state: it is how a
+ * clock-out reads when it happened before the end of the shift, because a
+ * dropped connection produces an exact provider clock-out that is
+ * indistinguishable from leaving for the day. See `classifyTimebotEvent`. */
 
 export type CosmosDeliveryOutcome = "sent" | "retry" | "dead";
 
@@ -89,6 +86,40 @@ export function humanDelay(ms: number) {
   return `${Math.floor(hours / 24)}d`;
 }
 
+export type TimebotMessageKind = "in" | "break" | "back" | "out" | "inactive";
+
+export interface TimebotClassification {
+  kind: TimebotMessageKind;
+  /** The event this one resumes from, when it has one. */
+  previousObservedAt: string | null;
+}
+
+/** Decide what a Work OS event should say in the channel.
+ *
+ * A clock-out only reads as `out` when the session had already reached eod_due,
+ * i.e. the shift was over. Every other clock-out reads as `inactive`, because a
+ * network drop produces an exact provider clock-out that cannot be told apart
+ * from an early departure at the moment it arrives.
+ *
+ * A clock-in that resumes a clock-out from the same shift reads as `back`, not a
+ * second `in`, and a break return reads as `back` with the break's length.
+ */
+export function classifyTimebotEvent(input: {
+  eventType: string;
+  fromState?: string | null;
+  previousObservedAt?: string | null;
+}): TimebotClassification | null {
+  const event = input.eventType;
+  if (!(COSMOS_TIMEBOT_EVENTS as readonly string[]).includes(event)) return null;
+  const previous = input.previousObservedAt ?? null;
+  if (event === "clock_out") {
+    return { kind: input.fromState === "eod_due" ? "out" : "inactive", previousObservedAt: null };
+  }
+  if (event === "pause") return { kind: "break", previousObservedAt: null };
+  if (event === "resume") return { kind: "back", previousObservedAt: previous };
+  return { kind: previous ? "back" : "in", previousObservedAt: previous };
+}
+
 /** Render one channel line.
  *
  * Age never removes a transition: the line is always posted. What age changes is
@@ -103,14 +134,18 @@ export function renderTimebotMessage(input: {
   timezone?: string | null;
   /** Delivery time. Defaults to now; tests pass it explicitly. */
   now?: string | Date;
+  /** The session state the event left, used to tell `out` from `inactive`. */
+  fromState?: string | null;
+  /** The event this one resumes from, used for the `back` gap. */
+  previousObservedAt?: string | null;
 }): string | null {
-  if (!(COSMOS_TIMEBOT_EVENTS as readonly string[]).includes(input.eventType)) return null;
-  const word = EVENT_WORD[input.eventType as CosmosTimebotEvent];
+  const classification = classifyTimebotEvent(input);
+  if (!classification) return null;
   const name = input.displayName.trim().split(/\s+/)[0];
   if (!name) return null;
 
   const observed = new Date(input.observedAt);
-  if (Number.isNaN(observed.getTime())) return `--:-- ${name} — ${word}`;
+  if (Number.isNaN(observed.getTime())) return `--:-- ${name} — ${classification.kind}`;
 
   const delivered = input.now === undefined ? new Date() : new Date(input.now);
   const deliveredValid = !Number.isNaN(delivered.getTime());
@@ -127,8 +162,16 @@ export function renderTimebotMessage(input: {
   // 00:02 is only four minutes late, but Cosmos's "Today" divider would file it
   // under the wrong day, so it still needs the absolute date.
   const prefix = observedStamp.date !== deliveredStamp.date ? `${observedStamp.day} ` : "";
-  const suffix = delayed ? ` (delayed ${humanDelay(lateMs)})` : "";
-  return `${prefix}${observedStamp.time} ${name} — ${word}${suffix}`;
+  const delaySuffix = delayed ? ` (delayed ${humanDelay(lateMs)})` : "";
+
+  let gapSuffix = "";
+  const previous = classification.previousObservedAt ? Date.parse(classification.previousObservedAt) : Number.NaN;
+  if (Number.isFinite(previous)) {
+    const gap = observed.getTime() - previous;
+    if (gap >= 60_000) gapSuffix = ` (${humanDelay(gap)})`;
+  }
+
+  return `${prefix}${observedStamp.time} ${name} — ${classification.kind}${gapSuffix}${delaySuffix}`;
 }
 
 /** Cosmos documents no idempotency key and no delivery receipt, so a retry of an
@@ -179,6 +222,8 @@ interface OutboxRow {
   event_type: string;
   observed_at: string;
   attempts: number;
+  from_state: string | null;
+  previous_observed_at: string | null;
 }
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -345,6 +390,8 @@ export async function flushTimebotOutbox(limit = 20, fetchImpl: FetchLike = fetc
         eventType: row.event_type,
         observedAt: row.observed_at,
         timezone: row.timezone,
+        fromState: row.from_state,
+        previousObservedAt: row.previous_observed_at,
         // Lateness is measured when the line is actually about to be sent, so a
         // long retry loop is reported as late even though it was enqueued on time.
         now: new Date(),
