@@ -24,6 +24,12 @@ const fs = require('node:fs');
     checks++;
   }
   const pet = '.dashboard-shell .mascot-pet';
+  async function openDebugSection(section) {
+    const rail = debug.locator(`[data-debug-section="${section}"]`);
+    if (await rail.isVisible().catch(() => false)) await rail.click();
+    else await debug.getByLabel('Debugger section', { exact: true }).selectOption(section);
+    await debug.waitForFunction((id) => document.querySelector(`[data-debug-section="${id}"]`)?.getAttribute('aria-current') === 'page', section);
+  }
   try {
     await orb.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb&prompt');
     await orb.locator('.avatar-pet .studio-otto').waitFor();
@@ -68,6 +74,7 @@ const fs = require('node:fs');
     await main.goto('http://127.0.0.1:5173/?offline&day=optional');
     await main.locator('.dashboard-shell .dashboard-otto-band .studio-otto').waitFor();
     await debug.goto('http://127.0.0.1:5173/debug.html');
+    await openDebugSection('companion');
     await debug.getByLabel('Mascot activity', { exact: true }).waitFor();
     await debug.waitForFunction(() => document.querySelector('.debug-mascot-controls')?.disabled === false, null, { timeout: 12000 });
     await avatar.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=recorded-completion');
@@ -82,12 +89,14 @@ const fs = require('node:fs');
       assert(color.trim()); checks++;
     }
     await debug.getByLabel('Mascot activity', { exact: true }).selectOption('');
+    await openDebugSection('workday');
     for (const [day, workday] of [['clocked_in','check-in-due'],['paused','paused'],['catch_up','check-in-due'],['optional','active'],['eod_due','eod-due'],['clocked_out','off-shift']]) {
       await debug.getByLabel('Shift state', { exact: true }).selectOption(day);
       await attr(main, pet, 'data-workday', workday);
       await attr(avatar, '.avatar-pet', 'data-workday', workday);
     }
     await debug.getByLabel('Shift state', { exact: true }).selectOption('optional');
+    await openDebugSection('companion');
     for (const workday of ['disconnected','off-shift','active','paused','late','check-in-due','eod-due']) {
       await debug.getByLabel('Mascot workday', { exact: true }).selectOption(workday);
       for (const activity of ['idle','working','needs-input','ready','blocked']) {
@@ -115,14 +124,20 @@ const fs = require('node:fs');
     await main.waitForTimeout(3500);
     await attr(main, pet, 'data-activity', 'idle');
     await debug.getByRole('button', { name: 'Work to completion', exact: true }).click();
+    await openDebugSection('presets');
     await debug.getByRole('button', { name: /Mascot: Failed/ }).click();
     await main.waitForTimeout(3500);
     await attr(main, pet, 'data-activity', 'blocked');
+    await openDebugSection('companion');
     await debug.getByRole('button', { name: 'Work to completion', exact: true }).click();
+    await openDebugSection('overview');
     await debug.getByRole('switch', { name: 'Enable debug scenario', exact: true }).click();
     await main.waitForTimeout(3500);
+    await openDebugSection('companion');
     assert(await debug.getByLabel('Mascot activity', { exact: true }).isDisabled()); checks++;
+    await openDebugSection('presets');
     await debug.getByRole('button', { name: /Offline playground \(no backend\)/ }).click();
+    await openDebugSection('workday');
     await debug.getByLabel('Shift state', { exact: true }).selectOption('optional');
     await main.locator('.dashboard-shell .dashboard-otto-band').waitFor();
     for (const page of [main, readiness]) {
@@ -140,6 +155,7 @@ const fs = require('node:fs');
     await main.setViewportSize({ width: 1000, height: 800 });
     await main.screenshot({ path: '/tmp/otto-active.png' });
     await debug.setViewportSize({ width: 900, height: 1000 });
+    await openDebugSection('companion');
     await debug.locator('#mascot-debug-heading').scrollIntoViewIfNeeded();
     await debug.screenshot({ path: '/tmp/otto-debugger.png' });
     assert.equal(writes.length, 0, `Unexpected API writes: ${writes}`); checks++;
