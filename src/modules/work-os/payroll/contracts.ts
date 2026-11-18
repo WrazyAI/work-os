@@ -90,7 +90,7 @@ export type PayrollDayResult = {
 export type PayrollWeekSources = {
   scope: PayrollScope; week: 1 | 2; from: string; through: string; sourceHash: string;
   recaps: { id: string; revision: number; reviewVersion: number; reviewSource: ReviewSource | null;
-    headline: string; detail: string; citations: PayrollCitation[] }[];
+    headline: string; detail: string; citations: PayrollCitation[]; date?: string }[];
   outcomes: { citation: PayrollCitation; text: string }[]; gaps: string[];
 };
 export type PayrollSourceManifest = {

@@ -222,6 +222,7 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
       return [{
         id: String(row.id), revision: Math.max(1, Number(row.revision ?? 1)), reviewVersion,
         reviewSource: source, headline: String(row.headline ?? ""), detail,
+        date: dateKey(row.local_date) ?? undefined,
         citations: [{ type: "interval" as const, id: String(row.id), revision: reviewVersion }],
       }];
     });
