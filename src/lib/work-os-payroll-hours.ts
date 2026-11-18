@@ -13,7 +13,7 @@ const GAP_FLAG_MS = 5 * MINUTE;
 const LOW_EVIDENCE_RATIO = 0.2;
 const LOW_EVIDENCE_CONTINUOUS_MS = 30 * MINUTE;
 const INACTIVITY_THRESHOLD_MS = 180_000;
-const CONFIDENCE_FLOOR = 0.8;
+const CONFIDENCE_FLOOR = 0.6;
 const MINUTE_ORDER: Category[] = ["payable", "break", "inactivity", "held", "manual", "outside"];
 
 type Part = { span: Span; category: Category; findingKey: string | null };
@@ -240,7 +240,9 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
     }
   }
 
-  const coverage = unionSpans(captureSpans);
+  const coverage = unionSpans(input.captures
+    .filter((capture) => capture.activity !== null && capture.span)
+    .map((capture) => capture.span!));
   const gapSpans = subtractSpans(subtractSpans(tracked, coverage), unionSpans(input.breaks.map((item) => item.span)));
   let gapTotal = 0;
   for (const span of gapSpans) {

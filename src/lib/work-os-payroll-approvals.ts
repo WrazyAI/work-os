@@ -11,6 +11,7 @@ import type {
 
 type Row = Record<string, unknown>;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const object = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 function requireAdmin(access: WorkOsAccess): void {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll approval is admin-only.");
 }
@@ -29,11 +30,19 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
   const scope = await reviewScope(access, reviewId);
   const result = await payrollTransaction(scope, async (client) => {
     const review = await loadPayrollReviewRow(client, scope, reviewId);
-    const existing = await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND request_key=$2`, [scope.organizationId, input.requestKey]);
+    const existing = await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND request_key=$3`, [scope.organizationId, reviewId, input.requestKey]);
     if (existing.rows.length) return approvalFromRow(existing.rows[0], scope, await periodOf(client, review));
     verifyCommand(review, input);
     if (String(review.status) === "approved") throw new WorkOsConflictError("This payroll review is already approved.", "payroll_already_approved");
-    if (String(review.status) === "failed") throw new WorkOsConflictError("This payroll analysis failed; re-analyze before approval.", "payroll_analysis_failed");
+    if (String(review.status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
+    const locked = await client.query(`SELECT row_version,status FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [scope.organizationId, reviewId]);
+    if (!locked.rows.length || String(locked.rows[0].status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
+    review.row_version = locked.rows[0].row_version;
+    const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
+    if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
+    const priorRow = review.current_approval_id
+      ? await client.query(`SELECT id FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, review.current_approval_id])
+      : await client.query(`SELECT id FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 ORDER BY revision DESC LIMIT 1`, [scope.organizationId, reviewId]);
     const active = await client.query(`SELECT 1 FROM work_payroll_runs WHERE organization_id=$1 AND review_id=$2 AND status IN ('queued','running') LIMIT 1`, [scope.organizationId, reviewId]);
     if (active.rows.length) throw new WorkOsConflictError("Payroll analysis is still running and blocks approval.", "payroll_run_active");
     const pendingRecaps = await client.query(`SELECT 1 FROM work_activity_intervals
@@ -57,11 +66,15 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     if (!days.length) throw new WorkOsConflictError("Payroll analysis has no daily record.", "payroll_days_missing");
     const totals = totalsOfDays(days);
     if (totals.held !== 0) throw new WorkOsConflictError("Held payroll minutes must be resolved before approval.", "payroll_held_minutes");
+    const approvedTotals = { ...totals, approved: totals.recommended };
     const briefs = (await client.query(`SELECT week,status,title,summary_markdown,summary_citations,themes,open_items,gaps,source_hash
       FROM work_payroll_week_briefs WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY week`,
     [scope.organizationId, reviewId, review.analysis_revision])).rows as Row[];
     const findings = (await client.query(`SELECT finding_key,kind,status,effect,start_at,end_at,minutes,reason,source_hash
       FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY finding_key`,
+    [scope.organizationId, reviewId, review.analysis_revision])).rows as Row[];
+    const decisions = (await client.query(`SELECT finding_key,decision,reason,actor_user_id,created_at,prior_decision_id
+      FROM work_payroll_decisions WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY created_at`,
     [scope.organizationId, reviewId, review.analysis_revision])).rows as Row[];
     const person = (await client.query(`SELECT display_name FROM work_people WHERE organization_id=$1 AND id=$2`, [scope.organizationId, scope.personId])).rows[0];
     const period = await periodOf(client, review);
@@ -69,9 +82,8 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       schemaVersion: "payroll-approval-v1",
       period,
       identity: { displayName: String(person?.display_name ?? "Employee") },
-      totals: { ...totals, approved: totals.recommended },
-      exact: days.map((day) => ({ date: day.local_date, exactMs: day.exact_ms })),
-      days: days.map((day) => ({ date: day.local_date, minutes: payrollObject(day.result).minutes ?? {}, status: day.status })),
+      totals: { ...totals, approved: totals.recommended },      exact: days.map((day) => ({ date: payrollDateKey(day.local_date), exactMs: day.exact_ms })),
+      days: days.map((day) => ({ date: payrollDateKey(day.local_date), minutes: { ...object(day.result).minutes as unknown as PayrollTotals, approved: Number(object(object(day.result).minutes).recommended ?? 0) }, status: day.status })),
       briefs: briefs.map((brief) => ({
         week: brief.week, status: brief.status, title: brief.title, summary: brief.summary_markdown,
         summaryCitations: brief.summary_citations ?? [], themes: brief.themes ?? [], openItems: brief.open_items ?? [],
@@ -81,6 +93,10 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
         key: finding.finding_key, kind: finding.kind, status: finding.status, effect: finding.effect,
         startAt: finding.start_at, endAt: finding.end_at, minutes: finding.minutes, reason: finding.reason, sourceHash: finding.source_hash,
       })),
+      decisions: decisions.map((decision) => ({
+        findingKey: decision.finding_key, decision: decision.decision, reason: decision.reason,
+        actorUserId: decision.actor_user_id, at: decision.created_at, priorDecisionId: decision.prior_decision_id,
+      })),
       sourceExplanation: {
         sourceHash: review.source_hash, sourceToken: revision.source_token,
         policyVersion: revision.policy_version, asOf: revision.as_of,
@@ -88,7 +104,7 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       approvedBy: access.ctx.user.id, approvedAt: new Date().toISOString(),
     };
     const snapshotHash = hash(snapshot);
-    const prior = review.current_approval_id ? String(review.current_approval_id) : null;
+    const prior = priorRow.rows[0]?.id ? String(priorRow.rows[0].id) : null;
     const nextRevision = Number((await client.query(`SELECT coalesce(max(revision),0)+1 AS revision FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2`, [scope.organizationId, reviewId])).rows[0].revision);
     const inserted = await client.query(`INSERT INTO work_payroll_approvals
       (organization_id,review_id,person_id,analysis_revision,revision,snapshot,approved_minutes,approved_by,note,
@@ -97,12 +113,18 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     [scope.organizationId, reviewId, scope.personId, review.analysis_revision, nextRevision, JSON.stringify(snapshot),
       totals.recommended, access.ctx.user.id, input.note?.trim() || null, prior, snapshotHash, input.requestKey]);
     const approval = inserted.rows[0];
-    await client.query(`UPDATE work_payroll_reviews SET status='approved', current_approval_id=$3,
+    await client.query(`UPDATE work_payroll_days SET approved_minutes=recommended_minutes, updated_at=now()
+      WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3`,
+    [scope.organizationId, reviewId, review.analysis_revision]);
+    const published = await client.query(`UPDATE work_payroll_reviews SET status='approved', current_approval_id=$3,
       approved_minutes=$4, approved_by=$5, approved_at=now(), approval_note=$6, totals=$7::jsonb,
-      retention_expires_at=greatest(now()+interval '30 days', pay_date + interval '30 days'),
+      retention_expires_at=greatest(retention_expires_at, now()+interval '30 days', pay_date + interval '30 days'),
       evidence_changed_since_approval=false, row_version=row_version+1, updated_at=now()
-      WHERE organization_id=$1 AND id=$2`,
-    [scope.organizationId, reviewId, approval.id, totals.recommended, access.ctx.user.id, input.note?.trim() || null, JSON.stringify(totals)]);
+      WHERE organization_id=$1 AND id=$2`, [scope.organizationId, reviewId, approval.id, totals.recommended, access.ctx.user.id, input.note?.trim() || null, JSON.stringify(approvedTotals)]);
+    const after = await client.query(`SELECT row_version,status FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2`, [scope.organizationId, reviewId]);
+    if (!after.rows.length || String(after.rows[0].status) !== "approved" || Number(after.rows[0].row_version) !== Number(review.row_version) + 1) {
+      throw new WorkOsConflictError("The payroll review changed before approval could be recorded.", "review_version_conflict");
+    }
     await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
       VALUES ($1,$2,'payroll.approved','payroll_review',$3,$4::jsonb)`,
     [scope.organizationId, access.ctx.user.id, reviewId, JSON.stringify({ approvalId: approval.id, revision: nextRevision, snapshotHash, approvedMinutes: totals.recommended })]);
@@ -124,9 +146,11 @@ export async function reopenPayrollReview(access: WorkOsAccess, reviewId: string
     const review = await loadPayrollReviewRow(client, scope, reviewId);
     verifyCommand(review, input);
     if (String(review.status) !== "approved") throw new WorkOsConflictError("Only an approved payroll review can be reopened.", "payroll_not_approved");
+    const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
+    if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
     await client.query(`UPDATE work_payroll_reviews SET status='reopened', current_approval_id=NULL,
       approved_minutes=NULL, approved_by=NULL, approved_at=NULL, approval_note=NULL,
-      retention_expires_at=greatest(now()+interval '30 days', pay_date + interval '30 days'),
+      retention_expires_at=greatest(retention_expires_at, pay_date + interval '30 days'),
       row_version=row_version+1, updated_at=now() WHERE organization_id=$1 AND id=$2`,
     [scope.organizationId, reviewId]);
     await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)

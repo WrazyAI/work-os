@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
-import { loadPayrollSourceToken, verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
+import { loadPayrollSourceToken, readPayrollSourceToken, verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
 import { applyPayrollDecisions } from "@/lib/work-os-payroll-hours";
 import type {
@@ -86,10 +86,14 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
   const client = await getPool().connect();
   try {
     const review = await loadPayrollReviewRow(client, scope, reviewId);
+    const expiry = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
+    if (Number.isFinite(expiry) && expiry <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
     const approval = review.current_approval_id
       ? (await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, review.current_approval_id])).rows[0]
       : null;
     const briefs = (await client.query(`SELECT * FROM work_payroll_week_briefs WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY week`, [scope.organizationId, reviewId, review.analysis_revision])).rows;
+    const revisionToken = (await client.query(`SELECT source_token FROM work_payroll_analysis_revisions WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`, [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
+    const sourceChanged = Boolean(approval && revisionToken?.source_token && (await readPayrollSourceToken(scope)) !== String(revisionToken.source_token));
     const recapStatsRow = (await client.query(`SELECT
         count(*) FILTER (WHERE review_status IN ('confirmed','amended') AND coalesce(review_source,'employee')='employee')::int AS employee_reviewed,
         count(*) FILTER (WHERE review_status IN ('confirmed','amended') AND review_source='payroll_auto')::int AS auto_approved,
@@ -112,7 +116,7 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
       blockers: [], run: null,
       approval: approval ? approvalFromRow(approval, scope, period) : null,
       retentionExpiresAt: iso(review.retention_expires_at) ?? "",
-      firstExportAt: iso(review.first_export_at), evidenceChangedSinceApproval: review.evidence_changed_since_approval === true,
+      firstExportAt: iso(review.first_export_at), evidenceChangedSinceApproval: review.evidence_changed_since_approval === true || sourceChanged,
       providerVerifiedAt: null,
       recapStats: {
         employeeReviewed: Number(recapStatsRow?.employee_reviewed ?? 0),
@@ -204,6 +208,9 @@ export async function resolvePayrollFindings(access: WorkOsAccess, reviewId: str
   if (!input.note.trim()) throw new WorkOsValidationError("A decision reason is required.");
   await payrollTransaction(scope, async (client) => {
     const review = await loadPayrollReviewRow(client, scope, reviewId);
+    if (String(review.status) === "approved" || review.current_approval_id) {
+      throw new WorkOsConflictError("Reopen the approved payroll review before changing findings.", "payroll_approved");
+    }
     const existing = await client.query(`SELECT count(*)::int AS n FROM work_payroll_decisions WHERE organization_id=$1 AND idempotency_key=ANY($2::text[])`,
       [scope.organizationId, input.findingIds.map((id) => `${input.requestKey}:${id}`)]);
     if (Number(existing.rows[0].n) === input.findingIds.length) return;

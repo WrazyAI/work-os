@@ -186,15 +186,21 @@ test("provider connection resolution requires an active org connection and verif
     await f.db.query("update work_people set worktivity_employee_id='other-emp' where id=$1 and organization_id=$2", [otherPerson, otherOrg]);
     await f.db.query(`insert into work_provider_connections(id,organization_id,provider,external_workspace_id)
       values($1,$2,'worktivity','ws-1'),($3,$4,'worktivity','ws-2')`, [connection, org, otherConnection, otherOrg]);
+    await f.db.query(`insert into work_source_accounts(organization_id,provider,external_account_id,person_id,verified)
+      values($1,'worktivity',$2,$3,true)`, [org, employee, person]);
     const scope: PayrollScope = { organizationId: org, personId: person };
+    await f.db.query(`insert into work_source_accounts(organization_id,provider,external_account_id,person_id,verified)
+      values($1,'worktivity',$2,$3,true)`, [org, employee, person]);
     assert.deepEqual(await resolvePayrollProviderConnection(scope), { connectionId: connection, employeeId: employee });
     await assert.rejects(resolvePayrollProviderConnection({ organizationId: otherOrg, personId: person }), /not found/i);
     await f.db.query("update work_provider_connections set active=false where id=$1", [connection]);
     await assert.rejects(resolvePayrollProviderConnection(scope), /connection/i);
     await f.db.query("update work_provider_connections set active=true where id=$1", [connection]);
+    await f.db.query("delete from work_source_accounts where organization_id=$1 and person_id=$2", [org, person]);
     await f.db.query(`insert into work_source_accounts(organization_id,provider,external_account_id,person_id,verified)
       values($1,'worktivity',$2,$3,false)`, [org, "wrong-emp", person]);
     await assert.rejects(resolvePayrollProviderConnection(scope), /verified/i);
+    await f.db.query(`delete from work_source_accounts where organization_id=$1 and person_id=$2`, [org, person]);
     await f.db.query(`insert into work_source_accounts(organization_id,provider,external_account_id,person_id,verified)
       values($1,'worktivity',$2,$3,true)`, [org, employee, person]);
     assert.deepEqual(await resolvePayrollProviderConnection(scope), { connectionId: connection, employeeId: employee });

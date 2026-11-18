@@ -12,6 +12,7 @@ const PROMPT_VERSION = "payroll-frame-v1";
 const RUBRIC_HASH = "payroll-frame-rubric-v1";
 const MAX_FRAMES = 3;
 const CATEGORIES = new Set(["work", "meeting", "training", "reading", "idle", "nonwork", "unclear"]);
+const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export class PayrollFrameUnavailableError extends Error {
   readonly code = "payroll_frame_unavailable";
@@ -59,6 +60,8 @@ export async function assertPayrollFrameImageAccess(scope: PayrollScope, frame: 
   if (row.deleted_at || String(row.processing_status) !== "processed") throw new PayrollFrameUnavailableError("Payroll frame is not retained");
   const expires = row.expires_at instanceof Date ? row.expires_at.getTime() : Date.parse(String(row.expires_at ?? ""));
   if (!Number.isFinite(expires) || expires <= now.getTime()) throw new PayrollFrameUnavailableError("Payroll frame expired");
+  const visible = object(row.visible_context);
+  if (visible.contains_sensitive_content === true || visible.containsSensitiveContent === true) throw new PayrollFrameUnavailableError("Payroll frame is excluded by sensitive-content policy");
   const consent = await employeeTrackingConsent(scope.organizationId, scope.personId);
   if (!consent.tracking || !consent.screenshotAnalysis) throw new PayrollFrameConsentError("Current tracking and screenshot consent are required");
 }

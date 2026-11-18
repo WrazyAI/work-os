@@ -403,8 +403,10 @@ begin
   delete from public.work_payroll_week_briefs where organization_id=r.organization_id and review_id=r.id;
   delete from public.work_payroll_analysis_revisions where organization_id=r.organization_id and review_id=r.id;
   delete from public.work_payroll_runs where organization_id=r.organization_id and review_id=r.id;
+  delete from public.work_payroll_recap_settlements where organization_id=r.organization_id and person_id=r.person_id and pay_date=r.pay_date;
   delete from public.work_payroll_audit_events where organization_id=r.organization_id and review_id=r.id;
   delete from public.work_payroll_operator_holds where organization_id=r.organization_id and review_id=r.id;
+  delete from public.work_payroll_person_context where organization_id=r.organization_id and person_id=r.person_id;
   delete from public.work_payroll_reviews where organization_id=r.organization_id and id=r.id;
 end $$;
 revoke all on function work_payroll_purge_expired(uuid,uuid) from public;

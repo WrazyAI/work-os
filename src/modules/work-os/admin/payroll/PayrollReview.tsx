@@ -69,7 +69,6 @@ export default function PayrollReview({ personId, payDate }: { personId: string;
       {error ? <Notice tone="warn">{error}</Notice> : null}
       <PayrollReviewView review={review.data} onApprove={approve} onReopen={reopen} onDecide={(key, action) => void decide(key, action)} onAdvance={() => void start()} />
       <PayrollQuestions review={review.data} />
-      <PayrollQuestions review={review.data} />
       <details className="payroll-panel">
         <summary>Daily record and decision queue</summary>
         <ul>{(days.data?.items ?? []).map((day) => <li key={day.id ?? day.date}>{day.date} · recommended {day.minutes.recommended} min · held {day.minutes.held} min</li>)}</ul>

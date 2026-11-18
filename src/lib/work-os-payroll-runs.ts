@@ -275,11 +275,7 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
     const phase = String(run.phase) as PayrollProgress["phase"];
     if (phase === "recaps") {
       const result = await deps.ensureRecaps(scope, period, at, 100);
-      if (!result.complete) {
-        await persistRun(scope, runId, token, at, { progress: { message: `Draining pending recaps (${result.pending} left).`, daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: result.pending } });
-        return progress((await getPool().query(`SELECT * FROM work_payroll_runs WHERE organization_id=$1 AND id=$2`, [scope.organizationId, runId])).rows[0]);
-      }
-      await persistRun(scope, runId, token, at, { phase: "activity", progress: { message: "Recaps settled; loading historical sources.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 } });
+      await persistRun(scope, runId, token, at, { phase: "activity", progress: { message: result.complete ? "Recaps settled; loading historical sources." : `Pending recaps remain (${result.pending}); loading sources without auto-approving them.`, daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: result.pending } });
     } else if (phase === "activity") {
       const manifest = await deps.loadSources(scope, period, new Date(String(run.as_of)));
       await persistRun(scope, runId, token, at, { phase: "evidence", inputManifest: manifest as unknown as Json, sourceHash: manifest.sourceToken, progress: { message: "Sources captured; reading provider evidence.", days: manifest.days.length, daysDone: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: manifest.days.length } });
@@ -304,7 +300,7 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       const logs = Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : [];
       const provider = { scope, connectionId: "run", bounds: { startMs: Date.parse(`${period.from}T00:00:00Z`), endMs: Date.parse(`${period.through}T00:00:00Z`) + 86_400_000 }, logs, complete: true, watermark: "", verifiedAt: at.toISOString(), semantics: { version: "worktivity-activitylog-v1", verified: false, direction: "unknown" as const, durationMs: 60_000 }, apps: { items: [], complete: true, coverage: [], enumLabels: {} } };
       const days = buildPayrollDayInputs(manifest, provider);
-      const dayIndex = Number(cursor.dayIndex ?? 0);
+      const dayIndex = Number(cursor.classifyIndex ?? 0);
       if (dayIndex >= days.length) {
         await persistRun(scope, runId, token, at, { phase: "days", progress: { message: "Frame classification complete; calculating hours.", days: days.length, daysDone: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: days.length } });
       } else {
@@ -314,8 +310,9 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
           if (frameResults[frame.summaryId]) continue;
           frameResults[frame.summaryId] = await deps.classifyFrame(scope, frame, policy, deps.signal);
         }
-        await persistRun(scope, runId, token, at, { inputArtifact: { ...artifact, frameResults }, progress: { message: "Classifying representative frames.", days: days.length, daysDone: dayIndex, framesClassified: Object.keys(frameResults).length, framesReused: 0, findings: 0, remaining: days.length - dayIndex } });
-        if (dayIndex === days.length - 1) await persistRun(scope, runId, token, at, { phase: "days" });
+        const nextClassify = dayIndex + 1;
+        await persistRun(scope, runId, token, at, { cursor: { ...cursor, classifyIndex: nextClassify }, inputArtifact: { ...artifact, frameResults }, progress: { message: "Classifying representative frames.", days: days.length, daysDone: nextClassify, framesClassified: Object.keys(frameResults).length, framesReused: 0, findings: 0, remaining: days.length - nextClassify } });
+        if (nextClassify >= days.length) await persistRun(scope, runId, token, at, { phase: "days" });
       }
     } else if (phase === "days") {
       const manifest = run.input_manifest as unknown as PayrollSourceManifest;
@@ -347,7 +344,7 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       weekBriefs[key] = result.brief;
       const bothDone = Boolean(checkpoints["week-1"]?.phase === "done" && checkpoints["week-2"]?.phase === "done");
       const nextWeek = week === 1 ? 2 : 1;
-      if (result.complete) {
+      if (result.brief.status !== "missing") {
         await getPool().query(`INSERT INTO work_payroll_week_briefs
           (organization_id,review_id,person_id,analysis_revision,week,period_start,period_end,status,title,summary_markdown,
            summary_citations,themes,open_items,gaps,sources,source_hash,model,prompt_version,generated_at)
@@ -384,7 +381,7 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
         const published = await client.query(`UPDATE work_payroll_reviews SET
           status=$4, analysis_revision=$5, row_version=row_version+1, source_hash=$6, totals=$7::jsonb,
           last_analyzed_at=now(), updated_at=now()
-          WHERE organization_id=$1 AND id=$2 AND row_version=$3 AND status <> 'approved' AND current_approval_id IS NULL
+          WHERE organization_id=$1 AND id=$2 AND row_version=$3 AND status <> 'approved'
           RETURNING row_version`,
         [scope.organizationId, run.review_id, review.row_version, blocked ? "needs_review" : "ready", run.target_revision, manifest.hash, JSON.stringify(totals)]);
         if (!published.rows.length) throw new PayrollLeaseLostError();

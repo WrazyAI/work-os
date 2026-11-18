@@ -187,7 +187,7 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
       const eligible = starts !== null && ends !== null ? span(starts, ends + 60 * 60_000)
         : window ? { startMs: instant(window.startsAt)!, endMs: instant(window.endsAt)! + 60 * 60_000 } : null;
       if (!session.clocked_out_at && clockedIn !== null) blockers.push("Open session requires clock-out or correction");
-      if (session.correction_status && String(session.correction_status) !== "original") {
+      if (["needs_correction", "invalid"].includes(String(session.correction_status ?? "original"))) {
         blockers.push("Session correction is not reconciled into the payroll source");
       }
       normalizedSessions.push({
@@ -264,7 +264,8 @@ export function buildPayrollDayInputs(manifest: PayrollSourceManifest, provider:
   }
   return days.map((day) => ({
     ...day,
-    blockers: provider.complete ? day.blockers : [...day.blockers, "Provider paging is incomplete; payroll publication is blocked"],
+    blockers: provider.complete && (day.sessions.length || day.captures.length === 0)
+      ? day.blockers : [...day.blockers, ...(!provider.complete ? ["Provider paging is incomplete; payroll publication is blocked"] : ["Activity has no mirrored session; correct attendance before approval"])],
     captures: day.captures.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt) || left.id.localeCompare(right.id)),
     sourceHash: hash({ base: day.sourceHash, provider: provider.watermark, captureIds: day.captures.map((capture) => capture.id) }),
   }));

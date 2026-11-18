@@ -155,13 +155,13 @@ export async function resolvePayrollProviderConnection(scope: PayrollScope): Pro
     [scope.organizationId, PROVIDER, scope.personId],
   );
   const mapped = person.rows[0].worktivity_employee_id?.trim() || null;
-  const employeeId = accounts.rows.length
-    ? accounts.rows.find((account) => account.verified && account.external_account_id === mapped)?.external_account_id ?? null
-    : mapped;
-  if (!employeeId) throw new Error("The person has no verified Worktivity employee mapping");
-  if (accounts.rows.length && !accounts.rows.some((account) => account.verified)) {
-    throw new Error("The Worktivity source account is not verified");
-  }
+  // A deployment-global API key is not organization authorization. Require an
+  // explicitly verified source-account mapping; a bare people-row id is not
+  // proof that this organization may read the provider account.
+  if (!accounts.rows.length) throw new Error("A verified Worktivity source account mapping is required for payroll");
+  if (!accounts.rows.some((account) => account.verified)) throw new Error("A verified Worktivity source account mapping is required for payroll");
+  const employeeId = accounts.rows.find((account) => account.verified && account.external_account_id === mapped)?.external_account_id ?? null;
+  if (!employeeId) throw new Error("A verified Worktivity employee mapping is required for payroll");
   return { connectionId: connection.rows[0].id, employeeId };
 }
 

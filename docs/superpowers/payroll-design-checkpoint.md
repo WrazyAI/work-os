@@ -2,7 +2,7 @@
 
 Ledger: d8ccca72-8b4e-41ea-885f-1cd0cb9ef6eb
 
-Scope: approved design and Native inline implementation authorized. Local product code/tests are in progress. No production mutation, approval/export, deployment, push/merge or packaging is authorized by this execution.
+Scope: approved design and Native inline implementation authorized. Local product code and focused tests are implemented; full-suite/build/review verification is in progress. No production mutation, approval/export, deployment, push/merge or packaging has been authorized.
 
 ## Checklist
 - [x] Capture initial requirements and payroll rules in conversation.
@@ -21,6 +21,10 @@ Scope: approved design and Native inline implementation authorized. Local produc
 - [x] After approval only: write implementation plan.
 - [x] Main-agent planning self-review: spec coverage, steps, shared types/signatures, five risk classes and document proportion.
 - [x] User reviews plan and chooses Native inline execution before implementation.
+- [x] Implement all 19 plan tasks locally with focused RED/GREEN evidence; full-suite/build/review gates in progress.
+- [ ] Full Work OS suite, production build, full companion suite/build, real PostgreSQL races and rendered browser acceptance.
+- [ ] Independent whole-surface review and any Critical/Important fixes.
+- [ ] Authorized rollout: migrations, provider/model probe, cron enablement, pilot activation, deployment.
 
 ## Confirmed requirements
 Admin only; Work OS is the export source, no Worktivity payroll writes. Distinguish tracked, recommended and approved hours. Work OS screenshots/recaps/intervals primary; Worktivity attendance, app usage and productivity signals supplementary. Productivity is not authoritative pay evidence.
@@ -47,7 +51,9 @@ Composition: navigation | employee + period / hours reconciliation / Week 1 + We
 Critique: removed generic donut/KPI-tile dashboard and decorative confidence scores. The distinctive instrument is a transparent tracked-to-recommended reconciliation, with uncertain minutes separate and unapproved state explicit. Existing Work OS palette overrides the reference's suggestion to invent a new brand.
 
 ## Next action
-Continue authorized inline execution. Task 1 committed as `9976f1b2`: periods/contracts, missing-module RED then 33/33 payroll/workday tests GREEN and typecheck PASS. Task 2 schema/fixtures in progress; first three SQL/service tests pass, added legal-hold/helper tests had expected RED and await GREEN. Baseline full Work OS suite: 1,340 passed, 11 opt-in PG skipped, zero failures (920 seconds under load). Execution record: `.superpowers/sdd/2026-11-16-work-os-payroll-review/progress.md`.
+Implementation tasks 1–18 are committed on `codex/payroll-review-design`; Task 19 is running the full Work OS suite, production build, rendered/route checks and one bounded whole-surface review. Current tip: `8b9c654b`. Focused evidence per task is in `.superpowers/sdd/2026-11-16-work-os-payroll-review/progress.md`.
+
+Outstanding rollout gates: full suite/build result; real disposable-PostgreSQL lease/approval/purge race tests (currently skipped); live Worktivity capture-direction/paging probe; OpenRouter provider/high-effort readiness probe; rendered 1440/1024/720/390 Light/Dark/keyboard/reduced-motion/TestSprite acceptance; verified supported employee clients before auto-approval; CodeRabbit pass. Do not enable payroll or auto-approval until these are recorded. Production deployment, cron activation and companion packaging remain separate operator decisions.
 
 Rebased execution base is `d7a1e10f`. New flexible arrangements are preserved and block fixed-shift payroll approval without a separately defined pay rule. Migration numbers now `0075_work_payroll_review.sql` and `0076_work_payroll_recap_provenance.sql`; existing `0074` is flexible arrangements. Payroll purge uses an isolated NOLOGIN retention executor; migration requires CREATEROLE and does not grant runtime membership. Documented operator holds are server/operator-only, never client JSON.
 
@@ -61,6 +67,6 @@ Browser tab: tab_736ef65a-880a-4245-8e11-f4e008934f4b.
 Browser accessibility snapshot confirms page loaded. At current 1000px viewport, document content width 985px (no horizontal overflow). Review dialog opens/closes and sample question renders its explicitly labelled sample answer. Screenshot capture blocked by browser visibility even after focus. Attempted iframe-based responsive check was unavailable (null frame document); temporary iframe removed. No claim of complete visual/responsive acceptance.
 
 ## Verification / outstanding execution gates
-Planning verification is document-only: task/checkbox/path/contract consistency checks and `git diff --check`. No product tests, live deductions, provider capture proof, AI readiness calls or deployment were run as part of plan writing.
+Implementation verification is in progress, not yet a completion claim. Focused tests passed for periods, schema, provider, hours, recap provenance, cutoff approval, sources/freshness, AI policy/vision, briefs, durable runs, decisions/approvals, screenshots, exports, retention, APIs, UI model/render and questions. The real PostgreSQL race suites (runs, approvals, purge) are explicitly skipped unless `WORK_OS_TEST_POSTGRES_URL` and `WORK_OS_TEST_POSTGRES_DISPOSABLE=1` are supplied. Full `work-os:test`, `npm run build`, rendered browser/TestSprite checks, rendered employee provenance, live provider/model probes and CodeRabbit remain outstanding. No production deployment or automation activation has occurred.
 
 At execution: verify Worktivity capture start/end semantics and complete paging read-only; verify selected OpenRouter model/provider/high effort using minimal non-sensitive calls; exercise multi-connection PostgreSQL locks; render desktop/narrow/Light/Dark states and TestSprite flows. Do not enable payroll auto-approval until supported employee clients show system provenance and notice. Export/retention changes never erase the employee recap ledger. Installed companion release cadence remains mandatory.

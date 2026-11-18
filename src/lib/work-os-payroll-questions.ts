@@ -112,9 +112,14 @@ export async function answerPayrollQuestion(access: WorkOsAccess, reviewId: stri
   const facts = await getPool().query(`SELECT totals,briefs.status,briefs.title,briefs.summary_markdown FROM work_payroll_reviews r
     LEFT JOIN work_payroll_week_briefs briefs ON briefs.organization_id=r.organization_id AND briefs.review_id=r.id AND briefs.analysis_revision=r.analysis_revision
     WHERE r.organization_id=$1 AND r.id=$2`, [scope.organizationId, reviewId]);
+  const approvalId = input.approvalId;
+  const approvalSnapshot = approvalId ? object((await getPool().query(`SELECT snapshot FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, approvalId])).rows[0]?.snapshot) : null;
+  const findings = await getPool().query(`SELECT finding_key,kind,status,minutes,reason FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY finding_key LIMIT 40`, [scope.organizationId, reviewId, created.review.analysis_revision]);
   const factsText = JSON.stringify({
-    totals: object((facts.rows[0] as Row | undefined)?.totals),
-    briefs: facts.rows.map((row: Row) => ({ status: row.status, title: row.title, summary: text(row.summary_markdown, 800) })),
+    totals: approvalSnapshot?.totals ?? object((facts.rows[0] as Row | undefined)?.totals),
+    days: approvalSnapshot?.days ?? [],
+    findings: approvalSnapshot?.findings ?? findings.rows,
+    briefs: approvalSnapshot?.briefs ?? facts.rows.map((row: Row) => ({ status: row.status, title: row.title, summary: text(row.summary_markdown, 800) })),
     history: history.rows.map((row: Row) => ({ question: text(row.question, 300), blocks: row.blocks })),
   }).slice(0, 8_000);
   const apiKey = process.env.OPENROUTER_API_KEY;

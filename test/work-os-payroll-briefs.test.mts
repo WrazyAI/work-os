@@ -95,9 +95,9 @@ test("cross-week citations are dropped from the associated claim", async () => {
         openItems: [], gaps: [],
       }),
     });
-    assert.deepEqual(result.brief.summaryCitations, []);
-    assert.equal(result.brief.themes.length, 1);
-    assert.deepEqual(result.brief.themes[0].citations, [{ type: "interval", id: "nov1", revision: 1 }]);
+    assert.equal(result.brief.status, "failed");
+    assert.equal(result.brief.summary, "");
+    assert.equal(result.brief.themes.length, 0);
   } finally {
     if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = previous;

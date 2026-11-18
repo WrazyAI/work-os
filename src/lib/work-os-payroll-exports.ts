@@ -12,9 +12,8 @@ const object = (value: unknown): Row => value && typeof value === "object" && !A
 const hours = (minutes: number) => (minutes / 60).toFixed(4);
 
 function text(value: unknown): string {
-  const raw = String(value ?? "");
-  // Spreadsheet formula defense applies to text cells only.
-  return /^[ \t=+\-@]/.test(raw) ? `'${raw}` : raw;
+  const last = String(value ?? "");
+  return /^[\s=+\-@]/.test(last) ? `'${last}` : last;
 }
 function csvField(value: string | number, isText: boolean): string {
   const raw = isText ? text(value) : String(value);
@@ -76,11 +75,15 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   if (ids.length > 100) throw new WorkOsValidationError("At most 100 approvals may be exported at once.");
   if (!input.requestKey.trim()) throw new WorkOsValidationError("An export request key is required.");
   const rows = (await getPool().query(`SELECT a.*, r.person_id AS review_person_id, r.pay_date AS review_pay_date,
-      r.current_approval_id, r.timezone
+      r.current_approval_id, r.timezone, r.retention_expires_at
     FROM work_payroll_approvals a JOIN work_payroll_reviews r
       ON r.organization_id=a.organization_id AND r.id=a.review_id AND r.person_id=a.person_id
     WHERE a.organization_id=$1 AND a.id=ANY($2::uuid[]) ORDER BY a.id`, [access.organizationId, ids])).rows as Row[];
   if (rows.length !== ids.length) throw new WorkOsValidationError("One or more payroll approvals were not found.");
+  for (const row of rows) {
+    const expiry = row.retention_expires_at instanceof Date ? row.retention_expires_at.getTime() : Date.parse(String(row.retention_expires_at ?? ""));
+    if (Number.isFinite(expiry) && expiry <= at.getTime()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
+  }
   const payDates = new Set(rows.map((row) => String(payrollDateKey(row.review_pay_date))));
   if (payDates.size !== 1) throw new WorkOsConflictError("Bulk payroll export requires one pay date.", "payroll_mixed_pay_dates");
   const approvals = rows.map((row) => approvalFromRow(row, { organizationId: access.organizationId, personId: String(row.person_id) }, periodOf(row)));
@@ -89,15 +92,23 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   const body = approvals.flatMap((approval) => input.kind === "daily" ? dailyRows(approval, historical) : summaryRows(approval, historical));
   const bytes = Buffer.from(csv([[...table], ...body], input.kind === "daily" ? DAILY_TEXT : SUMMARY_TEXT), "utf8");
   const digest = hash(bytes);
+  // Store each approval's own canonical file so a later single export cannot
+  // return a different approval's batch rows.
+  const individual = new Map(approvals.map((approval) => {
+    const rowsForApproval = input.kind === "daily" ? dailyRows(approval, historical) : summaryRows(approval, historical);
+    const payload = Buffer.from(csv([[...table], ...rowsForApproval], input.kind === "daily" ? DAILY_TEXT : SUMMARY_TEXT), "utf8");
+    return [approval.id, { payload, hash: hash(payload) }] as const;
+  }));
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     for (const approval of approvals) {
+      const file = individual.get(approval.id)!;
       await client.query(`INSERT INTO work_payroll_exports
         (organization_id,review_id,person_id,approval_id,kind,schema_version,snapshot_hash,payload,payload_hash,actor_user_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (organization_id,approval_id,kind,schema_version) DO NOTHING`,
       [access.organizationId, approval.reviewId, approval.scope.personId, approval.id, input.kind, SCHEMA,
-        approval.snapshotHash, bytes, digest, access.ctx.user.id]);
+        approval.snapshotHash, file.payload, file.hash, access.ctx.user.id]);
       await client.query(`UPDATE work_payroll_reviews SET
         first_export_at=coalesce(first_export_at,$3), last_exported_at=$3,
         retention_expires_at=greatest(retention_expires_at, pay_date + interval '30 days', coalesce(first_export_at,$3::timestamptz) + interval '30 days'),
@@ -114,6 +125,9 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   } finally { client.release(); }
   const stored = await getPool().query<{ payload: Buffer; payload_hash: string }>(`SELECT payload,payload_hash FROM work_payroll_exports
     WHERE organization_id=$1 AND approval_id=$2 AND kind=$3 AND schema_version=$4`, [access.organizationId, approvals[0].id, input.kind, SCHEMA]);
+  if (approvals.length > 1) {
+    return { bytes, filename: `payroll-${payDates.values().next().value}-${input.kind}-${digest.slice(0, 12)}.csv`, hash: digest };
+  }
   const storedBytes = stored.rows[0]?.payload ? new Uint8Array(stored.rows[0].payload) : bytes;
   const storedHash = String(stored.rows[0]?.payload_hash ?? digest);
   return {

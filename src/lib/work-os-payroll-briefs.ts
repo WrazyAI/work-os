@@ -45,7 +45,7 @@ export function validatePayrollCitations(citations: unknown, sources: PayrollWee
     const row = entry as Record<string, unknown>;
     const id = typeof row.id === "string" ? row.id : "";
     const revision = Number(row.revision);
-    if (!id || !Number.isSafeInteger(revision) || revision < 1) continue;
+    if (!id || !Number.isSafeInteger(revision) || revision < 0) continue;
     let citation: PayrollCitation | null = null;
     if (row.type === "interval") {
       const recap = recaps.get(id);
@@ -155,6 +155,7 @@ function parseDraft(week: 1 | 2, sourceHash: string, parsed: Record<string, unkn
   const summary = clean(parsed.summary, 900);
   if (!summary || timeClaim.test(summary)) return null;
   const summaryCitations = validatePayrollCitations(parsed.citations, sources);
+  if (!summaryCitations.length) return null;
   if (completionClaim.test(summary) && !hasOutcome(summaryCitations)) return null;
   const themes = (Array.isArray(parsed.themes) ? parsed.themes : []).flatMap((entry) => {
     const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : null;
