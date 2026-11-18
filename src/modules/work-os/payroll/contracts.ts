@@ -128,6 +128,8 @@ export type PayrollReview = {
   status: PayrollReviewStatus; totals: PayrollTotals; briefs: PayrollWeekBrief[]; blockers: string[];
   run: PayrollRun | null; approval: PayrollApproval | null; retentionExpiresAt: string;
   firstExportAt: string | null; evidenceChangedSinceApproval: boolean; providerVerifiedAt: string | null;
+  /** Safe count context for the admin header; never raw recap sources. */
+  recapStats?: { employeeReviewed: number; autoApproved: number; pending: number };
 };
 export type PayrollRosterPage = Page<{
   personId: string; displayName: string; active: boolean; mapped: boolean; reviewId: string | null;
