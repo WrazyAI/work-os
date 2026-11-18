@@ -40,10 +40,13 @@ export function mergeSeenIds(seenIds: readonly string[], candidateIds: readonly 
  * review is still inferred. Confirmed, amended, preparing, or failed intervals
  * are never surfaced as a review notification. */
 export function readyRecap(intervals: readonly ActivityInterval[] | undefined): ActivityInterval | null {
-  const ready = (intervals ?? [])
-    .filter((interval) => interval.generationStatus === "ready" && interval.reviewStatus === "inferred")
-    .sort((left, right) => String(right.windowStart).localeCompare(String(left.windowStart)));
-  return ready[0] ?? null;
+  const latest = latestReadyRecap(intervals);
+  return latest?.reviewStatus === "inferred" ? latest : null;
+}
+
+export type RecapWatermark = Pick<ActivityInterval, "windowEnd" | "id">;
+function compareRecaps(a: RecapWatermark, b: RecapWatermark) {
+  return Date.parse(a.windowEnd) - Date.parse(b.windowEnd) || (a.id > b.id ? 1 : a.id < b.id ? -1 : 0);
 }
 
 /** The newest ready recap regardless of review state. Launch surfacing uses
@@ -52,7 +55,7 @@ export function readyRecap(intervals: readonly ActivityInterval[] | undefined): 
 export function latestReadyRecap(intervals: readonly ActivityInterval[] | undefined): ActivityInterval | null {
   const ready = (intervals ?? [])
     .filter((interval) => interval.generationStatus === "ready")
-    .sort((left, right) => String(right.windowStart).localeCompare(String(left.windowStart)));
+    .sort((left, right) => compareRecaps(right, left));
   return ready[0] ?? null;
 }
 
@@ -60,19 +63,20 @@ export function latestReadyRecap(intervals: readonly ActivityInterval[] | undefi
  * watermark is the highest window this app session already surfaced; it keeps
  * an older recap from appearing after the newer one is approved. */
 export function recapSurfaceDecision(input: {
-  latest: Pick<ActivityInterval, "id" | "windowStart" | "reviewStatus"> | null;
-  watermark: string | null;
-  pendingRecap: Pick<ActivityInterval, "id" | "windowStart"> | null;
-}): { surface: boolean; watermark: string | null; reason: "surface" | "approved" | "not_newer" | "already_pending" | "none" } {
+  latest: Pick<ActivityInterval, "id" | "windowEnd" | "reviewStatus"> | null;
+  watermark: RecapWatermark | null;
+  pendingRecap: RecapWatermark | null;
+}): { surface: boolean; watermark: RecapWatermark | null; reason: "surface" | "approved" | "not_newer" | "already_pending" | "none" } {
   const { latest, watermark, pendingRecap } = input;
-  const later = (candidate: string) => watermark && watermark >= candidate ? watermark : candidate;
+  const later = (candidate: RecapWatermark) => watermark && compareRecaps(watermark, candidate) >= 0 ? watermark : { windowEnd: candidate.windowEnd, id: candidate.id };
   if (!latest) return { surface: false, watermark, reason: "none" };
-  if (latest.reviewStatus !== "inferred") return { surface: false, watermark: later(latest.windowStart), reason: "approved" };
-  if (pendingRecap && (pendingRecap.id === latest.id || pendingRecap.windowStart >= latest.windowStart)) {
-    return { surface: false, watermark: later(pendingRecap.windowStart), reason: "already_pending" };
+  if (watermark && compareRecaps(watermark, latest) > 0) return { surface: false, watermark, reason: "not_newer" };
+  if (latest.reviewStatus !== "inferred") return { surface: false, watermark: later(latest), reason: "approved" };
+  if (pendingRecap && compareRecaps(pendingRecap, latest) >= 0) {
+    return { surface: false, watermark: later(pendingRecap), reason: "already_pending" };
   }
-  if (watermark && watermark >= latest.windowStart) return { surface: false, watermark, reason: "not_newer" };
-  return { surface: true, watermark: latest.windowStart, reason: "surface" };
+  if (watermark && compareRecaps(watermark, latest) >= 0) return { surface: false, watermark, reason: "not_newer" };
+  return { surface: true, watermark: later(latest), reason: "surface" };
 }
 
 /** One compact bubble state for the post-approval queue. The approved recap

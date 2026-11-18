@@ -61,7 +61,7 @@ import { TaskFinder } from "./TaskFinder";
 import { buildFocusPlan } from "./focusPlan";
 import { filterFinderTasks } from "./taskFinderFilters";
 import type { TaskFinderSource } from "./workOsQueries";
-import { updateTaskHistoryPages } from "./workOsQueries";
+import { updateTaskHistoryPages, useLatestActivityIntervalQuery } from "./workOsQueries";
 import { SortHeaderRow } from "./SortHeaderRow";
 import { taskViewTabIndex } from "./taskViewTabs";
 import { ProgressRing } from "./ProgressRing";
@@ -71,11 +71,11 @@ import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversation
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { clearWorkOsAccountCache, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalNotificationQuery, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
-import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, latestReadyRecap, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
+import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, recapSurfaceDecision, type RecapWatermark, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
@@ -2432,10 +2432,13 @@ export default function App() {
       onLoadMore: () => { void requestMemoryFactPage(proposedMemoryQuery); },
     },
   } : undefined;
-  const notificationIntervalsQuery = useActivityIntervalNotificationQuery({ enabled: notificationReadsEnabled, date: day?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
+  const latestRecapQuery = useLatestActivityIntervalQuery({ enabled: notificationReadsEnabled,
+    scope: workSessionQuery.data?.organizationId && workSessionQuery.data.personId
+      ? { organizationId: workSessionQuery.data.organizationId, personId: workSessionQuery.data.personId } : null,
+    pollMs: NOTIFICATION_POLL_MS });
   // The bell only needs the newest ready recap, which always lives on the
   // first page; later pages stay unloaded until the stream asks for them.
-  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
+  const readyRecapInterval = latestRecapQuery.data?.interval?.reviewStatus === "inferred" ? latestRecapQuery.data.interval : null;
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data?.factTotals?.candidate ?? (memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0), [memoryQuery.data]);
   // The Admin tab reads the same live overview the administration pages use.
@@ -2949,21 +2952,20 @@ export default function App() {
   // Once that newest is approved an older recap never cascades into a flyout;
   // the floating companion keeps owning system-level delivery so one recap
   // never fires two system toasts.
-  const latestRecapInterval = useMemo(() => latestReadyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
-  const recapSurfaceWatermark = useRef<string | null>(null);
+  const latestRecapInterval = latestRecapQuery.data?.interval ?? null;
+  const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
   const recapAccountRef = useRef<string | null>(null);
   useEffect(() => {
-    const account = workSessionQuery.data?.personId ?? workSessionQuery.data?.userId ?? null;
+    const account = workSessionQuery.data ? `${workSessionQuery.data.organizationId}:${workSessionQuery.data.personId ?? workSessionQuery.data.userId}` : null;
     if (recapAccountRef.current === account) return;
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
-  }, [workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
+  }, [workSessionQuery.data?.organizationId, workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
   useEffect(() => {
     if (!latestRecapInterval) return;
-    const previous = recapSurfaceWatermark.current;
-    if (previous !== null && latestRecapInterval.windowStart <= previous) return;
-    recapSurfaceWatermark.current = latestRecapInterval.windowStart;
-    if (latestRecapInterval.reviewStatus !== "inferred") return;
+    const decision = recapSurfaceDecision({ latest: latestRecapInterval, watermark: recapSurfaceWatermark.current, pendingRecap: null });
+    recapSurfaceWatermark.current = decision.watermark;
+    if (!decision.surface) return;
     notifications.info(
       "Confirm or correct what Otto saw during your last interval.",
       "Your recap is ready",

@@ -29,7 +29,9 @@ export const workOsKeys = {
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
   activityIntervals: (date: string) => ["work-os", "activity-intervals", date] as const,
-  activityIntervalLatest: () => ["work-os", "activity-intervals", "latest"] as const,
+  activityIntervalLatest: (scope?: { organizationId: string; personId: string } | null) => scope
+    ? ["work-os", "activity-intervals", "latest", scope.organizationId, scope.personId] as const
+    : ["work-os", "activity-intervals", "latest"] as const,
   memory: () => ["work-os", "memory"] as const,
   suggestions: () => ["work-os", "suggestions"] as const,
 };
@@ -40,7 +42,7 @@ export function isPersistedQueryKey(key: QueryKey): boolean {
   // Administration reads (roster, evidence, review state, organization
   // settings) stay out of the on-disk cache: they belong to the workspace
   // record, not to this device's employee session.
-  return key[0] === PERSISTED_ROOT && key[1] !== "admin";
+  return key[0] === PERSISTED_ROOT && key[1] !== "admin" && !(key[1] === "activity-intervals" && key[2] === "latest");
 }
 
 export function createWorkOsQueryClient(): QueryClient {
