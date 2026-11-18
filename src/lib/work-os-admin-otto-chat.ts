@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
+import { recapReviewLabel } from "@/modules/work-os/recap-review";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import {
   adminRecordWindows,
@@ -681,7 +682,7 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
   const reviewDay = recap.reviewedAt ? localDay(recap.reviewedAt, recap.timezone) : "";
   const name = recap.person.displayName.replace(/\s+/g, " ").trim();
   return {
-    reply: `${name}: latest reviewed recap (${recap.reviewStatus}) for ${windowDay}${reviewDay ? `, reviewed ${reviewDay}` : ""}.`,
+    reply: `${name}: latest reviewed recap (${recapReviewLabel(recap.reviewStatus, recap.reviewSource).toLowerCase()}) for ${windowDay}${reviewDay ? `, reviewed ${reviewDay}` : ""}.`,
   };
 }
 

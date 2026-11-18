@@ -445,6 +445,10 @@ export interface ActivityInterval {
    * the generation `revision`. */
   reviewVersion?: number;
   reviewStatus: "inferred" | "confirmed" | "amended";
+  /** Who approved the current projection. Absent on older servers means the
+   * historical employee review; payroll_auto is a system approval. */
+  reviewSource?: "employee" | "admin" | "payroll_auto" | null;
+  payrollDate?: string | null;
   headline: string | null;
   detail: string | null;
   /** Structured recap fields from the synthesis; older payloads omit them and

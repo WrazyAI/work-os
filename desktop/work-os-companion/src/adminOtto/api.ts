@@ -137,6 +137,9 @@ function recapValue(value: unknown): ReviewedRecap {
     sourceRevision: number(record.sourceRevision, "Admin Otto recap source revision"),
     scriptHash: text(record.scriptHash, "Admin Otto recap script hash"),
     reviewStatus: record.reviewStatus === "amended" ? "amended" : "confirmed",
+    reviewSource: record.reviewSource === "payroll_auto" || record.reviewSource === "admin" || record.reviewSource === "employee"
+      ? record.reviewSource : undefined,
+    payrollDate: typeof record.payrollDate === "string" ? record.payrollDate : null,
     reviewedAt: text(record.reviewedAt, "Admin Otto recap review time"),
     windowStart: text(record.windowStart, "Admin Otto recap window start"),
     windowEnd: text(record.windowEnd, "Admin Otto recap window end"),

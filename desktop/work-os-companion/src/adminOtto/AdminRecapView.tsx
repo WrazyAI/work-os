@@ -71,7 +71,7 @@ export function AdminRecapView({
           </p>
         </div>
         <span className={`admin-otto-review-status is-${recap.reviewStatus}`}>
-          {adminReviewStatusLabel(recap.reviewStatus)}
+          {adminReviewStatusLabel(recap.reviewStatus, recap.reviewSource)}
         </span>
       </header>
 
@@ -137,7 +137,11 @@ export function AdminRecapView({
 
       <footer className="admin-otto-recap-footer">
         <p className="admin-otto-quiet">
-          Reviewed by the employee. Observed activity is context, not task completion or attendance.
+          {recap.reviewSource === "payroll_auto"
+            ? "Auto-approved for payroll. This is a system decision, not an employee confirmation. Observed activity is context, not task completion or attendance."
+            : recap.reviewSource === "admin"
+              ? "Approved by an administrator. Observed activity is context, not task completion or attendance."
+              : "Reviewed by the employee. Observed activity is context, not task completion or attendance."}
         </p>
         <div className="admin-otto-recap-actions">
           {!listening ? (

@@ -140,6 +140,7 @@ export default function AdminOverviewPage() {
   const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
   const recapsToday = data.counts.recapsToday ?? 0;
   const recapsReviewedToday = data.counts.recapsReviewedToday ?? 0;
+  const recapsAutoApprovedToday = data.counts.recapsAutoApprovedToday ?? 0;
   const digest = activityDigest(data.recentActivity);
 
   return (
@@ -240,7 +241,7 @@ export default function AdminOverviewPage() {
       <Group label="Today" detail="Recorded across the workspace so far.">
         <Record columns={4}>
           <Fact label="Completed" value={data.counts.tasksCompletedToday} detail="Task outcomes" tone="signal" lead />
-          <Fact label="Recaps" value={recapsToday} detail={recapsToday === 0 ? "No recaps yet" : `${recapsReviewedToday} reviewed${recapsToday > recapsReviewedToday ? ` · ${recapsToday - recapsReviewedToday} waiting` : ""}`} />
+          <Fact label="Recaps" value={recapsToday} detail={recapsToday === 0 ? "No recaps yet" : `${recapsReviewedToday} employee-reviewed${recapsAutoApprovedToday ? ` · ${recapsAutoApprovedToday} auto-approved` : ""}${recapsToday > recapsReviewedToday + recapsAutoApprovedToday ? ` · ${recapsToday - recapsReviewedToday - recapsAutoApprovedToday} waiting` : ""}`} />
           <Fact label="Evidence" value={data.counts.evidenceToday} detail={`${data.counts.evidenceActivityToday} activity · ${data.counts.evidenceOutputToday} output`} tone="observed" />
           <Fact label="EOD submitted" value={data.counts.reportsSubmittedToday} detail={`${data.counts.reportsPendingReview} awaiting review`} />
         </Record>

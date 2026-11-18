@@ -1,9 +1,10 @@
 import type { ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import { recapReviewLabel } from "../../../../src/modules/work-os/recap-review";
 import { formatWorkOsFullDate } from "../dateFormat";
 
 /** The one vocabulary administration uses for a reviewed recap. */
-export function adminReviewStatusLabel(status: ReviewedRecap["reviewStatus"]): string {
-  return status === "amended" ? "Corrected by employee" : "Confirmed by employee";
+export function adminReviewStatusLabel(status: ReviewedRecap["reviewStatus"], source?: ReviewedRecap["reviewSource"]): string {
+  return recapReviewLabel(status, source);
 }
 
 export function adminRecapDate(iso: string | null | undefined, timezone?: string | null): string {

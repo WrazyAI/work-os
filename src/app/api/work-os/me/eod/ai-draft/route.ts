@@ -176,7 +176,7 @@ export async function POST(req: Request) {
       grounding.observed = [
         ...intervalLines.map((line) => ({
           at: null,
-          text: `${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${line.detail}`,
+          text: `${line.label} — ${intervalProvenanceLabel(line.provenance, line.reviewSource)}: ${line.detail}`,
           app: null,
         })),
         ...githubLines.map((text) => ({ at: null, text, app: "GitHub" })),

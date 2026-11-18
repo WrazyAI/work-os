@@ -375,7 +375,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                       <li key={String(recap.id ?? index)}>
                         <div className="admin-recap-head">
                           <b>{timeLabel}</b>
-                          <Pill tone={reviewStatus === "confirmed" ? "ok" : reviewStatus === "amended" ? "info" : "neutral"}>{recapReviewLabel(recap.review_status)}</Pill>
+                          <Pill tone={reviewStatus === "confirmed" ? "ok" : reviewStatus === "amended" ? "info" : "neutral"}>{recapReviewLabel(recap.review_status, recap.review_source)}</Pill>
                         </div>
                         <p title={detailText}>{detailText}</p>
                       </li>

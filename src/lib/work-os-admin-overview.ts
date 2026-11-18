@@ -36,6 +36,8 @@ export interface AdminOverviewPerson {
    * employee has reviewed them. */
   recapsToday: number;
   recapsReviewedToday: number;
+  /** Recaps auto-approved for payroll; never counted as employee reviews. */
+  recapsAutoApprovedToday: number;
   lastRecapAt: string | null;
   evidenceToday: number;
   tasksCompletedToday: number;
@@ -78,6 +80,7 @@ export interface AdminOverview {
     /** Ready interval recaps generated today, including not-yet-reviewed ones. */
     recapsToday: number;
     recapsReviewedToday: number;
+    recapsAutoApprovedToday: number;
     tasksCompletedToday: number;
     tasksOpen: number;
     tasksOverdue: number;
@@ -152,6 +155,8 @@ export interface RecapRollupEntry {
   total: number;
   /** Of those, the recaps the employee confirmed or corrected. */
   reviewed: number;
+  /** Of those, payroll automation approved without employee input. */
+  autoApproved: number;
   /** The latest recap window end, or null when there is no finished recap. */
   lastAt: string | null;
 }
@@ -162,6 +167,7 @@ export interface RecapGroupRow {
   person_id: string;
   total: number | string;
   reviewed: number | string;
+  auto_approved?: number | string;
   last_at: Date | string | null;
 }
 
@@ -169,6 +175,7 @@ export function summarizeRecapGroups(rows: RecapGroupRow[]): RecapRollupEntry & 
   const rollup: RecapRollupEntry & { byPerson: Map<string, RecapRollupEntry> } = {
     total: 0,
     reviewed: 0,
+    autoApproved: 0,
     lastAt: null,
     byPerson: new Map(),
   };
@@ -178,10 +185,12 @@ export function summarizeRecapGroups(rows: RecapGroupRow[]): RecapRollupEntry & 
     const entry: RecapRollupEntry = {
       total: Number(row.total ?? 0),
       reviewed: Number(row.reviewed ?? 0),
+      autoApproved: Number(row.auto_approved ?? 0),
       lastAt: isoOrNull(row.last_at),
     };
     rollup.total += entry.total;
     rollup.reviewed += entry.reviewed;
+    rollup.autoApproved += entry.autoApproved;
     if (entry.lastAt && (!rollup.lastAt || entry.lastAt > rollup.lastAt)) rollup.lastAt = entry.lastAt;
     rollup.byPerson.set(personId, entry);
   }
@@ -247,7 +256,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       .select("id,person_id,kind,substantive,input_text,update_kind,occurred_at,created_at")
       .eq("organization_id", organizationId).eq("shift_date", date).order("occurred_at", { ascending: false }).limit(300),
     db.from("work_activity_intervals")
-      .select("id,person_id,window_start,window_end,prompt_kind,generation_status,review_status,headline,ai_detail,final_detail,employee_feedback,timezone,structured_summary,evidence_expired_at")
+      .select("id,person_id,window_start,window_end,prompt_kind,generation_status,review_status,review_source,payroll_date,headline,ai_detail,final_detail,employee_feedback,timezone,structured_summary,evidence_expired_at")
       .eq("organization_id", organizationId).eq("local_date", date).order("window_end", { ascending: false }).limit(80),
     db.from("work_evidence")
       .select("id,person_id,source,title,summary,evidence_date,created_at")
@@ -264,7 +273,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     getPool().query<RecapGroupRow>(`
       SELECT i.person_id,
         count(*)::int AS total,
-        count(*) FILTER (WHERE i.review_status IN ('confirmed', 'amended'))::int AS reviewed,
+        count(*) FILTER (WHERE i.review_status IN ('confirmed', 'amended') AND coalesce(i.review_source, 'employee') = 'employee')::int AS reviewed,
+        count(*) FILTER (WHERE i.review_source = 'payroll_auto')::int AS auto_approved,
         max(i.window_end) AS last_at
       FROM work_activity_intervals i
       JOIN work_people p
@@ -519,6 +529,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       substantiveUpdatesToday: Number(personUpdates?.substantive ?? 0),
       recapsToday: recapRollup.byPerson.get(personId)?.total ?? 0,
       recapsReviewedToday: recapRollup.byPerson.get(personId)?.reviewed ?? 0,
+      recapsAutoApprovedToday: recapRollup.byPerson.get(personId)?.autoApproved ?? 0,
       lastRecapAt: recapRollup.byPerson.get(personId)?.lastAt ?? null,
       evidenceToday: evidenceByPerson.get(personId) ?? 0,
       tasksCompletedToday: completedByPerson.get(personId) ?? 0,
@@ -555,11 +566,15 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       title: interval.headline ? String(interval.headline) : "Activity recap",
       detail: String(interval.final_detail ?? interval.ai_detail ?? "").slice(0, 260) || null,
       provenance:
-        String(interval.review_status) === "confirmed"
-          ? "employee confirmed"
-          : String(interval.review_status) === "amended"
-            ? "employee amended"
-            : "AI-inferred, not reviewed",
+        String(interval.review_source ?? "") === "payroll_auto"
+          ? "auto-approved for payroll"
+          : String(interval.review_source ?? "") === "admin"
+            ? "approved by administrator"
+            : String(interval.review_status) === "confirmed"
+              ? "employee confirmed"
+              : String(interval.review_status) === "amended"
+                ? "employee amended"
+                : "AI-inferred, not reviewed",
     });
   }
   for (const event of completedEvents.slice(0, 20)) {
@@ -612,6 +627,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     substantiveUpdatesToday: sum(todayCheckIns, "substantive"),
     recapsToday: recapRollup.total,
     recapsReviewedToday: recapRollup.reviewed,
+    recapsAutoApprovedToday: recapRollup.autoApproved,
     tasksCompletedToday: sum(todayEvents, "total"),
     tasksOpen: Number(taskStats.open),
     tasksOverdue: Number(taskStats.overdue),

@@ -6,6 +6,9 @@ import { intervalRevision, intervalSpeechSource, isoInstant } from "@/lib/work-o
 import type { ActivityIntervalRecord } from "@/lib/work-os-activity-intervals";
 import { buildRecapSpeechLines } from "@/lib/work-os-recap-speech";
 import type { PersonRef, ReviewedRecap } from "@/modules/work-os/admin-otto/contracts";
+import {
+  normalizeReviewedRecap, recapCoverageLine, recapReviewSource, recapSpeechProvenanceLine,
+} from "@/modules/work-os/recap-review";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const reviewed = (row: ActivityIntervalRecord) => row.review_status === "confirmed" || row.review_status === "amended";
@@ -14,6 +17,11 @@ const reviewed = (row: ActivityIntervalRecord) => row.review_status === "confirm
  * both the visible read-along and the spoken script, not just metadata. */
 export function buildReviewedRecap(row: ActivityIntervalRecord, version: number, eventId: string, person: PersonRef): ReviewedRecap {
   if (!reviewed(row)) throw new WorkOsConflictError("This recap has not been reviewed.");
+  const status = row.review_status as "confirmed" | "amended";
+  const reviewSource = recapReviewSource(status, row.review_source);
+  if (!reviewSource) throw new WorkOsConflictError("This recap has no review source.");
+  const payrollDate = row.payroll_date ? String(row.payroll_date).slice(0, 10) : null;
+  if (reviewSource === "payroll_auto" && !payrollDate) throw new Error("A payroll auto-approval requires its pay date");
   const source = intervalSpeechSource({ ...row, final_detail: row.ai_detail });
   const original = { headline: source.headline ?? "", detail: source.detail ?? "", activities: source.activities };
   const feedback = row.review_status === "amended" ? String(row.employee_feedback ?? "") : null;
@@ -22,27 +30,34 @@ export function buildReviewedRecap(row: ActivityIntervalRecord, version: number,
     { text: "Original AI summary.", time: null }, ...originalLines,
     { text: "Employee correction.", time: null }, { text: feedback ?? "", time: null },
   ] : originalLines;
+  const provenanceLine = recapSpeechProvenanceLine(status, reviewSource);
+  if (provenanceLine) speechLines.unshift({ text: provenanceLine, time: null });
   const scriptHash = hash(speechLines);
   return {
     intervalId: String(row.id), eventId, person, reviewVersion: version,
-    reviewKey: hash([row.organization_id, row.id, version, scriptHash]),
+    reviewKey: hash([row.organization_id, row.id, version, scriptHash, reviewSource, payrollDate]),
     sourceRevision: intervalRevision(row), scriptHash,
-    reviewStatus: row.review_status as "confirmed" | "amended",
+    reviewStatus: status, reviewSource, payrollDate,
     reviewedAt: isoInstant(row.reviewed_at) ?? isoInstant(row.generated_at) ?? isoInstant(row.window_end) ?? "",
     windowStart: isoInstant(row.window_start) ?? "", windowEnd: isoInstant(row.window_end) ?? "",
     timezone: String(row.timezone ?? "UTC"), original, employeeFeedback: feedback,
-    speechLines, coverage: ["AI-inferred activity, employee reviewed; not task completion or attendance."],
+    speechLines, coverage: [recapCoverageLine(status, reviewSource)],
     recordUrl: `/work-os/admin/people/${encodeURIComponent(person.id)}?recap=${encodeURIComponent(String(row.id))}`,
   };
 }
 
 /** Content identity intentionally excludes version, event id and review time.
- * Only the immediately previous content is deduplicated, never an older A. */
+ * Only the immediately previous content is deduplicated, never an older A.
+ * Historical snapshots keep their original hash; source and pay date enter the
+ * identity only once a row carries the new provenance (or is not an employee
+ * decision), so a legacy retry still matches its stored hash. */
 function contentHash(row: ActivityIntervalRecord, recap: ReviewedRecap) {
-  return hash({ organizationId: row.organization_id, intervalId: row.id, personId: row.person_id,
+  const base = { organizationId: row.organization_id, intervalId: row.id, personId: row.person_id,
     sourceHash: row.source_hash ?? null, sourceRevision: recap.sourceRevision,
     windowStart: recap.windowStart, windowEnd: recap.windowEnd, timezone: recap.timezone,
-    original: recap.original, reviewStatus: recap.reviewStatus, feedback: recap.employeeFeedback, script: recap.speechLines });
+    original: recap.original, reviewStatus: recap.reviewStatus, feedback: recap.employeeFeedback, script: recap.speechLines };
+  const versioned = row.review_source != null || recap.reviewSource !== "employee" || recap.payrollDate !== null;
+  return hash(versioned ? { ...base, reviewSource: recap.reviewSource, payrollDate: recap.payrollDate } : base);
 }
 
 async function transaction<T>(access: WorkOsAccess, run: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -104,7 +119,7 @@ async function latestExisting(access: WorkOsAccess, intervalId: string): Promise
       AND ($3::boolean OR i.person_id = $4::uuid)
     ORDER BY r.version DESC LIMIT 1`,
   [access.organizationId, intervalId, access.role === "admin", access.personId]);
-  return rows[0]?.payload ?? null;
+  return rows[0]?.payload ? normalizeReviewedRecap(rows[0].payload) : null;
 }
 
 async function append(client: PoolClient, row: ActivityIntervalRecord, version: number, arrivalEligible: boolean): Promise<ReviewEvent> {
@@ -115,9 +130,9 @@ async function append(client: PoolClient, row: ActivityIntervalRecord, version: 
   const content = contentHash(row, recap);
   const { rows } = await client.query("UPDATE work_admin_otto_clock SET sequence = sequence + 1 WHERE organization_id = $1 RETURNING sequence", [row.organization_id]);
   await client.query(`INSERT INTO work_recap_reviews
-    (id, organization_id, interval_id, person_id, version, event_sequence, review_key, source_revision, content_hash, script_hash, payload, reviewed_at, arrival_eligible)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)`,
-  [eventId, row.organization_id, row.id, row.person_id, version, rows[0].sequence, recap.reviewKey, recap.sourceRevision, content, recap.scriptHash, JSON.stringify(recap), recap.reviewedAt, arrivalEligible]);
+    (id, organization_id, interval_id, person_id, version, event_sequence, review_key, source_revision, content_hash, script_hash, payload, reviewed_at, arrival_eligible, review_source, payroll_date)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15)`,
+  [eventId, row.organization_id, row.id, row.person_id, version, rows[0].sequence, recap.reviewKey, recap.sourceRevision, content, recap.scriptHash, JSON.stringify(recap), recap.reviewedAt, arrivalEligible, recap.reviewSource, recap.payrollDate]);
   return { version, content_hash: content, payload: recap };
 }
 
@@ -155,11 +170,14 @@ export async function decideReviewedRecap(access: WorkOsAccess, intervalId: stri
     if (row.generation_status !== "ready" || !row.ai_detail) throw new WorkOsConflictError("This activity recap is not ready to review yet.");
     let previous = await latest(client, row);
     if (!previous && reviewed(row)) previous = await append(client, row, 1, false);
-    const candidate = { ...row, review_status: input.action === "confirm" ? "confirmed" : "amended", employee_feedback: feedback };
+    const candidate = { ...row, review_status: input.action === "confirm" ? "confirmed" : "amended", employee_feedback: feedback, review_source: "employee", payroll_date: null };
     const projection = buildReviewedRecap(candidate, (previous?.version ?? 0) + 1, "pending", await personFor(client, row));
     // Exact retries (including a stale expected version) never reset next steps
     // or the review timestamp. Legacy clients may retry, but not overwrite.
-    if (previous?.content_hash === contentHash(candidate, projection)) return row;
+    // The identity uses the row as it was stored, so a pre-provenance retry
+    // still matches its historical hash.
+    const identityRow = { ...candidate, review_source: row.review_source, payroll_date: row.payroll_date };
+    if (previous?.content_hash === contentHash(identityRow, projection)) return row;
     const currentVersion = previous?.version ?? 0;
     if ((input.expectedReviewVersion !== undefined && input.expectedReviewVersion !== currentVersion)
       || (input.expectedReviewVersion === undefined && currentVersion > 0)) {
@@ -169,6 +187,7 @@ export async function decideReviewedRecap(access: WorkOsAccess, intervalId: stri
       : `Original AI summary.\n${row.ai_detail}\n\nEmployee correction.\n${feedback}`;
     const { rows } = await client.query(`UPDATE work_activity_intervals SET
       review_status=$3, employee_feedback=$4, final_detail=$5, reviewed_at=clock_timestamp(),
+      review_source='employee', payroll_date=NULL,
       next_steps_status='pending', updated_at=clock_timestamp()
       WHERE organization_id=$1 AND id=$2 AND person_id=$6 RETURNING *`,
     [access.organizationId, intervalId, candidate.review_status, feedback, finalDetail, access.personId]);
@@ -177,7 +196,7 @@ export async function decideReviewedRecap(access: WorkOsAccess, intervalId: stri
     await client.query(`INSERT INTO work_audit_log (organization_id, actor_user_id, action, target_type, target_id, metadata)
       VALUES ($1,$2,$3,'activity_interval',$4,$5::jsonb)`,
     [access.organizationId, access.ctx.user.id, `activity_interval.${saved.review_status}`, intervalId,
-      JSON.stringify({ reviewVersion: event.version, eventId: event.payload.eventId, feedbackChars: feedback?.length ?? 0 })]);
+      JSON.stringify({ reviewVersion: event.version, eventId: event.payload.eventId, feedbackChars: feedback?.length ?? 0, reviewSource: "employee" })]);
     return saved;
   });
 }

@@ -47,6 +47,8 @@ export interface EodRecap {
   detail: string;
   /** confirmed | amended | inferred */
   provenance: string;
+  /** Who approved this review; absent on historical facts means employee. */
+  reviewSource?: "employee" | "admin" | "payroll_auto" | null;
   startIso: string;
   endIso: string;
 }
@@ -284,8 +286,10 @@ function recapHeadline(recap: EodRecap): string {
   return clipText(recap.headline?.trim() || firstSentence(recap.detail), 120);
 }
 
-function recapProvenance(value: string): string {
-  return value === "amended" ? "Updated by you" : value === "confirmed" ? "Confirmed" : "Inferred";
+function recapProvenance(recap: EodRecap): string {
+  if (recap.reviewSource === "payroll_auto") return "Auto-approved for payroll";
+  if (recap.reviewSource === "admin") return "Approved by administrator";
+  return recap.provenance === "amended" ? "Updated by you" : recap.provenance === "confirmed" ? "Confirmed" : "Inferred";
 }
 
 /** Confirmed or amended recaps that describe work the completed list does not
@@ -295,7 +299,8 @@ function recapProvenance(value: string): string {
 export function eodProgressRecaps(facts: EodReportFacts, limit = 3): EodRecap[] {
   const completedTitles = facts.completed.map((item) => normalizeEodTitle(item.title)).filter(Boolean);
   return facts.recaps
-    .filter((recap) => recap.provenance === "confirmed" || recap.provenance === "amended")
+    .filter((recap) => (recap.provenance === "confirmed" || recap.provenance === "amended")
+      && (recap.reviewSource ?? "employee") === "employee")
     .filter((recap) => recapHeadline(recap).length > 0)
     .filter((recap) => {
       const headline = normalizeEodTitle(recapHeadline(recap));
@@ -357,7 +362,7 @@ function ghlEvidenceLine(facts: EodReportFacts): string | null {
 }
 
 function recapLine(recap: EodRecap): string {
-  return `- ${recap.label} — ${recapProvenance(recap.provenance)}: ${recapHeadline(recap)}`;
+  return `- ${recap.label} — ${recapProvenance(recap)}: ${recapHeadline(recap)}`;
 }
 
 function githubEvidenceLine(facts: EodReportFacts): string | null {

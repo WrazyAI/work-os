@@ -15,7 +15,12 @@ export type SpeechLine = { text: string; time: string | null };
 export type ReviewedRecap = {
   intervalId: string; eventId: string; person: PersonRef; reviewVersion: number;
   reviewKey: string; sourceRevision: number; scriptHash: string;
-  reviewStatus: "confirmed" | "amended"; reviewedAt: string;
+  reviewStatus: "confirmed" | "amended";
+  /** Who approved this version. Absent on historical payloads; readers treat
+   * that absence as `employee`, never as a system approval. */
+  reviewSource?: "employee" | "admin" | "payroll_auto";
+  payrollDate?: string | null;
+  reviewedAt: string;
   windowStart: string; windowEnd: string; timezone: string;
   original: { headline: string; detail: string; activities: string[] };
   employeeFeedback: string | null; speechLines: SpeechLine[]; coverage: string[];

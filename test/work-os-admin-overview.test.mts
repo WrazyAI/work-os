@@ -46,14 +46,15 @@ test("a day with no recorded session or plan never counts as outstanding", () =>
 
 test("recap groups keep the returned totals and review state exact", () => {
   const rollup = summarizeRecapGroups([
-    { person_id: "p1", total: 2, reviewed: 1, last_at: "2026-11-04T11:00:00.000Z" },
+    { person_id: "p1", total: 2, reviewed: 1, auto_approved: 1, last_at: "2026-11-04T11:00:00.000Z" },
     { person_id: "p2", total: 1, reviewed: 1, last_at: "2026-11-04T09:30:00.000Z" },
   ]);
   assert.equal(rollup.total, 3);
   assert.equal(rollup.reviewed, 2);
+  assert.equal(rollup.autoApproved, 1, "payroll auto-approvals are counted separately");
   assert.equal(rollup.lastAt, "2026-11-04T11:00:00.000Z");
-  assert.deepEqual(rollup.byPerson.get("p1"), { total: 2, reviewed: 1, lastAt: "2026-11-04T11:00:00.000Z" });
-  assert.deepEqual(rollup.byPerson.get("p2"), { total: 1, reviewed: 1, lastAt: "2026-11-04T09:30:00.000Z" });
+  assert.deepEqual(rollup.byPerson.get("p1"), { total: 2, reviewed: 1, autoApproved: 1, lastAt: "2026-11-04T11:00:00.000Z" });
+  assert.deepEqual(rollup.byPerson.get("p2"), { total: 1, reviewed: 1, autoApproved: 0, lastAt: "2026-11-04T09:30:00.000Z" });
   assert.equal(rollup.byPerson.get("p3"), undefined);
 });
 
@@ -66,11 +67,13 @@ test("recap groups accept database strings, dates, and an absent last recap", ()
   assert.equal(rollup.reviewed, 2);
   assert.equal(rollup.byPerson.get("p1")?.lastAt, "2026-11-04T08:15:00.000Z");
   assert.equal(rollup.byPerson.get("p2")?.lastAt, null);
+  assert.equal(rollup.byPerson.get("p1")?.autoApproved, 0);
 });
 
 test("the recap rollup read stays org-scoped, ready-only, and active-only", () => {
   const source = readFileSync(new URL("../src/lib/work-os-admin-overview.ts", import.meta.url), "utf8");
   assert.match(source, /JOIN work_people p[\s\S]*p\.active = true/);
   assert.match(source, /i\.organization_id = \$1 AND i\.local_date = \$2 AND i\.generation_status = 'ready'/);
-  assert.match(source, /count\(\*\) FILTER \(WHERE i\.review_status IN \('confirmed', 'amended'\)\)/);
+  assert.match(source, /count\(\*\) FILTER \(WHERE i\.review_status IN \('confirmed', 'amended'\) AND coalesce\(i\.review_source, 'employee'\) = 'employee'\)/);
+  assert.match(source, /count\(\*\) FILTER \(WHERE i\.review_source = 'payroll_auto'\)/);
 });

@@ -271,6 +271,8 @@ export type ActivityIntervalView = {
   promptKind: "follow_up" | "hourly_fallback";
   generationStatus: string;
   reviewStatus: "inferred" | "confirmed" | "amended";
+  reviewSource?: "employee" | "admin" | "payroll_auto" | null;
+  payrollDate?: string | null;
   headline: string | null;
   detail: string | null;
   recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;

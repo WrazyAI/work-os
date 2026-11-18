@@ -177,6 +177,10 @@ export interface ActivityInterval {
   promptKind: "follow_up" | "hourly_fallback";
   generationStatus: "preparing" | "ready" | "unavailable" | "failed";
   reviewStatus: "inferred" | "confirmed" | "amended";
+  reviewSource?: "employee" | "admin" | "payroll_auto" | null;
+  payrollDate?: string | null;
+  /** Immutable review version to echo on the next correction; 0 while inferred. */
+  reviewVersion?: number;
   headline: string | null;
   detail: string | null;
   activities?: string[];

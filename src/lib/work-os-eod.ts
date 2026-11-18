@@ -272,6 +272,7 @@ export async function buildDailyWorkspaceEodContent(
     headline: line.headline,
     detail: line.detail,
     provenance: String(line.provenance ?? "inferred"),
+    reviewSource: line.reviewSource,
     startIso: line.startIso,
     endIso: line.endIso,
   }));

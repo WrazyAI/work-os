@@ -671,6 +671,9 @@ export function normalizeIntervals(raw: unknown): AdminIntervalListResponse {
       promptKind: row.promptKind === "hourly_fallback" ? "hourly_fallback" : "follow_up",
       generationStatus: asText(row.generationStatus, "ready"),
       reviewStatus: oneOf(row.reviewStatus, INTERVAL_REVIEW_STATUSES, "inferred"),
+      reviewSource: row.reviewSource === "payroll_auto" || row.reviewSource === "admin" || row.reviewSource === "employee"
+        ? row.reviewSource : undefined,
+      payrollDate: asTextOrNull(row.payrollDate),
       headline: asTextOrNull(row.headline),
       detail: asTextOrNull(row.detail),
       recordedActivity: asRows(row.recordedActivity).map((entry) => ({

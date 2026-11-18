@@ -42,6 +42,13 @@ describe("admin recap view", () => {
     expect(html).not.toContain("Corrected by employee");
   });
 
+  it("labels a payroll auto-approval as a system decision", () => {
+    const html = render({ recap: { ...reviewed, reviewStatus: "confirmed", employeeFeedback: null, reviewSource: "payroll_auto", payrollDate: "2026-11-16" } });
+    expect(html).toContain("Auto-approved for payroll");
+    expect(html).not.toContain("Confirmed by employee");
+    expect(html).not.toContain("Employee correction");
+  });
+
   it("matches the reviewed speech sections and marks them as the spoken script", () => {
     const html = render({}, FIXTURE_REVIEWED_RECAP);
     // Task 2's amended script begins with these exact markers. The visible

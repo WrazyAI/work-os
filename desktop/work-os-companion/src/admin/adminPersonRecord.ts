@@ -161,7 +161,9 @@ export function reportForDay(reports: Array<Record<string, any>>, date: string):
     })[0] ?? null;
 }
 
-export function recapReviewLabel(status: unknown): string {
+export function recapReviewLabel(status: unknown, source?: unknown): string {
+  if (source === "payroll_auto") return "Auto-approved";
+  if (source === "admin") return "Approved by admin";
   if (status === "confirmed") return "Confirmed";
   if (status === "amended") return "Updated";
   return "Not reviewed";

@@ -91,7 +91,7 @@ export function AdminReadCard({ result, onOpenRecord, onOpenRecap, onListen, pla
     {result.page.items.length ? <ol className="admin-tool-rows">{result.page.items.map((recap) => {
       const active = playback?.intervalId === recap.intervalId && (playback.status === "playing" || playback.status === "loading");
       return <li key={recap.intervalId} className="admin-tool-recap-row">
-        <strong>{recap.person.displayName}</strong><p className="admin-tool-meta">{adminReviewStatusLabel(recap.reviewStatus)} · {adminRecapDate(recap.reviewedAt, recap.timezone)}</p>
+        <strong>{recap.person.displayName}</strong><p className="admin-tool-meta">{adminReviewStatusLabel(recap.reviewStatus, recap.reviewSource)} · {adminRecapDate(recap.reviewedAt, recap.timezone)}</p>
         {recap.original.headline ? <p className="admin-tool-excerpt">{recap.original.headline}</p> : null}
         <div className="admin-tool-actions"><button type="button" data-admin-recap-id={recap.intervalId} data-admin-recap-action="view" onClick={() => onOpenRecap(recap)}>View recap</button>
           <button type="button" aria-label={`${active ? "Stop reading" : "Listen to"} the recap for ${recap.person.displayName}`} aria-pressed={active} onClick={() => onListen(recap)}>{active ? "Stop" : "Listen"}</button></div>

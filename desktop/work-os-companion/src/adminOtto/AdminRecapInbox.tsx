@@ -99,7 +99,7 @@ export function AdminRecapInbox({
           <p>
             {page
               ? `${page.total} recap${page.total === 1 ? "" : "s"} from the last 30 days`
-              : "Confirmed or corrected by employees"}
+              : "Employee-confirmed, corrected, or auto-approved for payroll"}
           </p>
         </div>
         <button
@@ -158,7 +158,7 @@ export function AdminRecapInbox({
                     <header className="admin-otto-inbox-item-head">
                       <strong>{recap.person.displayName}</strong>
                       <span className={`admin-otto-review-status is-${recap.reviewStatus}`}>
-                        {adminReviewStatusLabel(recap.reviewStatus)}
+                        {adminReviewStatusLabel(recap.reviewStatus, recap.reviewSource)}
                       </span>
                     </header>
                     <p className="admin-otto-inbox-when">{adminRecapWindow(recap)}</p>

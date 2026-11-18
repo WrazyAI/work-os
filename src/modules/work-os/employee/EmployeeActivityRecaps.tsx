@@ -6,13 +6,8 @@ import { Check, FileSearch, Pencil, Square, Volume2 } from "lucide-react";
 import { fetchJson, formatTime, requestId, type ActivityInterval, type ActivityIntervalsResponse } from "./model";
 import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "./recaps";
 import { useRecapRead } from "./recapAudio";
+import { isEmployeeReviewedRecap, payrollRecapNotice, recapReviewLabel } from "@/modules/work-os/recap-review";
 import { Panel, PanelHeader, PrimaryButton, QuietButton, SecondaryButton, Skeleton, StatusPill } from "./ui";
-
-const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
-  inferred: "Not reviewed",
-  confirmed: "Confirmed",
-  amended: "Updated by you",
-};
 
 /** Quiet coverage summary for the evidence disclosure: "8 of 28 frames
  * analyzed", or just "8 frames analyzed" when nothing was left out. */
@@ -153,7 +148,9 @@ function RecapCard({ interval, timezone, onDecided, voiceAvailable, read }: {
     mutationFn: (action: "confirm" | "amend") => fetchJson(`/api/work-os/me/activity-intervals/${encodeURIComponent(interval.id)}/decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify(action === "amend" ? { action, feedback: feedback.trim() } : { action }),
+      body: JSON.stringify(action === "amend"
+        ? { action, feedback: feedback.trim(), expectedReviewVersion: interval.reviewVersion }
+        : { action, expectedReviewVersion: interval.reviewVersion }),
     }),
     onSuccess: () => {
       setAmending(false);
@@ -175,10 +172,16 @@ function RecapCard({ interval, timezone, onDecided, voiceAvailable, read }: {
     <li className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11.5px] font-semibold tabular-nums text-[var(--text-tertiary)]">{interval.label}</p>
-        <StatusPill tone={interval.reviewStatus === "confirmed" ? "done" : interval.reviewStatus === "amended" ? "info" : "open"}>
-          {REVIEW_LABELS[interval.reviewStatus]}
+        <StatusPill tone={isEmployeeReviewedRecap(interval.reviewStatus, interval.reviewSource) ? "done" : interval.reviewSource === "payroll_auto" ? "info" : interval.reviewStatus === "amended" ? "info" : "open"}>
+          {recapReviewLabel(interval.reviewStatus, interval.reviewSource)}
         </StatusPill>
       </div>
+
+      {interval.reviewSource === "payroll_auto" && interval.payrollDate ? (
+        <p className="mt-2 rounded-[8px] px-2.5 py-2 text-[11px] leading-5" style={{ background: "var(--bg-subtle, #f4f6f1)", color: "var(--text-secondary)" }}>
+          {payrollRecapNotice(interval.payrollDate)}
+        </p>
+      ) : null}
 
       {preparing ? (
         <div className="mt-3 grid gap-2" aria-busy="true">
@@ -304,7 +307,7 @@ function RecapCard({ interval, timezone, onDecided, voiceAvailable, read }: {
 
       {decide.error ? <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--status-error)" }}>{(decide.error as Error).message}</p> : null}
 
-      {interval.reviewStatus === "inferred" && !preparing && !unavailable ? (
+      {!isEmployeeReviewedRecap(interval.reviewStatus, interval.reviewSource) && !preparing && !unavailable ? (
         amending ? (
           <div className="mt-3 grid gap-2">
             <label className="grid gap-1">

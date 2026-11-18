@@ -4,6 +4,7 @@ import { listPersonTasks } from "@/lib/work-os-tasks";
 import { audit, db, ensureNoError, nonEmptyString, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, NEXT_STEPS_MODEL, recordAiUsage } from "@/lib/work-os-ai-model";
+import { nextStepsRecapEligible } from "@/modules/work-os/recap-review";
 
 /* Recap-approved next steps.
  *
@@ -19,7 +20,8 @@ import { AI_TIMEOUTS, AI_TOKEN_BUDGETS, aiRequestBody, NEXT_STEPS_MODEL, recordA
  *   add_subtask    — a subtask under one of the listed open tasks.
  *
  * Boundaries enforced here and in the schema:
- *   - Only confirmed/amended recaps are eligible; `review_status` is re-read.
+  *   - Only employee-confirmed/amended recaps are eligible; `review_status` and
+ *     `review_source` are re-read so payroll automation never starts the flow.
  *   - Every proposed target id must come from the exact list the model saw, so
  *     a fabricated id can never file.
  *   - One generation per recap revision; a skip or rejection is remembered and
@@ -379,8 +381,8 @@ export async function ensureRecapNextStepsForInterval(access: WorkOsAccess, inte
   if (!row) throw new Error("activity interval not found");
   const record = row as Record<string, unknown>;
   if (String(record.person_id) !== access.personId) throw new Error("forbidden");
-  if (!["confirmed", "amended"].includes(String(record.review_status))) {
-    await markNextSteps(access, intervalId, "skipped", "recap_not_approved");
+  if (!nextStepsRecapEligible(record.review_status, record.review_source)) {
+    await markNextSteps(access, intervalId, "skipped", "recap_not_employee_reviewed");
     return { status: "skipped", created: 0 };
   }
   // Claim: pending -> generating, so a concurrent pass (or a retried sync)

@@ -76,11 +76,15 @@ values ('${interval}', '${org}', '${person}', 'Review work', 'Reviewed the queue
 `;
 
 export const migration = () => readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8");
+/** Source-aware recap provenance is additive and required by every review
+ * writer, so the shared service fixture applies it with 0065. */
+export const provenanceMigration = () => readFile(new URL("../../supabase/migrations/0076_work_payroll_recap_provenance.sql", import.meta.url), "utf8");
 
 export async function fixture() {
   const db = new PGlite();
   await db.exec(prerequisites);
   await db.exec(await migration());
+  await db.exec(await provenanceMigration());
   let released = 0;
   // Only adapts the pg wire boundary: all service SQL executes in PGlite.
   // This is NOT a concurrent-connection or row-lock fixture.

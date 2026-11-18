@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { decideReviewedRecap } from "@/lib/work-os-reviewed-recaps";
 import { intervalRevision, intervalSpeechSource, intervalStructure, isoInstant, reviewVersionForRow } from "@/lib/work-os-activity-interval-projection";
+import { recapReviewSource } from "@/modules/work-os/recap-review";
 import { getPool } from "@/lib/db/pool";
 import { dateOnly, workOsActorUserId } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
@@ -1184,6 +1185,10 @@ export type ActivityIntervalView = {
    * latest persisted review version. This is never the generation `revision`. */
   reviewVersion: number;
   reviewStatus: "inferred" | "confirmed" | "amended";
+  /** Who approved the current projection; absent on older payloads means the
+   * historical employee review. */
+  reviewSource: "employee" | "admin" | "payroll_auto" | null;
+  payrollDate: string | null;
   headline: string | null;
   detail: string | null;
   recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null; source?: "github" | "ghl"; eventId?: string }>;
@@ -1215,6 +1220,8 @@ export function activityIntervalCardView(row: ActivityIntervalRecord, reviewVers
     promptKind: String(row.prompt_kind),
     generationStatus: String(row.generation_status),
     reviewStatus: String(row.review_status),
+    reviewSource: recapReviewSource(row.review_status, row.review_source),
+    payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
     reviewVersion,
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
@@ -1280,6 +1287,8 @@ function intervalView(row: ActivityIntervalProjectionRow, evidence: ActivityInte
     revision: intervalRevision(row),
     reviewVersion: reviewVersionForRow(row),
     reviewStatus: String(row.review_status) as ActivityIntervalView["reviewStatus"],
+    reviewSource: recapReviewSource(row.review_status, row.review_source),
+    payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
     ...intervalStructure(row),
@@ -1513,7 +1522,9 @@ export async function listAdminActivityIntervals(
 
 /** Provenance prefix for every downstream consumer (EOD activity context and
  * future manager reporting). The recap never becomes employee-authored truth. */
-export function intervalProvenanceLabel(status: string): string {
+export function intervalProvenanceLabel(status: string, source?: string | null): string {
+  if (source === "payroll_auto") return "auto-approved for payroll";
+  if (source === "admin") return "approved by administrator";
   if (status === "confirmed") return "employee confirmed";
   if (status === "amended") return "employee amended";
   return "AI-inferred, not reviewed";
@@ -1524,6 +1535,8 @@ export type ActivityIntervalActivityLine = {
   endIso: string;
   label: string;
   provenance: "inferred" | "confirmed" | "amended";
+  reviewSource: "employee" | "admin" | "payroll_auto" | null;
+  payrollDate: string | null;
   detail: string;
   headline: string | null;
   /** Local hour starts the interval covers, so hourly rollups are not repeated. */
@@ -1565,7 +1578,7 @@ export function intervalHourStarts(startIso: string, endIso: string, timezone: s
  * provenance downstream reports must show. */
 export async function listActivityIntervalActivityLines(organizationId: string, personId: string, date: string): Promise<ActivityIntervalActivityLine[]> {
   const { data, error } = await db().from("work_activity_intervals")
-    .select("window_start,window_end,timezone,review_status,generation_status,headline,final_detail,ai_detail")
+    .select("window_start,window_end,timezone,review_status,review_source,payroll_date,generation_status,headline,final_detail,ai_detail")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("local_date", date)
     .eq("generation_status", "ready")
     .order("window_start", { ascending: true });
@@ -1581,6 +1594,8 @@ export async function listActivityIntervalActivityLines(organizationId: string, 
       endIso,
       label: formatIntervalRange(startIso, endIso, timezone),
       provenance: String(row.review_status) as ActivityIntervalActivityLine["provenance"],
+      reviewSource: recapReviewSource(row.review_status, row.review_source),
+      payrollDate: row.payroll_date ? String(row.payroll_date).slice(0, 10) : null,
       detail,
       headline: row.headline ? String(row.headline) : null,
       hourStarts: intervalHourStarts(startIso, endIso, timezone),

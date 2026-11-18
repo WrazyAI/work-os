@@ -31,6 +31,8 @@ const ADMIN_OTTO_SUMMARY_SCHEMA = {
   },
 } as const;
 
+import { recapReviewLabel } from "@/modules/work-os/recap-review";
+
 function bounded(value: unknown, max: number): string {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -39,6 +41,9 @@ function recapPayload(recap: ReviewedRecap) {
   return {
     person: bounded(recap.person.displayName, 120),
     reviewStatus: recap.reviewStatus,
+    reviewLabel: recapReviewLabel(recap.reviewStatus, recap.reviewSource),
+    reviewSource: recap.reviewSource ?? "employee",
+    payrollDate: recap.payrollDate ?? null,
     reviewedAt: recap.reviewedAt,
     windowStart: recap.windowStart,
     windowEnd: recap.windowEnd,

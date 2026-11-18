@@ -3,16 +3,17 @@ import { createPortal } from "react-dom";
 import { Cable, Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
+import { isEmployeeReviewedRecap, payrollRecapNotice, recapReviewLabel } from "../../../src/modules/work-os/recap-review";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
 
 /** The Tasks stream and the prompt turn both send the full disclosure now;
  * older compact payloads without the evidence fields still render. */
 type ActivityIntervalModel = ActivityIntervalCardData;
 
-const STATUS_LABEL: Record<ActivityInterval["reviewStatus"], string> = {
-  inferred: "Not reviewed",
-  confirmed: "Confirmed",
-  amended: "Updated by you",
+const reviewLabel = (interval: ActivityInterval) => {
+  if (interval.reviewSource === "payroll_auto") return recapReviewLabel(interval.reviewStatus, interval.reviewSource);
+  if (interval.reviewSource === "admin") return "Approved by admin";
+  return interval.reviewStatus === "amended" ? "Updated by you" : interval.reviewStatus === "confirmed" ? "Confirmed" : "Not reviewed";
 };
 
 function formatPart(date: Date, timezone: string | null | undefined, options: Intl.DateTimeFormatOptions) {
@@ -274,8 +275,11 @@ export function ActivityIntervalCard({
           <strong className="chat-activity-label">{interval.label}</strong>
           {showDate ? <small>{dateLabel(interval.windowStart, timezone)}</small> : null}
         </span>
-        <span className={`chat-activity-status is-${interval.reviewStatus}`}>{STATUS_LABEL[interval.reviewStatus]}</span>
+        <span className={`chat-activity-status is-${interval.reviewStatus}`}>{reviewLabel(interval)}</span>
       </header>
+      {interval.reviewSource === "payroll_auto" && interval.payrollDate ? (
+        <p className="chat-activity-note"><strong>Payroll:</strong> {payrollRecapNotice(interval.payrollDate)}</p>
+      ) : null}
       {interval.headline ? <p className="chat-activity-headline">{interval.headline}</p> : null}
       {interval.detail ? <p className="chat-activity-detail">{interval.detail}</p> : null}
       {interval.activities?.length ? (
@@ -308,7 +312,7 @@ export function ActivityIntervalCard({
         <p className="chat-activity-note"><strong>Your note:</strong> {interval.employeeFeedback}</p>
       ) : null}
 
-      {interval.reviewStatus === "inferred" && onDecide ? (
+      {!isEmployeeReviewedRecap(interval.reviewStatus, interval.reviewSource) && onDecide ? (
         onEdit ? (
           <div className="chat-activity-decide">
             <p className="chat-activity-ask">{deciding ? "Saving…" : "Sounds good?"}</p>
