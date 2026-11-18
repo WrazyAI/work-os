@@ -203,8 +203,7 @@ create table if not exists work_payroll_provider_budgets (
   updated_at timestamptz not null default now(),
   primary key(organization_id,connection_id),
   foreign key(organization_id,connection_id) references work_provider_connections(organization_id,id)
-);
--- Conservative payroll sub-budget: provider allows 5/sec,100/min,1000/hour;
+);-- Conservative payroll sub-budget: provider allows 5/sec,100/min,1000/hour;
 -- payroll reserves 4/sec spacing with 80/min and 800/hour so neighboring
 -- attendance/screenshot reads retain headroom. All process instances serialize
 -- on this row, which a per-run sleep cannot do.
@@ -254,6 +253,78 @@ create table if not exists work_payroll_operator_holds (
   foreign key(organization_id,review_id,person_id) references work_payroll_reviews(organization_id,id,person_id)
 );
 
+-- Organization and person calculation-source versions. Person rows track every
+-- relevant source mutation; the zero UUID row tracks organization policy.
+create table if not exists work_payroll_source_versions (
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid not null,
+  version bigint not null default 0 check(version>=0),
+  updated_at timestamptz not null default now(),
+  primary key(organization_id,person_id)
+);
+create or replace function work_payroll_source_touch() returns trigger
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare new_row jsonb; old_row jsonb; org uuid; person uuid; cols text[]; col text;
+  person_col text; org_col text; changed boolean := false;
+begin
+  new_row := case when tg_op='DELETE' then null else to_jsonb(NEW) end;
+  old_row := case when tg_op='INSERT' then null else to_jsonb(OLD) end;
+  org_col := coalesce(TG_ARGV[2],'organization_id');
+  person_col := coalesce(TG_ARGV[1],'person_id');
+  org := coalesce((new_row->>org_col)::uuid,(old_row->>org_col)::uuid);
+  if org is null then return case when tg_op='DELETE' then OLD else NEW end; end if;
+  if person_col <> 'none' then
+    person := coalesce((new_row->>person_col)::uuid,(old_row->>person_col)::uuid);
+  end if;
+  if tg_op <> 'UPDATE' then changed := true;
+  else
+    cols := string_to_array(coalesce(TG_ARGV[0],''),',');
+    if cols is null or cardinality(cols)=0 then changed := true;
+    else
+      foreach col in array cols loop
+        if (new_row->col) is distinct from (old_row->col) then changed := true; exit; end if;
+      end loop;
+    end if;
+  end if;
+  if changed then
+    insert into public.work_payroll_source_versions(organization_id,person_id,version)
+      values(org,coalesce(person,'00000000-0000-0000-0000-000000000000'::uuid),1)
+      on conflict (organization_id,person_id) do update
+        set version=public.work_payroll_source_versions.version+1, updated_at=now();
+  end if;
+  return case when tg_op='DELETE' then OLD else NEW end;
+end $$;
+do $$ declare t text; c text; p text; o text; begin
+  for t,c,p,o in select * from (values
+    ('work_sessions','state,shift_date,clocked_in_at,clocked_out_at,scheduled_starts_at,scheduled_ends_at,schedule_id,correction_status,paused_seconds,provider_break_seconds,person_id','person_id','organization_id'),
+    ('work_session_events','event_type,observed_at,from_state,to_state,metadata,person_id,session_id','person_id','organization_id'),
+    ('work_schedules','timezone,days_of_week,arrangement,shift_start,shift_end,break_windows,effective_from,effective_to,active,person_id','person_id','organization_id'),
+    ('work_schedule_exceptions','exception_date,kind,shift_start,shift_end,break_windows,person_id','person_id','organization_id'),
+    ('work_activity_intervals','review_status,review_source,payroll_date,generated_at,final_detail,ai_detail,employee_feedback,structured_summary,source_hash,revision,window_start,window_end,local_date,timezone,generation_status,headline','person_id','organization_id'),
+    ('work_recap_reviews','','person_id','organization_id'),
+    ('work_employee_onboarding','timezone,privacy_preferences','person_id','organization_id'),
+    ('work_source_accounts','external_account_id,verified,person_id','person_id','organization_id'),
+    ('work_people','display_name,active,timezone,worktivity_employee_id','id','organization_id'),
+    ('work_org_members','person_id,role,active,feature_flags','person_id','organization_id'),
+    ('work_provider_connections','provider,active,config','none','organization_id'),
+    ('work_organizations','feature_flags','none','id'),
+    ('work_evidence_events','evidence_class,occurred_at,metadata,raw,title,summary,correction_status,person_id','person_id','organization_id'),
+    ('work_screenshot_summaries','summary,visible_context,confidence,processing_status,evidence_event_id,model,prompt_version,person_id','person_id','organization_id'),
+    ('work_reports','status,submitted_at,submitted_markdown,reviewed_at,manager_notes,person_id','person_id','organization_id'),
+    ('work_report_versions','markdown,metrics,created_at','none','organization_id'),
+    ('work_task_day_events','event_type,provenance,exact_at,observed_at,task_snapshot,person_id,task_id','person_id','organization_id'),
+    ('work_payroll_person_context','context,revision','person_id','organization_id'),
+    ('work_payroll_settings','enabled,auto_approve_enabled,cutoff_hour,provider_ready,models_ready,auto_approve_activated_at','none','organization_id')
+  ) v(t,c,p,o) loop
+    if to_regclass('public.'||t) is not null then
+      execute format('drop trigger if exists work_payroll_source_touch on %I',t);
+      execute format('create trigger work_payroll_source_touch after insert or update or delete on %I for each row execute function work_payroll_source_touch(%L,%L,%L)',t,c,p,o);
+    end if;
+  end loop;
+end $$;
+revoke all on function work_payroll_source_touch() from public;
+do $$ begin execute format('grant execute on function work_payroll_source_touch() to %I',current_user); end $$;
+
 -- A NOLOGIN function owner, NOT an application-controlled override setting.
 do $$ begin
   if not exists(select 1 from pg_roles where rolname='work_payroll_retention') then
@@ -278,7 +349,7 @@ do $$ declare t text; begin
     execute format('drop trigger if exists work_payroll_immutable on %I',t);
     execute format('create trigger work_payroll_immutable before update or delete on %I for each row execute function work_payroll_immutable()',t);
   end loop;
-  foreach t in array array['work_payroll_settings','work_payroll_reviews','work_payroll_analysis_revisions','work_payroll_days','work_payroll_findings','work_payroll_decisions','work_payroll_approvals','work_payroll_frame_findings','work_payroll_week_briefs','work_payroll_questions','work_payroll_person_context','work_payroll_runs','work_payroll_exports','work_payroll_recap_settlements','work_payroll_provider_budgets','work_payroll_audit_events','work_payroll_operator_holds'] loop
+  foreach t in array array['work_payroll_settings','work_payroll_reviews','work_payroll_analysis_revisions','work_payroll_days','work_payroll_findings','work_payroll_decisions','work_payroll_approvals','work_payroll_frame_findings','work_payroll_week_briefs','work_payroll_questions','work_payroll_person_context','work_payroll_runs','work_payroll_exports','work_payroll_recap_settlements','work_payroll_provider_budgets','work_payroll_audit_events','work_payroll_operator_holds','work_payroll_source_versions'] loop
     execute format('alter table %I enable row level security',t);
     execute format('revoke all on %I from public',t);
     if exists(select 1 from pg_roles where rolname='anon') then execute format('revoke all on %I from anon',t); end if;

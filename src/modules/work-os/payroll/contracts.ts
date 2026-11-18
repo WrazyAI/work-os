@@ -96,6 +96,9 @@ export type PayrollWeekSources = {
 export type PayrollSourceManifest = {
   scope: PayrollScope; period: PayrollPeriod; asOf: string; sourceToken: string; policyVersion: string;
   days: PayrollDayInput[]; weekSources: [PayrollWeekSources, PayrollWeekSources]; hash: string;
+  /** Expiry snapshots are shown to the operator but excluded from the
+   * calculation hash: an expired raw image never rewrites source evidence. */
+  rawImageExpiry?: Record<string, string | null>;
 };
 export type PayrollWeekBrief = {
   week: 1 | 2; status: "missing" | "generating" | "ready" | "failed" | "stale";
