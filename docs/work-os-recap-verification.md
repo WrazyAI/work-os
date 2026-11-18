@@ -1,0 +1,62 @@
+# Recap reliability verification
+
+Implementation: `c7d177ab`, `8fff4bb4`, `0e78412f`, `d1a09bb5`.
+Review fixes: `44ab8072`; operational contract: `c973667b`.
+Tracking task: `30f3e792-1975-474d-b6ec-5d96542b03c7`.
+
+## Observed checks
+
+- Backend focused regression suite: **110 passed, 0 failed** (`node --import
+  tsx --test test/work-os-workday.test.mts
+  test/work-os-activity-intervals.test.mts
+  test/work-os-activity-recap-schedule.test.mts
+  test/work-os-route-contracts.test.mts`).
+- Final client scope/delivery regressions: **37 passed, 0 failed**
+  (`npm --prefix desktop/work-os-companion test --
+  src/workOsQueries.test.ts src/notificationsLogic.test.ts
+  src/recapNotificationQuery.test.ts --maxWorkers=1`).
+- Work OS typecheck completed successfully before the final full-suite run.
+- Changed-file ESLint: **0 errors, 75 warnings**.
+- Six rendered fixtures: desktop and narrow main window, ready recap, pending
+  queue, preparing and empty mascot. No page errors or horizontal overflow;
+  keyboard-focused “View recaps” opened the recap queue.
+- Full companion attempt: **2,001 passed, 2 failed**, both existing vault
+  persistence tests exceeding their five-second timeout under host load.
+  The bounded-worker retry is not yet recorded as passing.
+- Full backend and build gates remain pending; partial logs are not passes.
+  An earlier full backend attempt had one native V8/WASM crash; its isolated
+  suite passed all 12 tests. The 11 opt-in PostgreSQL tests were not enabled.
+
+## Review disposition
+
+One independent review and one completed CodeRabbit batch were used.
+The independent findings overlap the account-state and overdue-recovery rows.
+
+| Finding | Disposition and regression evidence |
+| --- | --- |
+| Retained previous account's recap | Fixed: scoped pending recap, account-bound reset and playback stop. |
+| Avatar scope lags same-organization account switch | Fixed: authoritative response identity checked before cache admission. |
+| Old nudge can deliver a new due slot | Fixed: delivery receipt must match the original nudge's due instant. |
+| Awaiting evidence has no retry on unchanged day facts | No new timer: existing five-minute server job retries; latest polling surfaces the ready result. Live timer acceptance remains pending. |
+| Database timestamp loses microseconds | Fixed: exact timestamp text used for attempt ownership; database-backed retry regression. |
+| Terminal-empty shortcut bypasses overdue recovery | Fixed: eligible empty intervals reach bounded recovery guards. |
+| Plan confirmation discards a pending frozen window | Fixed: “an existing awaiting slot keeps its frozen window after plan confirmation.” |
+| Stale ready response advances a preparing replacement | Fixed: “a stale ready response cannot authorize a preparing replacement row.” |
+| Transport timeout sends unbound delivery | Fixed: null result refuses delivery; covered by client delivery regression. |
+| Latest response admitted under another person's key | Fixed: same-organization switch and same-person refresh query regressions. |
+| Ready row visible before evidence/audit commit | Fixed: “readiness is published atomically with evidence and its system audit,” including rollback on persistence failure. |
+| Terminal outcome suffers a second scheduler backoff | Existing terminal fast path retained, with overdue-recovery exception; focused backend suite passes. |
+| Legacy route drops inspected slot | Refuted by route handoff: `deliverWorkdayPrompt(auth.access, at, inspected.slot)` retains the inspected receipt. |
+| Correction races delivery CAS | Fixed: correction status participates in “expected recap delivery uses a session-scoped database CAS.” |
+
+## Acceptance and rollout limits
+
+TestSprite run `a15daf21-e993-449c-8cf3-d6f1520fe9fc` was refused before
+execution with `FEATURE_GATED` / `billing_hold`. No billing changes were made.
+Default Turbopack rejects the cross-worktree dependency symlink; an isolated
+Webpack build was started without changing production configuration.
+
+No push, merge, deployment, installer release or production fixture mutation
+has been performed. Closed-companion/provider/timer acceptance in
+`docs/work-os-recap-operations.md` requires an authorized controlled fixture.
+Local regression and rendered evidence do not replace that acceptance.
