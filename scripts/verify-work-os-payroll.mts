@@ -29,6 +29,12 @@ const { values } = parseArgs({
     person: { type: "string" },
     period: { type: "string" },
     "verify-models": { type: "boolean", default: false },
+    "activate-pilot": { type: "boolean", default: false },
+    "confirm-readiness": { type: "boolean", default: false },
+    "organization-id": { type: "string" },
+    "expected-revision": { type: "string" },
+    "cutoff-hour": { type: "string" },
+    "enable-auto-approval": { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
   allowPositionals: false,
@@ -36,6 +42,25 @@ const { values } = parseArgs({
 
 if (values.help) {
   console.log("Read-only payroll readiness. See docs/work-os-payroll-operations.md.");
+  process.exit(0);
+}
+if (values["activate-pilot"]) {
+  const organizationId = values["organization-id"] ?? "";
+  const revision = Number(values["expected-revision"] ?? "");
+  const cutoffHour = Number(values["cutoff-hour"] ?? "6");
+  if (!values["confirm-readiness"] || process.env.WORK_OS_PAYROLL_PILOT_CONFIRM !== "1") {
+    console.error("BLOCKED: confirm readiness and set WORK_OS_PAYROLL_PILOT_CONFIRM=1 after recording the client/provider/model gates.");
+    process.exit(1);
+  }
+  if (!organizationId || !Number.isSafeInteger(revision) || revision < 0) {
+    console.error("BLOCKED: --organization-id and --expected-revision are required.");
+    process.exit(1);
+  }
+  const { activatePayrollPilot } = await import("../src/lib/work-os-payroll-api");
+  const settings = await activatePayrollPilot(organizationId, {
+    expectedRevision: revision, autoApprove: values["enable-auto-approval"] === true, cutoffHour, activatedAt: new Date(),
+  });
+  console.log(JSON.stringify({ organizationId, enabled: settings.enabled, autoApprove: settings.auto_approve_enabled, cutoffHour: settings.cutoff_hour, revision: settings.revision }));
   process.exit(0);
 }
 

@@ -1,0 +1,24 @@
+name: Work OS payroll recap cutoff
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: work-os-payroll-recap-approval
+  cancel-in-progress: false
+jobs:
+  recap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Settle due payroll recap approvals
+        env:
+          WORK_OS_BASE_URL: ${{ secrets.WORK_OS_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 110 \
+            -X POST "$WORK_OS_BASE_URL/api/work-os/evidence/activity-intervals/auto-approve-payroll" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{"limit":100}'

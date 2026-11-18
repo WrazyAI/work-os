@@ -1,0 +1,24 @@
+name: Work OS payroll retention
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+concurrency:
+  group: work-os-payroll-retention
+  cancel-in-progress: false
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Purge expired payroll artifacts
+        env:
+          WORK_OS_BASE_URL: ${{ secrets.WORK_OS_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 110 \
+            -X POST "$WORK_OS_BASE_URL/api/work-os/admin/payroll/retention" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{"limit":50}'

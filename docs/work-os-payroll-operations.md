@@ -103,6 +103,18 @@ ambiguous run); the durable run owns the 48-frame per-person cap.
 
 ## Failure behavior
 
+- Scheduled workflows: advance every five minutes, recap cutoff hourly at :17,
+  retention daily at 03:41. They use `WORK_OS_BASE_URL` and `CRON_SECRET`, bounded
+  curl timeouts, and `cancel-in-progress:false`. GitHub may run the hourly recap
+  after 06:00 local (e.g. 06:17); this is a cutoff guarantee, not an exact-minute
+  SLA. The on-demand ensure handles a missed cron. If exact 06:00 is required,
+  use the Agent OS systemd timer instead, not two silent schedulers.
+- First pilot activation is explicit and revisioned:
+  `WORK_OS_PAYROLL_PILOT_CONFIRM=1 node --import tsx scripts/verify-work-os-payroll.mts --activate-pilot --confirm-readiness --organization-id <uuid> --expected-revision <n> [--enable-auto-approval] [--cutoff-hour 6]`.
+  It never chooses another organization, never bypasses the cutoff notice/client
+  readiness gate, and should be run only after provider/model/employee-client gates
+  are recorded. Payroll remains off by default.
+
 - Payroll artifacts expire 30 days after the latest of local pay-date start,
   explicit approval, or first durable export. Reopen/read/re-export/Q&A/retry
   never move the anchor. The purge is service-only (CRON_SECRET), bounded 50 by

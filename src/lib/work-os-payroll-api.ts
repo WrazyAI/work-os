@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db/pool";
-import { requireWorkOsAdmin, type WorkOsAccess } from "@/lib/work-os-api";
+import { WorkOsConflictError, requireWorkOsAdmin, type WorkOsAccess } from "@/lib/work-os-api";
 
 export async function requirePayrollAdmin(req: Request): Promise<{ access: WorkOsAccess } | { response: Response }> {
   const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
@@ -26,4 +26,33 @@ export function payrollError(error: unknown): NextResponse {
   const message = error instanceof Error ? error.message : "Payroll request failed.";
   const status = /not found/i.test(message) ? 404 : /forbidden|admin-only|not enabled/i.test(message) ? 403 : /expired/i.test(message) ? 410 : 400;
   return NextResponse.json({ error: message.slice(0, 300) }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+/** Explicit operator activation. It is not a browser endpoint and cannot be
+ * called by a view; the CLI/runbook must pass the current settings revision. */
+export async function activatePayrollPilot(organizationId: string, input: {
+  expectedRevision: number; autoApprove: boolean; cutoffHour: number; activatedAt: Date;
+}) {
+  if (!/^[0-9a-f-]{36}$/i.test(organizationId)) throw new Error("A valid organization id is required.");
+  if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error("A valid settings revision is required.");
+  if (!Number.isInteger(input.cutoffHour) || input.cutoffHour < 0 || input.cutoffHour > 23) throw new Error("Cutoff hour must be 0–23.");
+  if (!Number.isFinite(input.activatedAt.getTime())) throw new Error("Activation instant is invalid.");
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`INSERT INTO work_payroll_settings(organization_id,enabled,auto_approve_enabled,cutoff_hour,revision)
+      VALUES($1,false,false,$2,0) ON CONFLICT (organization_id) DO NOTHING`, [organizationId, input.cutoffHour]);
+    const updated = await client.query(`UPDATE work_payroll_settings SET enabled=true,
+      auto_approve_enabled=$3, cutoff_hour=$4, revision=revision+1,
+      auto_approve_activated_at=CASE WHEN $3 THEN $5 ELSE auto_approve_activated_at END,
+      updated_at=now()
+      WHERE organization_id=$1 AND revision=$2 RETURNING *`,
+    [organizationId, input.expectedRevision, input.autoApprove, input.cutoffHour, input.activatedAt.toISOString()]);
+    if (!updated.rows.length) throw new WorkOsConflictError("Payroll settings changed. Reload before activating.", "settings_revision_conflict");
+    await client.query("COMMIT");
+    return updated.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
 }
