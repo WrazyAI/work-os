@@ -27,6 +27,7 @@ export interface GithubActivityItem {
   repository: string | null;
   /** Login of the account that performed the event, when known. */
   actor: string | null;
+  eventId?: string;
 }
 
 export interface GithubActivityCounts {
@@ -51,6 +52,7 @@ export interface GithubIdentitySet {
 /** One row of the bounded window scan; raw subjects are projected in SQL so a
  * full webhook payload never has to be loaded. */
 export interface GithubActivityRow {
+  id?: string;
   person_id: string | null;
   occurred_at: string | Date;
   title: string | null;
@@ -110,7 +112,7 @@ function shortRepo(fullName: unknown): string | null {
 /** Verified logins for the person's accounts plus the numeric actor ids seen on
  * their attributed events; the two are needed because accounts store logins
  * while events carry numeric ids. */
-export async function listGithubIdentities(organizationId: string, personId: string): Promise<GithubIdentitySet> {
+export async function listGithubIdentities(organizationId: string, personId: string, verifiedOnly = false): Promise<GithubIdentitySet> {
   const logins = new Set<string>();
   const ids = new Set<string>();
   const pool = getPool();
@@ -121,11 +123,19 @@ export async function listGithubIdentities(organizationId: string, personId: str
     [organizationId, personId],
   );
   for (const row of accounts.rows as Array<{ external_account_id: string | null; login: string | null }>) {
+    const accountId = clean(row.external_account_id, 80);
+    if (verifiedOnly && /^\d+$/.test(accountId)) {
+      ids.add(accountId);
+      // A numeric account mapping is authoritative. Do not grant performed
+      // attribution to someone else who later takes the same login.
+      continue;
+    }
     for (const value of [row.external_account_id, row.login]) {
       const login = clean(value, 80).toLowerCase();
       if (login) logins.add(login);
     }
   }
+  if (verifiedOnly) return { logins, ids };
   const events = await pool.query(
     `select distinct metadata->'actor'->>'id' as actor_id, lower(metadata->'actor'->>'login') as actor_login
        from work_evidence_events
@@ -377,8 +387,10 @@ export async function listGithubActivity(input: {
   windowStart: string;
   windowEnd: string;
   limit?: number;
+  /** Otto does not infer account ownership from historical event attribution. */
+  verifiedOnly?: boolean;
 }): Promise<GithubActivity> {
-  const identities = await listGithubIdentities(input.organizationId, input.personId);
+  const identities = await listGithubIdentities(input.organizationId, input.personId, input.verifiedOnly);
   const empty: GithubActivity = {
     items: [],
     counts: { ...EMPTY_GITHUB_COUNTS, performed: { ...EMPTY_GITHUB_COUNTS.performed }, triggered: { ...EMPTY_GITHUB_COUNTS.triggered } },
@@ -389,7 +401,7 @@ export async function listGithubActivity(input: {
   if (!identities.logins.size && !identities.ids.size) return empty;
   const limit = Math.max(1, Math.min(GITHUB_ACTIVITY_LIMIT, Math.floor(input.limit ?? GITHUB_ACTIVITY_LIMIT)));
   const rows = await getPool().query(
-    `select person_id,
+    `select person_id, id::text as id,
             occurred_at,
             title,
             artifact_url,
@@ -419,9 +431,10 @@ export async function listGithubActivity(input: {
        from work_evidence_events
       where organization_id = $1
         and provider = 'github'
+        ${input.verifiedOnly ? "and correction_status in ('original', 'corrected')" : ""}
         and occurred_at >= $2
         and occurred_at < $3
-      order by occurred_at asc
+      order by occurred_at asc, id asc
       limit $4`,
     [input.organizationId, input.windowStart, input.windowEnd, limit],
   );
@@ -439,7 +452,7 @@ export async function listGithubActivity(input: {
   const items: GithubActivityItem[] = [];
   for (const row of windowRows) {
     const item = classifyGithubEvent(row, identities, pushedShas);
-    if (item) items.push(item);
+    if (item) items.push(row.id ? { ...item, eventId: row.id } : item);
   }
   return {
     items,

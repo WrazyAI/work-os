@@ -59,6 +59,18 @@ describe("admin read cards", () => {
     expect(html).toContain("No recorded progress update.");
     expect(html).not.toContain("## Summary");
   });
+  it.each([["github", "GitHub"], ["ghl", "GoHighLevel"], ["worktivity", "Worktivity"]] as const)(
+    "names the %s provider on both populated and empty reads", (source, label) => {
+      const result = fixtureRecordsResult();
+      if (result.kind !== "records") throw new Error("fixture");
+      result.evidenceSource = source;
+      result.page.items[0].source = source;
+      expect(read(result)).toContain(`<h4>${label} evidence</h4>`);
+      expect(read(result)).toContain(`>${label}</span>`);
+      result.page.items = [];
+      expect(read(result)).toContain(`<h4>${label} evidence</h4>`);
+    },
+  );
   it("preserves reviewed recap correction and real playback stop behavior", () => {
     const html = read({ kind: "recap", recap: FIXTURE_REVIEWED_RECAP }, { playback: {
       intervalId: FIXTURE_REVIEWED_RECAP.intervalId, status: "playing", lines: [], progress: 0, activeIndex: 0, slow: false,

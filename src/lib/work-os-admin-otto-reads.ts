@@ -2,6 +2,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { loadReviewedRecap } from "@/lib/work-os-reviewed-recaps";
+import { listGithubActivity } from "@/lib/work-os-github-activity";
+import { resolveGhlScope } from "@/lib/work-os-ghl-activity";
 import {
   ADMIN_TASK_DEFAULT_LIMIT,
   ADMIN_TASK_MAX_LIMIT,
@@ -9,8 +11,9 @@ import {
   adminTaskDates,
   adminTaskStatusRank,
 } from "@/modules/work-os/admin-task-model";
-import { localDateForTimezone } from "@/modules/work-os/companion";
+import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import type {
+  EvidenceSource,
   LocalWindow,
   Page,
   PersonRef,
@@ -759,6 +762,121 @@ const RECORD_SOURCES = new Set<WorkRecord["source"]>([
   "update", "submitted_eod", "task", "reviewed_recap", "workday",
 ]);
 
+const EVIDENCE_COVERAGE: Record<EvidenceSource, string> = {
+  ghl: "Retained GoHighLevel evidence: attributed actions with an occurrence time only. Excludes snapshots, assignments, and automation. Sync coverage may be incomplete.",
+  github: "Retained GitHub evidence from verified accounts only. Related events are labeled separately from actions performed. Not the entire repository history.",
+  worktivity: "Retained Worktivity attendance snapshots: latest observation per person and local day. No screenshots or measure of work performed.",
+};
+
+export function isOttoEvidenceSource(value: unknown): value is EvidenceSource {
+  return value === "ghl" || value === "github" || value === "worktivity";
+}
+
+const PROVIDER_RECORD_LIMIT = 300;
+
+async function listProviderRecords(
+  access: WorkOsAccess, source: EvidenceSource, windows: LocalWindow[], cursor?: string,
+): Promise<Page<WorkRecord>> {
+  const coverage = [
+    EVIDENCE_COVERAGE[source],
+    ...new Set(windows.map(w => `${w.from} through ${w.through} (${w.timezone})`)),
+  ];
+  const flag = source === "github" ? "github_evidence" : source === "ghl" ? "ghl_evidence" : null;
+  if (flag && access.featureFlags[flag] !== true) {
+    return emptyPage([`${source === "github" ? "GitHub" : "GoHighLevel"} evidence is unavailable: this source is not enabled for this workspace. No evidence was queried.`, ...coverage]);
+  }
+  const ghlScope = source === "ghl" ? await resolveGhlScope(access.organizationId) : null;
+  if (source === "ghl" && !ghlScope) {
+    return emptyPage(["GoHighLevel evidence is unavailable: no active connection. No evidence was queried.", ...coverage]);
+  }
+  const scope = scopeHash({
+    kind: "records", organizationId: access.organizationId, windows, sources: [source],
+    ...(ghlScope ? { connectionId: ghlScope.connectionId } : {}),
+  });
+  const after = decodeCursor(cursor, "records", scope);
+  let items: WorkRecord[] = [];
+  if (source === "github") {
+    if (windows.length > MAX_TARGETS) throw new WorkOsValidationError(`GitHub evidence is limited to ${MAX_TARGETS} employee windows per read.`);
+    for (const w of windows) {
+      const endDate = addAdminTaskDays(w.through, 1);
+      if (!endDate) throw new WorkOsValidationError("Invalid GitHub evidence date range.");
+      const result = await listGithubActivity({
+        organizationId: access.organizationId,
+        personId: w.personId,
+        windowStart: zonedDateTimeToUtc(w.from, "00:00", w.timezone).toISOString(),
+        windowEnd: zonedDateTimeToUtc(endDate, "00:00", w.timezone).toISOString(),
+        verifiedOnly: true,
+      });
+      if (result.capped && !coverage.includes("GitHub scan limit reached; results and totals may be partial.")) {
+        coverage.push("GitHub scan limit reached; results and totals may be partial.");
+      }
+      if (!result.identities.ids.length && !result.identities.logins.length) {
+        if (!coverage.includes("GitHub evidence unavailable for one or more employees without a verified GitHub account.")) {
+          coverage.push("GitHub evidence unavailable for one or more employees without a verified GitHub account.");
+        }
+      }
+      for (const event of result.items) {
+        if (!event.eventId) continue;
+        items.push({
+          id: `github:${event.eventId}:${w.personId}`, personId: w.personId, source, occurredAt: event.at,
+          localDate: localDateForTimezone(new Date(event.at), w.timezone) ?? event.at.slice(0, 10),
+          text: `${event.relation === "performed" ? "Performed" : "Triggered (related event, not employee work)"}: ${event.description}`,
+          recordUrl: `/work-os/admin/evidence?personId=${encodeURIComponent(w.personId)}&source=github`,
+        });
+      }
+    }
+  } else {
+    const projection = source === "worktivity"
+      ? `select distinct on (e.person_id, e.local_date) e.id, e.person_id, e.observed_at as occurred_at,
+           e.local_date, concat('Worktivity attendance snapshot: ', replace(e.state, '_', ' ')) as text
+         from work_attendance_observations e join windows w on e.person_id = w.person_id
+         where e.organization_id = $1 and e.provider = 'worktivity' and e.local_date between w.from_date and w.through_date
+         order by e.person_id, e.local_date, e.observed_at desc, e.id desc`
+      : `select distinct on (e.id) e.id, e.person_id, e.occurred_at,
+           (e.occurred_at at time zone w.timezone)::date as local_date, left(e.title, 240) as text
+         from work_evidence_events e join windows w on e.person_id = w.person_id
+         where e.organization_id = $1 and e.provider = 'ghl'
+           and e.metadata->'ghl'->>'connectionId' = $7
+           and (e.occurred_at at time zone w.timezone)::date between w.from_date and w.through_date
+           and e.correction_status in ('original', 'corrected')
+           and e.metadata->'ghl'->>'relation' = 'performed'
+           and e.metadata->'ghl'->>'occurredAt' is not null
+           and coalesce(e.metadata->'ghl'->>'snapshot', 'false') <> 'true'
+         order by e.id, w.from_date desc`;
+    const { rows } = await getPool().query<Pick<RecordRow, "person_id" | "occurred_at" | "local_date" | "text"> & { id: string }>(
+      `with windows as (
+         select * from unnest($2::uuid[], $3::text[], $4::date[], $5::date[]) as w(person_id, timezone, from_date, through_date)
+       ), provider_records as (${projection})
+       select * from provider_records order by occurred_at desc, id asc limit $6`,
+      [access.organizationId, windows.map(w => w.personId), windows.map(w => w.timezone), windows.map(w => w.from),
+        windows.map(w => w.through), PROVIDER_RECORD_LIMIT + 1, ...(ghlScope ? [ghlScope.connectionId] : [])],
+    );
+    if (rows.length > PROVIDER_RECORD_LIMIT) coverage.push(`Only the most recent ${PROVIDER_RECORD_LIMIT} matching records are available in this read; narrow the date range for more.`);
+    items = rows.slice(0, PROVIDER_RECORD_LIMIT).map(row => ({
+      id: `${source}:${row.id}`, personId: row.person_id, source, occurredAt: iso(row.occurred_at),
+      localDate: dateOnlyValue(row.local_date), text: recordText(row.text),
+      recordUrl: source === "ghl"
+        ? `/work-os/admin/evidence?personId=${encodeURIComponent(row.person_id)}&source=ghl`
+        : `/work-os/admin/people/${encodeURIComponent(row.person_id)}`,
+    }));
+  }
+  const ordered = [...new Map(items.map(item => [item.id, item])).values()].sort((a, b) =>
+    (b.occurredAt ?? "").localeCompare(a.occurredAt ?? "") || a.id.localeCompare(b.id));
+  const remaining = after ? ordered.filter(item => {
+    const at = item.occurredAt ?? "";
+    const key = String(after.o);
+    return at < key || (at === key && item.id.localeCompare(String(after.i)) > 0);
+  }) : ordered;
+  const visible = remaining.slice(0, DEFAULT_RECORD_LIMIT);
+  const last = visible.at(-1);
+  return {
+    items: visible, total: ordered.length, asOf: new Date().toISOString(), coverage,
+    nextCursor: last && remaining.length > visible.length
+      ? encodeCursor({ v: 1, k: "records", s: scope, o: last.occurredAt ?? "", i: last.id })
+      : null,
+  };
+}
+
 /** Optional exact source filter for a typed admin read (for example the
  * workday action). The default keeps the complete record projection. */
 function normalizeRecordSources(value: WorkRecord["source"][] | undefined): WorkRecord["source"][] | null {
@@ -810,6 +928,13 @@ export async function listAdminOttoRecords(access: WorkOsAccess, input: {
 }): Promise<Page<WorkRecord>> {
   requireAdmin(access);
   const windows = await validateWindows(access, input.windows);
+  if (input.sources?.some(isOttoEvidenceSource)) {
+    const source = input.sources[0];
+    if (input.sources.length !== 1 || !isOttoEvidenceSource(source) || input.query?.trim()) {
+      throw new WorkOsValidationError("Read one evidence provider at a time without a text filter.");
+    }
+    return listProviderRecords(access, source, windows, input.cursor);
+  }
   const sources = normalizeRecordSources(input.sources);
   const query = normalizeRecordQuery(input.query);
   const scope = scopeHash({
