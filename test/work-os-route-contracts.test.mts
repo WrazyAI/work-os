@@ -629,6 +629,11 @@ test("the evidence page marks future integrations and keeps bots out of the pers
   assert.match(evidence, /useSearchParams/);
   assert.match(evidence, /searchParams\.get\("source"\)/);
   assert.match(evidence, /aria-pressed=\{source === entry\.source\}/);
+  // Organization-scoped GHL rows name the verified actor/relation rather than
+  // reading as unattributed, and the page can load the server's full 500-row cap.
+  assert.match(evidence, /evidencePersonLabel/);
+  assert.match(evidence, /limit: "500"/);
+  assert.doesNotMatch(evidence, /row\.person\?\.display_name \?\? "Unattributed"/);
 });
 
 test("GHL evidence reaches the person and task panels", async () => {

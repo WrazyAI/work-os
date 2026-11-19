@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Cable, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { EVIDENCE_SOURCE_OPTIONS as SOURCE_OPTIONS, evidenceSourceLabel as sourceLabel } from "@/modules/work-os/evidence-sources";
+import { evidencePersonLabel } from "@/modules/work-os/evidence-labels";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import GhlEvidenceDetail from "./GhlEvidenceDetail";
 import {
@@ -98,7 +99,7 @@ export default function AdminEvidencePage() {
   }>({
     queryKey: adminKeys.evidence(filters),
     queryFn: () => {
-      const params = new URLSearchParams({ from, to, limit: "300", summary: "1" });
+      const params = new URLSearchParams({ from, to, limit: "500", summary: "1" });
       if (personId) params.set("personId", personId);
       if (source) params.set("source", source);
       if (disputedOnly) params.set("correction", "disputed");
@@ -413,7 +414,7 @@ export default function AdminEvidencePage() {
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{row.title}</span>
                               <span className="block truncate text-[11.5px] text-[var(--text-tertiary)]">
-                                {row.person?.display_name ?? "Unattributed"}{row.task ? ` · ${row.task.title}` : ""}
+                                {evidencePersonLabel(row)}{row.task ? ` · ${row.task.title}` : ""}
                                 {row.summary ? ` · ${row.summary.slice(0, 90)}` : ""}
                               </span>
                             </span>
@@ -508,7 +509,7 @@ export default function AdminEvidencePage() {
         open={!!selected}
         onClose={() => { setSelected(null); setScreenshotUrl(null); setScreenshotError(null); }}
         title={selected?.title ?? "Evidence"}
-        subtitle={selected ? `${selected.person?.display_name ?? (selected.source === "ghl" ? "Shared GHL activity" : "Unattributed")} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
+        subtitle={selected ? `${evidencePersonLabel(selected)} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
         width={560}
       >
         {selected ? (

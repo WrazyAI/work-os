@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ghlEvidenceRow } from "../src/lib/work-os-ghl-evidence-view";
+import { evidencePersonLabel } from "../src/modules/work-os/evidence-labels";
 
 function event(relation: string, actorId: string | null = "U0iE") {
   return {
@@ -63,4 +64,27 @@ test("the mapped-actor name does not become a person attribution", () => {
   assert.equal(row.person_id, null);
   assert.equal(row.person, null);
   assert.equal((row.metrics as { relation: string }).relation, "unknown");
+});
+
+test("evidence list labels name mapped GHL context instead of Unattributed", () => {
+  assert.equal(
+    evidencePersonLabel({ person: null, source: "ghl", ghl: { actorLabel: "Aden Badon" } }),
+    "Aden Badon",
+  );
+  assert.equal(
+    evidencePersonLabel({ person: null, source: "ghl", ghl: { actorLabel: "Automation — not the employee" } }),
+    "Automation — not the employee",
+  );
+  assert.equal(
+    evidencePersonLabel({ person: null, source: "ghl", ghl: null }),
+    "Shared GHL activity",
+  );
+  assert.equal(
+    evidencePersonLabel({ person: null, source: "github", ghl: null }),
+    "Unattributed",
+  );
+  assert.equal(
+    evidencePersonLabel({ person: { display_name: "Aden Badon" }, source: "ghl", ghl: { actorLabel: "Aden Badon" } }),
+    "Aden Badon",
+  );
 });
