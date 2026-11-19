@@ -78,12 +78,12 @@ export function resetSessionScopedReads(client: QueryClient): void {
 
 /** Sign-out is ordered after an already-started vault save, not raced with it.
  * Cancel reads (never mutations), retire queued snapshots, then erase storage. */
-export async function clearWorkOsAccountCache(client: QueryClient): Promise<void> {
+export async function clearWorkOsAccountCache(client: QueryClient, expectedToken?: string | null): Promise<void> {
   const resume = await persistenceBarriers.get(client)?.();
   try {
     await client.cancelQueries();
     client.clear();
-    await secureState.clearAccount();
+    await secureState.clearAccount(expectedToken);
   } finally {
     resume?.();
   }

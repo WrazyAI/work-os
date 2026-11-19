@@ -126,10 +126,10 @@ benchmark with `--ignored` to reproduce the variability.
   revision differs from the Playwright package expectation; a scratch preload
   selects the existing Chromium 1254 executable, without package installation
   or product/test changes.
-- Full companion suite after all lease, sign-out, and recovery changes: **232 files / 2,062 tests passed**, and the production build passed.
+- Full companion suite after all lease, sign-out, and recovery changes: **232 files / 2,063 tests passed**, and the production build passed.
 - Full Work OS suite: **1,332 tests / 1,321 passed / 0 failed / 11 skipped** on
   the pre-rebase branch before the final companion-only hardening. After
-  rebasing onto current main (published 0.5.36), the full companion suite (232 files/2,062 tests),
+  rebasing onto current main (published 0.5.40), the full companion suite (232 files/2,063 tests),
   `work-os:typecheck`, root ACL/desktop contracts, and the production build pass.
   A whole-repo root-suite rerun on the rebased tree was not completed, so it is
   not claimed; companion runtime behavior is covered by the full companion suite.
@@ -195,6 +195,6 @@ the main agent verified and fixed the valid findings. This is documented rather
 than presented as an independent pass.
 
 Queue: one companion outcome appended as `shared-vault-single-initialization`
-after the existing `guide-split-view-and-settings-film`; release status is 2/5
-pending, ineligible. Published version is 0.5.36. No version bump, packaging, or
+directly after the existing `admin-otto-evidence-request-scope`; the gate
+reports 2/5 pending, ineligible. Published version is 0.5.40. No version bump, packaging, or
 installer publication.

@@ -249,18 +249,22 @@ export const secureState = {
   session: async () => (await secureState.sessionState()).session,
   saveSession: (session: DesktopSession) => isTauri() ? set("session", session) : Promise.resolve(),
   clearSession: () => isTauri() ? remove("session") : Promise.resolve(),
-  clearAccount: async () => {
+  clearAccount: async (expectedToken?: string | null) => {
     if (!isTauri()) return;
     // Sign-out is idempotent: another window can retire this lease mid-cleanup
     // (a reset or failed durable save), so resume from the start on a fresh one
     // instead of abandoning the remaining employee records.
-    let startingToken: string | null = null;
-    let tokenKnown = false;
+    let startingToken: string | null = expectedToken ?? null;
+    let tokenKnown = expectedToken !== undefined;
     for (let attempt = 0; ; attempt += 1) {
       const lease = vault();
       try {
         const currentToken = sessionStateFrom(await get<DesktopSession>("session", lease), httpsOrigin).session?.token ?? null;
         if (!tokenKnown) {
+          // The initiating read failed, so the account token is unknown. Never
+          // adopt a session that appeared during the retry: it belongs to
+          // whoever signed in afterwards.
+          if (attempt > 0 && currentToken !== null) return;
           startingToken = currentToken;
           tokenKnown = true;
         // A different account may have signed in while this cleanup was waiting

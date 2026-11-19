@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The native worker itself is exercised by the Rust lifecycle/native tests.
 const host = vi.hoisted(() => ({
   disk: new Map<string, number[]>(), generation: 1, ready: false,
-  error: null as unknown, saveError: false, failRemoveKey: null as string | null, onRemoveFailure: null as (() => void) | null, failReadKey: null as string | null, writes: 0,
+  error: null as unknown, saveError: false, failRemoveKey: null as string | null, onRemoveFailure: null as (() => void) | null, failReadKey: null as string | null, onReadFailure: null as (() => void) | null, writes: 0,
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
@@ -24,6 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "read_local_vault") {
       if (host.failReadKey === key) {
         host.failReadKey = null; host.generation++; host.ready = false;
+        host.onReadFailure?.();
         throw { code: "storage_failed", message: "Local data could not be read.", requiresReset: false };
       }
       return host.disk.get(key) ?? null;
@@ -56,7 +57,7 @@ async function windowState() {
 describe("session persistence through the shared native vault transport", () => {
   beforeEach(() => {
     vi.stubGlobal("window", { setTimeout, location: { search: "" } });
-    host.disk = new Map(); host.generation = 1; host.ready = false; host.error = null; host.saveError = false; host.failRemoveKey = null; host.onRemoveFailure = null; host.failReadKey = null; host.writes = 0;
+    host.disk = new Map(); host.generation = 1; host.ready = false; host.error = null; host.saveError = false; host.failRemoveKey = null; host.onRemoveFailure = null; host.failReadKey = null; host.onReadFailure = null; host.writes = 0;
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -141,12 +142,20 @@ describe("session persistence through the shared native vault transport", () => 
     expect(await main.pendingAuth()).toBeNull();
     expect(await main.conversation("shift")).toEqual([]);
   });
+  it("never adopts an account that signs in after the initiating read failed", async () => {
+    const main = (await windowState()).secureState;
+    await main.saveSession(session);
+    host.failReadKey = "session";
+    host.onReadFailure = () => { host.disk.set("session", [...new TextEncoder().encode(JSON.stringify(otherSession))]); };
+    await main.clearAccount(session.token);
+    expect(await main.session()).toEqual(otherSession);
+  });
   it("still clears account data when the first session read fails", async () => {
     const main = (await windowState()).secureState;
     await main.saveSession(session);
     await main.savePendingAuth({ verifier: "fixture", state: "fixture", apiBase: "https://app.wrazyos.com" });
     host.failReadKey = "session";
-    await expect(main.clearAccount()).resolves.toBeUndefined();
+    await expect(main.clearAccount(session.token)).resolves.toBeUndefined();
     expect(await main.session()).toBeNull();
     expect(await main.pendingAuth()).toBeNull();
   });
