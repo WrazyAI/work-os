@@ -4,11 +4,13 @@ import type { DebugScenario } from "./types";
 import { MascotPet } from "./MascotPet";
 import { MASCOT } from "./mascot";
 import { MASCOT_ACTIVITIES, MASCOT_WORKDAYS, isMascotActivity, isMascotWorkday, resolveMascotRuntime, type MascotRuntimeState } from "./mascotRuntimeModel";
+import type { MascotAgentActivity } from "./mascotState";
+import { MASCOT_MATRIX_STATES } from "./mascotDebugMatrix";
 import { MASCOT_SEQUENCES, type MascotSequence } from "./mascotDebugSequences";
 import "./mascot-runtime.css";
 
 const label = (value: string) => value.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
-const ACTIVITY_LABELS = { idle: "Idle", working: "Working", "needs-input": "Needs input", ready: "Completed", blocked: "Failed / blocked" };
+const ACTIVITY_LABELS: Record<MascotAgentActivity, string> = { idle: "Idle", working: "Working", "needs-input": "Needs input", ready: "Completed", blocked: "Failed / blocked" };
 
 /** Presentation-only controls: never call a workday, task, notification or
  * approval API. Delayed steps cannot outlive disable, reset or unmount. */
@@ -104,7 +106,7 @@ export function MascotDebugControls({ scenario, onChange }: { scenario: DebugSce
     </fieldset>
     <p className="debug-help" role="status">{running ? `Running ${running} sequence...` : "No sequence running."} Auto also follows My Day conditions and Companion force. Explicit mascot overrides win while the scenario is enabled.</p>
     <div className="debug-mascot-actions"><button type="button" aria-pressed={dark} onClick={() => setDark((value) => !value)}>Dark preview surface</button><button type="button" aria-expanded={matrix} onClick={() => setMatrix((value) => !value)}>All 35 combinations</button></div>
-    {matrix && <div className="mascot-lab-state-grid" style={{ marginTop: 16 }}>{MASCOT_WORKDAYS.flatMap((workday) => MASCOT_ACTIVITIES.map((agent) => <div className="mascot-lab-state" key={`${workday}-${agent}`}><MascotPet isolated agent={agent} workday={workday} reducedMotion={preview.reducedMotion} replayKey={preview.replay} /><small>{label(workday)} / {ACTIVITY_LABELS[agent]}</small></div>))}</div>}
+    {matrix && <div className="mascot-lab-state-grid debug-mascot-matrix">{MASCOT_MATRIX_STATES.map(({ workday, agent, key }) => <div className="mascot-lab-state" key={key} data-state={key}><MascotPet isolated agent={agent} workday={workday} reducedMotion={preview.reducedMotion} replayKey={preview.replay} /><small>{label(workday)} / {ACTIVITY_LABELS[agent]}</small></div>)}</div>}
     <div className="debug-mascot-readout" aria-label="Reported mascot states"><strong>Last reported by each window</strong>{(["main", "avatar"] as const).map((windowName) => <div key={windowName}>{windowName}: {reported[windowName] ? `${reported[windowName]!.activity} / ${reported[windowName]!.workday} / ${reported[windowName]!.pose} (${reported[windowName]!.source})` : "No response yet - open this window to verify."}</div>)}</div>
     </div>
   </section>;
