@@ -1864,6 +1864,14 @@ body:has(.admin-workspace) .notifications-card {
   min-width: 0;
 }
 
+.admin-evidence-time {
+  flex: 0 0 62px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .admin-evidence-frame,
 .admin-evidence-thumb-missing {
   flex: 0 0 auto;

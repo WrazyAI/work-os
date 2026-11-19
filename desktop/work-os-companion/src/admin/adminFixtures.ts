@@ -391,7 +391,7 @@ function evidenceResponse(): EvidenceResponse {
     { id: "e-7", person: "p-2", date: DATES[DATES.length - 1], source: "worktivity", title: "Billing retry suite in the browser", summary: "VS Code beside a browser running the billing retry tests.", disputed: false, shot: true },
     { id: "e-8", person: "p-2", date: DATES[DATES.length - 1], source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", disputed: false, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
     { id: "e-9", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Settings IA review", summary: "Figma and Notion with the settings IA outline open.", disputed: false, shot: true },
-    { id: "e-ghl", person: "p-1", date: DATES[DATES.length - 1], source: "ghl", title: "Call outbound", summary: "Recorded outbound call with status completed.", disputed: false, ghl: { eventId: "e-ghl", relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" } },
+    { id: "e-ghl", person: "p-1", date: DATES[DATES.length - 1], source: "ghl", title: "Call outbound", summary: "Recorded outbound call with status completed.", disputed: false, recorded_at: `${DATES[DATES.length - 1]}T13:10:00.000Z`, ghl: { eventId: "e-ghl", relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" } },
   ];
   return {
     evidence: rows.map((row) => {
@@ -407,6 +407,7 @@ function evidenceResponse(): EvidenceResponse {
         url: (row as { url?: string }).url ?? (row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null),
         metrics: null,
         created_at: `${row.date}T09:30:00.000Z`,
+        recorded_at: (row as { recorded_at?: string }).recorded_at ?? `${row.date}T09:30:00.000Z`,
         person: { id: person.id, display_name: person.name },
         ghl: (row as { ghl?: EvidenceRow["ghl"] }).ghl ?? null,
         event: {
