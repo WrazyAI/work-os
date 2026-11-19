@@ -19,8 +19,7 @@
     "allow-day-monitor",
     "allow-voice-commands",
     "process:allow-restart",
-    "stronghold:default",
-    "stronghold:allow-remove-store-record",
+    "allow-vault-store",
     "updater:default"
   ]
 }

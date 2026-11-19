@@ -95,6 +95,8 @@ jobs:
           toolchain: 1.99.1
       - name: Test the local vault rules
         run: cargo test --manifest-path src-tauri/vault-password-core/Cargo.toml
+      - name: Test shared vault lifecycle and reset fencing
+        run: cargo test --manifest-path src-tauri/vault-runtime-core/Cargo.toml
       - name: Test diagnostics metadata, redaction, and paging
         run: cargo test --manifest-path src-tauri/diagnostics-core/Cargo.toml
 

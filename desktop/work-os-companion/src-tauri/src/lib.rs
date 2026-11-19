@@ -6,6 +6,8 @@ mod diagnostics;
 mod local_settings;
 mod session_guard;
 mod vault_password;
+mod vault_backend;
+mod vault_store;
 mod window_fit;
 
 use tauri::menu::{Menu, MenuItem};
@@ -660,6 +662,10 @@ pub fn run() {
             vault_password::get_vault_password,
             vault_password::reset_local_vault,
             vault_password::vault_open_trouble,
+            vault_store::open_local_vault,
+            vault_store::read_local_vault,
+            vault_store::write_local_vault,
+            vault_store::remove_local_vault,
             local_settings::ensure_local_settings,
             session_guard::app_heartbeat,
             arm_update_exit_watchdog,
@@ -745,6 +751,7 @@ pub fn run() {
             // in-place update changes the ad-hoc signature), and that must never
             // happen on the main thread or twice per launch.
             vault_password::init(app.handle());
+            vault_store::init(app.handle()).map_err(|_| "Could not start the local vault worker")?;
             // Reap a predecessor that died without exiting — a tray app left
             // behind by a shutdown or a hung teardown would otherwise swallow
             // every later launch through the single-instance handoff — then

@@ -91,3 +91,36 @@ The run exited successfully. Chromium emitted a class-unregistration diagnostic
 not fail the run. This validates the native production window path, not an
 installed/updater release. The installed 0.5.27 app remains unchanged until a
 separate installer release.
+
+## Shared vault startup measurements
+
+The shared-vault implementation attaches main and avatar to one native owner.
+It does not change the encrypted snapshot format, keychain credential, salt,
+client name, or encryption work factors. A healthy attach reports reuse instead
+of replacing the live instance. Explicit start-fresh recovery invalidates the
+previous generation; an action from that generation fails rather than replaying
+its payload into the replacement vault.
+
+For a slow launch, distinguish these events:
+
+- `vault.shared.key`, `.derive`, `.snapshot`, `.client`: native initializer
+  subphases with `durationMs` and `window: host`. A normal dual-window startup
+  should have one set, not two; an explicit failed-open retry can add another set.
+- `vault.shared.ready`: each invoking window's wait and `reused` flag. The
+  waiting windows' durations overlap; do not add them.
+- `vault.open.started` / `.ready`: frontend vault wait, now window-labelled.
+- `app.startup.vault_wait` and `.cache_restore`: one-shot WebView timings.
+- `app.startup.content_frame` versus `.overlay_exit`: a post-commit frame
+  observation before/after the loading overlay's exit, not browser TTI or proof
+  that fresh provider data has arrived. `.avatar_frame` observes its initial
+  rendered frame, not signed-in readiness. Hidden windows can delay animation
+  frame callbacks without holding the actual vault gate.
+
+Timing payloads contain only known window labels, fixed phase names, durations,
+and reuse state. They must never contain query strings, record contents, vault
+paths, passwords, or tokens. Existing `app.boot.phase` breadcrumbs remain state
+evidence, not direct measurements of usable paint.
+
+Verification and the synthetic Windows before/after snapshot measurements:
+`docs/verification/2026-11-16-shared-vault-startup.md`. Those measurements are
+not an installed-app launch-time promise.
