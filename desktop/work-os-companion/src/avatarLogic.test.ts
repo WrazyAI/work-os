@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, planHoldExpired, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
-  avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, dismissPrompt, isPromptDismissed, nextSnoozeDelayMs, promptDismissalToken, shiftElapsedFraction, snoozeUntil,
+  avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, dismissPrompt, isPromptDismissed, modeScopedMascot, nextSnoozeDelayMs, promptDismissalToken, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand, overdueTasks,
   type CompanionDayFacts,
 } from "./avatarLogic";
@@ -570,6 +570,26 @@ describe("prompt dismissals", () => {
     const next = dismissPrompt(old, "agenda", promptDismissalToken("agenda", { day: "2026-11-19", planRevision: 1 }), "2026-11-19");
     expect(next.eod).toBeUndefined();
     expect(next.agenda?.day).toBe("2026-11-19");
+  });
+});
+
+describe("modeScopedMascot", () => {
+  it("keeps the employee ask out of the administration orb", () => {
+    expect(modeScopedMascot({
+      mode: "admin", employeeAgent: "needs-input", employeeWorkday: "check-in-due", adminAttention: false,
+    })).toEqual({ agent: "idle", workday: "active", adminAttention: false });
+  });
+
+  it("gives administration its own attention state", () => {
+    expect(modeScopedMascot({
+      mode: "admin", employeeAgent: "idle", employeeWorkday: "off-shift", adminAttention: true,
+    })).toEqual({ agent: "needs-input", workday: "active", adminAttention: true });
+  });
+
+  it("restores the pending employee state exactly when the workspace returns", () => {
+    expect(modeScopedMascot({
+      mode: "employee", employeeAgent: "needs-input", employeeWorkday: "check-in-due", adminAttention: true,
+    })).toEqual({ agent: "needs-input", workday: "check-in-due", adminAttention: false });
   });
 });
 

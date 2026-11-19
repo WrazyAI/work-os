@@ -7,18 +7,22 @@ import { PGlite } from "@electric-sql/pglite";
 // tests only read the migration as text, which is exactly how an invalid column
 // reference in the reconciler survived review: PL/pgSQL bodies are not checked
 // until they run.
-const migration = readFileSync("supabase/migrations/0075_work_cosmos_timebot_notifications.sql", "utf8");
+const migrations = [
+  readFileSync("supabase/migrations/0075_work_cosmos_timebot_notifications.sql", "utf8"),
+  readFileSync("supabase/migrations/0076_work_timebot_inactive.sql", "utf8"),
+];
 
 const SCHEMA = `
     create table work_organizations (id uuid primary key default gen_random_uuid(), name text not null, slug text not null);
     create table work_people (id uuid primary key default gen_random_uuid(), display_name text not null);
-    create table work_sessions (id uuid primary key default gen_random_uuid(), organization_id uuid not null, person_id uuid not null, timezone text not null);
+    create table work_sessions (id uuid primary key default gen_random_uuid(), organization_id uuid not null, person_id uuid not null, timezone text not null, shift_date date not null);
     create table work_session_events (
       id uuid primary key default gen_random_uuid(),
       organization_id uuid not null references work_organizations(id) on delete cascade,
       person_id uuid not null references work_people(id) on delete cascade,
       session_id uuid not null references work_sessions(id) on delete cascade,
       event_type text not null,
+      from_state text,
       source text not null default 'desktop',
       observed_at timestamptz not null,
       recorded_at timestamptz not null default now()
@@ -28,7 +32,7 @@ const SCHEMA = `
 async function freshDb() {
   const db = new PGlite();
   await db.exec(SCHEMA);
-  await db.exec(migration);
+  for (const sql of migrations) await db.exec(sql);
   return db;
 }
 
@@ -37,7 +41,7 @@ async function freshDbWithOrg() {
   const db = new PGlite();
   await db.exec(SCHEMA);
   const org = await db.query("insert into work_organizations (name, slug) values ('Wrazy', 'wrazy') returning id");
-  await db.exec(migration);
+  for (const sql of migrations) await db.exec(sql);
   return { db, organizationId: org.rows[0].id };
 }
 
@@ -49,17 +53,17 @@ async function seed(db) {
   const person = await db.query("insert into work_people (display_name) values ('David Zawadi') returning id");
   const personId = person.rows[0].id;
   const session = await db.query(
-    "insert into work_sessions (organization_id, person_id, timezone) values ($1,$2,'Europe/London') returning id",
+    "insert into work_sessions (organization_id, person_id, timezone, shift_date) values ($1,$2,'Europe/London',current_date) returning id",
     [organizationId, personId],
   );
   return { organizationId, personId, sessionId: session.rows[0].id };
 }
 
-async function addEvent(db, ids, eventType, observedAt) {
+async function addEvent(db, ids, eventType, observedAt, fromState = null) {
   const result = await db.query(
-    `insert into work_session_events (organization_id, person_id, session_id, event_type, observed_at)
-     values ($1,$2,$3,$4,$5) returning id`,
-    [ids.organizationId, ids.personId, ids.sessionId, eventType, observedAt],
+    `insert into work_session_events (organization_id, person_id, session_id, event_type, from_state, observed_at)
+     values ($1,$2,$3,$4,$5,$6) returning id`,
+    [ids.organizationId, ids.personId, ids.sessionId, eventType, fromState, observedAt],
   );
   return result.rows[0].id;
 }
@@ -249,6 +253,75 @@ test("a failed first enqueue still leaves the event that becomes the cutover", a
     await db.exec("alter table work_notification_outbox drop constraint test_first");
     const rebuilt = await db.query("select work_reconcile_timebot_outbox($1::timestamptz, 50) as inserted", [boundary.rows[0].at]);
     assert.equal(Number(rebuilt.rows[0].inserted), 1, "recovery from the derived boundary closes the gap");
+  } finally {
+    await db.close();
+  }
+});
+
+test("a clock-out records the session state it left", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    await addEvent(db, ids, "clock_out", ago(5), "active");
+    await addEvent(db, ids, "clock_out", ago(30), "eod_due");
+    const rows = await db.query("select from_state from work_notification_outbox order by observed_at desc");
+    assert.deepEqual(rows.rows.map((row) => row.from_state), ["active", "eod_due"]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("a same-shift return carries the clock-out it resumes", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    const outAt = ago(50);
+    await addEvent(db, ids, "clock_out", outAt, "active");
+    await addEvent(db, ids, "clock_in", ago(8));
+    const row = await db.query(
+      "select previous_observed_at from work_notification_outbox where event_type = 'clock_in'",
+    );
+    assert.equal(
+      new Date(row.rows[0].previous_observed_at).toISOString(),
+      new Date(outAt).toISOString(),
+      "the return knows when the inactivity started",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("a break return carries the pause it ends", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    const pauseAt = ago(40);
+    await addEvent(db, ids, "pause", pauseAt);
+    await addEvent(db, ids, "resume", ago(5));
+    const row = await db.query(
+      "select previous_observed_at from work_notification_outbox where event_type = 'resume'",
+    );
+    assert.equal(new Date(row.rows[0].previous_observed_at).toISOString(), new Date(pauseAt).toISOString());
+  } finally {
+    await db.close();
+  }
+});
+
+test("a next-day clock-in is a fresh in, not a back", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    await db.query("update work_sessions set shift_date = current_date - 1 where id = $1", [ids.sessionId]);
+    await addEvent(db, ids, "clock_out", ago(18 * 60), "eod_due");
+    const today = await db.query(
+      "insert into work_sessions (organization_id, person_id, timezone, shift_date) values ($1,$2,'Europe/London',current_date) returning id",
+      [ids.organizationId, ids.personId],
+    );
+    await addEvent(db, { ...ids, sessionId: today.rows[0].id }, "clock_in", ago(5));
+    const row = await db.query(
+      "select previous_observed_at from work_notification_outbox where event_type = 'clock_in'",
+    );
+    assert.equal(row.rows[0].previous_observed_at, null, "yesterday's clock-out must not turn today into a back");
   } finally {
     await db.close();
   }

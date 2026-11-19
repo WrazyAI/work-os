@@ -13,6 +13,18 @@ export function recapArrivalCopy(count: number): { title: string; body: string }
   };
 }
 
+/** Notification copy for a submitted EOD report. It names the decision, never
+ * the person: the name belongs to the in-app card, not a lock-screen toast. */
+export function eodArrivalCopy(count: number): { title: string; body: string } {
+  const safe = Math.max(1, Math.trunc(count));
+  return {
+    title: "EOD report submitted",
+    body: safe === 1
+      ? "1 report is waiting for your review."
+      : `${safe} reports are waiting for your review.`,
+  };
+}
+
 /** The host seams the acceptance predicate is tested against. */
 export type AdminRecapPresentationHost = {
   isTauri: boolean;
@@ -53,17 +65,17 @@ const liveHost: AdminRecapPresentationHost = {
 };
 
 /**
- * Present a grouped arrival and report whether a person could actually see it.
+ * Present one administration arrival and report whether a person could actually
+ * see it.
  *
  * - A visible in-app surface accepting the group is presentation even when the
  *   OS toast is denied.
  * - A hidden window's flyout is not a presentation; only an accepted toast is.
- * - The avatar has no in-app recap surface yet, so a denied toast is `false`.
- *   The delivery controller then releases its lease and leaves the event for
- *   the next poll instead of marking it presented forever.
+ * - A denied toast with no visible surface is `false`, so a lease stays
+ *   unacknowledged and the event is offered again on the next poll.
  */
-export async function presentAdminRecapArrival(
-  count: number,
+export async function presentAdminArrival(
+  copy: { title: string; body: string },
   options: AdminRecapPresentationOptions = {},
 ): Promise<boolean> {
   const signal = options.signal ?? new AbortController().signal;
@@ -72,7 +84,6 @@ export async function presentAdminRecapArrival(
     isCurrent: () => !signal.aborted && (options.isCurrent?.() ?? true),
   };
   if (!fence.isCurrent()) return false;
-  const copy = recapArrivalCopy(count);
   const host: AdminRecapPresentationHost = {
     ...liveHost,
     ...options.host,
@@ -107,4 +118,12 @@ export async function presentAdminRecapArrival(
   } catch {
     return false;
   }
+}
+
+/** The reviewed-recap arrival keeps its own count-only copy. */
+export function presentAdminRecapArrival(
+  count: number,
+  options: AdminRecapPresentationOptions = {},
+): Promise<boolean> {
+  return presentAdminArrival(recapArrivalCopy(count), options);
 }

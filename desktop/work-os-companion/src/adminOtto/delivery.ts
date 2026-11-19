@@ -237,8 +237,10 @@ export function startAdminRecapDelivery(deps: AdminRecapDeliveryDeps): AdminReca
 
     if (mode === "employee") {
       // Personal mode keeps the team feed state but never claims, presents or
-      // acknowledges the team delivery; that changes only when Administration
-      // returns to the screen.
+      // acknowledges the team delivery. The shells deliberately pass
+      // `getMode: () => "admin"` for an administrator in either workspace: a
+      // reviewed recap is a team event, and its arrival still belongs to the
+      // admin feed while the personal workday is on screen.
       return;
     }
 

@@ -31,7 +31,7 @@ import { loadMachineCadence } from "./localSettings";
 import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
-import { useNotifications } from "./NotificationFlyouts";
+import { useNotifications, type NotificationAction } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
 import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
@@ -130,7 +130,8 @@ import { adminOttoRoleAllowed, personalBootstrapFlags, planAdminOttoBootstrap } 
 import { adminOttoKeys } from "./adminOtto/queryKeys";
 import { adminOttoChangedEvent, captureScopeStillCurrent, createOttoModeController, ottoContextEvent, parseAdminOttoChangedEvent, sameOttoScope, OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, type AdminOttoContext, type OttoModeController, type OttoModeSnapshot } from "./adminOtto/mode";
 import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from "./adminOtto/delivery";
-import { presentAdminRecapArrival } from "./adminOtto/notifications";
+import { eodArrivalCopy, presentAdminArrival, recapArrivalCopy } from "./adminOtto/notifications";
+import { ADMIN_ATTENTION_SEEN_KEY, OTTO_ADMIN_ATTENTION_EVENT, OTTO_ADMIN_ATTENTION_OPEN_EVENT, adminAttentionEvent, adminAttentionSeenKey, eodAttentionFromOverview, parseAdminAttentionEvent, parseAdminAttentionSeen, recapAttentionItem, shouldAutoSwitchWorkspace, type AdminAttentionItem, type AdminAttentionSeen } from "./adminOtto/attention";
 import { personalBootstrapAccess, runPersonalBootstrapRefresh, type PersonalBootstrapSource } from "./adminOtto/personalBootstrap";
 import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
 import { createAdminOttoContextRetry } from "./adminOtto/context";
@@ -328,6 +329,24 @@ function writeSeenIds(key: string, ids: string[]): void {
   } catch { /* best effort */ }
 }
 
+/** The EOD attention baseline is a watermark plus ids, not just a list: it
+ * catches a report submitted while the app was closed without re-announcing
+ * one that was already seen. */
+function readAdminAttentionSeen(): AdminAttentionSeen | null {
+  try {
+    const raw = window.localStorage.getItem(ADMIN_ATTENTION_SEEN_KEY);
+    return raw ? parseAdminAttentionSeen(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAdminAttentionSeen(value: AdminAttentionSeen): void {
+  try {
+    window.localStorage.setItem(ADMIN_ATTENTION_SEEN_KEY, JSON.stringify(value));
+  } catch { /* best effort */ }
+}
+
 /** Main companion shell: coordinates cached workday data, task history, and routed workspaces. */
 export default function App() {
   const notifications = useNotifications();
@@ -445,6 +464,10 @@ export default function App() {
   useLayoutEffect(() => {
     adminOttoSnapshotRef.current = adminOttoSnapshot;
   }, [adminOttoSnapshot]);
+  /** The last grounded admin arrival: a submitted EOD or a reviewed recap.
+   * The overview read owns EODs; the delivery loop owns recaps. */
+  const adminAttentionSeenRef = useRef<AdminAttentionSeen | null>(readAdminAttentionSeen());
+  const adminAttentionAnnouncedRef = useRef<string | null>(null);
   /** Stable across App renders, including the New chat state updates. The
    * callback still reads the latest published scope from the ref. */
   const handleAdminOttoConversation = useCallback((conversationId: string) => {
@@ -1264,67 +1287,6 @@ export default function App() {
     navigateAdmin(target.section, target.focus);
   }, [navigateAdmin, notifications, session?.token]);
 
-  /** One grouped-arrival presentation used by both the local delivery owner and
-   * an avatar-owned arrival forwarded over the changed event. It never opens a
-   * window, switches tabs, starts audio, or moves focus. */
-  const presentAdminOttoArrival = useCallback(async (input: {
-    count: number;
-    unread: number;
-    eventIds: string[];
-  }): Promise<boolean> => {
-    const requestedSnapshot = adminOttoModeRef.current?.snapshot() ?? null;
-    const requestedToken = session?.token;
-    const isCurrent = () => {
-      const current = adminOttoModeRef.current?.snapshot();
-      if (session?.token !== requestedToken) return false;
-      if (!requestedSnapshot) return !current;
-      return !!current
-        && current.epoch === requestedSnapshot.epoch
-        && current.scope.userId === requestedSnapshot.scope.userId
-        && current.scope.organizationId === requestedSnapshot.scope.organizationId
-        && current.scope.mode === requestedSnapshot.scope.mode;
-    };
-    const page = await (ADMIN_SHELL_BOOT ? Promise.resolve(null) : fetchAdminOttoInbox({ limit: 12 })).catch(() => null);
-    if (!isCurrent()) return false;
-    const recap = page?.items.find((item) => input.eventIds.includes(item.deliveryId))?.recap ?? null;
-    setAdminOttoArrival({
-      count: input.count,
-      unread: page?.unread ?? input.unread,
-      eventIds: [...input.eventIds],
-      recap,
-    });
-    setAdminOttoArrivalRevision((value) => value + 1);
-    const copy = {
-      title: "Reviewed recaps are ready",
-      body: input.count === 1
-        ? "1 reviewed recap is waiting in the administration inbox."
-        : `${input.count} reviewed recaps are waiting in the administration inbox.`,
-    };
-    const listen = input.count === 1 && recap
-      ? [{
-          label: "Listen",
-          kind: "primary" as const,
-          onClick: () => {
-            notifications.clearPersistent("admin-otto-recap-arrival");
-            setAdminOttoArrival(null);
-            openAdminOttoSurface({ tab: "recaps", recap, listen: true });
-          },
-        }]
-      : [];
-    const view = [{
-      label: input.count === 1 ? "View recap" : "View inbox",
-      kind: "quiet" as const,
-      onClick: () => openAdminOttoSurface({
-        tab: "recaps",
-        recap: input.count === 1 ? recap : null,
-      }),
-    }];
-    notifications.persistent("admin-otto-recap-arrival", copy.body, copy.title, "info", {
-      icon: "otto",
-      actions: [...listen, ...view],
-    });
-    return true;
-  }, [notifications, openAdminOttoSurface, session?.token]);
   /** The admin tour walks the sections for real, so it drives the workspace. */
   const navigateAdminGuide = useCallback((guide: GuideView) => {
     const section = adminSectionForGuideView(guide);
@@ -1931,6 +1893,35 @@ export default function App() {
     };
   }, [openAdminRecord]);
 
+  /* The floating companion can be the only surface the administrator sees.
+     Its card action names a real destination; this window brings the exact
+     section forward after the same scope/epoch check as a record link. */
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_ADMIN_ATTENTION_OPEN_EVENT, (event) => {
+      const parsed = parseAdminAttentionEvent(event.payload);
+      const item = parsed?.item;
+      const current = viewStateRef.current;
+      if (!parsed || !item || !current) return;
+      if (current.scope.userId !== parsed.scope.userId
+        || current.scope.organizationId !== parsed.scope.organizationId
+        || parsed.epoch > current.epoch) return;
+      if (isTauri()) void invoke("focus_main").catch(() => undefined);
+      void requestWorkspaceMode("admin").then((result) => {
+        if (!result.ok) return;
+        if (item.kind === "recap_reviewed") openAdminOttoSurface({ tab: "recaps" });
+        else navigateAdmin("review", item.personId ? { personId: item.personId } : undefined);
+      });
+    }).then((cleanup) => {
+      if (cancelled) cleanup(); else off = cleanup;
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, [navigateAdmin, openAdminOttoSurface, requestWorkspaceMode]);
+
   const coordinatedSend = useCallback(async (input: ChatRequest, signal?: AbortSignal): Promise<ChatResult> => {
     const client = conversationClientRef.current;
     if (!client) return sendAdminOttoChat(input, signal);
@@ -1966,6 +1957,124 @@ export default function App() {
     }
     return result;
   });
+
+  /** Publish one grounded administration arrival to every Otto surface.
+   *
+   * The persistent card is the main window's durable record; the cross-window
+   * event is the floating companion's bubble and card. A new arrival also
+   * brings Administration forward once, quietly: the employee's own pending
+   * prompt is untouched and returns when they switch back. */
+  const announceAdminAttention = useCallback((item: AdminAttentionItem, options: {
+    recap?: ReviewedRecap | null;
+    toast?: boolean;
+  } = {}): boolean => {
+    if (adminAttentionAnnouncedRef.current === item.id) return false;
+    adminAttentionAnnouncedRef.current = item.id;
+    const scope = adminOttoContextQuery.data?.scope ?? adminOttoSnapshotRef.current?.scope ?? null;
+    const epoch = adminOttoSnapshotRef.current?.epoch ?? 1;
+    if (scope) {
+      void emit(OTTO_ADMIN_ATTENTION_EVENT, adminAttentionEvent({ ...scope, mode: "admin" }, epoch, item));
+    }
+    const key = `admin-attention:${item.id}`;
+    const clear = () => notifications.clearPersistent(key);
+    const open = () => {
+      clear();
+      void setWorkspaceMode("admin").then((result) => {
+        if (!result.ok) return;
+        if (item.kind === "recap_reviewed") openAdminOttoSurface({ tab: "recaps", recap: options.recap ?? null });
+        else navigateAdmin("review", item.personId ? { personId: item.personId } : undefined);
+      });
+    };
+    const listen: NotificationAction[] = item.kind === "recap_reviewed" && item.count === 1 && options.recap
+      ? [{
+          label: "Listen",
+          kind: "primary",
+          onClick: () => {
+            clear();
+            setAdminOttoArrival(null);
+            void setWorkspaceMode("admin").then((result) => {
+              if (result.ok) openAdminOttoSurface({ tab: "recaps", recap: options.recap, listen: true });
+            });
+          },
+        }]
+      : [];
+    const actions: NotificationAction[] = [...listen, {
+      label: item.kind === "recap_reviewed" ? "View recaps" : "Review reports",
+      kind: listen.length ? "quiet" : "primary",
+      onClick: open,
+    }];
+    notifications.persistent(key, item.body, item.title, "info", { icon: "otto", actions });
+    if (shouldAutoSwitchWorkspace({
+      current: effectiveWorkspaceRef.current,
+      target: "admin",
+      available: adminContextState?.status === "ready",
+    })) void requestWorkspaceMode("admin");
+    if (options.toast !== false) {
+      void presentAdminArrival(item.kind === "recap_reviewed" ? recapArrivalCopy(item.count) : eodArrivalCopy(item.count), {
+        isWindowVisible: async () => {
+          try {
+            return isTauri() ? await getCurrentWindow().isVisible() : document.visibilityState !== "hidden";
+          } catch {
+            return false;
+          }
+        },
+        // The persistent card above is a visible in-app surface even when the
+        // employee workspace is the one on screen.
+        inApp: () => true,
+      });
+    }
+    return true;
+  }, [adminContextState?.status, adminOttoContextQuery.data?.scope, navigateAdmin, notifications, openAdminOttoSurface, requestWorkspaceMode]);
+
+  /** One grouped-arrival presentation used by both the local delivery owner and
+   * an avatar-owned arrival forwarded over the changed event. It never opens a
+   * window, switches tabs, starts audio, or moves focus. The OS toast is the
+   * presentation when the main window is hidden; the persistent card is the
+   * presentation when it is visible. */
+  const presentAdminOttoArrival = useCallback(async (input: {
+    count: number;
+    unread: number;
+    eventIds: string[];
+  }): Promise<boolean> => {
+    const requestedSnapshot = adminOttoModeRef.current?.snapshot() ?? null;
+    const requestedToken = session?.token;
+    const isCurrent = () => {
+      const current = adminOttoModeRef.current?.snapshot();
+      if (session?.token !== requestedToken) return false;
+      if (!requestedSnapshot) return !current;
+      // Mode is deliberately not part of this fence: an admin arrival reaches
+      // the person in either workspace, and the persisted record is the inbox.
+      return !!current
+        && current.epoch === requestedSnapshot.epoch
+        && current.scope.userId === requestedSnapshot.scope.userId
+        && current.scope.organizationId === requestedSnapshot.scope.organizationId;
+    };
+    const page = await (ADMIN_SHELL_BOOT ? Promise.resolve(null) : fetchAdminOttoInbox({ limit: 12 })).catch(() => null);
+    if (!isCurrent()) return false;
+    const recap = page?.items.find((item) => input.eventIds.includes(item.deliveryId))?.recap ?? null;
+    setAdminOttoArrival({
+      count: input.count,
+      unread: page?.unread ?? input.unread,
+      eventIds: [...input.eventIds],
+      recap,
+    });
+    setAdminOttoArrivalRevision((value) => value + 1);
+    const announced = announceAdminAttention(recapAttentionItem({ count: input.count, eventIds: input.eventIds }), {
+      recap,
+      toast: false,
+    });
+    if (!announced) return true;
+    return presentAdminArrival(recapArrivalCopy(input.count), {
+      host: { isWindowVisible: async () => {
+        try {
+          return isTauri() ? await getCurrentWindow().isVisible() : document.visibilityState !== "hidden";
+        } catch {
+          return false;
+        }
+      } },
+      inApp: () => true,
+    });
+  }, [announceAdminAttention, session?.token]);
 
   /* The avatar window is the normal notification owner. Main only needs its
      visibility, checked on the same minute cadence as the delivery loop, so a
@@ -2186,17 +2295,20 @@ export default function App() {
 
   /* Main-window fallback delivery. The avatar owns this normally; main starts
      only when the avatar is known to be unavailable, still polls while hidden,
-     drains catch-up pages once, and releases leases on cleanup. */
+     drains catch-up pages once, and releases leases on cleanup. The delivery
+     scope stays Administration even while the personal workspace is on screen:
+     a reviewed recap is a team event, not a personal one. */
   useEffect(() => {
     const snapshot = adminOttoSnapshot;
-    if (!snapshot) return;
+    const adminContext = adminOttoContextQuery.data;
+    if (!snapshot || !adminContext) return;
     // Wait for the first visibility read before choosing an owner in Tauri;
     // starting on "unknown" would race the avatar's own loop.
     if (isTauri() && avatarWindowVisible === null) return;
     if (deliveryOwnedContext !== deliveryOwnershipKey(snapshot)) return;
     const controller = startAuthorizedAdminRecapDelivery({
       signedIn, syncBypass, session: workSessionQuery.data ?? null,
-      scope: snapshot.scope,
+      scope: { ...adminContext.scope, mode: "admin" },
       epoch: snapshot.epoch,
       deviceId: adminOttoDeviceId.current,
       windowId: "main",
@@ -2211,27 +2323,14 @@ export default function App() {
         const controller = adminOttoModeRef.current;
         const current = controller?.snapshot();
         return !!controller?.isCurrent(epoch) && current?.scope.userId === scope.userId
-          && current.scope.organizationId === scope.organizationId && current.scope.mode === scope.mode;
+          && current.scope.organizationId === scope.organizationId;
       },
-      getMode: () => snapshot.scope.mode,
+      getMode: () => "admin",
       canPresent: () => true,
-      onArrival: (arrival, fence) => presentAdminRecapArrival(arrival.count, {
-        ...fence,
-        isWindowVisible: async () => {
-          try {
-            return isTauri() ? await getCurrentWindow().isVisible() : document.visibilityState !== "hidden";
-          } catch {
-            return false;
-          }
-        },
-        inApp: async (_copy, current) => {
-          if (!current.isCurrent()) return false;
-          return presentAdminOttoArrival({
-            count: arrival.count,
-            unread: arrival.unread,
-            eventIds: arrival.eventIds,
-          });
-        },
+      onArrival: (arrival) => presentAdminOttoArrival({
+        count: arrival.count,
+        unread: arrival.unread,
+        eventIds: arrival.eventIds,
       }),
       onError: (error) => diagnostics.warn("admin_otto.delivery_failed", errorMessage(error, "Recap delivery failed.")),
     });
@@ -2248,7 +2347,7 @@ export default function App() {
       void controller.stop();
       if (adminOttoDeliveryRef.current === controller) adminOttoDeliveryRef.current = null;
     };
-  }, [signedIn, syncBypass, session?.token, session?.organizationId, workSessionQuery.data, adminOttoSnapshot, avatarWindowVisible, deliveryOwnedContext, notifications, presentAdminOttoArrival]);
+  }, [signedIn, syncBypass, session?.token, session?.organizationId, workSessionQuery.data, adminOttoSnapshot, adminOttoContextQuery.data, avatarWindowVisible, deliveryOwnedContext, notifications, presentAdminOttoArrival]);
 
   /* The avatar can be the process-local delivery owner. It forwards only the
      accepted arrival's event ids and scope/epoch; the main window fetches the
@@ -2266,7 +2365,6 @@ export default function App() {
       if (!changed || !current || !changed.eventIds.length) return;
       if (changed.scope.userId !== current.scope.userId
         || changed.scope.organizationId !== current.scope.organizationId
-        || changed.scope.mode !== current.scope.mode
         || changed.epoch !== current.epoch) return;
       void presentAdminOttoArrival({
         count: changed.eventIds.length,
@@ -2442,22 +2540,40 @@ export default function App() {
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data?.factTotals?.candidate ?? (memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0), [memoryQuery.data]);
   // The Admin tab reads the same live overview the administration pages use.
-  // Its query key is shared, so opening the bell never starts a second record;
-  // in the administration workspace it also keeps the closed bell's badge
-  // current. The dev-only shell harness seeds the same key and stays offline.
-  const adminNotificationReadsEnabled = notificationReadsEnabled
-    && workSessionQuery.data?.role === "admin"
-    && (adminWorkspaceBranch || notificationsOpen);
+  // Its query key is shared, so opening the bell never starts a second record.
+  // An administrator's overview also polls from the personal workspace: a
+  // submitted EOD is a team event whether or not Administration is on screen.
+  const adminNotificationReadsEnabled = (signedIn || ADMIN_SHELL_BOOT) && !syncBypass
+    && workSessionQuery.data?.role === "admin";
   const adminNotificationQuery = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(todayIso()),
     queryFn: () => fetchAdminOverview(),
     select: normalizeAdminOverview,
     enabled: adminNotificationReadsEnabled && !ADMIN_SHELL_BOOT,
     staleTime: 30_000,
-    refetchInterval: adminWorkspaceBranch && !ADMIN_SHELL_BOOT ? 60_000 : false,
-    refetchIntervalInBackground: false,
+    refetchInterval: adminNotificationReadsEnabled && !ADMIN_SHELL_BOOT ? 60_000 : false,
+    refetchIntervalInBackground: true,
   });
   const adminShellNotificationPin = ADMIN_SHELL_BOOT ? ADMIN_SHELL_NOTIFICATIONS : null;
+
+  /* EOD submissions are a team event in either workspace. The overview poll
+     supplies the stable activity record; a watermark plus seen ids means a
+     reload never re-announces the same report, while a report submitted while
+     the app was closed is still caught on the next open. */
+  useEffect(() => {
+    if (ADMIN_SHELL_BOOT || syncBypass) return;
+    const overview = adminNotificationQuery.data;
+    const sessionData = workSessionQuery.data;
+    if (!overview || !sessionData || sessionData.role !== "admin") return;
+    const key = adminAttentionSeenKey({ userId: sessionData.userId, organizationId: sessionData.organizationId });
+    const stored = adminAttentionSeenRef.current;
+    const previous = stored && stored.scope === key && stored.day === overview.date ? stored : null;
+    const result = eodAttentionFromOverview(overview, previous);
+    const next = { ...result.seen, scope: key };
+    adminAttentionSeenRef.current = next;
+    writeAdminAttentionSeen(next);
+    if (result.item) announceAdminAttention(result.item);
+  }, [adminNotificationQuery.data, announceAdminAttention, syncBypass, workSessionQuery.data]);
   const adminNotificationFeed = workSessionQuery.data?.role === "admin" ? {
     overview: adminShellNotificationPin === "empty" && adminNotificationQuery.data
       ? emptyAdminNotificationOverview(adminNotificationQuery.data)
@@ -2955,17 +3071,32 @@ export default function App() {
   const latestRecapInterval = latestRecapQuery.data?.interval ?? null;
   const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
   const recapAccountRef = useRef<string | null>(null);
+  const autoSwitchRecapWatermark = useRef<string | null>(null);
   useEffect(() => {
     const account = workSessionQuery.data ? `${workSessionQuery.data.organizationId}:${workSessionQuery.data.personId ?? workSessionQuery.data.userId}` : null;
     if (recapAccountRef.current === account) return;
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
+    autoSwitchRecapWatermark.current = null;
   }, [workSessionQuery.data?.organizationId, workSessionQuery.data?.personId, workSessionQuery.data?.userId]);
   useEffect(() => {
     if (!latestRecapInterval) return;
     const decision = recapSurfaceDecision({ latest: latestRecapInterval, watermark: recapSurfaceWatermark.current, pendingRecap: null });
     recapSurfaceWatermark.current = decision.watermark;
     if (!decision.surface) return;
+    // A recap is an employee notification even when Administration is on the
+    // screen. Switch once for a genuinely new recap, never for the one already
+    // waiting when the app opened.
+    const recapId = latestRecapInterval.id;
+    const firstObservation = autoSwitchRecapWatermark.current === null;
+    const recapChanged = autoSwitchRecapWatermark.current !== recapId;
+    autoSwitchRecapWatermark.current = recapId;
+    if (recapChanged && shouldAutoSwitchWorkspace({
+      current: effectiveWorkspaceRef.current,
+      target: "employee",
+      available: adminOttoBootstrap.switchToEmployeeAvailable,
+      firstObservation,
+    })) void requestWorkspaceMode("employee");
     notifications.info(
       "Confirm or correct what Otto saw during your last interval.",
       "Your recap is ready",
