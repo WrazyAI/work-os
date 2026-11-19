@@ -11,7 +11,6 @@ import {
   normalizeBlueprints,
   normalizeConnections,
   normalizeEvidence,
-  normalizeFieldMappings,
   normalizeGithubActors,
   normalizeGithubRepos,
   normalizeIntervals,
@@ -304,7 +303,6 @@ describe("administration response normalizers", () => {
     expect(repos).toMatchObject({ connection: null, organization: null, repos: [], connectedRepos: [], webhookUrl: "" });
     expect(repos.configuration).toMatchObject({ repositoryManagementReady: false, webhookReceiverReady: false, orgWebhook: false, reason: null });
     expect(normalizeProjects({}).projects).toEqual([]);
-    expect(normalizeFieldMappings({}).mappings).toEqual([]);
     expect(normalizeBlueprints({}).blueprints).toEqual([]);
     const status = normalizeSystemStatus({});
     expect(status.schema).toEqual({ ready: false, migration: "" });
@@ -379,7 +377,6 @@ describe("preview fixture states", () => {
       normalizeConnections(client.getQueryData(adminKeys.connections())),
       normalizeGithubActors(client.getQueryData(adminKeys.githubActors())),
       normalizeGithubRepos(client.getQueryData(adminKeys.githubRepos())),
-      normalizeFieldMappings(client.getQueryData(adminKeys.fieldMappings())),
       normalizeBlueprints(client.getQueryData(adminKeys.blueprints())),
       normalizeSystemStatus(client.getQueryData(adminKeys.status())),
     ];

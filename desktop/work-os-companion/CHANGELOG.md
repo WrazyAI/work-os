@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Admin Settings no longer shows a “Failed to fetch” error, and the retired Field mappings page is gone.
 - Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.
 
 ## 0.5.40 — 2026-11-19

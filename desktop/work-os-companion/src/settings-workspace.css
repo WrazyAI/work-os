@@ -484,10 +484,6 @@
 .admin-grid[data-active-card="members"] .admin-card:not(.admin-card-members),
 .admin-grid[data-active-card="teams"] .admin-card:not(.admin-card-teams),
 .admin-grid[data-active-card="connections"] .admin-card:not(.admin-card-connections),
-.admin-grid[data-active-card="mappings"] .admin-card:not(.admin-card-mappings),
 .admin-grid[data-active-card="blueprints"] .admin-card:not(.admin-card-blueprints) {
-  display: none;
-}
-.admin-grid[data-active-card]:not([data-active-card="all"]):not([data-active-card="connections"]):not([data-active-card="mappings"]) .admin-band {
   display: none;
 }

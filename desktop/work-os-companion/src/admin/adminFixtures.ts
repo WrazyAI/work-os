@@ -620,7 +620,6 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     connections: [{ id: "conn-1", provider: "github", active: true, external_workspace_id: "wrazy" }],
     accounts: PEOPLE.slice(0, 3).map((person) => ({ id: `acct-${person.id}`, provider: "github", person_id: person.id })),
   } satisfies ConnectionsResponse);
-  queryClient.setQueryData(adminKeys.fieldMappings(), { mappings: [{ id: "m-1", field: "priority", provider_field_id: "customfield_10012" }] });
   queryClient.setQueryData(adminKeys.blueprints(), { blueprints: [{ id: "bp-1", name: "Client onboarding", kind: "template", updated_at: `${DATES[6]}T10:00:00.000Z` }] });
   queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" } } satisfies SystemStatusResponse);
   queryClient.setQueryData(adminKeys.organization(), {
@@ -883,11 +882,10 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
   queryClient.setQueryData(adminKeys.projects(), { projects: [{ id: "proj-1", name: "Platform" }] });
 
   // Settings: organization without slug, feature flags, memberships, teams, or
-  // team members; no field mappings or blueprints.
+  // team members; no blueprints.
   queryClient.setQueryData(adminKeys.organization(), {
     organization: { id: "org-preview", name: "Wrazy Internal" },
   });
-  queryClient.setQueryData(adminKeys.fieldMappings(), {});
   queryClient.setQueryData(adminKeys.blueprints(), {});
   queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" } } satisfies SystemStatusResponse);
 }

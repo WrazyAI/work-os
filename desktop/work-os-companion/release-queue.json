@@ -456,6 +456,12 @@
       "type": "fix",
       "summary": "Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.",
       "verification": "Work OS and companion CI passed: https://github.com/WrazyAI/work-os/actions/runs/44592602846. Focused routing and tied-timestamp regressions passed. Independent local synthetic walkthrough passed five functional checks, including the follow-up staying on the requested person."
+    },
+    {
+      "id": "admin-settings-retired-field-mappings",
+      "type": "fix",
+      "summary": "Admin Settings no longer shows a Failed to fetch error, and the retired Field mappings page is gone.",
+      "verification": "Focused companion render and normalizer tests 23 passed; full companion vitest 231 files/2055 tests passed; companion tsc and Vite production build passed; work-os:typecheck passed; full Work OS suite 1423 tests/1412 pass/0 fail/11 skipped. Rendered the admin shell at 1440 and 390: Field mappings is absent from the rail and section picker, Members renders with no error banner, and network capture showed no /api/work-os/field-mappings request. CodeRabbit's remaining question was verified against AdminWorkspace's visible-page guard and selectSettingsCardError's stale-key fallback."
     }
   ],
   "emergency": {
