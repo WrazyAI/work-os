@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.
+
 ## 0.5.40 — 2026-11-19
 
 - Evidence rows now show the time the provider record happened, including GoHighLevel calls and messages.

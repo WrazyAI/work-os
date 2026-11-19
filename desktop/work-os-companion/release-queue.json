@@ -450,6 +450,12 @@
       "type": "fix",
       "summary": "Evidence rows show the time a provider record happened, including GoHighLevel calls and messages.",
       "verification": "Companion focused 18/18 (Evidence render and normalizers); tsc clean; Vite production build passed. Web typecheck and route-contracts 27/27. Live Agent OS: Evidence API returned recorded_at 2026-11-17T18:58:23.656Z while created_at was 2026-11-18T01:25:14.549Z, and the page rendered 6:58 PM with that datetime. Rendered desktop rows show the time column for GHL evidence."
+    },
+    {
+      "id": "admin-otto-evidence-request-scope",
+      "type": "fix",
+      "summary": "Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.",
+      "verification": "Work OS and companion CI passed: https://github.com/WrazyAI/work-os/actions/runs/44592602846. Focused routing and tied-timestamp regressions passed. Independent local synthetic walkthrough passed five functional checks, including the follow-up staying on the requested person."
     }
   ],
   "emergency": {
