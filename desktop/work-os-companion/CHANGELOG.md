@@ -23,7 +23,7 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.38 — 2026-11-19
 
 - GoHighLevel activity is now visible and filterable in Evidence, and people and task panels show recorded GHL activity.
 
