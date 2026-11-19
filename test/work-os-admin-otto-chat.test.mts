@@ -281,6 +281,172 @@ async function serializedFixture() {
   return f;
 }
 
+test("provider follow-ups keep Ravi and never replace Worktivity with Nora's records", async () => {
+  const f = await fixture();
+  try {
+    await f.db.exec(`
+      create table work_evidence_events (id uuid primary key default gen_random_uuid(),
+        organization_id uuid, person_id uuid, provider text, occurred_at timestamptz,
+        title text, summary text, artifact_url text, raw jsonb default '{}',
+        correction_status text default 'original', metadata jsonb default '{}');
+      create table work_source_accounts (organization_id uuid, provider text, person_id uuid,
+        verified boolean, external_account_id text, metadata jsonb);
+      create table work_provider_connections (id uuid primary key, organization_id uuid, provider text,
+        active boolean, external_workspace_id text, updated_at timestamptz default now());
+      create table work_attendance_observations (id uuid primary key default gen_random_uuid(),
+        organization_id uuid, person_id uuid, provider text, local_date date, observed_at timestamptz,
+        state text, clocked_in_at timestamptz, clocked_out_at timestamptz, activity_observed_at timestamptz);
+      update work_organizations set feature_flags = feature_flags || '{"github_evidence":true,"ghl_evidence":true}';
+    `);
+    const connection = randomUUID();
+    await f.db.query(`insert into work_provider_connections (id,organization_id,provider,active,external_workspace_id)
+      values ($1,$2,'ghl',true,'synthetic-location')`, [connection, org]);
+    await seedPerson(f.db, { id: personA, name: "Nora Linden" });
+    await seedPerson(f.db, { id: personB, name: "Ravi Lane" });
+    await f.db.query(`insert into work_source_accounts values ($1,'github',$2,true,'154321','{}')`, [org, personB]);
+    await f.db.query(`insert into work_evidence_events (organization_id,person_id,provider,occurred_at,title,metadata)
+      values ($1,$2,'ghl','2026-11-17 12:01Z','Outbound call','{"ghl":{"relation":"performed","occurredAt":"2026-11-17T12:01:00Z"}}'),
+        ($1,$3,'github','2026-11-17 12:02Z','Push to main','{"event":"push","actor":{"id":"154321","login":"synthetic-ravi"}}'),
+        ($1,$3,'github','2026-11-17 12:03Z','Unverified push','{"event":"push","actor":{"login":"stranger"}}'),
+        ($1,$3,'github','2026-11-17 12:04Z','Retracted push','{"event":"push","actor":{"id":"154321","login":"synthetic-ravi"}}'),
+        ($4,$3,'github','2026-11-17 12:05Z','Cross-org push','{"event":"push","actor":{"id":"154321","login":"synthetic-ravi"}}')`,
+    [org, personA, personB, otherOrg]);
+    await f.db.query(`update work_evidence_events set correction_status='retracted' where title='Retracted push'`);
+    await f.db.query(`update work_evidence_events set metadata = jsonb_set(metadata, '{ghl,connectionId}', to_jsonb($1::text))
+      where provider='ghl'`, [connection]);
+    await f.db.query(`insert into work_attendance_observations (organization_id,person_id,provider,local_date,observed_at,state)
+      values ($1,$2,'worktivity','2026-11-17','2026-11-17 10:00Z','active'),
+        ($1,$2,'worktivity','2026-11-17','2026-11-17 17:00Z','off_shift'),
+        ($3,$2,'worktivity','2026-11-17','2026-11-17 18:00Z','paused')`, [org, personB, otherOrg]);
+    await seedSession(f.db, personA, { date: "2026-11-17" });
+    const service = await chat();
+    const now = () => new Date("2026-11-19T15:00:00Z");
+    const access = { ...adminAccess, featureFlags: { ...adminAccess.featureFlags, github_evidence: true, ghl_evidence: true } };
+    for (const githubEnabled of [true, false]) {
+      const run = (text: string, conversationId: string | null, intent: ReadIntent | null) =>
+        service.executeAdminOttoChat({ ...access, featureFlags: { ...access.featureFlags, github_evidence: githubEnabled } },
+          { text, conversationId, requestId: randomUUID() },
+          { now, interpret: async () => ({ reply: "No evidence source is available.", intent }) });
+      const first = await run("Show me ghl evidence for nora from yesterday", null,
+        readIntent("records", { kind: "names", names: ["nora"] }, { relativeDay: "yesterday" }));
+      const firstRead = expectKind(first.result, "records");
+      assert.equal(firstRead.page.total, 0);
+      assert.match(first.reply, /GoHighLevel.*2026-11-18.*UTC/);
+      assert.doesNotMatch(firstRead.page.coverage.join(" "), /authored updates/i);
+      const second = await run("what about github evidence for ravi?", first.conversationId, null);
+      const secondRead = expectKind(second.result, "records");
+      assert.equal(secondRead.page.total, githubEnabled ? 1 : 0);
+      assert.deepEqual(secondRead.people?.map(p => p.displayName), ["Ravi Lane"]);
+      if (githubEnabled) assert.equal(secondRead.page.items[0]?.source, "github");
+      else assert.match(second.reply, /GitHub.*unavailable/i);
+      const third = await run("what about his work activity? Maybe worktivity records?", second.conversationId,
+        readIntent("records", { kind: "context" }));
+      const thirdRead = expectKind(third.result, "records");
+      assert.deepEqual(thirdRead.page.items.map(r => [r.personId, r.source, r.occurredAt]), [
+        [personB, "worktivity", "2026-11-17T17:00:00.000Z"],
+      ]);
+      assert.match(third.reply, /Worktivity.*Ravi Lane.*2026-11-13.*2026-11-19.*UTC/);
+      assert.equal(thirdRead.evidenceSource, "worktivity");
+
+      const missing = await run("GitHub evidence for Unknown Employee?", third.conversationId, null);
+      assert.equal(missing.result?.kind, "resolution");
+      const afterMissing = await run("what about his worktivity records?", missing.conversationId,
+        readIntent("records", { kind: "context" }));
+      assert.equal(afterMissing.result?.kind, "resolution", "a missing explicit person fences the previous subject");
+    }
+
+    const run = (text: string, conversationId: string | null, intent: ReadIntent | null, steps?: import("../src/lib/work-os-admin-otto-intent").AdminOttoInterpretation["steps"]) =>
+      service.executeAdminOttoChat(access, { text, conversationId, requestId: randomUUID() },
+        { now, interpret: async () => ({ reply: "", intent, steps }) });
+    const seed = await run("Show work records for Nora", null, readIntent("records", { kind: "names", names: ["Nora"] }));
+    const direct = await run("What did Ravi do on GitHub yesterday?", seed.conversationId,
+      readIntent("records", { kind: "names", names: ["Ravi"] }, { relativeDay: "yesterday" }));
+    assert.equal(expectKind(direct.result, "records").evidenceSource, "github");
+
+    const excluded = await run("Show Worktivity records for Ravi, not GitHub", direct.conversationId,
+      readIntent("records", { kind: "names", names: ["Ravi"] }));
+    assert.equal(expectKind(excluded.result, "records").evidenceSource, "worktivity");
+
+    const range = await run("Show GitHub evidence for Ravi from yesterday through today", excluded.conversationId,
+      readIntent("records", { kind: "names", names: ["Ravi"] }));
+    assert.equal(range.result, null, "an unparsed range must not become a one-day read");
+
+    const batchSeed = await run("Show work records for Nora", null, readIntent("records", { kind: "names", names: ["Nora"] }));
+    const batch = await run("Show GitHub and Worktivity evidence for Ravi", batchSeed.conversationId, null,
+      (["github", "worktivity"] as const).map(action => ({
+        intent: readIntent(action, { kind: "context" }), operation: null, depends_on: null,
+      })));
+    assert.equal(batch.workflow?.steps.length, 2);
+    assert.deepEqual(batch.workflow?.steps.map(step => expectKind(step.result ?? null, "records").people?.map(p => p.id)),
+      [[personB], [personB]]);
+    const afterBatch = await run("What about his Worktivity records?", batch.conversationId, readIntent("records", { kind: "context" }));
+    assert.deepEqual(expectKind(afterBatch.result, "records").people?.map(p => p.id), [personB]);
+
+    await seedEod(f.db, personB, { reportDate: "2026-11-19", submittedAt: "2026-11-19T12:00:00Z", text: "Reviewed GitHub activity." });
+    const eod = await run("Show Ravi's EOD report about GitHub activity today", null,
+      readIntent("eods", { kind: "names", names: ["Ravi"] }, { relativeDay: "today" }));
+    assert.deepEqual(expectKind(eod.result, "records").page.items.map(row => row.source), ["submitted_eod"]);
+
+    await seedPerson(f.db, { id: personC, name: "Ravi Quinn" });
+    const ambiguous = await run("Show GitHub and Worktivity evidence for Ravi", seed.conversationId, null,
+      (["github", "worktivity"] as const).map(action => ({
+        intent: readIntent(action, { kind: "context" }), operation: null, depends_on: null,
+      })));
+    assert.equal(ambiguous.result, null, "don't offer a selection that would execute only half the comparison");
+    assert.match(ambiguous.reply, /full name.*both/i);
+    const afterAmbiguous = await run("What about his Worktivity records?", ambiguous.conversationId,
+      readIntent("records", { kind: "context" }));
+    assert.equal(afterAmbiguous.result?.kind, "resolution", "ambiguous comparison clears the former subject");
+    await f.db.query("update work_people set active=false where id=$1", [personC]);
+
+    const retry = { text: "GitHub evidence for Ravi yesterday", conversationId: null, requestId: randomUUID() };
+    const deps = { now, interpret: async () => ({ reply: "", intent: null }) };
+    const empty = await service.executeAdminOttoChat(access, retry, deps);
+    assert.match(empty.reply, /no matching retained/);
+    await assert.rejects(service.executeAdminOttoChat({
+      ...access, featureFlags: { ...access.featureFlags, github_evidence: false },
+    }, retry, deps), /saved result changed/i);
+
+    await f.db.query(`insert into work_evidence_events (organization_id,person_id,provider,occurred_at,title,metadata)
+      select $1,$2,'github','2026-11-17 13:00Z'::timestamptz + n * interval '1 second',
+        'Synthetic push','{"event":"push","actor":{"id":"154321","login":"synthetic-ravi"}}'::jsonb from generate_series(1,50) n`, [org, personB]);
+    const paged = await run("GitHub evidence for Ravi", null, null);
+    const page = expectKind(paged.result, "records").page;
+    assert.equal(page.total, 51);
+    assert.ok(page.nextCursor);
+    const next = expectKind(await service.continueAdminOttoRead(access, page.nextCursor, { now }), "records");
+    assert.equal(next.evidenceSource, "github");
+    assert.equal(next.page.total, 51);
+    assert.equal(next.page.items.length, 1);
+    assert.equal(next.page.items[0].personId, personB);
+    assert.ok(page.items.every(item => item.id !== next.page.items[0].id));
+    await assert.rejects(service.continueAdminOttoRead(otherOrgAdminAccess, page.nextCursor, { now }), /continuation|available/i);
+  } finally {
+    await f.close();
+  }
+});
+
+test("explicit evidence scope is preserved when a model omits the requested date or picks context for a named employee", async () => {
+  const f = await fixture();
+  try {
+    await seedPerson(f.db, { id: personA, name: "Nora Linden" });
+    await seedPerson(f.db, { id: personB, name: "Ravi Lane" });
+    const service = await chat();
+    const run = (text: string, conversationId: string | null, intent: ReadIntent) =>
+      service.executeAdminOttoChat(adminAccess, { text, conversationId, requestId: randomUUID() },
+        { now: () => NOW, interpret: async () => ({ reply: "", intent }) });
+    const first = await run("Give me records for Nora", null, readIntent("records", { kind: "names", names: ["Nora"] }));
+    const second = await run("Give me GitHub evidence for Ravi yesterday", first.conversationId,
+      readIntent("records", { kind: "context" }));
+    const read = expectKind(second.result, "records");
+    assert.deepEqual(read.windows, [{ personId: personB, timezone: "UTC", from: "2026-10-22", through: "2026-10-22" }]);
+    assert.equal(read.page.total, 0);
+    assert.match(second.reply, /GitHub.*unavailable.*Ravi Lane/);
+  } finally {
+    await f.close();
+  }
+});
+
 test("five_approved_requests_execute_real_reads", async () => {
   const f = await fixture();
   try {

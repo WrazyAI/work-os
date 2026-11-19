@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import {
   adminRecordWindows,
+  isOttoEvidenceSource,
   listAdminOttoRecords,
   listAdminOttoRecaps,
   listAdminOttoTasks,
@@ -31,6 +32,7 @@ import type {
   AdminOttoWorkflowView,
   ChatRequest,
   ChatResult,
+  EvidenceSource,
   LocalWindow,
   Page,
   PersonRef,
@@ -137,6 +139,7 @@ type ResultSnapshot = {
   total: number;
   ids: string[];
   reviewKey?: string;
+  evidenceScopeHash?: string;
 };
 
 type StoredReadRefs =
@@ -171,6 +174,7 @@ type ExecutedRead = {
   errorCode?: ChatResult["errorCode"];
   pendingAction?: ChatResult["pendingAction"];
   workflow?: AdminOttoWorkflowView;
+  subject?: { intent: ReadIntent; personIds: string[]; pending: PendingTargetState | null };
   stale?: boolean;
 };
 
@@ -279,6 +283,46 @@ function nameAuthorizedByText(name: string, text: string): boolean {
   const escaped = nameText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`(?<![\\p{L}\\p{N}\\p{M}])${escaped}(?![\\p{L}\\p{N}\\p{M}])`, "u");
   return pattern.test(textText);
+}
+
+const EVIDENCE_LABEL: Record<EvidenceSource, string> = {
+  ghl: "GoHighLevel", github: "GitHub", worktivity: "Worktivity",
+};
+
+/** Guard common explicit provider requests even if the model chooses a broad
+ * read. Do not interpret provider names inside task titles as evidence reads. */
+function explicitEvidenceRequest(text: string): { sources: EvidenceSource[]; target: Target | null } | null {
+  const value = normalizeText(text);
+  if (/\b(?:screenshots?|captures?|keystrokes?|raw activity)\b/.test(value)
+    || /^(?:can|could|do|does|are|is)\b.*\b(?:access|support|available|integrate|connect)\b/.test(value)) return null;
+  if (/^(?:do not|don't|never|omit|exclude|ignore|no)\b/.test(value)) return null;
+  const affirmative = value.split(/\b(?:without|except|excluding|omit|not|instead of|rather than|no|ignore)\b/, 1)[0];
+  const providers = {
+    ghl: /\b(?:ghl|go\s*high\s*level)\b/,
+    github: /\bgithub\b/,
+    worktivity: /\bworktivity\b/,
+  };
+  const sources = (Object.keys(providers) as EvidenceSource[]).filter(source => providers[source].test(affirmative));
+  if (!sources.length || !/\b(?:evidence|records?|activity|attendance|commits?|pull requests?|what (?:did|has|was)|what about)\b/.test(affirmative)) return null;
+  const named = (affirmative.match(/\bfor\b/g)?.length === 1
+    ? /\bfor ([\p{L}\p{M}][\p{L}\p{M} .'-]{0,119}?)(?=\s+(?:from|on|since|between|during|over|last|this|today|yesterday)\b|[?!,;]|$)/u.exec(affirmative.trim())?.[1]
+    : /\bwhat (?:did|has) ([\p{L}\p{M} .'-]{1,120}?) (?:do|done|record|recorded|push|pushed) (?:on|in)\b/u.exec(affirmative)?.[1])?.trim().replace(/\.$/, "");
+  const target: Target | null = named && !pronounFollowUp(named) && !/^(?:him|her|them|me|us|today|yesterday)$/.test(named)
+    ? explicitTeam(named) ? { kind: "team" } : { kind: "names", names: [named] }
+    : pronounFollowUp(value) ? { kind: "context" } : null;
+  return { sources, target };
+}
+
+function fallbackEvidenceDay(text: string): ReadIntent["relativeDay"] | undefined {
+  const value = normalizeText(text);
+  if (/\b(?:from|between|since|through|until|before|after)\b/.test(value) && !/\bfrom (?:today|yesterday)\s*[.?!]?$/.test(value)) return undefined;
+  if (/\btoday\b/.test(value) && /\byesterday\b/.test(value)) return undefined;
+  if (/\byesterday\b/.test(value)) return "yesterday";
+  if (/\btoday\b/.test(value)) return "today";
+  if (/\bthis week\b/.test(value)) return "this_week";
+  if (/\blast week\b/.test(value)) return "last_week";
+  return /\d|\b(?:from|since|between|during|last|over|past|before|after|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(value)
+    ? undefined : null;
 }
 
 function dedupePeople(people: PersonRef[]): PersonRef[] {
@@ -647,6 +691,18 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
   }
   if (read.kind === "records") {
     const scope = windowSummary(read.windows);
+    if (isOttoEvidenceSource(intent.action)) {
+      const provider = EVIDENCE_LABEL[intent.action];
+      const unavailable = read.page.coverage.filter(line => /unavailable/i.test(line));
+      const partial = read.page.coverage.find(line => /scan limit|only the most recent/i.test(line));
+      const shown = read.page.items.length < read.page.total ? ` Showing ${read.page.items.length} of ${read.page.total}.` : "";
+      const status = unavailable.length ? ` ${provider} evidence is unavailable for some or all of this scope; see source coverage.` : "";
+      const extra = `${status}${partial ? ` ${partial}` : ""}`;
+      if (!read.page.total) return { reply: unavailable.length
+        ? `${provider} evidence unavailable for ${label} in ${scope}. See source coverage; no other source was searched.`
+        : `${provider}: no matching retained records for ${label} in ${scope}. Missing evidence is not proof of inactivity.${extra}` };
+      return { reply: `${provider}: ${plural(read.page.total, "retained record")} for ${label} in ${scope}.${shown}${extra}` };
+    }
     if (!read.page.total) {
       return { reply: `No matching records for ${label} in ${scope}. A missing record does not mean no work was done.` };
     }
@@ -688,6 +744,7 @@ function replyFor(read: ReadResult, intent: ReadIntent, resolved: PersonRef[]): 
 /** The record projection a typed action is allowed to read. The reader applies
  * the source filter inside its authorized query; no unlisted source is exposed. */
 function recordSources(intent: ReadIntent): WorkRecord["source"][] | undefined {
+  if (isOttoEvidenceSource(intent.action)) return [intent.action];
   if (intent.action === "workday") return ["workday"];
   if (intent.action === "eods") return ["submitted_eod"];
   if (intent.action === "reports") return ["update", "submitted_eod"];
@@ -708,7 +765,9 @@ function readSnapshot(read: AdminRead): ResultSnapshot | null {
     return { total: read.page.total, ids: read.page.items.map((task) => task.id) };
   }
   if (read.kind === "records") {
-    return { total: read.page.total, ids: read.page.items.map((record) => record.id) };
+    return { total: read.page.total, ids: read.page.items.map((record) => record.id),
+      ...(read.evidenceSource ? { evidenceScopeHash: createHash("sha256")
+        .update(JSON.stringify([read.evidenceSource, read.page.coverage])).digest("hex") } : {}) };
   }
   if (read.kind === "recaps") {
     return { total: read.page.total, ids: read.page.items.map((recap) => recap.reviewKey) };
@@ -725,7 +784,8 @@ function snapshotMatches(expected: ResultSnapshot | undefined, read: AdminRead):
   if (!actual) return false;
   if (expected.total !== actual.total || expected.ids.length !== actual.ids.length) return false;
   if (!expected.ids.every((id, index) => id === actual.ids[index])) return false;
-  return (expected.reviewKey ?? null) === (actual.reviewKey ?? null);
+  return (expected.reviewKey ?? null) === (actual.reviewKey ?? null)
+    && (expected.evidenceScopeHash ?? null) === (actual.evidenceScopeHash ?? null);
 }
 
 function samePersonSnapshots(
@@ -852,7 +912,8 @@ async function executeRead(
     windows,
     ...(sources ? { sources } : {}),
   });
-  const read: AdminRead = { kind: "records", page, windows, people };
+  const read: AdminRead = { kind: "records", page, windows, people,
+    ...(isOttoEvidenceSource(intent.action) ? { evidenceSource: intent.action } : {}) };
   const reply = replyFor(read, intent, people);
   return {
     read,
@@ -913,10 +974,12 @@ function normalizeSnapshot(value: unknown): ResultSnapshot | undefined | null {
     ids.push(id);
   }
   if (row.reviewKey !== undefined && (typeof row.reviewKey !== "string" || !row.reviewKey)) return null;
+  if (row.evidenceScopeHash !== undefined && (typeof row.evidenceScopeHash !== "string" || !/^[0-9a-f]{64}$/.test(row.evidenceScopeHash))) return null;
   return {
     total: row.total,
     ids,
     ...(typeof row.reviewKey === "string" ? { reviewKey: row.reviewKey } : {}),
+    ...(typeof row.evidenceScopeHash === "string" ? { evidenceScopeHash: row.evidenceScopeHash } : {}),
   };
 }
 
@@ -1218,6 +1281,9 @@ function replyForContinuation(read: AdminRead, intent: ReadIntent | null): strin
     return `Loaded the next ${plural(read.page.items.length, kind)}.`;
   }
   if (read.kind === "records") {
+    if (intent && isOttoEvidenceSource(intent.action)) {
+      return replyFor(read, intent, read.people ?? []).reply;
+    }
     const kind = intent?.action === "workday"
       ? "workday row"
       : intent?.action === "eods"
@@ -1385,7 +1451,8 @@ async function continueRead(
       cursor: payload.c,
       ...(sources ? { sources } : {}),
     });
-    const read: AdminRead = { kind: "records", page, windows: payload.w };
+    const read: AdminRead = { kind: "records", page, windows: payload.w, people,
+      ...(isOttoEvidenceSource(intent.action) ? { evidenceSource: intent.action } : {}) };
     return { read: withContinuation(read, refs, access, thread.id, payload.cv, payload.ti), threadId: thread.id, turnId: payload.ti, contextVersion: payload.cv, refs };
   }
   const page = await listAdminOttoRecaps(access, {
@@ -1447,7 +1514,9 @@ function prepareWrite(
   let intent: ReadIntent | null = null;
   let personIds: string[] = [];
   let pending: PendingTargetState | null = null;
-  if (executed.refs.kind === "read") {
+  if (executed.subject) {
+    ({ intent, personIds, pending } = executed.subject);
+  } else if (executed.refs.kind === "read") {
     intent = executed.refs.intent;
     personIds = executed.refs.personIds;
   } else if (executed.refs.kind === "resolution") {
@@ -1653,7 +1722,8 @@ export async function executeAdminOttoChat(
   // A plural follow-up cannot widen a pending choice. This runs before the
   // model only for unambiguous plural pronouns; singular possessives such as
   // "David ... his EOD" still reach the model and stay scoped to David.
-  if (thread && pending?.ambiguous.length && pluralPronounFollowUp(request.text) && !explicitTeam(request.text)) {
+  const evidenceRequest = explicitEvidenceRequest(request.text);
+  if (!evidenceRequest?.target && thread && pending?.ambiguous.length && pluralPronounFollowUp(request.text) && !explicitTeam(request.text)) {
     const executed = resolutionExecuted(pending.intent, pending);
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
@@ -1673,6 +1743,45 @@ export async function executeAdminOttoChat(
       : await parseAdminOttoInterpretation(request.text, context);
 
   if (interpretation.steps?.length) {
+    const actions = interpretation.steps.flatMap(step => step.intent ? [step.intent.action] : []);
+    if (evidenceRequest && actions.length && (
+      !evidenceRequest.sources.every(source => actions.includes(source))
+      || actions.some(action => action === "records" || (isOttoEvidenceSource(action) && !evidenceRequest.sources.includes(action)))
+    )) {
+      const reply = "I couldn’t separate the requested evidence sources. Ask for one provider at a time and name the employee.";
+      return persistExecution(access, thread, request, { read: null, refs: adminOttoMessageRef(reply), reply }, deps, now, newId);
+    }
+    let subject: ExecutedRead["subject"];
+    const evidenceSteps = interpretation.steps.filter(step => step.intent && isOttoEvidenceSource(step.intent.action));
+    const sharedNamedTarget = evidenceRequest?.target?.kind === "names" ? evidenceRequest.target : null;
+    if (evidenceRequest && evidenceSteps.length) {
+      for (const step of evidenceSteps) {
+        if (!step.intent || !sharedNamedTarget) continue;
+        if (step.intent.target.kind === "context" || step.intent.target.kind === "ids") {
+          step.intent = { ...step.intent, target: sharedNamedTarget };
+        }
+      }
+      const targets = evidenceSteps.flatMap(step => step.intent?.target.kind === "names" ? step.intent.target.names : []);
+      const subjectNames = [...new Set(targets)];
+      if (subjectNames.length && subjectNames.every(name => nameAuthorizedByText(name, request.text))) {
+        const subjectIntent = { ...evidenceSteps[0].intent!, target: { kind: "names" as const, names: subjectNames } };
+        const resolution = await resolveTargetRequest(access, subjectIntent.target);
+        const state = stateFromResolution(subjectIntent, resolution);
+        if (state) {
+          const reply = "Please repeat the comparison with the employee’s full name so I can read both requested sources. I didn’t search other records.";
+          return persistExecution(access, thread, request, { read: null, refs: adminOttoMessageRef(reply), reply,
+            subject: { intent: { ...subjectIntent, target: { kind: "context" } }, personIds: [], pending: null } }, deps, now, newId);
+        }
+        // An ambiguous singular pronoun after work for several subjects must
+        // never fall back to the previous resolved employee.
+        if (resolution.people.length !== 1) {
+          const reply = "Ask for one employee at a time when comparing evidence sources.";
+          return persistExecution(access, thread, request, { read: null, refs: adminOttoMessageRef(reply), reply,
+            subject: { intent: { ...subjectIntent, target: { kind: "context" } }, personIds: [], pending: null } }, deps, now, newId);
+        }
+        subject = { intent: subjectIntent, personIds: resolution.people.map(person => person.id), pending: null };
+      }
+    }
     for (const step of interpretation.steps) {
       const names = step.operation?.person_names ?? (step.intent?.target.kind === "names" ? step.intent.target.names : []);
       if (names.some((name) => !nameAuthorizedByText(name, request.text))) {
@@ -1694,8 +1803,10 @@ export async function executeAdminOttoChat(
       adminOttoWorkflowDeps(access, now, deps));
     await recheckAfterRead(access, deps);
     return persistExecution(access, thread, request, {
-      read: null, refs: { v: 1, kind: "workflow", workflowId: workflow.id }, workflow,
-      reply: "Here is the result of each request. Task changes await your approval.",
+      read: null, refs: { v: 1, kind: "workflow", workflowId: workflow.id }, workflow, subject,
+      reply: interpretation.steps.some(step => step.operation)
+        ? "Here is the result of each request. Task changes await your approval."
+        : "Here are the results, separated by request.",
     }, deps, now, newId);
   }
 
@@ -1722,7 +1833,27 @@ export async function executeAdminOttoChat(
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
 
-  if (!interpretation.intent) {
+  let selectedIntent = interpretation.intent;
+  const reportAboutProvider = (selectedIntent?.action === "eods" || selectedIntent?.action === "reports")
+    && /\b(?:eod|end[- ]of[- ]day|reports?)\b.*\b(?:about|covering|discussing|mentions?)\b/i.test(request.text);
+  if (evidenceRequest && !interpretation.operation && !reportAboutProvider) {
+    const [source] = evidenceRequest.sources;
+    const target = !selectedIntent || selectedIntent.target.kind === "context" || selectedIntent.target.kind === "ids"
+      ? evidenceRequest.target ?? selectedIntent?.target
+      : selectedIntent.target;
+    const relativeDay = selectedIntent?.date || selectedIntent?.from || selectedIntent?.through || selectedIntent?.relativeDay
+      ? selectedIntent.relativeDay : fallbackEvidenceDay(request.text);
+    if (evidenceRequest.sources.length !== 1 || !target || relativeDay === undefined) {
+      const reply = "Please specify one evidence provider, the employee, and any date range you want searched. I didn’t search other records.";
+      return persistExecution(access, thread, request, { read: null, refs: adminOttoMessageRef(reply), reply }, deps, now, newId);
+    }
+    selectedIntent = {
+      action: source, target, relativeDay,
+      date: selectedIntent?.date ?? null, from: selectedIntent?.from ?? null, through: selectedIntent?.through ?? null,
+      overdueOnly: false, latest: false,
+    };
+  }
+  if (!selectedIntent) {
     if (interpretation.reply) {
       const executed: ExecutedRead = {
         read: null,
@@ -1745,7 +1876,7 @@ export async function executeAdminOttoChat(
   }
 
   // Even an injected parser is held to the typed contract before any read.
-  const parsedIntent = requireAdminOttoIntent(interpretation.intent);
+  const parsedIntent = requireAdminOttoIntent(selectedIntent);
   const teamExplicit = explicitTeam(request.text);
   // The model's `context` target is the primary pronoun signal. The regex is
   // only a fallback for a parser that named nobody the administrator actually
@@ -1762,8 +1893,10 @@ export async function executeAdminOttoChat(
 
   // A pending unresolved target stays unresolved on a true pronoun follow-up.
   // The server never widens "their" to the roster while a choice is outstanding.
-  if (thread && pending?.ambiguous.length && followUp && !teamExplicit) {
-    const executed = resolutionExecuted(pending.intent, pending);
+  if (thread && pending && followUp && !teamExplicit
+    && (pending.ambiguous.length || (!pending.resolved.length && pending.missing.length))) {
+    const state = { ...pending, intent: { ...parsedIntent, target: pending.intent.target } };
+    const executed = resolutionExecuted(state.intent, state);
     return persistExecution(access, thread, request, executed, deps, now, newId);
   }
 
@@ -1845,7 +1978,7 @@ export async function executeAdminOttoChat(
   let executed = await executeTargetResolution(access, intent, resolution, now);
   const missing = executed.refs.kind === "read" ? executed.refs.missing : [];
   const legacyIntentOnly = !deps.interpret && !!deps.parseIntent;
-  if (!legacyIntentOnly && executed.read && executed.read.kind !== "resolution" && !missing.length) {
+  if (!legacyIntentOnly && !isOttoEvidenceSource(intent.action) && executed.read && executed.read.kind !== "resolution" && !missing.length) {
     const summarize = deps.summarizeRead
       ? deps.summarizeRead(request.text, executed.read, resolution.people, context.conversation)
       : deps.interpret

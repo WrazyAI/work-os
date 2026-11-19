@@ -36,7 +36,9 @@ function ReadFrame({ title, page, children, onLoadMore }: { title: string; page:
 
 const sourceLabels: Record<WorkRecord["source"], string> = {
   update: "Employee update", submitted_eod: "EOD report", task: "Task", reviewed_recap: "Reviewed recap", workday: "Workday",
+  github: "GitHub", ghl: "GoHighLevel", worktivity: "Worktivity",
 };
+const recordSourceLabel = (source: WorkRecord["source"]) => Object.hasOwn(sourceLabels, source) ? sourceLabels[source] : "Recorded activity";
 type NamedRecord = WorkRecord & { person?: Pick<PersonRef, "displayName">; personDisplayName?: string; displayName?: string };
 
 export type AdminReadCardProps = {
@@ -70,21 +72,23 @@ export function AdminReadCard({ result, onOpenRecord, onOpenRecap, onListen, pla
   </ReadFrame>;
   if (result.kind === "records") {
     const people = (result as typeof result & { people?: PersonRef[] }).people ?? [];
-    return <ReadFrame title="Work records" page={result.page} onLoadMore={onLoadMore}>
+    const provider = result.evidenceSource ? recordSourceLabel(result.evidenceSource) : null;
+    const unavailable = provider && result.page.coverage.some(line => /evidence is unavailable|evidence unavailable/i.test(line));
+    return <ReadFrame title={provider ? `${provider} evidence` : "Work records"} page={result.page} onLoadMore={onLoadMore}>
       {result.page.items.length ? <ol className="admin-tool-rows">{result.page.items.map((entry) => {
         const record = entry as NamedRecord;
         const name = record.person?.displayName || record.personDisplayName || record.displayName || people.find((person) => person.id === record.personId)?.displayName || "Team member";
         const timezone = result.windows.find((window) => window.personId === record.personId)?.timezone;
         return <li key={record.id}><article className={`admin-tool-record admin-tool-record--${record.source}`}>
-          <header><strong>{name}</strong><span className="admin-tool-meta">{sourceLabels[record.source]}</span></header>
+          <header><strong>{name}</strong><span className="admin-tool-meta">{recordSourceLabel(record.source)}</span></header>
           <p className="admin-tool-meta"><time dateTime={record.localDate}>{adminCalendarDate(record.localDate)}</time>{timezone ? ` · ${timezone}` : ""}</p>
           {record.source === "submitted_eod" ? <div className="admin-tool-document"><h5>Submitted report</h5><ChatMarkdown text={record.text || "No report text available."} /></div>
             : record.source === "update" ? <blockquote>{record.text || "No update text available."}</blockquote>
               : record.source === "workday" ? <dl className="admin-tool-workday"><dt>Day record</dt><dd>{record.text || "No day details available."}</dd></dl>
-                : <p className="admin-tool-excerpt">{record.text || sourceLabels[record.source]}</p>}
-          <RecordLink url={record.recordUrl} onOpenRecord={onOpenRecord}>Open {record.source === "submitted_eod" ? "report" : record.source === "workday" ? "workday" : "record"}</RecordLink>
+                : <p className="admin-tool-excerpt">{record.text || recordSourceLabel(record.source)}</p>}
+          {(!provider || safeAdminRecordHref(record.recordUrl)) && <RecordLink url={record.recordUrl} onOpenRecord={onOpenRecord}>Open {record.source === "submitted_eod" ? "report" : record.source === "workday" ? "workday" : "record"}</RecordLink>}
         </article></li>;
-      })}</ol> : <p>No records matched that request. Try another person or date range.</p>}
+      })}</ol> : <p>{unavailable ? `${provider} evidence was unavailable. See source coverage.` : provider ? `No retained ${provider} records matched this request.` : "No records matched that request. Try another person or date range."}</p>}
     </ReadFrame>;
   }
   return <ReadFrame title="Reviewed recaps" page={result.page} onLoadMore={onLoadMore}>
