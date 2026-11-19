@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## 0.5.40 — 2026-11-19
+
+- Evidence rows now show the time the provider record happened, including GoHighLevel calls and messages.
+
 ## 0.5.39 — 2026-11-19
 
 - GoHighLevel activity is now visible and filterable in Evidence, and people and task panels show recorded GHL activity.

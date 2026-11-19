@@ -228,7 +228,12 @@ describe("administration response normalizers", () => {
       task: null,
       event: null,
       created_at: "",
+      recorded_at: "",
     });
+    const timed = normalizeEvidence({
+      evidence: [{ id: "e-2", created_at: "2026-11-18T01:25:14.549Z", recorded_at: "2026-11-17T16:50:06.128Z" }],
+    });
+    expect(timed.evidence[0].recorded_at).toBe("2026-11-17T16:50:06.128Z");
     const summarized = normalizeEvidence({ summary: {} });
     expect(summarized.summary).toEqual({ sources: [], days: [] });
     expectNoLeaks(evidence);

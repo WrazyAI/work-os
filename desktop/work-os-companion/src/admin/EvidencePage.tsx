@@ -54,6 +54,16 @@ const SOURCE_OPTIONS = [
   { value: "nifty", label: "Legacy import" },
 ];
 
+/** The time a provider record actually happened. The API supplies
+ * `recorded_at` from the event occurrence; `created_at` is the mirror write
+ * time and stays the fallback for manual or legacy rows. */
+function evidenceTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function screenshotOf(row: EvidenceRow) {
   return one<{ id: string; processing_status: string; summary: string | null; confidence: number | null; storage_path: string | null; deleted_at: string | null }>(row.event?.screenshot);
 }
@@ -278,10 +288,18 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                   <ul>
                     {rows.map((row) => {
                       const shot = screenshotOf(row);
+                      const recordedAt = row.recorded_at ?? row.created_at;
                       return (
                         <li key={row.id}>
                           <button type="button" onClick={() => { setSelected(row); setReason(""); setScreenshotUrl(null); setScreenshotError(null); }}>
                             <span className="admin-evidence-row">
+                              <time
+                                className="admin-evidence-time"
+                                dateTime={recordedAt || undefined}
+                                title={recordedAt ? new Date(recordedAt).toLocaleString() : undefined}
+                              >
+                                {evidenceTime(recordedAt)}
+                              </time>
                               {shot?.id ? (
                                 thumbnailIds.has(shot.id) ? (
                                   <ScreenshotImage
@@ -367,7 +385,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 <div className="admin-kv"><span>Source</span><b>{evidenceSourceLabel(selected.source)}</b></div>
                 <div className="admin-kv"><span>Class</span><b>{statusLabel(selected.event?.evidence_class ?? "—")}</b></div>
                 <div className="admin-kv"><span>Correction state</span><b>{statusLabel(selected.event?.correction_status ?? "none")}</b></div>
-                <div className="admin-kv"><span>Recorded</span><b>{relativeTime(selected.created_at)}</b></div>
+                <div className="admin-kv"><span>Recorded</span><b>{relativeTime(selected.recorded_at ?? selected.created_at)}</b></div>
                 {selected.ghl?.relation ? <div className="admin-kv"><span>GHL relation</span><b>{statusLabel(selected.ghl.relation)}</b></div> : null}
                 {selected.ghl?.actorLabel ? <div className="admin-kv"><span>Recorded actor</span><b>{selected.ghl.actorLabel}</b></div> : null}
                 {selected.ghl?.coverage ? <div className="admin-kv"><span>Coverage</span><b>{statusLabel(selected.ghl.coverage)}</b></div> : null}

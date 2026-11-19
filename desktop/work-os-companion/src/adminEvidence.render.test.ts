@@ -17,6 +17,11 @@ describe("admin evidence record", () => {
     );
 
     expect(markup).toContain("Worktivity (activity)");
+    // Every row now carries the time the provider record happened, including
+    // the GHL row whose fixture records 13:10 rather than the 09:30 mirror time.
+    expect(markup).toContain('class="admin-evidence-time"');
+    expect(markup).toContain('dateTime="2026-');
+    expect(markup).toContain("13:10:00.000Z");
     // An image row reserves its frame tile and loads the real preview when the
     // surface mounts; the server render is the skeleton, never a broken image.
     // Five Worktivity rows carry a retained frame; the GitHub and Loom rows in

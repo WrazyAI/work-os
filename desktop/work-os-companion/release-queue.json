@@ -444,13 +444,19 @@
       "type": "fix",
       "summary": "GoHighLevel activity is visible and filterable in Evidence, and people and task panels show recorded GHL activity.",
       "verification": "Companion focused admin/evidence/task suites 24 passed; full vitest 2023/2024 with one unrelated Stronghold timeout that passed 5/5 alone; tsc clean; Vite production build passed. Web work-os suite 1412 tests/1401 pass/0 fail/11 skipped; webpack production build passed. Rendered preview: GHL source summary and filter, GHL evidence row, People drawer GHL count and task drawer assignee GHL activity both link to filtered Evidence. Live Agent OS b3b3f0e24: Evidence URL filters and People link verified; task detail assignee_ghl returned 179, matching the database."
+    },
+    {
+      "id": "ghl-evidence-recorded-time",
+      "type": "fix",
+      "summary": "Evidence rows show the time a provider record happened, including GoHighLevel calls and messages.",
+      "verification": "Companion focused 18/18 (Evidence render and normalizers); tsc clean; Vite production build passed. Web typecheck and route-contracts 27/27. Live Agent OS: Evidence API returned recorded_at 2026-11-17T18:58:23.656Z while created_at was 2026-11-18T01:25:14.549Z, and the page rendered 6:58 PM with that datetime. Rendered desktop rows show the time column for GHL evidence."
     }
   ],
   "emergency": {
-    "version": "0.5.39",
-    "updateId": "ghl-evidence-visibility-and-panels",
-    "brokenBehavior": "Administrators could not see or filter recorded GoHighLevel evidence in the desktop app, and the people and task panels omitted it.",
-    "restoredBehavior": "GoHighLevel is a filterable Evidence source, and the people and task panels show recorded GHL activity with links to the filtered record."
+    "version": "0.5.40",
+    "updateId": "ghl-evidence-recorded-time",
+    "brokenBehavior": "Evidence rows did not show when a provider record happened, so GoHighLevel calls and messages had no time in the record.",
+    "restoredBehavior": "Every evidence row shows the provider occurrence time, and GHL rows no longer show the delayed sync write time."
   },
   "operatorOverride": null
 }
