@@ -318,6 +318,15 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 
 The date appears only when the event's local day differs from the delivery day, because Cosmos's `Today`/`Yesterday` dividers describe posting time. The marker is attached per event, so a delayed `break` does not make the following `back` look delayed.
 
+**`inactive`, not `out`, before the end of the shift.** A dropped connection makes Worktivity report an exact clock-out, which is indistinguishable from leaving for the day at the moment it arrives. The return is only visible in hindsight. The channel therefore posts `inactive` for any clock-out that did not leave the `eod_due` state, and `back` for the clock-in that resumes it, with the gap:
+
+```
+19:29 David — inactive
+20:11 David — back (42m)
+```
+
+A clock-out from `eod_due` still reads `out`. `work_session_events.from_state` and the resumed event's timestamp are captured on the outbox row by a `before insert` trigger (migration `0076`), and the classification lives in `classifyTimebotEvent`, so the enqueue trigger and the reconciler cannot disagree. Work OS still records the underlying clock-out and clock-in: this changes what the channel claims, not the attendance ledger.
+
 **Deferred by decision.** Compressing anything older than 24 hours into one per-person recovery line was considered and deliberately postponed: the team is small, multi-day outages are rare, and dated individual lines degrade honestly. Revisit only if a real backlog proves noisy.
 
 **Recovery is bounded by a cutover, not a rolling window.** `work_notification_state` records when the integration became active for an organization. The migration seeds it for every existing organization, so everything recorded afterwards is recoverable however old — a swallowed enqueue must not expire just because nobody noticed within a week — and nothing before it is drawn in, so pre-rollout history is never replayed.
