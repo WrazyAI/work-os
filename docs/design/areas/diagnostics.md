@@ -38,6 +38,12 @@ hard-coded white field is never allowed in the dark variant. A persistent action
 bar keeps Copy scenario JSON and Reset all overrides reachable from every
 category and states whether the active scenario is a preset or custom overrides.
 
+The Companion category's 35-state mascot matrix is a glanceable grid, not one
+full-width figure per row: auto-fill keeps three or four compact tiles at normal
+widths and the grid caps at six columns once the content column is wide. Each
+tile holds the 88×99 mascot and its workday/activity label; the tile surface and
+label follow the selected material.
+
 It is destroyed when closed and recreated on demand, so it holds no history and
 no subscriptions while closed. Selecting another category releases the Live
 trace rows and its listener. The tab strip's peer-view contract does not apply;
