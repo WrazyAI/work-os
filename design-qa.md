@@ -1,5 +1,10 @@
 # Work OS active-day redesign QA
 
+> Historical evidence from the August 25, 2026 active-day redesign. The paths,
+> screenshots, and results below describe that review; they are not current
+> acceptance evidence. Use [design verification](docs/design/verification.md)
+> for today's UI changes and [the design index](design.md) for current contracts.
+
 - Source visual truth: `/mnt/c/Users/jnopa/AppData/Local/Temp/codex-clipboard-e631eca0-b367-443b-aaff-0f07dffa7034.png`
 - Primary implementation: `/mnt/c/Users/jnopa/.codex/visualizations/2026/08/25/01a039ed-79d7-7411-b5e7-982502b30194/work-os-redesign/today-hero-metrics.png`
 - Compact implementation: `/mnt/c/Users/jnopa/.codex/visualizations/2026/08/25/01a039ed-79d7-7411-b5e7-982502b30194/work-os-redesign/today-hero-metrics-mobile.png`
