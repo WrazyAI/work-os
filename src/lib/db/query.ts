@@ -353,10 +353,21 @@ export class PostgrestQuery {
           return { data: null, error: { message: e.message ?? String(err), code: e.code }, count: null };
         }
       }
-      let sql = `SELECT ${parsed.base === "*" ? "*" : parsed.base} FROM ${t}${where}${this.buildOrder()}`;
+      // A to-one embed needs its foreign key on the parent row to resolve.
+      // PostgREST lets callers omit that key from the select list, so fetch it
+      // here and strip it again when the caller did not ask for it.
+      let base = parsed.base;
+      let injected: string[] = [];
+      if (base !== "*" && parsed.embeds.length) {
+        const present = new Set(splitTopLevel(base));
+        injected = (await embedForeignKeyColumns(this.table, parsed.embeds)).filter((column) => !present.has(column));
+        if (injected.length) base = [...splitTopLevel(base), ...injected].join(", ");
+      }
+      let sql = `SELECT ${base === "*" ? "*" : base} FROM ${t}${where}${this.buildOrder()}`;
       if (this.limitN !== null) sql += ` LIMIT ${Number(this.limitN)}`;
       if (this.offsetN !== null) sql += ` OFFSET ${Number(this.offsetN)}`;
-      return this.runSql(sql, params);
+      const result = await this.runSql(sql, params);
+      return injected.length ? stripColumns(result, injected) : result;
     }
 
     if (this.mode === "insert") {
@@ -578,6 +589,16 @@ async function functionArgTypes(fnName: string): Promise<Map<string, string>> {
 
 /** Resolves embeds with one batched query per embed table per level instead of
  * one query per parent row. Nested embeds recurse on the fetched child rows. */
+/** Foreign keys needed to resolve a level's to-one embeds. */
+async function embedForeignKeyColumns(table: string, embeds: EmbedSpec[]): Promise<string[]> {
+  const columns = new Set<string>();
+  for (const embed of embeds) {
+    const relation = await resolveRelation(table, embed.table);
+    if (relation?.kind === "to-one") columns.add(relation.fkColumn);
+  }
+  return [...columns];
+}
+
 async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[], embeds: EmbedSpec[]): Promise<Record<string, unknown>[]> {
   if (!embeds.length || !rows.length) return rows;
   let out = rows.map((r) => ({ ...r }));
@@ -586,7 +607,7 @@ async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[
     if (!rel) throw new Error(`cannot resolve relation ${parentTable} <- ${e.table}`);
     const requested = e.columns === "*" ? "*" : e.columns;
     const pk = await primaryKeyColumn(e.table);
-    const selected: string[] | "*" = requested === "*" ? "*" : [...new Set([...requested, pk])];
+    const selected: string[] | "*" = requested === "*" ? "*" : [...new Set([...requested, pk, ...(await embedForeignKeyColumns(e.table, e.embeds))])];
     const selectedSql = selected === "*" ? "*" : selected.map(ident).join(", ");
 
     if (rel.kind === "to-one") {
@@ -640,6 +661,20 @@ async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[
     }
   }
   return out;
+}
+
+/** Removes parent keys that were fetched only to resolve a to-one embed. */
+function stripColumns(result: ExecResult, columns: string[]): ExecResult {
+  if (!result.data) return result;
+  const strip = (row: Record<string, unknown>) => {
+    const copy = { ...row };
+    for (const column of columns) delete copy[column];
+    return copy;
+  };
+  return {
+    ...result,
+    data: Array.isArray(result.data) ? result.data.map(strip) : strip(result.data as Record<string, unknown>),
+  };
 }
 
 /** Removes columns that were fetched only to support nested embed resolution. */

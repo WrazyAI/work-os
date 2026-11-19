@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { PGlite } from "@electric-sql/pglite";
+import type { Pool } from "pg";
 import { encodeRpcParams, parseSelect, splitTopLevelList } from "../src/lib/db/query";
+import { createAdminClient } from "../src/lib/supabase/admin";
 
 test("or-spec splitting respects nested and()/or() groups", () => {
   assert.deepEqual(splitTopLevelList("a.eq.1,b.eq.2"), ["a.eq.1", "b.eq.2"]);
@@ -79,4 +82,40 @@ test("RPC encoding quotes string json params and normalizes undefined", () => {
 test("RPC encoding without known param types passes arrays through", () => {
   const params = encodeRpcParams({ p_ids: ["a", "b"] }, new Map());
   assert.deepEqual(params[0], ["a", "b"]);
+});
+
+test("to-one embeds resolve when the foreign key is not explicitly selected", async () => {
+  const db = new PGlite();
+  await db.exec(`
+    create table work_people (id uuid primary key, display_name text not null);
+    create table work_source_accounts (
+      id uuid primary key default gen_random_uuid(),
+      external_account_id text not null,
+      person_id uuid references work_people(id) on delete set null
+    );
+    insert into work_people (id, display_name) values ('11111111-1111-4111-8111-111111111111', 'Aden Badon');
+    insert into work_source_accounts (external_account_id, person_id)
+      values ('U0iEgwXaVEQ2eYNNAwIj', '11111111-1111-4111-8111-111111111111');
+  `);
+  globalThis.__workOsPgPool = {
+    query: (sql: string, values?: unknown[]) => db.query(sql, values),
+    connect: async () => ({ query: (sql: string, values?: unknown[]) => db.query(sql, values), release: () => undefined }),
+  } as unknown as Pool;
+  const globalForDb = globalThis as unknown as { __workOsDbClient?: unknown };
+  globalForDb.__workOsDbClient = undefined;
+  try {
+    const { data, error } = await createAdminClient()
+      .from("work_source_accounts")
+      .select("external_account_id,person:work_people(id,display_name)")
+      .eq("external_account_id", "U0iEgwXaVEQ2eYNNAwIj");
+    assert.ifError(error);
+    assert.equal(data?.length, 1);
+    assert.equal(data?.[0]?.person?.display_name, "Aden Badon");
+    // The injected key stays internal; callers that did not request it must not see it.
+    assert.equal("person_id" in (data?.[0] ?? {}), false);
+  } finally {
+    globalThis.__workOsPgPool = undefined;
+    globalForDb.__workOsDbClient = undefined;
+    await db.close();
+  }
 });
