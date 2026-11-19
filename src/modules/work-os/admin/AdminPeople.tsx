@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
@@ -353,6 +354,14 @@ export default function AdminPeoplePage() {
                 <span>{detail.data.evidenceSummary.total} items</span>
                 <StateMark tone="observed">{detail.data.evidenceSummary.activity} activity</StateMark>
                 <span>{detail.data.evidenceSummary.output} output</span>
+                {detail.data.evidenceSummary.ghl > 0 ? (
+                  <Link
+                    href={`/work-os/admin/evidence?personId=${encodeURIComponent(detail.data.person.id)}&source=ghl`}
+                    className="font-semibold underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--text-primary)]"
+                  >
+                    {detail.data.evidenceSummary.ghl} GoHighLevel
+                  </Link>
+                ) : null}
                 {detail.data.evidenceSummary.disputed > 0 ? <StateMark tone="warn">{detail.data.evidenceSummary.disputed} disputed</StateMark> : null}
               </div>
             </section>

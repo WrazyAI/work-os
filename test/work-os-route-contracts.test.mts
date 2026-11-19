@@ -624,6 +624,21 @@ test("the evidence page marks future integrations and keeps bots out of the pers
   assert.match(settings, /comingSoon/);
   assert.match(evidence, /Organization webhook active/);
   assert.match(evidence, /Covered by organization/);
+  // Deep links from people/task panels preselect the person and source, and
+  // the source summary is itself a filter.
+  assert.match(evidence, /useSearchParams/);
+  assert.match(evidence, /searchParams\.get\("source"\)/);
+  assert.match(evidence, /aria-pressed=\{source === entry\.source\}/);
+});
+
+test("GHL evidence reaches the person and task panels", async () => {
+  const person = await source("src/app/api/work-os/admin/people/[personId]/route.ts");
+  assert.match(person, /e\.source = 'ghl'/);
+  assert.match(person, /ghl: Number\(summary\?\.ghl/);
+  const task = await source("src/app/api/work-os/tasks/[taskId]/route.ts");
+  assert.match(task, /assignee_ghl/);
+  assert.match(task, /metadata->'ghl'->>'relation' = 'performed'/);
+  assert.match(task, /coalesce\(e\.metadata->'ghl'->>'snapshot', 'false'\) <> 'true'/);
 });
 
 /** Column names per table, unioned from every CREATE TABLE body and ALTER
