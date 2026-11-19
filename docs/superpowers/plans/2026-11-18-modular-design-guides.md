@@ -78,3 +78,12 @@ Incoming application, release, research, and operational documentation changes
 are retained unchanged. A bounded independent audit identified these deltas;
 validation and merge status for the combined commit are recorded in the PR and
 final handoff.
+
+The combined run exposed a pre-existing release-metadata failure also present
+in main's CI run `44563990253`: the companion package and Tauri/Cargo metadata
+declare `0.5.39`, while both root version fields in its npm lockfile still
+declare `0.5.38`. The existing desktop static guard fails on that mismatch.
+The merge prerequisite corrects only those two lockfile fields to `0.5.39`;
+dependency records and the declared app version are unchanged. The same guard
+was reproduced failing locally and passes after the correction. Full CI is
+required again on the final branch before merge.
