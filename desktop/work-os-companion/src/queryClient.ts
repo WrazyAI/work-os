@@ -29,7 +29,9 @@ export const workOsKeys = {
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
   activityIntervals: (date: string) => ["work-os", "activity-intervals", date] as const,
-  activityIntervalLatest: () => ["work-os", "activity-intervals", "latest"] as const,
+  activityIntervalLatest: (scope?: { organizationId: string; personId: string } | null) => scope
+    ? ["work-os", "activity-intervals", "latest", scope.organizationId, scope.personId] as const
+    : ["work-os", "activity-intervals", "latest"] as const,
   memory: () => ["work-os", "memory"] as const,
   suggestions: () => ["work-os", "suggestions"] as const,
 };
@@ -40,7 +42,7 @@ export function isPersistedQueryKey(key: QueryKey): boolean {
   // Administration reads (roster, evidence, review state, organization
   // settings) stay out of the on-disk cache: they belong to the workspace
   // record, not to this device's employee session.
-  return key[0] === PERSISTED_ROOT && key[1] !== "admin";
+  return key[0] === PERSISTED_ROOT && key[1] !== "admin" && !(key[1] === "activity-intervals" && key[2] === "latest");
 }
 
 export function createWorkOsQueryClient(): QueryClient {
@@ -66,6 +68,13 @@ export const workOsQueryClient = createWorkOsQueryClient();
 
 const PERSIST_DEBOUNCE_MS = 2_500;
 const persistenceBarriers = new WeakMap<QueryClient, () => Promise<() => void>>();
+
+/** A new sign-in must not let the previous account's session or recap scope
+ * answer for the new one while the session read is still pending. */
+export function resetSessionScopedReads(client: QueryClient): void {
+  client.removeQueries({ queryKey: ["work-os", "session"] });
+  client.removeQueries({ queryKey: ["work-os", "activity-intervals", "latest"] });
+}
 
 /** Sign-out is ordered after an already-started vault save, not raced with it.
  * Cancel reads (never mutations), retire queued snapshots, then erase storage. */

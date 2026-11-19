@@ -141,7 +141,7 @@ export interface PersonDetailResponse {
   reports: Array<Record<string, unknown>>;
   updates: Array<Record<string, unknown>>;
   intervals: Array<Record<string, unknown>>;
-  evidenceSummary: { total: number; activity: number; output: number; disputed: number };
+  evidenceSummary: { total: number; activity: number; output: number; ghl: number; disputed: number };
 }
 
 export type SessionResponse = WorkOsSessionInfo;

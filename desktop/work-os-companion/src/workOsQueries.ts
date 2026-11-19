@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./api";
+import { secureState } from "./vault";
 import {
   ACTIVITY_INTERVALS_STALE_MS,
   DAY_DETAILS_STALE_MS,
@@ -380,21 +381,40 @@ export function latestActivityIntervalUrl() {
   return "/api/work-os/me/activity-intervals/latest" as const;
 }
 
-export function fetchLatestActivityInterval(signal?: AbortSignal): Promise<ActivityIntervalLatestData> {
+export async function fetchLatestActivityInterval(signal?: AbortSignal, scope?: LatestRecapScope): Promise<ActivityIntervalLatestData> {
+  const before = scope ? await secureState.session() : null;
+  if (scope && before?.organizationId !== scope.organizationId) throw new DOMException("Workspace changed", "AbortError");
   const timeout = AbortSignal.timeout(20_000);
-  return apiRequest<ActivityIntervalLatestData>(latestActivityIntervalUrl(), {
+  const result = await apiRequest<ActivityIntervalLatestData>(latestActivityIntervalUrl(), {
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
+  if (scope) {
+    const identity = result.scope ?? await apiRequest<LatestRecapScope>("/api/work-os/session", { signal });
+    if (identity.organizationId !== scope.organizationId || identity.personId !== scope.personId) throw new DOMException("Workspace identity changed", "AbortError");
+    const current = await secureState.session();
+    if (!current || current.token !== before?.token || current.organizationId !== scope.organizationId) throw new DOMException("Workspace changed", "AbortError");
+  }
+  signal?.throwIfAborted();
+  return result;
 }
 
-export function useLatestActivityIntervalQuery(options: { enabled: boolean; pollMs?: number }) {
-  return useQuery({
-    queryKey: workOsKeys.activityIntervalLatest(),
-    enabled: options.enabled,
+export type LatestRecapScope = { organizationId: string; personId: string };
+
+export function latestActivityIntervalOptions(options: { scope: LatestRecapScope | null; enabled: boolean; pollMs?: number }) {
+  return {
+    queryKey: workOsKeys.activityIntervalLatest(options.scope),
+    enabled: options.enabled && options.scope !== null,
     staleTime: 15_000,
-    refetchInterval: options.pollMs ?? false,
-    queryFn: ({ signal }) => fetchLatestActivityInterval(signal),
-  });
+    gcTime: 0,
+    placeholderData: undefined,
+    refetchOnMount: "always" as const,
+    refetchInterval: options.pollMs ?? (false as const),
+    queryFn: ({ signal }: { signal: AbortSignal }) => options.scope ? fetchLatestActivityInterval(signal, options.scope) : Promise.resolve({ interval: null, pendingCount: 0 }),
+  };
+}
+
+export function useLatestActivityIntervalQuery(options: { scope: LatestRecapScope | null; enabled: boolean; pollMs?: number }) {
+  return useQuery(latestActivityIntervalOptions(options));
 }
 
 /** Live notices own only the latest page, never the history observer. With no
@@ -450,6 +470,15 @@ export function ensureActivityIntervalReview(promptDueAt: string | null, signal?
     method: "POST",
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     body: JSON.stringify({ prompt_due_at: promptDueAt }),
+  });
+}
+
+export function deliverActivityIntervalPrompt(result: Pick<ActivityIntervalEnsureResult, "status" | "slot" | "mayAdvance"> | null, key: string, originalDueAt?: string | null) {
+  if (!result || result.mayAdvance === false || result.status === "awaiting_evidence" || result.status === "preparing") return Promise.resolve({ delivered: false });
+  if (originalDueAt && result.slot && Date.parse(originalDueAt) !== Date.parse(result.slot.promptDueAt)) return Promise.resolve({ delivered: false });
+  return apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
+    method: "POST", headers: { "Idempotency-Key": key },
+    body: JSON.stringify(result?.slot ? { expectedSlot: result.slot } : {}),
   });
 }
 

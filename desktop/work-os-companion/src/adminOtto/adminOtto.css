@@ -308,6 +308,38 @@
 .admin-otto-arrival p { margin: 2px 0 0; color: var(--conversation-muted); font-size: 11px; line-height: 1.45; }
 .admin-otto-arrival-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
+/* One grounded administration arrival: a submitted EOD or a reviewed recap.
+ * Gold is the admin accent; it stays a note, never an alarm. */
+.admin-otto-attention {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #b08a42 55%, var(--conversation-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, #f3e7c8 38%, var(--conversation-paper));
+}
+.admin-otto-attention-copy { min-width: 0; }
+.admin-otto-attention strong { display: block; color: var(--conversation-ink); font-size: 12px; font-weight: 750; }
+.admin-otto-attention p { margin: 2px 0 0; color: var(--conversation-muted); font-size: 11px; line-height: 1.45; }
+.admin-otto-attention-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.admin-otto-attention-actions .admin-otto-secondary { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; white-space: nowrap; }
+.admin-otto-attention-dismiss {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--conversation-muted);
+  cursor: pointer;
+}
+.admin-otto-attention-dismiss:hover { background: var(--conversation-surface); color: var(--conversation-ink); }
+.admin-otto-attention-dismiss:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: 1px; }
+
 /* ── Recap inbox ────────────────────────────────────────────────────────── */
 
 .admin-otto-inbox {
@@ -802,6 +834,8 @@
     align-items: center;
   }
   .admin-otto-arrival { flex-direction: column; align-items: flex-start; }
+  .admin-otto-attention { flex-direction: column; align-items: flex-start; }
+  .admin-otto-attention-actions { align-self: flex-end; }
   .admin-otto-arrival-actions { justify-content: flex-start; }
   .admin-otto-inbox-actions { justify-content: flex-start; }
 }

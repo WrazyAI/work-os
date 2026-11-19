@@ -11,6 +11,7 @@
 - Changing task-completion previews: [Parent and subtask completion](../patterns/task-rows.md#parent-and-subtask-completion).
 - Changing shared chat frames: [In-app chat and shared tool cards](../areas/chat.md).
 - Changing the view switch: [Floating companion, Otto, and assets](../areas/floating-companion.md).
+- Changing arrival prompts or workspace attention: [Workspace-scoped attention](../areas/floating-companion.md#workspace-scoped-attention).
 - Changing recap follows: [Administration settings and recap follows](settings.md).
 
 **Implementation starting points:** [AdminOttoChat.tsx](../../../desktop/work-os-companion/src/adminOtto/AdminOttoChat.tsx), [AdminToolCards.tsx](../../../desktop/work-os-companion/src/adminOtto/AdminToolCards.tsx).

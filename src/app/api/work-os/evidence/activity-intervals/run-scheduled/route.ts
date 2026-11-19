@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(48, Math.max(1, Number(body.limit) || 24));
     return NextResponse.json(await runScheduledActivityRecaps(limit));
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "scheduled activity recaps failed" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "scheduled_activity_recaps_failed" }, { status: 500 });
   }
 }

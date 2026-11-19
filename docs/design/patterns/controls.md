@@ -74,10 +74,12 @@ Shortcut inventory:
 | Hold `Ctrl + M` | Hold-to-talk | System-wide in the companion; in the browser while the page has focus ([voice input](../areas/voice.md)) |
 | `Escape` | Dismiss the topmost menu, drawer, sheet, or modal and return focus to its trigger | Every detached surface ([menus and detached surfaces](controls.md#menus-and-detached-surfaces)) |
 
-Peer views (tabs, the memory modal's tabs, the debugger's tabs) share one
-contract. The tablist is reachable through its selected tab. ←/→ move and
-activate, Home and End jump to the ends, and each tab's accessible name includes
-its count when it has one. Lists of rows use ↑/↓ and Home/End to move focus
+Peer views (tabs and the memory modal's tabs) share one contract. The tablist is
+reachable through its selected tab. ←/→ move and activate, Home and End jump to
+the ends, and each tab's accessible name includes its count when it has one.
+The debugger's category rail is a vertical navigation list: ↑/↓ move and
+activate, Home/End jump to the ends, and the active destination carries
+`aria-current="page"`. Lists of rows use ↑/↓ and Home/End to move focus
 between rows, and Enter expands. Radio groups use ←/→ with roving tabindex ([appearance preferences](../areas/appearance.md)).
 
 Focus is visible on every interactive element. A focus outline must reach 3:1

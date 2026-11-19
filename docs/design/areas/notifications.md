@@ -11,6 +11,7 @@
 - Changing memory review: [Work Memory](memory.md).
 - Changing recap next-step decisions: [Next-step suggestions after recap approval](next-steps.md).
 - Changing bubble dismissal: [Floating companion, Otto, and assets](floating-companion.md).
+- Changing workspace arrival behavior: [Workspace-scoped attention](floating-companion.md#workspace-scoped-attention).
 - Changing administration navigation: [Administration shell and shared contracts](../admin/shell.md).
 
 **Implementation starting points:** [NotificationsBell.tsx](../../../desktop/work-os-companion/src/NotificationsBell.tsx), [NotificationFlyouts.tsx](../../../desktop/work-os-companion/src/NotificationFlyouts.tsx), [SuggestionReview.tsx](../../../desktop/work-os-companion/src/SuggestionReview.tsx).

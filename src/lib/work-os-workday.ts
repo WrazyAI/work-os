@@ -104,8 +104,14 @@ export async function isScheduledWorkday(access: WorkOsAccess, date: string) {
   return hasScheduledShiftOnDate(rules, (exceptions ?? []) as WorkOsScheduleException[], date);
 }
 
+/* Delivery compares the loaded session back to its own row. Postgres keeps
+ * microseconds while a JavaScript Date keeps only milliseconds, so every
+ * compared instant travels beside the exact stored text. */
+const PROMPT_CAS_INSTANTS = ["clocked_in_at", "last_prompt_at", "first_follow_up_at", "next_fallback_at", "last_substantive_update_at", "snoozed_until", "scheduled_ends_at"] as const;
+const SESSION_CAS_SELECT = ["*", ...PROMPT_CAS_INSTANTS.map((column) => `${column}::text AS ${column}_exact`)].join(",");
+
 export async function activeSession(access: WorkOsAccess) {
-  const { data, error } = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId)
+  const { data, error } = await db().from("work_sessions").select(SESSION_CAS_SELECT).eq("organization_id", access.organizationId)
     .eq("person_id", access.personId as string).in("state", ["clocked_in", "active", "paused", "eod_due"])
     .neq("correction_status", "needs_correction").maybeSingle();
   if (error) throw new Error(`load active work session: ${error.message}`);
@@ -152,21 +158,24 @@ async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string
     state: "eod_due",
     updated_at: at.toISOString(),
   }).eq("organization_id", access.organizationId).eq("id", session.id as string)
-    .in("state", ["clocked_in", "active", "paused"]).select("*").maybeSingle();
+    .in("state", ["clocked_in", "active", "paused"]).select(SESSION_CAS_SELECT).maybeSingle();
   if (error) throw new Error(`persist EOD session state: ${error.message}`);
   if (data) {
     await audit(access, session.id as string, "eod_due", session.state as string, "eod_due", `eod_due:${session.id}:${session.scheduled_ends_at}`, at.toISOString(), { dueAt }, "system");
     return data;
   }
-  const current = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId).eq("id", session.id as string).maybeSingle();
+  const current = await db().from("work_sessions").select(SESSION_CAS_SELECT).eq("organization_id", access.organizationId).eq("id", session.id as string).maybeSingle();
   if (current.error) throw new Error(`reload EOD session state: ${current.error.message}`);
   return current.data ?? session;
 }
 
-async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date, cadence: ResolvedWorkOsCadence) {
+export type WorkdayPromptSlot = { sessionId: string; promptDueAt: string };
+
+export async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date, cadence: ResolvedWorkOsCadence, expectedSlot?: WorkdayPromptSlot) {
   if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);
   if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return { session, delivered: false };
+  if (expectedSlot && (String(session.id) !== expectedSlot.sessionId || Date.parse(expectedSlot.promptDueAt) !== scheduledAt)) return { session, delivered: false };
   const nextFallbackAt = nextFallbackAfterDelivery(scheduledAt, at.getTime(), checkInIntervalMs(cadence.checkInIntervalMinutes));
   let query = db().from("work_sessions").update({
     last_prompt_kind: prompt.kind,
@@ -174,10 +183,12 @@ async function recordPromptDelivery(access: WorkOsAccess, session: Record<string
     next_fallback_at: nextFallbackAt,
     check_in_interval_minutes: cadence.checkInIntervalMinutes,
     updated_at: at.toISOString(),
-  }).eq("organization_id", access.organizationId).eq("id", session.id as string).in("state", ["clocked_in", "active", "paused", "eod_due"]);
-  query = session.last_prompt_at
-    ? query.eq("last_prompt_at", session.last_prompt_at as string)
-    : query.is("last_prompt_at", null);
+  }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", session.id as string);
+  for (const column of ["state", "correction_status", "last_prompt_at", "last_prompt_kind", "next_fallback_at", "first_follow_up_at", "last_substantive_update_at", "snoozed_until", "clocked_in_at", "check_in_interval_minutes", "scheduled_ends_at"]) {
+    const value = session[column];
+    const exact = (PROMPT_CAS_INSTANTS as readonly string[]).includes(column) ? session[`${column}_exact`] : null;
+    query = exact != null ? query.eq(column, exact) : value == null ? query.is(column, null) : query.eq(column, value);
+  }
   const { data, error } = await query.select("*").maybeSingle();
   if (error) throw new Error(`persist Work OS prompt schedule: ${error.message}`);
   return { session: data ?? session, delivered: !!data };
@@ -343,9 +354,9 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
 
 /** Claims a due notification after a companion has decided to display it.
  * Read-only day polling must never advance this cadence. */
-export async function deliverWorkdayPrompt(access: WorkOsAccess, at = new Date()) {
+export async function deliverWorkdayPrompt(access: WorkOsAccess, at = new Date(), expectedSlot?: WorkdayPromptSlot) {
   const workday = await getWorkday(access, at);
-  const delivery = await recordPromptDelivery(access, workday.session, workday.prompt, at, workday.cadence);
+  const delivery = await recordPromptDelivery(access, workday.session, workday.prompt, at, workday.cadence, expectedSlot);
   return { ...workday, session: delivery.session, delivered: delivery.delivered };
 }
 

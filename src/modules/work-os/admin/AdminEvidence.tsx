@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Cable, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
+import { EVIDENCE_SOURCE_OPTIONS as SOURCE_OPTIONS, evidenceSourceLabel as sourceLabel } from "@/modules/work-os/evidence-sources";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import GhlEvidenceDetail from "./GhlEvidenceDetail";
 import {
@@ -28,7 +30,6 @@ import {
   SelectField,
   Skeleton,
   StateMark,
-  StatusPill,
   Switch,
   relativeTime,
   statusLabel,
@@ -43,27 +44,23 @@ function isoDaysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-const SOURCE_OPTIONS = [
-  { value: "worktivity", label: "Worktivity (activity)" },
-  { value: "github", label: "GitHub" },
-  { value: "ghl", label: "GHL — coming soon", disabled: true },
-  { value: "loom", label: "Loom" },
-  { value: "manual", label: "Manual" },
-  { value: "agent", label: "Agent" },
-  { value: "nifty", label: "Legacy import" },
-  { value: "crm", label: "CRM" },
-  { value: "media", label: "Media" },
-];
+const SOURCE_VALUES = new Set<string>(SOURCE_OPTIONS.map((option) => option.value));
+
+function dateParam(value: string | null) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
 
 export default function AdminEvidencePage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const today = new Date().toISOString().slice(0, 10);
-  const [tab, setTab] = useState<EvidenceTab>("evidence");
-  const [from, setFrom] = useState(() => isoDaysAgo(7));
-  const [to, setTo] = useState(today);
-  const [personId, setPersonId] = useState("");
-  const [source, setSource] = useState("");
-  const [disputedOnly, setDisputedOnly] = useState(false);
+  const initialSource = searchParams.get("source") ?? "";
+  const [tab, setTab] = useState<EvidenceTab>(searchParams.get("tab") === "recaps" ? "recaps" : "evidence");
+  const [from, setFrom] = useState(() => dateParam(searchParams.get("from")) ?? isoDaysAgo(7));
+  const [to, setTo] = useState(() => dateParam(searchParams.get("to")) ?? today);
+  const [personId, setPersonId] = useState(searchParams.get("personId") ?? "");
+  const [source, setSource] = useState(SOURCE_VALUES.has(initialSource) ? initialSource : "");
+  const [disputedOnly, setDisputedOnly] = useState(searchParams.get("disputed") === "1" || searchParams.get("correction") === "disputed");
   const [selected, setSelected] = useState<EvidenceRow | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
@@ -213,13 +210,24 @@ export default function AdminEvidencePage() {
                 <strong className="text-[22px] font-[590] tracking-[-0.03em] tabular-nums text-[var(--text-primary)]">{evidenceSources.reduce((sum, entry) => sum + entry.count, 0)}</strong> items
               </span>
               {evidenceSources.slice(0, 6).map((entry, index) => (
-                <span key={entry.source} className="inline-flex items-center gap-1.5">
+                <button
+                  key={entry.source}
+                  type="button"
+                  onClick={() => setSource((current) => current === entry.source ? "" : entry.source)}
+                  aria-pressed={source === entry.source}
+                  aria-label={`Filter evidence to ${sourceLabel(entry.source)}`}
+                  className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition hover:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ outlineColor: "var(--accent-deep)" }}
+                >
                   <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
-                  {entry.source === "worktivity" ? "Worktivity (activity)" : entry.source}
+                  {sourceLabel(entry.source)}
                   <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{entry.count}</strong>
-                </span>
+                </button>
               ))}
             </div>
+            <p className="text-[10.5px] leading-5 text-[var(--text-tertiary)]">
+              Newest items first. Select a source above to see its full range, including items older than the current page.
+            </p>
             {evidenceDays.length ? (
               <Panel padded={false} className="p-3.5">
                 <TrendBars
@@ -412,7 +420,7 @@ export default function AdminEvidencePage() {
                             <span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
                               {metadata.repository ? <span>{String(metadata.repository)}</span> : null}
                               {event?.evidence_class ? <span>{statusLabel(event.evidence_class)}</span> : null}
-                              <span>{row.source === "loom" ? "Loom" : row.source}</span>
+                              <span>{sourceLabel(row.source)}</span>
                               {event?.correction_status && event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(event.correction_status)}</StateMark> : null}
                               {screenshot && !screenshot.deleted_at ? <StateMark tone="observed">Retained</StateMark> : null}
                             </span>
@@ -506,7 +514,7 @@ export default function AdminEvidencePage() {
         {selected ? (
           <div className="grid gap-4">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-              <span>{selected.source === "loom" ? "Loom recording" : selected.source === "ghl" ? "GoHighLevel" : selected.source}</span>
+              <span>{selected.source === "loom" ? "Loom recording" : sourceLabel(selected.source)}</span>
               {selected.ghl?.actorLabel ? <span>{selected.ghl.actorLabel}</span> : null}
               {selected.event?.evidence_class ? <span>{statusLabel(selected.event.evidence_class)}</span> : null}
               {(() => {

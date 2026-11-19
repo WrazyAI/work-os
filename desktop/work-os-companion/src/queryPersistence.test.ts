@@ -1,12 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryObserver } from "@tanstack/react-query";
-import { clearWorkOsAccountCache, createWorkOsQueryClient, startWorkOsQueryPersistence } from "./queryClient";
+import { clearWorkOsAccountCache, createWorkOsQueryClient, resetSessionScopedReads, startWorkOsQueryPersistence } from "./queryClient";
 import { secureState } from "./vault";
 
 vi.mock("./vault", () => ({ secureState: { saveQueryCache: vi.fn(async () => undefined), clearAccount: vi.fn(async () => undefined) } }));
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe("employee cache persistence", () => {
+  it("drops the previous account's session and recap scope on a new sign-in", () => {
+    const client = createWorkOsQueryClient();
+    client.setQueryData(["work-os", "session"], { organizationId: "org-a", personId: "person-a" });
+    client.setQueryData(["work-os", "activity-intervals", "latest", "org-a", "person-a"], { interval: { id: "recap-a" } });
+    client.setQueryData(["work-os", "activity-intervals", "2026-11-12"], { pages: [{ intervals: [] }] });
+    resetSessionScopedReads(client);
+    expect(client.getQueryData(["work-os", "session"])).toBeUndefined();
+    expect(client.getQueryData(["work-os", "activity-intervals", "latest"])).toBeUndefined();
+    expect(client.getQueryData(["work-os", "activity-intervals", "2026-11-12"])).toEqual({ pages: [{ intervals: [] }] });
+    client.clear();
+  });
+
   it("waits for an in-flight save before clearing an account and drops queued old data", async () => {
     vi.useFakeTimers();
     const client = createWorkOsQueryClient();

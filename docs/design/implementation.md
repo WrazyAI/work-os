@@ -41,7 +41,7 @@ Each surface states its budgets, and visual QA checks them.
   100 rows in the DOM.
 - Page size: one request returns at most 100 rows.
 - A closed debugger window holds no subscriptions and no rows. Selecting another
-  tab releases the trace rows and its event listener.
+  category releases the trace rows and its event listener.
 - Diagnostic change notices target only the debugger window, never the main or
   avatar windows. Bursts coalesce to the latest sequence at most every 250ms; the
   trace pulls the rows it shows instead of receiving whole events.

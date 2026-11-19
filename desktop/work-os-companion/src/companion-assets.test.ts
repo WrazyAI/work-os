@@ -57,11 +57,11 @@ describe("companion artwork", () => {
     expect(conversationCss).not.toContain("avatar-ring");
     expect(avatarCss).not.toContain(".avatar-orb::before");
     expect(conversationCss).toMatch(/\.avatar-orb\s*\{[^}]*background:\s*transparent/s);
-    expect(avatar).toContain('const showBadge = mascotVisual.pose === "alert"');
+    expect(avatar).toContain('const showBadge = workspaceView === "admin" ? scopedMascot.adminAttention : mascotVisual.pose === "alert";');
     expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
-    expect(avatar).toContain('{workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
     // The badge marks attention only; shift progress is the elapsed pill.
-    expect(avatar).toContain('{workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}');
+    expect(avatar).toContain('{showBadge && <span className="avatar-badge" aria-hidden="true" />}');
     expect(avatar).not.toContain("avatar-badge-progress");
     expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
@@ -256,8 +256,9 @@ describe("floating companion integration", () => {
 
   it("pages the debugger trace from a 1,000-event ring and destroys the debugger on close", () => {
     const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
-    expect(debugWindow).toContain("getCurrentWindow().close()");
-    expect(debugWindow).not.toContain("getCurrentWindow().hide()");
+    expect(debugWindow).toContain("getCurrentWindow()");
+    expect(debugWindow).toContain("appWindow.close()");
+    expect(debugWindow).not.toContain("appWindow.hide()");
     const trace = readFileSync(resolve(root, "src/DebugTrace.tsx"), "utf8");
     expect(trace).toContain('"work-os://diagnostics-changed"');
     expect(trace).not.toContain('"work-os://diagnostics"');
@@ -489,7 +490,7 @@ describe("interval recap scheduler", () => {
        deps, or the interval recap is never requested and the generic check-in
        stands in for it. */
     expect(app).toContain("promptNudgeDue(facts, now)");
-    expect(app).toMatch(/eodAlertNow, clockInAlertNow, promptDueNow\]/);
+    expect(app).toMatch(/eodAlertNow, clockInAlertNow, promptDueNow, promptDismissals\]/);
   });
 });
 

@@ -60,3 +60,21 @@ Use a router plus shared foundations, area guides, and conditional pattern guide
 ## Delivery
 
 Publish `codex/modular-design-guides` directly to `WrazyAI/work-os` and open a PR against `main` through the authorized `zahemen9900` connection. Record the resulting URL and live review status in the delivery handoff. Ledger logging remains with the user's local agent, as explicitly directed. This plan records the verified changes prepared for publication; merge, deployment, and release remain separate actions.
+
+
+## November 19 integration
+
+The user authorized merging PR #179. Its original head passed the full CI
+workflow, including Work OS typecheck/tests, site and film checks, production
+build, companion tests/build, Rust checks, release policy, and CodeQL. CodeRabbit
+remained neutral after its rate-limited attempt.
+
+Main advanced to `0bacb51bf4338528d894c2713cbbb432bc8c2a77` and changed the
+monolithic blueprint. The conflict resolution keeps the root router and ports
+all four new contracts to their owners: debugger categories and platform chrome,
+vertical navigation semantics, workspace-scoped companion arrivals, and debugger
+category cleanup. It also links the new recap operations guide conditionally.
+Incoming application, release, research, and operational documentation changes
+are retained unchanged. A bounded independent audit identified these deltas;
+validation and merge status for the combined commit are recorded in the PR and
+final handoff.

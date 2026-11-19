@@ -1,8 +1,31 @@
 import { buildOttoViewState, resolveWorkspaceSwitch, type OttoViewFailure, type OttoViewState } from "./viewSwitch";
 import type { OttoMode } from "./mode";
+import type { AdminAttentionItem } from "./attention";
 
 const PARAM = "avatar-view";
 const SCOPE = { userId: "user-preview", organizationId: "org-preview", mode: "admin" as const };
+
+export function adminAttentionFixtureRequested(search: string): "eod" | "recap" | null {
+  if (!import.meta.env.DEV) return null;
+  const kind = new URLSearchParams(search).get("admin-attention");
+  return kind === "eod" || kind === "recap" ? kind : null;
+}
+
+/** A grounded arrival for rendered QA of the compact bubble, the alert pose,
+ * and the expanded card. It never reaches a real delivery feed. */
+export function createAdminAttentionFixture(kind: "eod" | "recap"): AdminAttentionItem {
+  return kind === "recap"
+    ? {
+        id: "recap:fixture", kind: "recap_reviewed", count: 2,
+        title: "Reviewed recaps are ready", body: "2 recaps are waiting in the administration inbox.",
+        section: "recaps", personId: null, at: "2026-11-18T17:05:00.000Z",
+      }
+    : {
+        id: "eod:fixture", kind: "eod_submitted", count: 1,
+        title: "EOD report submitted", body: "Maya Chen's report is waiting for your review.",
+        section: "review", personId: "person-preview", at: "2026-11-18T17:04:00.000Z",
+      };
+}
 
 export function avatarViewFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;

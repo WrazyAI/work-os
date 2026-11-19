@@ -155,6 +155,21 @@ It re-arms on a genuinely new event: the next workday, a new plan revision for
 the goal, or a newer recap watermark for the queue. Check-ins keep their snooze;
 EOD, goal, and recap reminders are dismissible.
 
+## Workspace-scoped attention
+
+The floating companion's expression is scoped to the active workspace. The
+employee ask is computed continuously but never drives the Administration orb;
+Administration has its own idle state and its own attention state for a new EOD
+submission or reviewed recap. Switching workspaces changes the pose, badge,
+bubble, and expanded card immediately, and switching back restores the employee
+prompt in the same state it was left, including an undismissed recap or goal.
+The admin arrival uses the gold workspace accent in the compact bubble and a
+quiet card above the thread or inbox; an OS toast used while the window is
+hidden states only the count, never an employee name or record body. A new
+admin or employee arrival switches the visible workspace once, for the newly
+arrived event only; the state that was already waiting at launch never changes
+the workspace by itself.
+
 ## Attention sequence
 
 The floating companion starts a bounded three-play attention sequence when an

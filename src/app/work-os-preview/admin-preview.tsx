@@ -268,9 +268,10 @@ function evidenceFixture(state: PreviewState) {
     { id: "e-1", person_id: "p-ada", task_id: null, evidence_date: TODAY, source: "github", title: "Pull request #482 merged", summary: "Harden payout retries — 6 files changed.", url: null, metrics: {}, created_at: `${TODAY}T12:20:00.000Z`, person: { id: "p-ada", display_name: "Ada Okafor" }, task: { id: "t-1", title: "Harden payout retries" }, event: { correction_status: "original", evidence_class: "output_evidence", metadata: { repository: "WrazyAI/work-os", event: "pull_request", actor: { id: "288747123", login: "david-z-9900" } }, screenshot: null } },
     { id: "e-2", person_id: "p-luis", task_id: null, evidence_date: TODAY, source: "worktivity", title: "Activity context 13:00–14:00", summary: "Chrome, Slack, and the reconciliation sheet.", url: null, metrics: { totalMinutes: 58, topApps: [{ name: "Chrome", minutes: 41 }] }, created_at: `${TODAY}T14:00:00.000Z`, person: { id: "p-luis", display_name: "Luis Moreno" }, task: null, event: { correction_status: "disputed", evidence_class: "activity_observation", metadata: { needsReview: true }, screenshot: { id: "s-1", processing_status: "processed", summary: "Reconciliation sheet with the vendor table.", confidence: 0.82, storage_path: "screenshots/x", deleted_at: null } } },
     { id: "e-3", person_id: "p-ada", task_id: null, evidence_date: "2026-09-29", source: "loom", title: "Settlement walkthrough", summary: "Recorded walkthrough of the settlement close.", url: "https://www.loom.com/share/example", metrics: {}, created_at: "2026-09-29T15:00:00.000Z", person: { id: "p-ada", display_name: "Ada Okafor" }, task: null, event: { correction_status: "original", evidence_class: "output_evidence", metadata: {}, screenshot: null } },
+    { id: "e-4", person_id: "p-ada", task_id: null, evidence_date: TODAY, source: "ghl", title: "Call outbound", summary: "Recorded outbound call with status completed.", url: null, metrics: { relation: "performed", evidenceClass: "output_evidence" }, created_at: `${TODAY}T13:10:00.000Z`, person: { id: "p-ada", display_name: "Ada Okafor" }, task: null, event: { correction_status: "original", evidence_class: "output_evidence", metadata: { ghl: { relation: "performed" } }, screenshot: null }, ghl: { eventId: "e-4", relation: "performed", actorLabel: "Ada Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" } },
   ];
   return { evidence: rows, summary: empty ? { sources: [], days: [] } : {
-    sources: [{ source: "worktivity", count: 96 }, { source: "github", count: 31 }, { source: "loom", count: 6 }, { source: "manual", count: 3 }],
+    sources: [{ source: "worktivity", count: 96 }, { source: "github", count: 31 }, { source: "ghl", count: 4 }, { source: "loom", count: 6 }, { source: "manual", count: 3 }],
     days: Array.from({ length: 14 }, (_, index) => {
       const date = new Date(`${TODAY}T12:00:00Z`);
       date.setUTCDate(date.getUTCDate() - (13 - index));
@@ -310,7 +311,7 @@ function personDetailFixture() {
     reports: [{ id: "r-2", report_date: "2026-09-29", status: "pending_review", submitted_at: "2026-09-29T17:05:00.000Z" }],
     updates: [{ id: "u-1", shift_date: TODAY, kind: "catch_up", input_text: "Finished the settlement reconciliation and moved to the payout edge cases.", occurred_at: `${TODAY}T14:48:00.000Z` }],
     intervals: [{ id: "i-1", local_date: TODAY, headline: "Reviewed the reconciliation queue", review_status: "confirmed" }],
-    evidenceSummary: { total: 12, activity: 8, output: 4, disputed: 1 },
+    evidenceSummary: { total: 12, activity: 8, output: 4, ghl: 2, disputed: 1 },
   };
 }
 

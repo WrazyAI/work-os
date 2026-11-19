@@ -11,7 +11,8 @@
 - Changing evidence semantics or async states: [Data truth, async states, and pagination](../patterns/data-and-state.md).
 - Changing post-review task proposals: [Next-step suggestions after recap approval](next-steps.md).
 - Changing reminders or floating geometry: [Floating companion, Otto, and assets](floating-companion.md).
-- Changing recap use in eod reports: [Employee EOD review](eod-review.md).
+- Changing recap use in EOD reports: [Employee EOD review](eod-review.md).
+- Changing generation, retry settlement, account boundaries, or scheduled delivery: [Activity recap operations](../../work-os-recap-operations.md).
 
 **Implementation starting points:** [ActivityIntervalCard.tsx](../../../desktop/work-os-companion/src/ActivityIntervalCard.tsx), [ActivityIntervalList.tsx](../../../desktop/work-os-companion/src/ActivityIntervalList.tsx), [EmployeeActivityRecaps.tsx](../../../src/modules/work-os/employee/EmployeeActivityRecaps.tsx).
 

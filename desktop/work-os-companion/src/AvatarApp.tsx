@@ -31,7 +31,7 @@ import { OTTO_RECORD_NAV_EVENT, OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT,
 import { createViewWorkFence } from "./adminOtto/viewWorkFence";
 import { useAdminOttoRecapAudio } from "./adminOtto/useAdminOttoRecapAudio";
 import { ADMIN_FIXTURE_TRANSPORT, FIXTURE_REVIEWED_RECAP, adminFixtureSpeak, fixtureInboxPage } from "./adminOtto/fixtures";
-import { avatarViewFixtureRequested, createAvatarViewFixture } from "./adminOtto/viewFixture";
+import { adminAttentionFixtureRequested, avatarViewFixtureRequested, createAdminAttentionFixture, createAvatarViewFixture } from "./adminOtto/viewFixture";
 import type { OttoScope } from "../../../src/modules/work-os/admin-otto/contracts";
 import type { OttoMode } from "./adminOtto/mode";
 import type { AdminOttoEntryRecovery } from "./adminOtto/chatEntry";
@@ -39,11 +39,12 @@ import { PLAN_INTERPRET_TIMEOUT_MS } from "../../../src/modules/work-os/plan-tim
 import { personalBootstrapAccess, type PersonalBootstrapRole } from "./adminOtto/personalBootstrap";
 import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
 import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from "./adminOtto/delivery";
-import { presentAdminRecapArrival } from "./adminOtto/notifications";
+import { ADMIN_ATTENTION_DISMISSED_KEY, OTTO_ADMIN_ATTENTION_EVENT, OTTO_ADMIN_ATTENTION_OPEN_EVENT, adminAttentionEvent, dismissAdminAttention, isAdminAttentionDismissed, parseAdminAttentionDismissals, parseAdminAttentionEvent, shouldAutoSwitchWorkspace, type AdminAttentionDismissals, type AdminAttentionItem } from "./adminOtto/attention";
+import { AdminAttentionBubble } from "./adminOtto/AdminAttentionBubble";
 import { createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
-import { recapSurfaceDecision, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapQueueBubbleState } from "./notificationsLogic";
+import { decideActivityIntervalReview, decideRecapNextStep, deliverActivityIntervalPrompt, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchLatestActivityInterval, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep, useLatestActivityIntervalQuery } from "./workOsQueries";
+import { recapSurfaceDecision, scopedPendingRecap, reduceRecapQueueBubble, unapprovedRecapsBubbleVisible, type RecapWatermark, type RecapQueueBubbleState } from "./notificationsLogic";
 import { RecapQueueBubble } from "./RecapQueueBubble";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
@@ -75,7 +76,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, dismissPrompt, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, isPromptDismissed, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, planHoldExpired, promptDismissalToken, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, dismissPrompt, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, isPromptDismissed, mergeAvatarChatEntries, modeScopedMascot, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, planHoldExpired, promptDismissalToken, promptNudgeDue, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge, type DismissiblePromptKind, type PromptDismissals,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -242,6 +243,7 @@ export default function AvatarApp(): React.ReactElement {
   const avatarUnapprovedRecapsFixture = avatarUnapprovedRecapsFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarAdminViewFixtureRequested = avatarViewFixtureRequested(window.location.search);
+  const avatarAdminAttentionFixture = adminAttentionFixtureRequested(window.location.search);
   const avatarViewFixture = useMemo(
     () => avatarAdminViewFixtureRequested ? createAvatarViewFixture(window.location.search) : null,
     [avatarAdminViewFixtureRequested],
@@ -343,7 +345,10 @@ export default function AvatarApp(): React.ReactElement {
   const [pendingUnapprovedRecaps, setPendingUnapprovedRecaps] = useState(avatarUnapprovedRecapsFixture ? 2 : 0);
   const [recapSurfaceBlocked, setRecapSurfaceBlocked] = useState(false);
   const recapAnnouncedIds = useRef<Set<string>>(new Set());
-  const recapSurfaceWatermark = useRef<string | null>(null);
+  const recapSurfaceWatermark = useRef<RecapWatermark | null>(null);
+  const [recapOwnerScope, setRecapOwnerScope] = useState<string | null>(avatarFixture ? "fixture" : null);
+  const autoSwitchRecapIdRef = useRef<string | null>(null);
+  const agendaAutoSwitchRef = useRef<{ initialized: boolean; token: string | null }>({ initialized: false, token: null });
   const recapAccountRef = useRef<string | null>(null);
   const celebrationSeen = useRef(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
@@ -782,12 +787,16 @@ export default function AvatarApp(): React.ReactElement {
     : adminOttoContext?.scope.mode === "admin" ? adminOttoContext.scope : null;
   const adminEpoch = avatarViewState?.epoch ?? adminOttoContext?.epoch ?? 1;
   const adminReady = avatarViewState?.adminStatus === "ready" && !!adminScope;
-  const workspaceView: OttoMode = avatarViewState?.workspace
+  const workspaceView: OttoMode = viewPending
+    ?? avatarViewState?.workspace
     ?? (avatarRole === "admin" ? "admin" : adminOttoContext?.scope.mode === "admin" ? "admin" : "employee");
   const workspaceViewRef = useRef(workspaceView);
   workspaceViewRef.current = workspaceView;
   const latestRecapQuery = useLatestActivityIntervalQuery({
-    enabled: workspaceView === "employee" && facts.loaded && connected !== false && !avatarFixture,
+    scope: desktopSession?.organizationId && facts.personId ? { organizationId: desktopSession.organizationId, personId: facts.personId } : null,
+    enabled: (workspaceView === "employee"
+      || (avatarViewState?.role === "admin" && avatarViewState.employeeAvailable === true))
+      && facts.loaded && connected !== false && !avatarFixture,
     pollMs: 60_000,
   });
   const adminAudio = useAdminOttoRecapAudio({
@@ -884,12 +893,43 @@ export default function AvatarApp(): React.ReactElement {
       if (!changed || !current) return;
       if (changed.scope.userId !== current.scope.userId
         || changed.scope.organizationId !== current.scope.organizationId
-        || changed.scope.mode !== current.scope.mode
         || changed.epoch !== current.epoch) return;
       void adminDeliveryRef.current?.pollNow("manual");
     }).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
   }, []);
+
+  /* Administration arrivals arrive through the main window, which owns the
+     overview read and the recap delivery feed. This window only presents them:
+     one bubble, one card, one dismissal, and one explicit destination. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, unknown>>(OTTO_ADMIN_ATTENTION_EVENT, (event) => {
+      const parsed = parseAdminAttentionEvent(event.payload);
+      if (!parsed) return;
+      const current = adminOttoContextRef.current;
+      if (current && (parsed.scope.userId !== current.scope.userId
+        || parsed.scope.organizationId !== current.scope.organizationId
+        || parsed.epoch < current.epoch)) return;
+      setAdminAttention(parsed.item);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
+
+  useEffect(() => {
+    if (avatarAdminAttentionFixture) return;
+    setAdminAttention(null);
+  }, [adminOttoContext?.scope.userId, adminOttoContext?.scope.organizationId, avatarAdminAttentionFixture]);
+
+  /* A local midnight retires yesterday's arrival; an empty-to-loaded shift
+     date during boot must never clear one that just landed. */
+  const adminAttentionLocalDay = new Date(now).toLocaleDateString("en-CA");
+  const adminAttentionLocalDayRef = useRef(adminAttentionLocalDay);
+  useEffect(() => {
+    if (adminAttentionLocalDayRef.current === adminAttentionLocalDay) return;
+    adminAttentionLocalDayRef.current = adminAttentionLocalDay;
+    setAdminAttention(null);
+  }, [adminAttentionLocalDay]);
 
   /* A saved follow filter changes which reviewed arrivals the existing delivery
      feed may claim. Wake that one feed only for this window's live account; the
@@ -965,7 +1005,7 @@ export default function AvatarApp(): React.ReactElement {
     let cancelled = false;
     const controller = startAuthorizedAdminRecapDelivery({
       signedIn: avatarSessionPresent, syncBypass: !!avatarFixture, session: avatarContextController.identity(),
-      scope: context.scope,
+      scope: { ...context.scope, mode: "admin" },
       epoch: context.epoch,
       deviceId: `avatar:${desktopSession?.organizationId ?? "local"}`,
       windowId: "avatar",
@@ -977,7 +1017,7 @@ export default function AvatarApp(): React.ReactElement {
       isCurrent: () => !cancelled && adminOttoSessionRef.current?.token === desktopSession?.token
         && adminOttoSessionRef.current?.organizationId === desktopSession?.organizationId
         && avatarContextController.isCurrent(context),
-      getMode: () => context.scope.mode,
+      getMode: () => "admin",
       canPresent: async () => {
         try {
           return win ? await win.isVisible() : false;
@@ -986,15 +1026,16 @@ export default function AvatarApp(): React.ReactElement {
         }
       },
       onArrival: async (arrival, fence) => {
-        const presented = await presentAdminRecapArrival(arrival.count, fence);
-        if (presented && fence.isCurrent()) {
-          void emit(OTTO_CHANGED_EVENT, adminOttoChangedEvent({
-            scope: context.scope,
-            epoch: context.epoch,
-            eventIds: arrival.eventIds,
-          }));
-        }
-        return presented;
+        if (!fence.isCurrent()) return false;
+        // The visible companion is the in-app surface: the forwarded ids make
+        // the main window publish the grounded attention bubble and its OS
+        // toast when the main window itself is hidden.
+        void emit(OTTO_CHANGED_EVENT, adminOttoChangedEvent({
+          scope: { ...context.scope, mode: "admin" },
+          epoch: context.epoch,
+          eventIds: arrival.eventIds,
+        }));
+        return true;
       },
       onError: () => undefined,
     });
@@ -1153,6 +1194,33 @@ export default function AvatarApp(): React.ReactElement {
   });
   const [snoozeReplayId, setSnoozeReplayId] = useState(0);
   const [promptDismissals, setPromptDismissals] = useState<PromptDismissals>(() => readJson<PromptDismissals>(PROMPT_DISMISSALS_KEY, {}));
+  const [adminAttention, setAdminAttention] = useState<AdminAttentionItem | null>(() =>
+    avatarAdminAttentionFixture ? createAdminAttentionFixture(avatarAdminAttentionFixture) : null);
+  const [adminAttentionDismissals, setAdminAttentionDismissals] = useState<AdminAttentionDismissals | null>(() => parseAdminAttentionDismissals(readJson(ADMIN_ATTENTION_DISMISSED_KEY, null)));
+  const adminAttentionDay = facts.shiftDate || adminAttentionLocalDay;
+  const adminAttentionVisible = workspaceView === "admin" && adminAttention !== null
+    && !isAdminAttentionDismissed(adminAttentionDismissals, adminAttention, adminAttentionDay);
+  const dismissAdminAttentionPrompt = useCallback((item: AdminAttentionItem) => {
+    setAdminAttentionDismissals((current) => {
+      const next = dismissAdminAttention(current, item, adminAttentionDay);
+      writeJson(ADMIN_ATTENTION_DISMISSED_KEY, next);
+      return next;
+    });
+  }, [adminAttentionDay]);
+  const openAdminAttention = useCallback((item: AdminAttentionItem) => {
+    const context = adminOttoContextRef.current;
+    const epoch = avatarViewStateRef.current?.epoch ?? context?.epoch ?? 1;
+    if (context) {
+      void emit(OTTO_ADMIN_ATTENTION_OPEN_EVENT, adminAttentionEvent({ ...context.scope, mode: "admin" }, epoch, item));
+    }
+    setAdminAttentionDismissals((current) => {
+      const next = dismissAdminAttention(current, item, adminAttentionDay);
+      writeJson(ADMIN_ATTENTION_DISMISSED_KEY, next);
+      return next;
+    });
+    setAdminAttention(null);
+    if (workspaceViewRef.current !== "admin") void requestView("admin");
+  }, [adminAttentionDay, requestView]);
   const [missed, setMissed] = useState(false);
   const notifiedKeys = useRef<Set<string>>(new Set(readJson<string[]>(NOTIFIED_KEY, [])));
   const deliveryKeys = useRef<Set<string>>(new Set());
@@ -1545,6 +1613,15 @@ export default function AvatarApp(): React.ReactElement {
     void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       daySessionRevision.current += 1;
+      // A re-sign-in may resolve to the same account: retiring the card must
+      // also retire its watermark so the latest read can present it again.
+      recapSurfaceWatermark.current = null;
+      recapAccountRef.current = null;
+      setActivityPrompt(null);
+      setRecapOwnerScope(null);
+      setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+      stopRecapRead();
+      stopNextStepsRead();
       void secureState.session().then((session) => {
         setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
@@ -1770,33 +1847,30 @@ export default function AvatarApp(): React.ReactElement {
         // prompt before claiming delivery, so the notification can say the
         // recap is ready. Any failure falls back to the generic prompt.
         void (async () => {
+          const sessionRevision = daySessionRevision.current;
           let recap: ActivityIntervalCardData | null = null;
+          let ensuredResult: Awaited<ReturnType<typeof ensureActivityIntervalReview>> | null = null;
           try {
             setActivityPreparing(true);
             const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
+            ensuredResult = ensured;
             if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
           } catch { /* recap is optional; the generic prompt still fires */ }
           finally { setActivityPreparing(false); }
           try {
-            const { delivered } = await apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
-              method: "POST",
-              headers: { "Idempotency-Key": nudge.key },
-              body: JSON.stringify({}),
-            });
+            if (sessionRevision !== daySessionRevision.current) return;
+            const { delivered } = await deliverActivityIntervalPrompt(ensuredResult, nudge.key, facts.nextPromptAt);
+            if (sessionRevision !== daySessionRevision.current) return;
             if (!delivered || notifiedKeys.current.has(nudge.key)) return;
             notifiedKeys.current.add(nudge.key);
             writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
             if (recap) {
-              setActivityPrompt(recap);
-              if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
-                recapAnnouncedIds.current.add(recap.id);
-                fireNotification({
-                  kind: "hourly",
-                  key: `recap:${recap.id}`,
-                  title: "Your activity recap is ready",
-                  body: `${recap.label}: ${(recap.headline ?? "Review what your screenshots show.").slice(0, 140)}`,
-                }, notificationPermission.current);
-              }
+              void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervalLatest() });
+              if (shouldAutoSwitchWorkspace({
+                current: workspaceViewRef.current,
+                target: "employee",
+                available: avatarViewStateRef.current?.employeeAvailable === true,
+              })) void requestView("employee");
             } else {
               fireNotification(nudge, notificationPermission.current);
             }
@@ -1814,8 +1888,17 @@ export default function AvatarApp(): React.ReactElement {
       notifiedKeys.current.add(nudge.key);
       writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
       fireNotification(nudge, notificationPermission.current);
+      // The EOD wrap-up is an employee arrival; a check-in keeps its snooze
+      // and does not yank the administrator out of Administration.
+      const eodDay = facts.shiftDate || new Date().toLocaleDateString("en-CA");
+      const eodDismissed = isPromptDismissed(promptDismissals, "eod", promptDismissalToken("eod", { day: eodDay }), eodDay);
+      if (!eodDismissed && nudge.kind === "eod" && shouldAutoSwitchWorkspace({
+        current: workspaceViewRef.current,
+        target: "employee",
+        available: avatarViewStateRef.current?.employeeAvailable === true,
+      })) void requestView("employee");
     }
-  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow, promptDueNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow, promptDueNow, promptDismissals]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Goal-question hold: the first recap takes over when it expires ──
   // While the day has no goal the planning prompt holds the day, so the
@@ -1839,16 +1922,12 @@ export default function AvatarApp(): React.ReactElement {
         deliveryKeys.current.delete(key);
       }
       if (recap) {
-        setActivityPrompt(recap);
-        if (notificationPermission.current && !recapAnnouncedIds.current.has(recap.id)) {
-          recapAnnouncedIds.current.add(recap.id);
-          fireNotification({
-            kind: "hourly",
-            key: `recap:${recap.id}`,
-            title: "Your recap is ready",
-            body: `${recap.label}: ${(recap.headline ?? "Review what your screenshots show.").slice(0, 140)}`,
-          }, notificationPermission.current);
-        }
+        void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervalLatest() });
+        if (shouldAutoSwitchWorkspace({
+          current: workspaceViewRef.current,
+          target: "employee",
+          available: avatarViewStateRef.current?.employeeAvailable === true,
+        })) void requestView("employee");
       }
       void loadDay();
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
@@ -2889,30 +2968,36 @@ export default function AvatarApp(): React.ReactElement {
   const promptTurnId = attentionDue && !promptDismissed ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
   // The recap the compact bubble and the chat card treat as current: the live
   // one from the nudge, or the latest undecided recap already in the chat.
+  const recapScope = avatarFixture ? "fixture" : desktopSession?.organizationId && facts.personId ? `${desktopSession.organizationId}:${facts.personId}` : null;
   const pendingRecap = useMemo(() => {
     if (recapSurfaceBlocked) return null;
-    if (activityPrompt && activityPrompt.reviewStatus === "inferred") return activityPrompt;
-    const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
-    return entry?.activityInterval ?? null;
-  }, [activityPrompt, chat, recapSurfaceBlocked]);
+    return scopedPendingRecap(recapScope, recapOwnerScope, activityPrompt, chat.flatMap(item => item.activityInterval ? [item.activityInterval] : []));
+  }, [activityPrompt, chat, recapSurfaceBlocked, recapScope, recapOwnerScope]);
 
   useEffect(() => {
     if (avatarFixture) return;
-    const account = facts.personId ?? null;
+    const account = desktopSession?.organizationId && facts.personId ? `${desktopSession.organizationId}:${facts.personId}` : null;
     if (recapAccountRef.current === account) return;
     recapAccountRef.current = account;
     recapSurfaceWatermark.current = null;
+    autoSwitchRecapIdRef.current = null;
     recapAnnouncedIds.current.clear();
+    setActivityPrompt(null);
+    setRecapOwnerScope(null);
+    setChat(current => current.filter(entry => !entry.activityInterval && !entry.nextSteps));
+    stopRecapRead();
+    stopNextStepsRead();
     setRecapSurfaceBlocked(false);
     setRecapQueueBubble({ prompt: false, awaitingBeat: false });
     setPendingUnapprovedRecaps(0);
-  }, [facts.personId, avatarFixture]);
+  }, [desktopSession?.organizationId, facts.personId, avatarFixture]);
 
   /* The server may create the newest recap while this window is closed. This
      effect is the launch surface: newest ready recap only, re-announced on a
      new launch, and never an older recap after the newest is approved. */
   useEffect(() => {
     const latest = latestRecapQuery.data?.interval ?? null;
+    if (latestRecapQuery.data) setRecapOwnerScope(recapScope);
     if (!latest) return;
     const decision = recapSurfaceDecision({
       latest,
@@ -2924,9 +3009,29 @@ export default function AvatarApp(): React.ReactElement {
       setRecapSurfaceBlocked(true);
       return;
     }
+    if (decision.reason === "not_newer" || latest.reviewStatus !== "inferred") return;
     setRecapSurfaceBlocked(false);
-    if (latest.reviewStatus !== "inferred") return;
-    if (notificationPermission.current && !recapAnnouncedIds.current.has(latest.id)) {
+    // A genuinely new recap is an employee arrival even when Administration is
+    // on screen. The first observation seeds the id: a recap already waiting
+    // when the app opens never yanks the person to the other workspace.
+    const previousRecapId = autoSwitchRecapIdRef.current;
+    const firstObservation = previousRecapId === null;
+    const recapChanged = previousRecapId !== latest.id;
+    autoSwitchRecapIdRef.current = latest.id;
+    const recapDay = facts.shiftDate || new Date().toLocaleDateString("en-CA");
+    const recapDismissed = isPromptDismissed(
+      promptDismissals,
+      "recap",
+      promptDismissalToken("recap", { day: recapDay, recapWatermark: latest.windowStart }),
+      recapDay,
+    );
+    if (recapChanged && !recapDismissed && shouldAutoSwitchWorkspace({
+      current: workspaceViewRef.current,
+      target: "employee",
+      available: avatarViewStateRef.current?.employeeAvailable === true,
+      firstObservation,
+    })) void requestView("employee");
+    if ((decision.surface || decision.reason === "already_pending") && notificationPermission.current && !recapAnnouncedIds.current.has(latest.id)) {
       recapAnnouncedIds.current.add(latest.id);
       fireNotification({
         kind: "hourly",
@@ -2939,7 +3044,7 @@ export default function AvatarApp(): React.ReactElement {
       setActivityPrompt(latest);
       setRecapQueueBubble((current) => reduceRecapQueueBubble(current, { type: "surfaced" }));
     }
-  }, [latestRecapQuery.data, pendingRecap]);
+  }, [latestRecapQuery.data, pendingRecap, recapScope, requestView, promptDismissals, facts.shiftDate]);
 
   useEffect(() => {
     if (!latestRecapQuery.data) return;
@@ -2981,6 +3086,29 @@ export default function AvatarApp(): React.ReactElement {
   // screen. The prompt takes the pose back the moment the card closes.
   const nextStepsOpen = nextStepsMoment !== null;
   const promptLeads = attentionDue && !nextStepsOpen && !promptDismissed;
+
+  /* The day's goal is the third approved employee arrival. A plan prompt that
+     becomes due while Administration is on screen switches once; a prompt that
+     was already waiting at mount does not. */
+  useEffect(() => {
+    const token = contextualPrompt.kind === "agenda" && !promptDismissed
+      ? `${facts.shiftDate}:${facts.planRevision ?? ""}`
+      : null;
+    const state = agendaAutoSwitchRef.current;
+    if (!state.initialized) {
+      state.initialized = true;
+      state.token = token;
+      return;
+    }
+    if (state.token === token) return;
+    state.token = token;
+    if (!token) return;
+    if (shouldAutoSwitchWorkspace({
+      current: workspaceViewRef.current,
+      target: "employee",
+      available: avatarViewStateRef.current?.employeeAvailable === true,
+    })) void requestView("employee");
+  }, [contextualPrompt.kind, facts.shiftDate, facts.planRevision, promptDismissed, requestView]);
   /* The last read of this recap was cancelled while it was still preparing, or
      failed: the control offers another try instead of pretending it never ran. */
   const recapRetry = pendingRecap !== null && recapSpeech.retryIntervalId === pendingRecap.id;
@@ -3086,7 +3214,13 @@ export default function AvatarApp(): React.ReactElement {
   });
   const agentActivity: MascotAgentActivity = mascotVisual.activity;
   const workdayState: MascotWorkdayState = mascotVisual.workday;
-  const showBadge = mascotVisual.pose === "alert";
+  const scopedMascot = modeScopedMascot({
+    mode: workspaceView,
+    employeeAgent: agentActivity,
+    employeeWorkday: workdayState,
+    adminAttention: adminAttentionVisible,
+  });
+  const showBadge = workspaceView === "admin" ? scopedMascot.adminAttention : mascotVisual.pose === "alert";
   const statusText = facts.lateReasonRequired
     ? "Late start — add a reason"
     : daySyncState === "unmapped"
@@ -3244,8 +3378,8 @@ export default function AvatarApp(): React.ReactElement {
       if (current && (current.adminStatus === "failed" || current.adminStatus === "loading")) { void requestViewRetry(); return; }
       if (target) void requestView(target);
     } : undefined}
-    pose={workspaceView === "employee" ? mascotVisual.pose : undefined}
-    tone={workspaceView === "employee" ? mascotVisual.tone : undefined}
+    pose={scopedMascot.agent === "needs-input" ? "alert" : workspaceView === "admin" ? "focus" : mascotVisual.pose}
+    tone={mascotVisual.tone}
     className="avatar-head-switch"
   />;
 
@@ -3322,6 +3456,9 @@ export default function AvatarApp(): React.ReactElement {
         } : { send: coordinatedAdminSend, discard: coordinatedAdminDiscard }}
         initialInbox={avatarAdminViewFixtureRequested ? fixtureInboxPage({ count: 1, total: 1, nextCursor: null, unread: 1 }) : null}
         initialRecap={avatarAdminViewFixtureRequested ? FIXTURE_REVIEWED_RECAP : null}
+        attention={adminAttentionVisible ? adminAttention : null}
+        onOpenAttention={openAdminAttention}
+        onDismissAttention={dismissAdminAttentionPrompt}
         previewOnly={false}
         onClose={() => void toggleExpanded(false)}
       />
@@ -3431,17 +3568,29 @@ export default function AvatarApp(): React.ReactElement {
             onDismiss={dismissibleKind ? dismissCurrentPrompt : undefined}
           />
         )}
+        {workspaceView === "admin" && adminAttentionVisible && adminAttention && (
+          <AdminAttentionBubble
+            item={adminAttention}
+            onOpen={() => { void toggleExpanded(true); }}
+            onAction={() => openAdminAttention(adminAttention)}
+            onDismiss={() => dismissAdminAttentionPrompt(adminAttention)}
+          />
+        )}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); stopNextStepsRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"
           onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}
-          title={workspaceView === "admin" ? `${MASCOT.name} · Admin` : showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
-          aria-label={workspaceView === "admin" ? `Open ${MASCOT.name} Administration` : showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
+          title={workspaceView === "admin"
+            ? scopedMascot.adminAttention ? `${MASCOT.name} · Admin needs attention` : `${MASCOT.name} · Admin`
+            : showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
+          aria-label={workspaceView === "admin"
+            ? scopedMascot.adminAttention ? `${MASCOT.name}: admin attention. Open Administration.` : `Open ${MASCOT.name} Administration`
+            : showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
           <MascotPet
-            agent={workspaceView === "admin" ? "idle" : agentActivity}
-            workday={workspaceView === "admin" ? "active" : workdayState}
-            isolated={workspaceView === "admin"}
+            agent={scopedMascot.agent}
+            workday={scopedMascot.workday}
+            isolated
             mode={workspaceView}
             animateAttire
             className="avatar-pet"
@@ -3452,7 +3601,7 @@ export default function AvatarApp(): React.ReactElement {
           {/* One marker, one meaning: it appears when Otto needs attention.
               Shift progress lives in the elapsed pill; the old pie marker read
               as a stray wedge beside the figure. */}
-          {workspaceView === "employee" && showBadge && <span className="avatar-badge" aria-hidden="true" />}
+          {showBadge && <span className="avatar-badge" aria-hidden="true" />}
         </button>
         {workspaceView === "admin"
           ? <span className="avatar-admin-label">Admin</span>

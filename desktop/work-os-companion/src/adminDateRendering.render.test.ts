@@ -30,7 +30,7 @@ function renderPersonRecord() {
     updates: [],
     intervals: [],
     recapDays: [],
-    evidenceSummary: { total: 2, activity: 2, output: 0, disputed: 0 },
+    evidenceSummary: { total: 2, activity: 2, output: 0, ghl: 0, disputed: 0 },
   });
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client },

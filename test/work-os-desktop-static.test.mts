@@ -506,7 +506,8 @@ assert.match(notificationFlyouts, /clearPersistent/);
 assert.match(notificationFlyouts, /persistence === "persistent"/);
 
 const debugWindow = read("src/DebugWindow.tsx");
-assert.match(debugWindow, /if \(!isTauri\(\)\)/);
+assert.match(debugWindow, /if \(!appWindow\) \{ window\.close\(\); return; \}/);
+assert.match(debugWindow, /appWindow\.close\(\)/);
 for (const event of ["work-os://debug-request", "work-os://debug-current", "work-os://debug-scenario"]) {
   assert.match(debugWindow, new RegExp(event.replaceAll("/", "\\/")));
 }
@@ -694,7 +695,8 @@ assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/)
 assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
 assert.match(avatar, /const workdayState: MascotWorkdayState =/);
 assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);
-assert.match(avatar, /<MascotPet[\s\S]*?agent=\{workspaceView === "admin" \? "idle" : agentActivity\}/);
+assert.match(avatar, /<MascotPet[\s\S]*?agent=\{scopedMascot\.agent\}/);
+assert.match(avatar, /workday=\{scopedMascot\.workday\}/);
 assert.match(avatar, /mode=\{workspaceView\}/);
 assert.match(avatar, /animateAttire/);
 assert.match(avatar, /Late start — add a reason/);
