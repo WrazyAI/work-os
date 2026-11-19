@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
+import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
+import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
+import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { payrollProviderDeps, refreshPayrollProviderEvidence, type PayrollProviderVerification } from "@/lib/work-os-payroll-provider";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import {
   approvalFromRow, loadPayrollReview, loadPayrollReviewRow, payrollObject, reviewScope,
   payrollTransaction, totalsFromJson, verifyCommand, payrollDateKey,
 } from "@/lib/work-os-payroll-decisions";
 import type {
-  PayrollApproval, PayrollCommand, PayrollReview, PayrollTotals,
+  PayrollApproval, PayrollCommand, PayrollReview, PayrollScope, PayrollTotals,
 } from "@/modules/work-os/payroll/contracts";
 
 type Row = Record<string, unknown>;
@@ -24,10 +28,37 @@ function totalsOfDays(days: Row[]): PayrollTotals {
   return totals;
 }
 
-export async function approvePayrollReview(access: WorkOsAccess, reviewId: string, input: PayrollCommand & { note?: string }): Promise<PayrollApproval> {
+export type PayrollApprovalDeps = {
+  /** Complete, bounded provider re-read performed outside the approval transaction. */
+  refreshProvider?: (scope: PayrollScope, period: PayrollReview["period"]) => Promise<PayrollProviderVerification>;
+};
+
+export async function approvePayrollReview(access: WorkOsAccess, reviewId: string, input: PayrollCommand & { note?: string }, deps: PayrollApprovalDeps = {}): Promise<PayrollApproval> {
   requireAdmin(access);
   if (!input.requestKey.trim()) throw new WorkOsValidationError("An approval request key is required.");
   const scope = await reviewScope(access, reviewId);
+  const preflight = await getPool().query(`SELECT pay_date,timezone FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 AND person_id=$3`,
+    [scope.organizationId, reviewId, scope.personId]);
+  if (!preflight.rows.length) throw new WorkOsValidationError("Payroll review not found");
+  const duplicateRequest = await getPool().query(`SELECT 1 FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND request_key=$3`,
+    [scope.organizationId, reviewId, input.requestKey]);
+  let refreshed: PayrollProviderVerification | null = null;
+  if (!duplicateRequest.rows.length) {
+    const period = resolvePayrollPeriod(payrollDateKey(preflight.rows[0].pay_date)!, String(preflight.rows[0].timezone ?? "UTC"));
+    try {
+      const consent = await employeeTrackingConsent(scope.organizationId, scope.personId);
+      if (!consent.tracking) throw new Error("Tracking consent is required");
+      refreshed = await (deps.refreshProvider ?? ((s, p) => refreshPayrollProviderEvidence(s, p, payrollProviderDeps(s))))(scope, period);
+    } catch (error) {
+      throw new WorkOsConflictError(
+        `A complete provider refresh is required before approval. ${error instanceof Error ? error.message.slice(0, 200) : ""}`.trim(),
+        "payroll_provider_refresh_failed",
+      );
+    }
+    if (!refreshed.complete || !refreshed.fingerprint) {
+      throw new WorkOsConflictError("Provider evidence is incomplete; approval is blocked.", "payroll_provider_refresh_failed");
+    }
+  }
   const result = await payrollTransaction(scope, async (client) => {
     const review = await loadPayrollReviewRow(client, scope, reviewId);
     const existing = await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND request_key=$3`, [scope.organizationId, reviewId, input.requestKey]);
@@ -35,9 +66,9 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     verifyCommand(review, input);
     if (String(review.status) === "approved") throw new WorkOsConflictError("This payroll review is already approved.", "payroll_already_approved");
     if (String(review.status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
-    const locked = await client.query(`SELECT row_version,status FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [scope.organizationId, reviewId]);
+    const locked = await client.query(`SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [scope.organizationId, reviewId]);
     if (!locked.rows.length || String(locked.rows[0].status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
-    review.row_version = locked.rows[0].row_version;
+    Object.assign(review, locked.rows[0]);
     const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
     if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
     const priorRow = review.current_approval_id
@@ -55,10 +86,17 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
         AND blocks_approval AND status IN ('needs_review','needs_correction') LIMIT 1`,
     [scope.organizationId, reviewId, review.analysis_revision]);
     if (blocking.rows.length) throw new WorkOsConflictError("A held or correction-required payroll finding blocks approval.", "payroll_findings_unresolved");
-    const revision = (await client.query(`SELECT source_token,policy_version,as_of FROM work_payroll_analysis_revisions
+    const revision = (await client.query(`SELECT source_token,policy_version,as_of,provider_watermark,provider_verified_at,resolved_policy FROM work_payroll_analysis_revisions
       WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`,
     [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
     if (!revision || !revision.source_token) throw new WorkOsConflictError("Payroll source evidence is not frozen.", "payroll_sources_missing");
+    if (refreshed) {
+      const frozenFingerprint = String(object(revision.resolved_policy).providerFingerprint ?? "");
+      if (!frozenFingerprint) throw new WorkOsConflictError("Re-analyze this payroll review to record a provider verification before approval.", "payroll_provider_unverified");
+      if (frozenFingerprint !== refreshed.fingerprint) {
+        throw new WorkOsConflictError("Provider evidence changed since analysis; re-analyze before approval.", "payroll_provider_changed");
+      }
+    }
     await verifyPayrollSourceToken(client, scope, String(revision.source_token));
     const days = (await client.query(`SELECT * FROM work_payroll_days
       WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY local_date`,
@@ -82,8 +120,17 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       schemaVersion: "payroll-approval-v1",
       period,
       identity: { displayName: String(person?.display_name ?? "Employee") },
-      totals: { ...totals, approved: totals.recommended },      exact: days.map((day) => ({ date: payrollDateKey(day.local_date), exactMs: day.exact_ms })),
-      days: days.map((day) => ({ date: payrollDateKey(day.local_date), minutes: { ...object(day.result).minutes as unknown as PayrollTotals, approved: Number(object(object(day.result).minutes).recommended ?? 0) }, status: day.status })),
+      totals: { ...totals, approved: totals.recommended },
+      exact: days.map((day) => ({ date: payrollDateKey(day.local_date), exactMs: day.exact_ms })),
+      days: days.map((day) => {
+        const minutes = { ...object(day.result).minutes as unknown as PayrollTotals, approved: Number(object(object(day.result).minutes).recommended ?? 0) };
+        const schedule = object(day.schedule_snapshot);
+        const sessionIds = Array.isArray(day.session_ids) ? day.session_ids as unknown[] : [];
+        return {
+          date: payrollDateKey(day.local_date), minutes, status: String(day.status ?? ""),
+          schedule: String(schedule.scheduleSource ?? ""), sessionCount: sessionIds.length,
+        };
+      }),
       briefs: briefs.map((brief) => ({
         week: brief.week, status: brief.status, title: brief.title, summary: brief.summary_markdown,
         summaryCitations: brief.summary_citations ?? [], themes: brief.themes ?? [], openItems: brief.open_items ?? [],
@@ -100,6 +147,11 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       sourceExplanation: {
         sourceHash: review.source_hash, sourceToken: revision.source_token,
         policyVersion: revision.policy_version, asOf: revision.as_of,
+        providerWatermark: refreshed?.watermark ?? revision.provider_watermark ?? null,
+        providerVerifiedAt: refreshed?.verifiedAt ?? (revision.provider_verified_at instanceof Date
+          ? revision.provider_verified_at.toISOString() : revision.provider_verified_at ?? null),
+        providerFingerprint: refreshed?.fingerprint ?? String(object(revision.resolved_policy).providerFingerprint ?? ""),
+        providerPages: refreshed?.pages ?? null,
       },
       approvedBy: access.ctx.user.id, approvedAt: new Date().toISOString(),
     };
@@ -116,7 +168,7 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     await client.query(`UPDATE work_payroll_days SET approved_minutes=recommended_minutes, updated_at=now()
       WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3`,
     [scope.organizationId, reviewId, review.analysis_revision]);
-    const published = await client.query(`UPDATE work_payroll_reviews SET status='approved', current_approval_id=$3,
+    await client.query(`UPDATE work_payroll_reviews SET status='approved', current_approval_id=$3,
       approved_minutes=$4, approved_by=$5, approved_at=now(), approval_note=$6, totals=$7::jsonb,
       retention_expires_at=greatest(retention_expires_at, now()+interval '30 days', pay_date + interval '30 days'),
       evidence_changed_since_approval=false, row_version=row_version+1, updated_at=now()
@@ -127,7 +179,7 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     }
     await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
       VALUES ($1,$2,'payroll.approved','payroll_review',$3,$4::jsonb)`,
-    [scope.organizationId, access.ctx.user.id, reviewId, JSON.stringify({ approvalId: approval.id, revision: nextRevision, snapshotHash, approvedMinutes: totals.recommended })]);
+    [scope.organizationId, access.ctx.user.id, reviewId, JSON.stringify({ approvalId: approval.id, revision: nextRevision, snapshotHash, approvedMinutes: totals.recommended, providerFingerprint: refreshed?.fingerprint ?? null, providerVerifiedAt: refreshed?.verifiedAt ?? null })]);
     return approvalFromRow(approval, scope, period);
   });
   return result;

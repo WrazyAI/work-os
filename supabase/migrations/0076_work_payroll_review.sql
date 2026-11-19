@@ -133,7 +133,7 @@ create table if not exists work_payroll_frame_findings (
   foreign key(organization_id,review_id,person_id,analysis_revision,day_id) references work_payroll_days(organization_id,review_id,person_id,analysis_revision,id),
   foreign key(organization_id,person_id,screenshot_summary_id) references work_screenshot_summaries(organization_id,person_id,id) on delete cascade,
   foreign key(organization_id,person_id,evidence_event_id) references work_evidence_events(organization_id,person_id,id) on delete cascade,
-  unique(organization_id,person_id,screenshot_summary_id,classification_key)
+  unique(organization_id,review_id,person_id,analysis_revision,day_id,screenshot_summary_id,classification_key)
 );
 create table if not exists work_payroll_week_briefs (
   id uuid primary key default gen_random_uuid(), organization_id uuid not null, review_id uuid not null, person_id uuid not null,
@@ -238,6 +238,11 @@ begin
   return greatest(0,ceil(extract(epoch from slot-clock_timestamp())*1000))::int;
 end $$;
 revoke all on function work_payroll_reserve_provider_slot(uuid,uuid) from public;
+do $$ begin
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function work_payroll_reserve_provider_slot(uuid,uuid) to service_role;
+  end if;
+end $$;
 create table if not exists work_payroll_audit_events (
   id uuid primary key default gen_random_uuid(), organization_id uuid not null, review_id uuid not null, person_id uuid not null,
   actor_user_id uuid, action text not null, request_key text not null, metadata jsonb not null default '{}', created_at timestamptz not null default now(),
@@ -332,7 +337,12 @@ do $$ declare t text; c text; p text; o text; begin
   end loop;
 end $$;
 revoke all on function work_payroll_source_touch() from public;
-do $$ begin execute format('grant execute on function work_payroll_source_touch() to %I',current_user); end $$;
+do $$ begin
+  execute format('grant execute on function work_payroll_source_touch() to %I',current_user);
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function work_payroll_source_touch() to service_role;
+  end if;
+end $$;
 
 -- A NOLOGIN function owner, NOT an application-controlled override setting.
 do $$ begin
@@ -416,6 +426,9 @@ revoke all on function work_payroll_immutable(), work_payroll_parent_delete_guar
 grant usage,create on schema public to work_payroll_retention;
 do $$ begin
   execute format('grant execute on function work_payroll_purge_expired(uuid,uuid) to %I',current_user);
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function work_payroll_purge_expired(uuid,uuid) to service_role;
+  end if;
 end $$;
 alter function work_payroll_purge_expired(uuid,uuid) owner to work_payroll_retention;
 revoke create on schema public from work_payroll_retention;

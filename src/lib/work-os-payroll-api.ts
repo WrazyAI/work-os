@@ -24,7 +24,10 @@ export function payrollCursor(url: URL): string | null {
 
 export function payrollError(error: unknown): NextResponse {
   const message = error instanceof Error ? error.message : "Payroll request failed.";
-  const status = /not found/i.test(message) ? 404 : /expired/i.test(message) ? 410 : /conflict|changed|stale|revision|already|running|pending|held/i.test(message) ? 409 : /forbidden|admin-only|not enabled/i.test(message) ? 403 : 400;
+  const status = /not found/i.test(message) ? 404 : /expired/i.test(message) ? 410
+    : /conflict|changed|stale|revision|already|running|pending|held/i.test(message) ? 409
+      : /refresh|unavailable|offline/i.test(message) ? 503
+        : /forbidden|admin-only|not enabled/i.test(message) ? 403 : 400;
   return NextResponse.json({ error: "The payroll request could not be completed." }, { status, headers: { "Cache-Control": "no-store" } });
 }
 

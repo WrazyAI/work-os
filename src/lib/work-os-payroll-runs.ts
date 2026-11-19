@@ -3,8 +3,9 @@ import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { localDayBounds } from "@/modules/work-os/companion";
 import { ensurePayrollRecapApproval } from "@/lib/work-os-payroll-recap-approval";
-import { fetchPayrollProviderPage, payrollProviderDeps, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
+import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
 import { buildPayrollDayInputs, loadPayrollSources } from "@/lib/work-os-payroll-sources";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import { payrollPeriodExpired } from "@/lib/work-os-payroll-retention";
@@ -13,11 +14,17 @@ import { classifyPayrollFrame, selectPayrollFrames } from "@/lib/work-os-payroll
 import { advancePayrollWeekBrief, type BriefCheckpoint } from "@/lib/work-os-payroll-briefs";
 import { resolvePayrollAiPolicy, type PayrollAiPolicy } from "@/lib/work-os-payroll-ai";
 import type {
-  NormalizedActivity, PayrollDayResult, PayrollFrameResult,
+  NormalizedActivity, PayrollDayInput, PayrollDayResult, PayrollFrameResult,
   PayrollPeriod, PayrollProgress, PayrollRun, PayrollScope, PayrollSourceManifest,
 } from "@/modules/work-os/payroll/contracts";
 
 const LEASE_MS = 180_000;
+function providerBounds(period: PayrollPeriod): { startMs: number; endMs: number } {
+  return {
+    startMs: Date.parse(localDayBounds(period.from, period.timezone).startIso),
+    endMs: Date.parse(localDayBounds(period.through, period.timezone).endIso) + 60 * 60_000,
+  };
+}
 
 export type PayrollRunDeps = {
   now: () => Date;
@@ -205,14 +212,21 @@ function dayTotals(days: PayrollDayResult[]) {
   return totals;
 }
 
-async function persistDay(scope: PayrollScope, run: RunRow, day: PayrollDayResult, at: Date, token: string): Promise<void> {
+async function persistDay(scope: PayrollScope, run: RunRow, day: PayrollDayResult, at: Date, token: string, frameResults: Record<string, PayrollFrameResult> = {}, frameCandidates: PayrollDayInput["frameCandidates"] = [], input?: PayrollDayInput): Promise<void> {
+  const sessionIds = JSON.stringify((input?.sessions ?? []).map((session) => session.id));
+  const scheduleSnapshot = JSON.stringify(input ? {
+    scheduleSource: input.sessions[0]?.scheduleSource ?? "none",
+    sessions: input.sessions.map((session) => ({ id: session.id, recorded: session.recorded, eligible: session.eligible, scheduleSource: session.scheduleSource })),
+    breaks: input.breaks,
+  } : {});
   await transaction(async (client) => {
     const saved = await client.query(`INSERT INTO work_payroll_days
-      (organization_id,review_id,person_id,analysis_revision,local_date,week,status,recorded_ms,eligible_ms,exact_ms,partition,
+      (organization_id,review_id,person_id,analysis_revision,local_date,week,status,session_ids,schedule_snapshot,recorded_ms,eligible_ms,exact_ms,partition,
        tracked_minutes,break_minutes,inactivity_minutes,outside_minutes,held_minutes,recommended_minutes,manual_excluded_minutes,
        activity_summary,findings_summary,source_hash,original_result,result)
-      VALUES ($1,$2,$3,$4,$5::date,$6,'calculated',$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14,$15,$16,$17,'{}','{}',$18,$19::jsonb,$19::jsonb)
+      VALUES ($1,$2,$3,$4,$5::date,$6,'calculated',$7::jsonb,$8::jsonb,$9,$10,$11::jsonb,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,'{}','{}',$20,$21::jsonb,$21::jsonb)
       ON CONFLICT (organization_id,review_id,analysis_revision,local_date) DO UPDATE SET
+        session_ids=excluded.session_ids, schedule_snapshot=excluded.schedule_snapshot,
         recorded_ms=excluded.recorded_ms, eligible_ms=excluded.eligible_ms, exact_ms=excluded.exact_ms,
         partition=excluded.partition, tracked_minutes=excluded.tracked_minutes, break_minutes=excluded.break_minutes,
         inactivity_minutes=excluded.inactivity_minutes, outside_minutes=excluded.outside_minutes, held_minutes=excluded.held_minutes,
@@ -220,6 +234,7 @@ async function persistDay(scope: PayrollScope, run: RunRow, day: PayrollDayResul
         source_hash=excluded.source_hash, original_result=excluded.original_result, result=excluded.result, updated_at=now()
       RETURNING id`,
     [scope.organizationId, run.review_id, scope.personId, run.target_revision, day.date, day.week,
+      sessionIds, scheduleSnapshot,
       Object.values(day.exactMs).reduce((sum, value) => sum + value, 0),
       day.exactMs.payable + day.exactMs.break + day.exactMs.inactivity + day.exactMs.held + day.exactMs.manual, JSON.stringify(day.exactMs), JSON.stringify(day.partition),
       day.minutes.eligibleTracked, day.minutes.break, day.minutes.inactivity, day.minutes.outside, day.minutes.held,
@@ -238,6 +253,17 @@ async function persistDay(scope: PayrollScope, run: RunRow, day: PayrollDayResul
         finding.span ? new Date(finding.span.startMs).toISOString() : null,
         finding.span ? new Date(finding.span.endMs).toISOString() : null,
         finding.durationMs, finding.minutes, finding.reason, JSON.stringify({}), JSON.stringify(finding.citations), finding.sourceHash]);
+    }
+    for (const frame of frameCandidates) {
+      const result = frameResults[frame.summaryId];
+      if (!result) continue;
+      await client.query(`INSERT INTO work_payroll_frame_findings
+        (organization_id,review_id,person_id,analysis_revision,day_id,screenshot_summary_id,evidence_event_id,captured_at,category,confidence,reason,model,prompt_version,rubric_hash,classification_key,source_hash,policy_hash)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'payroll-frame-rubric-v1',$14,$15,$16)
+        ON CONFLICT (organization_id,review_id,person_id,analysis_revision,day_id,screenshot_summary_id,classification_key) DO NOTHING`,
+      [scope.organizationId, run.review_id, scope.personId, run.target_revision, dayId, frame.summaryId, frame.evidenceEventId,
+        frame.capturedAt, result.category, result.confidence, result.reason, result.model, result.promptVersion,
+        result.classificationKey, result.sourceHash, frame.policyVersion]);
     }
     const guarded = await client.query(`UPDATE work_payroll_runs SET cursor=$4::jsonb, updated_at=$5
       WHERE organization_id=$1 AND id=$2 AND lease_token=$3 AND lease_until > $5 RETURNING id`,
@@ -280,25 +306,51 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       const manifest = await deps.loadSources(scope, period, new Date(String(run.as_of)));
       await persistRun(scope, runId, token, at, { phase: "evidence", inputManifest: manifest as unknown as Json, sourceHash: manifest.sourceToken, progress: { message: "Sources captured; reading provider evidence.", days: manifest.days.length, daysDone: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: manifest.days.length } });
     } else if (phase === "evidence") {
+      const consent = await (await import("@/lib/work-os-onboarding")).employeeTrackingConsent(scope.organizationId, scope.personId);
+      if (!consent.tracking) {
+        await persistRun(scope, runId, token, at, { status: "failed", error: "tracking_consent_required", progress: { message: "Tracking consent is required before provider evidence can be ingested.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 } });
+        await release(scope, runId, token);
+        return { phase: "done", message: "Tracking consent is required.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null };
+      }
       const resolve = deps.resolveConnection ?? resolvePayrollProviderConnection;
       const connection = await resolve(scope);
       const manifest = run.input_manifest as unknown as PayrollSourceManifest;
       const pages = object(run.fetch_cursor);
       const page = await deps.fetchProviderPage({
-        scope, employeeId: connection.employeeId, bounds: { startMs: Date.parse(`${period.from}T00:00:00Z`), endMs: Date.parse(`${period.through}T00:00:00Z`) + 86_400_000 },
+        scope, employeeId: connection.employeeId, bounds: providerBounds(period),
         cursor: typeof pages.cursor === "string" ? pages.cursor : null, connectionId: connection.connectionId,
       }, deps.providerDeps ?? payrollProviderDeps(scope));
       const logs = Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : [];
+      const combinedLogs = [...logs, ...page.logs];
+      const previousProvider = object(artifact.provider);
+      const watermark = String(page.watermark && page.watermark > String(previousProvider.watermark ?? "")
+        ? page.watermark : previousProvider.watermark ?? "");
       await persistRun(scope, runId, token, at, {
         phase: page.complete ? "classify" : "evidence",
         fetchCursor: { cursor: page.nextCursor },
-        inputArtifact: { ...artifact, logs: [...logs, ...page.logs] },
+        inputArtifact: {
+          ...artifact, logs: combinedLogs,
+          provider: {
+            complete: page.complete,
+            watermark,
+            verifiedAt: page.complete ? at.toISOString() : previousProvider.verifiedAt ?? null,
+            fingerprint: page.complete ? payrollProviderFingerprint(combinedLogs) : null,
+            pages: Number(previousProvider.pages ?? 0) + 1,
+          },
+        },
         progress: { message: page.complete ? "Provider pages complete; classifying ambiguous frames." : "Reading provider evidence pages.", days: manifest.days.length, daysDone: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: manifest.days.length },
       });
     } else if (phase === "classify") {
+      const consent = await (await import("@/lib/work-os-onboarding")).employeeTrackingConsent(scope.organizationId, scope.personId);
+      if (!consent.tracking) {
+        await persistRun(scope, runId, token, at, { status: "failed", error: "tracking_consent_required", progress: { message: "Tracking consent was withdrawn before frame classification.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 } });
+        await release(scope, runId, token);
+        return { phase: "done", message: "Tracking consent was withdrawn.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null };
+      }
       const manifest = run.input_manifest as unknown as PayrollSourceManifest;
       const logs = Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : [];
-      const provider = { scope, connectionId: "run", bounds: { startMs: Date.parse(`${period.from}T00:00:00Z`), endMs: Date.parse(`${period.through}T00:00:00Z`) + 86_400_000 }, logs, complete: true, watermark: "", verifiedAt: at.toISOString(), semantics: { version: "worktivity-activitylog-v1", verified: false, direction: "unknown" as const, durationMs: 60_000 }, apps: { items: [], complete: true, coverage: [], enumLabels: {} } };
+      const providerState = object(artifact.provider);
+      const provider = { scope, connectionId: "run", bounds: providerBounds(period), logs, complete: providerState.complete === true, watermark: String(providerState.watermark ?? ""), verifiedAt: iso(providerState.verifiedAt) ?? at.toISOString(), semantics: { version: "worktivity-activitylog-v1", verified: false, direction: "unknown" as const, durationMs: 60_000 }, apps: { items: [], complete: true, coverage: [], enumLabels: {} } };
       const days = buildPayrollDayInputs(manifest, provider);
       const dayIndex = Number(cursor.classifyIndex ?? 0);
       if (dayIndex >= days.length) {
@@ -315,22 +367,41 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
         if (nextClassify >= days.length) await persistRun(scope, runId, token, at, { phase: "days" });
       }
     } else if (phase === "days") {
+      const consent = await (await import("@/lib/work-os-onboarding")).employeeTrackingConsent(scope.organizationId, scope.personId);
+      if (!consent.tracking) {
+        await persistRun(scope, runId, token, at, { status: "failed", error: "tracking_consent_required", progress: { message: "Tracking consent was withdrawn before payroll hours were calculated.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 } });
+        await release(scope, runId, token);
+        return { phase: "done", message: "Tracking consent was withdrawn.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null };
+      }
       const manifest = run.input_manifest as unknown as PayrollSourceManifest;
       const logs = Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : [];
-      const provider = { scope, connectionId: "run", bounds: { startMs: Date.parse(`${period.from}T00:00:00Z`), endMs: Date.parse(`${period.through}T00:00:00Z`) + 86_400_000 }, logs, complete: true, watermark: "", verifiedAt: at.toISOString(), semantics: { version: "worktivity-activitylog-v1", verified: false, direction: "unknown" as const, durationMs: 60_000 }, apps: { items: [], complete: true, coverage: [], enumLabels: {} } };
+      const providerState = object(artifact.provider);
+      const provider = { scope, connectionId: "run", bounds: providerBounds(period), logs, complete: providerState.complete === true, watermark: String(providerState.watermark ?? ""), verifiedAt: iso(providerState.verifiedAt) ?? at.toISOString(), semantics: { version: "worktivity-activitylog-v1", verified: false, direction: "unknown" as const, durationMs: 60_000 }, apps: { items: [], complete: true, coverage: [], enumLabels: {} } };
       const days = buildPayrollDayInputs(manifest, provider);
       const dayIndex = Number(cursor.dayIndex ?? 0);
       if (dayIndex >= days.length) {
         await persistRun(scope, runId, token, at, { phase: "briefs", progress: { message: "Daily hours complete; compiling week briefs.", days: days.length, daysDone: days.length, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 } });
       } else {
-        const result = deps.calculateDay(days[dayIndex]);
+        const frameResults = object(artifact.frameResults) as Record<string, PayrollFrameResult>;
+        const frameSignals = days[dayIndex].frameCandidates.flatMap((frame) => {
+          const result = frameResults[frame.summaryId];
+          if (!result) return [];
+          const atMs = Date.parse(frame.capturedAt);
+          return [{ span: { startMs: atMs, endMs: atMs + 60_000 }, category: result.category, confidence: result.confidence, citations: [], findingKey: `frame:${frame.summaryId}` }];
+        });
+        const result = deps.calculateDay({ ...days[dayIndex], frameSignals });
+        const providerState = object(artifact.provider);
+        const providerWatermark = String(providerState.watermark ?? "");
+        const providerVerifiedAt = iso(providerState.verifiedAt);
+        const providerFingerprint = String(providerState.fingerprint ?? "") || payrollProviderFingerprint(logs);
         await getPool().query(`INSERT INTO work_payroll_analysis_revisions
-          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10)
+          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb)
           ON CONFLICT (organization_id,review_id,person_id,analysis_revision) DO NOTHING`,
         [scope.organizationId, run.review_id, scope.personId, run.target_revision, manifest.hash, manifest.policyVersion,
-          run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash]);
-        await persistDay(scope, run, result, at, token);
+          run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash,
+          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint })]);
+        await persistDay(scope, run, result, at, token, artifact.frameResults as Record<string, PayrollFrameResult>, days[dayIndex].frameCandidates, days[dayIndex]);
         await persistRun(scope, runId, token, at, { progress: { message: "Calculating daily hours.", days: days.length, daysDone: dayIndex + 1, framesClassified: 0, framesReused: 0, findings: result.findings.length, remaining: days.length - dayIndex - 1 } });
       }
     } else if (phase === "briefs") {
@@ -372,11 +443,17 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
         const results = days.rows.map((row) => object(row.result) as unknown as PayrollDayResult);
         const totals = dayTotals(results);
         const manifest = run.input_manifest as unknown as PayrollSourceManifest;
+        const providerState = object(artifact.provider);
+        const providerWatermark = String(providerState.watermark ?? "");
+        const providerVerifiedAt = iso(providerState.verifiedAt);
+        const providerFingerprint = String(providerState.fingerprint ?? "")
+          || payrollProviderFingerprint(Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : []);
         await client.query(`INSERT INTO work_payroll_analysis_revisions
-          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,resolved_policy)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,'{}')
+          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb)
           ON CONFLICT (organization_id,review_id,person_id,analysis_revision) DO NOTHING`,
-        [scope.organizationId, run.review_id, scope.personId, run.target_revision, manifest.hash, manifest.policyVersion, run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash]);
+        [scope.organizationId, run.review_id, scope.personId, run.target_revision, manifest.hash, manifest.policyVersion, run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash,
+          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint })]);
         const blocked = results.some((day) => day.blockers.length || day.findings.some((finding) => finding.blocksApproval));
         const published = await client.query(`UPDATE work_payroll_reviews SET
           status=$4, analysis_revision=$5, row_version=row_version+1, source_hash=$6, totals=$7::jsonb,

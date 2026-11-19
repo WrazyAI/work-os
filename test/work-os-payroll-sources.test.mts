@@ -103,6 +103,32 @@ test("provider captures attach to the owning shift and incomplete paging blocks"
   assert.equal(built.find((item) => item.date === "2026-11-05")!.captures.length, 1);
   assert.ok(built.find((item) => item.date === "2026-11-05")!.blockers.some((line) => /incomplete/i.test(line)));
   assert.equal(built.find((item) => item.date === "2026-11-05")!.captures[0].id, "inside");
+  const unscheduled = built.find((item) => item.date === "2026-11-09");
+  assert.ok(unscheduled, "activity on an unscheduled day is materialized, never dropped");
+  assert.equal(unscheduled!.sessions.length, 0);
+  assert.ok(unscheduled!.blockers.some((line) => /no eligible schedule/i.test(line)));
+});
+
+test("provider and session break sources are located once without double-deducting", async () => {
+  const { buildPayrollDayInputs } = await sources();
+  const shift = { startMs: Date.parse("2026-11-05T09:00:00Z"), endMs: Date.parse("2026-11-05T17:00:00Z") };
+  const breakSpan = { startMs: Date.parse("2026-11-05T12:00:00Z"), endMs: Date.parse("2026-11-05T12:10:00Z") };
+  const base = manifest({
+    days: [day({
+      date: "2026-11-05", pauseResidualMs: 600_000,
+      sessions: [{ id: "s1", recorded: shift, eligible: { startMs: shift.startMs, endMs: shift.endMs + 3_600_000 }, closed: true, scheduleSource: "session_stamp", correctionStatus: "original" }],
+    })],
+  });
+  const provider = {
+    scope, connectionId: "c", bounds: shift, logs: [
+      { id: "break", employeeId: "e", capturedAt: "2026-11-05T12:00:00.000Z", span: breakSpan, activity: null, zeroEligible: false, status: 2, app: "Break", title: "Break", domain: null, productivityCode: null },
+    ], complete: true, watermark: "w2", verifiedAt: "2026-11-16T06:05:00Z",
+    semantics: { version: "v1", verified: false, direction: "unknown" as const, durationMs: 60_000 },
+    apps: { items: [], complete: true, coverage: [], enumLabels: {} },
+  };
+  const built = buildPayrollDayInputs(base, provider).find((item) => item.date === "2026-11-05")!;
+  assert.ok(built.breaks.some((item) => item.source === "provider_break" && item.span.startMs === breakSpan.startMs));
+  assert.equal(built.pauseResidualMs, 0, "the located provider break is not also an unlocated residual");
 });
 
 test("a timezone change cannot move the frozen period dates", async () => {

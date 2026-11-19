@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
-import { readPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
+import { loadPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
+import { subtractSpans, unionSpans } from "@/lib/work-os-payroll-intervals";
 import { localDateForTimezone, resolveShiftWindowForDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { recapReviewSource } from "@/modules/work-os/recap-review";
 import type {
@@ -109,23 +110,26 @@ async function sessionBreaks(client: PoolClient, scope: PayrollScope, sessionIds
 
 export async function loadPayrollSources(scope: PayrollScope, period: PayrollPeriod, asOf: Date): Promise<PayrollSourceManifest> {
   if (!Number.isFinite(asOf.getTime())) throw new Error("Payroll source observation instant is invalid");
-  const pool = getPool();
-  const person = await pool.query(`SELECT p.timezone,
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const sourceToken = await loadPayrollSourceToken(client, scope);
+  const person = await client.query(`SELECT p.timezone,
       coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o
         WHERE o.organization_id=p.organization_id AND o.person_id=p.id), p.timezone, 'UTC') AS effective_timezone
     FROM work_people p WHERE p.organization_id=$1 AND p.id=$2`, [scope.organizationId, scope.personId]);
   if (!person.rows.length) throw new Error("Payroll person not found");
-  const scheduleQuery = await pool.query(`SELECT * FROM work_schedules
+  const scheduleQuery = await client.query(`SELECT * FROM work_schedules
     WHERE organization_id=$1 AND person_id=$2
       AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $4::date)
     ORDER BY effective_from DESC`, [scope.organizationId, scope.personId, period.through, period.from]);
-  const exceptionQuery = await pool.query(`SELECT * FROM work_schedule_exceptions
+  const exceptionQuery = await client.query(`SELECT * FROM work_schedule_exceptions
     WHERE organization_id=$1 AND person_id=$2 AND exception_date BETWEEN $3::date AND $4::date`,
   [scope.organizationId, scope.personId, period.from, period.through]);
-  const sessionQuery = await pool.query(`SELECT * FROM work_sessions
+  const sessionQuery = await client.query(`SELECT * FROM work_sessions
     WHERE organization_id=$1 AND person_id=$2 AND shift_date BETWEEN $3::date AND $4::date
     ORDER BY shift_date, clocked_in_at`, [scope.organizationId, scope.personId, period.from, period.through]);
-  const intervalQuery = await pool.query<IntervalRow>(`SELECT i.*,
+  const intervalQuery = await client.query<IntervalRow>(`SELECT i.*,
       (SELECT max(r.version)::int FROM work_recap_reviews r
         WHERE r.organization_id=i.organization_id AND r.interval_id=i.id) AS review_version
     FROM work_activity_intervals i
@@ -142,6 +146,19 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
   })) as WorkOsScheduleException[];
   const sessions = sessionQuery.rows as SessionRow[];
   const intervals = intervalQuery.rows;
+  const intervalIds = intervals.map((row) => String(row.id));
+  const frameQuery = intervalIds.length
+    ? await client.query(`SELECT e.interval_id,e.screenshot_summary_id,e.captured_at,s.summary,e.visible_app_snapshot,s.evidence_event_id
+        FROM work_activity_interval_evidence e
+        JOIN work_screenshot_summaries s ON s.id=e.screenshot_summary_id
+        WHERE e.interval_id=ANY($1::uuid[]) AND s.organization_id=$2 AND s.person_id=$3
+          AND s.processing_status='processed' AND s.deleted_at IS NULL`, [intervalIds, scope.organizationId, scope.personId])
+    : { rows: [] };
+  const framesByInterval = new Map<string, Array<Record<string, unknown>>>();
+  for (const frame of frameQuery.rows as Array<Record<string, unknown>>) {
+    const key = String(frame.interval_id);
+    framesByInterval.set(key, [...(framesByInterval.get(key) ?? []), frame]);
+  }
   const sessionsByDate = new Map<string, SessionRow[]>();
   for (const session of sessions) {
     const date = dateKey(session.shift_date);
@@ -155,7 +172,7 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
     intervalsByDate.set(date, [...(intervalsByDate.get(date) ?? []), interval]);
   }
   const sessionIds = sessions.map((session) => Number(session.id)).filter((id) => Number.isFinite(id));
-  const pauses = await sessionBreaks(pool as unknown as PoolClient, scope, sessionIds);
+  const pauses = await sessionBreaks(client, scope, sessionIds);
   const days: PayrollDayInput[] = [];
   for (const date of eachDate(period.from, period.through)) {
     const window = dayWindow(rules, exceptions, date);
@@ -166,7 +183,7 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
     if (exception?.kind === "leave" && !daySessions.length && !dayIntervals.length) continue;
     const blockers: string[] = [];
     if (!window && (daySessions.length || dayIntervals.length)) blockers.push("No eligible schedule is available for recorded work");
-    if (exception?.kind === "leave" && daySessions.length) blockers.push("Leave day has recorded work");
+    if (exception?.kind === "leave" && (daySessions.length || dayIntervals.length)) blockers.push("Leave day has recorded work");
     if (rules.some((rule) => rule.arrangement === "flexible" && (dateKey(rule.effective_from) ?? "") <= date && (!rule.effective_to || (dateKey(rule.effective_to) ?? "") >= date))) {
       blockers.push("Flexible work arrangement has no fixed payroll window");
     }
@@ -195,7 +212,7 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
         scheduleSource: session.schedule_id ? "session_stamp" : window ? "historical_schedule" : "none",
         correctionStatus: String(session.correction_status ?? "original"),
       });
-      const providerBreakMs = Math.max(0, Number(session.provider_break_seconds ?? 0)) * 1000;
+      const providerBreakMs = Math.max(0, Number(session.provider_break_seconds ?? 0), Number(session.paused_seconds ?? 0)) * 1000;
       const sessionPauses = pauses.breaks.filter((item) => !recorded || (item.span.startMs >= recorded.startMs && item.span.endMs <= recorded.endMs));
       pauseResidualMs += Math.max(0, providerBreakMs - sessionPauses.reduce((sum, item) => sum + item.span.endMs - item.span.startMs, 0));
     }
@@ -204,7 +221,19 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
     days.push({
       scope, date, week: date <= period.weeks[0].through ? 1 : 2, timezone: period.timezone,
       sessions: normalizedSessions, breaks, pauseResidualMs, captures: [], exceptions: [], frameSignals: [],
-      frameCandidates: [], blockers, sourceHash: hash(base),
+      frameCandidates: dayIntervals.flatMap((interval) => (framesByInterval.get(String(interval.id)) ?? []).flatMap((frame) => {
+        const summaryId = String(frame.screenshot_summary_id ?? "");
+        const evidenceEventId = String(frame.evidence_event_id ?? "").trim();
+        const capturedMs = instant(frame.captured_at);
+        if (!summaryId || !evidenceEventId || capturedMs === null) return [];
+        const capturedAt = new Date(capturedMs).toISOString();
+        return [{
+          scope, summaryId, evidenceEventId, capturedAt,
+          sourceHash: hash({ summaryId, capturedAt }), summary: String(frame.summary ?? "Screenshot context unavailable."),
+          app: frame.visible_app_snapshot ? String(frame.visible_app_snapshot) : null,
+          findingKey: `frame:${summaryId}`, policyVersion: POLICY_VERSION,
+        }];
+      })), blockers, sourceHash: hash(base),
     });
   }
 
@@ -234,16 +263,21 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
   });
   const weekSources: [PayrollWeekSources, PayrollWeekSources] = [weekRows[0], weekRows[1]];
 
-  const rawImageQuery = await pool.query(`SELECT id,expires_at FROM work_screenshot_summaries
+  const rawImageQuery = await client.query(`SELECT id,expires_at FROM work_screenshot_summaries
     WHERE organization_id=$1 AND person_id=$2`, [scope.organizationId, scope.personId]);
   const rawImageExpiry = Object.fromEntries((rawImageQuery.rows as Array<Record<string, unknown>>)
     .map((row) => [String(row.id), row.expires_at instanceof Date ? row.expires_at.toISOString() : row.expires_at ? String(row.expires_at) : null]));
   const manifest: PayrollSourceManifest = {
-    scope, period, asOf: asOf.toISOString(), sourceToken: await readPayrollSourceToken(scope),
+    scope, period, asOf: asOf.toISOString(), sourceToken,
     policyVersion: POLICY_VERSION, days, weekSources, hash: "", rawImageExpiry,
   };
   manifest.hash = hashPayrollSources(manifest);
-  return manifest;
+    await client.query("COMMIT");
+    return manifest;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
 }
 
 /** Attach provider observations to their shift day. A capture inside a session
@@ -259,16 +293,35 @@ export function buildPayrollDayInputs(manifest: PayrollSourceManifest, provider:
       (session.recorded && at >= session.recorded.startMs && at < session.recorded.endMs)
       || (session.eligible && at >= session.eligible.startMs && at < session.eligible.endMs)));
     if (!target) target = byDate.get(localDateForTimezone(new Date(at), manifest.period.timezone));
-    if (!target) continue;
+    if (!target) {
+      const date = localDateForTimezone(new Date(at), manifest.period.timezone);
+      target = {
+        scope: manifest.scope, date, week: date <= manifest.period.weeks[0].through ? 1 : 2, timezone: manifest.period.timezone,
+        sessions: [], breaks: [], pauseResidualMs: 0, captures: [], exceptions: [], frameSignals: [], frameCandidates: [],
+        blockers: ["No eligible schedule is available for recorded work"], sourceHash: hash({ date, unscheduled: true }),
+      };
+      days.push(target);
+      byDate.set(date, target);
+    }
     target.captures.push(capture);
   }
-  return days.map((day) => ({
-    ...day,
-    blockers: provider.complete && (day.sessions.length || day.captures.length === 0)
-      ? day.blockers : [...day.blockers, ...(!provider.complete ? ["Provider paging is incomplete; payroll publication is blocked"] : ["Activity has no mirrored session; correct attendance before approval"])],
-    captures: day.captures.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt) || left.id.localeCompare(right.id)),
-    sourceHash: hash({ base: day.sourceHash, provider: provider.watermark, captureIds: day.captures.map((capture) => capture.id) }),
-  }));
+  return days.map((day) => {
+    const providerBreaks = unionSpans(day.captures
+      .filter((capture) => capture.status === 2 && capture.span)
+      .map((capture) => capture.span!));
+    const locatedPauses = unionSpans(day.breaks.filter((item) => item.source === "session_pause").map((item) => item.span));
+    const unlocatedProviderBreak = subtractSpans(providerBreaks, locatedPauses)
+      .reduce((sum, span) => sum + span.endMs - span.startMs, 0);
+    return {
+      ...day,
+      breaks: [...day.breaks, ...providerBreaks.map((span) => ({ span, source: "provider_break" }))],
+      pauseResidualMs: Math.max(0, day.pauseResidualMs - unlocatedProviderBreak),
+      blockers: provider.complete && (day.sessions.length || day.captures.length === 0)
+        ? day.blockers : [...day.blockers, ...(!provider.complete ? ["Provider paging is incomplete; payroll publication is blocked"] : ["Activity has no mirrored session; correct attendance before approval"])],
+      captures: day.captures.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt) || left.id.localeCompare(right.id)),
+      sourceHash: hash({ base: day.sourceHash, provider: provider.watermark, captureIds: day.captures.map((capture) => capture.id) }),
+    };
+  });
 }
 
 export { ZERO_UUID as PAYROLL_ZERO_UUID };

@@ -39,6 +39,13 @@ export async function payrollFixture() {
         screenshot_summary_id uuid not null,accessed_by uuid,reason text not null,accessed_at timestamptz not null default now());
     `);
     await f.db.exec(await payrollMigration());
+    await f.db.exec(`
+      insert into work_consent_records(organization_id,person_id,purpose,policy_version,decision,occurred_at)
+      values ('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.','work-tracking-v1','accepted','2026-01-01T00:00:00Z'),
+             ('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','Neutral screenshot summaries for approved Work OS activity context only.','work-tracking-v1','accepted','2026-01-01T00:00:00Z'),
+             ('10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','Employee work planning, task coordination, evidence collection, and manager-reviewable reporting within Work OS.','work-tracking-v1','accepted','2026-01-01T00:00:00Z'),
+             ('10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','Neutral screenshot summaries for approved Work OS activity context only.','work-tracking-v1','accepted','2026-01-01T00:00:00Z');
+    `);
     return f;
   } catch (error) { await f.close(); throw error; }
 }

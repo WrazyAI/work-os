@@ -51,17 +51,44 @@ const SUMMARY_COLUMNS = [
   "status", "approved_at", "snapshot_at", "schema_version",
 ] as const;
 const SUMMARY_TEXT = new Set([0, 2, 3, 4, 5, 6, 17, 18, 19, 20]);
-const DAILY_COLUMNS = [...SUMMARY_COLUMNS, "shift_date", "schedule", "session_count", "finding_count", "reason_summary"] as const;
-const DAILY_TEXT = new Set([...SUMMARY_TEXT, 21, 22, 25]);
+const DAILY_COLUMNS = [
+  "approval_id", "approval_revision", "person_id", "employee_name", "period_start", "period_end", "pay_date",
+  "shift_date", "schedule", "session_count",
+  "recorded_minutes", "eligible_tracked_minutes", "outside_minutes", "break_minutes", "inactivity_minutes",
+  "manual_excluded_minutes", "held_minutes", "recommended_minutes", "approved_minutes", "approved_hours",
+  "finding_count", "reason_summary", "status", "approved_at", "snapshot_at", "schema_version",
+] as const;
+const DAILY_TEXT = new Set([0, 2, 3, 4, 5, 6, 7, 8, 21, 22, 23, 24, 25]);
+
+function dayMinutes(day: PayrollApproval["days"][number]): PayrollTotals {
+  const saved = (day.minutes ?? {}) as Partial<PayrollTotals>;
+  const approved = Number(saved.approved ?? saved.recommended ?? 0);
+  return {
+    recorded: Number(saved.recorded ?? 0), eligibleTracked: Number(saved.eligibleTracked ?? 0),
+    outside: Number(saved.outside ?? 0), break: Number(saved.break ?? 0),
+    inactivity: Number(saved.inactivity ?? 0), held: Number(saved.held ?? 0),
+    manualExcluded: Number(saved.manualExcluded ?? 0), recommended: Number(saved.recommended ?? 0),
+    approved,
+  };
+}
 
 function dailyRows(approval: PayrollApproval, historical: boolean): Array<Array<string | number>> {
   const base = summaryRows(approval, historical)[0];
-  if (!approval.days.length) return [[...base, approval.period.from, "", 0, 0, "No work recorded"]];
+  const prefix = base.slice(0, 7) as Array<string | number>;
+  const suffix = [base[17], base[18], base[19], base[20]] as Array<string | number>;
+  if (!approval.days.length) {
+    const zeroMinutes = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    return [[...prefix, approval.period.from, "", 0, ...zeroMinutes, "0.0000", 0, "No work recorded", ...suffix]];
+  }
   return approval.days.map((day) => {
-    const findings = approval.findings.filter((finding) => finding.span && new Date(finding.span.startMs).toISOString().slice(0, 10) === day.date);
+    const minutes = dayMinutes(day);
+    const findings = approval.findings.filter((finding) => String((finding as unknown as Record<string, unknown>).startAt ?? "").slice(0, 10) === String(day.date).slice(0, 10));
+    const reason = findings.map((finding) => finding.reason).join("; ").replace(/\s+/g, " ").trim().slice(0, 400);
     return [
-      ...base, day.date, day.status, 0, findings.length,
-      findings.map((finding) => finding.reason).join("; ").slice(0, 400),
+      ...prefix, day.date, day.schedule ?? "", Number(day.sessionCount ?? 0),
+      minutes.recorded, minutes.eligibleTracked, minutes.outside, minutes.break, minutes.inactivity,
+      minutes.manualExcluded, minutes.held, minutes.recommended, minutes.approved, hours(minutes.approved),
+      findings.length, reason, ...suffix,
     ];
   });
 }

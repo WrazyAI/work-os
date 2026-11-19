@@ -10,6 +10,14 @@ const reviewId = "96000000-0000-4000-8000-000000000001";
 const dayId = "96000000-0000-4000-8000-000000000002";
 const findingKey = "inactivity:0-600000";
 const token = { rowVersion: "0", analysisRevision: 1, sourceHash: "hash" };
+const approvalId = "96000000-0000-4000-8000-000000000010";
+const pinnedFinding = "pinned:finding";
+const snapshot = {
+  totals: { recorded: 10, eligibleTracked: 10, outside: 0, break: 0, inactivity: 10, held: 0, manualExcluded: 0, recommended: 0, approved: 0 },
+  days: [{ date: "2026-11-05", minutes: { recorded: 10, eligibleTracked: 10, outside: 0, break: 0, inactivity: 10, held: 0, manualExcluded: 0, recommended: 0, approved: 0 }, status: "resolved" }],
+  findings: [{ key: pinnedFinding, kind: "inactivity", status: "resolved_excluded", effect: "exclude", startAt: "2026-11-05T09:00:00Z", endAt: "2026-11-05T09:10:00Z", minutes: 10, reason: "Pinned exclusion", sourceHash: "pinned" }],
+  briefs: [{ week: 1, status: "ready", title: "Week 1", summary: "Pinned brief", summaryCitations: [{ type: "interval", id: "pinned-interval", revision: 2 }], themes: [], openItems: [], gaps: [], sourceHash: "week" }],
+};
 
 async function seed(f: Awaited<ReturnType<typeof payrollFixture>>) {
   await f.db.query(`insert into work_payroll_reviews
@@ -23,6 +31,10 @@ async function seed(f: Awaited<ReturnType<typeof payrollFixture>>) {
   await f.db.query(`insert into work_payroll_findings
     (organization_id,review_id,person_id,analysis_revision,day_id,finding_key,kind,status,effect,blocks_approval,required_action,reason,source_hash)
     values($1,$2,$3,1,$4,$5,'inactivity','needs_review','hold',true,'decide','Held run','hash')`, [org, reviewId, person, dayId, findingKey]);
+  await f.db.query(`insert into work_payroll_approvals
+    (id,organization_id,review_id,person_id,analysis_revision,revision,snapshot,approved_minutes,approved_by,approved_at,snapshot_hash,export_schema_version,request_key)
+    values($1,$2,$3,$4,1,1,$5::jsonb,0,$6,'2026-11-16T06:05:00Z','snapshot-hash','payroll-approval-v1','approval-question')`,
+  [approvalId, org, reviewId, person, JSON.stringify(snapshot), adminAccess.ctx.user.id]);
 }
 
 test("a cited answer is read-only, idempotent and refuses invalid citations", async () => {
@@ -51,6 +63,29 @@ test("a cited answer is read-only, idempotent and refuses invalid citations", as
     assert.equal(invalid.status, "failed");
     assert.match(invalid.blocks[0].text, /Not grounded/);
     await assert.rejects(answerPayrollQuestion(otherOrgAdminAccess, reviewId, { token, threadId: "", approvalId: null, question: "x", requestKey: "q-3" }), /not found/i);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = previous;
+    await f.close();
+  }
+});
+
+test("a pinned approval answer can only cite the frozen approval snapshot", async () => {
+  const { answerPayrollQuestion } = await questions();
+  const f = await payrollFixture();
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  try {
+    await seed(f);
+    const live = await answerPayrollQuestion(adminAccess, reviewId, {
+      token, threadId: "", approvalId, question: "Why was this excluded?", requestKey: "pinned-live",
+    }, { fetch: (async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ blocks: [{ text: "Held.", citations: [{ type: "finding", id: findingKey, revision: 1 }] }] }) } }] }), { status: 200 })) as typeof fetch });
+    assert.equal(live.status, "failed");
+    assert.match(live.blocks[0].text, /Not grounded/);
+    const pinned = await answerPayrollQuestion(adminAccess, reviewId, {
+      token, threadId: "", approvalId, question: "Why was this excluded?", requestKey: "pinned-valid",
+    }, { fetch: (async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ blocks: [{ text: "Pinned exclusion.", citations: [{ type: "finding", id: pinnedFinding, revision: 1 }] }] }) } }] }), { status: 200 })) as typeof fetch });
+    assert.equal(pinned.status, "ready");
+    assert.equal(pinned.blocks[0].citations[0].id, pinnedFinding);
   } finally {
     if (previous === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = previous;
     await f.close();

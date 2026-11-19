@@ -120,7 +120,7 @@ export type PayrollReviewStatus = "draft" | "analyzing" | "ready" | "needs_revie
 export type PayrollApproval = {
   id: string; reviewId: string; scope: PayrollScope; revision: number; period: PayrollPeriod;
   approvedAt: string; approvedBy: string; note: string | null; totals: PayrollTotals;
-  days: { date: string; minutes: PayrollTotals; status: string }[]; briefs: PayrollWeekBrief[];
+  days: { date: string; minutes: PayrollTotals; status: string; schedule?: string; sessionCount?: number }[]; briefs: PayrollWeekBrief[];
   snapshotHash: string; schemaVersion: string; identity: { displayName: string }; findings: PayrollFinding[];
 };
 export type PayrollReview = {

@@ -37,8 +37,8 @@ async function seed(f: Awaited<ReturnType<typeof payrollFixture>>) {
     values($1,$2,$3,'2026-11-16','2026-11-01','2026-11-15','UTC','needs_review',1,0,'hash',$4::jsonb,'2026-12-16Z')`,
   [reviewId, org, person, JSON.stringify(day.minutes)]);
   await f.db.query(`insert into work_payroll_analysis_revisions
-    (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token)
-    values($1,$2,$3,1,'hash','v1','2026-11-16T06:05:00Z','{}','{}',$4)`, [org, reviewId, person, token]);
+    (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy)
+    values($1,$2,$3,1,'hash','v1','2026-11-16T06:05:00Z','{}','{}',$4,'2026-11-15T23:00:00Z','2026-11-16T06:00:00Z','{"providerFingerprint":"provider-fingerprint"}'::jsonb)`, [org, reviewId, person, token]);
   const savedDay = await f.db.query(`insert into work_payroll_days
     (organization_id,review_id,person_id,analysis_revision,local_date,week,status,recorded_ms,eligible_ms,exact_ms,partition,
      tracked_minutes,held_minutes,recommended_minutes,source_hash,result)
@@ -53,6 +53,12 @@ async function seed(f: Awaited<ReturnType<typeof payrollFixture>>) {
   return { dayId, token };
 }
 const command = (over: Partial<PayrollCommand> = {}): PayrollCommand => ({ rowVersion: "0", analysisRevision: 1, sourceHash: "hash", requestKey: "decision-1", ...over });
+const approvalDeps = {
+  refreshProvider: async () => ({
+    complete: true, watermark: "2026-11-15T23:00:00Z", verifiedAt: "2026-11-16T06:05:00Z",
+    fingerprint: "provider-fingerprint", pages: 1,
+  }),
+};
 const count = async (f: Awaited<ReturnType<typeof payrollFixture>>, sql: string, params: unknown[] = []) =>
   Number(((await f.db.query(sql, params)).rows[0] as { n?: number }).n ?? 0);
 const cell = async (f: Awaited<ReturnType<typeof payrollFixture>>, sql: string, params: unknown[] = []) =>
@@ -106,14 +112,38 @@ test("approval_retry_preserves_the_same_receipt", async () => {
     await resolvePayrollFindings(adminAccess, reviewId, { ...command({ requestKey: "decide-for-approval" }), findingIds: [heldKey], action: "payable", note: "Resolved" });
     const current = await loadPayrollReview(adminAccess, reviewId);
     const input = { rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-1", note: "Payroll approved" };
-    const first = await approvePayrollReview(adminAccess, reviewId, input);
-    const retry = await approvePayrollReview(adminAccess, reviewId, input);
+    const first = await approvePayrollReview(adminAccess, reviewId, input, approvalDeps);
+    const retry = await approvePayrollReview(adminAccess, reviewId, input, approvalDeps);
     assert.equal(first.id, retry.id);
     assert.equal(first.snapshotHash, retry.snapshotHash);
     assert.equal(first.totals.approved, 305);
     assert.equal(await count(f, "select count(*)::int as n from work_payroll_approvals where review_id=$1", [reviewId]), 1);
     const snapshot = (await f.db.query(`select snapshot from work_payroll_approvals where id=$1`, [first.id])).rows[0] as { snapshot: Record<string, unknown> };
     assert.doesNotMatch(JSON.stringify(snapshot.snapshot), /storage_path|storagePath|https?:\/\//);
+  } finally { await f.close(); }
+});
+
+test("changed or unavailable provider evidence blocks approval", async () => {
+  const { resolvePayrollFindings, loadPayrollReview } = await decisions();
+  const { approvePayrollReview } = await approvals();
+  const f = await payrollFixture();
+  try {
+    await seed(f);
+    await resolvePayrollFindings(adminAccess, reviewId, { ...command({ requestKey: "decide-provider" }), findingIds: [heldKey], action: "payable", note: "Resolved" });
+    const current = await loadPayrollReview(adminAccess, reviewId);
+    const changed = {
+      refreshProvider: async () => ({
+        complete: true, watermark: "2026-11-15T23:30:00Z", verifiedAt: "2026-11-16T06:05:00Z",
+        fingerprint: "different-provider-fingerprint", pages: 1,
+      }),
+    };
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, {
+      rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-provider-changed",
+    }, changed), /provider evidence changed/i);
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, {
+      rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-provider-offline",
+    }, { refreshProvider: async () => { throw new Error("provider offline"); } }), /provider refresh/i);
+    assert.equal(await count(f, "select count(*)::int as n from work_payroll_approvals where review_id=$1", [reviewId]), 0);
   } finally { await f.close(); }
 });
 
@@ -126,7 +156,7 @@ test("a source edit after the analysis freezes approval with a conflict", async 
     await resolvePayrollFindings(adminAccess, reviewId, { ...command({ requestKey: "decide-source" }), findingIds: [heldKey], action: "payable", note: "Resolved" });
     const current = await loadPayrollReview(adminAccess, reviewId);
     await f.db.query("update work_sessions set organization_id=$1,person_id=$2,clocked_out_at='2026-11-16T00:00:00Z' where id=1", [org, person]);
-    await assert.rejects(approvePayrollReview(adminAccess, reviewId, { rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-source" }), /source|changed/i);
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, { rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-source" }, approvalDeps), /source|changed/i);
     assert.equal(await count(f, "select count(*)::int as n from work_payroll_approvals where review_id=$1", [reviewId]), 0);
   } finally { await f.close(); }
 });
@@ -139,7 +169,7 @@ test("reopening keeps the old receipt addressable and creates no new approval", 
     await seed(f);
     await resolvePayrollFindings(adminAccess, reviewId, { ...command({ requestKey: "decide-reopen" }), findingIds: [heldKey], action: "payable", note: "Resolved" });
     const current = await loadPayrollReview(adminAccess, reviewId);
-    const approval = await approvePayrollReview(adminAccess, reviewId, { rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-reopen" });
+    const approval = await approvePayrollReview(adminAccess, reviewId, { rowVersion: current.token.rowVersion, analysisRevision: 1, sourceHash: "hash", requestKey: "approve-reopen" }, approvalDeps);
     const reopened = await reopenPayrollReview(adminAccess, reviewId, { rowVersion: "2", analysisRevision: 1, sourceHash: "hash", requestKey: "reopen-1", reason: "New evidence" });
     assert.equal(reopened.status, "reopened");
     assert.equal(reopened.approval, null);

@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
 import { wtPost } from "@/lib/worktivity";
+import { localDayBounds } from "@/modules/work-os/companion";
 import type {
-  CaptureSemantics, NormalizedActivity, PayrollAppContext, PayrollScope, Span,
+  CaptureSemantics, NormalizedActivity, PayrollAppContext, PayrollPeriod, PayrollScope, Span,
 } from "@/modules/work-os/payroll/contracts";
 
 const PROVIDER = "worktivity";
@@ -123,8 +125,62 @@ export async function fetchPayrollProviderPage(
   };
 }
 
-/** Payroll does not inherit a duration/direction claim from neighboring code.
- * The only time this changes is a documented live capture probe (Task 19). */
+/** Stable identity over the normalized provider rows the payroll run used.
+ * Approval re-reads the same period and refuses a different fingerprint, so a
+ * remote correction cannot be approved from an older cached read. */
+export function payrollProviderFingerprint(logs: NormalizedActivity[]): string {
+  const canonical = [...new Map(logs.map((log) => [log.id, log])).values()]
+    .sort((left, right) => left.capturedAt.localeCompare(right.capturedAt) || left.id.localeCompare(right.id));
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+export type PayrollProviderVerification = {
+  complete: boolean; watermark: string; verifiedAt: string; fingerprint: string; pages: number;
+};
+
+/** One complete, bounded provider read over the period's employee-local bounds
+ * plus the eligible-window grace. Used before approval, never inside the
+ * approval transaction. */
+export async function refreshPayrollProviderEvidence(
+  scope: PayrollScope, period: PayrollPeriod, deps: PayrollProviderDeps = payrollProviderDeps(scope),
+): Promise<PayrollProviderVerification> {
+  const connection = await resolvePayrollProviderConnection(scope);
+  const bounds: Span = {
+    startMs: Date.parse(localDayBounds(period.from, period.timezone).startIso),
+    endMs: Date.parse(localDayBounds(period.through, period.timezone).endIso) + 60 * 60_000,
+  };
+  const logs = new Map<string, NormalizedActivity>();
+  let cursor: string | null = null;
+  let watermarkMs = -Infinity;
+  let pages = 0;
+  for (;;) {
+    if (pages >= MAX_PAGES) throw new Error("Provider refresh exceeded the bounded page limit; approval is blocked");
+    const page = await fetchPayrollProviderPage({
+      scope, employeeId: connection.employeeId, connectionId: connection.connectionId, bounds, cursor,
+    }, deps);
+    pages += 1;
+    for (const log of page.logs) {
+      const prior = logs.get(log.id);
+      if (prior && JSON.stringify(prior) !== JSON.stringify(log)) throw new Error(`Provider refresh conflict for log ${log.id}`);
+      logs.set(log.id, log);
+    }
+    if (page.watermark) {
+      const parsed = Date.parse(page.watermark);
+      if (Number.isFinite(parsed) && parsed > watermarkMs) watermarkMs = parsed;
+    }
+    if (page.complete) break;
+    if (!page.nextCursor) throw new Error("Provider refresh pagination is incomplete; approval is blocked");
+    cursor = page.nextCursor;
+  }
+  return {
+    complete: true,
+    watermark: Number.isFinite(watermarkMs) ? new Date(watermarkMs).toISOString() : "",
+    verifiedAt: deps.now().toISOString(),
+    fingerprint: payrollProviderFingerprint([...logs.values()]),
+    pages,
+  };
+}
+
 export const unverifiedSemantics: CaptureSemantics = {
   version: "worktivity-activitylog-v1", verified: false, direction: "unknown", durationMs: 60_000,
 };

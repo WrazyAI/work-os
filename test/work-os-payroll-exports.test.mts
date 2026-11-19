@@ -16,6 +16,7 @@ const now = new Date("2026-11-16T06:05:00Z");
 
 async function seedApproval(f: Awaited<ReturnType<typeof payrollFixture>>, input: {
   id?: string; review?: string; orgId?: string; personId?: string; payDate?: string; name?: string; emptyDays?: boolean;
+  schedule?: string; sessionCount?: number;
 } = {}) {
   const id = input.id ?? approvalId;
   const review = input.review ?? reviewId;
@@ -27,7 +28,8 @@ async function seedApproval(f: Awaited<ReturnType<typeof payrollFixture>>, input
     schemaVersion: "payroll-approval-v1", period,
     identity: { displayName: input.name ?? "Ada Lovelace" },
     totals: { recorded: 370, eligibleTracked: 370, outside: 0, break: 20, inactivity: 45, held: 0, manualExcluded: 0, recommended: 305, approved: 305 },
-    days: input.emptyDays ? [] : [{ date: "2026-11-05", minutes: { recorded: 370, eligibleTracked: 370, outside: 0, break: 20, inactivity: 45, held: 0, manualExcluded: 0, recommended: 305, approved: 305 }, status: "resolved" }],
+    days: input.emptyDays ? [] : [{ date: "2026-11-05", minutes: { recorded: 370, eligibleTracked: 370, outside: 0, break: 20, inactivity: 45, held: 0, manualExcluded: 0, recommended: 305, approved: 305 }, status: "resolved",
+      schedule: input.schedule ?? "historical_schedule", sessionCount: input.sessionCount ?? 1 }],
     briefs: [{ week: 1, status: "ready", title: "Week 1", summary: "Reviewed the queue.", summaryCitations: [], themes: [], openItems: [], gaps: [], sourceHash: "week-1" }],
     findings: [],
     sourceExplanation: { sourceHash: "manifest", sourceToken: "0:0", policyVersion: "v1", asOf: "2026-11-16T06:00:00Z" },
@@ -106,6 +108,29 @@ test("daily export includes a no-work zero row for an empty approved day set", a
     const text = Buffer.from(file.bytes).toString("utf8");
     assert.match(text, /No work recorded/);
     assert.match(text, /shift_date,.*finding_count,reason_summary/);
+  } finally { await f.close(); }
+});
+
+test("daily export carries per-day hours, schedule and session count", async () => {
+  const { createPayrollExport } = await exportsLib();
+  const f = await payrollFixture();
+  try {
+    await seedApproval(f, { schedule: "session_stamp", sessionCount: 2 });
+    const file = await createPayrollExport(adminAccess, { approvalIds: [approvalId], kind: "daily", requestKey: "daily-values" }, now);
+    const lines = Buffer.from(file.bytes).toString("utf8").trim().split("\r\n");
+    const header = lines[0].split(",");
+    const row = lines[1].split(",");
+    const cell = (name: string) => row[header.indexOf(name)];
+    assert.equal(cell("shift_date"), "2026-11-05");
+    assert.equal(cell("schedule"), "session_stamp");
+    assert.equal(cell("session_count"), "2");
+    assert.equal(cell("recorded_minutes"), "370");
+    assert.equal(cell("break_minutes"), "20");
+    assert.equal(cell("inactivity_minutes"), "45");
+    assert.equal(cell("recommended_minutes"), "305");
+    assert.equal(cell("approved_minutes"), "305");
+    assert.equal(cell("approved_hours"), "5.0833");
+    assert.equal(cell("status"), "approved");
   } finally { await f.close(); }
 });
 

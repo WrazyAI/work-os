@@ -92,7 +92,7 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
       ? (await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, review.current_approval_id])).rows[0]
       : null;
     const briefs = (await client.query(`SELECT * FROM work_payroll_week_briefs WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY week`, [scope.organizationId, reviewId, review.analysis_revision])).rows;
-    const revisionToken = (await client.query(`SELECT source_token FROM work_payroll_analysis_revisions WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`, [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
+    const revisionToken = (await client.query(`SELECT source_token,provider_verified_at FROM work_payroll_analysis_revisions WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`, [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
     const sourceChanged = Boolean(approval && revisionToken?.source_token && (await readPayrollSourceToken(scope)) !== String(revisionToken.source_token));
     const recapStatsRow = (await client.query(`SELECT
         count(*) FILTER (WHERE review_status IN ('confirmed','amended') AND coalesce(review_source,'employee')='employee')::int AS employee_reviewed,
@@ -117,7 +117,8 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
       approval: approval ? approvalFromRow(approval, scope, period) : null,
       retentionExpiresAt: iso(review.retention_expires_at) ?? "",
       firstExportAt: iso(review.first_export_at), evidenceChangedSinceApproval: review.evidence_changed_since_approval === true || sourceChanged,
-      providerVerifiedAt: null,
+      providerVerifiedAt: iso(object(object(approval?.snapshot).sourceExplanation).providerVerifiedAt)
+        ?? iso(revisionToken?.provider_verified_at),
       recapStats: {
         employeeReviewed: Number(recapStatsRow?.employee_reviewed ?? 0),
         autoApproved: Number(recapStatsRow?.auto_approved ?? 0),

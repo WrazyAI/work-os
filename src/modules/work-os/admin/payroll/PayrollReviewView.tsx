@@ -17,6 +17,7 @@ export function PayrollReviewView({ review, onApprove, onReopen, onDecide, onAdv
           <p className="payroll-kicker">Payroll review</p>
           <h1>{review.period.from} — {review.period.through}</h1>
           <p>Paid {review.period.payDate} · {review.period.timezone} · {review.status.replaceAll("_", " ")}</p>
+          <p className="payroll-provider-check">Provider verified {review.providerVerifiedAt ? review.providerVerifiedAt.replace("T", " ").slice(0, 16) + " UTC" : "not yet"}</p>
         </div>
         <div className="payroll-actions">
           {model.canApprove && onApprove ? <button type="button" className="primary" onClick={onApprove}>Approve payable hours</button> : null}

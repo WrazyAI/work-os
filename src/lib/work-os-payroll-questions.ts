@@ -66,6 +66,26 @@ async function allowedCitations(client: PoolClient, review: Row): Promise<Allowe
   return allowed;
 }
 
+function approvalCitations(snapshot: Row, approvalId: string): AllowedCitations {
+  const allowed: AllowedCitations = { intervals: new Map(), findings: new Set(), briefs: new Set(), approvals: new Set([approvalId]), days: new Set() };
+  const briefs = Array.isArray(snapshot.briefs) ? snapshot.briefs as Row[] : [];
+  for (const brief of briefs) {
+    allowed.briefs.add(`week-${brief.week}`);
+    for (const citation of Array.isArray(brief.summaryCitations) ? brief.summaryCitations as Row[] : []) {
+      if (citation.type === "interval" && typeof citation.id === "string") {
+        allowed.intervals.set(citation.id, Number(citation.revision ?? 0));
+      }
+    }
+  }
+  for (const finding of Array.isArray(snapshot.findings) ? snapshot.findings as Row[] : []) {
+    if (typeof finding.key === "string") allowed.findings.add(finding.key);
+  }
+  for (const day of Array.isArray(snapshot.days) ? snapshot.days as Row[] : []) {
+    if (day.date) allowed.days.add(String(day.date).slice(0, 10));
+  }
+  return allowed;
+}
+
 function turnFrom(row: Row): PayrollQuestionTurn {
   return {
     id: String(row.id), threadId: String(row.thread_id), analysisRevision: Number(row.analysis_revision),
@@ -94,17 +114,19 @@ export async function answerPayrollQuestion(access: WorkOsAccess, reviewId: stri
     const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
     if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
     const approvalId = input.approvalId;
+    let approvalSnapshot: Row | null = null;
     if (approvalId) {
-      const approval = await client.query(`SELECT 1 FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, approvalId]);
+      const approval = await client.query(`SELECT snapshot FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, approvalId]);
       if (!approval.rows.length) throw new WorkOsValidationError("Payroll approval not found for this review.");
+      approvalSnapshot = object(approval.rows[0].snapshot);
     }
     const threadId = input.threadId || randomUUID();
-    const allowed = await allowedCitations(client, review);
+    const allowed = approvalId ? approvalCitations(approvalSnapshot ?? {}, approvalId) : await allowedCitations(client, review);
     const row = await client.query(`INSERT INTO work_payroll_questions
       (organization_id,review_id,person_id,actor_user_id,thread_id,analysis_revision,approval_id,request_key,status,source_hash,question)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10) RETURNING *`,
     [scope.organizationId, reviewId, scope.personId, access.ctx.user.id, threadId, review.analysis_revision, approvalId, input.requestKey, review.source_hash, question]);
-    return { review, row: row.rows[0] as Row, allowed };
+    return { review, row: row.rows[0] as Row, allowed, approvalSnapshot };
   });
   const policy = resolvePayrollAiPolicy();
   const history = await getPool().query(`SELECT question,blocks FROM work_payroll_questions WHERE organization_id=$1 AND review_id=$2 AND thread_id=$3 ORDER BY created_at DESC LIMIT $4`,
@@ -112,8 +134,7 @@ export async function answerPayrollQuestion(access: WorkOsAccess, reviewId: stri
   const facts = await getPool().query(`SELECT totals,briefs.status,briefs.title,briefs.summary_markdown FROM work_payroll_reviews r
     LEFT JOIN work_payroll_week_briefs briefs ON briefs.organization_id=r.organization_id AND briefs.review_id=r.id AND briefs.analysis_revision=r.analysis_revision
     WHERE r.organization_id=$1 AND r.id=$2`, [scope.organizationId, reviewId]);
-  const approvalId = input.approvalId;
-  const approvalSnapshot = approvalId ? object((await getPool().query(`SELECT snapshot FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, approvalId])).rows[0]?.snapshot) : null;
+  const approvalSnapshot = created.approvalSnapshot;
   const findings = await getPool().query(`SELECT finding_key,kind,status,minutes,reason FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY finding_key LIMIT 40`, [scope.organizationId, reviewId, created.review.analysis_revision]);
   const factsText = JSON.stringify({
     totals: approvalSnapshot?.totals ?? object((facts.rows[0] as Row | undefined)?.totals),
