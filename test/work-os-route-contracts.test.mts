@@ -631,6 +631,14 @@ test("the evidence page marks future integrations and keeps bots out of the pers
   assert.match(evidence, /aria-pressed=\{source === entry\.source\}/);
 });
 
+test("provider evidence carries its occurrence time, not just the mirror write time", async () => {
+  const route = await source("src/app/api/work-os/evidence/route.ts");
+  assert.match(route, /event:work_evidence_events\(occurred_at/);
+  assert.match(route, /recorded_at: event\?\.occurred_at \?\? row\.created_at/);
+  const view = await source("src/lib/work-os-ghl-evidence-view.ts");
+  assert.match(view, /recorded_at: row\.occurred_at/);
+});
+
 test("GHL evidence reaches the person and task panels", async () => {
   const person = await source("src/app/api/work-os/admin/people/[personId]/route.ts");
   assert.match(person, /e\.source = 'ghl'/);

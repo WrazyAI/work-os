@@ -407,9 +407,13 @@ export default function AdminEvidencePage() {
                             className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5 border-b px-5 py-3 text-left transition hover:bg-[var(--bg-secondary)]"
                             style={{ borderColor: "var(--border-subtle)" }}
                           >
-                            <span className="w-[72px] shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">
-                              {new Date(row.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                            </span>
+                            <time
+                              dateTime={row.recorded_at ?? row.created_at}
+                              title={new Date(row.recorded_at ?? row.created_at).toLocaleString()}
+                              className="w-[72px] shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]"
+                            >
+                              {new Date(row.recorded_at ?? row.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                            </time>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{row.title}</span>
                               <span className="block truncate text-[11.5px] text-[var(--text-tertiary)]">
@@ -527,7 +531,7 @@ export default function AdminEvidencePage() {
                 );
               })()}
               {selected.event?.correction_status && selected.event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(selected.event.correction_status)}</StateMark> : null}
-              <span>recorded {relativeTime(selected.created_at)}</span>
+              <span>recorded {relativeTime(selected.recorded_at ?? selected.created_at)}</span>
             </div>
             {selected.summary ? <p className="text-[13px] leading-6 text-[var(--text-secondary)]">{selected.summary}</p> : <p className="text-[12.5px] text-[var(--text-tertiary)]">No summary was recorded for this item.</p>}
             {selected.source === "ghl"
