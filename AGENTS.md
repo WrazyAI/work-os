@@ -79,8 +79,13 @@ and verification, but never weaken the checks required for the affected change.
    instead of doing untracked work. **TASKS** is the progress ledger. **EOD
    Report** is a project, not a task: each report is a task named
    `<Full Name><MM/DD/YYYY>`, and drafting never authorizes submission.
-3. Read `design.md` completely before touching any UI. It is the canonical
-   companion and web blueprint.
+3. For UI work, read the short `design.md` index and
+   `docs/design/foundations.md`, then only the area/pattern guides relevant to
+   the change. Follow their `Requires` fields; load conditional links only when
+   the named behavior is affected. Do not read or concatenate the whole guide
+   set. The index, shared foundations, focused guides, and applicable design
+   exceptions together are the canonical companion and web blueprint. Revisit
+   the routing when a shared component or style change affects another surface.
 4. Read `desktop/work-os-companion/CHANGELOG.md` and skim recent `main` commits
    when reconciling work another agent may have landed.
 
