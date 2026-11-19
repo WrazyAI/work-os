@@ -31,10 +31,13 @@ would refuse, and a completed task has no status path until it is reopened.
 The status control states the task's current status and opens the detached
 menu of [menus and detached surfaces](controls.md#menus-and-detached-surfaces), listing Pending and In progress with the current option marked
 and inert. An overdue task keeps it disabled with the note "Update the due date
-first": overdue is derived from the due date, so the control unlocks only once
-the due date is today or later, and reopening a completed task restores the
-status it held before completion (reading Overdue again if its due date has
-since passed). The assignee control lists only the people this actor may
+first". For an open employee task, moving the recorded due date to today or
+later, or clearing it, removes the overdue lock; the actor still needs permission
+to change status. Administration uses its own
+[effective-date rule](../admin/tasks.md#task-dates-and-overdue-counts), so clearing
+its recorded date does not necessarily remove the lock. Reopening a completed
+task restores the status it held before completion (reading Overdue again if
+its applicable due date has since passed). The assignee control lists only the people this actor may
 assign; when a current assignee sits outside that scope the control locks and
 states why, so a client never submits a set the server would reject. Replacing
 the assignees records the actor as the task's assigner.

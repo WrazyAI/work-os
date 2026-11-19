@@ -120,9 +120,11 @@ asset can be referenced. Mascot motion is removed under reduced motion.
 The one place raster art is required is the page-guide film ([page guides](page-guides.md)), and it is
 allowed there for the opposite of decorative reasons: it is footage of this
 product's own interface rather than an illustration of it, so a guide can show
-where a control is instead of describing it. It is generated, never drawn, and it
-is bound by the version test in [performance budgets](../implementation.md#performance-budgets) — a film that no longer matches the
-interface it depicts fails the build rather than quietly going stale.
+where a control is instead of describing it. It is generated, never drawn,
+and must match the current interaction. Apply the automated checks in
+[performance budgets](../implementation.md#performance-budgets), review the
+footage when instructions or filmed controls change, and re-shoot chapters
+that no longer demonstrate the step.
 
 The compact companion's drag handle is a visible, subtle dark capsule centered
 above the mascot with a generous grab area. The ordinary handle is 72×30px and
@@ -178,3 +180,10 @@ five-second active window, hold still for one second, then repeat twice. A
 snoozed prompt replays the same sequence when it returns. The mascot then stays
 still in its alert pose until the employee responds. Never loop continuously,
 and remove attention motion under reduced-motion preferences.
+
+**Existing snooze gap.** The real snooze handler and expiry effect in
+[AvatarApp](../../../desktop/work-os-companion/src/AvatarApp.tsx) both advance
+the counter. The first expiry after `Snooze 10 min` marks a still-required
+check-in missed and skips the return/replay required above; the fixture starts
+from a different counter value. Retain the replay requirement and verify the
+real click-and-expiry path when repairing this separate implementation gap.

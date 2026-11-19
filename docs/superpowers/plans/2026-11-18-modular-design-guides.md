@@ -17,7 +17,7 @@
 - Retain the root entry point and replace the whole-document reading instruction in `AGENTS.md`.
 - Use ordinary Markdown and explicit task routing; no new runtime dependency or loader.
 - Work from `804bc8e3b940713a443add29a8f1b2da39d97ec0` on `codex/modular-design-guides`. Leave the source checkout unchanged.
-- No merge, deployment, release, or version change is part of this task.
+- The initial scope ended at PR delivery. The user's November 19 request authorizes merge; deployment and release remain outside this task.
 
 ## Approach
 
@@ -48,7 +48,7 @@ Use a router plus shared foundations, area guides, and conditional pattern guide
 - Older specs contain section numbers absent from this baseline. Historical records remain historical and can be resolved through Git history; the refactor will not invent missing contracts.
 - Validation is scoped to documentation integrity and existing direct consumers. Application build/typecheck/render gates remain required for future UI changes; this task changes no UI.
 
-## Validation and review record
+## Initial validation and review record
 
 - The root router is 84 lines / 706 words. The collection has 43 focused guides plus an administration index, maintenance guide, and legacy lookup. Representative reading paths, including foundations and verification, use approximately 76–89% fewer words than the former complete blueprint.
 - A temporary migration audit checked all 81 source spans. Only five structural headings were replaced; the audit tracked the editorial clarifications separately. All 46 guides are reachable, 532 local links and anchors resolve, and required-reading dependencies have no cycles.
@@ -59,8 +59,7 @@ Use a router plus shared foundations, area guides, and conditional pattern guide
 
 ## Delivery
 
-Publish `codex/modular-design-guides` directly to `WrazyAI/work-os` and open a PR against `main` through the authorized `zahemen9900` connection. Record the resulting URL and live review status in the delivery handoff. Ledger logging remains with the user's local agent, as explicitly directed. This plan records the verified changes prepared for publication; merge, deployment, and release remain separate actions.
-
+Publish `codex/modular-design-guides` directly to `WrazyAI/work-os` and open a PR against `main` through the authorized `zahemen9900` connection. Record the resulting URL and live review status in the delivery handoff. Ledger logging remains with the user's local agent, as explicitly directed. PR #179 fulfills this delivery; the user's subsequent merge request is recorded below.
 
 ## November 19 integration
 
@@ -86,4 +85,41 @@ declare `0.5.38`. The existing desktop static guard fails on that mismatch.
 The merge prerequisite corrects only those two lockfile fields to `0.5.39`;
 dependency records and the declared app version are unchanged. The same guard
 was reproduced failing locally and passes after the correction. Full CI is
-required again on the final branch before merge.
+required again on the final branch before merge. The lockfile correction passed
+all CI jobs in run `44575837411`; CodeQL also passed. The final documentation
+clarifications below require fresh checks before merge.
+
+## CodeRabbit review disposition
+
+The November 19 review returned 11 minor findings on the integrated blueprint.
+Source comparison confirmed that all flagged statements or implementation gaps
+predate this extraction. Two bounded read-only reviews checked the findings
+against the original blueprint and current code. Six documentation ambiguities
+are clarified; five existing implementation gaps are identified beside their
+owning rules. The latter remain implementation follow-ups, not runtime fixes
+claimed by this refactor.
+
+| Finding | Documentation disposition |
+|---|---|
+| Admin paging | Retain the required 100-row continuation contract; identify the companion's single 200-row request and the web limit/cap gap. |
+| Admin comparison day | Retain shift-local/UTC requirements; identify the companion's device-local override for all administrators. |
+| Appearance propagation | Distinguish immediate main-window preview, successful-save broadcast, and failure rollback. |
+| Attendance pending state | State that the manual-action pending lock takes precedence over background observation polling. |
+| Snooze replay | Retain the replay requirement and identify the real-path double counter increment. |
+| Duplicate new-task suggestions | Retain untracked-deliverable semantics and identify the parser's missing open-task comparison. |
+| Suggested-goal partial success | Scope goal-less fallback to pre-save failure; identify audit failure after persistence and the caller's missing reload. |
+| Legacy routes | Distinguish employee/My workspace mappings from Administration mappings. |
+| Film freshness | Describe actual automated coverage and require visual review/re-shoot for changed instructions or controls. |
+| Cleared due date | State the employee unlock case while preserving Administration's effective-date exception. |
+| Selection accessibility | Limit aria-selected to supporting widget roles; use aria-current for current-page navigation. |
+
+No application behavior was changed to address those five gaps. Their source
+pointers and scope stay close to the relevant contracts so selective reading
+still exposes the limitation. The lockfile correction above remains the only
+non-Markdown change in this PR.
+
+The final documentation audit resolves 550 local links and anchors, reaches all
+46 guides, and preserves all 81 original source spans plus the four contracts
+added on main. Required-reading dependencies remain acyclic. The root stays at
+84 lines / 706 words; representative reading paths use 75–89% fewer words than
+the former complete guide. Whitespace checks pass.

@@ -22,8 +22,8 @@ and the local add-task flow: one flat table, never grouped or ordered by
 project, which stays a small per-task detail beside the task's priority and
 labels. Columns carry the record's sort (Task, Assignees, Created, Due,
 Status), the first activation applies the natural order, rows missing a value
-stay last in both directions, and the list loads 100 at a time with a Show
-more control. Each row shows the task's description on its own line
+stay last in both directions. The required paging contract is 100 rows at a
+time with an explicit Show more control. Each row shows the task's description on its own line
 beneath the title — clipped with the shared fade and never a pan — and the
 assignee cell resolves the recorded assignee ids through the roster, so a task
 with a real assignee is never displayed as Unassigned. A row with
@@ -40,6 +40,15 @@ allows it. The task drawer carries the status control, the assignee control,
 and the lifecycle buttons — Mark complete or Reopen task, Edit task, Archive
 task, Delete task — under the same gate, and archiving or deleting waits for
 an explicit confirmation.
+
+**Existing paging gap.** The companion's
+[TasksPage](../../../desktop/work-os-companion/src/admin/TasksPage.tsx)
+requests up to 200 rows in one query and has no continuation control. The web
+[AdminTasks](../../../src/modules/work-os/admin/AdminTasks.tsx) starts at 100 and
+increases the requested limit with Load more, but does not advance an offset;
+the [list endpoint](../../../src/app/api/work-os/tasks/route.ts) caps that limit
+at 200. These implementations do not yet satisfy the required paging contract.
+Resolving the gap requires a separate implementation change.
 
 ## Task dates and overdue counts
 
@@ -63,6 +72,15 @@ date; only an administrator with no person mapping falls back to UTC. The
 edit form still seeds and writes the recorded date, so saving it never turns
 the derived default into a recorded one; a task with no recorded date opens
 the editor empty, and the date the operator types becomes the real due date.
+
+**Existing comparison-day gap.** The companion's
+[TasksPage](../../../desktop/work-os-companion/src/admin/TasksPage.tsx) uses the
+device-local `todayIso()` from [data.ts](../../../desktop/work-os-companion/src/admin/data.ts)
+for every administrator and sends that day to the list endpoint. It does not
+yet resolve the administrator's shift-local day or the unmapped administrator's
+UTC fallback. Around calendar boundaries, row warnings, status locks, and list
+counts can disagree with the required rule above. Device-local time does not
+replace that approved rule.
 
 **Recorded versus default overdue.** The task summary separates the two counts.
 The headline says how many tasks are past a **recorded** due date; a quiet second

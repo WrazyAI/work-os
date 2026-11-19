@@ -143,8 +143,8 @@ The selected treatment is:
 - stable geometry: no width change, no left rail, no extra padding;
 - the existing task title and status remain the strongest signals.
 
-Use aria-selected="true" as the source of truth. Do not add a separate
-selected class that can drift. The visual may be implemented with an inset
+On selectable roles that support `aria-selected`, derive its value and visual
+selection from the same state. Do not add a separate selected class that can drift. The visual may be implemented with an inset
 1px line plus a subtle surface change, but it must never use a colored
 vertical bar or a neon highlighter.
 

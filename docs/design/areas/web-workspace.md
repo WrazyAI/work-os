@@ -26,12 +26,14 @@ page:
     /work-os/insights   range brief and per-day records
     /work-os/settings   profile, working hours, consent, and companion connect
 
-- Employees and mapped administrators use the workspace; managers keep the
-  review console and unmapped administrators keep the administration console.
-  `/work-os/workspace` dispatches by role and redirects employees to their workspace.
-  Legacy `?tab=` links map onto the destinations (reports/evidence → Review,
-  people/schedules/blueprints → Today) so old sidebar links and bookmarks keep
-  working.
+- `/work-os/workspace` dispatches by role and active view. Employees and mapped
+  administrators in **My workspace** use the employee destinations; managers
+  keep the review console, and administrators in **Administration** use its
+  separate routes. Employee-view legacy `?tab=` links map reports and evidence
+  to Review, and people, schedules, and blueprints to Today. In Administration,
+  evidence opens Evidence, people and schedules open People, blueprints opens
+  Settings, and reports opens administration EOD Review. Old links retain the
+  meaning of the selected view.
 - Work OS navigation is role-aware in the console sidebar: the workspace
   destinations for employees, Team review for managers, and the administration
   destinations for administrators, with the active state resolved on the real

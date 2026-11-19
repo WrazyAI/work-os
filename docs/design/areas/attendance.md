@@ -60,10 +60,12 @@ refresh.
   attendance-and-session signature actually moved. Only a real transition
   refreshes the workspace; the main window relays it so the floating companion
   and every workspace view converge together.
-- While a transition is pending, the dashboard shows one quiet line
-  (`Checking your activity…`) beside the state copy. The manual Clock in,
-  Pause/Resume, and Clock out controls stay available the whole time, and
-  manual clock actions keep their existing Worktivity confirmation flow.
+- While an activity-driven transition is expected, the dashboard shows one
+  quiet line (`Checking your activity…`) beside the state copy. Activity polling
+  alone leaves the manual Clock in, Pause/Resume, and Clock out controls
+  available. Manual actions keep their existing Worktivity confirmation flow:
+  while an action is unconfirmed, its pending-action lock takes precedence,
+  disables the other attendance controls, and offers a read-only status retry.
 - Provider reads are cached for 25 seconds and single-flight per employee, so
   two windows polling together never stampede the provider. The cache belongs to
   the background cadence, never to an explicit request: a page load, the refresh

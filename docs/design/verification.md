@@ -59,7 +59,10 @@ Before editing:
 During editing:
 
 - Use semantic tokens and shared seams.
-- Keep selection driven by aria-selected.
+- For selectable widgets whose roles support
+  [`aria-selected`](https://www.w3.org/TR/wai-aria-1.2/#aria-selected), derive its
+  value and the visual selection from the same state. Mark the current page's
+  navigation link with `aria-current="page"`.
 - Never add a colored content-row rail.
 - Preserve approval/provenance contracts.
 - Add deterministic model/render coverage for new visual states.

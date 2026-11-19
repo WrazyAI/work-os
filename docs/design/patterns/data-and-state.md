@@ -107,7 +107,7 @@ Select the owner before applying the generic streaming defaults:
 | Employee tasks | Explicit load control; retain appended rows | [Task views](../areas/tasks.md#views-and-ordering) |
 | Recap history | Explicit load control; retain appended cards | [Recent activity stream](../areas/recaps.md#recent-activity-stream) |
 | Memory facts | Independent explicit paging for each collection; retain loaded rows | [Work Memory](../areas/memory.md) |
-| Organization tasks | Its own page size and Show more control | [Admin task record](../admin/tasks.md#task-record) |
+| Organization tasks | Explicit Show more is required; see the owner's documented paging gap | [Admin task record](../admin/tasks.md#task-record) |
 | Administration evidence | Its own initial bound and Show more control | [Evidence record](../admin/evidence.md#evidence-record) |
 
 Keep the numerical limits in those owners. A shared pagination refactor must

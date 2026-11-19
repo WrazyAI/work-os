@@ -43,7 +43,9 @@ there is never more than one guide per page.
     a feature of the interface and neither appears outside a guide.
   - `src/guideFilms.ts` is generated from the encoded files, and a test asserts
     one clip per step, both files on disk, and each chapter label matching its
-    step title. A guide whose steps changed without a re-shoot fails the build.
+    step title. These assertions do not detect instruction-only or filmed-control
+    changes. Follow the [film checks and visual-review requirement](../implementation.md#performance-budgets)
+    and re-shoot chapters that no longer demonstrate the current step.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
   described by its promise. It is a split view by default: the film plate is
   the left column and the script — header, chapters, actions — is the right.

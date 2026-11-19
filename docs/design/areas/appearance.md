@@ -15,15 +15,13 @@
 **Implementation starting points:** [AppearanceSettings.tsx](../../../desktop/work-os-companion/src/AppearanceSettings.tsx), [appearance.ts](../../../desktop/work-os-companion/src/appearance.ts), [ThemePrompt.tsx](../../../desktop/work-os-companion/src/ThemePrompt.tsx).
 
 Appearance sits above Reading & display and holds exactly one preference:
-**Theme** — `Light`, `Dark`, or `System` (default). It is per-device, applies
-instantly in every window, and is remembered locally rather than synced to the
-workspace. System resolves through the device preference and follows a live
+**Theme** — `Light`, `Dark`, or `System` (default). It is per-device and is
+remembered locally rather than synced to the workspace. System resolves through the device preference and follows a live
 change. A best-effort local mirror paints the boot theme before the vault
 opens; the vault is always the source of truth once it loads.
 
 Reading & display sits below it and holds exactly two preferences. Both are
-per-device, apply instantly in every window, and are remembered locally
-rather than synced to the workspace:
+per-device and are remembered locally rather than synced to the workspace:
 
 - **Text size** — `Small` (default) or `Medium`,
   which scales text 15% through one root custom property (`--text-scale`).
@@ -40,10 +38,12 @@ rather than synced to the workspace:
 Both preferences render as a two-option segmented radio group
 (`role="radiogroup"` with `role="radio"`, roving tabindex, and arrow keys),
 state the current value, and normalize unknown or missing stored values back to
-the declared defaults: Text size → Small, Mascot size → Large, and Theme → System. The main window applies
-and persists a change (rolling the visible state back if the save fails) and
-broadcasts it with `work-os://appearance-changed`; the floating companion
-window reads the stored value on boot and follows the broadcast live.
+the declared defaults: Text size → Small, Mascot size → Large, and Theme → System.
+Settings previews each change immediately in the main window. After saving
+succeeds, it broadcasts the change with `work-os://appearance-changed` to the
+floating window, so a slow save delays that window's update. A failed save rolls
+back the main-window preview and sends no broadcast for the change. The floating
+window reads the stored value on boot and follows successful broadcasts live.
 
 ## First-login theme choice
 

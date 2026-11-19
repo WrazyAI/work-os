@@ -92,7 +92,7 @@ one:
 - **Source.** One short sentence from three bounded sources: unfinished work
   carried from earlier days, work created or due today, and the interval's
   recorded activity. The write is a small, tool-free model call; a failure
-  leaves the recap goal-less rather than blocking it.
+  before any goal is saved leaves the recap goal-less rather than blocking it.
 - **Provenance.** The goal is saved with `goal_provenance = suggested` and is
   labelled as a suggestion everywhere — `Suggested by Otto` on the companion's
   focus line, `suggested by Otto` in the web workspace, `Suggested goal` in the
@@ -102,3 +102,12 @@ one:
 - **The recap follows.** The interval synthesizes against that goal, so the
   day, its recaps, and its EOD describe the same focus. The companion requests
   the held recap once the hold instant passes, deduped per slot.
+
+**Existing partial-success gap.** [suggestWorkOsDayGoal](../../../src/lib/work-os-goal-suggestion.ts)
+saves the suggested goal before its audit event. If the audit fails, the
+function rejects after persistence; the [recap generation path](../../../src/lib/work-os-activity-intervals.ts)
+catches that error without reloading the saved goal. The day can retain a goal
+that the new recap did not use. The required contract remains that the recap
+uses the goal already saved by this fallback: failure after persistence must
+not be treated as no goal. Resolving this path requires a separate
+implementation change.

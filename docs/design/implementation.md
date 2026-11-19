@@ -53,6 +53,8 @@ Each surface states its budgets, and visual QA checks them.
 - Guide film is loaded per chapter on demand, not all at once. Opening a guide
   fetches one clip and one still, and a chapter that is never chosen is never
   downloaded.
-- The film list is checked against the interface it depicts: one clip per step,
-  every clip and still present on disk, and every chapter label equal to its
-  step's title. A step that changed without a re-shoot fails that check.
+- Automated film checks cover one clip per step, clip/still asset presence,
+  chapter-title correspondence, minimum manifest duration, and total package
+  size. They do not compare step instructions or rendered controls with the
+  footage. Review the film when either changes, and re-shoot chapters that no
+  longer demonstrate the current step.

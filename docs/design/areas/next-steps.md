@@ -32,6 +32,14 @@ target must be a real open task/subtask from the list the model was given, and
 a subtask suggestion carries the parent's current state, so fabricated ids
 cannot file and approvals apply instead of going stale.
 
+**Existing duplicate-work gap.** [parseNextSteps](../../../src/lib/work-os-next-steps.ts)
+deduplicates new-task titles within one model response, and proposal-history
+checks suppress previously proposed work, but `create_task` is not yet checked
+against the supplied open-task titles. A repeated open-task title can be
+proposed and, if approved, create another task. The required deliverable must
+still be untracked; approval and per-proposal retry protection do not enforce
+that requirement by themselves. This gap needs a separate implementation fix.
+
 The moment lives in the **mascot chat**, not in a queue. After the employee
 approves a recap, the panel lingers instead of returning to the orb: it shows
 the receipt and a `Next steps` card (`From your <interval> recap`) with each
