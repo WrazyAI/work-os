@@ -404,10 +404,6 @@ function projectsFixture() {
   return { projects: [{ id: "pr-1", name: "Platform", provider_project_id: "nifty-pr-1" }, { id: "pr-2", name: "Finance", provider_project_id: "nifty-pr-2" }] };
 }
 
-function fieldMappingsFixture() {
-  return { mappings: [{ id: "fm-1", semantic_field: "priority", provider_field_id: "field-123" }] };
-}
-
 function installAdminFetchStub(state: PreviewState) {
   if (typeof window === "undefined") return;
   const flag = window as unknown as { __adminPreviewStub?: boolean };
@@ -454,7 +450,6 @@ function installAdminFetchStub(state: PreviewState) {
     if (url.includes("/api/work-os/projects")) return json(projectsFixture());
     if (url.includes("/api/work-os/organization")) return json(organizationFixture(state));
     if (url.includes("/api/work-os/integrations/connections")) return json(connectionsFixture());
-    if (url.includes("/api/work-os/field-mappings")) return json(fieldMappingsFixture());
     if (url.includes("/api/work-os/blueprints")) return json(blueprintsFixture());
     if (url.includes("/api/work-os/readiness")) return json(overviewFixture(state).readiness);
     return json({});

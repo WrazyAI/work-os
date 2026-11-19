@@ -50,8 +50,8 @@ to the previous workspace and restores the app rail. The rail carries one
 search field, the signed-in account's profile row, and grouped destinations:
 Account (Profile, Workday, Session, and administration's Recap follows), App
 (General, Appearance, Voice, Otto memory, Page guides), Workspace (Workspace
-status, Features, Members, Teams), Integrations (Connections, Field mappings,
-Blueprints), Data & privacy (Diagnostics, Reset), and About.
+status, Features, Members, Teams), Integrations (Connections, Blueprints),
+Data & privacy (Diagnostics, Reset), and About.
 
 Choosing a destination reveals one page in the stage: one title, one purpose
 line, and the existing label/detail/control group rows. Settings groups keep
@@ -65,6 +65,5 @@ The Profile page renders the profile form inline — Identity, Region & time,
 Workday, Privacy, and Work profile — using the same two-column section layout
 as the former modal. The masthead avatar opens Settings → Profile; the modal is
 not the entry point. Administration's workspace configuration is split the
-same way: Workspace status, Features, Members, Teams, Connections, Field
-mappings, and Blueprints are separate destination pages, each rendering its
-own card. Personal settings pages are shared by both workspaces.
+same way: Workspace status, Features, Members, Teams, Connections, and
+Blueprints are separate destination pages, each rendering its own card. Personal settings pages are shared by both workspaces.
