@@ -7,6 +7,7 @@ import type {
   AdminInsightTotals,
   AdminOverview,
   AdminOverviewPerson,
+  AdminTaskAssigneeGhl,
   AdminTimeSeriesPoint,
   ActivityIntervalView,
   ConnectionsResponse,
@@ -32,6 +33,7 @@ export type {
   AdminInsightTotals,
   AdminOverview,
   AdminOverviewPerson,
+  AdminTaskAssigneeGhl,
   AdminTimeSeriesPoint,
   ActivityIntervalView,
   ConnectionsResponse,
@@ -548,6 +550,7 @@ export function normalizePersonDetail(raw: unknown): PersonDetailResponse {
       total: asNumber(evidenceSummary.total),
       activity: asNumber(evidenceSummary.activity),
       output: asNumber(evidenceSummary.output),
+      ghl: asNumber(evidenceSummary.ghl),
       disputed: asNumber(evidenceSummary.disputed),
     },
   };
@@ -777,9 +780,18 @@ export function normalizeAdminTaskList(raw: unknown): AdminTaskListResponse {
   };
 }
 
-export function normalizeAdminTaskDetails(raw: unknown): { task: AdminTaskRow; subtasks: AdminTaskRow[] } {
+export function normalizeAdminTaskDetails(raw: unknown): { task: AdminTaskRow; subtasks: AdminTaskRow[]; assignee_ghl: AdminTaskAssigneeGhl[] } {
   const source = asRecord(raw);
-  return { task: normalizeTaskRow(asRecord(source.task)), subtasks: asRows(source.subtasks).map(normalizeTaskRow) };
+  return {
+    task: normalizeTaskRow(asRecord(source.task)),
+    subtasks: asRows(source.subtasks).map(normalizeTaskRow),
+    assignee_ghl: asRows(source.assignee_ghl).map((row) => ({
+      personId: asText(row.personId),
+      displayName: asText(row.displayName, "Assignee"),
+      performed: asNumber(row.performed),
+      lastAt: asIsoOrNull(row.lastAt),
+    })),
+  };
 }
 
 export function normalizeProjects(raw: unknown): { projects: Array<Record<string, any>> } {
@@ -968,6 +980,7 @@ export function statusLabel(value: string | null | undefined) {
 export function evidenceSourceLabel(source: string) {
   if (source === "worktivity") return "Worktivity (activity)";
   if (source === "github") return "GitHub";
+  if (source === "ghl") return "GoHighLevel";
   return statusLabel(source);
 }
 

@@ -92,7 +92,7 @@ work-os/
 ├── supabase/migrations/        # Historical and continuing SQL migrations
 ├── test/                       # Work OS server and integration tests
 ├── docs/                       # Migration, pilot and verification notes
-├── design.md                   # Canonical product design blueprint
+├── design.md                   # Design entry point and task-to-guide router
 └── AGENTS.md                   # Repository workflow and safety constraints
 ```
 
@@ -212,7 +212,7 @@ GitHub Actions covers web checks, companion checks and internal release-policy g
 ## Working on Work OS
 
 - **Read [AGENTS.md](./AGENTS.md) before modifying behavior.** It documents worktree isolation, task tracking, testing, safety invariants and cross-repository reconciliation.
-- **Follow [design.md](./design.md) for UI work.** It defines the shared desktop/web visual language and interaction contracts.
+- **Start UI work at [design.md](./design.md).** Read the shared foundations and only the relevant app-area or pattern guides in `docs/design/`; together they define the desktop/web visual language and interaction contracts.
 - **Keep product and deployment separate.** This repository is authoritative for Work OS source and the companion. The production web/runner services operate from the separate **Agent OS** checkout on the VPS. Updating `main` here does **not**, by itself, verify or perform a production deployment.
 - **Keep provider credentials out of source control.** Respect organization boundaries, employee consent, idempotency and provider-verified outcomes.
 - **For desktop releases**, read the [release handbook](./desktop/work-os-companion/README.md) and [changelog](./desktop/work-os-companion/CHANGELOG.md). Internal Windows installers are unsigned; update signatures are not equivalent to OS code-signing.

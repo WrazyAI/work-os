@@ -16,6 +16,8 @@ export interface AdminSectionFocus {
   /** The task view a person measure opens. Completed is the Outcomes target. */
   taskView?: "open" | "completed" | "all";
   evidenceTab?: "evidence" | "recaps";
+  /** The source a deep link should preselect on the Evidence page. */
+  evidenceSource?: string;
   /** A reviewed recap opened from an administration record link. This is a
    * real recap target, deliberately distinct from an EOD `reportId`. */
   recapId?: string;
@@ -225,6 +227,15 @@ export interface ReportsResponse {
   series?: Array<{ date: string; submitted: number; drafted: number; people?: Array<{ personId: string; name: string; submitted: number }> }>;
 }
 
+/** Verified performed GHL occurrences for one assignee in the last seven days.
+ * It is context for the task drawer, never task completion evidence. */
+export interface AdminTaskAssigneeGhl {
+  personId: string;
+  displayName: string;
+  performed: number;
+  lastAt: string | null;
+}
+
 export interface EvidenceRow {
   id: string;
   person_id: string | null;
@@ -309,7 +320,7 @@ export interface PersonDetailResponse {
   intervals: Array<Record<string, unknown>>;
   /** Exact ready-recap counts for the drawer's fourteen-day workday rows. */
   recapDays: Array<{ date: string; total: number; reviewed: number }>;
-  evidenceSummary: { total: number; activity: number; output: number; disputed: number };
+  evidenceSummary: { total: number; activity: number; output: number; ghl: number; disputed: number };
 }
 
 export interface PeopleResponse {

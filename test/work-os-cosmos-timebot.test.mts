@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  COSMOS_TIMEBOT_EVENTS,
   DELAY_MARKER_MS,
   classifyTimebotDelivery,
+  classifyTimebotEvent,
   cosmosTimebotConfigured,
   describeTimebotFailure,
   humanDelay,
@@ -17,11 +17,47 @@ const observedAt = "2026-11-17T17:06:00.000Z";
 // Fresh relative to the event, so the line carries no delay marker.
 const fresh = { now: observedAt } as const;
 
-test("renders the channel's own vocabulary: in, break, back, out", () => {
-  const words = COSMOS_TIMEBOT_EVENTS.map((event) =>
-    renderTimebotMessage({ displayName: "David Zawadi", eventType: event, observedAt, timezone: "Europe/London", ...fresh }),
+test("renders the channel's own vocabulary", () => {
+  const at = (eventType: string, extra: Record<string, unknown> = {}) =>
+    renderTimebotMessage({ displayName: "David Zawadi", eventType, observedAt, timezone: "Europe/London", ...fresh, ...extra });
+  assert.equal(at("clock_in"), "17:06 David — in");
+  assert.equal(at("clock_in", { previousObservedAt: "2026-11-17T16:24:00.000Z" }), "17:06 David — back (42m)");
+  assert.equal(at("pause"), "17:06 David — break");
+  assert.equal(at("resume", { previousObservedAt: "2026-11-17T16:31:00.000Z" }), "17:06 David — back (35m)");
+  assert.equal(at("clock_out", { fromState: "eod_due" }), "17:06 David — out");
+});
+
+test("a clock-out before the end of the shift reads as inactive, not out", () => {
+  for (const fromState of ["active", "paused", "clocked_in", null]) {
+    assert.equal(
+      renderTimebotMessage({
+        displayName: "David",
+        eventType: "clock_out",
+        observedAt,
+        timezone: "Europe/London",
+        fromState,
+        ...fresh,
+      }),
+      "17:06 David — inactive",
+    );
+  }
+});
+
+test("classifies every event explicitly", () => {
+  assert.deepEqual(classifyTimebotEvent({ eventType: "clock_out", fromState: "eod_due" }), {
+    kind: "out",
+    previousObservedAt: null,
+  });
+  assert.deepEqual(classifyTimebotEvent({ eventType: "clock_out", fromState: "active" }), {
+    kind: "inactive",
+    previousObservedAt: null,
+  });
+  assert.deepEqual(classifyTimebotEvent({ eventType: "clock_in" }), { kind: "in", previousObservedAt: null });
+  assert.deepEqual(
+    classifyTimebotEvent({ eventType: "clock_in", previousObservedAt: "2026-11-17T16:24:00.000Z" }),
+    { kind: "back", previousObservedAt: "2026-11-17T16:24:00.000Z" },
   );
-  assert.deepEqual(words, ["17:06 David — in", "17:06 David — break", "17:06 David — back", "17:06 David — out"]);
+  assert.equal(classifyTimebotEvent({ eventType: "mark_active" }), null);
 });
 
 test("uses the employee's timezone, not the server's", () => {
@@ -43,7 +79,7 @@ test("an unparseable timestamp still produces a postable line", () => {
 
 test("keeps only the first name so the channel stays scannable", () => {
   assert.equal(
-    renderTimebotMessage({ displayName: "  Lisa   van der Berg ", eventType: "clock_out", observedAt, timezone: "UTC", ...fresh }),
+    renderTimebotMessage({ displayName: "  Lisa   van der Berg ", eventType: "clock_out", fromState: "eod_due", observedAt, timezone: "UTC", ...fresh }),
     "17:06 Lisa — out",
   );
 });
@@ -111,6 +147,7 @@ test("a multi-day delay is dated and expressed in days", () => {
   const message = renderTimebotMessage({
     displayName: "David",
     eventType: "clock_out",
+    fromState: "eod_due",
     observedAt: "2026-11-14T17:06:00.000Z",
     timezone: "Europe/London",
     now: "2026-11-17T17:06:00.000Z",

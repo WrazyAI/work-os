@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { Activity, Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { apiRequestBlob } from "../api";
 import { TaskEvidenceList } from "../CompletionEvidence";
 import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
@@ -357,7 +357,7 @@ async function loadTaskEvidenceFile(evidence: TaskEvidenceRecord) {
 
 /** The organization task record: bounded filters, the flat list, and a drawer
  * that opens one task's detail with its subtasks. */
-export default function TasksPage({ initialTaskId, initialPersonId, initialFilter }: { initialTaskId?: string; initialPersonId?: string; initialFilter?: TaskFilter } = {}) {
+export default function TasksPage({ initialTaskId, initialPersonId, initialFilter, onOpenEvidence }: { initialTaskId?: string; initialPersonId?: string; initialFilter?: TaskFilter; onOpenEvidence?: (personId: string) => void } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const downloadTaskEvidence = async (evidence: TaskEvidenceRecord) => {
@@ -778,6 +778,25 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
               completed={drawerTask.completed === true}
               onDownload={(evidence) => void downloadTaskEvidence(evidence)}
             />
+            {detail.data?.assignee_ghl?.length ? (
+              <section className="admin-block">
+                <h3><Activity size={14} aria-hidden /> GoHighLevel activity (7 days)</h3>
+                <ul className="admin-rows">
+                  {(detail.data?.assignee_ghl ?? []).map((entry) => (
+                    <li key={entry.personId}>
+                      <span>{entry.displayName}</span>
+                      <span className="admin-inline-fields">
+                        <b>{entry.performed}</b>
+                        {onOpenEvidence ? (
+                          <AdminButton variant="ghost" onClick={() => onOpenEvidence(entry.personId)}>Open evidence</AdminButton>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="admin-quiet">Recorded provider actions for this task&apos;s assignees. Context, not completion evidence.</p>
+              </section>
+            ) : null}
             {/* The status control is the same permission payload the row menu
                 reads. An overdue task keeps the control, disabled with the
                 due-date note; a completed task has no status path at all. */}

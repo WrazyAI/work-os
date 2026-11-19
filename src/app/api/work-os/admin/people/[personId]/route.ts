@@ -79,11 +79,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
       // Exact seven-day evidence totals. Counting the bounded display read
       // capped every total at 100 and made the drawer disagree with the
       // Overview's today count.
-      getPool().query<{ total: number | string; activity: number | string; output: number | string; disputed: number | string }>(`
+      getPool().query<{ total: number | string; activity: number | string; output: number | string; ghl: number | string; disputed: number | string }>(`
         SELECT
           count(*)::int AS total,
           count(*) FILTER (WHERE e.source = 'worktivity')::int AS activity,
           count(*) FILTER (WHERE e.source IS DISTINCT FROM 'worktivity')::int AS output,
+          count(*) FILTER (WHERE e.source = 'ghl')::int AS ghl,
           count(*) FILTER (WHERE ev.correction_status = 'disputed')::int AS disputed
         FROM work_evidence e
         LEFT JOIN work_evidence_events ev ON ev.id = e.evidence_event_id
@@ -117,6 +118,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ personId
       total: Number(summary?.total ?? 0) || 0,
       activity: Number(summary?.activity ?? 0) || 0,
       output: Number(summary?.output ?? 0) || 0,
+      ghl: Number(summary?.ghl ?? 0) || 0,
       disputed: Number(summary?.disputed ?? 0) || 0,
     };
 

@@ -73,7 +73,7 @@ function personDetail(overrides: Record<string, unknown> = {}) {
         timezone: "Europe/Berlin",
       },
     ],
-    evidenceSummary: { total: 146, activity: 120, output: 26, disputed: 0 },
+    evidenceSummary: { total: 146, activity: 120, output: 26, ghl: 4, disputed: 0 },
     ...overrides,
   };
 }
@@ -88,6 +88,8 @@ describe("admin person record", () => {
     expect(markup).toContain("Open today&#x27;s EOD report: Pending review");
     expect(markup).toContain("View all recaps");
     expect(markup).toContain("View all reports");
+    expect(markup).toContain("GoHighLevel");
+    expect(markup).toContain("Open GoHighLevel evidence");
     expect(markup).toContain("Reviewed the settings IA and the mapping states.");
     expect(markup).toContain("Worked through the provider mapping review.");
     expect(markup).toContain('aria-label="Open EOD report for');

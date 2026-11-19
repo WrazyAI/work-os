@@ -154,7 +154,13 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
           onOpenRecaps={onOpenRecaps}
         />
       : section === "tasks"
-        ? <TasksPage key={`tasks-${focus.taskId ?? ""}-${focus.personId ?? ""}-${focus.taskView ?? ""}`} initialTaskId={focus.taskId} initialPersonId={focus.personId} initialFilter={focus.taskView} />
+        ? <TasksPage
+            key={`tasks-${focus.taskId ?? ""}-${focus.personId ?? ""}-${focus.taskView ?? ""}`}
+            initialTaskId={focus.taskId}
+            initialPersonId={focus.personId}
+            initialFilter={focus.taskView}
+            onOpenEvidence={(personId) => navigate("evidence", { personId, evidenceSource: "ghl" })}
+          />
         : section === "review"
           ? <ReviewPage
               key={`review-${focus.reportId ?? ""}-${focus.personId ?? ""}`}
@@ -167,9 +173,10 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
               ? <EvidencePage
-                  key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}`}
+                  key={`${focus.evidenceTab ?? "evidence"}:${focus.personId ?? ""}:${focus.evidenceSource ?? ""}`}
                   initialTab={focus.evidenceTab}
                   initialPersonId={focus.personId}
+                  initialSource={focus.evidenceSource}
                   viewerPersonId={session.personId ?? ""}
                 />
               : section === "settings" && personalSettingsProps
