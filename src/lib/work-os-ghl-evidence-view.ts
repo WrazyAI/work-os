@@ -63,6 +63,7 @@ export function ghlEvidenceRow(row: Json, actorPerson?: { id: string; displayNam
     url: null,
     metrics: { relation, evidenceClass: row.evidence_class },
     created_at: row.occurred_at,
+    recorded_at: row.occurred_at,
     person: null,
     task: null,
     event: {

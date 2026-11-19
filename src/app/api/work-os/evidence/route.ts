@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { createEvidence } from "@/lib/work-os";
+import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { canViewGhlOrganizationContext, ghlEvidenceRow } from "@/lib/work-os-ghl-evidence-view";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsAdmin, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const EVIDENCE_SELECT =
-  "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events(correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
+  "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events(occurred_at,correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
 
 export async function GET(req: Request) {
   try {
@@ -119,8 +120,22 @@ export async function GET(req: Request) {
         return ghlEvidenceRow(row, mapped);
       });
     }
-    const merged = [...(data ?? []), ...ghlRows]
-      .sort((left, right) => String((right as Record<string, unknown>).created_at ?? "").localeCompare(String((left as Record<string, unknown>).created_at ?? "")))
+    // The event occurrence is the authoritative time for provider evidence. The
+    // mirror row's created_at is when the sync wrote it, which for a backfill
+    // can be hours or days after the call actually happened.
+    const evidenceRows = ((data ?? []) as Record<string, unknown>[]).map((row) => {
+      const event = embeddedRow<{ occurred_at?: string | null }>(row.event);
+      return {
+        ...row,
+        recorded_at: event?.occurred_at ?? row.created_at ?? null,
+      };
+    });
+    const merged = [...evidenceRows, ...ghlRows]
+      .sort((left, right) => {
+        const leftAt = (left as Record<string, unknown>).recorded_at ?? (left as Record<string, unknown>).created_at;
+        const rightAt = (right as Record<string, unknown>).recorded_at ?? (right as Record<string, unknown>).created_at;
+        return String(rightAt ?? "").localeCompare(String(leftAt ?? ""));
+      })
       .slice(0, limit);
     // Optional summary for the Evidence page's lead visual: source mix and a
     // daily volume series over the same filters, computed from date/source

@@ -247,6 +247,8 @@ export interface EvidenceRow {
   url: string | null;
   metrics: Record<string, unknown> | null;
   created_at: string;
+  /** Provider occurrence time when available, else the mirror write time. */
+  recorded_at?: string | null;
   person?: { id: string; display_name: string } | null;
   task?: { id: string; title: string } | null;
   /** Provider-recorded GHL classification. `actorLabel` states who the record

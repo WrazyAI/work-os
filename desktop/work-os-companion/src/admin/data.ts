@@ -631,6 +631,7 @@ function normalizeEvidenceRow(row: Loose): EvidenceRow {
     url: asTextOrNull(row.url),
     metrics: row.metrics && typeof row.metrics === "object" ? (row.metrics as Record<string, unknown>) : null,
     created_at: asText(row.created_at),
+    recorded_at: asTextOrNull(row.recorded_at) ?? asText(row.created_at),
     person: person ? { id: asText(person.id), display_name: asText(person.display_name, "Unmapped person") } : null,
     task: task ? { id: asText(task.id), title: asText(task.title, "Task") } : null,
     event: event
