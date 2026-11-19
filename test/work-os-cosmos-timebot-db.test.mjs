@@ -10,12 +10,13 @@ import { PGlite } from "@electric-sql/pglite";
 const migrations = [
   readFileSync("supabase/migrations/0075_work_cosmos_timebot_notifications.sql", "utf8"),
   readFileSync("supabase/migrations/0076_work_timebot_inactive.sql", "utf8"),
+  readFileSync("supabase/migrations/0077_work_timebot_no_activity.sql", "utf8"),
 ];
 
 const SCHEMA = `
     create table work_organizations (id uuid primary key default gen_random_uuid(), name text not null, slug text not null);
     create table work_people (id uuid primary key default gen_random_uuid(), display_name text not null);
-    create table work_sessions (id uuid primary key default gen_random_uuid(), organization_id uuid not null, person_id uuid not null, timezone text not null, shift_date date not null);
+    create table work_sessions (id uuid primary key default gen_random_uuid(), organization_id uuid not null, person_id uuid not null, timezone text not null, shift_date date not null, state text not null default 'active');
     create table work_session_events (
       id uuid primary key default gen_random_uuid(),
       organization_id uuid not null references work_organizations(id) on delete cascade,
@@ -322,6 +323,40 @@ test("a next-day clock-in is a fresh in, not a back", async () => {
       "select previous_observed_at from work_notification_outbox where event_type = 'clock_in'",
     );
     assert.equal(row.rows[0].previous_observed_at, null, "yesterday's clock-out must not turn today into a back");
+  } finally {
+    await db.close();
+  }
+});
+
+test("no-activity markers enqueue and carry the gap", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    const quietAt = ago(30);
+    await addEvent(db, ids, "no_activity", quietAt);
+    await addEvent(db, ids, "activity_resumed", ago(5));
+    const rows = await db.query(
+      "select event_type, observed_at, previous_observed_at from work_notification_outbox order by observed_at",
+    );
+    assert.deepEqual(rows.rows.map((row) => row.event_type), ["no_activity", "activity_resumed"]);
+    assert.equal(
+      new Date(rows.rows[1].previous_observed_at).toISOString(),
+      new Date(quietAt).toISOString(),
+      "the return knows when the quiet gap started",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("a no-activity event does not move the session state", async () => {
+  const db = await freshDb();
+  try {
+    const ids = await seed(db);
+    const before = await db.query("select state from work_sessions where id = $1", [ids.sessionId]);
+    await addEvent(db, ids, "no_activity", ago(10));
+    const after = await db.query("select state from work_sessions where id = $1", [ids.sessionId]);
+    assert.deepEqual(after.rows, before.rows, "the marker is a description, not a transition");
   } finally {
     await db.close();
   }

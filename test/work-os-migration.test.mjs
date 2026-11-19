@@ -74,6 +74,7 @@ const migrations = [
     "supabase/migrations/0068_work_sessions_day_index_reconcile.sql",
     "supabase/migrations/0075_work_cosmos_timebot_notifications.sql",
     "supabase/migrations/0076_work_timebot_inactive.sql",
+    "supabase/migrations/0077_work_timebot_no_activity.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {

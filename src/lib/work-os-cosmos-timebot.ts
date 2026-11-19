@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * work_session_events (`late_reason`, `mark_active`, `worktivity_reopened`,
  * `resolve_missed_clock_out`, ...) is a system or correction event and would
  * just add noise to a human punch-clock channel. */
-export const COSMOS_TIMEBOT_EVENTS = ["clock_in", "pause", "resume", "clock_out"] as const;
+export const COSMOS_TIMEBOT_EVENTS = ["clock_in", "pause", "resume", "clock_out", "no_activity", "activity_resumed"] as const;
 export type CosmosTimebotEvent = (typeof COSMOS_TIMEBOT_EVENTS)[number];
 
 /** Channel vocabulary. `pause`/`resume` are Work OS's names for a break; the
@@ -86,7 +86,7 @@ export function humanDelay(ms: number) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export type TimebotMessageKind = "in" | "break" | "back" | "out" | "inactive";
+export type TimebotMessageKind = "in" | "break" | "back" | "out" | "no activity" | "activity";
 
 export interface TimebotClassification {
   kind: TimebotMessageKind;
@@ -113,11 +113,15 @@ export function classifyTimebotEvent(input: {
   if (!(COSMOS_TIMEBOT_EVENTS as readonly string[]).includes(event)) return null;
   const previous = input.previousObservedAt ?? null;
   if (event === "clock_out") {
-    return { kind: input.fromState === "eod_due" ? "out" : "inactive", previousObservedAt: null };
+    return { kind: input.fromState === "eod_due" ? "out" : "no activity", previousObservedAt: null };
   }
   if (event === "pause") return { kind: "break", previousObservedAt: null };
   if (event === "resume") return { kind: "back", previousObservedAt: previous };
-  return { kind: previous ? "back" : "in", previousObservedAt: previous };
+  if (event === "no_activity") return { kind: "no activity", previousObservedAt: null };
+  if (event === "activity_resumed") return { kind: "activity", previousObservedAt: previous };
+  // A clock-in that resumes a same-shift exit is the return of activity, not a
+  // second start of the day.
+  return { kind: previous ? "activity" : "in", previousObservedAt: previous };
 }
 
 /** Render one channel line.
