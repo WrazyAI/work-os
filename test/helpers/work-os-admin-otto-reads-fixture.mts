@@ -205,7 +205,7 @@ insert into work_org_members (id, organization_id, user_id, role, feature_flags,
 export const migration = async () => (await Promise.all([
   readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8"),
   readFile(new URL("../../supabase/migrations/0072_work_admin_otto_workflows.sql", import.meta.url), "utf8"),
-  readFile(new URL("../../supabase/migrations/0077_work_payroll_recap_provenance.sql", import.meta.url), "utf8"),
+  readFile(new URL("../../supabase/migrations/0078_work_payroll_recap_provenance.sql", import.meta.url), "utf8"),
 ])).join("\n");
 
 export async function fixture() {
