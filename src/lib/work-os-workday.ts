@@ -14,6 +14,7 @@ import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-lat
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 import { worktivityClockInChanged, worktivityIntervalReopenCandidate, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted } from "@/modules/work-os/worktivity-control";
+import { recordInactivityGap } from "@/lib/work-os-inactivity";
 
 type Json = Record<string, unknown>;
 const db = () => createAdminClient();
@@ -438,6 +439,12 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
   const existing = await activeSession(access);
   if (projection.state === "active" || projection.state === "paused") {
     if (existing) {
+      // A disconnected employee keeps the provider's last state; this only
+      // records the quiet gap so the channel can say "no activity".
+      await recordInactivityGap(access, existing, {
+        status: projection.status,
+        activityObservedAt: projection.activityObservedAt ?? null,
+      }, new Date(projection.observedAt));
       let current = existing;
       if (existing.source !== "worktivity" || worktivityClockInChanged(existing.clocked_in_at, projection.clockedInAt)) {
         const providerStart = projection.clockedInAt && Number.isFinite(Date.parse(projection.clockedInAt))

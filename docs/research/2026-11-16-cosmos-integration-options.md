@@ -318,14 +318,18 @@ Single-channel, env-configured. Branch `codex/cosmos-timebot`.
 
 The date appears only when the event's local day differs from the delivery day, because Cosmos's `Today`/`Yesterday` dividers describe posting time. The marker is attached per event, so a delayed `break` does not make the following `back` look delayed.
 
-**`inactive`, not `out`, before the end of the shift.** A dropped connection makes Worktivity report an exact clock-out, which is indistinguishable from leaving for the day at the moment it arrives. The return is only visible in hindsight. The channel therefore posts `inactive` for any clock-out that did not leave the `eod_due` state, and `back` for the clock-in that resumes it, with the gap:
+**`no activity`, not `out`, before the end of the shift.** A dropped connection makes Worktivity report an exact clock-out, which is indistinguishable from leaving for the day at the moment it arrives. The return is only visible in hindsight. The channel therefore posts `no activity` for any clock-out that did not leave the `eod_due` state, and `activity` for the clock-in that resumes it, with the gap:
 
 ```
-19:29 David — inactive
-20:11 David — back (42m)
+19:29 David — no activity
+20:11 David — activity (42m)
 ```
 
 A clock-out from `eod_due` still reads `out`. `work_session_events.from_state` and the resumed event's timestamp are captured on the outbox row by a `before insert` trigger (migration `0076`), and the classification lives in `classifyTimebotEvent`, so the enqueue trigger and the reconciler cannot disagree. Work OS still records the underlying clock-out and clock-in: this changes what the channel claims, not the attendance ledger.
+
+**A live gap, not just a clock-out.** A connection drop, a sleeping machine, or a force-closed tracker produces **no** clock-out at all: Worktivity keeps returning its last status (usually `working`) and simply stops producing activity samples. Migration `0077` and `src/lib/work-os-inactivity.ts` close that hole. While the session is active and the provider status is `clock_in` or `working`, if the newest sample is older than five minutes, Work OS writes a synthetic `no_activity` event and the channel posts it; when a fresh sample arrives it writes `activity_resumed` and the channel posts `activity (7m)`. Neither event moves the session state.
+
+`idle` (Status 3) is deliberately excluded. It is a real provider status distinct from `clock_out`, and a reading or thinking employee still produces samples, so idle never trips the gap. Only absence does. Detection runs on the five-minute `work-os-attendance-sync.timer` on the VPS, so it works when the employee's machine is off, and on the companion's poll when it is online.
 
 **Deferred by decision.** Compressing anything older than 24 hours into one per-person recovery line was considered and deliberately postponed: the team is small, multi-day outages are rare, and dated individual lines degrade honestly. Revisit only if a real backlog proves noisy.
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inactivityAction, NO_ACTIVITY_THRESHOLD_MS } from "../src/lib/work-os-inactivity.ts";
 import {
   DELAY_MARKER_MS,
   classifyTimebotDelivery,
@@ -21,13 +22,13 @@ test("renders the channel's own vocabulary", () => {
   const at = (eventType: string, extra: Record<string, unknown> = {}) =>
     renderTimebotMessage({ displayName: "David Zawadi", eventType, observedAt, timezone: "Europe/London", ...fresh, ...extra });
   assert.equal(at("clock_in"), "17:06 David — in");
-  assert.equal(at("clock_in", { previousObservedAt: "2026-11-17T16:24:00.000Z" }), "17:06 David — back (42m)");
+  assert.equal(at("clock_in", { previousObservedAt: "2026-11-17T16:24:00.000Z" }), "17:06 David — activity (42m)");
   assert.equal(at("pause"), "17:06 David — break");
   assert.equal(at("resume", { previousObservedAt: "2026-11-17T16:31:00.000Z" }), "17:06 David — back (35m)");
   assert.equal(at("clock_out", { fromState: "eod_due" }), "17:06 David — out");
 });
 
-test("a clock-out before the end of the shift reads as inactive, not out", () => {
+test("a clock-out before the end of the shift reads as no activity, not out", () => {
   for (const fromState of ["active", "paused", "clocked_in", null]) {
     assert.equal(
       renderTimebotMessage({
@@ -38,7 +39,7 @@ test("a clock-out before the end of the shift reads as inactive, not out", () =>
         fromState,
         ...fresh,
       }),
-      "17:06 David — inactive",
+      "17:06 David — no activity",
     );
   }
 });
@@ -49,13 +50,18 @@ test("classifies every event explicitly", () => {
     previousObservedAt: null,
   });
   assert.deepEqual(classifyTimebotEvent({ eventType: "clock_out", fromState: "active" }), {
-    kind: "inactive",
+    kind: "no activity",
     previousObservedAt: null,
   });
   assert.deepEqual(classifyTimebotEvent({ eventType: "clock_in" }), { kind: "in", previousObservedAt: null });
   assert.deepEqual(
     classifyTimebotEvent({ eventType: "clock_in", previousObservedAt: "2026-11-17T16:24:00.000Z" }),
-    { kind: "back", previousObservedAt: "2026-11-17T16:24:00.000Z" },
+    { kind: "activity", previousObservedAt: "2026-11-17T16:24:00.000Z" },
+  );
+  assert.deepEqual(classifyTimebotEvent({ eventType: "no_activity" }), { kind: "no activity", previousObservedAt: null });
+  assert.deepEqual(
+    classifyTimebotEvent({ eventType: "activity_resumed", previousObservedAt: "2026-11-17T16:24:00.000Z" }),
+    { kind: "activity", previousObservedAt: "2026-11-17T16:24:00.000Z" },
   );
   assert.equal(classifyTimebotEvent({ eventType: "mark_active" }), null);
 });
@@ -317,5 +323,45 @@ test("the migration can never break a clock transition", () => {
     sql,
     /revoke all on function public\.work_enqueue_timebot_notification\(\) from public/,
     "the security-definer trigger function must not be callable by ordinary roles",
+  );
+});
+
+test("a no-activity gap opens only after five quiet minutes of working", () => {
+  assert.equal(NO_ACTIVITY_THRESHOLD_MS, 5 * 60_000);
+  const base = { status: "working", activityObservedAt: "2026-11-19T19:10:00Z", open: false };
+  assert.equal(inactivityAction({ ...base, now: new Date("2026-11-19T19:14:59Z") }), null, "4m59s is still normal");
+  assert.equal(inactivityAction({ ...base, now: new Date("2026-11-19T19:15:00Z") }), "open", "five quiet minutes opens the gap");
+  for (const status of ["idle", "break", "clock_out", "yet_to_start", "unknown"]) {
+    assert.equal(inactivityAction({ ...base, status, now: new Date("2026-11-19T19:30:00Z") }), null, `${status} is not inactivity`);
+  }
+});
+
+test("a no-activity gap closes when fresh activity arrives", () => {
+  const open = { status: "working", activityObservedAt: "2026-11-19T19:20:00Z", open: true };
+  assert.equal(inactivityAction({ ...open, now: new Date("2026-11-19T19:21:00Z") }), "close");
+  assert.equal(inactivityAction({ ...open, now: new Date("2026-11-19T19:26:00Z") }), null, "still quiet stays open");
+});
+
+test("renders the no-activity pair with its gap", () => {
+  assert.equal(
+    renderTimebotMessage({
+      displayName: "David",
+      eventType: "no_activity",
+      observedAt: "2026-11-19T19:15:00Z",
+      timezone: "Europe/London",
+      now: "2026-11-19T19:15:00Z",
+    }),
+    "19:15 David — no activity",
+  );
+  assert.equal(
+    renderTimebotMessage({
+      displayName: "David",
+      eventType: "activity_resumed",
+      previousObservedAt: "2026-11-19T19:15:00Z",
+      observedAt: "2026-11-19T19:22:00Z",
+      timezone: "Europe/London",
+      now: "2026-11-19T19:22:00Z",
+    }),
+    "19:22 David — activity (7m)",
   );
 });
