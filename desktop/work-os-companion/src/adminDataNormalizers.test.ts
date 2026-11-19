@@ -171,7 +171,7 @@ describe("administration response normalizers", () => {
     expect(detail.reports).toEqual([]);
     expect(detail.updates).toEqual([]);
     expect(detail.intervals).toEqual([]);
-    expect(detail.evidenceSummary).toEqual({ total: 0, activity: 0, output: 0, disputed: 0 });
+    expect(detail.evidenceSummary).toEqual({ total: 0, activity: 0, output: 0, ghl: 0, disputed: 0 });
     // An absent flag never silently deactivates a person.
     expect(detail.person.active).toBe(true);
     expect(detail.person.role_profile).toBeNull();
@@ -259,6 +259,12 @@ describe("administration response normalizers", () => {
     expect(list.tasks[0]).toMatchObject({ id: "t-1", name: "Retry handling", title: null, project: null, assignees: [], labels: [], completed: null, due_date: null, created_at: null, provider_created_at: null });
     const details = normalizeAdminTaskDetails({ task: { id: "t-1", title: "Retry handling" } });
     expect(details.subtasks).toEqual([]);
+    expect(details.assignee_ghl).toEqual([]);
+    const withGhl = normalizeAdminTaskDetails({
+      task: { id: "t-1", title: "Retry handling" },
+      assignee_ghl: [{ personId: "p-1", displayName: "Amara Okafor", performed: 4, lastAt: "2026-10-15T09:00:00.000Z" }],
+    });
+    expect(withGhl.assignee_ghl).toEqual([{ personId: "p-1", displayName: "Amara Okafor", performed: 4, lastAt: "2026-10-15T09:00:00.000Z" }]);
     expect(details.task.project).toBeNull();
     // A present assignee keeps a readable name for the table.
     const named = normalizeAdminTaskList({ tasks: [{ id: "t-2", assignees: [{ display_name: "Amara Okafor" }] }] });
@@ -272,7 +278,7 @@ describe("administration response normalizers", () => {
     const attached = normalizeAdminTaskList({ tasks: [{ id: "t-4", completion_evidence: [{ id: "e-1", fileName: "a.txt", contentType: "text/plain", sizeBytes: 10, url: "/api/work-os/evidence/e-1/file" }] }] });
     expect(attached.tasks[0].completion_evidence?.[0]).toMatchObject({ id: "e-1", fileName: "a.txt", contentType: "text/plain", sizeBytes: 10 });
     expect(list.tasks[0].completion_evidence).toEqual([]);
-    expectNoLeaks([list, details, named, stamped, attached]);
+    expectNoLeaks([list, details, withGhl, named, stamped, attached]);
   });
 
   it("normalizes organization, connections, and GitHub payloads without their collections", () => {

@@ -49,6 +49,7 @@ function evidencePersonLabel(row: EvidenceRow): string {
 const SOURCE_OPTIONS = [
   { value: "worktivity", label: "Worktivity (activity)" },
   { value: "github", label: "GitHub" },
+  { value: "ghl", label: "GoHighLevel" },
   { value: "loom", label: "Loom" },
   { value: "nifty", label: "Legacy import" },
 ];
@@ -61,12 +62,12 @@ function screenshotOf(row: EvidenceRow) {
  * apart; the raw-frame preview stays inside the flagged/disputed rule and
  * records a reason with every view. A caller can land directly on the
  * activity-recap tab (the Overview recap action does). */
-export default function EvidencePage({ initialTab = "evidence", initialPersonId = "", viewerPersonId = "" }: { initialTab?: EvidenceTab; initialPersonId?: string; viewerPersonId?: string } = {}) {
+export default function EvidencePage({ initialTab = "evidence", initialPersonId = "", initialSource = "", viewerPersonId = "" }: { initialTab?: EvidenceTab; initialPersonId?: string; initialSource?: string; viewerPersonId?: string } = {}) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
   const [tab, setTab] = useState<EvidenceTab>(initialTab);
   const [personId, setPersonId] = useState(initialPersonId);
-  const [source, setSource] = useState("");
+  const [source, setSource] = useState(SOURCE_OPTIONS.some((option) => option.value === initialSource) ? initialSource : "");
   const [disputedOnly, setDisputedOnly] = useState(false);
   const [from, setFrom] = useState(() => isoDaysAgo(13));
   const [to, setTo] = useState(() => todayIso());
@@ -167,6 +168,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
   const actors = githubActors.data?.actors ?? [];
   const sources = evidence.data?.summary?.sources ?? [];
+  const ghlSource = sources.find((entry) => entry.source === "ghl") ?? null;
   const selectedShot = selected ? screenshotOf(selected) : null;
   const selectedReviewable = !!selected && (selected.event?.correction_status === "disputed" || one<Record<string, unknown>>(selected.event?.metadata)?.needsReview === true);
   const selectedOwn = !!selected?.person?.id && !!viewerPersonId && String(selected.person.id) === String(viewerPersonId);
@@ -180,6 +182,11 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
         detail={`Evidence by source between ${formatWorkOsFullDate(from)} and ${formatWorkOsFullDate(to)}`}
       >
         <ShareBars ariaLabel="Evidence items in this range by source" items={sources.map((entry) => ({ label: evidenceSourceLabel(entry.source), value: entry.count }))} />
+        {ghlSource && source !== "ghl" ? (
+          <button type="button" className="admin-block-action" onClick={() => setSource("ghl")}>
+            View GoHighLevel evidence ({ghlSource.count})
+          </button>
+        ) : null}
       </AdminCard>
 
       <AdminCard
@@ -361,6 +368,9 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 <div className="admin-kv"><span>Class</span><b>{statusLabel(selected.event?.evidence_class ?? "—")}</b></div>
                 <div className="admin-kv"><span>Correction state</span><b>{statusLabel(selected.event?.correction_status ?? "none")}</b></div>
                 <div className="admin-kv"><span>Recorded</span><b>{relativeTime(selected.created_at)}</b></div>
+                {selected.ghl?.relation ? <div className="admin-kv"><span>GHL relation</span><b>{statusLabel(selected.ghl.relation)}</b></div> : null}
+                {selected.ghl?.actorLabel ? <div className="admin-kv"><span>Recorded actor</span><b>{selected.ghl.actorLabel}</b></div> : null}
+                {selected.ghl?.coverage ? <div className="admin-kv"><span>Coverage</span><b>{statusLabel(selected.ghl.coverage)}</b></div> : null}
                 {selected.task ? <div className="admin-kv"><span>Task</span><b>{selected.task.title}</b></div> : null}
               </div>
               <p className="admin-quiet">{selected.summary}</p>

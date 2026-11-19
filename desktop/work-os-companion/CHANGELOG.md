@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- GoHighLevel activity is now visible and filterable in Evidence, and people and task panels show recorded GHL activity.
+
 ## 0.5.37 — 2026-11-18
 
 - Recap, EOD, and goal reminders now have a dismiss button in the bubble and the chat.

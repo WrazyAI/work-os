@@ -12,6 +12,7 @@ import type {
   AdminTimeSeriesPoint,
   ConnectionsResponse,
   EvidenceResponse,
+  EvidenceRow,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
   OrganizationResponse,
@@ -299,7 +300,7 @@ function personDetail(personId: string): PersonDetailResponse {
         timezone: "Europe/Berlin",
       },
     ],
-    evidenceSummary: { total: 42, activity: 37, output: 5, disputed: personId === "p-5" ? 1 : 0 },
+    evidenceSummary: { total: 42, activity: 37, output: 5, ghl: 3, disputed: personId === "p-5" ? 1 : 0 },
   };
 }
 
@@ -390,6 +391,7 @@ function evidenceResponse(): EvidenceResponse {
     { id: "e-7", person: "p-2", date: DATES[DATES.length - 1], source: "worktivity", title: "Billing retry suite in the browser", summary: "VS Code beside a browser running the billing retry tests.", disputed: false, shot: true },
     { id: "e-8", person: "p-2", date: DATES[DATES.length - 1], source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", disputed: false, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
     { id: "e-9", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Settings IA review", summary: "Figma and Notion with the settings IA outline open.", disputed: false, shot: true },
+    { id: "e-ghl", person: "p-1", date: DATES[DATES.length - 1], source: "ghl", title: "Call outbound", summary: "Recorded outbound call with status completed.", disputed: false, ghl: { eventId: "e-ghl", relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" } },
   ];
   return {
     evidence: rows.map((row) => {
@@ -406,10 +408,11 @@ function evidenceResponse(): EvidenceResponse {
         metrics: null,
         created_at: `${row.date}T09:30:00.000Z`,
         person: { id: person.id, display_name: person.name },
+        ghl: (row as { ghl?: EvidenceRow["ghl"] }).ghl ?? null,
         event: {
           correction_status: row.disputed ? "disputed" : "none",
           evidence_class: row.source === "worktivity" ? "activity" : "output",
-          metadata: {},
+          metadata: (row as { ghl?: EvidenceRow["ghl"] }).ghl ? { ghl: (row as { ghl?: EvidenceRow["ghl"] }).ghl } : {},
           screenshot: (row as { shot?: boolean }).shot
             ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", previewUrl: PREVIEW_SHOT_URL, deleted_at: null }
             : null,
@@ -420,6 +423,7 @@ function evidenceResponse(): EvidenceResponse {
       sources: [
         { source: "worktivity", count: 21 },
         { source: "github", count: 9 },
+        { source: "ghl", count: 4 },
         { source: "nifty", count: 6 },
       ],
       days: DATES.slice(-7).map((date, index) => ({ date, count: 4 + (index % 5) })),
@@ -581,6 +585,16 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       intervals: intervalRows.filter((entry) => entry.personId === personId),
     });
   }
+  // The rendered fixture must exercise the GHL filter, including the deep link
+  // from a person panel. Seed the filtered query keys with the matching rows.
+  for (const personId of ["", "p-1", "p-2"]) {
+    const base = personId ? evidenceForPerson(personId) : reportEvidence;
+    const rows = base.evidence.filter((row) => row.source === "ghl");
+    queryClient.setQueryData(
+      adminKeys.evidence({ personId, source: "ghl", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }),
+      { evidence: rows, summary: { sources: rows.length ? [{ source: "ghl", count: rows.length }] : [], days: base.summary?.days ?? [] } } satisfies EvidenceResponse,
+    );
+  }
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
     intervals: intervalRows,
   });
@@ -702,6 +716,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       { id: "s-1", title: "Exponential backoff for 5xx responses", completed: true },
       { id: "s-2", title: "Dead-letter queue for exhausted retries", completed: false },
     ],
+    assignee_ghl: [{ personId: "p-1", displayName: "Amara Okafor", performed: 3, lastAt: `${today}T09:00:00.000Z` }],
   });
   queryClient.setQueryData(adminKeys.projects(), { projects: [{ id: "proj-1", name: "Platform" }, { id: "proj-2", name: "Product" }, { id: "proj-3", name: "Operations" }] });
   void ADMIN_STALE_MS;

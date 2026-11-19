@@ -10,7 +10,7 @@ import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
 
 const today = todayIso();
-const Tasks = TasksPage as ComponentType<{ initialTaskId?: string }>;
+const Tasks = TasksPage as ComponentType<{ initialTaskId?: string; onOpenEvidence?: (personId: string) => void }>;
 
 const evidence: TaskEvidenceRecord[] = [
   {
@@ -64,6 +64,38 @@ function renderTaskWithEvidence() {
   );
 }
 
+function renderTaskWithGhl() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  seedAdminFixtures(client, "dense");
+  const task = {
+    id: "t-ghl",
+    title: "Follow up the estimates",
+    completed: false,
+    due_date: today,
+    priority: "medium",
+    workflow_status: "in_progress",
+    assignee_person_ids: ["p-1"],
+    assigned_by_person_id: "p-1",
+    assignees: [{ displayName: "Amara Okafor" }],
+    updated_at: `${today}T08:00:00.000Z`,
+  };
+  const withCaps = { ...task, capabilities: taskCapabilities(task, { role: "admin", personId: "p-1" }, today) };
+  client.setQueryData(
+    adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }),
+    { tasks: [withCaps], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } },
+  );
+  client.setQueryData(adminKeys.taskDetails("t-ghl"), {
+    task: withCaps,
+    subtasks: [],
+    assignee_ghl: [{ personId: "p-1", displayName: "Amara Okafor", performed: 5, lastAt: `${today}T09:00:00.000Z` }],
+  });
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client },
+      createElement(NotificationProvider, null,
+        createElement(Tasks, { initialTaskId: "t-ghl", onOpenEvidence: () => undefined }))),
+  );
+}
+
 describe("admin task attachments", () => {
   it("marks the status cell and shows the actual files in the task drawer", () => {
     const markup = renderTaskWithEvidence();
@@ -73,5 +105,14 @@ describe("admin task attachments", () => {
     expect(markup).toContain("Completion evidence");
     expect(markup).toContain("Employee-attached");
     expect(markup).toContain("Download retry-verification.txt");
+  });
+
+  it("shows each assignee's recorded GoHighLevel activity as context", () => {
+    const markup = renderTaskWithGhl();
+    expect(markup).toContain("GoHighLevel activity (7 days)");
+    expect(markup).toContain("Amara Okafor");
+    expect(markup).toContain(">5<");
+    expect(markup).toContain("Context, not completion evidence.");
+    expect(markup).toContain("Open evidence");
   });
 });

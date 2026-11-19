@@ -420,14 +420,19 @@
       "type": "fix",
       "summary": "Recaps wait briefly for delayed activity evidence instead of disappearing, and switching accounts never shows the previous account's recap.",
       "verification": "Branch codex/recap-reliability-plan at 44ab8072: Work OS typecheck and full suite 1407 tests/1396 pass/0 fail/11 opt-in PG skipped; focused backend 110/110; companion 225 files/2003 tests, typecheck, and production build; Webpack production build; changed-file ESLint 0 errors; six rendered desktop/narrow fixtures with no overflow or page errors. Recorded in docs/work-os-recap-verification.md."
+    },
+    {
+      "id": "ghl-evidence-visibility-and-panels",
+      "type": "fix",
+      "summary": "GoHighLevel activity is visible and filterable in Evidence, and people and task panels show recorded GHL activity.",
+      "verification": "Companion focused admin/evidence/task suites 24 passed; full vitest 2023/2024 with one unrelated Stronghold timeout that passed 5/5 alone; tsc clean; Vite production build passed. Web work-os suite 1412 tests/1401 pass/0 fail/11 skipped; webpack production build passed. Rendered preview: GHL source summary and filter, GHL evidence row, People drawer GHL count and task drawer assignee GHL activity both link to filtered Evidence. Live Agent OS b3b3f0e24: Evidence URL filters and People link verified; task detail assignee_ghl returned 179, matching the database."
     }
   ],
-  "emergency": null,
-  "operatorOverride": {
-    "version": "0.5.37",
-    "updateId": "dismissible-recap-eod-goal-prompts",
-    "approvedBy": "operator",
-    "reason": "The operator asked for dismiss controls on the persistent recap, EOD, and goal prompts.",
-    "approvedAt": "2026-11-18"
-  }
+  "emergency": {
+    "version": "0.5.38",
+    "updateId": "ghl-evidence-visibility-and-panels",
+    "brokenBehavior": "Administrators could not see or filter recorded GoHighLevel evidence in the desktop app, and the people and task panels omitted it.",
+    "restoredBehavior": "GoHighLevel is a filterable Evidence source, and the people and task panels show recorded GHL activity with links to the filtered record."
+  },
+  "operatorOverride": null
 }

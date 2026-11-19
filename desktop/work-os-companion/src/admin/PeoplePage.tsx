@@ -440,8 +440,18 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
                 <KeyValue label="Total" value={String(detail.data.evidenceSummary.total)} />
                 <KeyValue label="Activity" value={String(detail.data.evidenceSummary.activity)} />
                 <KeyValue label="Output" value={String(detail.data.evidenceSummary.output)} />
+                <KeyValue label="GoHighLevel" value={String(detail.data.evidenceSummary.ghl)} />
                 <KeyValue label="Disputed" value={String(detail.data.evidenceSummary.disputed)} />
               </div>
+              {detail.data.evidenceSummary.ghl > 0 && personRecord?.person.id ? (
+                <button
+                  type="button"
+                  className="admin-block-action"
+                  onClick={() => openSection("evidence", { personId: personRecord.person.id, evidenceSource: "ghl" })}
+                >
+                  Open GoHighLevel evidence
+                </button>
+              ) : null}
               <p className="admin-quiet">Observed activity is neutral context. Your own retained frames preview in Evidence; teammates&apos; raw frames stay behind the flagged/disputed review rule.</p>
             </section>
           </div>
