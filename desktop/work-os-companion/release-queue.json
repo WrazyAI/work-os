@@ -461,7 +461,7 @@
       "id": "shared-vault-single-initialization",
       "type": "fix",
       "summary": "Work OS opens its local data once and shares it between both windows instead of repeating the same unlock.",
-      "verification": "Branch codex/companion-shared-vault-startup rebased on 0.5.40: core7; transport9 (queued-settings, failed-save, resumable sign-out RED\u2192GREEN); companion 232 files/2062 tests, typecheck, contracts, Windows GNU check and production build; committed native Windows harness 6 pass (legacy/shared init/writers/restart/theme/reset, wrong-key recovery, corrupt snapshot and salt preservation). Installed 0.5.33 showed duplicated Stronghold initialization in both windows; one init is verified. Synthetic timing was too variable to claim a speedup; installed gain unmeasured. TestSprite blocked by billing; no installer published."
+      "verification": "Branch codex/companion-shared-vault-startup rebased on 0.5.40: core7; transport9 (queued-settings, failed-save, resumable sign-out RED\u2192GREEN); companion 232 files/2063 tests, typecheck, contracts, Windows GNU check and production build; committed native Windows harness 6 pass (legacy/shared init/writers/restart/theme/reset, wrong-key recovery, corrupt snapshot and salt preservation). Installed 0.5.33 showed duplicated Stronghold initialization in both windows; one init is verified. Synthetic timing was too variable to claim a speedup; installed gain unmeasured. TestSprite blocked by billing; no installer published."
     }
   ],
   "emergency": {

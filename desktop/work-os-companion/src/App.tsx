@@ -3997,7 +3997,7 @@ export default function App() {
       void emit(OTTO_CONTEXT_CLEARED_EVENT, adminOttoSnapshot ? ottoContextEvent(adminOttoSnapshot) : null);
       requestOttoAudioStop();
       void adminOttoDeliveryRef.current?.stop();
-      await clearWorkOsAccountCache(queryClient);
+      await clearWorkOsAccountCache(queryClient, session?.token ?? null);
       setSession(null); setDay(null); setDayLive(false); planningAutoOpenedRef.current = false; setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }
