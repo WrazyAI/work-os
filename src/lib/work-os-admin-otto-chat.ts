@@ -482,7 +482,9 @@ async function loadTurns(access: WorkOsAccess, threadId: string): Promise<TurnRo
     from work_admin_otto_turns
     where organization_id = $1 and thread_id = $2 and membership_id = $3
       and created_at >= clock_timestamp() - interval '${RETENTION_DAYS} days'
-    order by created_at desc, id desc
+    -- Keep equal-timestamp prompt/reply pairs together, with the reply first
+    -- in this descending, limited slice. The result is reversed below.
+    order by created_at desc, request_id desc, role asc, id desc
     limit $4`,
   [access.organizationId, threadId, access.membershipId, MAX_TURNS]);
   return rows.reverse();

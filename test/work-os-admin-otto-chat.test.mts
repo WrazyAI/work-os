@@ -1517,6 +1517,33 @@ test("result_snapshot_change_rehydrates_stale", async () => {
   } finally { await f.close(); }
 });
 
+test("rehydrated chat puts the reply after its prompt when their timestamps tie", async () => {
+  const f = await fixture();
+  try {
+    const prompt = "What can you help me with?";
+    const reply = "I can help you review your team's work.";
+    const service = await chat();
+    const response = await service.executeAdminOttoChat(adminAccess, {
+      text: prompt,
+      conversationId: null,
+      requestId: randomUUID(),
+    }, { now: () => NOW, interpret: async () => ({ reply, intent: null }) });
+    // Make the user's UUID sort after the reply's UUID and force equal timestamps.
+    // The chronological order of a request's prompt and reply must not depend on either.
+    await f.db.query(`update work_admin_otto_turns
+      set id = 'ffffffff-ffff-4fff-bfff-ffffffffffff', created_at = (
+        select created_at from work_admin_otto_turns where id = $1
+      )
+      where thread_id = $2 and role = 'user'`, [response.turnId, response.conversationId]);
+
+    const view = await service.loadAdminOttoThread(adminAccess, response.conversationId, { now: () => NOW });
+    assert.deepEqual(view.turns.map(({ role, text }) => [role, text]), [
+      ["user", prompt],
+      ["assistant", reply],
+    ]);
+  } finally { await f.close(); }
+});
+
 test("team_roster_change_rehydrates_stale", async () => {
   const f = await fixture();
   try {
