@@ -12,6 +12,16 @@ export function ottoVisibilityLabel(visible: boolean | null): "Show Otto" | "Hid
   return visible === true ? "Hide Otto" : "Show Otto";
 }
 
+/** A visibility poll is only allowed to write the label when no host event
+ * landed while it was in flight. The listener owns the revision. */
+export function shouldApplyVisibilityPoll(
+  startedRevision: number,
+  currentRevision: number,
+  cancelled: boolean,
+): boolean {
+  return !cancelled && startedRevision === currentRevision;
+}
+
 /** Shared by the in-window View menu and its macOS native mirror. */
 export function ottoVisibilityMenuItem(visible: boolean | null, onSelect: () => void): AppMenuItem {
   return { id: "view:otto", label: ottoVisibilityLabel(visible), onSelect };
