@@ -80,6 +80,22 @@ test("consumed outcomes cannot be removed, renamed, or edited to count again", (
   }
 });
 
+test("only the one-time shared-vault test-count correction is accepted", () => {
+  assert.equal(typeof gate.isAllowedVerificationCorrection, "function", "the append-only exception must be an explicit gate");
+  const before = {
+    id: "shared-vault-single-initialization",
+    type: "fix",
+    summary: "Work OS opens its local data once and shares it between both windows instead of repeating the same unlock.",
+    verification: "companion 232 files/2062 tests, typecheck and production build",
+  };
+  const after = { ...before, verification: "companion 232 files/2063 tests, typecheck and production build" };
+  assert.equal(gate.isAllowedVerificationCorrection(before, after), true);
+  assert.equal(gate.isAllowedVerificationCorrection({ ...before, id: "other-outcome" }, after), false);
+  assert.equal(gate.isAllowedVerificationCorrection({ ...before, summary: "Renamed outcome" }, after), false);
+  assert.equal(gate.isAllowedVerificationCorrection(before, { ...after, verification: after.verification.replace("2063", "2064") }), false);
+  assert.equal(gate.isAllowedVerificationCorrection(before, { ...after, verification: `${after.verification} and a rewrite` }), false);
+});
+
 test("empty, malformed, unverified, or internal-only outcomes fail closed", () => {
   for (const malformed of [null, {}, { ...queue(), schemaVersion: 2 }, { ...queue(), updates: null }]) {
     assert.throws(() => evaluate(malformed), /queue|schema/i);
