@@ -474,13 +474,19 @@
       "type": "fix",
       "summary": "GoHighLevel records now name their assigned owner instead of reading as an unknown actor.",
       "verification": "Unit projection test names the owner while keeping the action actor separate; a live assigned-only opportunity returned assigneeLabels ['Kalia Bell'] with person_id null. Companion Evidence render 3/3; web and companion typechecks; route contracts 34/34."
+    },
+    {
+      "id": "ghl-inbound-attribution",
+      "type": "fix",
+      "summary": "Inbound GoHighLevel calls no longer appear under the employee who owns the shared line; only their outgoing calls and sent email are attributed to them.",
+      "verification": "Projection tests assert a mapped account does not name an inbound/unknown event as the actor, while a performed outbound event still names the verified person. Live API showed 36 inbound calls labeled 'Aden Badon' before the fix; the same rows must read 'Actor unknown' after deploy."
     }
   ],
   "emergency": {
     "version": "0.5.42",
-    "updateId": "ghl-assignee-context",
-    "brokenBehavior": "Assigned-only GoHighLevel records discarded the known owner and read as an unknown actor on the dashboard.",
-    "restoredBehavior": "The record names its assigned owner as context while keeping the action actor unrecorded."
+    "updateId": "ghl-inbound-attribution",
+    "brokenBehavior": "Inbound GoHighLevel calls were labeled with the employee who owns the shared line, making it look like he handled calls he did not.",
+    "restoredBehavior": "Inbound calls stay unattributed while the employee's outgoing calls and sent email remain attributed to him."
   },
   "operatorOverride": null
 }
