@@ -66,6 +66,8 @@ export default function EvidenceCoverageView({
         </div>
       </div>
 
+      {summary?.capped ? <div className="evidence-partial">Coverage counts are capped at 20,000 records; narrow the window for exact counts.</div> : null}
+
       {loading ? (
         <div className="evidence-loading"><Skeleton className="h-32" /></div>
       ) : error ? (

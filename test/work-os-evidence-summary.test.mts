@@ -34,6 +34,7 @@ test("summarizes sources, days, exact kinds, and distinct people together", () =
     { kind: "context", count: 1 },
   ]);
   assert.equal(summary.peopleCount, 2);
+  assert.deepEqual(summary.peopleByBucket, { calls: 1, emails: 1, texts: 0, work: 1, context: 0 });
   assert.equal(summary.coverage, undefined);
 });
 
@@ -61,6 +62,7 @@ test("keeps total counts honest when a date is malformed", () => {
   assert.deepEqual(summary.sources, [{ source: "ghl", count: 1 }]);
   assert.deepEqual(summary.days, []);
   assert.deepEqual(summary.kinds, [{ kind: "call", count: 1 }]);
+  assert.deepEqual(summary.peopleByBucket, { calls: 0, emails: 0, texts: 0, work: 0, context: 0 });
   assert.deepEqual(summary.coverage, { people: [] });
 });
 
@@ -70,6 +72,7 @@ test("handles an empty record without inventing a coverage row", () => {
     days: [],
     kinds: [],
     peopleCount: 0,
+    peopleByBucket: { calls: 0, emails: 0, texts: 0, work: 0, context: 0 },
     coverage: { people: [] },
   });
 });

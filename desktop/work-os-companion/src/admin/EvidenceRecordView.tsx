@@ -86,14 +86,14 @@ export default function EvidenceRecordView({
       <div className="evidence-index">
         <div className="evidence-index-primary">
           <p className="evidence-index-kicker">In this view</p>
-          <div className="evidence-index-number">{loading ? "—" : viewTotal.toLocaleString("en-US")}<small>record{viewTotal === 1 ? "" : "s"}</small></div>
+          <div className="evidence-index-number">{capped && !loading ? "≥" : ""}{loading ? "—" : viewTotal.toLocaleString("en-US")}<small>record{viewTotal === 1 ? "" : "s"}</small></div>
           <p className="evidence-index-scope">{scopeLabel}</p>
         </div>
         <div className="evidence-index-facts">
           <div className="evidence-fact"><span><Phone size={12} aria-hidden /> Calls</span><b>{loading ? "—" : callCount.toLocaleString("en-US")}</b><small>provider actions</small></div>
           <div className="evidence-fact"><span><Mail size={12} aria-hidden /> Emails</span><b>{loading ? "—" : emailCount.toLocaleString("en-US")}</b><small>sent messages</small></div>
           <div className="evidence-fact"><span><Users size={12} aria-hidden /> People</span><b>{loading ? "—" : peopleCount.toLocaleString("en-US")}</b><small>credited or contextual</small></div>
-          <div className="evidence-index-note"><b>{loading ? "Loading" : partial ? `${loadedCount.toLocaleString("en-US")} loaded` : capped ? "Counts capped" : "Complete view"}</b>Provider occurrence time</div>
+          <div className="evidence-index-note"><b>{loading ? "Loading" : partial ? `${loadedCount.toLocaleString("en-US")} loaded` : "Complete view"}</b>{capped ? "Counts capped · " : ""}Provider occurrence time</div>
         </div>
         <div className="evidence-pulse-wrap">
           <div className="evidence-pulse-head"><span>Last 14 days · all sources</span><b>{pulseError ? "Unavailable" : pulseLoading ? "Loading" : `Peak ${pulse.get(peakDate) ?? 0} · ${evidenceShortDate(peakDate)}`}</b></div>
@@ -135,7 +135,7 @@ export default function EvidenceRecordView({
             type="search"
             value={filters.search}
             aria-label="Search evidence"
-            placeholder="Search title, summary, or event id"
+            placeholder="Search title or summary"
             onChange={(event) => onFilters({ search: event.target.value })}
           />
         </label>

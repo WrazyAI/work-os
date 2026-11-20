@@ -650,6 +650,7 @@ export function normalizeEvidence(raw: unknown): EvidenceResponse {
   const source = asRecord(raw);
   const summary = source.summary && typeof source.summary === "object" ? asRecord(source.summary) : null;
   const coverage = summary?.coverage && typeof summary.coverage === "object" ? asRecord(summary.coverage) : null;
+  const peopleByBucket = summary?.peopleByBucket && typeof summary.peopleByBucket === "object" ? asRecord(summary.peopleByBucket) : null;
   return {
     evidence: asRows(source.evidence).map(normalizeEvidenceRow),
     summary: summary
@@ -660,6 +661,15 @@ export function normalizeEvidence(raw: unknown): EvidenceResponse {
             ? asRows(summary.kinds).map((entry) => ({ kind: asText(entry.kind, "other") as EvidenceKind, count: asNumber(entry.count) }))
             : undefined,
           peopleCount: summary.peopleCount == null ? undefined : asNumber(summary.peopleCount),
+          peopleByBucket: peopleByBucket
+            ? {
+                calls: asNumber(peopleByBucket.calls),
+                emails: asNumber(peopleByBucket.emails),
+                texts: asNumber(peopleByBucket.texts),
+                work: asNumber(peopleByBucket.work),
+                context: asNumber(peopleByBucket.context),
+              }
+            : undefined,
           capped: summary.capped === true ? true : undefined,
           coverage: coverage
             ? {

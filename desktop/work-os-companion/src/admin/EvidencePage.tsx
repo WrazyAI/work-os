@@ -231,7 +231,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   const viewTotal = counts[kind];
   const peopleCount = kind === "all"
     ? summary?.peopleCount ?? new Set(rawRows.map((row) => row.person_id).filter(Boolean)).size
-    : new Set(visibleRows.map((row) => row.person_id).filter(Boolean)).size;
+    : summary?.peopleByBucket?.[kind] ?? new Set(visibleRows.map((row) => row.person_id).filter(Boolean)).size;
   const personOptions = [
     { value: "", label: "All people" },
     ...(people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") })),

@@ -70,11 +70,16 @@ export async function GET(req: Request) {
       if (to) query = query.lte("evidence_date", to);
     }
     if (sp.get("source")) query = query.eq("source", sp.get("source"));
-    if (kind === "calls") query = query.ilike("title", "Call %");
-    else if (kind === "emails") query = query.ilike("title", "%email%");
-    else if (kind === "texts") query = query.ilike("title", "Text message%");
-    else if (kind === "context") query = query.or("title.ilike.%opportunity%,source.eq.loom,source.eq.nifty");
-    else if (kind === "work") query = query.in("source", ["github", "worktivity"]);
+    if (kind === "calls") query = query.not("source", "in", ["github", "worktivity"]).ilike("title", "Call %");
+    else if (kind === "emails") query = query.not("source", "in", ["github", "worktivity"]).ilike("title", "%email%");
+    else if (kind === "texts") query = query.not("source", "in", ["github", "worktivity"]).ilike("title", "Text message%");
+    else if (kind === "context") {
+      query = query
+        .not("source", "in", ["github", "worktivity"])
+        .not("title", "ilike", "Call %")
+        .not("title", "ilike", "%email%")
+        .not("title", "ilike", "Text message%");
+    } else if (kind === "work") query = query.in("source", ["github", "worktivity"]);
     if (search) query = query.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
     if (correctionEventIds) query = query.in("evidence_event_id", correctionEventIds);
     const rawLimit = sp.get("limit");
@@ -113,7 +118,12 @@ export async function GET(req: Request) {
       if (kind === "calls") ghlQuery = ghlQuery.ilike("title", "Call %");
       else if (kind === "emails") ghlQuery = ghlQuery.ilike("title", "%email%");
       else if (kind === "texts") ghlQuery = ghlQuery.ilike("title", "Text message%");
-      else if (kind === "context") ghlQuery = ghlQuery.ilike("title", "%opportunity%");
+      else if (kind === "context") {
+        ghlQuery = ghlQuery
+          .not("title", "ilike", "Call %")
+          .not("title", "ilike", "%email%")
+          .not("title", "ilike", "Text message%");
+      }
       if (search) ghlQuery = ghlQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
       const ghlResult = await ghlQuery.order("occurred_at", { ascending: false }).limit(limit);
       if (ghlResult.error) throw new Error(`load GHL organization evidence: ${ghlResult.error.message}`);

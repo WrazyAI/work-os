@@ -1,4 +1,4 @@
-import { evidenceKind, type EvidenceKind } from "@/modules/work-os/evidence-kinds";
+import { evidenceKind, evidenceKindBucket, type EvidenceKind, type EvidenceKindBucket } from "@/modules/work-os/evidence-kinds";
 
 /** The bounded projection the evidence summary reads. Linked rows come from
  * `work_evidence`; uncredited GHL context rows are normalized to the same
@@ -15,6 +15,7 @@ export type EvidenceSummaryPayload = {
   days: Array<{ date: string; count: number }>;
   kinds: Array<{ kind: EvidenceKind; count: number }>;
   peopleCount: number;
+  peopleByBucket: Record<EvidenceKindBucket, number>;
   /** True when the summary row read hit its bound; counts are disclosed as
    * capped rather than presented as exact. */
   capped?: boolean;
@@ -33,6 +34,7 @@ export function summarizeEvidence(rows: EvidenceSummaryInput[], coverageRequeste
   const days = new Map<string, number>();
   const kinds = new Map<EvidenceKind, number>();
   const people = new Set<string>();
+  const peopleByBucket = new Map<EvidenceKindBucket, Set<string>>();
   const coverage = new Map<string, Map<string, { count: number; emails: number }>>();
 
   for (const row of rows) {
@@ -42,7 +44,13 @@ export function summarizeEvidence(rows: EvidenceSummaryInput[], coverageRequeste
     const kind = evidenceKind(source, title);
     sources.set(source, (sources.get(source) ?? 0) + 1);
     kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-    if (row.person_id) people.add(row.person_id);
+    if (row.person_id) {
+      people.add(row.person_id);
+      const bucket = evidenceKindBucket(kind);
+      const bucketPeople = peopleByBucket.get(bucket) ?? new Set<string>();
+      bucketPeople.add(row.person_id);
+      peopleByBucket.set(bucket, bucketPeople);
+    }
     if (!day) continue;
     days.set(day, (days.get(day) ?? 0) + 1);
     if (!coverageRequested) continue;
@@ -60,6 +68,13 @@ export function summarizeEvidence(rows: EvidenceSummaryInput[], coverageRequeste
     days: [...days.entries()].map(([date, count]) => ({ date, count })).sort((left, right) => left.date.localeCompare(right.date)),
     kinds: [...kinds.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
     peopleCount: people.size,
+    peopleByBucket: {
+      calls: peopleByBucket.get("calls")?.size ?? 0,
+      emails: peopleByBucket.get("emails")?.size ?? 0,
+      texts: peopleByBucket.get("texts")?.size ?? 0,
+      work: peopleByBucket.get("work")?.size ?? 0,
+      context: peopleByBucket.get("context")?.size ?? 0,
+    },
   };
   if (coverageRequested) {
     summary.coverage = {

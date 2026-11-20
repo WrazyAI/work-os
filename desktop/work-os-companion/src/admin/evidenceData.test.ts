@@ -13,6 +13,7 @@ describe("evidence summary normalization", () => {
           { kind: "email", count: 1 },
         ],
         peopleCount: 1,
+        peopleByBucket: { calls: 1, emails: 1, texts: 0, work: 0, context: 0 },
         coverage: {
           people: [
             {
@@ -36,6 +37,7 @@ describe("evidence summary normalization", () => {
         { kind: "email", count: 1 },
       ],
       peopleCount: 1,
+      peopleByBucket: { calls: 1, emails: 1, texts: 0, work: 0, context: 0 },
       coverage: {
         people: [
           { personId: "person-aden", days: [{ date: "2026-11-16", count: 102, emails: 1 }] },
