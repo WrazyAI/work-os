@@ -5,12 +5,20 @@ import { createEvidence } from "@/lib/work-os";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { canViewGhlOrganizationContext, ghlEvidenceRow } from "@/lib/work-os-ghl-evidence-view";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsAdmin, requireWorkOsPersonAccess } from "@/lib/work-os-api";
+import { evidenceKind } from "@/modules/work-os/evidence-kinds";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const EVIDENCE_SELECT =
   "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events(occurred_at,correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
+
+/** A search term is used inside a PostgREST `or` expression. Strip the
+ * separators the expression parser owns so a person's search text can never
+ * change the query shape. */
+function evidenceSearchTerm(value: string | null) {
+  return String(value ?? "").replace(/[%,()]/g, " ").replace(/\s+/g, " ").trim();
+}
 
 export async function GET(req: Request) {
   try {
@@ -22,8 +30,10 @@ export async function GET(req: Request) {
       const denied = await requireWorkOsPersonAccess(auth.access, requestedPersonId);
       if (denied) return denied;
     }
-    const personIds = requestedPersonId ? [requestedPersonId] : await accessibleWorkOsPersonIds(auth.access);
+    const unattributed = sp.get("unattributed") === "1";
+    const personIds = requestedPersonId ? [requestedPersonId] : unattributed ? null : await accessibleWorkOsPersonIds(auth.access);
     if (personIds && !personIds.length) return NextResponse.json({ evidence: [] });
+    const search = evidenceSearchTerm(sp.get("q"));
     // The query shim cannot filter on embedded columns, so a correction filter
     // resolves the matching event ids first and filters evidence by event id.
     const correction = sp.get("correction");
@@ -42,6 +52,7 @@ export async function GET(req: Request) {
       .select(EVIDENCE_SELECT)
       .eq("organization_id", auth.access.organizationId);
     if (personIds) query = query.in("person_id", personIds);
+    else if (unattributed) query = query.is("person_id", null);
     if (sp.get("taskId")) query = query.eq("task_id", sp.get("taskId"));
     const date = sp.get("date");
     if (date) {
@@ -53,6 +64,7 @@ export async function GET(req: Request) {
       if (to) query = query.lte("evidence_date", to);
     }
     if (sp.get("source")) query = query.eq("source", sp.get("source"));
+    if (search) query = query.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
     if (correctionEventIds) query = query.in("evidence_event_id", correctionEventIds);
     const rawLimit = sp.get("limit");
     const limitParam = rawLimit == null || rawLimit === "" ? Number.NaN : Number(rawLimit);
@@ -81,6 +93,7 @@ export async function GET(req: Request) {
         if (sp.get("to")) ghlQuery = ghlQuery.lt("occurred_at", `${sp.get("to")}T23:59:59.999Z`);
       }
       if (correction) ghlQuery = ghlQuery.eq("correction_status", correction);
+      if (search) ghlQuery = ghlQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
       const ghlResult = await ghlQuery.order("occurred_at", { ascending: false }).limit(limit);
       if (ghlResult.error) throw new Error(`load GHL organization evidence: ${ghlResult.error.message}`);
       const ghlEvents = (ghlResult.data ?? []) as Record<string, unknown>[];
@@ -140,14 +153,17 @@ export async function GET(req: Request) {
         return String(rightAt ?? "").localeCompare(String(leftAt ?? ""));
       })
       .slice(0, limit);
-    // Optional summary for the Evidence page's lead visual: source mix and a
-    // daily volume series over the same filters, computed from date/source
-    // columns only so the payload stays small.
+    // Optional summary for the Evidence page's lead visual: source mix, daily
+    // volume, exact kind counts, and (on request) the bounded coverage matrix.
+    // The provider occurrence day is used for GHL context so an uncredited
+    // inbound call is visible in the same pulse as a linked outbound call.
     if (sp.get("summary") === "1") {
+      const coverageRequested = sp.get("coverage") === "1";
       let summaryQuery = createAdminClient().from("work_evidence")
-        .select("source,evidence_date")
+        .select("source,evidence_date,title,person_id")
         .eq("organization_id", auth.access.organizationId);
       if (personIds) summaryQuery = summaryQuery.in("person_id", personIds);
+      else if (unattributed) summaryQuery = summaryQuery.is("person_id", null);
       if (date) {
         summaryQuery = summaryQuery.eq("evidence_date", date);
       } else {
@@ -157,43 +173,86 @@ export async function GET(req: Request) {
         if (to) summaryQuery = summaryQuery.lte("evidence_date", to);
       }
       if (sp.get("source")) summaryQuery = summaryQuery.eq("source", sp.get("source"));
-      const summaryResult = await summaryQuery.limit(2000);
+      if (search) summaryQuery = summaryQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
+      const summaryResult = await summaryQuery.limit(coverageRequested ? 5000 : 2000);
       if (summaryResult.error) throw new Error(`summarize Work OS evidence: ${summaryResult.error.message}`);
       const sources = new Map<string, number>();
       const days = new Map<string, number>();
-      let ghlContextCount = 0;
+      const kinds = new Map<string, number>();
+      const people = new Set<string>();
+      const coverage = new Map<string, Map<string, { count: number; emails: number }>>();
+      const addCoverage = (personKey: string, day: string, kind: string) => {
+        if (!coverageRequested || !day) return;
+        let dayCounts = coverage.get(personKey);
+        if (!dayCounts) {
+          dayCounts = new Map();
+          coverage.set(personKey, dayCounts);
+        }
+        const current = dayCounts.get(day) ?? { count: 0, emails: 0 };
+        current.count += 1;
+        if (kind === "email") current.emails += 1;
+        dayCounts.set(day, current);
+      };
+      for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
+        const source = String(row.source ?? "unknown");
+        const title = String(row.title ?? "");
+        const kind = evidenceKind(source, title);
+        sources.set(source, (sources.get(source) ?? 0) + 1);
+        kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+        const day = dateOnly(row.evidence_date) ?? "";
+        if (day) days.set(day, (days.get(day) ?? 0) + 1);
+        if (row.person_id) people.add(String(row.person_id));
+        addCoverage(row.person_id ? String(row.person_id) : "__none__", day, kind);
+      }
       if (includeGhlContext) {
-        let ghlCount = createAdminClient().from("work_evidence_events")
-          .select("id", { count: "exact", head: true })
+        let ghlSummaryQuery = createAdminClient().from("work_evidence_events")
+          .select("occurred_at,title")
           .eq("organization_id", auth.access.organizationId)
           .eq("provider", "ghl")
           .is("person_id", null);
-        if (date) ghlCount = ghlCount.gte("occurred_at", `${date}T00:00:00.000Z`).lt("occurred_at", `${date}T23:59:59.999Z`);
+        if (date) ghlSummaryQuery = ghlSummaryQuery.gte("occurred_at", `${date}T00:00:00.000Z`).lt("occurred_at", `${date}T23:59:59.999Z`);
         else {
           const summaryFrom = sp.get("from");
           const summaryTo = sp.get("to");
-          if (summaryFrom) ghlCount = ghlCount.gte("occurred_at", `${summaryFrom}T00:00:00.000Z`);
-          if (summaryTo) ghlCount = ghlCount.lt("occurred_at", `${summaryTo}T23:59:59.999Z`);
+          if (summaryFrom) ghlSummaryQuery = ghlSummaryQuery.gte("occurred_at", `${summaryFrom}T00:00:00.000Z`);
+          if (summaryTo) ghlSummaryQuery = ghlSummaryQuery.lt("occurred_at", `${summaryTo}T23:59:59.999Z`);
         }
-        if (correction) ghlCount = ghlCount.eq("correction_status", correction);
-        const ghlCountResult = await ghlCount;
-        if (ghlCountResult.error) throw new Error(`count GHL organization evidence: ${ghlCountResult.error.message}`);
-        ghlContextCount = ghlCountResult.count ?? 0;
-        if (ghlContextCount) sources.set("ghl", (sources.get("ghl") ?? 0) + ghlContextCount);
+        if (correction) ghlSummaryQuery = ghlSummaryQuery.eq("correction_status", correction);
+        if (search) ghlSummaryQuery = ghlSummaryQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
+        const ghlSummaryResult = await ghlSummaryQuery.order("occurred_at", { ascending: false }).limit(5000);
+        if (ghlSummaryResult.error) throw new Error(`summarize GHL organization evidence: ${ghlSummaryResult.error.message}`);
+        for (const row of (ghlSummaryResult.data ?? []) as Array<Record<string, unknown>>) {
+          const occurredAt = String(row.occurred_at ?? "");
+          const day = occurredAt.slice(0, 10);
+          const title = String(row.title ?? "");
+          const kind = evidenceKind("ghl", title);
+          sources.set("ghl", (sources.get("ghl") ?? 0) + 1);
+          kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+          if (day) days.set(day, (days.get(day) ?? 0) + 1);
+          addCoverage("__none__", day, kind);
+        }
       }
-      for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
-        const source = String(row.source ?? "unknown");
-        sources.set(source, (sources.get(source) ?? 0) + 1);
-        const day = dateOnly(row.evidence_date) ?? "";
-        if (day) days.set(day, (days.get(day) ?? 0) + 1);
+      const summary: {
+        sources: Array<{ source: string; count: number }>;
+        days: Array<{ date: string; count: number }>;
+        kinds: Array<{ kind: string; count: number }>;
+        peopleCount: number;
+        coverage?: { people: Array<{ personId: string | null; days: Array<{ date: string; count: number; emails: number }> }> };
+      } = {
+        sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
+        days: [...days.entries()].map(([day, count]) => ({ date: day, count })).sort((left, right) => left.date.localeCompare(right.date)),
+        kinds: [...kinds.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
+        peopleCount: people.size,
+      };
+      if (coverageRequested) {
+        summary.coverage = {
+          people: [...coverage.entries()].map(([personKey, dayCounts]) => ({
+            personId: personKey === "__none__" ? null : personKey,
+            days: [...dayCounts.entries()].map(([day, counts]) => ({ date: day, count: counts.count, emails: counts.emails })).sort((left, right) => left.date.localeCompare(right.date)),
+          })),
+        };
       }
-      return NextResponse.json({
-        evidence: merged,
-        summary: {
-          sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
-          days: [...days.entries()].map(([day, count]) => ({ date: day, count })).sort((left, right) => left.date.localeCompare(right.date)),
-        },
-      });
+      return NextResponse.json({ evidence: merged, summary });
     }
     return NextResponse.json({ evidence: merged });
   } catch (err) {

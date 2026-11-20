@@ -544,6 +544,17 @@ test("evidence and report lists expose bounded filters for the admin surfaces", 
   assert.match(reports, /requireWorkOsPersonAccess/);
 });
 
+test("evidence summary exposes kind counts, coverage, search, and unattributed scope", async () => {
+  const evidence = await source("src/app/api/work-os/evidence/route.ts");
+  assert.match(evidence, /evidenceKind\(source, title\)/);
+  assert.match(evidence, /kinds:/);
+  assert.match(evidence, /peopleCount/);
+  assert.match(evidence, /coverageRequested/);
+  assert.match(evidence, /personId: personKey === "__none__" \? null : personKey/);
+  assert.match(evidence, /unattributed/);
+  assert.match(evidence, /title\.ilike/);
+});
+
 test("admin queries stay within the Postgres shim's filter capabilities", async () => {
   // The query shim supports embeds for selects only; filters on embedded
   // columns fail at runtime with `invalid identifier`, so plan dates resolve
