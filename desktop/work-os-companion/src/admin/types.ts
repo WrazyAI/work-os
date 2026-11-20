@@ -4,6 +4,8 @@
  * same record; the desktop keeps its own copy so the Vite bundle never imports
  * Next.js modules. Rows whose database shape is wide stay loose on purpose. */
 
+import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
+
 export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
 
 /** Deep-link focus carried when navigating between administration sections:
@@ -270,12 +272,33 @@ export interface EvidenceRow {
   } | null;
 }
 
+export interface EvidenceCoverageDay {
+  date: string;
+  count: number;
+  emails: number;
+}
+
+export interface EvidenceCoveragePerson {
+  /** null is the uncredited class: actor unknown, assigned-only, or automation. */
+  personId: string | null;
+  days: EvidenceCoverageDay[];
+}
+
+export interface EvidenceCoverage {
+  people: EvidenceCoveragePerson[];
+}
+
+export interface EvidenceSummary {
+  sources: Array<{ source: string; count: number }>;
+  days: Array<{ date: string; count: number }>;
+  kinds?: Array<{ kind: EvidenceKind; count: number }>;
+  peopleCount?: number;
+  coverage?: EvidenceCoverage;
+}
+
 export interface EvidenceResponse {
   evidence: EvidenceRow[];
-  summary?: {
-    sources: Array<{ source: string; count: number }>;
-    days: Array<{ date: string; count: number }>;
-  };
+  summary?: EvidenceSummary;
 }
 
 export type ActivityIntervalView = {

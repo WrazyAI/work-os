@@ -25,6 +25,7 @@ import type {
 } from "./types";
 import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
+import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {
@@ -648,12 +649,25 @@ function normalizeEvidenceRow(row: Loose): EvidenceRow {
 export function normalizeEvidence(raw: unknown): EvidenceResponse {
   const source = asRecord(raw);
   const summary = source.summary && typeof source.summary === "object" ? asRecord(source.summary) : null;
+  const coverage = summary?.coverage && typeof summary.coverage === "object" ? asRecord(summary.coverage) : null;
   return {
     evidence: asRows(source.evidence).map(normalizeEvidenceRow),
     summary: summary
       ? {
           sources: asRows(summary.sources).map((entry) => ({ source: asText(entry.source, "unknown"), count: asNumber(entry.count) })),
           days: asRows(summary.days).map((entry) => ({ date: asText(entry.date), count: asNumber(entry.count) })),
+          kinds: Array.isArray(summary.kinds)
+            ? asRows(summary.kinds).map((entry) => ({ kind: asText(entry.kind, "other") as EvidenceKind, count: asNumber(entry.count) }))
+            : undefined,
+          peopleCount: summary.peopleCount == null ? undefined : asNumber(summary.peopleCount),
+          coverage: coverage
+            ? {
+                people: asRows(coverage.people).map((entry) => ({
+                  personId: asTextOrNull(entry.personId),
+                  days: asRows(entry.days).map((day) => ({ date: asText(day.date), count: asNumber(day.count), emails: asNumber(day.emails) })),
+                })),
+              }
+            : undefined,
         }
       : undefined,
   };
