@@ -92,6 +92,7 @@ import AppMenuBar, { type AppMenuGroup, type AppMenuItem } from "./AppMenuBar";
 import NativeAppMenu from "./NativeAppMenu";
 import { installContextMenuSuppression } from "./contextMenu";
 import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
+import { COMPANION_VISIBILITY_EVENT, ottoVisibilityMenuItem } from "./ottoVisibility";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
@@ -2101,6 +2102,18 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
+  }, []);
+
+  /* A hide from the avatar's own close button or the tray never passes through
+     this window, so the host announces every transition. The menu label flips
+     at once, and the minute poll stays as the fallback. */
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<boolean>(COMPANION_VISIBILITY_EVENT, (event) => {
+      if (typeof event.payload === "boolean") setAvatarWindowVisible(event.payload);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
   }, []);
 
   /* One mode controller owns actor + organization + mode + epoch. It is
@@ -5871,6 +5884,21 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen, taskFinderOpen]);
 
+  /* The View menu owns the floating companion's visibility. `null` means the
+     first visibility read has not landed, and showing is the safe action:
+     invoking it again cannot lose a window and the label already says "Show". */
+  const toggleOtto = useCallback(async () => {
+    if (!isTauri()) return;
+    const nextVisible = avatarWindowVisible !== true;
+    try {
+      await invoke(nextVisible ? "show_avatar" : "hide_avatar");
+      setAvatarWindowVisible(nextVisible);
+    } catch {
+      /* The host may refuse a missing window; the visibility poll and the
+         visibility event remain the source of truth and correct the label. */
+    }
+  }, [avatarWindowVisible]);
+
   const quitApp = () => {
     if (!isTauri()) {
       notifications.info("Quit is available in the desktop app.", "Desktop only");
@@ -6550,16 +6578,17 @@ export default function App() {
         onSelect: () => setView(item.id),
       }));
     menuGroups.push({ label: "Go", items: goItems });
-    menuGroups.push({
-      label: "View",
-      items: [{
-        id: "view:sidebar",
-        label: "Toggle sidebar",
-        shortcut: chromeUsesMacShortcuts ? "⌘B" : "Ctrl B",
-        accelerator: "CmdOrCtrl+B",
-        onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
-      }],
-    });
+    const viewItems: AppMenuItem[] = [{
+      id: "view:sidebar",
+      label: "Toggle sidebar",
+      shortcut: chromeUsesMacShortcuts ? "⌘B" : "Ctrl B",
+      accelerator: "CmdOrCtrl+B",
+      onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
+    }];
+    // The browser preview has no floating companion window, so it must not
+    // offer a command that could only fail there.
+    if (isTauri()) viewItems.push(ottoVisibilityMenuItem(avatarWindowVisible, () => void toggleOtto()));
+    menuGroups.push({ label: "View", items: viewItems });
     const helpItems: AppMenuItem[] = [];
     if (pageGuideView) helpItems.push({ id: "help:guide", label: "How Work OS works", onSelect: () => openGuide(pageGuideView) });
     helpItems.push({ id: "help:new", label: "What’s new", onSelect: openChangelogFromAdmin });
