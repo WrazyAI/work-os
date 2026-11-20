@@ -80,7 +80,11 @@ export async function GET(req: Request) {
     const rawLimit = sp.get("limit");
     const limitParam = rawLimit == null || rawLimit === "" ? Number.NaN : Number(rawLimit);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(500, Math.floor(limitParam))) : 200;
-    const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
+    // Select the most recent recorded days first. The client orders the loaded
+    // rows by provider occurrence time; ordering the page by evidence_date
+    // keeps a backfill's mirror write time from choosing which days survive
+    // the bounded page.
+    const { data, error } = await query.order("evidence_date", { ascending: false }).order("created_at", { ascending: false }).limit(limit);
     if (error) throw new Error(`load Work OS evidence: ${error.message}`);
 
     // Organization-scoped GHL records that are not attributable to one person
