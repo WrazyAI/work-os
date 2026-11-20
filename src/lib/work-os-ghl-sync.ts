@@ -162,8 +162,12 @@ export function createGhlSyncSource(scope: GhlScope, client: GhlClient): GhlSync
           startDate: from,
           endDate: through,
           limit,
-          ...(channel === "Email" ? { sortBy: "createdAt", sortDirection: "desc" } : {}),
-          ...(cursor ? { lastMessageId: cursor } : {}),
+          ...(channel === "Email" ? { sortBy: "createdAt", sortOrder: "desc" } : {}),
+          // The export endpoint pages with the opaque `nextCursor` from the
+          // previous response. `lastMessageId` belongs to the conversation
+          // message feed; the export ignores it and re-serves the first page,
+          // which silently drops every record after the first page.
+          ...(cursor ? { cursor } : {}),
         },
       });
       const items = entityArray(body);
@@ -380,7 +384,10 @@ async function processPartition(input: {
   }
   const owner = randomUUID();
   if (!(await claimGhlPartition({ stateId: String(state.id), leaseOwner: owner, now }))) return false;
-  const limit = plan.key === "contacts" ? 10 : 100;
+  // The export supports up to 1,000 messages per page. A larger page keeps a
+  // large call history inside one or two requests instead of dozens of
+  // five-minute sync runs (whose provider cursor can expire between runs).
+  const limit = plan.channel ? 1000 : plan.key === "contacts" ? 10 : 100;
   const asInstant = (value: unknown, fallback: string): string => {
     const parsed = new Date(value instanceof Date ? value.toISOString() : String(value ?? ""));
     return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : fallback;
