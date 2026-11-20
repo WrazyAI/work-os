@@ -308,11 +308,11 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   return (
     <div className="evidence-hybrid">
       <div className="evidence-viewbar">
-        <div className="evidence-view-toggle" role="tablist" aria-label="Evidence view">
-          <button type="button" role="tab" aria-selected={view === "record"} className={view === "record" ? "is-active" : ""} onClick={() => { setView("record"); setSelected(null); }}>
+        <div className="evidence-view-toggle" role="group" aria-label="Evidence view">
+          <button type="button" aria-pressed={view === "record"} className={view === "record" ? "is-active" : ""} onClick={() => { setView("record"); setSelected(null); }}>
             <List size={13} aria-hidden /> Record
           </button>
-          <button type="button" role="tab" aria-selected={view === "coverage"} className={view === "coverage" ? "is-active" : ""} onClick={() => { setView("coverage"); setSelected(null); }}>
+          <button type="button" aria-pressed={view === "coverage"} className={view === "coverage" ? "is-active" : ""} onClick={() => { setView("coverage"); setSelected(null); }}>
             <Grid3X3 size={13} aria-hidden /> Coverage
           </button>
         </div>
