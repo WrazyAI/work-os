@@ -110,7 +110,7 @@ describe("evidence attribution", () => {
       title: "Text message sent",
       summary: "Text message sent recorded by GHL.",
     });
-    expect(evidencePerson(automated)).toEqual({ name: "Automation — not the employee", note: "Not the employee", tone: "unknown" });
+    expect(evidencePerson(automated)).toEqual({ name: "Automation", note: "Not the employee", tone: "unknown" });
     expect(evidenceActor(automated)).toBe("Automation — not the employee");
     expect(evidenceAutomation(automated)).toBe(true);
   });

@@ -2,7 +2,7 @@ import {
   evidenceKind,
   type EvidenceKind,
 } from "../../../../src/modules/work-os/evidence-kinds";
-import type { EvidenceCoverage, EvidenceRow, EvidenceSummary } from "./types";
+import { one, type EvidenceCoverage, type EvidenceRow, type EvidenceSummary } from "./types";
 
 export type EvidenceTone = "observed" | "quiet" | "warn" | "danger";
 export type EvidenceDirection = "inbound" | "outbound" | null;
@@ -10,6 +10,20 @@ export type EvidenceDirection = "inbound" | "outbound" | null;
 export type EvidenceEntry =
   | { type: "group"; key: string; hour: number; direction: EvidenceDirection; rows: EvidenceRow[]; sortMinutes: number }
   | { type: "event"; row: EvidenceRow; sortMinutes: number };
+
+export type EvidenceScreenshot = {
+  id: string;
+  processing_status: string;
+  summary: string | null;
+  confidence: number | null;
+  storage_path: string | null;
+  deleted_at: string | null;
+  previewUrl?: string | null;
+};
+
+export function evidenceScreenshot(row: EvidenceRow): EvidenceScreenshot | null {
+  return one<EvidenceScreenshot>(row.event?.screenshot);
+}
 
 export type CoverageRow = {
   key: string;
@@ -69,6 +83,12 @@ export function evidenceOccurrence(row: EvidenceRow): string {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
 }
 
+export function evidenceShortDate(value: string): string {
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 export function evidenceTime(row: EvidenceRow): string {
   const occurrence = evidenceOccurrence(row);
   if (!occurrence) return "—";
@@ -112,7 +132,7 @@ export function evidenceStatus(row: EvidenceRow): { label: string; tone: Evidenc
     if (title.includes("sent") || summary.includes("sent")) return { label: "Sent", tone: "observed" };
     return { label: "Recorded", tone: "quiet" };
   }
-  if (kind === "opportunity") {
+  if (kind === "context") {
     if (title.includes("won") || summary.includes("won")) return { label: "Won", tone: "observed" };
     if (title.includes("lost") || summary.includes("lost")) return { label: "Lost", tone: "danger" };
     return { label: title.includes("open") || summary.includes("open") ? "Open" : "Recorded", tone: "quiet" };
@@ -154,8 +174,11 @@ export function evidencePerson(row: EvidenceRow): { name: string; note: string; 
     };
   }
   const ghl = row.ghl;
-  if (row.source === "ghl" && (ghl?.relation === "automation" || ghl?.relation === "shared_account") && ghl.actorLabel) {
-    return { name: ghl.actorLabel, note: "Not the employee", tone: "unknown" };
+  if (row.source === "ghl" && ghl?.relation === "automation") {
+    return { name: "Automation", note: "Not the employee", tone: "unknown" };
+  }
+  if (row.source === "ghl" && ghl?.relation === "shared_account") {
+    return { name: "Shared account", note: "Not one employee", tone: "unknown" };
   }
   if (row.source === "ghl" && ghl?.assigneeLabels?.length) {
     return { name: ghl.assigneeLabels.join(", "), note: "Assigned only", tone: "context" };

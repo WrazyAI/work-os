@@ -166,7 +166,7 @@ describe("administration primitives", () => {
     expect(client.getQueryData(adminKeys.person("p-2"))).toBeTruthy();
     expect(client.getQueryData(adminKeys.insights("7d", ""))).toBeTruthy();
     expect(client.getQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() }))).toBeTruthy();
-    expect(client.getQueryData(adminKeys.evidence({ personId: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", summary: "1", limit: "100" }))).toBeTruthy();
+    expect(client.getQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", q: "", summary: "1", limit: "500" }))).toBeTruthy();
     expect(client.getQueryData(adminKeys.organization())).toBeTruthy();
     expect(client.getQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: todayIso() }))).toBeTruthy();
   });
