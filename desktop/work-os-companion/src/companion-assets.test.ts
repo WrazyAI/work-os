@@ -212,11 +212,21 @@ describe("floating companion integration", () => {
 
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
     expect(app).toContain("ottoVisibilityMenuItem(avatarWindowVisible");
-    expect(app).toContain('invoke(nextVisible ? "show_avatar" : "hide_avatar")');
+    expect(app).toContain('await invoke("show_avatar")');
+    expect(app).toContain('await invoke("hide_avatar")');
+    expect(app).not.toContain('invoke(nextVisible ? "show_avatar" : "hide_avatar")');
     expect(app).toContain("listen<boolean>(COMPANION_VISIBILITY_EVENT");
     expect(app).toContain('from "./ottoVisibility"');
     // The browser preview must not render a dead desktop-only command.
     expect(app).toMatch(/if \(isTauri\(\)\) viewItems\.push\(ottoVisibilityMenuItem/);
+    // Command completion is not visibility truth: the event and poll own the
+    // label, so a slow invoke cannot overwrite a newer tray/avatar transition.
+    expect(app).not.toContain("setAvatarWindowVisible(nextVisible)");
+    expect(app).toContain("const avatarVisibilityRevision = useRef(0)");
+    expect(app).toMatch(/avatarVisibilityRevision\.current \+= 1;\s*setAvatarWindowVisible\(event\.payload\)/);
+    // A poll that started before a host event must not land afterward.
+    expect(app).toContain("const revision = avatarVisibilityRevision.current");
+    expect(app).toContain("shouldApplyVisibilityPoll(revision, avatarVisibilityRevision.current, cancelled)");
 
     const menu = readFileSync(resolve(root, "src/ottoVisibility.ts"), "utf8");
     expect(menu).toContain('id: "view:otto"');
