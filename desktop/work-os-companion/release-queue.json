@@ -468,13 +468,19 @@
       "type": "fix",
       "summary": "The Evidence list loads older items, so sent GoHighLevel email is not hidden behind a busy first page of calls.",
       "verification": "Companion Evidence render 2/2 (including a 100-row fixture that exposes Show older evidence) and tsc clean; live GHL evidence API showed the 3 performed 'Email sent' rows beyond the desktop's first 100 calls, and the page now loads older rows on demand up to 500."
+    },
+    {
+      "id": "ghl-assignee-context",
+      "type": "fix",
+      "summary": "GoHighLevel records now name their assigned owner instead of reading as an unknown actor.",
+      "verification": "Unit projection test names the owner while keeping the action actor separate; a live assigned-only opportunity returned assigneeLabels ['Kalia Bell'] with person_id null. Companion Evidence render 3/3; web and companion typechecks; route contracts 34/34."
     }
   ],
   "emergency": {
-    "version": "0.5.41",
-    "updateId": "evidence-older-rows",
-    "brokenBehavior": "The desktop Evidence list stopped after the first 100 items, so sent GoHighLevel email could be hidden behind a busy first page of calls.",
-    "restoredBehavior": "The Evidence list loads older items on demand, so sent email and older calls stay reachable."
+    "version": "0.5.42",
+    "updateId": "ghl-assignee-context",
+    "brokenBehavior": "Assigned-only GoHighLevel records discarded the known owner and read as an unknown actor on the dashboard.",
+    "restoredBehavior": "The record names its assigned owner as context while keeping the action actor unrecorded."
   },
   "operatorOverride": null
 }
