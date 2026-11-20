@@ -32,9 +32,12 @@ export default function EvidenceRecordView({
   partial,
   counts,
   peopleCount,
+  capped,
   pulseDays,
   pulseFrom,
   pulseTo,
+  pulseLoading,
+  pulseError,
   filters,
   personOptions,
   sourceOptions,
@@ -53,9 +56,12 @@ export default function EvidenceRecordView({
   partial: boolean;
   counts: { all: number; calls: number; emails: number; texts: number; work: number; context: number };
   peopleCount: number;
+  capped?: boolean;
   pulseDays: Array<{ date: string; count: number }>;
   pulseFrom: string;
   pulseTo: string;
+  pulseLoading?: boolean;
+  pulseError?: Error | null;
   filters: EvidenceRecordFilters;
   personOptions: Array<{ value: string; label: string }>;
   sourceOptions: Array<{ value: string; label: string }>;
@@ -87,30 +93,38 @@ export default function EvidenceRecordView({
           <div className="evidence-fact"><span><Phone size={12} aria-hidden /> Calls</span><b>{loading ? "—" : callCount.toLocaleString("en-US")}</b><small>provider actions</small></div>
           <div className="evidence-fact"><span><Mail size={12} aria-hidden /> Emails</span><b>{loading ? "—" : emailCount.toLocaleString("en-US")}</b><small>sent messages</small></div>
           <div className="evidence-fact"><span><Users size={12} aria-hidden /> People</span><b>{loading ? "—" : peopleCount.toLocaleString("en-US")}</b><small>credited or contextual</small></div>
-          <div className="evidence-index-note"><b>{loading ? "Loading" : partial ? `${loadedCount.toLocaleString("en-US")} loaded` : "Complete view"}</b>Provider occurrence time</div>
+          <div className="evidence-index-note"><b>{loading ? "Loading" : partial ? `${loadedCount.toLocaleString("en-US")} loaded` : capped ? "Counts capped" : "Complete view"}</b>Provider occurrence time</div>
         </div>
         <div className="evidence-pulse-wrap">
-          <div className="evidence-pulse-head"><span>Last 14 days · all sources</span><b>Peak {pulse.get(peakDate) ?? 0} · {evidenceShortDate(peakDate)}</b></div>
-          <div className="evidence-pulse" role="group" aria-label="Evidence volume over the last 14 days">
-            {dates.map((date) => {
-              const count = pulse.get(date) ?? 0;
-              const height = count === 0 ? 3 : Math.max(4, Math.round((count / max) * 34));
-              const selected = filters.from === date && filters.to === date;
-              const inRange = date >= filters.from && date <= filters.to;
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  className={`${count ? "has-data" : ""}${inRange ? " is-in-range" : ""}${selected ? " is-selected" : ""}`.trim()}
-                  style={{ height }}
-                  title={`${evidenceShortDate(date)} · ${count} record${count === 1 ? "" : "s"}`}
-                  aria-label={`${evidenceShortDate(date)}, ${count} records`}
-                  onClick={() => onPickDay(date)}
-                />
-              );
-            })}
-          </div>
-          <div className="evidence-pulse-axis"><span>{evidenceShortDate(dates[0])}</span><span>{evidenceShortDate(dates[dates.length - 1])}</span></div>
+          <div className="evidence-pulse-head"><span>Last 14 days · all sources</span><b>{pulseError ? "Unavailable" : pulseLoading ? "Loading" : `Peak ${pulse.get(peakDate) ?? 0} · ${evidenceShortDate(peakDate)}`}</b></div>
+          {pulseError ? (
+            <div className="evidence-pulse-unavailable">Pulse unavailable. Record counts are still shown.</div>
+          ) : pulseLoading ? (
+            <div className="evidence-pulse-unavailable">Loading the last 14 days…</div>
+          ) : (
+            <>
+              <div className="evidence-pulse" role="group" aria-label="Evidence volume over the last 14 days">
+                {dates.map((date) => {
+                  const count = pulse.get(date) ?? 0;
+                  const height = count === 0 ? 3 : Math.max(4, Math.round((count / max) * 34));
+                  const selected = filters.from === date && filters.to === date;
+                  const inRange = date >= filters.from && date <= filters.to;
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      className={`${count ? "has-data" : ""}${inRange ? " is-in-range" : ""}${selected ? " is-selected" : ""}`.trim()}
+                      style={{ height }}
+                      title={`${evidenceShortDate(date)} · ${count} record${count === 1 ? "" : "s"}`}
+                      aria-label={`${evidenceShortDate(date)}, ${count} records`}
+                      onClick={() => onPickDay(date)}
+                    />
+                  );
+                })}
+              </div>
+              <div className="evidence-pulse-axis"><span>{evidenceShortDate(dates[0])}</span><span>{evidenceShortDate(dates[dates.length - 1])}</span></div>
+            </>
+          )}
         </div>
       </div>
 

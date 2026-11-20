@@ -554,7 +554,12 @@ test("evidence summary exposes kind counts, coverage, search, and unattributed s
   assert.match(evidence, /summarizeEvidence/);
   assert.match(evidence, /coverageRequested/);
   assert.match(evidence, /unattributed/);
+  assert.match(evidence, /unattributed && !canViewGhlOrganizationContext/);
   assert.match(evidence, /title\.ilike/);
+  assert.match(evidence, /kind === "calls"/);
+  assert.match(evidence, /summaryQuery = summaryQuery\.eq\("task_id"/);
+  assert.match(evidence, /summaryQuery = summaryQuery\.in\("evidence_event_id"/);
+  assert.match(evidence, /SUMMARY_ROW_LIMIT/);
 });
 
 test("admin queries stay within the Postgres shim's filter capabilities", async () => {

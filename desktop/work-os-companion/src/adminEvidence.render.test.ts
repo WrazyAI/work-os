@@ -21,7 +21,7 @@ function renderEvidence() {
 function pageFilters(overrides: Record<string, string> = {}) {
   return {
     personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(),
-    correction: "", q: "", summary: "1", limit: "500", ...overrides,
+    correction: "", q: "", kind: "all", summary: "1", limit: "500", ...overrides,
   };
 }
 

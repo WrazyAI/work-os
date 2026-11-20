@@ -660,6 +660,7 @@ export function normalizeEvidence(raw: unknown): EvidenceResponse {
             ? asRows(summary.kinds).map((entry) => ({ kind: asText(entry.kind, "other") as EvidenceKind, count: asNumber(entry.count) }))
             : undefined,
           peopleCount: summary.peopleCount == null ? undefined : asNumber(summary.peopleCount),
+          capped: summary.capped === true ? true : undefined,
           coverage: coverage
             ? {
                 people: asRows(coverage.people).map((entry) => ({

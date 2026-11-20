@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Camera, ShieldCheck } from "lucide-react";
 import { ScreenshotImage } from "../ScreenshotGallery";
@@ -40,21 +40,29 @@ export default function EvidenceDetailDrawer({ row, viewerPersonId = "", onClose
   const [reason, setReason] = useState("");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const generation = useRef(0);
+  const activeRowId = useRef<string | null>(null);
 
   useEffect(() => {
+    activeRowId.current = row?.id ?? null;
+    generation.current += 1;
     setReason("");
     setScreenshotUrl(null);
     setScreenshotError(null);
   }, [row?.id]);
 
   const access = useMutation({
-    mutationFn: ({ summaryId, reason: why }: { summaryId: string; reason: string }) => requestScreenshotAccess(summaryId, why),
-    onSuccess: (result) => {
+    mutationFn: ({ summaryId, reason: why }: { summaryId: string; reason: string; rowId: string; generation: number }) => requestScreenshotAccess(summaryId, why),
+    onSuccess: (result, variables) => {
+      if (variables.rowId !== activeRowId.current || variables.generation !== generation.current) return;
       setScreenshotError(null);
       setScreenshotUrl(result.url);
       notifications.success("The retained frame is ready; this view was recorded with your reason.", "Screenshot access prepared");
     },
-    onError: (error) => setScreenshotError((error as Error).message),
+    onError: (error, variables) => {
+      if (variables.rowId !== activeRowId.current || variables.generation !== generation.current) return;
+      setScreenshotError((error as Error).message);
+    },
   });
 
   const shot = row ? evidenceScreenshot(row) : null;
@@ -65,13 +73,15 @@ export default function EvidenceDetailDrawer({ row, viewerPersonId = "", onClose
   const occurred = row ? row.recorded_at ?? row.created_at : null;
   const mirrored = row?.created_at;
   const person = row ? evidencePerson(row) : null;
+  const pendingForRow = access.isPending && (access.variables as { rowId?: string } | undefined)?.rowId === row?.id;
+  const personHeading = person ? (person.tone === "context" ? `Assigned to ${person.name}` : person.name) : "Unmapped person";
 
   return (
     <Drawer
       open={!!row}
       onClose={onClose}
       title={row?.title ?? "Evidence"}
-      subtitle={row ? `${person?.name ?? "Unmapped person"} · ${formatWorkOsFullDate(row.evidence_date)}` : undefined}
+      subtitle={row ? `${personHeading} · ${formatWorkOsFullDate(row.evidence_date)}` : undefined}
       width={560}
     >
       {row ? (
@@ -141,8 +151,17 @@ export default function EvidenceDetailDrawer({ row, viewerPersonId = "", onClose
                   <p className="admin-quiet">Raw frames stay limited to flagged or disputed review. Every view is recorded with the reason you give.</p>
                   <div className="admin-inline-fields">
                     <TextField label="Reason" value={reason} onChange={setReason} ariaLabel="Reason for viewing this retained screenshot" placeholder="Why this frame is being reviewed" />
-                    <AdminButton variant="secondary" icon={Camera} disabled={!reason.trim() || access.isPending} onClick={() => access.mutate({ summaryId: shot.id, reason: reason.trim() })}>
-                      {access.isPending ? "Preparing…" : "View frame"}
+                    <AdminButton
+                      variant="secondary"
+                      icon={Camera}
+                      disabled={!reason.trim() || pendingForRow}
+                      onClick={() => {
+                        const requestGeneration = generation.current + 1;
+                        generation.current = requestGeneration;
+                        access.mutate({ summaryId: shot.id, reason: reason.trim(), rowId: row.id, generation: requestGeneration });
+                      }}
+                    >
+                      {pendingForRow ? "Preparing…" : "View frame"}
                     </AdminButton>
                   </div>
                   {screenshotError ? <Notice tone="err">{screenshotError}</Notice> : null}

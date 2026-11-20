@@ -15,6 +15,9 @@ export type EvidenceSummaryPayload = {
   days: Array<{ date: string; count: number }>;
   kinds: Array<{ kind: EvidenceKind; count: number }>;
   peopleCount: number;
+  /** True when the summary row read hit its bound; counts are disclosed as
+   * capped rather than presented as exact. */
+  capped?: boolean;
   coverage?: {
     people: Array<{
       personId: string | null;

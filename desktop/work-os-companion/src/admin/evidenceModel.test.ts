@@ -13,6 +13,7 @@ import {
   evidenceRelationLabel,
   evidenceStatus,
   evidenceStatusMix,
+  evidenceWhoNote,
   groupEvidenceDays,
   groupEvidenceEntries,
 } from "./evidenceModel";
@@ -56,7 +57,7 @@ describe("evidence grouping", () => {
         recorded_at: "2026-11-16T13:05:00",
         created_at: "2026-11-16T18:05:00.000Z",
       }),
-      call(10, "completed", 13),
+      call(0, "completed", 13),
     ];
     const entries = groupEvidenceEntries("2026-11-16", rows);
     expect(entries).toHaveLength(3);
@@ -102,6 +103,12 @@ describe("evidence attribution", () => {
     expect(evidenceActor(assigned)).toBe("Actor unknown");
     expect(evidenceAssignee(assigned)).toBe("Kalia Bell");
     expect(evidenceAutomation(assigned)).toBe(false);
+  });
+
+  it("does not call a mapped inbound performer an unknown actor", () => {
+    const inbound = row({ title: "Call inbound", summary: "Call inbound with status completed.", ghl: { relation: "performed", actorLabel: "Aden Badon", assigneeLabels: [] } });
+    expect(evidenceActor(inbound)).toBe("Aden Badon");
+    expect(evidenceWhoNote(inbound)).toContain("The actor is who the provider says");
   });
 
   it("keeps automation out of employee attribution", () => {

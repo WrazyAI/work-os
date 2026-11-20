@@ -10,6 +10,8 @@ import { summarizeEvidence, type EvidenceSummaryInput } from "@/lib/work-os-evid
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SUMMARY_ROW_LIMIT = 20_000;
+
 const EVIDENCE_SELECT =
   "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events(occurred_at,correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
 
@@ -31,9 +33,13 @@ export async function GET(req: Request) {
       if (denied) return denied;
     }
     const unattributed = sp.get("unattributed") === "1";
+    if (unattributed && !canViewGhlOrganizationContext(auth.access)) {
+      return NextResponse.json({ error: "Unattributed evidence is admin-only." }, { status: 403 });
+    }
     const personIds = requestedPersonId ? [requestedPersonId] : unattributed ? null : await accessibleWorkOsPersonIds(auth.access);
     if (personIds && !personIds.length) return NextResponse.json({ evidence: [] });
     const search = evidenceSearchTerm(sp.get("q"));
+    const kind = sp.get("kind");
     // The query shim cannot filter on embedded columns, so a correction filter
     // resolves the matching event ids first and filters evidence by event id.
     const correction = sp.get("correction");
@@ -64,6 +70,11 @@ export async function GET(req: Request) {
       if (to) query = query.lte("evidence_date", to);
     }
     if (sp.get("source")) query = query.eq("source", sp.get("source"));
+    if (kind === "calls") query = query.ilike("title", "Call %");
+    else if (kind === "emails") query = query.ilike("title", "%email%");
+    else if (kind === "texts") query = query.ilike("title", "Text message%");
+    else if (kind === "context") query = query.or("title.ilike.%opportunity%,source.eq.loom,source.eq.nifty");
+    else if (kind === "work") query = query.in("source", ["github", "worktivity"]);
     if (search) query = query.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
     if (correctionEventIds) query = query.in("evidence_event_id", correctionEventIds);
     const rawLimit = sp.get("limit");
@@ -76,10 +87,12 @@ export async function GET(req: Request) {
     // (shared accounts, automation, assigned-only context) are admin-only and
     // never appear behind a person filter.
     let ghlRows: Record<string, unknown>[] = [];
-    const includeGhlContext = !requestedPersonId
+    const includeGhlContextBase = !requestedPersonId
       && !sp.get("taskId")
       && canViewGhlOrganizationContext(auth.access)
       && (!sp.get("source") || sp.get("source") === "ghl");
+    const includeGhlContext = includeGhlContextBase
+      && (!kind || kind === "all" || kind === "calls" || kind === "emails" || kind === "texts" || kind === "context");
     if (includeGhlContext) {
       let ghlQuery = createAdminClient().from("work_evidence_events")
         .select("id,person_id,occurred_at,title,summary,evidence_class,correction_status,metadata")
@@ -93,6 +106,10 @@ export async function GET(req: Request) {
         if (sp.get("to")) ghlQuery = ghlQuery.lt("occurred_at", `${sp.get("to")}T23:59:59.999Z`);
       }
       if (correction) ghlQuery = ghlQuery.eq("correction_status", correction);
+      if (kind === "calls") ghlQuery = ghlQuery.ilike("title", "Call %");
+      else if (kind === "emails") ghlQuery = ghlQuery.ilike("title", "%email%");
+      else if (kind === "texts") ghlQuery = ghlQuery.ilike("title", "Text message%");
+      else if (kind === "context") ghlQuery = ghlQuery.ilike("title", "%opportunity%");
       if (search) ghlQuery = ghlQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
       const ghlResult = await ghlQuery.order("occurred_at", { ascending: false }).limit(limit);
       if (ghlResult.error) throw new Error(`load GHL organization evidence: ${ghlResult.error.message}`);
@@ -173,8 +190,10 @@ export async function GET(req: Request) {
         if (to) summaryQuery = summaryQuery.lte("evidence_date", to);
       }
       if (sp.get("source")) summaryQuery = summaryQuery.eq("source", sp.get("source"));
+      if (sp.get("taskId")) summaryQuery = summaryQuery.eq("task_id", sp.get("taskId"));
+      if (correctionEventIds) summaryQuery = summaryQuery.in("evidence_event_id", correctionEventIds);
       if (search) summaryQuery = summaryQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
-      const summaryResult = await summaryQuery.limit(coverageRequested ? 5000 : 2000);
+      const summaryResult = await summaryQuery.limit(SUMMARY_ROW_LIMIT);
       if (summaryResult.error) throw new Error(`summarize Work OS evidence: ${summaryResult.error.message}`);
       const linkedSummaryRows: EvidenceSummaryInput[] = (summaryResult.data ?? []).map((row: Record<string, unknown>) => ({
         source: String(row.source ?? "unknown"),
@@ -183,7 +202,7 @@ export async function GET(req: Request) {
         person_id: row.person_id ? String(row.person_id) : null,
       }));
       const contextSummaryRows: EvidenceSummaryInput[] = [];
-      if (includeGhlContext) {
+      if (includeGhlContextBase) {
         let ghlSummaryQuery = createAdminClient().from("work_evidence_events")
           .select("occurred_at,title")
           .eq("organization_id", auth.access.organizationId)
@@ -198,7 +217,7 @@ export async function GET(req: Request) {
         }
         if (correction) ghlSummaryQuery = ghlSummaryQuery.eq("correction_status", correction);
         if (search) ghlSummaryQuery = ghlSummaryQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
-        const ghlSummaryResult = await ghlSummaryQuery.order("occurred_at", { ascending: false }).limit(5000);
+        const ghlSummaryResult = await ghlSummaryQuery.order("occurred_at", { ascending: false }).limit(SUMMARY_ROW_LIMIT);
         if (ghlSummaryResult.error) throw new Error(`summarize GHL organization evidence: ${ghlSummaryResult.error.message}`);
         for (const row of (ghlSummaryResult.data ?? []) as Array<Record<string, unknown>>) {
           contextSummaryRows.push({
@@ -210,6 +229,7 @@ export async function GET(req: Request) {
         }
       }
       const summary = summarizeEvidence([...linkedSummaryRows, ...contextSummaryRows], coverageRequested);
+      if (linkedSummaryRows.length >= SUMMARY_ROW_LIMIT || contextSummaryRows.length >= SUMMARY_ROW_LIMIT) summary.capped = true;
       return NextResponse.json({ evidence: merged, summary });
     }
     return NextResponse.json({ evidence: merged });

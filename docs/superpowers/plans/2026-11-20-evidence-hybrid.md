@@ -263,9 +263,10 @@ Seed the new filter keys (`limit: "500"`, `q`, `unattributed`, `coverage`, pulse
 
 Run:
 ```bash
-cd desktop/work-os-companion && npx tsc --noEmit
-cd desktop/work-os-companion && npx vitest run src/admin/evidenceModel.test.ts src/admin/evidenceData.test.ts
-cd desktop/work-os-companion && npx vite build
+cd desktop/work-os-companion
+npx tsc --noEmit
+npx vitest run src/admin/evidenceModel.test.ts src/admin/evidenceData.test.ts
+npx vite build
 ```
 Expected: all pass. Render `?preview-admin&section=evidence` at 1440 and 720 in light/dark and confirm the email row, the drawer, and the recaps view.
 

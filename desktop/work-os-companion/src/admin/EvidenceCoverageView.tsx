@@ -45,6 +45,8 @@ export default function EvidenceCoverageView({
   const selectedRow = selection ? rows.find((row) => row.personId === selection.personId) ?? null : null;
   const calls = drillRows.filter((row) => evidenceKindOf(row) === "call").length;
   const emails = drillRows.filter((row) => evidenceKindOf(row) === "email").length;
+  const cellTotal = selectedRow?.total ?? 0;
+  const drillPartial = !!selectedRow && cellTotal > drillRows.length;
   const columnStyle = { gridTemplateColumns: `180px repeat(${dates.length}, minmax(26px, 1fr)) 64px` };
 
   return (
@@ -114,10 +116,11 @@ export default function EvidenceCoverageView({
       <div className="evidence-coverage-drill-head">
         <div>
           <h2>{selectedRow ? `${selectedRow.name} · ${evidenceShortDate(selection?.date ?? "")}` : "Select a cell"}</h2>
-          <span>{drillLoading ? "Loading ledger…" : `${drillRows.length} records · ${calls} calls · ${emails} email${emails === 1 ? "" : "s"}`}</span>
+          <span>{drillLoading ? "Loading ledger…" : drillPartial ? `${drillRows.length} of ${cellTotal} records loaded` : `${drillRows.length} records · ${calls} calls · ${emails} email${emails === 1 ? "" : "s"}`}</span>
         </div>
         <AdminButton variant="secondary" icon={List} disabled={!selection} onClick={onOpenRecord}>Open in Record</AdminButton>
       </div>
+      {drillPartial ? <div className="evidence-partial">Showing {drillRows.length} of {cellTotal} records in this cell. Open in Record to narrow the day.</div> : null}
       <EvidenceLedger rows={drillRows} onSelect={onSelectRow} thumbnailIds={thumbnailIds} loading={drillLoading} error={drillError} emptyTitle="No evidence in this cell" emptyBody="The coverage count and the ledger are read from the same provider record; this cell has no rows to show." />
     </section>
   );

@@ -218,6 +218,15 @@
 .evidence-pulse button.is-selected { background: var(--ink); }
 .evidence-pulse button:hover { background: var(--observed); }
 .evidence-pulse button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.evidence-pulse-unavailable {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 10px;
+}
 .evidence-pulse-axis {
   display: flex;
   justify-content: space-between;

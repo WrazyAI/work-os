@@ -1,7 +1,7 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
-import { evidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
+import { evidenceKind, evidenceKindBucket } from "../../../../src/modules/work-os/evidence-kinds";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
 import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData, PendingSuggestion } from "../types";
@@ -520,7 +520,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
-    queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", summary: "1", limit: "500" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
+    queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
     // Insights needs its own honest empty record; without it the page shows a
     // load error instead of the empty state every other section renders.
     for (const range of ["7d", "30d", "90d"] as const) queryClient.setQueryData(adminKeys.insights(range, ""), emptyInsights(range, today));
@@ -604,7 +604,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   const reportEvidence = evidenceResponse();
   const evidencePageFilters = (overrides: Record<string, string> = {}) => ({
     personId: "", unattributed: "", source: "", from: evidenceFrom, to: today,
-    correction: "", q: "", summary: "1", limit: "500", ...overrides,
+    correction: "", q: "", kind: "all", summary: "1", limit: "500", ...overrides,
   });
   const evidenceForPerson = (personId: string) => {
     const evidence = reportEvidence.evidence.filter((item) => item.person_id === personId);
@@ -646,7 +646,12 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   }));
   queryClient.setQueryData(adminKeys.reportIntervals("p-2", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-2") });
   queryClient.setQueryData(adminKeys.reportIntervals("p-1", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-1") });
-  queryClient.setQueryData(adminKeys.evidence(evidencePageFilters()), reportEvidence);
+  for (const kind of ["all", "calls", "emails", "texts", "work", "context"]) {
+    const rows = kind === "all"
+      ? reportEvidence.evidence
+      : reportEvidence.evidence.filter((row) => evidenceKindBucket(evidenceKind(row.source, row.title)) === kind);
+    queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ kind })), { evidence: rows, summary: reportEvidence.summary });
+  }
   queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), reportEvidence);
   queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), reportEvidence);
   for (const personId of ["p-1", "p-2"]) {
@@ -930,7 +935,7 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
 
   // Evidence: rows without person, summary, event, or screenshot; no summary
   // collection and no GitHub actor rows.
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", summary: "1", limit: "500" }), {
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), {
     evidence: [
       { id: "e-s1", evidence_date: today, source: "github" },
       { id: "e-s2", evidence_date: yesterday, source: "worktivity" },

@@ -293,6 +293,8 @@ export interface EvidenceSummary {
   days: Array<{ date: string; count: number }>;
   kinds?: Array<{ kind: EvidenceKind; count: number }>;
   peopleCount?: number;
+  /** The summary read hit its server bound; counts are disclosed as capped. */
+  capped?: boolean;
   coverage?: EvidenceCoverage;
 }
 

@@ -326,7 +326,7 @@ describe("administration response normalizers", () => {
 });
 
 describe("preview fixture states", () => {
-  const evidenceFilters = { personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", q: "", summary: "1", limit: "500" };
+  const evidenceFilters = { personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", q: "", kind: "all", summary: "1", limit: "500" };
   const reportFilters = { status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() };
   const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: todayIso() };
 

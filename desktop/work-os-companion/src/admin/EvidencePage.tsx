@@ -121,6 +121,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
     to,
     correction: disputedOnly ? "disputed" : "",
     q: debouncedSearch,
+    kind,
     summary: "1",
     limit: "500",
   };
@@ -396,9 +397,12 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
           partial={viewTotal > visibleRows.length}
           counts={counts}
           peopleCount={peopleCount}
+          capped={summary?.capped === true}
           pulseDays={pulse.data?.summary?.days ?? []}
           pulseFrom={pulseFrom}
           pulseTo={pulseTo}
+          pulseLoading={pulse.isLoading}
+          pulseError={pulse.error as Error | null}
           filters={{ personId, source, from, to, search, kind, disputed: disputedOnly }}
           personOptions={personOptions}
           sourceOptions={sourceOptions}

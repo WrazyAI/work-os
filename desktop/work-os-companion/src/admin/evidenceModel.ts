@@ -8,8 +8,8 @@ export type EvidenceTone = "observed" | "quiet" | "warn" | "danger";
 export type EvidenceDirection = "inbound" | "outbound" | null;
 
 export type EvidenceEntry =
-  | { type: "group"; key: string; hour: number; direction: EvidenceDirection; rows: EvidenceRow[]; sortMinutes: number }
-  | { type: "event"; row: EvidenceRow; sortMinutes: number };
+  | { type: "group"; key: string; hour: number; direction: EvidenceDirection; rows: EvidenceRow[]; sortMs: number }
+  | { type: "event"; row: EvidenceRow; sortMs: number };
 
 export type EvidenceScreenshot = {
   id: string;
@@ -230,7 +230,7 @@ export function evidenceRelationLabel(row: EvidenceRow): string {
 }
 
 export function evidenceWhoNote(row: EvidenceRow): string {
-  if (evidenceKindOf(row) === "call" && evidenceDirection(row) === "inbound") {
+  if (evidenceKindOf(row) === "call" && evidenceDirection(row) === "inbound" && evidenceActor(row) === "Actor unknown") {
     return "The provider recorded an inbound action but named no person. It is not credited to the contact owner.";
   }
   if (evidenceGhlRelation(row) === "assigned_only") {
@@ -290,11 +290,11 @@ export function groupEvidenceDays(rows: EvidenceRow[]): Array<{ date: string; ro
     .map(([date, dayRows]) => ({ date, rows: dayRows }));
 }
 
-function occurrenceMinutes(row: EvidenceRow) {
+function occurrenceMs(row: EvidenceRow) {
   const occurrence = evidenceOccurrence(row);
   if (!occurrence) return 0;
-  const date = new Date(occurrence);
-  return date.getHours() * 60 + date.getMinutes();
+  const value = new Date(occurrence).getTime();
+  return Number.isFinite(value) ? value : 0;
 }
 
 export function groupEvidenceEntries(date: string, rows: EvidenceRow[]): EvidenceEntry[] {
@@ -302,7 +302,7 @@ export function groupEvidenceEntries(date: string, rows: EvidenceRow[]): Evidenc
   const entries: EvidenceEntry[] = [];
   for (const row of rows) {
     if (evidenceKindOf(row) !== "call") {
-      entries.push({ type: "event", row, sortMinutes: occurrenceMinutes(row) });
+      entries.push({ type: "event", row, sortMs: occurrenceMs(row) });
       continue;
     }
     const occurrence = evidenceOccurrence(row);
@@ -314,9 +314,10 @@ export function groupEvidenceEntries(date: string, rows: EvidenceRow[]): Evidenc
     groups.set(key, group);
   }
   for (const [key, group] of groups) {
-    entries.push({ type: "group", key, hour: group.hour, direction: group.direction, rows: group.rows, sortMinutes: group.hour * 60 });
+    const sortMs = Math.min(...group.rows.map(occurrenceMs));
+    entries.push({ type: "group", key, hour: group.hour, direction: group.direction, rows: group.rows, sortMs });
   }
-  return entries.sort((left, right) => left.sortMinutes - right.sortMinutes);
+  return entries.sort((left, right) => left.sortMs - right.sortMs);
 }
 
 export function coverageLevel(count: number): 0 | 1 | 2 | 3 | 4 {
