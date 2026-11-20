@@ -534,7 +534,10 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
-    queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
+    const emptyEvidence = { evidence: [], summary: summaryFor([]) } satisfies EvidenceResponse;
+    queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), emptyEvidence);
+    queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), emptyEvidence);
+    queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), emptyEvidence);
     // Insights needs its own honest empty record; without it the page shows a
     // load error instead of the empty state every other section renders.
     for (const range of ["7d", "30d", "90d"] as const) queryClient.setQueryData(adminKeys.insights(range, ""), emptyInsights(range, today));
@@ -947,14 +950,16 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
     intervals: [{ id: "i-s1", reviewStatus: "inferred" }],
   });
 
-  // Evidence: rows without person, summary, event, or screenshot; no summary
-  // collection and no GitHub actor rows.
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), {
-    evidence: [
-      { id: "e-s1", evidence_date: today, source: "github" },
-      { id: "e-s2", evidence_date: yesterday, source: "worktivity" },
-    ],
-  });
+  // Evidence: rows without person, event, or screenshot; the summary still
+  // covers the pulse and coverage keys the record view mounts.
+  const sparseEvidenceRows = [
+    { id: "e-s1", evidence_date: today, source: "github", title: "Pull request opened", person_id: "p-2" },
+    { id: "e-s2", evidence_date: yesterday, source: "worktivity", title: "Worktivity screenshot context", person_id: null },
+  ] as EvidenceRow[];
+  const sparseEvidence = { evidence: sparseEvidenceRows, summary: summaryFor(sparseEvidenceRows) } satisfies EvidenceResponse;
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), sparseEvidence);
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), sparseEvidence);
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), sparseEvidence);
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
     intervals: [
       { id: "i-s2", reviewStatus: "confirmed", personName: "Ben Sato" },
