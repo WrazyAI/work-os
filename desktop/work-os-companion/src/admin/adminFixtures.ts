@@ -1,6 +1,7 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
+import { evidenceKind, evidenceKindBucket } from "../../../../src/modules/work-os/evidence-kinds";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
 import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData, PendingSuggestion } from "../types";
@@ -13,6 +14,7 @@ import type {
   ConnectionsResponse,
   EvidenceResponse,
   EvidenceRow,
+  EvidenceSummary,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
   OrganizationResponse,
@@ -380,56 +382,139 @@ function reportsResponse(status: string): ReportsResponse {
   return { reports: rows, counts };
 }
 
-function evidenceResponse(): EvidenceResponse {
-  const rows = [
-    { id: "e-1", person: "p-2", date: DATES[DATES.length - 1], source: "github", title: "Pull request merged", summary: "wrazy/agent-os #480 — billing webhook retries", disputed: false },
-    { id: "e-2", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Observed design session", summary: "Figma and Notion in one drafting block", disputed: false, shot: true },
-    { id: "e-3", person: "p-3", date: DATES[DATES.length - 1], source: "worktivity", title: "Observed review block", summary: "GitHub review comments on two pull requests", disputed: false, shot: true },
-    { id: "e-4", person: "p-5", date: DATES[DATES.length - 2], source: "worktivity", title: "Observed research block", summary: "Long browsing block; flagged for review", disputed: true, shot: true },
-    { id: "e-5", person: "p-4", date: DATES[DATES.length - 2], source: "nifty", title: "Task completed", summary: "Vendor comparison matrix", disputed: false },
-    { id: "e-6", person: "p-8", date: DATES[DATES.length - 3], source: "github", title: "Workflow run passed", summary: "wrazy/agent-os main · lint and tests", disputed: false },
-    { id: "e-7", person: "p-2", date: DATES[DATES.length - 1], source: "worktivity", title: "Billing retry suite in the browser", summary: "VS Code beside a browser running the billing retry tests.", disputed: false, shot: true },
-    { id: "e-8", person: "p-2", date: DATES[DATES.length - 1], source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", disputed: false, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
-    { id: "e-9", person: "p-1", date: DATES[DATES.length - 1], source: "worktivity", title: "Settings IA review", summary: "Figma and Notion with the settings IA outline open.", disputed: false, shot: true },
-    { id: "e-ghl", person: "p-1", date: DATES[DATES.length - 1], source: "ghl", title: "Call outbound", summary: "Recorded outbound call with status completed.", disputed: false, recorded_at: `${DATES[DATES.length - 1]}T13:10:00.000Z`, ghl: { eventId: "e-ghl", relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" } },
-  ];
+function summaryFor(rows: EvidenceRow[]): EvidenceSummary {
+  const sources = new Map<string, number>();
+  const days = new Map<string, number>();
+  const kinds = new Map<ReturnType<typeof evidenceKind>, number>();
+  const people = new Set<string>();
+  const peopleByBucket = new Map<string, Set<string>>();
+  const coverage = new Map<string, Map<string, { count: number; emails: number }>>();
+  for (const row of rows) {
+    const source = row.source || "unknown";
+    const day = String(row.evidence_date ?? "").slice(0, 10);
+    const kind = evidenceKind(source, row.title);
+    sources.set(source, (sources.get(source) ?? 0) + 1);
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    if (day) days.set(day, (days.get(day) ?? 0) + 1);
+    if (row.person_id) {
+      people.add(row.person_id);
+      const bucket = evidenceKindBucket(kind);
+      const bucketPeople = peopleByBucket.get(bucket) ?? new Set<string>();
+      bucketPeople.add(row.person_id);
+      peopleByBucket.set(bucket, bucketPeople);
+    }
+    if (!day) continue;
+    const personKey = row.person_id ?? "__none__";
+    const dayCounts = coverage.get(personKey) ?? new Map<string, { count: number; emails: number }>();
+    const current = dayCounts.get(day) ?? { count: 0, emails: 0 };
+    current.count += 1;
+    if (kind === "email") current.emails += 1;
+    dayCounts.set(day, current);
+    coverage.set(personKey, dayCounts);
+  }
   return {
-    evidence: rows.map((row) => {
-      const person = PEOPLE.find((entry) => entry.id === row.person)!;
-      return {
-        id: row.id,
-        person_id: row.person,
-        task_id: null,
-        evidence_date: row.date,
-        source: row.source,
-        title: row.title,
-        summary: row.summary,
-        url: (row as { url?: string }).url ?? (row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null),
-        metrics: null,
-        created_at: `${row.date}T09:30:00.000Z`,
-        recorded_at: (row as { recorded_at?: string }).recorded_at ?? `${row.date}T09:30:00.000Z`,
-        person: { id: person.id, display_name: person.name },
-        ghl: (row as { ghl?: EvidenceRow["ghl"] }).ghl ?? null,
-        event: {
-          correction_status: row.disputed ? "disputed" : "none",
-          evidence_class: row.source === "worktivity" ? "activity" : "output",
-          metadata: (row as { ghl?: EvidenceRow["ghl"] }).ghl ? { ghl: (row as { ghl?: EvidenceRow["ghl"] }).ghl } : {},
-          screenshot: (row as { shot?: boolean }).shot
-            ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", previewUrl: PREVIEW_SHOT_URL, deleted_at: null }
-            : null,
-        },
-      };
-    }),
-    summary: {
-      sources: [
-        { source: "worktivity", count: 21 },
-        { source: "github", count: 9 },
-        { source: "ghl", count: 4 },
-        { source: "nifty", count: 6 },
-      ],
-      days: DATES.slice(-7).map((date, index) => ({ date, count: 4 + (index % 5) })),
+    sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
+    days: [...days.entries()].map(([date, count]) => ({ date, count })).sort((left, right) => left.date.localeCompare(right.date)),
+    kinds: [...kinds.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
+    peopleCount: people.size,
+    peopleByBucket: {
+      calls: peopleByBucket.get("calls")?.size ?? 0,
+      emails: peopleByBucket.get("emails")?.size ?? 0,
+      texts: peopleByBucket.get("texts")?.size ?? 0,
+      work: peopleByBucket.get("work")?.size ?? 0,
+      context: peopleByBucket.get("context")?.size ?? 0,
+    },
+    coverage: {
+      people: [...coverage.entries()].map(([personKey, dayCounts]) => ({
+        personId: personKey === "__none__" ? null : personKey,
+        days: [...dayCounts.entries()].map(([date, counts]) => ({ date, count: counts.count, emails: counts.emails })).sort((left, right) => left.date.localeCompare(right.date)),
+      })),
     },
   };
+}
+
+function evidenceResponse(): EvidenceResponse {
+  const today = DATES[DATES.length - 1];
+  const yesterday = DATES[DATES.length - 2];
+  const statuses = ["completed", "completed", "no-answer", "completed", "busy", "completed", "completed", "failed"];
+  const rows: Array<Record<string, any>> = [];
+  for (let index = 0; index < 18; index += 1) {
+    const hour = 9 + Math.floor(index / 3);
+    const minute = (index % 3) * 17 + 4;
+    const status = statuses[index % statuses.length];
+    rows.push({
+      id: `e-ghl-call-${index}`,
+      person: "p-1",
+      date: today,
+      source: "ghl",
+      title: "Call outbound",
+      summary: `Call outbound with status ${status}.`,
+      recorded_at: `${today}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`,
+      created_at: `${today}T18:20:00.000Z`,
+      durationSeconds: status === "completed" ? 60 + index * 13 : null,
+      ghl: { eventId: `e-ghl-call-${index}`, relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" },
+    });
+  }
+  rows.push(
+    {
+      id: "e-ghl-email", person: "p-1", date: today, source: "ghl", title: "Email sent", summary: "Email sent recorded by GHL.",
+      recorded_at: `${today}T13:05:00.000Z`, created_at: `${today}T18:05:00.000Z`,
+      ghl: { eventId: "e-ghl-email", relation: "performed", actorLabel: "Amara Okafor", assigneeLabels: [], contentAvailability: "on_demand", coverage: "recorded_action" },
+    },
+    {
+      id: "e-ghl-inbound-1", person: null, date: today, source: "ghl", title: "Call inbound", summary: "Call inbound with status no-answer.",
+      recorded_at: `${today}T10:12:00.000Z`, created_at: `${today}T18:20:00.000Z`,
+      ghl: { eventId: "e-ghl-inbound-1", relation: "unknown", actorLabel: "Actor unknown", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" },
+    },
+    {
+      id: "e-ghl-inbound-2", person: null, date: today, source: "ghl", title: "Call inbound", summary: "Call inbound with status voicemail.",
+      recorded_at: `${today}T14:20:00.000Z`, created_at: `${today}T18:20:00.000Z`,
+      ghl: { eventId: "e-ghl-inbound-2", relation: "unknown", actorLabel: "Actor unknown", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" },
+    },
+    {
+      id: "e-ghl-text", person: null, date: today, source: "ghl", title: "Text message sent", summary: "Text message sent recorded by GHL.",
+      recorded_at: `${today}T15:10:00.000Z`, created_at: `${today}T18:20:00.000Z`,
+      ghl: { eventId: "e-ghl-text", relation: "automation", actorLabel: "Automation — not the employee", assigneeLabels: [], contentAvailability: "metadata_only", coverage: "recorded_action" },
+    },
+    {
+      id: "e-ghl-opportunity", person: null, date: today, source: "ghl", title: "Opportunity open", summary: "Opportunity state recorded by GHL; ownership is not proof of an employee action.",
+      recorded_at: `${today}T11:20:00.000Z`, created_at: `${today}T18:20:00.000Z`,
+      ghl: { eventId: "e-ghl-opportunity", relation: "assigned_only", actorLabel: "Actor unknown", assigneeLabels: ["Ben Sato"], contentAvailability: "metadata_only", coverage: "contextual_snapshot" },
+    },
+    { id: "e-github-1", person: "p-3", date: today, source: "github", title: "Pull request merged", summary: "wrazy/agent-os #480 — billing webhook retries", recorded_at: `${today}T08:58:00.000Z` },
+    { id: "e-github-2", person: "p-3", date: today, source: "github", title: "Workflow run passed", summary: "wrazy/agent-os main · lint and tests", recorded_at: `${today}T09:20:00.000Z` },
+    { id: "e-github-3", person: "p-3", date: yesterday, source: "github", title: "Pushed 1 commit to main", summary: "wrazy/agent-os · 8ad4c21 Keep the retry path", recorded_at: `${yesterday}T16:40:00.000Z` },
+    { id: "e-worktivity-1", person: "p-2", date: today, source: "worktivity", title: "Observed design session", summary: "Figma and Notion in one drafting block", recorded_at: `${today}T10:40:00.000Z`, shot: true },
+    { id: "e-worktivity-2", person: "p-4", date: yesterday, source: "worktivity", title: "Observed research block", summary: "A long browsing block; flagged for review", recorded_at: `${yesterday}T14:15:00.000Z`, disputed: true, shot: true },
+    { id: "e-loom-1", person: "p-2", date: yesterday, source: "loom", title: "Billing retry walkthrough", summary: "A short walkthrough of the retry path and the remaining approval.", recorded_at: `${yesterday}T11:00:00.000Z`, url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
+  );
+  const evidence = rows.map((row) => {
+    const person = row.person ? PEOPLE.find((entry) => entry.id === row.person) ?? null : null;
+    const recordedAt = String(row.recorded_at ?? `${row.date}T09:30:00.000Z`);
+    const mirroredAt = String(row.created_at ?? recordedAt);
+    return {
+      id: row.id,
+      person_id: row.person ?? null,
+      task_id: null,
+      evidence_date: row.date,
+      source: row.source,
+      title: row.title,
+      summary: row.summary,
+      url: row.url ?? (row.source === "github" ? "https://github.com/wrazy/agent-os/pull/480" : null),
+      metrics: null,
+      created_at: mirroredAt,
+      recorded_at: recordedAt,
+      person: person ? { id: person.id, display_name: person.name } : null,
+      ghl: row.ghl ?? null,
+      event: {
+        correction_status: row.disputed ? "disputed" : "none",
+        evidence_class: row.source === "worktivity" ? "activity" : "output",
+        metadata: row.ghl ? { ghl: { ...row.ghl, durationSeconds: row.durationSeconds ?? null } } : {},
+        screenshot: row.shot ? { id: `${row.id}-shot`, processing_status: "ready", summary: "Editor and design tools with a task document open", confidence: 0.72, storage_path: "preview", previewUrl: PREVIEW_SHOT_URL, deleted_at: null } : null,
+      },
+    } satisfies EvidenceRow;
+  });
+  return { evidence, summary: summaryFor(evidence) };
 }
 
 export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "empty" | "sparse") {
@@ -449,7 +534,10 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
-    queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
+    const emptyEvidence = { evidence: [], summary: summaryFor([]) } satisfies EvidenceResponse;
+    queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), emptyEvidence);
+    queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), emptyEvidence);
+    queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), emptyEvidence);
     // Insights needs its own honest empty record; without it the page shows a
     // load error instead of the empty state every other section renders.
     for (const range of ["7d", "30d", "90d"] as const) queryClient.setQueryData(adminKeys.insights(range, ""), emptyInsights(range, today));
@@ -531,17 +619,13 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   }
   const reportDate = DATES[DATES.length - 1];
   const reportEvidence = evidenceResponse();
+  const evidencePageFilters = (overrides: Record<string, string> = {}) => ({
+    personId: "", unattributed: "", source: "", from: evidenceFrom, to: today,
+    correction: "", q: "", kind: "all", summary: "1", limit: "500", ...overrides,
+  });
   const evidenceForPerson = (personId: string) => {
     const evidence = reportEvidence.evidence.filter((item) => item.person_id === personId);
-    const sources = [...evidence.reduce((counts, row) => {
-      counts.set(row.source, (counts.get(row.source) ?? 0) + 1);
-      return counts;
-    }, new Map<string, number>()).entries()].map(([source, count]) => ({ source, count }));
-    const days = [...evidence.reduce((counts, row) => {
-      counts.set(row.evidence_date, (counts.get(row.evidence_date) ?? 0) + 1);
-      return counts;
-    }, new Map<string, number>()).entries()].map(([date, count]) => ({ date, count }));
-    return { ...reportEvidence, evidence, summary: { sources, days } };
+    return { ...reportEvidence, evidence, summary: summaryFor(evidence) };
   };
   queryClient.setQueryData(adminKeys.reportEvidence("p-2", reportDate), evidenceForPerson("p-2"));
   queryClient.setQueryData(adminKeys.reportEvidence("p-1", reportDate), evidenceForPerson("p-1"));
@@ -579,9 +663,16 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   }));
   queryClient.setQueryData(adminKeys.reportIntervals("p-2", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-2") });
   queryClient.setQueryData(adminKeys.reportIntervals("p-1", reportDate), { intervals: intervalRows.filter((entry) => entry.personId === "p-1") });
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), reportEvidence);
+  for (const kind of ["all", "calls", "emails", "texts", "work", "context"]) {
+    const rows = kind === "all"
+      ? reportEvidence.evidence
+      : reportEvidence.evidence.filter((row) => evidenceKindBucket(evidenceKind(row.source, row.title)) === kind);
+    queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ kind })), { evidence: rows, summary: reportEvidence.summary });
+  }
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), reportEvidence);
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), reportEvidence);
   for (const personId of ["p-1", "p-2"]) {
-    queryClient.setQueryData(adminKeys.evidence({ personId, source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), evidenceForPerson(personId));
+    queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ personId })), evidenceForPerson(personId));
     queryClient.setQueryData(adminKeys.intervals({ personId, from: evidenceFrom, to: today, limit: "60" }), {
       intervals: intervalRows.filter((entry) => entry.personId === personId),
     });
@@ -592,10 +683,20 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     const base = personId ? evidenceForPerson(personId) : reportEvidence;
     const rows = base.evidence.filter((row) => row.source === "ghl");
     queryClient.setQueryData(
-      adminKeys.evidence({ personId, source: "ghl", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }),
-      { evidence: rows, summary: { sources: rows.length ? [{ source: "ghl", count: rows.length }] : [], days: base.summary?.days ?? [] } } satisfies EvidenceResponse,
+      adminKeys.evidence(evidencePageFilters({ personId, source: "ghl" })),
+      { evidence: rows, summary: summaryFor(rows) } satisfies EvidenceResponse,
     );
   }
+  const uncredited = reportEvidence.evidence.filter((row) => !row.person_id);
+  queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ unattributed: "1" })), { evidence: uncredited, summary: summaryFor(uncredited) });
+  const p1Today = reportEvidence.evidence.filter((row) => row.person_id === "p-1" && row.evidence_date === today);
+  const uncreditedToday = uncredited.filter((row) => row.evidence_date === today);
+  queryClient.setQueryData(adminKeys.evidence({ personId: "p-1", date: today, limit: "500", summary: "1" }), { evidence: p1Today, summary: summaryFor(p1Today) });
+  queryClient.setQueryData(adminKeys.evidence({ unattributed: "1", date: today, limit: "500", summary: "1" }), { evidence: uncreditedToday, summary: summaryFor(uncreditedToday) });
+  queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ personId: "p-1", from: today, to: today })), { evidence: p1Today, summary: summaryFor(p1Today) });
+  queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ unattributed: "1", from: today, to: today })), { evidence: uncreditedToday, summary: summaryFor(uncreditedToday) });
+  const emailSearch = reportEvidence.evidence.filter((row) => `${row.title} ${row.summary}`.toLowerCase().includes("email"));
+  queryClient.setQueryData(adminKeys.evidence(evidencePageFilters({ q: "Email" })), { evidence: emailSearch, summary: summaryFor(emailSearch) });
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
     intervals: intervalRows,
   });
@@ -849,14 +950,16 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
     intervals: [{ id: "i-s1", reviewStatus: "inferred" }],
   });
 
-  // Evidence: rows without person, summary, event, or screenshot; no summary
-  // collection and no GitHub actor rows.
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), {
-    evidence: [
-      { id: "e-s1", evidence_date: today, source: "github" },
-      { id: "e-s2", evidence_date: yesterday, source: "worktivity" },
-    ],
-  });
+  // Evidence: rows without person, event, or screenshot; the summary still
+  // covers the pulse and coverage keys the record view mounts.
+  const sparseEvidenceRows = [
+    { id: "e-s1", evidence_date: today, source: "github", title: "Pull request opened", person_id: "p-2" },
+    { id: "e-s2", evidence_date: yesterday, source: "worktivity", title: "Worktivity screenshot context", person_id: null },
+  ] as EvidenceRow[];
+  const sparseEvidence = { evidence: sparseEvidenceRows, summary: summaryFor(sparseEvidenceRows) } satisfies EvidenceResponse;
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), sparseEvidence);
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", pulse: "1" }), sparseEvidence);
+  queryClient.setQueryData(adminKeys.evidence({ from: evidenceFrom, to: today, limit: "1", summary: "1", coverage: "1" }), sparseEvidence);
   queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
     intervals: [
       { id: "i-s2", reviewStatus: "confirmed", personName: "Ben Sato" },

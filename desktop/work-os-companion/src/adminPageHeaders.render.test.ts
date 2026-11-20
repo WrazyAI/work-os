@@ -147,29 +147,37 @@ describe("administration page headers", () => {
     expect(controls.split('class="admin-controls"').slice(1)).toHaveLength(1);
   });
 
-  it("keeps the record's view, person, and source above its range and disputed filters", () => {
+  it("keeps the hybrid view switch at the top, above the record filters", () => {
     const markup = renderPage(createElement(EvidencePage, {}));
-    const card = cardOf(markup, "The record");
-    expectCleanTitleRow(card, "The record");
-    const controls = controlsBand(card);
-    const rows = controls.split('class="admin-controls"').slice(1);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain('aria-label="Evidence view"');
-    expect(rows[0]).toContain('aria-label="Filter by person"');
-    expect(rows[0]).toContain('aria-label="Filter by source"');
-    expect(rows[1]).toContain('aria-label="Evidence from date"');
-    expect(rows[1]).toContain('aria-label="Evidence to date"');
-    expect(rows[1]).toContain("Disputed only");
+    expect(markup).toContain('class="evidence-viewbar"');
+    expect(markup).toContain('class="evidence-view-toggle"');
+    expect(markup).toContain("Record");
+    expect(markup).toContain("Coverage");
+    expect(markup).toContain('aria-label="Evidence from date"');
+    expect(markup).toContain('aria-label="Evidence to date"');
+    expect(markup).toContain('aria-label="Person"');
+    expect(markup).toContain('aria-label="Source"');
+    expect(markup).toContain("Disputed only");
+    const toggle = markup.indexOf('class="evidence-view-toggle"');
+    const from = markup.indexOf('aria-label="Evidence from date"');
+    const query = markup.indexOf('class="evidence-query"');
+    expect(toggle).toBeGreaterThan(-1);
+    expect(from).toBeGreaterThan(toggle);
+    expect(query).toBeGreaterThan(from);
   });
 
-  it("keeps every toolbar page's controls out of the title action slot", () => {
-    for (const page of ["ReviewPage", "TasksPage", "PeoplePage", "InsightsPage", "EvidencePage"]) {
+  it("keeps the card pages' controls out of the title action slot and the evidence controls in their own bar", () => {
+    for (const page of ["ReviewPage", "TasksPage", "PeoplePage", "InsightsPage"]) {
       const source = readText(resolve(root, `src/admin/${page}.tsx`));
       expect(source, page).toContain("controls={");
       expect(source, page).toMatch(/<AdminControls[\s>]/);
       expect(source, page).toContain("<AdminControlsGroup");
       expect(source, page).not.toContain('className="admin-toolbar"');
     }
+    const evidence = readText(resolve(root, "src/admin/EvidencePage.tsx"));
+    expect(evidence).not.toContain("controls={");
+    expect(evidence).toContain("evidence-viewbar");
+    expect(readText(resolve(root, "src/admin/EvidenceRecordView.tsx"))).toContain("evidence-query");
   });
 
   it("keeps the overview and the settings page quiet", () => {
