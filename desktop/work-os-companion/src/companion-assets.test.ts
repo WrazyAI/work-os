@@ -115,8 +115,9 @@ describe("floating companion integration", () => {
     expect(rustShell).toContain("fn hide_avatar");
     expect(rustShell).toContain("fn show_avatar");
     expect(rustShell).toContain("fn toggle_companion");
-    expect(rustShell).toMatch(/fn hide_avatar[\s\S]*sync_companion_item/);
-    expect(rustShell).toMatch(/fn show_avatar[\s\S]*sync_companion_item/);
+    expect(rustShell).toMatch(/fn hide_avatar[\s\S]*announce_companion_visibility/);
+    expect(rustShell).toMatch(/fn show_avatar[\s\S]*announce_companion_visibility/);
+    expect(rustShell).toMatch(/fn announce_companion_visibility[\s\S]*sync_companion_item/);
     expect(rustShell).toContain('"companion"');
     expect(avatar).toContain('invoke("hide_avatar")');
     expect(avatar).toContain("avatar-hide");
@@ -198,6 +199,46 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('decision: "reject"');
     expect(avatar).toContain("TaskSelectionCard");
     expect(avatar).toContain("proposeAvatarSelectedCompletions");
+  });
+
+  it("toggles the floating companion from the main View menu", () => {
+    // The main window needs the same two commands the avatar already has.
+    const appCommands = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");
+    expect(appCommands).toContain('"hide_avatar"');
+    expect(appCommands).toContain('"show_avatar"');
+    const avatarCommands = readFileSync(resolve(root, "src-tauri/permissions/allow-avatar-commands.toml"), "utf8");
+    expect(avatarCommands).toContain('"hide_avatar"');
+    expect(avatarCommands).toContain('"show_avatar"');
+
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("ottoVisibilityMenuItem(avatarWindowVisible");
+    expect(app).toContain('await invoke("show_avatar")');
+    expect(app).toContain('await invoke("hide_avatar")');
+    expect(app).not.toContain('invoke(nextVisible ? "show_avatar" : "hide_avatar")');
+    expect(app).toContain("listen<boolean>(COMPANION_VISIBILITY_EVENT");
+    expect(app).toContain('from "./ottoVisibility"');
+    // The browser preview must not render a dead desktop-only command.
+    expect(app).toMatch(/if \(isTauri\(\)\) viewItems\.push\(ottoVisibilityMenuItem/);
+    // Command completion is not visibility truth: the event and poll own the
+    // label, so a slow invoke cannot overwrite a newer tray/avatar transition.
+    expect(app).not.toContain("setAvatarWindowVisible(nextVisible)");
+    expect(app).toContain("const avatarVisibilityRevision = useRef(0)");
+    expect(app).toMatch(/avatarVisibilityRevision\.current \+= 1;\s*setAvatarWindowVisible\(event\.payload\)/);
+    // A poll that started before a host event must not land afterward.
+    expect(app).toContain("const revision = avatarVisibilityRevision.current");
+    expect(app).toContain("shouldApplyVisibilityPoll(revision, avatarVisibilityRevision.current, cancelled)");
+
+    const menu = readFileSync(resolve(root, "src/ottoVisibility.ts"), "utf8");
+    expect(menu).toContain('id: "view:otto"');
+    expect(menu).toContain('visible === true ? "Hide Otto" : "Show Otto"');
+
+    // Every host-side transition announces the truth to the main menu; the
+    // avatar's own close button and the tray both flow through these commands.
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    expect(rust).toContain('"work-os://companion-visibility"');
+    expect(rust).toMatch(/fn hide_avatar[\s\S]{0,300}announce_companion_visibility/);
+    expect(rust).toMatch(/fn show_avatar[\s\S]{0,400}announce_companion_visibility/);
+    expect(rust).toMatch(/fn toggle_companion[\s\S]{0,600}announce_companion_visibility/);
   });
 
   it("shares the per-workday conversation between the main window and avatar", () => {

@@ -100,7 +100,7 @@ fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: Stri
                 }
                 if window_target == "avatar" {
                     let _ = app_handle.emit_to("avatar", "avatar://expand", ());
-                    sync_companion_item(&app_handle, true);
+                    announce_companion_visibility(&app_handle, true);
                 }
                 if target == "eod" {
                     let _ = app_handle.emit_to("main", "work-os://avatar-open-eod", ());
@@ -167,23 +167,34 @@ fn sync_companion_item(app: &tauri::AppHandle, visible: bool) {
     }
 }
 
+/// One visibility transition: the tray label and the main window's View menu
+/// both read the same truth, so a hide from the avatar's own button or the
+/// tray lands in the main menu without waiting for its visibility poll.
+fn announce_companion_visibility(app: &tauri::AppHandle, visible: bool) {
+    sync_companion_item(app, visible);
+    let _ = app.emit_to("main", "work-os://companion-visibility", visible);
+}
+
 /// Hides the floating companion without quitting the app. Recover it from the
 /// tray's "Show companion" item.
 #[tauri::command]
 fn hide_avatar(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("avatar") {
         let _ = window.hide();
-        sync_companion_item(&app, false);
     }
+    announce_companion_visibility(&app, false);
 }
 
 #[tauri::command]
 fn show_avatar(app: tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("avatar") {
+    let shown = if let Some(window) = app.get_webview_window("avatar") {
         let _ = window.show();
         let _ = window.set_focus();
-        sync_companion_item(&app, true);
-    }
+        true
+    } else {
+        false
+    };
+    announce_companion_visibility(&app, shown);
 }
 
 fn toggle_companion(app: &tauri::AppHandle) {
@@ -193,12 +204,12 @@ fn toggle_companion(app: &tauri::AppHandle) {
     match window.is_visible() {
         Ok(true) => {
             let _ = window.hide();
-            sync_companion_item(app, false);
+            announce_companion_visibility(app, false);
         }
         _ => {
             let _ = window.show();
             let _ = window.set_focus();
-            sync_companion_item(app, true);
+            announce_companion_visibility(app, true);
         }
     }
 }
