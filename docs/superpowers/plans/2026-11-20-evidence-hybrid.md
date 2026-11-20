@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-20-evidence-hybrid-design.md`
 
+**Status (2026-11-20):** Tasks 1–6 are implemented on `codex/evidence-hybrid`. The companion suite passes (2,075 tests), root typecheck passes, and the rendered Record/Coverage views were checked at 1440, 1024, 720, and 390 in light and dark, including the email filter, group expansion, drawer, Unattributed deep link, and Connections/repos drawers. The full Work OS suite and CodeRabbit are finishing; no version bump or release is part of this branch.
+
 ## Global Constraints
 
 - Use Work OS tokens; no new gradients, card grids, or signal-filled tabs.
