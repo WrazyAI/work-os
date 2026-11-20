@@ -639,6 +639,17 @@ test("provider evidence carries its occurrence time, not just the mirror write t
   assert.match(view, /recorded_at: row\.occurred_at/);
 });
 
+test("GHL assigned-only evidence resolves its owner without claiming authorship", async () => {
+  const route = await source("src/app/api/work-os/evidence/route.ts");
+  // The actor and the owner are resolved through the same verified account
+  // mapping; neither id is accepted from the browser.
+  assert.match(route, /identityIds/);
+  assert.match(route, /ghlEvidenceRow\(row, mapped, identityPeople\)/);
+  const view = await source("src/lib/work-os-ghl-evidence-view.ts");
+  assert.match(view, /assigneeLabels/);
+  assert.match(view, /ownership is not authorship|context, never authorship/i);
+});
+
 test("GHL evidence reaches the person and task panels", async () => {
   const person = await source("src/app/api/work-os/admin/people/[personId]/route.ts");
   assert.match(person, /e\.source = 'ghl'/);

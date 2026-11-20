@@ -57,6 +57,17 @@ test("an unmapped actor keeps the plain provider-relation label", () => {
   );
 });
 
+test("an assigned-only record names its owner without claiming the action", () => {
+  const row = event("assigned_only", null);
+  (row.metadata.ghl as Record<string, unknown>).assigneeIds = ["mwha6"];
+  const projected = ghlEvidenceRow(row, null, new Map([["mwha6", { id: "person-kalia", displayName: "Kalia Bell" }]]));
+  const ghl = projected.ghl as { actorLabel: string; assigneeLabels: string[]; relation: string };
+  assert.deepEqual(ghl.assigneeLabels, ["Kalia Bell"]);
+  assert.equal(ghl.relation, "assigned_only");
+  assert.equal(ghl.actorLabel, "Assigned contact only — actor unknown");
+  assert.equal(projected.person_id, null, "ownership is context, not a person attribution");
+});
+
 test("the mapped-actor name does not become a person attribution", () => {
   const row = ghlEvidenceRow(event("unknown"), aden);
   // Organization context: still not one person's evidence row.

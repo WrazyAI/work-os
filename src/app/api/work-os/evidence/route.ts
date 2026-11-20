@@ -84,31 +84,34 @@ export async function GET(req: Request) {
       const ghlResult = await ghlQuery.order("occurred_at", { ascending: false }).limit(limit);
       if (ghlResult.error) throw new Error(`load GHL organization evidence: ${ghlResult.error.message}`);
       const ghlEvents = (ghlResult.data ?? []) as Record<string, unknown>[];
-      // An event stays organization context, but when its acting account is
-      // already mapped to a person the row should say who that is. Resolving
-      // the actor ids once keeps this to two queries regardless of page size.
-      const actorIds = [...new Set(ghlEvents
-        .map((row) => {
-          const metadata = (row.metadata ?? {}) as Record<string, unknown>;
-          const ghlMeta = (metadata.ghl ?? {}) as Record<string, unknown>;
-          const actor = (metadata.actor ?? {}) as Record<string, unknown>;
-          const id = ghlMeta.actorId ?? actor.id;
-          return typeof id === "string" && id.trim() ? id.trim() : null;
-        })
-        .filter((id): id is string => !!id))];
-      const actorPeople = new Map<string, { id: string; displayName: string }>();
-      if (actorIds.length) {
+      // An event stays organization context, but when its acting account or
+      // its owner is already mapped to a person the row should say who that is.
+      // Resolving every referenced identity once keeps this to two queries
+      // regardless of page size, and lets an assigned-only row name its owner
+      // without ever crediting that owner as the actor.
+      const identityIds = [...new Set(ghlEvents.flatMap((row) => {
+        const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+        const ghlMeta = (metadata.ghl ?? {}) as Record<string, unknown>;
+        const actor = (metadata.actor ?? {}) as Record<string, unknown>;
+        const actorId = ghlMeta.actorId ?? actor.id;
+        const assigneeIds = Array.isArray(ghlMeta.assigneeIds) ? ghlMeta.assigneeIds : [];
+        return [actorId, ...assigneeIds]
+          .map((id) => typeof id === "string" ? id.trim() : "")
+          .filter(Boolean);
+      }))];
+      const identityPeople = new Map<string, { id: string; displayName: string }>();
+      if (identityIds.length) {
         const accounts = await createAdminClient().from("work_source_accounts")
           .select("external_account_id,person:work_people(id,display_name)")
           .eq("organization_id", auth.access.organizationId)
           .eq("provider", "ghl")
           .eq("verified", true)
-          .in("external_account_id", actorIds);
+          .in("external_account_id", identityIds);
         for (const account of (accounts.data ?? []) as Record<string, unknown>[]) {
           const person = account.person as { id?: unknown; display_name?: unknown } | null;
           const externalId = String(account.external_account_id ?? "");
           if (!externalId || !person?.id || !person.display_name) continue;
-          actorPeople.set(externalId, { id: String(person.id), displayName: String(person.display_name) });
+          identityPeople.set(externalId, { id: String(person.id), displayName: String(person.display_name) });
         }
       }
       ghlRows = ghlEvents.map((row) => {
@@ -116,8 +119,8 @@ export async function GET(req: Request) {
         const ghlMeta = (metadata.ghl ?? {}) as Record<string, unknown>;
         const actor = (metadata.actor ?? {}) as Record<string, unknown>;
         const actorId = ghlMeta.actorId ?? actor.id;
-        const mapped = typeof actorId === "string" ? actorPeople.get(actorId.trim()) ?? null : null;
-        return ghlEvidenceRow(row, mapped);
+        const mapped = typeof actorId === "string" ? identityPeople.get(actorId.trim()) ?? null : null;
+        return ghlEvidenceRow(row, mapped, identityPeople);
       });
     }
     // The event occurrence is the authoritative time for provider evidence. The
