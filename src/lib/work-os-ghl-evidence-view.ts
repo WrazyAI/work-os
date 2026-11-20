@@ -89,7 +89,11 @@ export function ghlEvidenceRow(
       // The record's own classification decides what the action was; a mapped
       // account names the person. Naming them is not a hedge: a verified
       // mapping is the workspace's answer to "whose account is this".
-      actorLabel: actorPerson
+      // Name the mapped account only when the record establishes that person
+      // as the actor. An inbound call or an API-originated message can carry
+      // the account owner's id without being their work, so `unknown` stays
+      // unattributed even when the id maps to a verified employee.
+      actorLabel: actorPerson && relation !== "unknown"
         ? (relation === "automation"
           ? `Automation — ${actorPerson.displayName}`
           : relation === "shared_account"
