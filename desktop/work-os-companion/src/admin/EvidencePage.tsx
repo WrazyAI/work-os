@@ -81,6 +81,10 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   const [disputedOnly, setDisputedOnly] = useState(false);
   const [from, setFrom] = useState(() => isoDaysAgo(13));
   const [to, setTo] = useState(() => todayIso());
+  // A busy GoHighLevel location can record hundreds of calls in a day. The
+  // first page stays small, and the record exposes older rows on demand so a
+  // sent email is never hidden behind a wall of calls.
+  const [evidenceLimit, setEvidenceLimit] = useState(100);
   const [selected, setSelected] = useState<EvidenceRow | null>(null);
   const [reposOpen, setReposOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -89,7 +93,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
   const [receipt, setReceipt] = useState<string | null>(null);
 
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
-  const filters = { personId, source: tab === "evidence" ? source : "", from, to, correction: disputedOnly ? "disputed" : "", summary: "1", limit: "100" };
+  const filters = { personId, source: tab === "evidence" ? source : "", from, to, correction: disputedOnly ? "disputed" : "", summary: "1", limit: String(evidenceLimit) };
   const evidence = useQuery({
     queryKey: adminKeys.evidence(filters),
     queryFn: () => fetchAdminEvidence(filters),
@@ -281,6 +285,15 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
           ) : evidence.error ? (
             <div className="admin-card-body is-padded"><Notice tone="err">{(evidence.error as Error).message}</Notice></div>
           ) : grouped.length ? (
+            <>
+            {evidence.data && evidence.data.evidence.length >= evidenceLimit && evidenceLimit < 500 ? (
+              <div className="admin-card-body is-padded">
+                <AdminButton variant="secondary" onClick={() => setEvidenceLimit((current) => Math.min(500, current + 200))}>
+                  Show older evidence
+                </AdminButton>
+                <p className="admin-quiet">Showing the most recent {evidenceLimit} items. Narrow the date range or load more.</p>
+              </div>
+            ) : null}
             <div className="admin-groups">
               {grouped.map(([date, rows]) => (
                 <section key={date}>
@@ -330,6 +343,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 </section>
               ))}
             </div>
+            </>
           ) : (
             <div className="admin-card-body is-padded"><p className="admin-empty-note">No evidence matches these filters.</p></div>
           )
