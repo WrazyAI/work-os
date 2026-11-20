@@ -5,7 +5,7 @@ import { createEvidence } from "@/lib/work-os";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { canViewGhlOrganizationContext, ghlEvidenceRow } from "@/lib/work-os-ghl-evidence-view";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsAdmin, requireWorkOsPersonAccess } from "@/lib/work-os-api";
-import { evidenceKind } from "@/modules/work-os/evidence-kinds";
+import { summarizeEvidence, type EvidenceSummaryInput } from "@/lib/work-os-evidence-summary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -176,34 +176,13 @@ export async function GET(req: Request) {
       if (search) summaryQuery = summaryQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
       const summaryResult = await summaryQuery.limit(coverageRequested ? 5000 : 2000);
       if (summaryResult.error) throw new Error(`summarize Work OS evidence: ${summaryResult.error.message}`);
-      const sources = new Map<string, number>();
-      const days = new Map<string, number>();
-      const kinds = new Map<string, number>();
-      const people = new Set<string>();
-      const coverage = new Map<string, Map<string, { count: number; emails: number }>>();
-      const addCoverage = (personKey: string, day: string, kind: string) => {
-        if (!coverageRequested || !day) return;
-        let dayCounts = coverage.get(personKey);
-        if (!dayCounts) {
-          dayCounts = new Map();
-          coverage.set(personKey, dayCounts);
-        }
-        const current = dayCounts.get(day) ?? { count: 0, emails: 0 };
-        current.count += 1;
-        if (kind === "email") current.emails += 1;
-        dayCounts.set(day, current);
-      };
-      for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
-        const source = String(row.source ?? "unknown");
-        const title = String(row.title ?? "");
-        const kind = evidenceKind(source, title);
-        sources.set(source, (sources.get(source) ?? 0) + 1);
-        kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-        const day = dateOnly(row.evidence_date) ?? "";
-        if (day) days.set(day, (days.get(day) ?? 0) + 1);
-        if (row.person_id) people.add(String(row.person_id));
-        addCoverage(row.person_id ? String(row.person_id) : "__none__", day, kind);
-      }
+      const linkedSummaryRows: EvidenceSummaryInput[] = (summaryResult.data ?? []).map((row: Record<string, unknown>) => ({
+        source: String(row.source ?? "unknown"),
+        evidence_date: dateOnly(row.evidence_date) ?? "",
+        title: String(row.title ?? ""),
+        person_id: row.person_id ? String(row.person_id) : null,
+      }));
+      const contextSummaryRows: EvidenceSummaryInput[] = [];
       if (includeGhlContext) {
         let ghlSummaryQuery = createAdminClient().from("work_evidence_events")
           .select("occurred_at,title")
@@ -222,36 +201,15 @@ export async function GET(req: Request) {
         const ghlSummaryResult = await ghlSummaryQuery.order("occurred_at", { ascending: false }).limit(5000);
         if (ghlSummaryResult.error) throw new Error(`summarize GHL organization evidence: ${ghlSummaryResult.error.message}`);
         for (const row of (ghlSummaryResult.data ?? []) as Array<Record<string, unknown>>) {
-          const occurredAt = String(row.occurred_at ?? "");
-          const day = occurredAt.slice(0, 10);
-          const title = String(row.title ?? "");
-          const kind = evidenceKind("ghl", title);
-          sources.set("ghl", (sources.get("ghl") ?? 0) + 1);
-          kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-          if (day) days.set(day, (days.get(day) ?? 0) + 1);
-          addCoverage("__none__", day, kind);
+          contextSummaryRows.push({
+            source: "ghl",
+            evidence_date: String(row.occurred_at ?? "").slice(0, 10),
+            title: String(row.title ?? ""),
+            person_id: null,
+          });
         }
       }
-      const summary: {
-        sources: Array<{ source: string; count: number }>;
-        days: Array<{ date: string; count: number }>;
-        kinds: Array<{ kind: string; count: number }>;
-        peopleCount: number;
-        coverage?: { people: Array<{ personId: string | null; days: Array<{ date: string; count: number; emails: number }> }> };
-      } = {
-        sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
-        days: [...days.entries()].map(([day, count]) => ({ date: day, count })).sort((left, right) => left.date.localeCompare(right.date)),
-        kinds: [...kinds.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
-        peopleCount: people.size,
-      };
-      if (coverageRequested) {
-        summary.coverage = {
-          people: [...coverage.entries()].map(([personKey, dayCounts]) => ({
-            personId: personKey === "__none__" ? null : personKey,
-            days: [...dayCounts.entries()].map(([day, counts]) => ({ date: day, count: counts.count, emails: counts.emails })).sort((left, right) => left.date.localeCompare(right.date)),
-          })),
-        };
-      }
+      const summary = summarizeEvidence([...linkedSummaryRows, ...contextSummaryRows], coverageRequested);
       return NextResponse.json({ evidence: merged, summary });
     }
     return NextResponse.json({ evidence: merged });

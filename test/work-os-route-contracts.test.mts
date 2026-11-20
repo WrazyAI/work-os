@@ -546,11 +546,13 @@ test("evidence and report lists expose bounded filters for the admin surfaces", 
 
 test("evidence summary exposes kind counts, coverage, search, and unattributed scope", async () => {
   const evidence = await source("src/app/api/work-os/evidence/route.ts");
-  assert.match(evidence, /evidenceKind\(source, title\)/);
-  assert.match(evidence, /kinds:/);
-  assert.match(evidence, /peopleCount/);
+  const summary = await source("src/lib/work-os-evidence-summary.ts");
+  assert.match(summary, /evidenceKind\(source, title\)/);
+  assert.match(summary, /kinds:/);
+  assert.match(summary, /peopleCount/);
+  assert.match(summary, /personId: personKey === "__none__" \? null : personKey/);
+  assert.match(evidence, /summarizeEvidence/);
   assert.match(evidence, /coverageRequested/);
-  assert.match(evidence, /personId: personKey === "__none__" \? null : personKey/);
   assert.match(evidence, /unattributed/);
   assert.match(evidence, /title\.ilike/);
 });
