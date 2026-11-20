@@ -28,6 +28,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## 0.5.42 — 2026-11-20
 
 - GoHighLevel records now name the assigned owner instead of reading as an unknown actor.
+- Inbound GoHighLevel calls no longer appear under the employee who owns the shared line.
 
 ## 0.5.41 — 2026-11-20
 
