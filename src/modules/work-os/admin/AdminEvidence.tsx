@@ -44,6 +44,20 @@ function isoDaysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/** GHL assigned-only records have no action actor, but often do have a known
+ * owner. Name the owner rather than presenting the record as wholly unknown;
+ * the detail keeps the actor and ownership lines separate. */
+function evidencePersonLabel(row: EvidenceRow): string {
+  if (row.person?.display_name) return row.person.display_name;
+  const ghl = row.ghl;
+  if (row.source === "ghl" && (ghl?.relation === "automation" || ghl?.relation === "shared_account") && ghl.actorLabel) {
+    return ghl.actorLabel;
+  }
+  if (row.source === "ghl" && ghl?.assigneeLabels?.length) return `Assigned to ${ghl.assigneeLabels.join(", ")}`;
+  if (row.source === "ghl" && ghl?.actorLabel) return ghl.actorLabel;
+  return "Unattributed";
+}
+
 const SOURCE_VALUES = new Set<string>(SOURCE_OPTIONS.map((option) => option.value));
 
 function dateParam(value: string | null) {
@@ -417,7 +431,7 @@ export default function AdminEvidencePage() {
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{row.title}</span>
                               <span className="block truncate text-[11.5px] text-[var(--text-tertiary)]">
-                                {row.person?.display_name ?? "Unattributed"}{row.task ? ` · ${row.task.title}` : ""}
+                                {evidencePersonLabel(row)}{row.task ? ` · ${row.task.title}` : ""}
                                 {row.summary ? ` · ${row.summary.slice(0, 90)}` : ""}
                               </span>
                             </span>
@@ -512,7 +526,7 @@ export default function AdminEvidencePage() {
         open={!!selected}
         onClose={() => { setSelected(null); setScreenshotUrl(null); setScreenshotError(null); }}
         title={selected?.title ?? "Evidence"}
-        subtitle={selected ? `${selected.person?.display_name ?? (selected.source === "ghl" ? "Shared GHL activity" : "Unattributed")} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
+        subtitle={selected ? `${evidencePersonLabel(selected)} · ${formatWorkOsDate(selected.evidence_date)}` : undefined}
         width={560}
       >
         {selected ? (
@@ -520,6 +534,7 @@ export default function AdminEvidencePage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
               <span>{selected.source === "loom" ? "Loom recording" : sourceLabel(selected.source)}</span>
               {selected.ghl?.actorLabel ? <span>{selected.ghl.actorLabel}</span> : null}
+              {selected.ghl?.assigneeLabels?.length ? <span>Assigned to {selected.ghl.assigneeLabels.join(", ")}</span> : null}
               {selected.event?.evidence_class ? <span>{statusLabel(selected.event.evidence_class)}</span> : null}
               {(() => {
                 const metadata = (selected.event?.metadata ?? {}) as AnyRow;

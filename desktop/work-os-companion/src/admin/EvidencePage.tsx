@@ -41,7 +41,14 @@ type EvidenceTab = "evidence" | "recaps";
  * unmapped wording, which is the real setup gap. */
 function evidencePersonLabel(row: EvidenceRow): string {
   if (row.person?.display_name) return row.person.display_name;
-  const ghl = (row as { ghl?: { actorLabel?: string | null } }).ghl;
+  const ghl = (row as { ghl?: { actorLabel?: string | null; assigneeLabels?: string[]; relation?: string } }).ghl;
+  // Automation and shared-account labels are the classification, so they win.
+  if (row.source === "ghl" && (ghl?.relation === "automation" || ghl?.relation === "shared_account") && ghl.actorLabel) {
+    return ghl.actorLabel;
+  }
+  // Otherwise, an assigned-only record names its owner instead of reading as
+  // if the workspace knew nothing about the record. The actor stays separate.
+  if (row.source === "ghl" && ghl?.assigneeLabels?.length) return `Assigned to ${ghl.assigneeLabels.join(", ")}`;
   if (row.source === "ghl" && ghl?.actorLabel) return ghl.actorLabel;
   return "Unmapped person";
 }
@@ -402,6 +409,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
                 <div className="admin-kv"><span>Recorded</span><b>{relativeTime(selected.recorded_at ?? selected.created_at)}</b></div>
                 {selected.ghl?.relation ? <div className="admin-kv"><span>GHL relation</span><b>{statusLabel(selected.ghl.relation)}</b></div> : null}
                 {selected.ghl?.actorLabel ? <div className="admin-kv"><span>Recorded actor</span><b>{selected.ghl.actorLabel}</b></div> : null}
+                {selected.ghl?.assigneeLabels?.length ? <div className="admin-kv"><span>Assigned to</span><b>{selected.ghl.assigneeLabels.join(", ")}</b></div> : null}
                 {selected.ghl?.coverage ? <div className="admin-kv"><span>Coverage</span><b>{statusLabel(selected.ghl.coverage)}</b></div> : null}
                 {selected.task ? <div className="admin-kv"><span>Task</span><b>{selected.task.title}</b></div> : null}
               </div>
