@@ -64,6 +64,8 @@
   color: var(--faint);
   font-size: 9px;
   font-weight: 650;
+  letter-spacing: normal;
+  text-transform: none;
 }
 .evidence-viewbar-controls .admin-field input,
 .evidence-viewbar-controls .admin-field select,

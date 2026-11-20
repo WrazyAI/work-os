@@ -189,13 +189,26 @@ export function evidencePerson(row: EvidenceRow): { name: string; note: string; 
   return { name: "Unmapped person", note: "No person mapping", tone: "unknown" };
 }
 
+/** Linked GHL evidence comes through `work_evidence` without the projected
+ * `ghl` block; its provider relation still lives in the event metadata. A
+ * linked row with a person is a performed action, never an unknown actor. */
+export function evidenceGhlRelation(row: EvidenceRow): string | null {
+  if (row.ghl?.relation) return row.ghl.relation;
+  const metadata = row.event?.metadata;
+  const ghl = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>).ghl : null;
+  const relation = ghl && typeof ghl === "object" ? (ghl as Record<string, unknown>).relation : null;
+  if (typeof relation === "string" && relation) return relation;
+  if (row.source === "ghl" && row.person?.id) return "performed";
+  return null;
+}
+
 export function evidenceActor(row: EvidenceRow): string {
   if (row.source !== "ghl") return row.person?.display_name ?? "Unmapped person";
-  const ghl = row.ghl;
-  if (ghl?.relation === "assigned_only" || ghl?.relation === "unknown") return ghl.actorLabel ?? "Actor unknown";
-  if (ghl?.relation === "automation" || ghl?.relation === "shared_account") return ghl.actorLabel ?? capitalize(ghl.relation);
-  if (row.person?.display_name) return row.person.display_name;
-  return ghl?.actorLabel ?? "Actor unknown";
+  const relation = evidenceGhlRelation(row);
+  if (relation === "assigned_only" || relation === "unknown") return row.ghl?.actorLabel ?? "Actor unknown";
+  if (relation === "automation" || relation === "shared_account") return row.ghl?.actorLabel ?? capitalize(relation);
+  if (relation === "performed" && row.person?.display_name) return row.person.display_name;
+  return row.ghl?.actorLabel ?? row.person?.display_name ?? "Actor unknown";
 }
 
 export function evidenceAssignee(row: EvidenceRow): string | null {
@@ -203,11 +216,11 @@ export function evidenceAssignee(row: EvidenceRow): string | null {
 }
 
 export function evidenceAutomation(row: EvidenceRow): boolean {
-  return row.ghl?.relation === "automation";
+  return evidenceGhlRelation(row) === "automation";
 }
 
 export function evidenceRelationLabel(row: EvidenceRow): string {
-  const relation = row.ghl?.relation;
+  const relation = evidenceGhlRelation(row);
   if (relation === "performed") return "Performed by actor";
   if (relation === "automation") return "Automation";
   if (relation === "shared_account") return "Shared account";
@@ -220,10 +233,10 @@ export function evidenceWhoNote(row: EvidenceRow): string {
   if (evidenceKindOf(row) === "call" && evidenceDirection(row) === "inbound") {
     return "The provider recorded an inbound action but named no person. It is not credited to the contact owner.";
   }
-  if (row.ghl?.relation === "assigned_only") {
+  if (evidenceGhlRelation(row) === "assigned_only") {
     return "Assigned only. The workspace shows the owner as context and does not credit the action to them.";
   }
-  if (row.ghl?.relation === "automation") return "Automation is never credited to an employee.";
+  if (evidenceGhlRelation(row) === "automation") return "Automation is never credited to an employee.";
   if (row.source === "github") return "The GitHub account is mapped to this person. The event is attributed to that account, not to a task completion.";
   if (row.source === "worktivity") return "Observed device activity. A frame does not establish what the person was thinking, completing, or intending.";
   return "The actor is who the provider says performed it. Ownership is context, never proof of an action.";

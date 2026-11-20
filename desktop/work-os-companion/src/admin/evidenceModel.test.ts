@@ -10,6 +10,7 @@ import {
   evidenceDuration,
   evidenceOccurrence,
   evidencePerson,
+  evidenceRelationLabel,
   evidenceStatus,
   evidenceStatusMix,
   groupEvidenceDays,
@@ -113,6 +114,13 @@ describe("evidence attribution", () => {
     expect(evidencePerson(automated)).toEqual({ name: "Automation", note: "Not the employee", tone: "unknown" });
     expect(evidenceActor(automated)).toBe("Automation — not the employee");
     expect(evidenceAutomation(automated)).toBe(true);
+  });
+
+  it("keeps a linked GHL row attributed to its mapped performer", () => {
+    const linked = row({ ghl: null, event: { metadata: { ghl: { relation: "performed" } } } });
+    expect(evidenceRelationLabel(linked)).toBe("Performed by actor");
+    expect(evidenceActor(linked)).toBe("Aden Badon");
+    expect(evidenceAutomation(linked)).toBe(false);
   });
 
   it("reads the provider duration when it exists", () => {

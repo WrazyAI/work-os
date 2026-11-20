@@ -29,7 +29,7 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose: stri
   tasks: { title: "Tasks", purpose: "The workspace task record and what is still open." },
   review: { title: "EOD Review", purpose: "Submitted end-of-day reports and the decision they need." },
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
-  evidence: { title: "Evidence", purpose: "The workspace record: provider actions, observed activity, and output evidence, ordered by when it happened." },
+  evidence: { title: "Evidence", purpose: "The workspace record: provider actions, observed activity, coverage, and the provenance behind it." },
   settings: { title: "Settings", purpose: "Your own settings, then the workspace's configuration, members, and provider connections." },
 };
 
