@@ -86,6 +86,8 @@ export type PayrollDayResult = {
   findings: PayrollFinding[]; blockers: string[]; sourceHash: string; decisionKeys: string[];
   decisionState?: Record<string, "payable" | "excluded" | "acknowledged">;
   decisionAmounts?: Record<string, number>;
+  evidence?: { scheduleSource: string | null; sampledFrames: number;
+    sessions: { recorded: Span | null; eligible: Span | null }[] };
 };
 export type PayrollWeekSources = {
   scope: PayrollScope; week: 1 | 2; from: string; through: string; sourceHash: string;
@@ -134,6 +136,7 @@ export type PayrollReview = {
 export type PayrollRosterPage = Page<{
   personId: string; displayName: string; active: boolean; mapped: boolean; reviewId: string | null;
   status: string; totals: PayrollTotals; workdays: number;
+  auditStatus?: PayrollRunStatus | null;
 }> & { period: PayrollPeriod; counts: Record<string, number> };
 export type PayrollQuestionInput = {
   threadId: string; token: RevisionToken; approvalId: string | null; question: string;

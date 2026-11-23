@@ -11,7 +11,7 @@ export default async function WorkOsAdminLayout({ children }: { children: React.
   // My workspace is active, an administration URL is not a second admin page.
   if (await resolveWorkOsViewModeFor(resolved.access) === "employee") redirect("/work-os/today");
   return (
-    <WorkOsProviders>
+    <WorkOsProviders key={resolved.access.organizationId}>
       <AdminFrame>{children}</AdminFrame>
     </WorkOsProviders>
   );

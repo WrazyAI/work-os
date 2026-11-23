@@ -131,10 +131,12 @@ function finding(
   };
 }
 
-function keysFor() {
+function keysFor(date: string) {
   const used = new Map<string, number>();
   return (kind: string, span: Span | null) => {
-    const base = `${kind}:${span ? `${span.startMs}-${span.endMs}` : "aggregate"}`;
+    // Findings are stored by review revision, not only by day. A non-timed
+    // finding must carry its owning date to stay independently resolvable.
+    const base = `${kind}:${span ? `${span.startMs}-${span.endMs}` : `aggregate:${date}`}`;
     const count = (used.get(base) ?? 0) + 1;
     used.set(base, count);
     return count === 1 ? base : `${base}:${count}`;
@@ -143,7 +145,7 @@ function keysFor() {
 
 export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   assertInput(input);
-  const nextKey = keysFor();
+  const nextKey = keysFor(input.date);
   const findings: PayrollFinding[] = [];
   const derivedBlockers: string[] = [];
   const sessions = input.sessions;

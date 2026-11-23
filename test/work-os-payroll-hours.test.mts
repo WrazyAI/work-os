@@ -50,6 +50,18 @@ const payHeld = (day: PayrollDayResult): FindingDecision => ({
   requestKey: "pay-held", findingKey: heldFinding(day).key, sourceHash: heldFinding(day).sourceHash,
   action: "payable", note: "Verified the frame context with the employee",
 });
+
+test("aggregate findings on separate days can be reviewed independently", async () => {
+  const { calculatePayrollDay } = await hours();
+  const one = calculatePayrollDay(input({ date: "2026-11-02", sessions: [], blockers: ["Missing session"] }));
+  const two = calculatePayrollDay(input({ date: "2026-11-03", sessions: [], blockers: ["Missing session"] }));
+  for (const kind of ["no_session", "no_work"]) {
+    const left = one.findings.find((finding) => finding.kind === kind);
+    const right = two.findings.find((finding) => finding.kind === kind);
+    assert.ok(left && right);
+    assert.notEqual(left.key, right.key, `${kind} must not overwrite another day's saved finding`);
+  }
+});
 function sparseZeroCapture(): PayrollDayInput {
   const start = t("09:00");
   return input({

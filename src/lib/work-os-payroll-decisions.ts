@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
+import { mapPayrollRun } from "@/lib/work-os-payroll-runs";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { loadPayrollSourceToken, readPayrollSourceToken, verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
@@ -85,9 +86,20 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
   const scope = await reviewScope(access, reviewId);
   const client = await getPool().connect();
   try {
-    const review = await loadPayrollReviewRow(client, scope, reviewId);
+    // Read the review and its latest run in one snapshot. Completion publishes
+    // both atomically; a polling client must not see "done" with the old revision.
+    const { rows } = await client.query(`SELECT r.*, row_to_json(u) AS latest_run
+      FROM work_payroll_reviews r LEFT JOIN LATERAL (
+        SELECT id,organization_id,review_id,person_id,target_revision,as_of,status,phase,progress,next_attempt_at
+        FROM work_payroll_runs WHERE organization_id=r.organization_id AND review_id=r.id AND person_id=r.person_id
+        ORDER BY target_revision DESC LIMIT 1
+      ) u ON true
+      WHERE r.organization_id=$1 AND r.id=$2 AND r.person_id=$3`, [scope.organizationId, reviewId, scope.personId]);
+    const review = rows[0];
+    if (!review) throw new WorkOsValidationError("Payroll review not found");
     const expiry = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
     if (Number.isFinite(expiry) && expiry <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
+    const latestRun = review.latest_run;
     const approval = review.current_approval_id
       ? (await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, review.current_approval_id])).rows[0]
       : null;
@@ -113,7 +125,7 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
         openItems: Array.isArray(brief.open_items) ? brief.open_items as PayrollReview["briefs"][number]["openItems"] : [],
         gaps: Array.isArray(brief.gaps) ? brief.gaps as string[] : [], sourceHash: String(brief.source_hash ?? ""),
       })),
-      blockers: [], run: null,
+      blockers: [], run: latestRun ? { ...mapPayrollRun(latestRun), rowVersion: String(review.row_version) } : null,
       approval: approval ? approvalFromRow(approval, scope, period) : null,
       retentionExpiresAt: iso(review.retention_expires_at) ?? "",
       firstExportAt: iso(review.first_export_at), evidenceChangedSinceApproval: review.evidence_changed_since_approval === true || sourceChanged,
