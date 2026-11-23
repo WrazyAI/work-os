@@ -16,6 +16,7 @@ export function payrollReviewModel(review: PayrollReview): PayrollReviewModel {
   const blockers = [...review.blockers];
   if (stale) blockers.push("Re-analyze before approval; the evidence or analysis changed.");
   if (review.status === "needs_review") blockers.push("Resolve the held or correction-required findings.");
+  if (review.status !== "approved" && review.recapStats?.pending) blockers.push("Pending recaps must be settled before payroll approval.");
   if (review.run && ["queued", "running"].includes(review.run.progress.status)) blockers.push("Analysis is still running.");
   const totals = review.totals;
   const canApprove = review.status === "ready" && !review.approval && !stale

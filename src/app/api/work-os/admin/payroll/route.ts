@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const payDate = url.searchParams.get("payDate") ?? "";
-    return NextResponse.json(await listPayrollRoster(auth.access, { payDate, cursor: payrollCursor(url), limit: payrollLimit(url) }));
+    return NextResponse.json(await listPayrollRoster(auth.access, { payDate, cursor: payrollCursor(url), limit: payrollLimit(url), recordsOnly: url.searchParams.get("view") === "records" }), { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return payrollError(error); }
 }
 

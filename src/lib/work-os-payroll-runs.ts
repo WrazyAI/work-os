@@ -5,7 +5,7 @@ import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
 import { localDayBounds } from "@/modules/work-os/companion";
 import { ensurePayrollRecapApproval } from "@/lib/work-os-payroll-recap-approval";
-import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection, verifiedPayrollSemantics } from "@/lib/work-os-payroll-provider";
+import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
 import { buildPayrollDayInputs, loadPayrollSources } from "@/lib/work-os-payroll-sources";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import { payrollPeriodExpired } from "@/lib/work-os-payroll-retention";
@@ -99,6 +99,7 @@ function mapRun(run: RunRow): PayrollRun {
     progress: progress(run), rowVersion: String(run.row_version ?? "0"),
   };
 }
+export { mapRun as mapPayrollRun };
 
 async function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await getPool().connect();

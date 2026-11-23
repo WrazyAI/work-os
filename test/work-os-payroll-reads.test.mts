@@ -43,10 +43,12 @@ test("roster, days, findings and one day read within the organization", async ()
     const roster = await listPayrollRoster(adminAccess, { payDate: "2026-11-16", cursor: null, limit: 50 });
     assert.equal(roster.total, 1);
     assert.equal(roster.items[0].reviewId, reviewId);
+    assert.equal(roster.items[0].mapped, false, "an existing record is not proof of a verified mapping");
     assert.equal(roster.period.from, "2026-11-01");
     const days = await listPayrollDays(adminAccess, reviewId, { cursor: null, limit: 50 });
     assert.equal(days.total, 1);
     assert.equal(days.items[0].id, dayId);
+    assert.deepEqual(days.items[0].evidence, { sessions: [], scheduleSource: null, sampledFrames: 0 });
     assert.equal("captures" in days.items[0], false);
     assert.equal("frameCandidates" in days.items[0], false);
     const findings = await listPayrollFindings(adminAccess, reviewId, { status: "needs_review", cursor: null, limit: 50 });
@@ -67,6 +69,31 @@ test("cross-org reads are not found and expired records are refused", async () =
     await assert.rejects(loadPayrollDay(otherOrgAdminAccess, reviewId, dayId), /not found/i);
     await f.db.query("update work_payroll_reviews set retention_expires_at='2000-01-01Z' where id=$1", [reviewId]);
     await assert.rejects(listPayrollDays(adminAccess, reviewId, { cursor: null, limit: 50 }), /expired/i);
+  } finally { await f.close(); }
+});
+
+test("an audit exposes its queued progress and pages findings without repeating a row", async () => {
+  const { loadPayrollReview, listPayrollRoster, listPayrollFindings } = await reads();
+  const f = await payrollFixture();
+  try {
+    await seed(f);
+    await f.db.query(`insert into work_payroll_runs
+      (organization_id,review_id,person_id,status,phase,progress,target_revision,as_of,request_key,resolved_policy)
+      values($1,$2,$3,'queued','recaps','{"message":"Queued payroll analysis."}',2,'2026-11-16T06:05:00Z','queued-test','{}')`, [org, reviewId, person]);
+    await f.db.query(`insert into work_payroll_findings
+      (organization_id,review_id,person_id,analysis_revision,day_id,finding_key,kind,status,effect,required_action,reason,source_hash)
+      values($1,$2,$3,1,$4,'outside:1','outside_window','auto_excluded','exclude','none','Outside shift','hash')`, [org, reviewId, person, dayId]);
+    const review = await loadPayrollReview(adminAccess, reviewId);
+    assert.equal(review.run?.progress.status, "queued");
+    assert.equal(review.run?.targetRevision, 2);
+    const roster = await listPayrollRoster(adminAccess, { payDate: "2026-11-16", cursor: null, limit: 50, recordsOnly: true });
+    assert.equal(roster.items[0].auditStatus, "queued");
+    const first = await listPayrollFindings(adminAccess, reviewId, { status: null, cursor: null, limit: 1 });
+    assert.ok(first.nextCursor);
+    const second = await listPayrollFindings(adminAccess, reviewId, { status: null, cursor: first.nextCursor, limit: 1 });
+    assert.notEqual(first.items[0].id, second.items[0].id);
+    assert.equal(second.total, 2);
+    assert.equal(second.nextCursor, null);
   } finally { await f.close(); }
 });
 

@@ -23,7 +23,7 @@ record shows, and what the next useful action is.
 ## Shell and navigation
 
 The workspace lives at `/work-os/admin` with real routes: Overview, People,
-Tasks, EOD Review, Insights, Evidence, and Settings. The server route gates the
+Tasks, EOD Review, Payroll, Insights, Evidence, and Settings. The server route gates the
 whole subtree to Work OS admins; employees and managers keep their own
 surfaces, and a mapped administrator reaches their employee workspace through
 `Switch to my workspace` on the masthead (the employee home is
@@ -35,7 +35,7 @@ not repeat it: it is one title, one purpose line, and one quiet meta line
 (date, workspace, schema state) with the view switch and page refresh on the
 right. The old `Work OS` eyebrow is gone, and the page leads. This is a
 deliberate revision of the earlier horizontal-in-masthead nav: the sidebar
-already lists the seven destinations, and a second nav only duplicated them.
+already lists those destinations, and a second nav only duplicated them.
 The Work OS surface paints its own `.work-os-surface` token scope (the [color tokens](../tokens.md#color)
 palette in light and dark) so the workspace reads as one material even inside a
 host application.

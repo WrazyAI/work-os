@@ -1,6 +1,8 @@
+import { notFound } from "next/navigation";
 import { getPool } from "@/lib/db/pool";
 import { resolveWorkOsPageAccess } from "@/lib/work-os-page-access";
 import PayrollReview from "@/modules/work-os/admin/payroll/PayrollReview";
+import { isPayrollPayDate } from "@/modules/work-os/admin/payroll/paths";
 
 function currentPayDate(): string {
   const now = new Date();
@@ -10,17 +12,24 @@ function currentPayDate(): string {
 
 export default async function PayrollReviewPage({ params, searchParams }: {
   params: Promise<{ personId: string }>;
-  searchParams: Promise<{ payDate?: string }>;
+  searchParams: Promise<{ payDate?: string | string[] }>;
 }) {
   const { personId } = await params;
   const { payDate } = await searchParams;
-  let fallback = "";
   const access = await resolveWorkOsPageAccess();
-  if (access.ok) {
-    const latest = await getPool().query(`SELECT pay_date FROM work_payroll_reviews
-      WHERE organization_id=$1 AND person_id=$2 ORDER BY updated_at DESC LIMIT 1`, [access.access.organizationId, personId]);
-    const value = latest.rows[0]?.pay_date;
-    fallback = value instanceof Date ? value.toISOString().slice(0, 10) : value ? String(value).slice(0, 10) : "";
-  }
-  return <PayrollReview personId={personId} payDate={payDate || fallback || currentPayDate()} />;
+  if (!access.ok || access.access.role !== "admin" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(personId)
+    || (payDate !== undefined && !isPayrollPayDate(payDate))) notFound();
+  const { rows } = await getPool().query<{ id: string | null; pay_date: string | null; display_name: string }>(`SELECT r.id,r.pay_date::text,p.display_name
+    FROM work_people p JOIN work_payroll_settings s ON s.organization_id=p.organization_id AND s.enabled
+    LEFT JOIN LATERAL (
+      SELECT id,pay_date FROM work_payroll_reviews
+      WHERE organization_id=p.organization_id AND person_id=p.id AND ($3::date IS NULL OR pay_date=$3::date)
+        AND retention_expires_at > now()
+      ORDER BY pay_date DESC LIMIT 1
+    ) r ON true
+    WHERE p.organization_id=$1 AND p.id=$2`, [access.access.organizationId, personId, payDate ?? null]);
+  const entry = rows[0];
+  if (!entry) notFound();
+  const chosenPayDate = entry.pay_date ?? payDate ?? currentPayDate();
+  return <PayrollReview key={`${personId}:${chosenPayDate}`} reviewId={entry.id} personId={personId} displayName={entry.display_name} payDate={chosenPayDate} />;
 }

@@ -8,7 +8,13 @@ import { payrollReviewModel } from "../src/modules/work-os/admin/payroll/model";
 test("stale_review_cannot_be_approved", () => {
   assert.equal(payrollReviewModel(staleReview).canApprove, false);
   assert.ok(payrollReviewModel(staleReview).blockers.some((blocker) => /re-analyze/i.test(blocker)));
-  assert.equal(payrollReviewModel(payrollReviewFixture()).canApprove, true);
+  assert.equal(payrollReviewModel(payrollReviewFixture({ recapStats: { employeeReviewed: 3, autoApproved: 2, pending: 0 } })).canApprove, true);
+});
+
+test("ready analysis with unsettled recaps does not offer approval", () => {
+  const model = payrollReviewModel(payrollReviewFixture());
+  assert.equal(model.canApprove, false);
+  assert.match(model.blockers.join(" "), /recap/i);
 });
 
 test("reconciliation keeps recorded, eligible and outside as separate lines", () => {
