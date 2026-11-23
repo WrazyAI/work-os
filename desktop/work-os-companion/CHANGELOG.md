@@ -25,6 +25,9 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.43 — 2026-11-23
+
+- Evidence now opens as a record or a team coverage view, with call rollups, email filters, and a person/day drill-down.
 - Plan your day is readable in dark mode, including Loom notes and disabled actions.
 - Show or hide Otto directly from the Work OS menu.
 
