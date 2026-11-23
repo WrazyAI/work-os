@@ -86,7 +86,7 @@ test("next steps refuse a payroll-auto recap even though it is confirmed", async
 test("an employee amendment after payroll auto writes a new employee version and preserves the auto event", async () => {
   const f = await fixture();
   try {
-    await f.db.exec(await readFile(new URL("../supabase/migrations/0078_work_payroll_recap_provenance.sql", import.meta.url), "utf8"));
+    await f.db.exec(await readFile(new URL("../supabase/migrations/0079_work_payroll_recap_provenance.sql", import.meta.url), "utf8"));
     await f.db.query("update work_activity_intervals set review_status='confirmed', review_source='payroll_auto', payroll_date='2026-11-16', reviewed_at='2026-11-16T06:05:00Z' where id=$1", [interval]);
     const { buildReviewedRecap } = await recap();
     const { rows } = await f.db.query("select * from work_activity_intervals where id=$1", [interval]);

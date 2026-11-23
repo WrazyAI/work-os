@@ -23,6 +23,23 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+## 0.5.42 — 2026-11-20
+
+- GoHighLevel records now name the assigned owner instead of reading as an unknown actor.
+- Inbound GoHighLevel calls no longer appear under the employee who owns the shared line.
+
+## 0.5.41 — 2026-11-20
+
+- Admin Otto keeps evidence on the person, source, and dates you ask for and says when that source can't answer.
+- Work OS now unlocks its saved local data once and shares it between the main and floating windows, so opening the app does less repeated work.
+- Evidence loads older items on demand, so sent GoHighLevel email is not hidden behind a busy first page of calls.
+
+## 0.5.40 — 2026-11-19
+
+- Evidence rows now show the time the provider record happened, including GoHighLevel calls and messages.
+
 ## 0.5.39 — 2026-11-19
 
 - GoHighLevel activity is now visible and filterable in Evidence, and people and task panels show recorded GHL activity.

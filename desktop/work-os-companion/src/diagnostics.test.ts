@@ -176,6 +176,17 @@ describe("debug window contract", () => {
     expect(debugPermissions).toContain("core:window:allow-start-dragging");
   });
 
+  it("keeps the 35-state mascot matrix compact and responsive", () => {
+    const controls = readFileSync(resolve(root, "src/MascotDebugControls.tsx"), "utf8");
+    const mascotStyles = readFileSync(resolve(root, "src/mascot-runtime.css"), "utf8");
+    expect(controls).toContain("mascot-lab-state-grid debug-mascot-matrix");
+    expect(mascotStyles).toContain(".debug-mascot-matrix");
+    expect(mascotStyles).not.toContain(".debug-group .mascot-lab-state-grid");
+    expect(mascotStyles).toContain("repeat(auto-fill, minmax(150px, 1fr))");
+    expect(mascotStyles).toContain("repeat(6, minmax(0, 1fr))");
+    expect(mascotStyles).toContain("width: 88px");
+  });
+
   it("splits debug capabilities away from Stronghold", () => {
     const debug = readFileSync(resolve(root, "src-tauri/capabilities/debug.json"), "utf8");
     const mainCap = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");
@@ -185,7 +196,8 @@ describe("debug window contract", () => {
     expect(debug).toContain("allow-debug-commands");
     expect(debug).toContain("core:window:allow-hide");
     expect(mainCap).not.toContain('"debug"');
-    expect(mainCap).toContain("stronghold:default");
+    expect(mainCap).toContain("allow-vault-store");
+    expect(mainCap).not.toContain("stronghold:default");
   });
 });
 

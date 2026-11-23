@@ -6,7 +6,7 @@ import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
 import { adminPreviewNotifications, adminPreviewOverview, seedAdminFixtures } from "./adminFixtures";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
-import type { AdminOttoPendingAction } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminRead } from "../../../../src/modules/work-os/admin-otto/contracts";
 import { ADMIN_FIXTURE_TRANSPORT, ADMIN_OTTO_FOLLOW_SCENARIOS, FIXTURE_ACTIONS, adminFixtureSpeak, createAdminOttoFollowFixture, fixtureInboxPage, FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "../adminOtto/fixtures";
 import type { AdminOttoFollowFixtureScenario } from "../adminOtto/fixtures";
 import { AdminOttoSpeechChangedError } from "../adminOtto/api";
@@ -65,7 +65,7 @@ export default function AdminPreview() {
   const [focus, setFocus] = useState<AdminSectionFocus>({});
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [ottoOpen, setOttoOpen] = useState(!!ottoState);
-  const [ottoTab, setOttoTab] = useState<"chat" | "recaps">(ottoState && ottoState !== "chat" ? "recaps" : "chat");
+  const [ottoTab, setOttoTab] = useState<"chat" | "recaps">(ottoState && ottoState !== "chat" && ottoState !== "evidence" ? "recaps" : "chat");
   const [ottoTabRequest, setOttoTabRequest] = useState<{ tab: "chat" | "recaps"; token: number }>({ tab: "chat", token: 0 });
   const [ottoConversation, setOttoConversation] = useState<string | null>(null);
   const [ottoDraft, setOttoDraft] = useState("");
@@ -90,7 +90,26 @@ export default function AdminPreview() {
   };
   const fixtureTransport = {
     ...ADMIN_FIXTURE_TRANSPORT,
-    send: ottoState === "cards" || ottoState === "partial"
+    send: ottoState === "evidence"
+      ? async (input: { conversationId: string | null; text: string }) => {
+        const source = /\bworktivity\b/i.test(input.text) ? "worktivity" : /\bghl\b/i.test(input.text) ? "ghl" : "github";
+        const person = { id: "fixture-david", displayName: "Synthetic David", active: true, timezone: "UTC" };
+        const empty = source === "ghl";
+        const result: AdminRead = {
+          kind: "records", evidenceSource: source, people: [person],
+          windows: [{ personId: person.id, from: "2026-11-13", through: "2026-11-19", timezone: "UTC" }],
+          page: {
+            items: empty ? [] : [{ id: `fixture-${source}`, personId: person.id, source,
+              localDate: "2026-11-17", occurredAt: "2026-11-17T17:00:00Z", recordUrl: "",
+              text: source === "worktivity" ? "Worktivity attendance snapshot: off shift" : "Performed: Pushed to the sample repository" }],
+            total: empty ? 0 : 1, asOf: "2026-11-19T15:00:00Z", nextCursor: null,
+            coverage: [source === "worktivity" ? "Latest retained attendance observation per local day." : "Retained provider evidence only."],
+          },
+        };
+        return { conversationId: input.conversationId ?? "admin-fixture-evidence", turnId: crypto.randomUUID(),
+          reply: "Here is the retained evidence for Synthetic David.", result, contextVersion: 1 };
+      }
+      : ottoState === "cards" || ottoState === "partial"
       ? async (input: { conversationId: string | null; text: string }) => ({
           conversationId: input.conversationId ?? "admin-fixture-conversation",
           turnId: `admin-fixture-cards-${input.text.length}`,

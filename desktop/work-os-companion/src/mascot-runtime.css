@@ -19,9 +19,48 @@
 .debug-mascot-actions button:focus-visible, .debug-mascot-controls select:focus-visible { outline: 2px solid var(--focus, #5e9d27); outline-offset: 3px; }
 .debug-mascot-readout { margin-top: 14px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 @media(max-width: 420px) { .debug-mascot-preview { gap: 10px; padding: 10px; } .debug-mascot-preview .mascot-pet { flex-basis: 88px; width: 88px; height: 99px; } }
-.debug-group .mascot-lab-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.debug-group .mascot-lab-state { display: grid; justify-items: center; gap: 8px; padding: 10px; border: 1px solid #d9ded5; border-radius: 10px; }
-.debug-group .mascot-lab-state .mascot-pet { display: inline-grid; width: 88px; height: 99px; }
-.debug-group .mascot-lab-state small { font-size: 11px; }
+/* The 35-state matrix is a glanceable grid inside the debugger's Companion
+   category. Scope it to its own class so a wrapper rename cannot drop the tiles
+   back to full-width blocks. */
+.debug-mascot-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.debug-mascot-matrix .mascot-lab-state {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 12px;
+  background: var(--white, #fafaf6);
+}
+
+.debug-mascot-matrix .mascot-lab-state .mascot-pet {
+  display: inline-grid;
+  width: 88px;
+  height: 99px;
+}
+
+.debug-mascot-matrix .mascot-lab-state .mascot-pet-art {
+  width: 100%;
+  height: 100%;
+}
+
+.debug-mascot-matrix .mascot-lab-state small {
+  color: var(--muted, #62685f);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Six across once the content column is genuinely wide; below that auto-fill
+   keeps three or four compact tiles. */
+@container (min-width: 1120px) {
+  .debug-mascot-matrix { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 
 .avatar-orb:has(.mascot-pet[data-reduced-motion="true"]) { animation: none !important; transition: none !important; }

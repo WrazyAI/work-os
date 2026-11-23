@@ -544,6 +544,24 @@ test("evidence and report lists expose bounded filters for the admin surfaces", 
   assert.match(reports, /requireWorkOsPersonAccess/);
 });
 
+test("evidence summary exposes kind counts, coverage, search, and unattributed scope", async () => {
+  const evidence = await source("src/app/api/work-os/evidence/route.ts");
+  const summary = await source("src/lib/work-os-evidence-summary.ts");
+  assert.match(summary, /evidenceKind\(source, title\)/);
+  assert.match(summary, /kinds:/);
+  assert.match(summary, /peopleCount/);
+  assert.match(summary, /personId: personKey === "__none__" \? null : personKey/);
+  assert.match(evidence, /summarizeEvidence/);
+  assert.match(evidence, /coverageRequested/);
+  assert.match(evidence, /unattributed/);
+  assert.match(evidence, /unattributed && !canViewGhlOrganizationContext/);
+  assert.match(evidence, /title\.ilike/);
+  assert.match(evidence, /kind === "calls"/);
+  assert.match(evidence, /summaryQuery = summaryQuery\.eq\("task_id"/);
+  assert.match(evidence, /summaryQuery = summaryQuery\.in\("evidence_event_id"/);
+  assert.match(evidence, /SUMMARY_ROW_LIMIT/);
+});
+
 test("admin queries stay within the Postgres shim's filter capabilities", async () => {
   // The query shim supports embeds for selects only; filters on embedded
   // columns fail at runtime with `invalid identifier`, so plan dates resolve
@@ -629,6 +647,25 @@ test("the evidence page marks future integrations and keeps bots out of the pers
   assert.match(evidence, /useSearchParams/);
   assert.match(evidence, /searchParams\.get\("source"\)/);
   assert.match(evidence, /aria-pressed=\{source === entry\.source\}/);
+});
+
+test("provider evidence carries its occurrence time, not just the mirror write time", async () => {
+  const route = await source("src/app/api/work-os/evidence/route.ts");
+  assert.match(route, /event:work_evidence_events\(occurred_at/);
+  assert.match(route, /recorded_at: event\?\.occurred_at \?\? row\.created_at/);
+  const view = await source("src/lib/work-os-ghl-evidence-view.ts");
+  assert.match(view, /recorded_at: row\.occurred_at/);
+});
+
+test("GHL assigned-only evidence resolves its owner without claiming authorship", async () => {
+  const route = await source("src/app/api/work-os/evidence/route.ts");
+  // The actor and the owner are resolved through the same verified account
+  // mapping; neither id is accepted from the browser.
+  assert.match(route, /identityIds/);
+  assert.match(route, /ghlEvidenceRow\(row, mapped, identityPeople\)/);
+  const view = await source("src/lib/work-os-ghl-evidence-view.ts");
+  assert.match(view, /assigneeLabels/);
+  assert.match(view, /ownership is not authorship|context, never authorship/i);
 });
 
 test("GHL evidence reaches the person and task panels", async () => {

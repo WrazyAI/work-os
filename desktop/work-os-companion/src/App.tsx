@@ -25,7 +25,7 @@ import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "../../.
 import { PLAN_INTERPRET_TIMEOUT_MS, PLAN_REFINE_TIMEOUT_MS } from "../../../src/modules/work-os/plan-timeouts";
 import { beginAuthentication, discardPendingAuthentication, errorMessage, listenForAuthentication, reopenPendingAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
-import { markBootPhase, markCleanExit } from "./bootTrace";
+import { markBootPhase, markCleanExit, markStartupTiming } from "./bootTrace";
 import { startInstanceHeartbeat } from "./instanceHeartbeat";
 import { loadMachineCadence } from "./localSettings";
 import { openDebuggerWindow } from "./openDebugger";
@@ -2879,7 +2879,9 @@ export default function App() {
       // device and left the gate reporting ClientDataNotPresent.
       if (outcome.status === "ready" && !queryCacheRestoredRef.current) {
         queryCacheRestoredRef.current = true;
+        const restoreStarted = performance.now();
         await restoreWorkOsQueryCache(queryClient);
+        markStartupTiming("cache_restore", restoreStarted);
       }
       setVaultGate(outcome);
     });
@@ -3995,7 +3997,7 @@ export default function App() {
       void emit(OTTO_CONTEXT_CLEARED_EVENT, adminOttoSnapshot ? ottoContextEvent(adminOttoSnapshot) : null);
       requestOttoAudioStop();
       void adminOttoDeliveryRef.current?.stop();
-      await clearWorkOsAccountCache(queryClient);
+      await clearWorkOsAccountCache(queryClient, session?.token ?? null);
       setSession(null); setDay(null); setDayLive(false); planningAutoOpenedRef.current = false; setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }

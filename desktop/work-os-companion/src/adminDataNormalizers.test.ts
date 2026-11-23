@@ -228,7 +228,12 @@ describe("administration response normalizers", () => {
       task: null,
       event: null,
       created_at: "",
+      recorded_at: "",
     });
+    const timed = normalizeEvidence({
+      evidence: [{ id: "e-2", created_at: "2026-11-18T01:25:14.549Z", recorded_at: "2026-11-17T16:50:06.128Z" }],
+    });
+    expect(timed.evidence[0].recorded_at).toBe("2026-11-17T16:50:06.128Z");
     const summarized = normalizeEvidence({ summary: {} });
     expect(summarized.summary).toEqual({ sources: [], days: [] });
     expectNoLeaks(evidence);
@@ -321,7 +326,7 @@ describe("administration response normalizers", () => {
 });
 
 describe("preview fixture states", () => {
-  const evidenceFilters = { personId: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", summary: "1", limit: "100" };
+  const evidenceFilters = { personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", q: "", kind: "all", summary: "1", limit: "500" };
   const reportFilters = { status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() };
   const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: todayIso() };
 

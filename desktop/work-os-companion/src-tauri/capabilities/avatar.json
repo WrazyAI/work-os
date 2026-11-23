@@ -19,8 +19,7 @@
     "core:window:allow-scale-factor",
     "core:window:allow-current-monitor",
     "notification:default",
-    "stronghold:default",
-    "stronghold:allow-remove-store-record",
+    "allow-vault-store",
     "allow-avatar-commands"
   ]
 }

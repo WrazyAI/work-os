@@ -25,6 +25,7 @@ import type {
 } from "./types";
 import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
 import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
+import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {
@@ -631,6 +632,7 @@ function normalizeEvidenceRow(row: Loose): EvidenceRow {
     url: asTextOrNull(row.url),
     metrics: row.metrics && typeof row.metrics === "object" ? (row.metrics as Record<string, unknown>) : null,
     created_at: asText(row.created_at),
+    recorded_at: asTextOrNull(row.recorded_at) ?? asText(row.created_at),
     person: person ? { id: asText(person.id), display_name: asText(person.display_name, "Unmapped person") } : null,
     task: task ? { id: asText(task.id), title: asText(task.title, "Task") } : null,
     event: event
@@ -647,12 +649,36 @@ function normalizeEvidenceRow(row: Loose): EvidenceRow {
 export function normalizeEvidence(raw: unknown): EvidenceResponse {
   const source = asRecord(raw);
   const summary = source.summary && typeof source.summary === "object" ? asRecord(source.summary) : null;
+  const coverage = summary?.coverage && typeof summary.coverage === "object" ? asRecord(summary.coverage) : null;
+  const peopleByBucket = summary?.peopleByBucket && typeof summary.peopleByBucket === "object" ? asRecord(summary.peopleByBucket) : null;
   return {
     evidence: asRows(source.evidence).map(normalizeEvidenceRow),
     summary: summary
       ? {
           sources: asRows(summary.sources).map((entry) => ({ source: asText(entry.source, "unknown"), count: asNumber(entry.count) })),
           days: asRows(summary.days).map((entry) => ({ date: asText(entry.date), count: asNumber(entry.count) })),
+          kinds: Array.isArray(summary.kinds)
+            ? asRows(summary.kinds).map((entry) => ({ kind: asText(entry.kind, "other") as EvidenceKind, count: asNumber(entry.count) }))
+            : undefined,
+          peopleCount: summary.peopleCount == null ? undefined : asNumber(summary.peopleCount),
+          peopleByBucket: peopleByBucket
+            ? {
+                calls: asNumber(peopleByBucket.calls),
+                emails: asNumber(peopleByBucket.emails),
+                texts: asNumber(peopleByBucket.texts),
+                work: asNumber(peopleByBucket.work),
+                context: asNumber(peopleByBucket.context),
+              }
+            : undefined,
+          capped: summary.capped === true ? true : undefined,
+          coverage: coverage
+            ? {
+                people: asRows(coverage.people).map((entry) => ({
+                  personId: asTextOrNull(entry.personId),
+                  days: asRows(entry.days).map((day) => ({ date: asText(day.date), count: asNumber(day.count), emails: asNumber(day.emails) })),
+                })),
+              }
+            : undefined,
         }
       : undefined,
   };

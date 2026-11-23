@@ -1,9 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { appDataDir, join } from "@tauri-apps/api/path";
-import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
-import { loadStrongholdWhenReady } from "./strongholdStartup";
 import { openVaultWhenReady, reportVaultRetry } from "./vaultStartup";
 import { diagnostics } from "./diagnostics";
+import { markStartupTiming, startupWindowLabel } from "./bootTrace";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
@@ -72,19 +70,24 @@ export interface WorkOsConversationTurn {
   nextSteps?: RecapNextStepsMoment;
 }
 
-let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
+interface VaultLease { generation: number; reused: boolean }
+let context: Promise<VaultLease> | null = null;
 
 /** Chat scopes are dynamic keys; remember every scope this device wrote so a
  * sign-out can clear another employee's conversations and pending reviews. */
 const CHAT_SCOPE_KEYS = "chat-scope-keys";
-async function rememberChatScope(scope: string) {
+async function rememberChatScope(scope: string, lease = vault()) {
   try {
-    const keys = new Set((await get<string[]>(CHAT_SCOPE_KEYS)) ?? []);
+    const keys = new Set((await get<string[]>(CHAT_SCOPE_KEYS, lease)) ?? []);
     const before = keys.size;
     keys.add(`conversation:${scope}`);
     keys.add(`pending-tools:${scope}`);
-    if (keys.size !== before) await set(CHAT_SCOPE_KEYS, [...keys]);
-  } catch { /* best effort: clearing falls back to session-scoped keys */ }
+    if (keys.size !== before) await set(CHAT_SCOPE_KEYS, [...keys], lease);
+  } catch (error) {
+    // A durable failure retires the lease; let the caller retry on a fresh one.
+    // Other failures stay best-effort so a registry issue never blocks a save.
+    if (isStorageRetirement(error)) throw error;
+  }
 }
 const defaultApiBase = import.meta.env.VITE_WORK_OS_API_URL || "https://app.wrazyos.com";
 
@@ -97,43 +100,28 @@ function httpsOrigin(value: string) {
   return url.origin;
 }
 
-/** One vault open: the saved key from the host, then the Stronghold file. */
+/** Every WebView attaches to the same native owner; no password crosses IPC. */
 async function openVault() {
-  const path = await join(await appDataDir(), "work-os-vault.hold");
-  const password = await invoke<string>("get_vault_password");
-  const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
-  let client: Client;
-  try { client = await stronghold.loadClient("work-os"); }
-  catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/has already been loaded before, can not be loaded twice/.test(message)) {
-      // The main and avatar WebViews share the host's Stronghold collection.
-      // Another window already loaded this client: attach to it, never replace
-      // it with createClient (which wipes the live store, including sign-in).
-      client = new Client(path, "work-os");
-    } else if (/^error loading client data; no data present$/.test(message)) {
-      client = await stronghold.createClient("work-os");
-    } else {
-      // A read failure is not a fresh device. Preserve the vault and let the
-      // boot gate report the failure instead of silently opening an empty one.
-      throw error;
-    }
-  }
-  return { stronghold, client };
+  return invoke<VaultLease>("open_local_vault");
 }
 
-async function vault() {
+// Deliberately not async: callers may compare the returned promise identity when
+// retiring only the failed attempt, without wrapping it in a fresh promise.
+function vault(): Promise<VaultLease> {
   if (!context) {
     const pending = (async () => {
-      const startedAt = Date.now();
-      diagnostics.info("vault.open.started", "Opening the local vault");
+      const startedAt = performance.now();
+      const windowLabel = startupWindowLabel(window.location?.search ?? "");
+      diagnostics.info("vault.open.started", "Opening the local vault", { window: windowLabel });
       // The host registers the password worker and the Stronghold plugin while
       // it starts; a first launch that loses that race must not cost the
       // employee a refresh, so the open retries inside this one attempt.
       const opened = await openVaultWhenReady(openVault, { onRetry: reportVaultRetry });
       // The gate above this is the only thing the employee sees while this
       // runs, so a slow open has to leave a trail to diagnose.
-      diagnostics.info("vault.open.ready", `Opened the local vault in ${Date.now() - startedAt}ms`);
+      const durationMs = Math.round(performance.now() - startedAt);
+      diagnostics.info("vault.open.ready", `Opened the local vault in ${durationMs}ms`, { window: windowLabel, reused: opened.reused }, { durationMs });
+      markStartupTiming("vault_wait", startedAt, opened.reused);
       return opened;
     })();
     context = pending;
@@ -163,47 +151,61 @@ export async function resetLocalVault(): Promise<void> {
   await invoke("reset_local_vault");
 }
 
-async function get<T>(key: string): Promise<T | null> {
-  return withVault(async ({ client }) => {
-    const value = await client.getStore().get(key);
-    if (!value) return null;
-    return JSON.parse(new TextDecoder().decode(new Uint8Array(value))) as T;
-  });
-}
-
-async function set(key: string, value: unknown) {
-  return withVault(async ({ stronghold, client }) => {
-    await client.getStore().insert(key, [...new TextEncoder().encode(JSON.stringify(value))]);
-    await stronghold.save();
-  });
-}
-
-async function remove(key: string) {
-  return withVault(async ({ stronghold, client }) => {
-    await client.getStore().remove(key);
-    await stronghold.save();
-  });
-}
-
-/** The host keeps one Stronghold per snapshot path. A second window's open
- * replaces that instance, so the first window's previously loaded client is
- * gone and its next store call reports ClientDataNotPresent. That is a race,
- * not a damaged vault: retire our cached open and retry against the collection
- * the other window just created. */
-const VAULT_CLIENT_RACE = /error loading client data; no data present|has already been loaded before, can not be loaded twice/;
-
-function vaultErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function withVault<T>(operation: (opened: Awaited<ReturnType<typeof openVault>>) => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
+async function get<T>(key: string, lease = vault()): Promise<T | null> {
+    const opened = await lease;
     try {
-      return await operation(await vault());
+      const value = await invoke<number[] | null>("read_local_vault", { generation: opened.generation, key });
+      if (!value) return null;
+      return JSON.parse(new TextDecoder().decode(new Uint8Array(value))) as T;
     } catch (error) {
-      if (attempt >= 2 || !VAULT_CLIENT_RACE.test(vaultErrorMessage(error))) throw error;
-      diagnostics.warn("vault.open.replaced", "The other window replaced the shared vault; reopening it");
-      abandonVaultOpen();
+      if (retiresLease(error)) retireLease(lease);
+      throw error;
+    }
+}
+
+async function set(key: string, value: unknown, lease = vault()) {
+  const opened = await lease;
+  try {
+    await invoke("write_local_vault", { generation: opened.generation, key, value: [...new TextEncoder().encode(JSON.stringify(value))] });
+  } catch (error) { if (retiresLease(error)) retireLease(lease); throw error; }
+}
+
+async function remove(key: string, lease = vault()) {
+  const opened = await lease;
+  try { await invoke("remove_local_vault", { generation: opened.generation, key }); }
+  catch (error) { if (retiresLease(error)) retireLease(lease); throw error; }
+}
+
+/** The native owner retires a live instance after any failed durable operation,
+ * not only an explicit reset. Keeping its old generation would strand the next
+ * read or save, so drop the cached lease without replaying the failed payload. */
+function retiresLease(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "stale_generation" || code === "storage_failed" || code === "unavailable";
+}
+
+/** Retire only the attempt that failed; a newer lease cached meanwhile is still
+ * valid and must not be discarded by a late rejection from an older attempt. */
+function retireLease(attempt: Promise<VaultLease>) {
+  if (context === attempt) abandonVaultOpen();
+}
+
+/** A storage failure retires the native instance without changing accounts, so
+ * a chat write that has not committed can safely retry on a fresh lease. A
+ * reset/stale generation is never replayed. */
+function isStorageRetirement(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "storage_failed" || code === "unavailable";
+}
+
+async function withStorageRetry<T>(run: (lease: Promise<VaultLease>) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    const lease = vault();
+    try {
+      return await run(lease);
+    } catch (error) {
+      if (attempt >= 1 || !isStorageRetirement(error)) throw error;
+      retireLease(lease);
     }
   }
 }
@@ -247,19 +249,44 @@ export const secureState = {
   session: async () => (await secureState.sessionState()).session,
   saveSession: (session: DesktopSession) => isTauri() ? set("session", session) : Promise.resolve(),
   clearSession: () => isTauri() ? remove("session") : Promise.resolve(),
-  clearAccount: async () => {
+  clearAccount: async (expectedToken?: string | null) => {
     if (!isTauri()) return;
-    await remove("session");
-    await remove("pending-auth");
-    await remove("offline-queue");
-    await remove("day-snapshot");
-    await remove("query-cache");
-    await remove("guide-state");
-    // Conversations and pending approval cards are per-shift keys; remove each
-    // scope this device wrote so a sign-out leaves no employee data behind.
-    const scopes = (await get<string[]>(CHAT_SCOPE_KEYS)) ?? [];
-    for (const key of scopes) await remove(key);
-    await remove(CHAT_SCOPE_KEYS);
+    // Sign-out is idempotent: another window can retire this lease mid-cleanup
+    // (a reset or failed durable save), so resume from the start on a fresh one
+    // instead of abandoning the remaining employee records.
+    let startingToken: string | null = expectedToken ?? null;
+    let tokenKnown = expectedToken !== undefined;
+    for (let attempt = 0; ; attempt += 1) {
+      const lease = vault();
+      try {
+        const currentToken = sessionStateFrom(await get<DesktopSession>("session", lease), httpsOrigin).session?.token ?? null;
+        if (!tokenKnown) {
+          // The initiating read failed, so the account token is unknown. Never
+          // adopt a session that appeared during the retry: it belongs to
+          // whoever signed in afterwards.
+          if (attempt > 0 && currentToken !== null) return;
+          startingToken = currentToken;
+          tokenKnown = true;
+        // A different account may have signed in while this cleanup was waiting
+        // for a retired lease. Its session is the new authority; never delete it.
+        } else if (currentToken !== null && currentToken !== startingToken) return;
+        await remove("session", lease);
+        await remove("pending-auth", lease);
+        await remove("offline-queue", lease);
+        await remove("day-snapshot", lease);
+        await remove("query-cache", lease);
+        await remove("guide-state", lease);
+        // Conversations and pending approval cards are per-shift keys; remove each
+        // scope this device wrote so a sign-out leaves no employee data behind.
+        const scopes = (await get<string[]>(CHAT_SCOPE_KEYS, lease)) ?? [];
+        for (const key of scopes) await remove(key, lease);
+        await remove(CHAT_SCOPE_KEYS, lease);
+        break;
+      } catch (error) {
+        if (attempt >= 2 || !retiresLease(error)) throw error;
+        retireLease(lease);
+      }
+    }
     // Device-local notification state is not account-scoped by nature, so a
     // sign-out must clear it or the next person on this device inherits a
     // suppressed nudge or a snooze they never set.
@@ -282,8 +309,9 @@ export const secureState = {
   },
   saveDaySnapshot: async (day: DayData) => {
     if (!isTauri()) return;
-    const session = await secureState.session();
-    if (session) await set("day-snapshot", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, day });
+    const lease = vault();
+    const session = sessionStateFrom(await get<DesktopSession>("session", lease), httpsOrigin).session;
+    if (session) await set("day-snapshot", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, day }, lease);
   },
   /** Persisted TanStack Query cache. Renders last-known work instantly on
    * relaunch; background revalidation keeps it truthful. 24h ceiling. */
@@ -298,8 +326,9 @@ export const secureState = {
   },
   saveQueryCache: async (state: string) => {
     if (!isTauri()) return;
-    const session = await secureState.session();
-    if (session) await set("query-cache", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, state });
+    const lease = vault();
+    const session = sessionStateFrom(await get<DesktopSession>("session", lease), httpsOrigin).session;
+    if (session) await set("query-cache", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, state }, lease);
   },
   clearQueryCache: () => isTauri() ? remove("query-cache") : Promise.resolve(),
   /** Last-known page-guide flags, account-scoped. Reconciled with the server on
@@ -320,19 +349,23 @@ export const secureState = {
    * overwriting it, so a shared review turn can never be clobbered. */
   saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => {
     if (!isTauri()) return Promise.resolve();
-    return (async () => {
-      await rememberChatScope(scope);
-      const stored = (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [];
-      await set(`conversation:${scope}`, mergeConversationTurns(stored, turns));
-    })();
+    return withStorageRetry(async (lease) => {
+      await rememberChatScope(scope, lease);
+      const stored = (await get<WorkOsConversationTurn[]>(`conversation:${scope}`, lease)) ?? [];
+      await set(`conversation:${scope}`, mergeConversationTurns(stored, turns), lease);
+    });
   },
   clearConversation: (scope: string) => isTauri() ? remove(`conversation:${scope}`) : Promise.resolve(),
   /** Latest pending tool review for the scope, shared by the main window and
    * the avatar so cards raised in either surface appear in both. */
   pendingTools: async (scope: string) => isTauri() ? (await get<PendingToolReview>(`pending-tools:${scope}`)) ?? null : null,
-  savePendingTools: (scope: string, review: PendingToolReview) => isTauri()
-    ? rememberChatScope(scope).then(() => set(`pending-tools:${scope}`, review))
-    : Promise.resolve(),
+  savePendingTools: (scope: string, review: PendingToolReview) => {
+    if (!isTauri()) return Promise.resolve();
+    return withStorageRetry(async (lease) => {
+      await rememberChatScope(scope, lease);
+      await set(`pending-tools:${scope}`, review, lease);
+    });
+  },
   clearPendingTools: (scope: string) => isTauri() ? remove(`pending-tools:${scope}`) : Promise.resolve(),
   pendingAuth: async () => {
     if (!isTauri()) return null;
@@ -351,7 +384,8 @@ export const secureState = {
       ...APPEARANCE_DEFAULTS,
       themePromptSeen: true,
     };
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+    const lease = vault();
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
     const stored = mergeWorkOsSettings(null, {
       autoCheckUpdates: settings?.autoCheckUpdates !== false,
       voiceHotkey: settings?.voiceHotkey !== false,
@@ -365,7 +399,10 @@ export const secureState = {
       // A recovery write is still a settings write: queue it and re-read so it
       // cannot overwrite a newer theme or prompt choice saved meanwhile.
       const recovery = settingsWriteQueue.then(async () => {
-        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+        // A queued write starts after earlier work may have retired the lease.
+        // Acquire when the task runs, then keep its read and write together.
+        const queuedLease = vault();
+        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", queuedLease);
         const currentRecord = mergeWorkOsSettings(null, {
           autoCheckUpdates: latest?.autoCheckUpdates !== false,
           voiceHotkey: latest?.voiceHotkey !== false,
@@ -381,7 +418,7 @@ export const secureState = {
           try { apiBase = httpsOrigin(latest.apiBase); } catch { apiBase = defaultApiBase; }
         }
         const fallback = mergeWorkOsSettings(currentRecord, { apiBase });
-        await set("settings", fallback);
+        await set("settings", fallback, queuedLease);
         return fallback;
       });
       settingsWriteQueue = recovery.then(() => undefined).catch(() => undefined);
@@ -391,7 +428,11 @@ export const secureState = {
   saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
     if (!isTauri()) return Promise.resolve();
     const write = settingsWriteQueue.then(async () => {
-      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings");
+      // Acquire only when this queued save begins. A preceding failure or reset
+      // may have retired the lease while this save was waiting; the save has not
+      // read anything yet, so it can safely attach to the current vault.
+      const lease = vault();
+      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
       const stored = mergeWorkOsSettings(null, {
         apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
         autoCheckUpdates: current?.autoCheckUpdates !== false,
@@ -400,7 +441,7 @@ export const secureState = {
         themePromptSeen: current?.themePromptSeen === true,
         ...(typeof current?.recapVoice === "string" ? { recapVoice: current.recapVoice } : {}),
       });
-      await set("settings", mergeWorkOsSettings(stored, settings));
+      await set("settings", mergeWorkOsSettings(stored, settings), lease);
     });
     settingsWriteQueue = write.catch(() => undefined);
     return write;

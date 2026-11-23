@@ -295,7 +295,7 @@ describe("floating companion integration", () => {
     expect(core).toMatch(/StoreAnswer::Missing if vault_exists => StoreDecision::UnlockFailed/);
     expect(core).toContain("fn reset_replaces_the_vault_id_so_a_stale_credential_cannot_block_a_restart");
     const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
-    expect(vault).toContain('invoke<string>("get_vault_password")');
+    expect(vault).toContain('invoke<VaultLease>("open_local_vault")');
     expect(vault).toContain('invoke("reset_local_vault")');
     expect(vault).toContain("abandonVaultOpen");
     const gate = readFileSync(resolve(root, "src/vaultGate.ts"), "utf8");

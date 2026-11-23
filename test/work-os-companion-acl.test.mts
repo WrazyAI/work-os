@@ -164,4 +164,21 @@ assert.deepEqual(ungranted.sort(), [], `frontend invokes commands its window cap
 // planned for a future surface. Only assert the audit itself stayed complete.
 assert.ok(registered.size >= invoked.size, "every invoked command should also be registered");
 
+for (const command of ["open_local_vault", "read_local_vault", "write_local_vault", "remove_local_vault"]) {
+  assert.ok(registered.has(command), `${command} must be registered`);
+  for (const label of ["main", "avatar"]) assert.ok(grantedFor(label).has(command), `${label} needs ${command}`);
+  assert.ok(!grantedFor("debug").has(command), `debug must not read or mutate the shared vault`);
+}
+const buildManifest = read(resolve(tauri, "build.rs")).match(/\.commands\(&\[([\s\S]*?)\]/)?.[1] ?? "";
+const restricted = new Set([...buildManifest.matchAll(/"([^"]+)"/g)].map(match => match[1]));
+assert.deepEqual([...restricted].sort(), [...registered].sort(), "every custom handler must participate in the build-time capability manifest");
+for (const label of windows) {
+  assert.ok(![...windowPermissions.get(label)!].some(p => p.startsWith("stronghold:")), `${label} must not bypass the shared native owner`);
+}
+for (const file of readdirSync(resolve(tauri, "capabilities"))) {
+  if (!file.endsWith(".json")) continue;
+  const cap = JSON.parse(read(resolve(tauri, "capabilities", file)));
+  assert.ok(!cap.remote, "local vault capabilities must not allow remote origins");
+}
+
 console.log(`ACL guard passed: ${registered.size} registered commands, ${invoked.size} invoked, windows ${windows.join("/")}.`);

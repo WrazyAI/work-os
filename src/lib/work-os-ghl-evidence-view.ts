@@ -33,16 +33,27 @@ const RELATION_LABELS: Record<string, string> = {
 
 /** Projects one raw GHL event into the existing Evidence row shape. It never
  * includes credentials, raw provider payloads, or message bodies. */
-export function ghlEvidenceRow(row: Json, actorPerson?: { id: string; displayName: string } | null): Json {
+export function ghlEvidenceRow(
+  row: Json,
+  actorPerson?: { id: string; displayName: string } | null,
+  assigneePeople?: Map<string, { id: string; displayName: string }> | null,
+): Json {
   const metadata = (row.metadata ?? {}) as Json;
   const ghl = (metadata.ghl ?? {}) as Json;
   const relation = String(ghl.relation ?? "unknown");
+  const assigneeIds = Array.isArray(ghl.assigneeIds) ? ghl.assigneeIds.map(String) : [];
+  // An assigned-only record has no action actor, but it does have an owner.
+  // Naming the owner is context, never authorship: the row still says the
+  // action actor is not recorded.
+  const assigneeLabels = [...new Set(assigneeIds
+    .map((id) => assigneePeople?.get(id.trim())?.displayName?.trim() ?? null)
+    .filter((name): name is string => !!name))];
   const safeGhl = {
     kind: ghl.kind,
     action: ghl.action,
     relation,
     actorId: ghl.actorId ?? (metadata.actor as Json | undefined)?.id ?? null,
-    assigneeIds: Array.isArray(ghl.assigneeIds) ? ghl.assigneeIds : [],
+    assigneeIds,
     source: ghl.source ?? null,
     conversationId: ghl.conversationId ?? null,
     emailId: ghl.emailId ?? null,
@@ -63,6 +74,7 @@ export function ghlEvidenceRow(row: Json, actorPerson?: { id: string; displayNam
     url: null,
     metrics: { relation, evidenceClass: row.evidence_class },
     created_at: row.occurred_at,
+    recorded_at: row.occurred_at,
     person: null,
     task: null,
     event: {
@@ -77,14 +89,18 @@ export function ghlEvidenceRow(row: Json, actorPerson?: { id: string; displayNam
       // The record's own classification decides what the action was; a mapped
       // account names the person. Naming them is not a hedge: a verified
       // mapping is the workspace's answer to "whose account is this".
-      actorLabel: actorPerson
+      // Name the mapped account only when the record establishes that person
+      // as the actor. An inbound call or an API-originated message can carry
+      // the account owner's id without being their work, so `unknown` stays
+      // unattributed even when the id maps to a verified employee.
+      actorLabel: actorPerson && relation !== "unknown"
         ? (relation === "automation"
           ? `Automation — ${actorPerson.displayName}`
           : relation === "shared_account"
             ? `Shared account — ${actorPerson.displayName}`
             : actorPerson.displayName)
         : RELATION_LABELS[relation] ?? RELATION_LABELS.unknown,
-      assigneeLabels: [],
+      assigneeLabels,
       contentAvailability: ghl.emailId ? "on_demand" : "metadata_only",
       coverage: ghl.snapshot ? "contextual_snapshot" : "recorded_action",
     },

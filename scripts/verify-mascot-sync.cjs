@@ -112,6 +112,17 @@ const fs = require('node:fs');
     assert.equal(await main.locator(pet).evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length), 0); checks++;
     await debug.getByRole('button', { name: 'All 35 combinations', exact: true }).click();
     assert.equal(await debug.locator('.mascot-lab-state-grid .mascot-pet').count(), 35); checks++;
+    const states = await debug.locator('.mascot-lab-state').evaluateAll(els => els.map(el => el.getAttribute('data-state')));
+    assert.equal(new Set(states).size, 35, `duplicate mascot states: ${states.filter((state, index) => states.indexOf(state) !== index).join(', ')}`); checks++;
+    const stateLabels = await debug.locator('.mascot-lab-state small').evaluateAll(els => els.map(el => (el.textContent ?? '').trim()));
+    assert.equal(new Set(stateLabels).size, 35, `duplicate mascot labels: ${stateLabels.filter((label, index) => stateLabels.indexOf(label) !== index).join(', ')}`); checks++;
+    const matrix = await debug.locator('.mascot-lab-state-grid').evaluate(el => {
+      const columns = getComputedStyle(el).gridTemplateColumns.split(' ').length;
+      const tile = el.querySelector('.mascot-lab-state')?.getBoundingClientRect();
+      return { columns, tileWidth: tile?.width ?? 0 };
+    });
+    assert(matrix.columns >= 3, `mascot matrix columns: ${JSON.stringify(matrix)}`); checks++;
+    assert(matrix.tileWidth < 320, `mascot tile width: ${JSON.stringify(matrix)}`); checks++;
     await debug.getByRole('button', { name: 'All 35 combinations', exact: true }).click();
     await debug.getByRole('button', { name: 'Stop and restore Auto', exact: true }).click();
     await debug.getByRole('button', { name: 'Interrupt work', exact: true }).click();

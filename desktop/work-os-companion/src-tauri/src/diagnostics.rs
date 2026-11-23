@@ -326,6 +326,19 @@ pub fn host_event(app: &AppHandle, category: &str, message: &str, level: Diagnos
     );
 }
 
+/// Deliberately bounded support metadata: no paths, records, or key material.
+pub fn vault_timing(app: &AppHandle, phase: &str, window: &str, duration_ms: u64, reused: bool) {
+    record(app, IncomingEvent {
+        category: format!("vault.shared.{phase}"),
+        message: "Shared local vault timing".into(),
+        source: Some(DiagnosticSource::Rust),
+        level: Some(DiagnosticLevel::Info),
+        duration_ms: Some(duration_ms),
+        metadata: Some(json!({ "window": window, "phase": phase, "reused": reused })),
+        ..IncomingEvent::default()
+    });
+}
+
 #[tauri::command]
 pub fn diagnostics_emit(app: AppHandle, event: IncomingEvent) -> Result<DiagnosticEvent, String> {
     Ok(record(&app, event))

@@ -6391,7 +6391,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "work-os-companion"
-version = "0.5.39"
+version = "0.5.42"
 dependencies = [
  "base64 0.22.1",
  "keyring",
@@ -6415,7 +6415,9 @@ dependencies = [
  "windows-sys 0.60.2",
  "work-os-diagnostics-core",
  "work-os-vault-password-core",
+ "work-os-vault-runtime-core",
  "work-os-window-fit-core",
+ "zeroize",
  "zip 2.4.2",
 ]
 
@@ -6435,6 +6437,10 @@ dependencies = [
  "rand 0.9.5",
  "serde",
 ]
+
+[[package]]
+name = "work-os-vault-runtime-core"
+version = "0.1.0"
 
 [[package]]
 name = "work-os-window-fit-core"
