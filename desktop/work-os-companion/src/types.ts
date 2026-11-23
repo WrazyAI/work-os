@@ -495,7 +495,7 @@ export interface ActivityIntervalLatestData {
  * fields keep older compact payloads renderable. */
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
-  "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus" | "revision" | "reviewVersion"
+  "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus" | "reviewSource" | "payrollDate" | "revision" | "reviewVersion"
   | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
 > & Partial<Pick<ActivityInterval, "evidence" | "evidenceExpired" | "evidenceCount" | "coverage">>;
 

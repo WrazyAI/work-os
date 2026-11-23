@@ -3,14 +3,14 @@ import { createPortal } from "react-dom";
 import { Cable, Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
-import { isEmployeeReviewedRecap, recapReviewLabel } from "../../../src/modules/work-os/recap-review";
-import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
+import { isEmployeeReviewedRecap } from "../../../src/modules/work-os/recap-review";
+import type { ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
 
 /** The Tasks stream and the prompt turn both send the full disclosure now;
  * older compact payloads without the evidence fields still render. */
 type ActivityIntervalModel = ActivityIntervalCardData;
 
-const reviewLabel = (interval: ActivityInterval) => {
+const reviewLabel = (interval: ActivityIntervalModel) => {
   if (interval.reviewSource === "payroll_auto") return "Reviewed";
   if (interval.reviewSource === "admin") return "Approved by admin";
   return interval.reviewStatus === "amended" ? "Updated by you" : interval.reviewStatus === "confirmed" ? "Confirmed" : "Not reviewed";
