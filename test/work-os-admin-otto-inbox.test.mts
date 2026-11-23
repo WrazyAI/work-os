@@ -161,7 +161,7 @@ test("same_timestamp_events_not_skipped", async () => {
     const { initializeAdminOtto } = await preferences();
     const inbox = await service();
     await initializeAdminOtto(adminAccess);
-    const reviewedAt = "2026-10-22T12:00:00.000Z";
+    const reviewedAt = new Date(Date.now() - 60_000).toISOString();
     const firstInterval = await seedInterval(f.db);
     const secondInterval = await seedInterval(f.db);
     const first = await seedEvent(f.db, { intervalId: firstInterval, reviewedAt });
@@ -185,7 +185,7 @@ test("more_than_100_same_timestamp_events_are_not_skipped", async () => {
     const { initializeAdminOtto } = await preferences();
     const inbox = await service();
     await initializeAdminOtto(adminAccess);
-    const reviewedAt = "2026-10-22T13:00:00.000Z";
+    const reviewedAt = new Date(Date.now() - 60_000).toISOString();
     const eventIds: string[] = [];
     for (let index = 0; index < 105; index += 1) {
       eventIds.push(await seedEvent(f.db, {
