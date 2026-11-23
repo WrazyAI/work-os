@@ -10,7 +10,7 @@ import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData
  * older compact payloads without the evidence fields still render. */
 type ActivityIntervalModel = ActivityIntervalCardData;
 
-const reviewLabel = (interval: ActivityInterval) => {
+const reviewLabel = (interval: ActivityIntervalModel) => {
   if (interval.reviewSource === "payroll_auto") return recapReviewLabel(interval.reviewStatus, interval.reviewSource);
   if (interval.reviewSource === "admin") return "Approved by admin";
   return interval.reviewStatus === "amended" ? "Updated by you" : interval.reviewStatus === "confirmed" ? "Confirmed" : "Not reviewed";

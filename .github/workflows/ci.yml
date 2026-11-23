@@ -16,7 +16,9 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The payroll/evidence suites now run long enough to exceed the old
+    # 30-minute budget on a cold dependency install and production build.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:

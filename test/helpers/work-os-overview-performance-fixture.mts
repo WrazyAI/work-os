@@ -37,8 +37,9 @@ export async function overviewFixture() {
     create table work_check_ins (id uuid primary key default gen_random_uuid(), organization_id uuid, person_id uuid, shift_date date,
       kind text, substantive boolean, input_text text, update_kind text, occurred_at timestamptz, created_at timestamptz);
     create table work_activity_intervals (id uuid primary key, organization_id uuid, person_id uuid, local_date date, window_start timestamptz,
-      window_end timestamptz, prompt_kind text, generation_status text, review_status text, headline text, ai_detail text,
-      final_detail text, employee_feedback text, timezone text, structured_summary jsonb, evidence_expired_at timestamptz);
+      window_end timestamptz, prompt_kind text, generation_status text, review_status text, review_source text, payroll_date date,
+      headline text, ai_detail text, final_detail text, employee_feedback text, timezone text, structured_summary jsonb,
+      evidence_expired_at timestamptz);
     create table work_evidence_events (id uuid primary key default gen_random_uuid(), organization_id uuid, provider text, occurred_at timestamptz,
       correction_status text, evidence_class text);
     create table work_screenshot_summaries (id uuid primary key, evidence_event_id uuid references work_evidence_events,
