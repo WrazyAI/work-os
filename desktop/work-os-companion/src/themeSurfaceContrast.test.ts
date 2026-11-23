@@ -245,6 +245,122 @@ describe("focus goal surfaces", () => {
   });
 });
 
+describe("planning dialog surfaces", () => {
+  const planning = workspace.slice(0, workspace.indexOf("body {\n  background: #eef1eb;"));
+  const tokensFrom = (source: string) => new Map(
+    [...source.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [match[1], match[2].toLowerCase()]),
+  );
+  // The light material splits its tokens between theme.css aliases and the
+  // workspace sheet's base group; the dark block owns every override.
+  const light = new Map([...tokensFrom(rule(theme, ":root")), ...tokensFrom(rule(workspace, ":root"))]);
+  const dark = tokensFrom(rule(theme, ':root[data-theme="dark"]'));
+  const lastRule = (source: string, selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const matches = [...source.matchAll(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`, "g"))];
+    return matches.at(-1)?.[1] ?? "";
+  };
+  const lum = (hex: string) => {
+    const value = Number.parseInt(hex.slice(1), 16);
+    const channel = (part: number) => {
+      const normalized = part / 255;
+      return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+  };
+  const contrast = (foreground: string, background: string) => {
+    const first = lum(foreground);
+    const second = lum(background);
+    return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+  };
+
+  it("keeps every planning helper and body pair above the contrast floor in both themes", () => {
+    for (const [name, palette] of [["light", light], ["dark", dark]] as const) {
+      for (const [foreground, background, floor] of [
+        ["ink-soft", "paper", 4.5],
+        ["ink-soft", "surface", 4.5],
+        ["ink-soft", "observed-soft", 4.5],
+        ["ink", "tool-success-soft", 4.5],
+        ["muted", "inset", 4.5],
+        ["observed", "observed-soft", 4.5],
+        ["warning-ink", "warning-soft", 4.5],
+      ] as const) {
+        expect(palette.get(foreground), `--${foreground} missing from ${name}`).toBeDefined();
+        expect(palette.get(background), `--${background} missing from ${name}`).toBeDefined();
+        expect(contrast(palette.get(foreground)!, palette.get(background)!), `${foreground} on ${background} in ${name}`).toBeGreaterThanOrEqual(floor);
+      }
+    }
+    expect(contrast(dark.get("danger")!, dark.get("danger-soft")!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("materials the loading, Loom readback, and Loom-only surfaces", () => {
+    const loading = rule(workspace, ".planning-loading");
+    expect(loading).toContain("var(--paper)");
+    expect(loading).toContain("var(--ink)");
+    expect(loading).not.toMatch(/#f6f9f1|#dbe3d3/);
+    expect(rule(workspace, ".planning-loading .loading-arc")).toContain("var(--signal-deep)");
+
+    const readback = rule(workspace, ".planning-loom-readback");
+    expect(readback).toContain("background: var(--observed-soft)");
+    expect(readback).toContain("color: var(--ink-soft)");
+    expect(readback).not.toMatch(/#edf6fd|#183f5a|#52758b/);
+
+    const use = rule(workspace, ".planning-loom-use");
+    expect(use).toContain("background: var(--tool-success-soft)");
+    expect(use).toContain("color: var(--ink)");
+    expect(use).not.toMatch(/#e8f4da|#315f17/);
+    expect(rule(workspace, ".planning-loom-use:disabled")).toContain("background: var(--inset)");
+    expect(rule(workspace, ".planning-loom-use:disabled")).toContain("color: var(--muted)");
+  });
+
+  it("keeps disabled and dismiss controls legible instead of washing them out", () => {
+    const read = rule(workspace, ".planning-loom-row button:disabled");
+    expect(read).toContain("background: var(--inset)");
+    expect(read).toContain("color: var(--muted)");
+    expect(read).toContain("opacity: 1");
+
+    const remove = lastRule(workspace, ".planning-loom-toggle.active .planning-loom-toggle-action");
+    expect(remove).toContain("border-color: var(--line-strong)");
+    expect(remove).toContain("background: var(--white)");
+
+    const icon = rule(workspace, ".planning-icon-button");
+    expect(icon).toContain("background: var(--inset)");
+    expect(icon).toContain("color: var(--ink)");
+    expect(icon).not.toMatch(/#edf0ea|#e2e7de/);
+    expect(rule(workspace, ".planning-icon-button.is-armed")).toContain("background: var(--danger-soft)");
+  });
+
+  it("promotes review guidance, commitment copy, and the footer hint above muted body text", () => {
+    const status = rule(workspace, ".planning-status");
+    expect(status).toContain("color: var(--ink-soft)");
+    expect(rule(workspace, ".planning-status, .planning-notice, .planning-confirmed")).toContain("font-size: 12.5px");
+    expect(rule(workspace, ".planning-materialize-hint")).toContain("var(--ink-soft)");
+
+    const objective = lastRule(workspace, ".planning-document-objective");
+    expect(objective).toContain("color: var(--ink-soft)");
+    expect(objective).toContain("font-size: 13px");
+    const criteria = [...workspace.matchAll(/\.planning-document-criteria\s*\{([\s\S]*?)\}/g)]
+      .map((match) => match[1])
+      .find((body) => body.includes("font-size: 12.5px")) ?? "";
+    expect(criteria).toContain("color: var(--ink-soft)");
+    expect(criteria).toContain("font-size: 12.5px");
+    const article = rule(workspace, ".planning-review article");
+    expect(article).toContain("gap: 12px");
+    expect(article).toContain("padding: 15px 0 17px");
+
+    const footerHint = rule(workspace, ".planning-footer-hint");
+    expect(footerHint).toContain("color: var(--ink-soft)");
+    expect(footerHint).toContain("font-size: 12px");
+  });
+
+  it("leaves no light-only planning literals or white edit washes in the dark dialog", () => {
+    for (const literal of ["#f6f9f1", "#dbe3d3", "#edf6fd", "#183f5a", "#52758b", "#e8f4da", "#315f17", "#edf0ea", "#fff0ec", "#963a2d", "#cfd5c9"]) {
+      expect(planning, `${literal} must not survive in the planning surfaces`).not.toContain(literal);
+    }
+    expect(planning).not.toContain("rgba(255, 255, 255, 0.56)");
+    expect(planning).not.toContain("rgba(255, 255, 255, 0.76)");
+  });
+});
+
 describe("activity stream view-in-app action", () => {
   it("keeps the light ink pill and swaps it for a raised chip in dark", () => {
     const view = rule(chat, ".chat-activity-view");
