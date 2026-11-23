@@ -498,6 +498,12 @@
       "type": "feature",
       "summary": "Evidence opens as a record or team coverage view, with call rollups, email filters, and a person/day drill-down.",
       "verification": "PR #195; companion suite 2,082 tests; full Work OS suite 1,430 tests with 0 failures; CI verify, companion, browser, and Windows release policy passed; light/dark checks at 1440, 1024, 720, and 390 covered the email filter, drawer, Unattributed deep link, and Coverage flows."
+    },
+    {
+      "id": "admin-panel-chrome-and-eod-recency",
+      "type": "fix",
+      "summary": "Admin side panels open below the menu bar, and EOD Review lists the newest report day first.",
+      "verification": "Companion suite 235 files / 2,090 tests passed; Work OS suite main pass 1,419/0 with the payroll files re-run individually 17/0 after a Node 24 V8 JIT crash in the parallel payroll batch; rendered shell at 1440 and 700 measured drawers at y=34 under the 34px bar with the close button fully below it; queue fixture rendered newest report day first with no page errors; live API returned 72 reports in strictly descending report day order (Nov 20, Nov 17, Nov 17, Nov 12, Nov 11) and the deployed EOD Review page reads \"Newest report day first\" with no page errors."
     }
   ],
   "emergency": null,

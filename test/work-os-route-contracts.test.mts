@@ -542,6 +542,9 @@ test("evidence and report lists expose bounded filters for the admin surfaces", 
   assert.match(reports, /counts/);
   assert.match(reports, /pending_review/);
   assert.match(reports, /requireWorkOsPersonAccess/);
+  // A report describes a day, so the queue's server order is the report day.
+  assert.match(reports, /order\("report_date", \{ ascending: false \}\)/);
+  assert.match(reports, /order\("submitted_at", \{ ascending: false, nullsFirst: false \}\)/);
 });
 
 test("evidence summary exposes kind counts, coverage, search, and unattributed scope", async () => {

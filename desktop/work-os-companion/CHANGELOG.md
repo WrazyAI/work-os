@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Admin side panels no longer hide under the menu bar, and EOD Review lists the newest report day first.
+
 ## 0.5.43 — 2026-11-23
 
 - Evidence now opens as a record or a team coverage view, with call rollups, email filters, and a person/day drill-down.

@@ -66,7 +66,15 @@ export async function GET(req: Request) {
     );
 
     const [listResult, ...countResults] = await Promise.all([
-      listQuery.order("created_at", { ascending: false }).limit(limit),
+      // A report describes a day, so the day is the queue's recency: a late
+      // submission for an older day must not outrank the newest day. Same-day
+      // rows break by submission time, newest first, with drafts last.
+      listQuery
+        .order("report_date", { ascending: false })
+        .order("submitted_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(limit),
       ...countQueries,
     ]);
     if (listResult.error) throw new Error(`load Work OS reports: ${listResult.error.message}`);

@@ -1961,7 +1961,11 @@ body:has(.admin-workspace) .notifications-card {
 
 .admin-drawer-backdrop {
   position: fixed;
-  inset: 0;
+  /* The custom window chrome is a real, non-overlapping bar at the top of the
+     app. The drawer portals to <body>, so it must start below that bar or its
+     header and close button disappear underneath the menu. Outside the
+     desktop chrome the variable is 0px. */
+  inset: var(--window-chrome-height, 0px) 0 0 0;
   z-index: 60;
   display: flex;
   justify-content: flex-end;

@@ -31,27 +31,39 @@ import { one, type EvidenceRow, type EvidenceResponse, type ReportsResponse, typ
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
 
-/** The queue reads newest first. A report's submission time is its clock; a
- * row that was never submitted falls back to its report date so a draft keeps
- * its day's place instead of jumping the queue. Rows missing both keys sort
- * last, and equal clocks break by report date then id so the order never
- * jitters. This is the queue's one deliberate order — there are no
- * click-to-sort headers here (design.md §16.2). */
+/** The queue reads newest report day first. A report describes a day, so that
+ * day is the queue's clock: a late submission for yesterday belongs below
+ * today's report, not above it. Same-day reports break by submission time
+ * (drafts without one after submitted rows), then by id so the order never
+ * jitters. Rows without a usable report date stay last. This is the queue's
+ * one deliberate order — there are no click-to-sort headers here
+ * (design.md §16.2). */
 export function sortReportsNewestFirst(reports: WorkOsReportRow[]): WorkOsReportRow[] {
-  const clock = (report: WorkOsReportRow): string | null => {
-    if (report.submitted_at) return report.submitted_at;
-    if (!report.report_date) return null;
-    return report.report_date.includes("T") ? report.report_date : `${report.report_date}T00:00:00.000Z`;
+  const reportDay = (report: WorkOsReportRow): string | null => {
+    const raw = String(report.report_date ?? "").trim();
+    const day = raw.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+  };
+  const submittedAt = (report: WorkOsReportRow): number | null => {
+    if (!report.submitted_at) return null;
+    const at = Date.parse(report.submitted_at);
+    return Number.isFinite(at) ? at : null;
   };
   return [...reports].sort((a, b) => {
-    const aClock = clock(a);
-    const bClock = clock(b);
-    if (aClock !== bClock) {
-      if (aClock === null) return 1;
-      if (bClock === null) return -1;
-      return aClock < bClock ? 1 : -1;
+    const aDay = reportDay(a);
+    const bDay = reportDay(b);
+    if (aDay !== bDay) {
+      if (aDay === null) return 1;
+      if (bDay === null) return -1;
+      return aDay < bDay ? 1 : -1;
     }
-    if (a.report_date !== b.report_date) return a.report_date < b.report_date ? 1 : -1;
+    const aSubmitted = submittedAt(a);
+    const bSubmitted = submittedAt(b);
+    if (aSubmitted !== bSubmitted) {
+      if (aSubmitted === null) return 1;
+      if (bSubmitted === null) return -1;
+      return bSubmitted - aSubmitted;
+    }
     return a.id.localeCompare(b.id);
   });
 }

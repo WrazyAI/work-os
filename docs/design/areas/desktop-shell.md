@@ -50,8 +50,10 @@ sit at the centre; minimize, maximize/restore, and close sit at the trailing
 edge in the platform's order. The bar is the drag region and a double-click
 maximizes. The menu carries Workspace, Go, View, and Help, then a separated
 `Quit Work OS` (`Ctrl + Q`; `Cmd + Q` on macOS). Close hides the window to the
-tray; Quit exits the app. The bar stays above modal surfaces. The webview's
-browser context menu is suppressed outside text fields.
+tray; Quit exits the app. The bar stays above modal surfaces, and every
+overlay that portals to the document body — drawers, sheets, and dialogs —
+starts below it, so its header and close control never sit under the caption.
+The webview's browser context menu is suppressed outside text fields.
 
 macOS uses the same 34px bar with its native traffic lights at the leading
 edge, so the bar reserves that track and drops its own window buttons; the

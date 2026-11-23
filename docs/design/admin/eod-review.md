@@ -26,12 +26,13 @@ Drafting an EOD is a secondary action on the controls row, never the primary.
 
 ## Review order and range
 
-**EOD Review order and range.** The review queue reads newest submission
-first: a report's submission time is its clock, a row that was never submitted
-falls back to its report date so a draft keeps its day's place rather than
-jumping the queue, rows missing both keys stay last, and ties break by report
-date then id. There are no click-to-sort headers here — newest first is the
-queue's one deliberate order. The date range is one compact control: an
+**EOD Review order and range.** The review queue reads newest report day
+first: a report describes a day, so its report date is the queue's clock. A
+late submission for an older day stays below a report for a newer day. Reports
+for the same day break by submission time, newest first, with drafts that were
+never submitted after the submitted rows. Rows without a usable report date
+stay last, and ties break by id. There are no click-to-sort headers here —
+newest report day first is the queue's one deliberate order. The date range is one compact control: an
 icon-only filter-cone button on the queue's controls row, beside the status
 views and ahead of the person filter, that expands a small popup holding the
 native From/To pickers and a Done action. The popup opens anchored under the

@@ -70,7 +70,7 @@ describe("review evidence frames", () => {
 });
 
 describe("review queue order", () => {
-  it("sorts newest submission first, falls back to the report date, and puts missing values last", () => {
+  it("sorts newest report day first and puts missing dates last", () => {
     const sorted = sortReportsNewestFirst([
       report("r-old", { report_date: "2026-10-01", submitted_at: "2026-10-01T09:00:00.000Z" }),
       report("r-new", { report_date: "2026-10-03", submitted_at: "2026-10-03T09:00:00.000Z" }),
@@ -80,24 +80,35 @@ describe("review queue order", () => {
     expect(sorted.map((row) => row.id)).toEqual(["r-new", "r-draft", "r-old", "r-undated"]);
   });
 
-  it("breaks equal clocks by report date then id so the order never jitters", () => {
+  it("does not let a late submission for an older day outrank a newer day", () => {
+    const sorted = sortReportsNewestFirst([
+      report("r-late-old-day", { report_date: "2026-11-11", submitted_at: "2026-11-23T12:00:00.000Z" }),
+      report("r-new-day-old-submission", { report_date: "2026-11-20", submitted_at: "2026-11-20T09:00:00.000Z" }),
+    ]);
+    expect(sorted.map((row) => row.id)).toEqual(["r-new-day-old-submission", "r-late-old-day"]);
+  });
+
+  it("breaks a shared report day by submission time, then id, so the order never jitters", () => {
     const sorted = sortReportsNewestFirst([
       report("b", { report_date: "2026-10-02", submitted_at: "2026-10-03T09:00:00.000Z" }),
       report("c", { report_date: "2026-10-01", submitted_at: "2026-10-03T09:00:00.000Z" }),
       report("a", { report_date: "2026-10-02", submitted_at: "2026-10-03T09:00:00.000Z" }),
+      report("d", { report_date: "2026-10-02", submitted_at: "2026-10-02T08:00:00.000Z" }),
+      report("e", { report_date: "2026-10-02" }),
     ]);
-    expect(sorted.map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(sorted.map((row) => row.id)).toEqual(["a", "b", "d", "e", "c"]);
   });
 
-  it("renders the queue newest-first from unsorted rows", () => {
+  it("renders the queue newest report day first from unsorted rows", () => {
     const markup = renderQueue([
       report("r-old", { report_date: "2026-10-01", submitted_at: "2026-10-01T09:00:00.000Z", title: "Oldest submission" }),
       report("r-undated", { report_date: "", title: "Undated row" }),
       report("r-new", { report_date: "2026-10-03", submitted_at: "2026-10-03T09:00:00.000Z", title: "Newest submission" }),
       report("r-draft", { report_date: "2026-10-02", title: "Draft day" }),
+      report("r-late", { report_date: "2026-10-01", submitted_at: "2026-10-04T09:00:00.000Z", title: "Late older day" }),
     ]);
     const body = bodyOf(markup);
-    const order = ["Newest submission", "Draft day", "Oldest submission", "Undated row"].map((title) => body.indexOf(title));
+    const order = ["Newest submission", "Draft day", "Late older day", "Oldest submission", "Undated row"].map((title) => body.indexOf(title));
     for (const at of order) expect(at).toBeGreaterThan(-1);
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
@@ -201,6 +212,9 @@ describe("review range control", () => {
     expect(css).toMatch(/\.admin-range-popup \{[\s\S]*?z-index: 20/);
     // The drawer layer (60) and the notifications stack (5100) stay above it.
     expect(css).toMatch(/\.admin-drawer-backdrop \{[\s\S]*?z-index: 60/);
+    // The drawer portals to <body>; it must start below the custom window
+    // chrome so its header and close button are never under the menu bar.
+    expect(css).toMatch(/\.admin-drawer-backdrop \{[\s\S]*?inset: var\(--window-chrome-height, 0px\) 0 0 0/);
     const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)", css.indexOf(".admin-range-popup")));
     expect(reduced).toContain(".admin-range-popup");
     expect(reduced).toContain("animation: none");
