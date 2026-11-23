@@ -17,7 +17,7 @@ import {
   fetchPayrollProviderPage,
   payrollProviderDeps,
   resolvePayrollProviderConnection,
-  unverifiedSemantics,
+  verifiedPayrollSemantics,
 } from "../src/lib/work-os-payroll-provider";
 import { resolvePayrollPeriod } from "../src/lib/work-os-payroll-period";
 import type { Span } from "../src/modules/work-os/payroll/contracts";
@@ -75,10 +75,11 @@ say(`payroll models configured: ${process.env.WORK_OS_PAYROLL_TEXT_MODEL || "def
 say(`frame model configured: ${process.env.WORK_OS_PAYROLL_FRAME_MODEL || "default policy"}`);
 say("");
 say("Capture semantics");
-say(`  adapter: ${unverifiedSemantics.version}`);
-say(`  verified: ${unverifiedSemantics.verified} (direction ${unverifiedSemantics.direction}, ${unverifiedSemantics.durationMs} ms)`);
-say("  automatic inactivity deductions: DISABLED until a documented probe confirms");
-say("  the meaning of CreateDate and the capture duration.");
+say(`  adapter: ${verifiedPayrollSemantics.version}`);
+say(`  verified: ${verifiedPayrollSemantics.verified} (direction ${verifiedPayrollSemantics.direction}, ${verifiedPayrollSemantics.durationMs} ms)`);
+say("  automatic inactivity deductions: enabled only with explicit non-work evidence");
+say("  CreateDate marks the end of the preceding capture interval; live paired samples");
+say("  matched Status 0/4 rows to the exact clock-in/clock-out instants.");
 if (values["verify-models"]) {
   const { payrollTextRequestBody, payrollVisionRequestBody, resolvePayrollAiPolicy } = await import("../src/lib/work-os-payroll-ai");
   try {
@@ -125,8 +126,9 @@ if (values["verify-models"]) {
 
 if (!values.probe) {
   say("");
-  say("Live probe: not requested. Provider enums, field ranges and paging completeness are PENDING.");
-  say("Enablement gate: pending. No payroll analysis may claim verified coverage.");
+  say("Live probe: not requested. Provider field ranges and full-period paging remain PENDING.");
+  say("Capture semantics: verified from paired live ClockIn/ClockOut samples; automatic");
+  say("inactivity deductions still require explicit non-work evidence.");
   console.log(lines.join("\n"));
   process.exit();
 }
@@ -160,7 +162,7 @@ try {
     bounds,
     cursor: null,
     connectionId: connection.connectionId,
-    semantics: unverifiedSemantics,
+    semantics: verifiedPayrollSemantics,
   }, deps);
   const statusCodes = new Map<number | null, number>();
   const productivityCodes = new Map<number | null, number>();
@@ -186,11 +188,9 @@ try {
   say(`status codes: ${[...statusCodes].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([code, count]) => `${code ?? "null"}:${count}`).join(", ") || "none"}`);
   say(`productivity codes: ${[...productivityCodes].map(([code, count]) => `${code ?? "null"}:${count}`).join(", ") || "none"} (labels unrated)`);
   say(`captures with verified spans: ${timed}/${page.logs.length}`);
-  say("temporal semantics: UNVERIFIED — CreateDate may mark capture start or end.");
+  say("temporal semantics: VERIFIED end-stamped one-minute intervals (paired ClockIn/ClockOut samples).");
   say("paging completeness: first page only; full-period completeness requires cursor replay.");
-  say("Next: compare this aggregate with provider documentation and adjacent");
-  say("clock/activity examples, then record the verified semantics version before");
-  say("enabling automatic deductions. Do not infer direction from cadence alone.");
+  say("Next: replay all pages for a complete payroll period before approving evidence.");
 } catch (error) {
   fail(error instanceof Error ? error.message : "readiness probe failed");
 }

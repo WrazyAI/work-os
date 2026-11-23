@@ -139,7 +139,7 @@ export async function settleDuePayrollRecapApprovals(input: { at: Date; limit: n
     if (!Number.isFinite(activation.getTime())) continue;
     const people = await pool.query(`SELECT p.id,
         coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o
-          WHERE o.organization_id=p.organization_id AND o.person_id=p.id), p.timezone, 'UTC') AS timezone
+          WHERE o.organization_id=p.organization_id AND o.person_id=p.id), to_jsonb(p)->>'timezone', 'UTC') AS timezone
       FROM work_people p WHERE p.organization_id=$1`, [organizationId]);
     for (const person of people.rows as Array<Record<string, unknown>>) {
       const timezone = safeTimezone(person.timezone);

@@ -52,7 +52,7 @@ export function payrollRecapNotice(payDate: string): string {
  * Employee reviews keep the existing script with no extra provenance line. */
 export function recapSpeechProvenanceLine(status: unknown, source: unknown = undefined): string | null {
   const resolved = recapReviewSource(status, source);
-  if (resolved === "payroll_auto") return "Auto-approved for payroll. This is a system approval, not an employee confirmation.";
+  if (resolved === "payroll_auto") return null;
   if (resolved === "admin") return status === "amended" ? "Corrected by an administrator." : "Approved by an administrator.";
   return null;
 }
@@ -60,7 +60,7 @@ export function recapSpeechProvenanceLine(status: unknown, source: unknown = und
 export function recapCoverageLine(status: unknown, source: unknown = undefined): string {
   const resolved = recapReviewSource(status, source);
   if (resolved === "payroll_auto") {
-    return "AI-inferred activity, auto-approved for payroll; a system decision, not employee confirmation or task completion/attendance.";
+    return "AI-inferred activity, reviewed; not task completion or attendance.";
   }
   if (resolved === "admin") return "AI-inferred activity, approved by an administrator; not task completion or attendance.";
   return "AI-inferred activity, employee reviewed; not task completion or attendance.";

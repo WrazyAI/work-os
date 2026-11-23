@@ -114,9 +114,9 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
   try {
     await client.query("BEGIN");
     const sourceToken = await loadPayrollSourceToken(client, scope);
-  const person = await client.query(`SELECT p.timezone,
+  const person = await client.query(`SELECT to_jsonb(p)->>'timezone',
       coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o
-        WHERE o.organization_id=p.organization_id AND o.person_id=p.id), p.timezone, 'UTC') AS effective_timezone
+        WHERE o.organization_id=p.organization_id AND o.person_id=p.id), to_jsonb(p)->>'timezone', 'UTC') AS effective_timezone
     FROM work_people p WHERE p.organization_id=$1 AND p.id=$2`, [scope.organizationId, scope.personId]);
   if (!person.rows.length) throw new Error("Payroll person not found");
   const scheduleQuery = await client.query(`SELECT * FROM work_schedules

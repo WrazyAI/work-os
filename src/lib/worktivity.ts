@@ -90,7 +90,7 @@ export interface WtActivityLog {
   Url: string | null;
   Screenshot: string | null; // pre-signed S3 URL, valid ~24h
   ScreenCount: number;
-  ActivityLevel: number; // raw active seconds per one-minute capture (observed 0–60)
+  ActivityLevel: number; // per-capture activity score; zero means none observed (provider example may exceed 60)
   // EmployeeActivityLogStatus: 0 ClockIn · 1 Working · 2 OnBreak · 3 Idle · 4 ClockOut · 5 YetToStart
   Status: number;
   Productivity: number | null;

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Cable, Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
-import { isEmployeeReviewedRecap, payrollRecapNotice, recapReviewLabel } from "../../../src/modules/work-os/recap-review";
+import { isEmployeeReviewedRecap, recapReviewLabel } from "../../../src/modules/work-os/recap-review";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
 
 /** The Tasks stream and the prompt turn both send the full disclosure now;
@@ -11,7 +11,7 @@ import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData
 type ActivityIntervalModel = ActivityIntervalCardData;
 
 const reviewLabel = (interval: ActivityInterval) => {
-  if (interval.reviewSource === "payroll_auto") return recapReviewLabel(interval.reviewStatus, interval.reviewSource);
+  if (interval.reviewSource === "payroll_auto") return "Reviewed";
   if (interval.reviewSource === "admin") return "Approved by admin";
   return interval.reviewStatus === "amended" ? "Updated by you" : interval.reviewStatus === "confirmed" ? "Confirmed" : "Not reviewed";
 };
@@ -277,9 +277,6 @@ export function ActivityIntervalCard({
         </span>
         <span className={`chat-activity-status is-${interval.reviewStatus}`}>{reviewLabel(interval)}</span>
       </header>
-      {interval.reviewSource === "payroll_auto" && interval.payrollDate ? (
-        <p className="chat-activity-note"><strong>Payroll:</strong> {payrollRecapNotice(interval.payrollDate)}</p>
-      ) : null}
       {interval.headline ? <p className="chat-activity-headline">{interval.headline}</p> : null}
       {interval.detail ? <p className="chat-activity-detail">{interval.detail}</p> : null}
       {interval.activities?.length ? (

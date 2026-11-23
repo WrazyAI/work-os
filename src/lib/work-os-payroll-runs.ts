@@ -5,7 +5,7 @@ import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
 import { localDayBounds } from "@/modules/work-os/companion";
 import { ensurePayrollRecapApproval } from "@/lib/work-os-payroll-recap-approval";
-import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
+import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection, verifiedPayrollSemantics } from "@/lib/work-os-payroll-provider";
 import { buildPayrollDayInputs, loadPayrollSources } from "@/lib/work-os-payroll-sources";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import { payrollPeriodExpired } from "@/lib/work-os-payroll-retention";
@@ -117,7 +117,7 @@ export async function startPayrollRun(access: WorkOsAccess, input: { personId: s
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll analysis is admin-only.");
   if (!input.requestKey.trim()) throw new WorkOsValidationError("requestKey is required");
   const person = await getPool().query(`SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o
-      WHERE o.organization_id=p.organization_id AND o.person_id=p.id), p.timezone, 'UTC') AS timezone
+      WHERE o.organization_id=p.organization_id AND o.person_id=p.id), to_jsonb(p)->>'timezone', 'UTC') AS timezone
     FROM work_people p WHERE p.organization_id=$1 AND p.id=$2`, [access.organizationId, input.personId]);
   if (!person.rows.length) throw new WorkOsValidationError("Payroll person not found");
   const timezone = String(person.rows[0].timezone ?? "UTC");

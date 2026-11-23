@@ -39,10 +39,11 @@ test("normalization rejects foreign and malformed samples instead of coercing ze
   assert.equal(normalize(log({ EmployeeId: "someone-else" })), null);
   assert.equal(normalize(log({ ID: "" })), null);
   assert.equal(normalize(log({ CreateDate: "not-a-date" })), null);
-  for (const activity of [null, -1, 61, 3.5, "0", Number.NaN, undefined]) {
+  for (const activity of [null, -1, 3_601, 3.5, "0", Number.NaN, undefined]) {
     assert.equal(normalize(log({ ActivityLevel: activity }))?.activity, null, String(activity));
     assert.equal(normalize(log({ ActivityLevel: activity }))?.zeroEligible, false, String(activity));
   }
+  assert.equal(normalize(log({ ActivityLevel: 78 }))?.activity, 78);
   assert.equal(normalize(log({ ActivityLevel: 0, Status: 2 }))?.zeroEligible, false);
   assert.equal(normalize(log({ ActivityLevel: 0, Status: 4 }))?.zeroEligible, false);
   assert.equal(normalize(log({ ActivityLevel: 0 }))?.zeroEligible, true);
@@ -56,6 +57,20 @@ test("normalization rejects foreign and malformed samples instead of coercing ze
   assert.equal(normalized.employeeId, employee);
   assert.equal(normalized.capturedAt, "2026-11-02T09:00:00.000Z");
   assert.doesNotMatch(JSON.stringify(normalized), /token=secret|x_api_key|bucket\/frame/);
+});
+
+test("payroll capture semantics are verified end-stamped one-minute intervals", async () => {
+  const { normalizePayrollActivity, verifiedPayrollSemantics } = await provider();
+  assert.deepEqual(verifiedPayrollSemantics, {
+    version: "worktivity-activitylog-v2", verified: true, direction: "end", durationMs: 60_000,
+  });
+  const capture = Date.parse("2026-11-19T15:01:34.048Z");
+  const working = normalizePayrollActivity(log({ CreateDate: new Date(capture).toISOString(), Status: 1, ActivityLevel: 0 }), employee, verifiedPayrollSemantics)!;
+  assert.deepEqual(working.span, { startMs: capture - 60_000, endMs: capture });
+  assert.equal(working.zeroEligible, true);
+  const clockIn = normalizePayrollActivity(log({ CreateDate: new Date(capture).toISOString(), Status: 0, ActivityLevel: 0 }), employee, verifiedPayrollSemantics)!;
+  assert.deepEqual(clockIn.span, { startMs: capture - 60_000, endMs: capture });
+  assert.equal(clockIn.zeroEligible, false);
 });
 
 test("capture spans follow the verified direction and never invent unknown timing", async () => {

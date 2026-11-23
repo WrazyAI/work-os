@@ -46,7 +46,9 @@ export function normalizePayrollActivity(raw: unknown, employeeId: string, seman
   if (!id || text(row.EmployeeId) !== employeeId) return null;
   const captureMs = instant(row.CreateDate);
   if (captureMs === null) return null;
-  const activity = integer(row.ActivityLevel, 0, 60);
+  // ActivityLevel is a per-capture activity score (the provider's documented
+  // example exceeds 60). Only zero is meaningful for payroll deductions.
+  const activity = integer(row.ActivityLevel, 0, 3_600);
   const status = integer(row.Status, 0, 5);
   const duration = finite(semantics.durationMs, 1, MAX_CAPTURE_MS);
   const timed = semantics.verified && duration !== null && semantics.direction !== "unknown";
@@ -97,7 +99,7 @@ export async function fetchPayrollProviderPage(
   const seen = new Map<string, NormalizedActivity>();
   let watermarkMs = -Infinity;
   for (const raw of data.Items) {
-    const normalized = normalizePayrollActivity(raw, input.employeeId, input.semantics ?? unverifiedSemantics);
+    const normalized = normalizePayrollActivity(raw, input.employeeId, input.semantics ?? verifiedPayrollSemantics);
     if (!normalized) continue;
     const captureMs = Date.parse(normalized.capturedAt);
     if (captureMs < input.bounds.startMs || captureMs >= input.bounds.endMs) continue;
@@ -181,6 +183,16 @@ export async function refreshPayrollProviderEvidence(
   };
 }
 
+/** Verified against the live provider on 2026-11-23: Status 0/4 rows carry the
+ * exact ClockIn/ClockOut instant, consecutive Status 1 rows arrive about one
+ * minute after the interval they summarize, and the provider changelog defines
+ * activity within the preceding 60 seconds. Payroll therefore treats a capture
+ * as the end of a 60-second interval. */
+export const verifiedPayrollSemantics: CaptureSemantics = {
+  version: "worktivity-activitylog-v2", verified: true, direction: "end", durationMs: 60_000,
+};
+
+/** Kept for explicit read-only diagnostics that must not assume timing. */
 export const unverifiedSemantics: CaptureSemantics = {
   version: "worktivity-activitylog-v1", verified: false, direction: "unknown", durationMs: 60_000,
 };

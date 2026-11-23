@@ -269,7 +269,7 @@ describe("ActivityIntervalCard", () => {
     expect(markup).not.toContain("Add or correct");
   });
 
-  it("labels a payroll auto-approval as a system decision and still offers a correction", () => {
+  it("shows a payroll auto-approval as reviewed without a payroll notice and still offers a correction", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: {
         ...baseInterval, reviewStatus: "confirmed", reviewSource: "payroll_auto",
@@ -277,9 +277,10 @@ describe("ActivityIntervalCard", () => {
       },
       onDecide: async () => undefined,
     }));
-    expect(markup).toContain("Auto-approved for payroll");
+    expect(markup).toContain("Reviewed");
+    expect(markup).not.toContain("Auto-approved for payroll");
+    expect(markup).not.toContain("Payroll:");
     expect(markup).not.toMatch(/>Confirmed</);
-    expect(markup).toContain("not an employee confirmation");
     expect(markup).toContain("Add or correct");
     expect(markup).not.toContain("Looks right by employee");
   });

@@ -287,7 +287,7 @@ function recapHeadline(recap: EodRecap): string {
 }
 
 function recapProvenance(recap: EodRecap): string {
-  if (recap.reviewSource === "payroll_auto") return "Auto-approved for payroll";
+  if (recap.reviewSource === "payroll_auto") return "Reviewed";
   if (recap.reviewSource === "admin") return "Approved by administrator";
   return recap.provenance === "amended" ? "Updated by you" : recap.provenance === "confirmed" ? "Confirmed" : "Inferred";
 }

@@ -32,7 +32,7 @@ async function assertLiveReview(access: WorkOsAccess, reviewId: string): Promise
 export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate: string; cursor: string | null; limit: number }): Promise<PayrollRosterPage> {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll roster is admin-only.");
   const scope = { organizationId: access.organizationId };
-  const person = await getPool().query(`SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o WHERE o.organization_id=p.organization_id AND o.person_id=p.id),p.timezone,'UTC') AS timezone FROM work_people p WHERE p.organization_id=$1 LIMIT 1`, [scope.organizationId]);
+  const person = await getPool().query(`SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o WHERE o.organization_id=p.organization_id AND o.person_id=p.id),to_jsonb(p)->>'timezone','UTC') AS timezone FROM work_people p WHERE p.organization_id=$1 LIMIT 1`, [scope.organizationId]);
   const period = resolvePayrollPeriod(filters.payDate, String(person.rows[0]?.timezone ?? "UTC"));
   const limit = Math.max(1, Math.min(100, filters.limit || 50));
   const cursor = decodeCursor(filters.cursor);
