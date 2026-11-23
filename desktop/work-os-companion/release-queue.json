@@ -480,6 +480,12 @@
       "type": "fix",
       "summary": "Inbound GoHighLevel calls no longer appear under the employee who owns the shared line; only their outgoing calls and sent email are attributed to them.",
       "verification": "Projection tests assert a mapped account does not name an inbound/unknown event as the actor, while a performed outbound event still names the verified person. Live API showed 36 inbound calls labeled 'Aden Badon' before the fix; the same rows must read 'Actor unknown' after deploy."
+    },
+    {
+      "id": "otto-visibility-menu",
+      "type": "feature",
+      "summary": "The Work OS menu can show or hide the floating Otto companion directly.",
+      "verification": "Companion full suite 233 files / 2069 tests passed; focused menu/event/permission tests 38; tsc clean; Vite production build passed; cargo check --target x86_64-pc-windows-gnu passed. Menu label follows host visibility events from the avatar and tray."
     }
   ],
   "emergency": {

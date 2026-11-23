@@ -92,6 +92,7 @@ import AppMenuBar, { type AppMenuGroup, type AppMenuItem } from "./AppMenuBar";
 import NativeAppMenu from "./NativeAppMenu";
 import { installContextMenuSuppression } from "./contextMenu";
 import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
+import { COMPANION_VISIBILITY_EVENT, ottoVisibilityMenuItem, shouldApplyVisibilityPoll } from "./ottoVisibility";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
 import { PersonalSettings } from "./PersonalSettings";
@@ -485,6 +486,9 @@ export default function App() {
     }));
   }, []);
   const [avatarWindowVisible, setAvatarWindowVisible] = useState<boolean | null>(null);
+  /** Bumped by every host visibility event. A poll that started before the
+   * event must not land afterward and overwrite newer truth. */
+  const avatarVisibilityRevision = useRef(0);
   const [deliveryOwnedContext, setDeliveryOwnedContext] = useState<string | null>(null);
   const adminOttoModeRef = useRef<OttoModeController | null>(null);
   const adminOttoEpochRef = useRef(0);
@@ -2086,13 +2090,18 @@ export default function App() {
     }
     let cancelled = false;
     const check = async () => {
+      const revision = avatarVisibilityRevision.current;
       try {
         const windows = await getAllWebviewWindows();
         const avatar = windows.find((candidate) => candidate.label === "avatar");
         const visible = avatar ? await avatar.isVisible() : false;
-        if (!cancelled) setAvatarWindowVisible(visible);
+        if (shouldApplyVisibilityPoll(revision, avatarVisibilityRevision.current, cancelled)) {
+          setAvatarWindowVisible(visible);
+        }
       } catch {
-        if (!cancelled) setAvatarWindowVisible(false);
+        if (shouldApplyVisibilityPoll(revision, avatarVisibilityRevision.current, cancelled)) {
+          setAvatarWindowVisible(false);
+        }
       }
     };
     void check();
@@ -2101,6 +2110,20 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
+  }, []);
+
+  /* A hide from the avatar's own close button or the tray never passes through
+     this window, so the host announces every transition. The menu label flips
+     at once, and the minute poll stays as the fallback. */
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<boolean>(COMPANION_VISIBILITY_EVENT, (event) => {
+      if (typeof event.payload !== "boolean") return;
+      avatarVisibilityRevision.current += 1;
+      setAvatarWindowVisible(event.payload);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
   }, []);
 
   /* One mode controller owns actor + organization + mode + epoch. It is
@@ -5871,6 +5894,24 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen, taskFinderOpen]);
 
+  /* The View menu owns the floating companion's visibility. `null` means the
+     first visibility read has not landed, and showing is the safe action:
+     invoking it again cannot lose a window and the label already says "Show".
+     The host's visibility event is the only writer after a command, so a
+     delayed invoke result cannot overwrite a newer tray/avatar transition. */
+  const toggleOtto = useCallback(async () => {
+    if (!isTauri()) return;
+    const nextVisible = avatarWindowVisible !== true;
+    try {
+      // Literal command names keep the Tauri ACL auditable.
+      if (nextVisible) await invoke("show_avatar");
+      else await invoke("hide_avatar");
+    } catch {
+      /* The host announces every transition and the visibility poll remains
+         the fallback; a failed command does not get to write the label. */
+    }
+  }, [avatarWindowVisible]);
+
   const quitApp = () => {
     if (!isTauri()) {
       notifications.info("Quit is available in the desktop app.", "Desktop only");
@@ -6550,16 +6591,17 @@ export default function App() {
         onSelect: () => setView(item.id),
       }));
     menuGroups.push({ label: "Go", items: goItems });
-    menuGroups.push({
-      label: "View",
-      items: [{
-        id: "view:sidebar",
-        label: "Toggle sidebar",
-        shortcut: chromeUsesMacShortcuts ? "⌘B" : "Ctrl B",
-        accelerator: "CmdOrCtrl+B",
-        onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
-      }],
-    });
+    const viewItems: AppMenuItem[] = [{
+      id: "view:sidebar",
+      label: "Toggle sidebar",
+      shortcut: chromeUsesMacShortcuts ? "⌘B" : "Ctrl B",
+      accelerator: "CmdOrCtrl+B",
+      onSelect: () => window.dispatchEvent(new Event(SIDEBAR_TOGGLE_EVENT)),
+    }];
+    // The browser preview has no floating companion window, so it must not
+    // offer a command that could only fail there.
+    if (isTauri()) viewItems.push(ottoVisibilityMenuItem(avatarWindowVisible, () => void toggleOtto()));
+    menuGroups.push({ label: "View", items: viewItems });
     const helpItems: AppMenuItem[] = [];
     if (pageGuideView) helpItems.push({ id: "help:guide", label: "How Work OS works", onSelect: () => openGuide(pageGuideView) });
     helpItems.push({ id: "help:new", label: "What’s new", onSelect: openChangelogFromAdmin });

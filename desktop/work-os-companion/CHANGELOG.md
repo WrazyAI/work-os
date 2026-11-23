@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Show or hide Otto directly from the Work OS menu.
+
 ## 0.5.42 — 2026-11-20
 
 - GoHighLevel records now name the assigned owner instead of reading as an unknown actor.
