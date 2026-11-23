@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Plan your day is readable in dark mode, including Loom notes and disabled actions.
 - Show or hide Otto directly from the Work OS menu.
 
 ## 0.5.42 — 2026-11-20
