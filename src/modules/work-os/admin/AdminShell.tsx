@@ -9,7 +9,7 @@ import WorkOsViewModeForm from "../WorkOsViewModeForm";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
 import { Button, Notice, Skeleton } from "./ui";
 
-export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
+export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings" | "payroll";
 
 const SECTION_META: Record<AdminSection, { title: string; purpose: string }> = {
   overview: { title: "Overview", purpose: "What is happening across the workspace right now." },
@@ -19,6 +19,7 @@ const SECTION_META: Record<AdminSection, { title: string; purpose: string }> = {
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
   evidence: { title: "Evidence", purpose: "Observations and output evidence, with their provenance." },
   settings: { title: "Settings", purpose: "Workspace configuration, members, and provider connections." },
+  payroll: { title: "Payroll", purpose: "Review recorded evidence, resolve findings, and approve payable hours." },
 };
 
 /** One quiet status line item: a tone dot with plain text, never a pill. */

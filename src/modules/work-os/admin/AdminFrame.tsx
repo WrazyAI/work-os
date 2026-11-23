@@ -11,6 +11,7 @@ function sectionFor(pathname: string): AdminSection {
   if (pathname.startsWith("/work-os/admin/insights")) return "insights";
   if (pathname.startsWith("/work-os/admin/evidence")) return "evidence";
   if (pathname.startsWith("/work-os/admin/settings")) return "settings";
+  if (pathname.startsWith("/work-os/admin/payroll")) return "payroll";
   return "overview";
 }
 
