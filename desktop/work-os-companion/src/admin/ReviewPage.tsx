@@ -235,7 +235,7 @@ export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvi
     staleTime: ADMIN_STALE_MS,
   });
 
-  // The queue's one deliberate order: newest submission first (see
+  // The queue's one deliberate order: newest report day first (see
   // `sortReportsNewestFirst`). A deep link still finds its record by id
   // whatever its place in the order.
   const list = useMemo(() => sortReportsNewestFirst(reports.data?.reports ?? []), [reports.data]);

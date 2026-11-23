@@ -119,7 +119,7 @@ export default function AdminReviewPage() {
 
   return (
     <div className="flex flex-col">
-      <Group label="Queue" detail="Newest submission first. Open a report to read it and decide.">
+      <Group label="Queue" detail="Newest report day first. Open a report to read it and decide.">
         <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
           <SegmentedControl<StatusFilter>
             ariaLabel="Report status"
