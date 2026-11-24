@@ -6,6 +6,7 @@ import { payrollApi } from "./api";
 import { PayrollBrief } from "./PayrollBrief";
 import { PayrollProgress } from "./PayrollProgress";
 import { payrollReviewModel } from "./model";
+import { groupBreakFindings } from "@/modules/work-os/payroll/break-groups";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
   inactivity: "Inactivity", break: "Unpaid break", outside_window: "Outside schedule",
@@ -16,7 +17,7 @@ const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
   source_conflict: "Source conflict",
 };
 
-const hours = (minutes: number) => `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+const hours = (minutes: number) => minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 const label = (value: string | null | undefined) => (value ?? "").replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
 const fullDate = (value: string) => {
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00Z`);
@@ -38,12 +39,17 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
   const attention = findings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = findings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
-  const breaks = excluded.filter((finding) => finding.kind === "break");
+  const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
+  const excludedCount = inactivity.length + breaks.length + outside.length
+    + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
   const apps = review.apps?.items ?? [];
   const appTotal = apps.reduce((sum, app) => sum + app.durationMs, 0);
-  const appMax = Math.max(1, ...apps.map((app) => app.durationMs));
+  const topApps = apps.slice(0, 8);
+  const otherApps = apps.slice(8);
+  const otherMs = otherApps.reduce((sum, app) => sum + app.durationMs, 0);
+  const appMax = Math.max(1, otherMs, ...apps.map((app) => app.durationMs));
   const dayMax = Math.max(1, ...days.map((day) => day.minutes.recommended));
   const time = (ms: number) => {
     if (!Number.isFinite(ms)) return "Unavailable";
@@ -109,7 +115,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               </div>
               <div className="payroll-hours-stats">
                 <div><span className="payroll-label">Flags</span><strong>{findings.length}</strong><span>{attention.length} need attention</span></div>
-                <div><span className="payroll-label">Excluded</span><strong>{excluded.length}</strong><span>intervals by rule</span></div>
+                <div><span className="payroll-label">Excluded</span><strong>{excludedCount}</strong><span>intervals by rule</span></div>
                 <div><span className="payroll-label">Recaps</span><strong>{review.recapStats?.employeeReviewed ?? 0}</strong><span>employee reviewed</span></div>
               </div>
             </div>
@@ -125,11 +131,16 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         <section className="payroll-panel" aria-labelledby="apps-title">
           <div className="payroll-report-head"><h2 id="apps-title">Apps and sites</h2><p>{appTotal ? `${hours(Math.round(appTotal / 60_000))} observed · Worktivity` : "App usage unavailable for this period"}</p></div>
           {apps.length ? <div className="payroll-apps">
-            {apps.slice(0, 10).map((app, index) => <div className="payroll-app-row" key={`${app.name}-${index}`}>
+            {topApps.map((app, index) => <div className="payroll-app-row" key={`${app.name}-${index}`}>
               <span className="payroll-app-name"><b style={{ background: `var(--payroll-c${(index % 6) + 1})` }} />{app.name}</span>
               <span className="payroll-track"><i style={{ width: `${Math.max(2, (app.durationMs / appMax) * 100)}%`, background: `var(--payroll-c${(index % 6) + 1})` }} /></span>
               <span className="payroll-app-time">{hours(Math.round(app.durationMs / 60_000))} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
             </div>)}
+            {otherApps.length ? <div className="payroll-app-row">
+              <span className="payroll-app-name"><b style={{ background: "var(--payroll-slate)" }} />Other ({otherApps.length} apps)</span>
+              <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--payroll-slate)" }} /></span>
+              <span className="payroll-app-time">{hours(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
+            </div> : null}
           </div> : <p className="payroll-empty">No app distribution was captured. This does not change payable hours.</p>}
           {review.apps && !review.apps.complete ? <p className="payroll-footnote">App coverage is incomplete for this period.</p> : null}
         </section>
@@ -156,9 +167,9 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         </section> : null}
 
         {!findingsError ? <section className="payroll-panel" aria-labelledby="excluded-title">
-          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excluded.length} intervals · {hours(excludedMinutes)} removed from pay.</p></div>
+          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excludedCount} intervals · {hours(excludedMinutes)} removed from pay.</p></div>
           <ExcludedGroup title="Continuous inactivity · 3 minutes or more" detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it." findings={inactivity} review={review} empty="No inactivity intervals were excluded." />
-          <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} empty="No break intervals were excluded." />
+          <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} collapsed empty="No break intervals were excluded." />
           <ExcludedGroup title="Outside the eligible window" detail="Recorded time before the shift or after its grace end is never payable." findings={outside} review={review} empty="No outside-window intervals were excluded." />
         </section> : null}
 
@@ -207,19 +218,18 @@ function Sources({ citations }: { citations: PayrollCitation[] }) {
   </details>;
 }
 
-function ExcludedGroup({ title, detail, findings, review, empty }: {
-  title: string; detail: string; findings: PayrollFinding[]; review: PayrollReview; empty: string;
+function ExcludedGroup({ title, detail, findings, review, empty, collapsed = false }: {
+  title: string; detail: string; findings: PayrollFinding[]; review: PayrollReview; empty: string; collapsed?: boolean;
 }) {
   const total = findings.reduce((sum, finding) => sum + finding.minutes, 0);
-  return <section className="payroll-rule">
-    <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><span className="payroll-pill">{findings.length} · {hours(total)}</span></div>
-    {findings.length ? <div className="payroll-rule-table">{findings.map((finding) => <div className="payroll-rule-row" key={finding.id}>
+  const head = <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><span className="payroll-pill">{findings.length} · {hours(total)}</span></div>;
+  const body = findings.length ? <div className="payroll-rule-table">{findings.map((finding) => <div className="payroll-rule-row" key={finding.id}>
       <span>{fullDate(finding.date)}</span>
       <span>{finding.span ? `${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.startMs))}–${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.endMs))}` : "—"}</span>
       <span>{hours(finding.minutes)}</span>
       <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames"}</span>
-    </div>)}</div> : <p className="payroll-empty">{empty}</p>}
-  </section>;
+    </div>)}</div> : <p className="payroll-empty">{empty}</p>;
+  return collapsed ? <details className="payroll-rule">{head}{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
 
 function PayrollFrameButton({ review, finding }: { review: PayrollReview; finding: PayrollFinding }) {

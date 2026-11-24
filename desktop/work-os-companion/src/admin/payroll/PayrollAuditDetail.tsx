@@ -7,6 +7,7 @@ import { formatWorkOsDateTime, formatWorkOsFullDate, formatWorkOsTime } from "..
 import { ADMIN_DETAIL_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
 import { desktopPayroll, desktopPayrollKey } from "./api";
+import { groupBreakFindings } from "../../../../../src/modules/work-os/payroll/break-groups";
 import "./payroll.css";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
@@ -108,12 +109,17 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   const attention = allFindings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = allFindings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
-  const breaks = excluded.filter((finding) => finding.kind === "break");
+  const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
+  const excludedCount = inactivity.length + breaks.length + outside.length
+    + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
   const appItems = record.apps?.items ?? [];
   const appTotal = appItems.reduce((sum, app) => sum + app.durationMs, 0);
-  const appMax = Math.max(1, ...appItems.map((app) => app.durationMs));
+  const topApps = appItems.slice(0, 8);
+  const otherApps = appItems.slice(8);
+  const otherMs = otherApps.reduce((sum, app) => sum + app.durationMs, 0);
+  const appMax = Math.max(1, otherMs, ...appItems.map((app) => app.durationMs));
   const dayItems = days.data?.items ?? [];
   const dayMax = Math.max(1, ...dayItems.map((day) => day.minutes.recommended));
   const framed = inactivity.filter((finding) => (finding.frameSummaryIds?.length ?? 0) > 0).slice(0, 5);
@@ -180,7 +186,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             </div>
             <div className="payroll-hours-stats">
               <div><span className="payroll-label">Flags</span><strong>{allFindings.length}</strong><span>{attention.length} need attention</span></div>
-              <div><span className="payroll-label">Excluded</span><strong>{excluded.length}</strong><span>intervals by rule</span></div>
+              <div><span className="payroll-label">Excluded</span><strong>{excludedCount}</strong><span>intervals by rule</span></div>
               <div><span className="payroll-label">Recaps</span><strong>{record.recapStats?.employeeReviewed ?? 0}</strong><span>employee reviewed</span></div>
             </div>
           </div>
@@ -198,7 +204,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
 
       <AdminCard title="Apps and sites" detail={appTotal ? `${formatMinutes(Math.round(appTotal / 60_000))} observed · Worktivity` : "App usage unavailable for this period"}>
         {appItems.length ? <div className="payroll-apps">
-          {appItems.slice(0, 10).map((app, index) => {
+          {topApps.map((app, index) => {
             const minutes = Math.round(app.durationMs / 60_000);
             return <div className="payroll-app-row" key={`${app.name}-${index}`}>
               <span className="payroll-app-name"><b style={{ background: `var(--chart-${(index % 8) + 1})` }} />{app.name}</span>
@@ -206,6 +212,11 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
               <span className="payroll-app-time">{formatMinutes(minutes)} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
             </div>;
           })}
+          {otherApps.length ? <div className="payroll-app-row">
+            <span className="payroll-app-name"><b style={{ background: "var(--chart-8)" }} />Other ({otherApps.length} apps)</span>
+            <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--chart-8)" }} /></span>
+            <span className="payroll-app-time">{formatMinutes(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
+          </div> : null}
         </div> : <p className="admin-quiet">No app distribution was captured. This does not change payable hours.</p>}
         {record.apps && !record.apps.complete ? <p className="admin-quiet">App coverage is incomplete for this period.</p> : null}
       </AdminCard>
@@ -234,13 +245,13 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         </div> : <p className="admin-quiet">Nothing needs a decision on this page.</p>}
       </AdminCard>
 
-      <AdminCard title="Excluded by rule" detail={`${excluded.length} intervals · ${formatMinutes(excludedMinutes)} removed from pay`}>
+      <AdminCard title="Excluded by rule" detail={`${excludedCount} intervals · ${formatMinutes(excludedMinutes)} removed from pay`}>
         <ExcludedGroup title="Continuous inactivity · 3 minutes or more"
           detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it."
           findings={inactivity} onFrame={setFrameFinding} formatTime={time} empty="No inactivity intervals were excluded." />
         <ExcludedGroup title="Unpaid break"
           detail="Break time never counts as work. Worktivity captures no screenshots during a break."
-          findings={breaks} onFrame={setFrameFinding} formatTime={time} empty="No break intervals were excluded." />
+          findings={breaks} onFrame={setFrameFinding} formatTime={time} collapsed empty="No break intervals were excluded." />
         <ExcludedGroup title="Outside the eligible window"
           detail="Recorded time before the shift or after its grace end is never payable."
           findings={outside} onFrame={setFrameFinding} formatTime={time} empty="No outside-window intervals were excluded." />
@@ -309,14 +320,13 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   </>;
 }
 
-function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty }: {
+function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty, collapsed = false }: {
   title: string; detail: string; findings: PayrollFinding[];
-  onFrame: (finding: PayrollFinding) => void; formatTime: (ms: number) => string; empty: string;
+  onFrame: (finding: PayrollFinding) => void; formatTime: (ms: number) => string; empty: string; collapsed?: boolean;
 }) {
   const total = findings.reduce((sum, finding) => sum + finding.minutes, 0);
-  return <section className="payroll-rule">
-    <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><Pill>{findings.length} · {formatMinutes(total)}</Pill></div>
-    {findings.length ? <div className="payroll-rule-table">{findings.map((finding) => {
+  const head = <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><Pill>{findings.length} · {formatMinutes(total)}</Pill></div>;
+  const body = findings.length ? <div className="payroll-rule-table">{findings.map((finding) => {
       const frames = finding.frameSummaryIds ?? [];
       return <div className="payroll-rule-row" key={finding.id}>
         <span>{formatWorkOsFullDate(finding.date)}</span>
@@ -324,8 +334,8 @@ function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty }: 
         <span>{finding.minutes === 0 && finding.durationMs > 0 ? "Under 1 min" : formatMinutes(finding.minutes)}</span>
         <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames"}</span>
       </div>;
-    })}</div> : <p className="admin-quiet">{empty}</p>}
-  </section>;
+    })}</div> : <p className="admin-quiet">{empty}</p>;
+  return collapsed ? <details className="payroll-rule">{head}{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
 
 function PayrollFrameDialog({ record, finding, onClose }: { record: PayrollReview; finding: PayrollFinding; onClose: () => void }) {

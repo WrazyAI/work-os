@@ -147,3 +147,5 @@
 .payroll-sources ul{padding-left:17px;list-style:disc}
 @media(max-width:980px){.payroll-hours{grid-template-columns:minmax(0,1fr)}.payroll-apps{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:640px){.payroll-big{font-size:28px}.payroll-askbar{padding:0 12px;bottom:12px}.payroll-rule-row{grid-template-columns:1fr auto}.payroll-rule-row > :nth-child(2),.payroll-rule-row > :nth-child(3){display:none}.payroll-attention-row{flex-direction:column}.payroll-attention-actions{justify-content:flex-start}.payroll-daily-row{grid-template-columns:1fr auto}}
+
+details.payroll-rule > summary { cursor: pointer; list-style-position: outside; padding-block: 2px; }

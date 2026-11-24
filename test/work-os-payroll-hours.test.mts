@@ -220,7 +220,22 @@ test("breaks union across sources and activity during a break never becomes paya
   assert.equal(finding.status, "auto_excluded");
   assert.match(finding.reason, /break/i);
   assert.match(finding.reason, /not work/i);
-});test("pre-shift and end-plus-sixty boundaries are excluded exactly", async () => {
+});test("near-adjacent provider break slices merge into one break run", async () => {
+  const { calculatePayrollDay } = await hours();
+  const day = calculatePayrollDay(input({
+    sessions: [session(spanMs(t("15:00"), t("15:10")), spanMs(t("15:00"), t("15:10")))],
+    captures: everyMinute("15:00", "15:10", 30),
+    breaks: [
+      { span: spanMs(t("15:02"), t("15:03")), source: "provider" },
+      { span: spanMs(t("15:03") + 3_000, t("15:04") + 3_000), source: "provider" },
+    ],
+  }));
+  const findings = day.findings.filter((finding) => finding.kind === "break");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.minutes, 2);
+});
+
+test("pre-shift and end-plus-sixty boundaries are excluded exactly", async () => {
   const { calculatePayrollDay } = await hours();
   const pre = calculatePayrollDay(input({
     captures: [...everyMinute("14:50", "15:00", 30), ...everyMinute("15:00", "16:00", 30)],

@@ -143,6 +143,20 @@ function keysFor(date: string) {
   };
 }
 
+/** Provider break captures arrive about one minute apart with a few seconds
+ * of clock drift. Merge those near-adjacent slices into one break run; leave
+ * genuinely separated breaks alone. */
+function mergeBreakRuns(spans: Span[], toleranceMs = 90_000): Span[] {
+  const merged = unionSpans(spans);
+  const out: Span[] = [];
+  for (const span of merged) {
+    const last = out.at(-1);
+    if (last && span.startMs - last.endMs <= toleranceMs) last.endMs = Math.max(last.endMs, span.endMs);
+    else out.push({ ...span });
+  }
+  return out;
+}
+
 export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   assertInput(input);
   const nextKey = keysFor(input.date);
@@ -178,7 +192,7 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   // Break time is unpaid, full stop. Worktivity captures no screenshots during
   // a break, so activity samples inside one are not work evidence and never
   // become a payable decision.
-  const breakSpans = intersectSpans(unionSpans(input.breaks.map((item) => item.span)), tracked);
+  const breakSpans = intersectSpans(mergeBreakRuns(input.breaks.map((item) => item.span)), tracked);
   for (const span of breakSpans) {
     const key = nextKey("break", span);
     parts = applyZone(parts, span, "break", key, (part) => part.category === "payable");
