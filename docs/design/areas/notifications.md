@@ -107,9 +107,9 @@ offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.
 Two standing conditions hold persistent cards under stable keys: an overview
 snapshot older than ten minutes, and a workspace status reporting a missing
-migration or an unusable Nifty connection. Standing cards render in the shell's
-notification region in the page's reading order below the masthead, so they
-never cover the page identity or its actions; a shell-less surface falls back
-to a fixed stack offset below its header. Transient receipts keep the shared
-viewport position: a receipt lands in the window's top-right corner with the
-same insets as the employee view, at every width.
+migration or an unusable Nifty connection. Every notification — both standing
+persistent cards and transient receipts — shares the floating top-right stack
+with the same insets as the employee view, at every width. When more than one
+notification is present, cards stack behind the front card and expand into a
+flat floating list on hover or keyboard focus, pausing transient auto-dismiss
+timers while inspected.
