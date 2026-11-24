@@ -25,6 +25,7 @@ export const payrollApi = {
     const query = new URLSearchParams();
     if (status) query.set("status", status);
     if (cursor) query.set("cursor", cursor);
+    query.set("limit", "100");
     return adminFetch<Page<PayrollFinding>>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings?${query}`);
   },
   decide: (reviewId: string, body: Record<string, unknown>) =>
@@ -38,4 +39,16 @@ export const payrollApi = {
   cancel: (runId: string, rowVersion: string) => adminFetch(`/api/work-os/admin/payroll/runs/${encodeURIComponent(runId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel", rowVersion }) }),
   start: (personId: string, payDate: string, requestKey: string) =>
     adminFetch<PayrollRun>(`/api/work-os/admin/payroll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ personId, payDate, requestKey }) }),
+  previewFrame: async (reviewId: string, findingKey: string, summaryId: string, reason: string) => {
+    const response = await fetch(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings/${encodeURIComponent(findingKey)}/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summary_id: summaryId, reason, request_key: crypto.randomUUID() }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error || "The evidence frame could not be opened.");
+    }
+    return response.blob();
+  },
 };
