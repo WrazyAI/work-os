@@ -157,6 +157,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               <Sources citations={finding.citations} />
             </div>
             <div className="payroll-attention-actions">
+              {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : null}
               {finding.requiredAction === "correct" ? <span className="payroll-quiet">Correct the source, then re-analyze.</span>
                 : onDecide && !busy ? (finding.requiredAction === "decide" ? <>
                   <button type="button" onClick={() => setDecision({ finding, action: "payable" })}>Keep payable</button>
@@ -257,7 +258,7 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
     {open ? <div className="payroll-overlay" role="dialog" aria-modal="true" aria-label="Evidence frames" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="payroll-dialog">
         <div className="payroll-dialog-head"><h3>Evidence · {FINDING_LABELS[finding.kind]}</h3><button type="button" onClick={() => setOpen(false)}>Close</button></div>
-        <p className="payroll-quiet">{fullDate(finding.date)}. Access is recorded; images are only available for excluded inactivity evidence.</p>
+        <p className="payroll-quiet">{fullDate(finding.date)}. Access is recorded and limited to reviewable payroll evidence.</p>
         {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
         <label className="payroll-field"><span>Reason</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
         {error ? <p className="payroll-blocker">{error}</p> : null}
