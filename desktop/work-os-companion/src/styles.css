@@ -331,7 +331,8 @@ select:focus-visible {
   position: fixed;
   z-index: 5000;
   top: max(18px, env(safe-area-inset-top));
-  right: max(18px, env(safe-area-inset-right));
+  left: 50%;
+  transform: translateX(-50%);
   width: min(340px, calc(100vw - 36px));
   display: grid;
   gap: 8px;
@@ -556,14 +557,14 @@ select:focus-visible {
   animation: notification-life var(--notification-duration) linear both;
 }
 @keyframes notification-enter {
-  from { opacity: 0; transform: translate3d(16px, -4px, 0) scale(0.97); }
+  from { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.97); }
   to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 @keyframes notification-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (max-width: 560px) {
   /* Fixed inset edges, not 100vw: a desktop scrollbar makes 100vw wider than
      the layout viewport and pushes the stack's leading edge off screen. */
-  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; }
+  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .notification-stack, .notification-flyout, .notification-flyout > *, .notification-flyout > i { animation: none; transition: none; }

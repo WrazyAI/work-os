@@ -108,7 +108,7 @@ also raises a failure flyout. Nothing fires for a queued or uncertain write.
 Two standing conditions hold persistent cards under stable keys: an overview
 snapshot older than ten minutes, and a workspace status reporting a missing
 migration or an unusable Nifty connection. Every notification — both standing
-persistent cards and transient receipts — shares the floating top-right stack
+persistent cards and transient receipts — shares the floating top-center stack
 with the same insets as the employee view, at every width. When more than one
 notification is present, cards stack behind the front card and expand into a
 flat floating list on hover or keyboard focus, pausing transient auto-dismiss
