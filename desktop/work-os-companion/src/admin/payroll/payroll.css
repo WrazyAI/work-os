@@ -67,3 +67,9 @@
   outline: 2px solid var(--accent-deep);
   outline-offset: 2px;
 }
+
+.payroll-records-table .payroll-open-row { cursor: pointer; }
+.payroll-records-table .payroll-open-row:hover { background: var(--inset); }
+.payroll-records-table .actions { text-align: right; white-space: nowrap; }
+.payroll-records-table .admin-record-open { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.payroll-records-table .admin-record-open:hover { text-decoration-color: currentColor; }

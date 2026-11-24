@@ -69,26 +69,35 @@ export default function PayrollPage({ organizationId, userId }: { organizationId
         {roster.data && records.length === 0 ? <Empty title={tab === "records" ? "No payroll records for this pay date" : "No audits for this pay date"} body="Choose another pay date or start a new audit." /> : null}
         {records.length > 0 ? (
           <div className="admin-table-wrap">
-            <table className="admin-table">
+            <table className="admin-table payroll-records-table">
               <thead><tr><th scope="col">Employee</th><th scope="col">Review status</th>{tab === "records"
                 ? <><th scope="col">Recommended</th><th scope="col">Approved</th></>
-                : <th scope="col">Analysis</th>}</tr></thead>
-              <tbody>{records.map((row) => (
-                <tr key={row.personId}>
-                  <td data-label="Employee">
-                    {row.reviewId ? <button type="button" className="admin-record-open"
-                      aria-label={`Open ${row.displayName} payroll review`}
-                      onClick={() => setSelection({ reviewId: row.reviewId!, personId: row.personId, name: row.displayName })}>{row.displayName}</button>
-                      : <b>{row.displayName}</b>}
-                    {row.active ? null : <small className="admin-quiet"> Inactive</small>}
-                  </td>
-                  <td data-label="Review status"><Pill tone={row.status === "approved" ? "ok" : row.status === "needs_review" ? "warn" : "neutral"}>{statusLabel(row.status)}</Pill></td>
-                  {tab === "records" ? <>
-                    <td data-label="Recommended">{row.status === "draft" || row.status === "failed" ? "—" : formatMinutes(row.totals.recommended)}</td>
-                    <td data-label="Approved">{row.status === "approved" ? formatMinutes(row.totals.approved) : "—"}</td>
-                  </> : <td data-label="Analysis">{row.auditStatus ? statusLabel(row.auditStatus) : "Not available"}</td>}
-                </tr>
-              ))}</tbody>
+                : <th scope="col">Analysis</th>}<th scope="col" className="actions">Open</th></tr></thead>
+              <tbody>{records.map((row) => {
+                const open = row.reviewId
+                  ? () => setSelection({ reviewId: row.reviewId!, personId: row.personId, name: row.displayName })
+                  : undefined;
+                return (
+                  <tr key={row.personId} className={open ? "payroll-open-row" : undefined} onClick={open}>
+                    <td data-label="Employee">
+                      <b>{row.displayName}</b>
+                      {row.active ? null : <small className="admin-quiet"> Inactive</small>}
+                    </td>
+                    <td data-label="Review status"><Pill tone={row.status === "approved" ? "ok" : row.status === "needs_review" ? "warn" : "neutral"}>{statusLabel(row.status)}</Pill></td>
+                    {tab === "records" ? <>
+                      <td data-label="Recommended">{row.status === "draft" || row.status === "failed" ? "—" : formatMinutes(row.totals.recommended)}</td>
+                      <td data-label="Approved">{row.status === "approved" ? formatMinutes(row.totals.approved) : "—"}</td>
+                    </> : <td data-label="Analysis">{row.auditStatus ? statusLabel(row.auditStatus) : "Not available"}</td>}
+                    <td data-label="Open" className="actions">
+                      {open ? <button type="button" className="admin-record-open"
+                        aria-label={`Open ${row.displayName} payroll review`}
+                        onClick={(event) => { event.stopPropagation(); open(); }}>
+                        {tab === "records" ? "Open review" : "Open audit"}
+                      </button> : null}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
             </table>
           </div>
         ) : null}
