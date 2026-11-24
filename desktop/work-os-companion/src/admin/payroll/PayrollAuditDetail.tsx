@@ -8,6 +8,23 @@ import { AdminButton, AdminCard, AdminControls, Drawer, Empty, Notice, Pill, Sel
 import { desktopPayroll, desktopPayrollKey } from "./api";
 import "./payroll.css";
 
+const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
+  inactivity: "Inactivity",
+  break: "Unpaid break",
+  outside_window: "Outside schedule",
+  unverified_gap: "Unverified coverage",
+  low_evidence: "Low evidence",
+  activity_during_break: "Activity during break",
+  break_mismatch: "Conflicting break records",
+  possible_work: "Possible work",
+  manual_adjustment: "Manual adjustment",
+  no_work: "No recorded work",
+  no_schedule: "Schedule correction",
+  no_session: "Missing session",
+  timezone_changed: "Time zone changed",
+  source_conflict: "Source conflict",
+};
+
 type Intent =
   | { kind: "approve" }
   | { kind: "reopen" }
@@ -85,7 +102,9 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
     queryFn: ({ signal }) => api.findings(record.id, status, cursor, signal), enabled: revision > 0,
     staleTime: ADMIN_DETAIL_STALE_MS, retry: false,
   });
-  const time = (ms: number) => formatWorkOsTime(new Date(ms).toISOString(), record.period.timezone);
+  const time = (ms: number) => Number.isFinite(ms)
+    ? formatWorkOsTime(new Date(ms).toISOString(), record.period.timezone)
+    : "Unavailable";
   return <>
     <AdminCard title={name} detail={`${formatWorkOsFullDate(record.period.from)} to ${formatWorkOsFullDate(record.period.through)}`}
       action={!running && !record.approval ? <AdminButton variant={canApprove ? "ghost" : "secondary"} disabled={writesDisabled} onClick={onRestart}>Re-analyze</AdminButton> : undefined}>
@@ -162,7 +181,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         {findings.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void findings.refetch()}>Retry</AdminButton>}>{findings.error.message}</Notice> : null}
         {findings.data?.items.length === 0 ? <Empty title="No findings on this page" body="Choose another filter to see the rest of the audit." /> : null}
         {findings.data?.items.map((finding) => <section className="payroll-native-row" key={finding.id}>
-          <div className="payroll-native-finding-title"><h3>{statusLabel(finding.kind)}</h3><Pill tone={finding.status === "needs_review" || finding.status === "needs_correction" ? "warn" : "neutral"}>{statusLabel(finding.status)}</Pill></div>
+          <div className="payroll-native-finding-title"><h3>{FINDING_LABELS[finding.kind]}</h3><Pill tone={finding.status === "needs_review" || finding.status === "needs_correction" ? "warn" : "neutral"}>{statusLabel(finding.status)}</Pill></div>
           <p className="admin-quiet">{formatWorkOsFullDate(finding.date)} · {finding.span ? `${time(finding.span.startMs)} to ${time(finding.span.endMs)} · ` : ""}
             {finding.minutes === 0 && finding.durationMs > 0 ? "Under 1 minute" : formatMinutes(finding.minutes)}</p>
           <p>{finding.reason}</p>

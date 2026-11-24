@@ -220,6 +220,13 @@ export default function AdminPreview() {
   }, [stubApi]);
   return (
     <>
+      {section === "payroll" ? (
+        <p role="note" style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 40, margin: 0, padding: "6px 10px",
+          border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper)",
+          color: "var(--muted)", font: "600 10.5px/1.3 Manrope, Inter, sans-serif",
+        }}>Synthetic payroll preview</p>
+      ) : null}
       <AdminWorkspace
         session={PREVIEW_SESSION}
         notifications={notifications}
