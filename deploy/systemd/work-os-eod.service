@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare Work OS end-of-day reports from the recorded day
+Wants=agentos-web.service
+After=agentos-web.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=300
+WorkingDirectory=/home/dev/agent-os
+EnvironmentFile=-/home/dev/agent-os/.env
+EnvironmentFile=-/home/dev/agent-os/.env.local
+ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 240 --request POST --header "Authorization: Bearer ${CRON_SECRET}" --header "Content-Type: application/json" --data '{"limit":24}' http://127.0.0.1:3000/api/work-os/eod/run-scheduled

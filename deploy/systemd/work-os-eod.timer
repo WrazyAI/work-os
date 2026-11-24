@@ -1,0 +1,11 @@
+[Unit]
+Description=Prepare Work OS end-of-day reports every five minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=5m
+Persistent=true
+Unit=work-os-eod.service
+
+[Install]
+WantedBy=timers.target

@@ -43,6 +43,8 @@ export {
 } from "@/lib/work-os-next-steps";
 export {
   draftWorkOsEod,
+  prepareWorkOsEod,
+  saveWorkOsEodComposition,
   deleteWorkOsEodDraft,
   submitWorkOsEod,
   reviewWorkOsEod,

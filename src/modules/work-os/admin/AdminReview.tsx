@@ -19,6 +19,8 @@ import EvidenceImageDialog, { EvidenceThumb, evidenceScreenshotUrl, type Evidenc
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
+import EodStructuredView from "@/modules/work-os/eod-structured-view";
+import { normalizeEodStructuredReport } from "@/modules/work-os/eod-structured";
 import {
   Avatar,
   Button,
@@ -158,7 +160,8 @@ export default function AdminReviewPage() {
             <ul className="max-h-[68vh] overflow-y-auto">
               {list.map((report) => {
                 const active = report.id === selected?.id;
-                const snippet = eodSnippet(report.submitted_markdown ?? report.markdown, 160);
+                const structured = normalizeEodStructuredReport(report.structured_report);
+                const snippet = (structured.summary || structured.completed[0] || eodSnippet(report.submitted_markdown ?? report.markdown, 160) || "").slice(0, 160);
                 const showStatus = status !== "pending_review" || report.status !== "pending_review";
                 return (
                   <li key={report.id}>
@@ -264,7 +267,21 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
 
   const [preview, setPreview] = useState<EvidencePreview | null>(null);
   const document = parseEodMarkdown(report.submitted_markdown ?? report.markdown);
-  const metricFacts = eodMetricFacts(report.metrics);
+  const structured = useMemo(() => normalizeEodStructuredReport(report.structured_report), [report.structured_report]);
+  const hasStructured = Boolean(
+    structured.summary
+    || structured.completed.length
+    || structured.inProgress.length
+    || structured.next.length,
+  );
+  const metricFacts = hasStructured
+    ? [
+        { label: "Completed", value: structured.completed.length },
+        { label: "In progress", value: structured.inProgress.length },
+        { label: "Next", value: structured.next.length },
+        { label: "Sources", value: structured.evidence.length },
+      ].filter((fact) => fact.value > 0)
+    : eodMetricFacts(report.metrics);
   const renderEodSection = (section: (typeof document.sections)[number]) => (
     <section key={section.heading} className="grid gap-2">
       <h3 className={cx("inline-flex items-center gap-1.5 text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
@@ -333,7 +350,9 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         </div>
       ) : null}
 
-      {/* The report as a document: meta, sections, disclaimer */}
+      {/* The report as a document: the employee's structured brief, then the
+          complete deterministic record. Historical reports fall back to the
+          parsed markdown. */}
       <Panel>
         <div className="grid gap-5">
           {document.meta.length ? (
@@ -346,7 +365,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
               ))}
             </dl>
           ) : null}
-          {document.sections.map(renderEodSection)}
+          {hasStructured ? <EodStructuredView report={structured} /> : document.sections.map(renderEodSection)}
           {document.appendix.length ? (
             <details className="border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
               <summary className="cursor-pointer text-[11.5px] font-semibold text-[var(--text-secondary)]">

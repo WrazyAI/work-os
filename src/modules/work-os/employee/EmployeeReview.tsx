@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Eye, FileCheck2, Pencil, RotateCcw, Send, Video, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import EodReportDocument from "./EodReportDocument";
 import EmployeeEodEvidence from "./EmployeeEodEvidence";
+import EmployeeEodComposer from "./EmployeeEodComposer";
+import EodStructuredView from "@/modules/work-os/eod-structured-view";
 import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { useNow } from "./useNow";
 import { HttpError, fetchJson, calendarDateLabel, longDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
-import { prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
+import { normalizeEodStructuredReport } from "@/modules/work-os/eod-structured";
 import {
   EOD_SHIFT_OPEN_LINK_LABEL,
   EOD_SHIFT_OPEN_PREFIX,
-  EOD_SHIFT_OPEN_REASON,
-  EOD_SHIFT_OPEN_REBUILD_PREFIX,
   EOD_SHIFT_OPEN_SUFFIX,
   eodDraftBlocked,
   eodDraftWindowOpen,
@@ -55,25 +55,22 @@ export default function EmployeeReview() {
   const outstanding = useOutstandingEods();
   const now = useNow();
   const [selectedDate, setSelectedDate] = useState("");
-  const [reportMarkdown, setReportMarkdown] = useState("");
   /** The EOD page keeps the moment after a submission: the confirmation stays
    * until the employee returns to the EOD list. */
   const [eodConfirmation, setEodConfirmation] = useState(false);
-  // The confirmation names the day that was submitted; changing the day must
-  // never leave it looking like that report was just filed.
-  useEffect(() => { setEodConfirmation(false); }, [selectedDate]);
-  const [draftSource, setDraftSource] = useState<"deterministic" | "refined" | "loom" | null>(null);
-  const [editingReport, setEditingReport] = useState(false);
-  const [eodNotice, setEodNotice] = useState<{ tone: "info" | "warn" | "err"; text: string } | null>(null);
-  const [refineOpen, setRefineOpen] = useState(false);
-  const [refineInput, setRefineInput] = useState("");
-  const [loomOpen, setLoomOpen] = useState(false);
-  const [loomUrl, setLoomUrl] = useState("");
-  const [loomTranscript, setLoomTranscript] = useState("");
+  const [refusal, setRefusal] = useState<{ date: string; at: string | null } | null>(null);
+  const [prepareNote, setPrepareNote] = useState<string | null>(null);
+  const preparedDates = useRef(new Set<string>());
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
 
   useEffect(() => {
     if (day.data?.shiftDate) setSelectedDate((current) => current || day.data!.shiftDate);
   }, [day.data?.shiftDate]);
+
+  // The confirmation names the day that was submitted; changing the day must
+  // never leave it looking like that report was just filed.
+  useEffect(() => { setEodConfirmation(false); }, [selectedDate]);
 
   const historical = !!selectedDate && !!day.data?.shiftDate && selectedDate !== day.data.shiftDate;
   const selectedDay = useQuery<EmployeeDayResponse>({
@@ -85,15 +82,10 @@ export default function EmployeeReview() {
 
   const eodDay = historical ? selectedDay.data ?? null : day.data ?? null;
   const eodReport = eodDay?.report ?? null;
-  /* Today's report opens in the final ten minutes before its scheduled
-     clock-out, so the employee can finish before clocking out. The server
-     enforces the same window; this is the prompt that explains the wait before
-     the employee reaches for the button. A refusal is remembered for the day it
-     happened and only while that day's payload is the one the server judged, so
-     a fresh payload supersedes it — clocking out, or the window opening, brings
-     the draft action back. */
-  const [refusal, setRefusal] = useState<{ date: string; at: string | null } | null>(null);
-  useEffect(() => { setRefusal(null); }, [selectedDate]);
+  const structured = useMemo(
+    () => eodReport ? normalizeEodStructuredReport(eodReport.structured_report) : null,
+    [eodReport],
+  );
   const scheduledEndsAt = eodDay?.dayShift?.endsAt ?? null;
   const shiftOpen = !historical && eodDraftBlocked({
     session: eodDay?.session ?? null,
@@ -101,152 +93,62 @@ export default function EmployeeReview() {
     scheduledEndsAt,
     now,
   });
-  const shiftBlocked = shiftOpen || (refusal?.date === selectedDate && refusal.at === (eodDay?.at ?? null) && !eodDraftWindowOpen({ session: eodDay?.session ?? null, scheduledEndsAt, now }));
-  /* The report date the editor is currently showing; an assistant response for
-     another day must never alter the active editor. */
-  const activeReportDateRef = useRef<string>("");
-  // Kept current at commit, not after paint: a deferred assistant response must
-  // never pass the guard against the date the editor has already left.
-  useLayoutEffect(() => { activeReportDateRef.current = eodDay?.shiftDate ?? ""; }, [eodDay?.shiftDate]);
+  const shiftBlocked = shiftOpen || (
+    refusal?.date === selectedDate
+    && refusal.at === (eodDay?.at ?? null)
+    && !eodDraftWindowOpen({ session: eodDay?.session ?? null, scheduledEndsAt, now })
+  );
 
-  type AssistantDraftMode = "refine" | "loom";
-  const assistantDraft = useMutation({
-    mutationFn: (variables: { mode: AssistantDraftMode; date: string; draft?: string; bottleneck?: string; feedback?: string; loom?: { url: string; transcript?: string } }) =>
-      fetchJson<AssistantEodDraftResponse>("/api/work-os/me/eod/ai-draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: variables.date,
-          ...(variables.draft !== undefined ? { draft: variables.draft } : {}),
-          ...(variables.feedback ? { feedback: variables.feedback } : {}),
-          ...(variables.loom ? { loom: variables.loom } : {}),
-        }),
-      }),
-    onSuccess: (result, variables) => {
-      // A response for a day the editor has left is dropped, not applied.
-      if (variables.date !== activeReportDateRef.current) return;
-      if (result.markdown) setReportMarkdown(variables.mode === "refine" ? restoreBottleneckSection(result.markdown, variables.bottleneck ?? "") : result.markdown);
-      setDraftSource(variables.mode === "refine" ? "refined" : "loom");
-      setEditingReport(false);
-      setEodNotice({
-        tone: "info",
-        text: variables.mode === "refine"
-          ? "The draft was refined from your feedback."
-          : "Draft rebuilt from your Loom recording. Review every line.",
-      });
+  const prepare = useMutation({
+    mutationFn: (date: string) => fetchJson<{ report: AnyRow }>("/api/work-os/me/eod/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    }),
+    onSuccess: () => {
+      setPrepareNote(null);
       void refresh();
+      if (historical) void selectedDay.refetch();
     },
-    onError: (error, variables) => {
-      if (variables.date !== activeReportDateRef.current) return;
-      const gated = error instanceof HttpError && error.status === 409;
-      // The server refuses a draft for a day that has not ended; the prompt
-      // explains it instead of a bare failure.
-      if (gated && error instanceof HttpError && error.reason === EOD_SHIFT_OPEN_REASON) {
-        setRefusal({ date: variables.date, at: eodDay?.at ?? null });
+    onError: (error, date) => {
+      if (error instanceof HttpError && error.status === 409) {
+        preparedDates.current.delete(date);
+        if (date === selectedDate) setRefusal({ date, at: eodDay?.at ?? null });
         return;
       }
-      const message = error instanceof Error ? error.message : "That change could not be applied.";
-      setEodNotice({
-        tone: gated ? "warn" : "err",
-        text: variables.mode === "refine"
-          ? `Your feedback was not applied. Your draft is unchanged.${gated ? ` ${message}` : ""}`
-          : `${message} Your draft is unchanged.`,
-      });
+      setPrepareNote(error instanceof Error ? error.message : "Your report could not be prepared.");
     },
   });
 
-  /* The day a draft attempt was made, so a late refusal never lands on the
-     day the employee has since opened. */
-  const attemptedRef = useRef<{ date: string; at: string | null }>({ date: "", at: null });
-
-  /** Creates or refreshes the stored draft. The server builds the document
-   * deterministically from the recorded day; nothing is submitted here. */
-  const buildDraft = async (date: string) => {
-    attemptedRef.current = { date, at: eodDay?.at ?? null };
-    // Analyze one bounded batch of waiting frames first so the draft reads the
-    // freshest record (the companion runs its own rounds).
-    if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
-    const created = await fetchJson<{ report: AnyRow }>("/api/work-os/reports/eod", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify({ date }),
-    });
-    // The created record lands in the editor only while that day is active.
-    if (date === activeReportDateRef.current) {
-      setDraftSource("deterministic");
-      setReportMarkdown(String(created.report?.markdown ?? ""));
-      setEditingReport(false);
-      setEodNotice({ tone: "info", text: "Report built from your recorded day. Review every line." });
-    }
-    return { created, date };
-  };
-  const onDraftError = (error: unknown) => {
-    // A shift that is still open refuses the draft; the prompt replaces it.
-    if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
-      setRefusal(attemptedRef.current);
-      return;
-    }
-    const message = error instanceof Error ? error.message : "The report could not be rebuilt.";
-    setEodNotice({ tone: "err", text: `${message} The report was not changed.` });
-  };
-
-  const draftEod = useMutation({
-    mutationFn: async () => {
-      if (!eodDay?.shiftDate) throw new Error("Load the day before drafting its EOD");
-      return buildDraft(eodDay.shiftDate);
-    },
-    onError: onDraftError,
-    onSuccess: () => void refresh(),
-  });
-
-  const redraftEod = useMutation({
-    mutationFn: async () => {
-      const date = eodDay?.shiftDate ?? "";
-      if (!date) throw new Error("Load the day before rebuilding its EOD");
-      return buildDraft(date);
-    },
-    onError: onDraftError,
-    onSuccess: () => void refresh(),
-  });
-
-  const appliedReportRef = useRef<string | null>(null);
-
-  /* A different review day starts from its own report state. */
+  // A page that opens before the scheduler has prepared the day asks once for
+  // the same server-side analysis. The employee never sees a "Draft" button.
   useEffect(() => {
-    appliedReportRef.current = null;
-    setDraftSource(null);
-    setEditingReport(false);
-    setEodNotice(null);
-  }, [selectedDate]);
+    const date = eodDay?.shiftDate ?? (historical ? selectedDate : "");
+    if (!date || eodReport || shiftBlocked || prepare.isPending) return;
+    if (historical && selectedDay.isLoading) return;
+    if (historical && selectedDay.error && !selectedDay.data) return;
+    if (preparedDates.current.has(date)) return;
+    preparedDates.current.add(date);
+    prepare.mutate(date);
+  }, [
+    eodDay?.shiftDate,
+    eodReport,
+    shiftBlocked,
+    historical,
+    selectedDay.isLoading,
+    selectedDay.error,
+    selectedDay.data,
+    selectedDate,
+    prepare.isPending,
+    prepare.mutate,
+  ]);
 
-  /* Adopt the server's stored markdown when the report itself changes (a new
-     report or a status transition). The key is claimed even when adoption is
-     skipped because an assistant draft is in flight: the server stores the
-     deterministic copy until the report is submitted, so adopting it once the
-     mutation settles would overwrite the assistant's markdown. Skipping is
-     safe — the draft mutation already applied the created record, and the
-     status key changes again on the next real transition. */
+  // A different day starts from its own preparation and gate state.
   useEffect(() => {
-    if (!eodReport) return;
-    const key = `${eodReport.id}:${eodReport.status}`;
-    if (appliedReportRef.current === key) return;
-    appliedReportRef.current = key;
-    if (assistantDraft.isPending) return;
-    setReportMarkdown(eodReport.markdown ?? "");
-    setEditingReport(false);
-  }, [eodReport?.id, eodReport?.status, eodReport?.markdown, assistantDraft.isPending]);
-
-  const submitEod = useMutation({
-    mutationFn: () => {
-      if (!eodReport?.id) throw new Error("Draft the EOD report before submitting it");
-      return fetchJson(`/api/work-os/reports/${eodReport.id}/submit`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-        body: JSON.stringify({ markdown: reportMarkdown }),
-      });
-    },
-    onSuccess: () => { setEodConfirmation(true); void refresh(); },
-  });
+    setRefusal(null);
+    setPrepareNote(null);
+    prepare.reset();
+  }, [selectedDate, prepare.reset]);
 
   const review = useMutation({
     mutationFn: async ({ id, decision }: { id: string; decision: "accept" | "reject" }) => {
@@ -255,8 +157,6 @@ export default function EmployeeReview() {
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
         body: JSON.stringify({ decision }),
       });
-      // A 200 is not proof the decision landed: the proposal may be stale,
-      // already decided in another window, or still applying.
       const expected = decision === "accept" ? "applied" : "rejected";
       if (row?.outcome && row.outcome !== expected) {
         throw new Error(row.failure_reason?.trim()
@@ -267,30 +167,14 @@ export default function EmployeeReview() {
     onSuccess: () => void refresh(),
   });
 
-  const disputeEvidence = useMutation({
-    mutationFn: (eventId: string) => fetchJson(`/api/work-os/evidence/${eventId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ correction_status: "disputed", reason: "Employee disputed this evidence from Review." }),
-    }),
-    onSuccess: () => void refresh(),
-  });
-
   const proposals = day.data?.proposals ?? [];
-  const evidence = eodDay?.evidence ?? [];
   const outstandingDays = outstanding.data?.days ?? [];
-  /* A refusal for an open shift is explained by the prompt, not by a raw
-     error banner. */
-  const shiftRefusal = draftEod.error instanceof HttpError && draftEod.error.status === 409 && draftEod.error.reason === EOD_SHIFT_OPEN_REASON;
-  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || submitEod.error || review.error || disputeEvidence.error;
+  const error = day.error || selectedDay.error || outstanding.error || review.error;
   const status = String(eodReport?.status || "");
   const editorLocked = status === "pending_review" || status === "approved";
-  const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";
+  const statusLabel = eodReport ? eodStatusLabel(status) : prepare.isPending ? "Preparing" : "Not drafted";
+  const statusClass = status === "approved" ? styles.statusApproved : status === "rejected" ? styles.statusRejected : status === "pending_review" ? styles.statusSubmitted : "";
 
-  /* The prompt for a shift that has not ended. The clock-out reads as inline
-     text, underlined, and behaves like the action it names: it takes the
-     employee to the dashboard, where the Windows Companion closes the
-     shift. */
   const shiftOpenPrompt = (prefix: string, suffix: string) => (
     <p className={styles.recordNote}>
       {prefix}{" "}
@@ -298,6 +182,36 @@ export default function EmployeeReview() {
       {suffix}
     </p>
   );
+
+  const retryPrepare = () => {
+    const date = eodDay?.shiftDate ?? (historical ? selectedDate : "");
+    if (!date) return;
+    preparedDates.current.delete(date);
+    setPrepareNote(null);
+    prepare.mutate(date);
+  };
+
+  const submittedView = eodReport ? (
+    <div className="grid gap-4">
+      <div className={styles.notice} role="status">
+        {status === "approved" ? "Approved." : "Submitted — waiting for review."}
+      </div>
+      {structured && structured.summary ? (
+        <EodStructuredView report={structured} variant="employee" />
+      ) : null}
+      <details className={styles.fullRecord}>
+        <summary>Full recorded day</summary>
+        <div>
+          <EodReportDocument
+            markdown={String(eodReport.submitted_markdown ?? eodReport.markdown ?? "")}
+            editing={false}
+            locked
+            onChange={() => undefined}
+          />
+        </div>
+      </details>
+    </div>
+  ) : null;
 
   const eodPanel = (() => {
     if (eodConfirmation) {
@@ -332,124 +246,24 @@ export default function EmployeeReview() {
       );
     }
     if (eodReport) {
+      if (editorLocked) return submittedView;
       return (
-        <div className={styles.editorWrap}>
-          {eodNotice ? (
-            <div className={`${styles.notice} ${eodNotice.tone === "warn" ? styles.noticeWarn : eodNotice.tone === "err" ? styles.noticeErr : ""}`}>
-              {eodNotice.text}
-            </div>
-          ) : null}
-          {shiftBlocked && !editorLocked ? <div className={styles.notice}>{shiftOpenPrompt(EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX.webRebuild)}</div> : null}
-          <div className={styles.reportBar}>
-            <div className={styles.reportViews} role="group" aria-label="Report view">
-              <button type="button" aria-pressed={!editingReport} className={!editingReport ? styles.reportViewActive : undefined} onClick={() => setEditingReport(false)}>
-                <Eye size={13} /> Review
-              </button>
-              <button type="button" aria-pressed={editingReport} className={editingReport ? styles.reportViewActive : undefined} onClick={() => setEditingReport(true)} disabled={editorLocked}>
-                <Pencil size={13} /> Edit source
-              </button>
-            </div>
-            <span className={styles.reportSource}>
-              {draftSource === "refined" ? "Refined with Otto" : draftSource === "loom" ? "Rebuilt from your Loom" : draftSource === "deterministic" ? "Drafted from your record" : ""}
-            </span>
-          </div>
-          <EodReportDocument markdown={reportMarkdown} editing={editingReport} locked={editorLocked} onChange={setReportMarkdown} />
-
-          {!editorLocked ? (
-            <div className={styles.disclosure}>
-              <div className={styles.disclosureHead}>
-                <span className={styles.disclosureLabel}>Ask Otto to adjust this draft</span>
-                <button type="button" className={styles.disclosureToggle} onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
-                  {refineOpen ? "Close" : "Refine draft"}
-                </button>
-              </div>
-              {refineOpen ? (
-                <div className={`${styles.disclosureBody} ${styles.inlineRow}`}>
-                  <input
-                    value={refineInput}
-                    onChange={(event) => setRefineInput(event.target.value)}
-                    placeholder="e.g. Lead with the settlement outcome and drop the stale ticket."
-                    className={`${styles.input} ${styles.grow}`}
-                    aria-label="EOD refinement request"
-                  />
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    disabled={!refineInput.trim() || assistantDraft.isPending}
-                    onClick={() => assistantDraft.mutate({ mode: "refine", date: eodDay?.shiftDate ?? "", draft: stripBottleneckSection(reportMarkdown), bottleneck: extractBottleneckSection(reportMarkdown), feedback: refineInput.trim() })}
-                  >
-                    <Wand2 size={13} /> {assistantDraft.isPending ? "Refining…" : "Apply refinement"}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!editorLocked && day.data?.access?.featureFlags?.loom_updates === true ? (
-            <div className={styles.disclosure}>
-              <div className={styles.disclosureHead}>
-                <span className={styles.disclosureLabel}>Recorded a Loom for this day?</span>
-                <button type="button" className={styles.disclosureToggle} onClick={() => { setLoomOpen((value) => !value); setEodNotice(null); }}>
-                  {loomOpen ? "Close" : "Analyze a Loom"}
-                </button>
-              </div>
-              {loomOpen ? (
-                <div className={styles.disclosureBody}>
-                  <input
-                    value={loomUrl}
-                    onChange={(event) => setLoomUrl(event.target.value)}
-                    placeholder="https://www.loom.com/share/…"
-                    className={styles.input}
-                    aria-label="Loom share link"
-                  />
-                  <textarea
-                    value={loomTranscript}
-                    onChange={(event) => setLoomTranscript(event.target.value)}
-                    rows={3}
-                    maxLength={50000}
-                    placeholder="Paste the transcript when Loom has none (optional)."
-                    className={styles.textarea}
-                    aria-label="Loom transcript"
-                  />
-                  <div className={styles.inlineRow}>
-                    <p className={`${styles.recordNote} ${styles.grow}`}>Draft context only — it never files an update, and a recording from another day is refused.</p>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      disabled={!loomUrl.trim() || assistantDraft.isPending}
-                      onClick={() => assistantDraft.mutate({ mode: "loom", date: eodDay?.shiftDate ?? "", loom: { url: loomUrl.trim(), transcript: loomTranscript.trim() || undefined } })}
-                    >
-                      <Video size={13} /> {assistantDraft.isPending ? "Analyzing…" : "Rebuild draft"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className={styles.editorFoot}>
-            <p className={styles.editorNote}>
-              {status === "pending_review" ? "Submitted — waiting for review."
-                : status === "approved" ? "Approved."
-                  : status === "rejected" ? "Changes were requested. Update the report and resubmit it."
-                    : "Nothing is filed until you submit."}
-            </p>
-            <div className={styles.editorActions}>
-              {!editorLocked && !shiftBlocked ? (
-                <button type="button" className={styles.secondaryButton} disabled={redraftEod.isPending} onClick={() => redraftEod.mutate()}>
-                  <RotateCcw size={13} /> {redraftEod.isPending ? "Rebuilding…" : "Rebuild from record"}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={!reportMarkdown.trim() || editorLocked || submitEod.isPending}
-                onClick={() => submitEod.mutate()}
-              >
-                <Send size={14} /> {submitEod.isPending ? "Submitting…" : submitLabel}
-              </button>
-            </div>
-          </div>
+        <div className="grid gap-0">
+          {shiftBlocked ? <div className={`${styles.notice} mb-4`}>{shiftOpenPrompt(EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX.web)}</div> : null}
+          <EmployeeEodComposer
+            key={`${String(eodReport.id)}:${status}`}
+            reportId={String(eodReport.id)}
+            reportDate={String(eodReport.report_date ?? eodDay?.shiftDate ?? selectedDate)}
+            initial={structured ?? normalizeEodStructuredReport({})}
+            legacyMarkdown={String(eodReport.markdown ?? "")}
+            status={status === "rejected" ? "rejected" : "draft"}
+            onSubmitted={(submitted) => {
+              setRefusal(null);
+              void refresh();
+              if (historical) void selectedDay.refetch();
+              if (String(submitted?.report_date ?? "") === selectedDateRef.current) setEodConfirmation(true);
+            }}
+          />
         </div>
       );
     }
@@ -457,46 +271,29 @@ export default function EmployeeReview() {
       return (
         <div className={styles.record}>
           {shiftOpenPrompt(EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX.web)}
-          <p className={styles.recordNote}>Drafting builds the report from your recorded day. It does not submit anything, and activity context is never a productivity claim.</p>
+          <p className={styles.recordNote}>
+            Your report is prepared from the recorded day when the EOD window opens. Nothing is filed until you submit it.
+          </p>
+        </div>
+      );
+    }
+    if (prepareNote) {
+      return (
+        <div className={styles.empty}>
+          <strong className={styles.emptyTitle}>Your report could not be prepared</strong>
+          <p className={styles.emptyCopy}>{prepareNote}</p>
+          <button type="button" className={styles.secondaryButton} onClick={retryPrepare}>Try again</button>
         </div>
       );
     }
     return (
-      <div className={styles.record}>
-        <div className={styles.facts}>
-          <div className={styles.fact}>
-            <span className={styles.factValue}>{eodDay?.signals?.completedTasks ?? 0}</span>
-            <span className={styles.factLabel}>Completed</span>
-            <span className={styles.factSub}>task outcomes today</span>
-          </div>
-          <div className={styles.fact}>
-            <span className={styles.factValue}>{eodDay?.signals?.employeeUpdates ?? 0}</span>
-            <span className={styles.factLabel}>Updates</span>
-            <span className={styles.factSub}>recorded by you</span>
-          </div>
-          <div className={styles.fact}>
-            <span className={styles.factValue}>{eodDay?.signals?.outputEvidence ?? 0}</span>
-            <span className={styles.factLabel}>Evidence</span>
-            <span className={styles.factSub}>output records</span>
-          </div>
-        </div>
-        <div className={styles.recordAction}>
-          <button
-            type="button"
-            className={styles.primaryButton}
-            disabled={draftEod.isPending || assistantDraft.isPending || (historical && !selectedDay.data)}
-            onClick={() => draftEod.mutate()}
-          >
-            <FileCheck2 size={14} /> {draftEod.isPending || assistantDraft.isPending ? "Drafting…" : historical ? `Draft EOD for ${calendarDateLabel(selectedDate)}` : "Draft EOD"}
-          </button>
-          <p className={styles.recordNote}>Drafting builds the report from your recorded day. It does not submit anything, and activity context is never a productivity claim.</p>
-        </div>
+      <div className="grid gap-3" aria-busy="true" aria-label="Preparing your report">
+        <div className={styles.skeleton} style={{ width: "34%" }} />
+        <div className={styles.skeletonBlock} style={{ height: 132 }} />
+        <div className={styles.skeletonBlock} style={{ height: 280 }} />
       </div>
     );
   })();
-
-  const statusLabel = eodStatusLabel(status);
-  const statusClass = status === "approved" ? styles.statusApproved : status === "rejected" ? styles.statusRejected : status === "pending_review" ? styles.statusSubmitted : "";
 
   return (
     <div className={styles.page} id="employee-eod-panel">
@@ -531,11 +328,12 @@ export default function EmployeeReview() {
           <section className={`${styles.surface} ${styles.reveal}`} id="employee-eod-editor" style={{ "--delay": "80ms" } as CSSProperties} aria-labelledby="review-eod-title">
             <div className={styles.surfaceHead}>
               <div>
+                <span className={styles.eyebrow}>Review</span>
                 <h2 className={styles.surfaceTitle} id="review-eod-title">
-                  {historical ? `Report for ${calendarDateLabel(selectedDate)}` : "Today's report"}
+                  {historical ? `Report for ${calendarDateLabel(selectedDate)}` : "End of day"}
                 </h2>
                 <p className={styles.surfaceMeta}>
-                  {historical ? "The recorded day stays read-only outside the report." : "Drafted from your recorded day."}
+                  {historical ? "The recorded day stays read-only outside the report." : "Written by you, opened by Otto."}
                 </p>
               </div>
               <span className={`${styles.status} ${statusClass}`}>{statusLabel}</span>
@@ -576,43 +374,6 @@ export default function EmployeeReview() {
               </ul>
             </section>
           ) : null}
-
-          <section className={`${styles.section} ${styles.reveal}`} style={{ "--delay": "220ms" } as CSSProperties} aria-labelledby="review-evidence-title">
-            <header className={styles.sectionHead}>
-              <div>
-                <h2 id="review-evidence-title">Recorded evidence</h2>
-                <p className={styles.sectionMeta}>Activity context sampled by Worktivity. Evidence never proves productivity or completion.</p>
-              </div>
-              <span className={styles.sectionCount}>{evidence.length}</span>
-            </header>
-            {evidence.length ? (
-              <ul className={styles.rows}>
-                {evidence.map((item) => (
-                  <li key={item.id} className={styles.row}>
-                    <div className={styles.rowMain}>
-                      <span className={styles.rowKicker}>{item.source === "loom" ? "Loom recording" : item.source}</span>
-                      <span className={styles.rowTitle}>{item.title}</span>
-                      {item.summary ? <p className={styles.rowCopy}>{item.summary}</p> : null}
-                      {item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer" className={styles.rowCopy} style={{ textDecoration: "underline", textUnderlineOffset: 3 }}>Open recording</a> : null}
-                    </div>
-                    <div className={styles.rowActions}>
-                      {item.event?.correction_status === "disputed" ? <span className={styles.status} style={{ color: "var(--status-error)" }}>Disputed</span> : null}
-                      {item.evidence_event_id && item.event?.correction_status !== "disputed" ? (
-                        <button type="button" className={styles.dispute} disabled={disputeEvidence.isPending} onClick={() => disputeEvidence.mutate(item.evidence_event_id)}>
-                          Dispute this evidence
-                        </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className={styles.empty}>
-                <strong className={styles.emptyTitle}>No evidence recorded for this day</strong>
-                <p className={styles.emptyCopy}>Sampled activity shows up here once Worktivity has observations.</p>
-              </div>
-            )}
-          </section>
 
           <EmployeeEodEvidence
             date={selectedDate}
@@ -675,7 +436,7 @@ export default function EmployeeReview() {
           </section>
 
           {historical ? (
-            <p className={styles.historical}>Historical workspace: tasks and evidence are read-only, and the report editor drafts against {calendarDateLabel(selectedDate)}.</p>
+            <p className={styles.historical}>Historical workspace: tasks and evidence are read-only, and the report is prepared against {calendarDateLabel(selectedDate)}.</p>
           ) : null}
         </aside>
       </div>
