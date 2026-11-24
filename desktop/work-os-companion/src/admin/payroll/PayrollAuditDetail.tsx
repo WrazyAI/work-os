@@ -233,6 +233,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
               <Sources citations={finding.citations} />
             </div>
             <div className="payroll-attention-actions">
+              {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds?.length ?? 0} frame{(finding.frameSummaryIds?.length ?? 0) === 1 ? "" : "s"}</AdminButton> : null}
               {finding.requiredAction === "correct" ? <span className="admin-quiet">Correct the source, then re-analyze.</span>
                 : mutable && record.status === "needs_review" && finding.status === "needs_review" ? (
                   finding.requiredAction === "decide" ? <>
@@ -335,7 +336,7 @@ function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty, co
         <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames"}</span>
       </div>;
     })}</div> : <p className="admin-quiet">{empty}</p>;
-  return collapsed ? <details className="payroll-rule">{head}{body}</details> : <section className="payroll-rule">{head}{body}</section>;
+  return collapsed ? <details className="payroll-rule"><summary>{head}</summary>{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
 
 function PayrollFrameDialog({ record, finding, onClose }: { record: PayrollReview; finding: PayrollFinding; onClose: () => void }) {
