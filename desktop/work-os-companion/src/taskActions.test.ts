@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { COMPLETION_BLOCKED_LABEL, completionClosesTaskPanel, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, patchedTaskCapabilities, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { NotificationProvider } from "../NotificationFlyouts";
 import { seedAdminFixtures } from "./adminFixtures";
 import { adminKeys, isoDaysAgo, shortDate, todayIso, type AdminTaskRow } from "./data";

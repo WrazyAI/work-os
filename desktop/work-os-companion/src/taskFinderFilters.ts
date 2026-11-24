@@ -1,5 +1,5 @@
-import { validateTaskFinderFilters, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
-import { taskDisplayState } from "../../../src/lib/work-os-task-permissions";
+import { validateTaskFinderFilters, type TaskFinderFilters } from "@wrazy/work-os-shared/task-finder";
+import { taskDisplayState } from "@wrazy/work-os-shared/task-permissions";
 import { parentTasks, safeTaskText, taskDateAttribution, type TaskRow } from "./taskWorkspace";
 
 export function taskFinderDatePreset(preset: "today" | "this_week" | "last_week", currentDate: string) {

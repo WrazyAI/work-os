@@ -6,8 +6,8 @@ import { NotificationProvider } from "../NotificationFlyouts";
 import { seedAdminFixtures } from "./adminFixtures";
 import { adminKeys, todayIso } from "./data";
 import TasksPage from "./TasksPage";
-import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
-import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 
 const today = todayIso();
 const Tasks = TasksPage as ComponentType<{ initialTaskId?: string; onOpenEvidence?: (personId: string) => void }>;

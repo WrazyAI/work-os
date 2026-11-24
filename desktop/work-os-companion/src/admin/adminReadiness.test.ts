@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryObserver, environmentManager, focusManager } from "@tanstack/react-query";
-import { readinessAttention } from "../../../../src/modules/work-os/admin-readiness";
+import { readinessAttention } from "@wrazy/work-os-shared/admin-readiness";
 import * as data from "./data";
 import { workOsQueryClient } from "../queryClient";
 

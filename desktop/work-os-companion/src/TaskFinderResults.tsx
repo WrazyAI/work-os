@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { ArrowUpRight, Check, Search } from "lucide-react";
-import { taskDisplayState } from "../../../src/lib/work-os-task-permissions";
+import { taskDisplayState } from "@wrazy/work-os-shared/task-permissions";
 import { formatWorkOsFullDate } from "./dateFormat";
 import { TaskListSkeleton } from "./LoadingUi";
 import { safeTaskText, type TaskRow } from "./taskWorkspace";

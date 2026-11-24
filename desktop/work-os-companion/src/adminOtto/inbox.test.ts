@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { InboxPage } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { InboxPage } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { createAdminInboxController } from "./inbox";
 import { fixtureInboxPage } from "./fixtures";
 

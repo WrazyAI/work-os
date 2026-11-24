@@ -15,7 +15,7 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-import { eodSectionIconKind, type EodSectionIconKind } from "../../../src/modules/work-os/eod-document";
+import { eodSectionIconKind, type EodSectionIconKind } from "@wrazy/work-os-shared/eod-document";
 
 const ICONS: Record<EodSectionIconKind, LucideIcon> = {
   completed: CheckCircle2,

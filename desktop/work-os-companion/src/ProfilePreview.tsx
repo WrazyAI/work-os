@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { ProfileSettings } from "./ProfileSettings";
 import { PREVIEW_DATA } from "./OnboardingPreview";
 import type { OnboardingData } from "./types";
-import { workProfileCatalog } from "../../../src/modules/work-os/onboarding";
+import { workProfileCatalog } from "@wrazy/work-os-shared/onboarding";
 
 /** Dev-only fixture for the Profile settings modal: the real modal against the
  * shared preview person, with the reviewed catalog and mapped evidence

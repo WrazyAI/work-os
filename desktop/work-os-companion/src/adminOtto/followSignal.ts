@@ -1,4 +1,4 @@
-import type { FollowSettings, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { FollowSettings, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { listen } from "../tauriEvents";
 
 /** A cross-window signal only. It carries who changed and which opaque ids

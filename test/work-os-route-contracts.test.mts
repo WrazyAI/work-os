@@ -793,7 +793,7 @@ test("admin task routes only select columns that exist in the migration DDL", as
 });
 
 test("an unfinished day can be drafted in its final ten minutes, and a draft can be deleted", async () => {
-  const gate = await source("src/lib/work-os-shift-gate.ts");
+  const gate = await source("packages/work-os-shared/src/shift-gate.ts");
   assert.match(gate, /export function shiftStillOpen/, "one predicate decides whether the workday is still open");
   assert.match(gate, /EOD_EARLY_DRAFT_WINDOW_MS = 10 \* 60_000/, "the early window is ten minutes");
   assert.match(gate, /export function eodDraftBlocked/, "one predicate decides whether the EOD window is open");

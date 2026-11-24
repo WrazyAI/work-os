@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FollowSettings, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { FollowSettings, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { setDebugSession } from "../api";
 import { PersonalSettings, type PersonalSettingsProps } from "../PersonalSettings";
 import SettingsPage from "../admin/SettingsPage";

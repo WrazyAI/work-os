@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Cable, Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
-import { isEmployeeReviewedRecap } from "../../../src/modules/work-os/recap-review";
+import { isEmployeeReviewedRecap } from "@wrazy/work-os-shared/recap-review";
 import type { ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
 
 /** The Tasks stream and the prompt turn both send the full disclosure now;

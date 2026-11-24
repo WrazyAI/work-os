@@ -5,6 +5,8 @@
     "plugins": []
   },
   "include": [
+    "packages/work-os-shared/src/**/*.ts",
+    "packages/work-os-shared/src/**/*.tsx",
     "src/app/api/work-os/**/*.ts",
     "src/app/api/agent/**/*.ts",
     "src/app/api/mcp/**/*.ts",

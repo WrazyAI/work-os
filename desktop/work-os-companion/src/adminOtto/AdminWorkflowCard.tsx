@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AdminOttoPendingAction, AdminOttoWorkflowView, ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminOttoWorkflowView, ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { AdminActionBatch, AdminReadCard } from "./AdminToolCards";
 import { confirmAdminOttoAction, fetchAdminOttoAction, refreshAdminOttoWorkflow } from "./api";
 import type { AdminRecapPlayback } from "./AdminRecapView";

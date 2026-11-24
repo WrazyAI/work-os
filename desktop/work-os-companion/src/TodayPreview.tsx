@@ -9,7 +9,7 @@ import { shiftPulse } from "./shiftPulse";
 import type { InsightsData, InsightDay } from "./types";
 import type { TaskRow } from "./taskWorkspace";
 import SidebarNav from "./SidebarNav";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { formatWorkOsDate } from "./dateFormat";
 
 const initialTasks: TaskRow[] = [

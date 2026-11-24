@@ -12,7 +12,7 @@ import type {
   PersonRef,
   ReviewedRecap,
   SpeechLine,
-} from "../../../../src/modules/work-os/admin-otto/contracts";
+} from "@wrazy/work-os-shared/admin-otto/contracts";
 import { apiRequestRaw } from "../api";
 
 const ADMIN_OTTO = "/api/work-os/admin/otto";

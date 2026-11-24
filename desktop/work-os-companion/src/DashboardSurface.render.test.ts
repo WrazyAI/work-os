@@ -5,7 +5,7 @@ import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
 import { TaskActionMenuItems } from "./taskSurfaces";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import type { InsightsData } from "./types";
 
 const shift = { startsAt: "2026-08-26T15:00:00Z", endsAt: "2026-08-26T20:00:00Z", timezone: "UTC", breaks: [] };

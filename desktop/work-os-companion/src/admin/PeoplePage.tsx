@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrangementReview } from "../../../../src/modules/work-os/ArrangementReview";
+import { ArrangementReview } from "@wrazy/work-os-shared/ui/ArrangementReview";
 import { apiRequest } from "../api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";

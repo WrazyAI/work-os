@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DeliveryLease, InboxPage, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { DeliveryLease, InboxPage, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import {
   startAuthorizedAdminRecapDelivery,
   ADMIN_RECAP_POLL_MS,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { OttoScope, ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope, ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { AdminOttoSpeechChangedError, updateAdminOttoDelivery } from "./api";
 import { requestOttoAudio, requestOttoAudioStop, onOttoSpeechStop, type OttoAudioLease } from "./audioOwner";
 import { createAdminSpeechFetcher } from "./speech";

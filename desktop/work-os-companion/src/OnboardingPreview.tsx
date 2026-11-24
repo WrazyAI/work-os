@@ -1,6 +1,6 @@
 import Onboarding from "./Onboarding";
 import type { OnboardingData } from "./types";
-import { workProfileCatalog } from "../../../src/modules/work-os/onboarding";
+import { workProfileCatalog } from "@wrazy/work-os-shared/onboarding";
 
 export const PREVIEW_DATA: OnboardingData = {
   onboardingRequired: true,

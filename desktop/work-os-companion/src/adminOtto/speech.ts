@@ -1,4 +1,4 @@
-import type { OttoScope, SpeechLine } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope, SpeechLine } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { speakAdminOttoRecap } from "./api";
 
 export type AdminSpeechClip = {
