@@ -149,3 +149,4 @@
 @media(max-width:640px){.payroll-big{font-size:28px}.payroll-askbar{padding:0 12px;bottom:12px}.payroll-rule-row{grid-template-columns:1fr auto}.payroll-rule-row > :nth-child(2),.payroll-rule-row > :nth-child(3){display:none}.payroll-attention-row{flex-direction:column}.payroll-attention-actions{justify-content:flex-start}.payroll-daily-row{grid-template-columns:1fr auto}}
 
 details.payroll-rule > summary { cursor: pointer; list-style-position: outside; padding-block: 2px; }
+details.payroll-rule > summary .payroll-rule-head { margin: 0; }

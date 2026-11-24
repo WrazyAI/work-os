@@ -229,7 +229,7 @@ function ExcludedGroup({ title, detail, findings, review, empty, collapsed = fal
       <span>{hours(finding.minutes)}</span>
       <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames"}</span>
     </div>)}</div> : <p className="payroll-empty">{empty}</p>;
-  return collapsed ? <details className="payroll-rule">{head}{body}</details> : <section className="payroll-rule">{head}{body}</section>;
+  return collapsed ? <details className="payroll-rule"><summary>{head}</summary>{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
 
 function PayrollFrameButton({ review, finding }: { review: PayrollReview; finding: PayrollFinding }) {
