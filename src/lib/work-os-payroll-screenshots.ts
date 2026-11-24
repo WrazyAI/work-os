@@ -54,15 +54,17 @@ export async function previewPayrollScreenshot(access: WorkOsAccess, input: {
   const reason = input.reason.replace(/\s+/g, " ").trim();
   if (!reason) throw new WorkOsValidationError("A reason is required to view a payroll screenshot.");
   if (reason.length > 500) throw new WorkOsValidationError("A screenshot reason must be 500 characters or fewer.");
-  const { rows } = await getPool().query(`SELECT r.person_id, f.day_id, f.status
+  const { rows } = await getPool().query(`SELECT r.person_id, f.day_id, f.status, f.kind
     FROM work_payroll_reviews r JOIN work_payroll_findings f
       ON f.organization_id=r.organization_id AND f.review_id=r.id AND f.person_id=r.person_id
     WHERE r.organization_id=$1 AND r.id=$2 AND f.finding_key=$3 AND f.analysis_revision=r.analysis_revision`,
   [access.organizationId, input.reviewId, input.findingId]);
   const finding = rows[0];
   if (!finding) throw new PayrollScreenshotError(404, "not_found", "Payroll finding not found.");
-  if (!["needs_review", "needs_correction"].includes(String(finding.status))) {
-    throw new PayrollScreenshotError(403, "resolved_finding", "Only an unresolved or disputed payroll finding can open a screenshot.");
+  const reviewable = ["needs_review", "needs_correction"].includes(String(finding.status))
+    || (String(finding.status) === "auto_excluded" && String(finding.kind) === "inactivity");
+  if (!reviewable) {
+    throw new PayrollScreenshotError(403, "resolved_finding", "Only an unresolved or disputed payroll finding, or an excluded inactivity run, can open a screenshot.");
   }
   const personId = String(finding.person_id);
   const link = await getPool().query(`SELECT 1 FROM work_payroll_frame_findings

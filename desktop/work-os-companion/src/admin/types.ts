@@ -6,7 +6,7 @@
 
 import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
 
-export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
+export type AdminSection = "overview" | "people" | "tasks" | "review" | "payroll" | "insights" | "evidence" | "settings";
 
 /** Deep-link focus carried when navigating between administration sections:
  * a person, report, or task opens its drawer, and the evidence section can

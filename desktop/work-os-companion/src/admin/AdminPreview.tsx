@@ -14,6 +14,7 @@ import { AdminOttoSpeechChangedError } from "../adminOtto/api";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester } from "../adminOtto/audioOwner";
 import { useAdminOttoRecapAudio } from "../adminOtto/useAdminOttoRecapAudio";
 import { parseAdminRecordHref } from "../adminOtto/recordLinks";
+import { seedPayrollPreview } from "./payroll/preview";
 
 const PREVIEW_SESSION: SessionResponse = {
   organizationId: "org-preview",
@@ -23,7 +24,7 @@ const PREVIEW_SESSION: SessionResponse = {
   featureFlags: { employee_companion: true, desktop_companion: true },
 };
 
-const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
+const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "payroll", "insights", "evidence", "settings"];
 const SCOPE = { userId: PREVIEW_SESSION.userId, organizationId: PREVIEW_SESSION.organizationId, mode: "admin" as const };
 /** The fixture New chat is a real action: it answers locally, so rendered QA
  * never sends a request or needs a live admin account. */
@@ -242,6 +243,7 @@ export default function AdminPreview() {
   };
   useMemo(() => {
     seedAdminFixtures(queryClient, state);
+    seedPayrollPreview(queryClient, PREVIEW_SESSION, state === "empty");
   }, [queryClient, state]);
   useEffect(() => {
     if (!stubApi) return;
@@ -255,6 +257,13 @@ export default function AdminPreview() {
   }, [stubApi]);
   return (
     <>
+      {section === "payroll" ? (
+        <p role="note" style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 40, margin: 0, padding: "6px 10px",
+          border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper)",
+          color: "var(--muted)", font: "600 10.5px/1.3 Manrope, Inter, sans-serif",
+        }}>Synthetic payroll preview</p>
+      ) : null}
       <AdminWorkspace
         session={PREVIEW_SESSION}
         notifications={notifications}

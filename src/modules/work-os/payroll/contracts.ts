@@ -52,6 +52,8 @@ export type PayrollFinding = {
   span: Span | null; durationMs: number; minutes: number; sourceHash: string;
   blocksApproval: boolean; requiredAction: "decide" | "acknowledge" | "correct" | "none";
   reason: string; citations: PayrollCitation[];
+  /** Safe summary identifiers for frames captured on the finding's day. */
+  frameSummaryIds?: string[];
 };
 export type PayrollFrameContext = {
   scope: PayrollScope; summaryId: string; evidenceEventId: string; capturedAt: string;
@@ -132,6 +134,8 @@ export type PayrollReview = {
   firstExportAt: string | null; evidenceChangedSinceApproval: boolean; providerVerifiedAt: string | null;
   /** Safe count context for the admin header; never raw recap sources. */
   recapStats?: { employeeReviewed: number; autoApproved: number; pending: number };
+  /** Provider app usage frozen with this analysis. Context only, never hours. */
+  apps?: PayrollAppContext | null;
 };
 export type PayrollRosterPage = Page<{
   personId: string; displayName: string; active: boolean; mapped: boolean; reviewId: string | null;

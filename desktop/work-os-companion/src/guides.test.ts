@@ -31,8 +31,9 @@ describe("page guide registry", () => {
       section: entry[1] as AdminSection,
       title: entry[2]!,
     }));
-    expect(sections.length).toBe(ADMIN_GUIDE_VIEWS.length);
-    for (const { section, title } of sections) {
+    const guided = sections.filter((row): row is { section: Exclude<AdminSection, "payroll">; title: string } => row.section !== "payroll");
+    expect(guided.length).toBe(ADMIN_GUIDE_VIEWS.length);
+    for (const { section, title } of guided) {
       expect(PAGE_GUIDES[guideViewForAdminSection(section)].title).toBe(`How ${title} works`);
     }
   });

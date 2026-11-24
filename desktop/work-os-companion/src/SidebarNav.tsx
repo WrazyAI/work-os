@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type P
 import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
+  BriefcaseBusiness,
   Check,
   ChevronDown,
   ChevronRight,
@@ -74,6 +75,7 @@ const ADMIN_DESTINATIONS: AdminDestination[] = [
   { id: "people", label: "People", icon: Users },
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "review", label: "EOD Review", shortLabel: "EOD", icon: MessageSquareText },
+  { id: "payroll", label: "Payroll", icon: BriefcaseBusiness },
   { id: "insights", label: "Insights", icon: Gauge },
   { id: "evidence", label: "Evidence", icon: Images },
   { id: "settings", label: "Settings", icon: Settings },
@@ -82,7 +84,7 @@ const ADMIN_DESTINATIONS: AdminDestination[] = [
 const PRIMARY_DESTINATION_IDS = new Set<SidebarView>(["day", "tasks", "review"]);
 const CONTEXT_DESTINATION_IDS = new Set<SidebarView>(["insights"]);
 const ADMIN_PRIMARY_IDS = new Set<AdminSection>(["overview", "people", "tasks"]);
-const ADMIN_CONTEXT_IDS = new Set<AdminSection>(["review", "insights", "evidence"]);
+const ADMIN_CONTEXT_IDS = new Set<AdminSection>(["review", "payroll", "insights", "evidence"]);
 
 const menuWidth = 228;
 

@@ -135,6 +135,17 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
     ORDER BY d.local_date,f.finding_key LIMIT $${values.length}`, values);
   const page = rows.slice(0, limit) as Row[];
   const last = page.at(-1);
+  const frames = await getPool().query(`SELECT day_id, screenshot_summary_id
+    FROM work_payroll_frame_findings
+    WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
+    ORDER BY captured_at LIMIT 500`, [access.organizationId, reviewId, review.analysis_revision]);
+  const framesByDay = new Map<string, string[]>();
+  for (const frame of frames.rows as Row[]) {
+    const day = String(frame.day_id);
+    const list = framesByDay.get(day) ?? [];
+    if (list.length < 3) list.push(String(frame.screenshot_summary_id));
+    framesByDay.set(day, list);
+  }
   const total = await getPool().query(`SELECT count(*)::int AS n FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${filters.status ? "AND status=$4" : ""}`,
     filters.status ? [access.organizationId, reviewId, review.analysis_revision, filters.status] : [access.organizationId, reviewId, review.analysis_revision]);
   return {
@@ -145,6 +156,7 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
       durationMs: Number(row.duration_ms), minutes: Number(row.minutes), sourceHash: String(row.source_hash),
       blocksApproval: row.blocks_approval === true, requiredAction: row.required_action as PayrollFinding["requiredAction"],
       reason: String(row.reason), citations: Array.isArray(row.citations) ? row.citations as PayrollFinding["citations"] : [],
+      frameSummaryIds: row.kind === "break" ? [] : framesByDay.get(String(row.day_id)) ?? [],
     })),
     total: Number(total.rows[0]?.n ?? 0),
     nextCursor: rows.length > limit && last ? encodeCursor({ date: last.local_date, key: last.finding_key }) : null,

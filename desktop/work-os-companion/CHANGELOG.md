@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Administrators can review payroll records, run audits, and record findings from the desktop app.
 - Notifications now float in a stack at the top center and spread out when you hover over them; the Evidence page no longer repeats its description.
 - Send an individual password reset email to any active member right from Settings → Members.
 - Admin Settings no longer shows a “Failed to fetch” error, and the retired Field mappings page is gone.

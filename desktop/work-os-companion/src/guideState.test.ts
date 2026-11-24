@@ -57,8 +57,8 @@ describe("page guide state", () => {
     expect(isGuideView("evidence")).toBe(false);
   });
 
-  it("gives every administration section its own guide flag", () => {
-    const sections: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
+  it("gives every guided administration section its own guide flag", () => {
+    const sections: Exclude<AdminSection, "payroll">[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
     const views = sections.map((section) => guideViewForAdminSection(section));
     expect(new Set(views).size).toBe(sections.length);
     // An administration guide key can never collide with an employee page's,
@@ -70,6 +70,7 @@ describe("page guide state", () => {
     }
     expect(adminSectionForGuideView("day")).toBe(null);
     expect(adminSectionForGuideView("settings")).toBe(null);
+    expect(guideViewForAdminSection("payroll")).toBe(null);
   });
 
   it("auto-opens only an unseen guide while automatic guides are on", () => {

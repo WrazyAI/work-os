@@ -10,6 +10,7 @@ import OverviewPage from "./OverviewPage";
 import PeoplePage from "./PeoplePage";
 import TasksPage from "./TasksPage";
 import ReviewPage from "./ReviewPage";
+import PayrollPage from "./payroll/PayrollPage";
 import InsightsPage from "./InsightsPage";
 import EvidencePage from "./EvidencePage";
 import SettingsPage from "./SettingsPage";
@@ -28,6 +29,7 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose?: str
   people: { title: "People", purpose: "Roster, schedules, and each teammate's recent record." },
   tasks: { title: "Tasks", purpose: "The workspace task record and what is still open." },
   review: { title: "EOD Review", purpose: "Submitted end-of-day reports and the decision they need." },
+  payroll: { title: "Payroll", purpose: "Review recorded evidence and approve payable hours." },
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
   evidence: { title: "Evidence" },
   settings: { title: "Settings", purpose: "Your own settings, then the workspace's configuration, members, and provider connections." },
@@ -169,6 +171,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
               onOpenEvidence={(personId) => navigate("evidence", { personId })}
               onOpenRecaps={onOpenRecaps}
             />
+          : section === "payroll"
+            ? <PayrollPage key={`${session.organizationId}:${session.userId}`} organizationId={session.organizationId} userId={session.userId} />
           : section === "insights"
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
@@ -204,7 +208,7 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
         displayName={profile?.name}
         avatarUrl={profile?.avatarUrl}
       /> : <SidebarNav
-        mode="admin"
+        mode={session.role === "admin" ? "admin" : "employee"}
         activeView="day"
         onNavigate={() => undefined}
         adminSection={section}

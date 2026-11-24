@@ -35,6 +35,7 @@ export const ADMIN_SECTION_REFRESH_PREFIXES: Record<AdminRefreshSection, readonl
   insights: [
     ["work-os", "admin", "insights"], // InsightsPage: insights(range, personId)
   ],
+  payroll: [["work-os", "admin", "payroll"]],
   evidence: [
     ["work-os", "admin", "people"], // EvidencePage: people() person filter
     ["work-os", "admin", "evidence"], // EvidencePage: evidence(filters)
