@@ -166,6 +166,20 @@ export interface AdminInsightPersonRow {
   lastActivityAt: string | null;
 }
 
+export interface AdminInsightPersonDay {
+  date: string;
+  outcomesCompleted: number;
+  updates: number;
+  substantiveUpdates: number;
+  eodSubmitted: number;
+  observedMinutes: number;
+}
+
+export interface AdminInsightPersonSeries {
+  personId: string;
+  days: AdminInsightPersonDay[];
+}
+
 export interface AdminInsightTotals {
   outcomesCompleted: number;
   outcomesLate: number;
@@ -199,6 +213,7 @@ export interface AdminInsights {
   people: AdminInsightPersonRow[];
   series: Array<{ date: string; outcomesCompleted: number; updates: number; eodSubmitted: number; trackedMinutes: number }>;
   timeSeries: AdminTimeSeriesPoint[];
+  peopleSeries: AdminInsightPersonSeries[];
   updateKinds: Array<{ kind: string; count: number }>;
   topApps: Array<{ name: string; minutes: number }>;
   overdueOpen: number | null;

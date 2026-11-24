@@ -188,6 +188,17 @@ function insightsFixture(state: PreviewState) {
     people,
     series,
     timeSeries: empty ? [] : timeSeriesForDates(series.map((point) => point.date)),
+    peopleSeries: empty ? [] : people.map((person, personIndex) => ({
+      personId: person.personId,
+      days: series.map((point, dayIndex) => ({
+        date: point.date,
+        outcomesCompleted: (dayIndex * 2 + personIndex) % 4 === 0 ? 1 : 0,
+        updates: (dayIndex + personIndex * 2) % 3 === 0 ? 1 : 0,
+        substantiveUpdates: (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
+        eodSubmitted: (dayIndex + personIndex) % 4 === 0 ? 1 : 0,
+        observedMinutes: Math.round(person.trackedMinutes / 7 * (0.6 + ((dayIndex % 3) * 0.2))),
+      })),
+    })),
     updateKinds: empty ? [] : [
       { kind: "material_progress", count: 18 },
       { kind: "blocked", count: 4 },

@@ -470,6 +470,17 @@ export function normalizeAdminInsights(raw: unknown): AdminInsights {
       trackedMinutes: asNumber(point.trackedMinutes),
     })),
     timeSeries: normalizeTimeSeries(source.timeSeries),
+    peopleSeries: asRows(source.peopleSeries).map((series) => ({
+      personId: asText(series.personId),
+      days: asRows(series.days).map((day) => ({
+        date: asText(day.date),
+        outcomesCompleted: asNumber(day.outcomesCompleted),
+        updates: asNumber(day.updates),
+        substantiveUpdates: asNumber(day.substantiveUpdates),
+        eodSubmitted: asNumber(day.eodSubmitted),
+        observedMinutes: asNumber(day.observedMinutes),
+      })),
+    })),
     updateKinds: asRows(source.updateKinds).map((entry) => ({ kind: asText(entry.kind, "unclassified"), count: asNumber(entry.count) })),
     topApps: asRows(source.topApps).map((entry) => ({ name: asText(entry.name, "Unknown"), minutes: asNumber(entry.minutes) })),
     overdueOpen: source.overdueOpen == null ? null : asNumber(source.overdueOpen),

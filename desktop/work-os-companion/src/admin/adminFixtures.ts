@@ -88,11 +88,11 @@ const PREVIEW_ATTACHMENTS = [
 
 function timeSeries(): AdminTimeSeriesPoint[] {
   return DATES.map((date, index) => {
-    const people = PEOPLE.slice(0, 5).map((person, personIndex) => ({
+    const people = PEOPLE.map((person, personIndex) => ({
       personId: person.id,
       name: person.name,
       minutes: ((index * 37 + personIndex * 61) % 260) + (personIndex % 2 === 0 ? 60 : 0),
-    })).filter((person) => (index + person.personId.length) % 4 !== 0);
+    })).filter((person, personIndex) => (index + personIndex) % 4 !== 0);
     return { date, totalMinutes: people.reduce((sum, person) => sum + person.minutes, 0), people };
   });
 }
@@ -550,6 +550,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   const insightsFor = (range: "7d" | "30d" | "90d"): AdminInsights => {
     const totals = { outcomesCompleted: 34, outcomesLate: 3, updates: 61, substantiveUpdates: 44, eodSubmitted: 21, eodApproved: 17, eodRejected: 2, planned: 48, plannedCompleted: 41, trackedMinutes: 9120, evidenceOutput: 38, evidenceActivity: 214, sessionsNeedingCorrection: 1, activePeople: 7 };
     const previous = { ...totals, outcomesCompleted: 28, updates: 52, substantiveUpdates: 36, eodSubmitted: 18, trackedMinutes: 8340, outcomesLate: 4, plannedCompleted: 33, planned: 46, sessionsNeedingCorrection: 2 };
+    const observedMinutes = new Map(timeSeries().flatMap((point) => point.people.map((person) => [`${person.personId}:${point.date}`, person.minutes] as const)));
     return {
       range,
       from: DATES[0],
@@ -578,6 +579,17 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       })),
       series: DATES.map((date, index) => ({ date, outcomesCompleted: (index * 2) % 5, updates: 3 + (index % 6), eodSubmitted: index % 4 === 0 ? 1 : 0, trackedMinutes: 500 + (index * 90) % 700 })),
       timeSeries: timeSeries(),
+      peopleSeries: PEOPLE.map((person, personIndex) => ({
+        personId: person.id,
+        days: DATES.map((date, dayIndex) => ({
+          date,
+          outcomesCompleted: (dayIndex * 3 + personIndex) % 5 === 0 ? 1 : 0,
+          updates: (dayIndex + personIndex * 2) % 3 === 0 ? 1 : 0,
+          substantiveUpdates: (dayIndex + personIndex) % 4 === 0 ? 1 : 0,
+          eodSubmitted: dayIndex % 4 === personIndex % 4 ? 1 : 0,
+          observedMinutes: observedMinutes.get(`${person.id}:${date}`) ?? 0,
+        })),
+      })),
       updateKinds: [
         { kind: "progress", count: 28 },
         { kind: "completion_claim", count: 15 },
@@ -841,6 +853,7 @@ function emptyInsights(range: AdminInsightRange, today: string): AdminInsights {
     people: [],
     series: DATES.map((date) => ({ date, outcomesCompleted: 0, updates: 0, eodSubmitted: 0, trackedMinutes: 0 })),
     timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
+    peopleSeries: [],
     updateKinds: [],
     topApps: [],
     overdueOpen: 0,

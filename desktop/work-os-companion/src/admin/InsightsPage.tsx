@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertTriangle, Gauge, RefreshCw, Sparkles, Users } from "lucide-react";
 import { KpiCard, PlanReliability, type ReliabilityRow } from "../InsightCharts";
@@ -9,6 +9,12 @@ import { adminKeys, ADMIN_STALE_MS, fetchAdminInsights, formatMinutes, normalize
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
 import type { AdminInsights, AdminInsightPersonRow, AdminInsightRange } from "./types";
 
+const InsightsPrototype = import.meta.env.DEV ? lazy(() => import("./InsightsPrototype")) : null;
+
+function prototypeRequested() {
+  return import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("prototype");
+}
+
 function deltaStat(key: string, label: string, current: number, previous: number, unit: DeltaStat["unit"], goodDirection: boolean): DeltaStat {
   return { key, label, current, previous, delta: current - previous, unit, goodDirection };
 }
@@ -17,6 +23,17 @@ function deltaStat(key: string, label: string, current: number, previous: number
  * period comparisons, the range's shape, and the per-person record behind it.
  * Observed activity stays context; nothing here is a productivity score. */
 export default function InsightsPage({ initialPersonId }: { initialPersonId?: string }) {
+  if (InsightsPrototype && prototypeRequested()) {
+    return (
+      <Suspense fallback={<div className="admin-grid"><Skeleton className="h-28" /><Skeleton className="h-72" /></div>}>
+        <InsightsPrototype initialPersonId={initialPersonId} />
+      </Suspense>
+    );
+  }
+  return <InsightsPageSurface initialPersonId={initialPersonId} />;
+}
+
+function InsightsPageSurface({ initialPersonId }: { initialPersonId?: string }) {
   const [range, setRange] = useState<AdminInsightRange>("7d");
   const [personId, setPersonId] = useState(initialPersonId ?? "");
   const [selectedRow, setSelectedRow] = useState<AdminInsightPersonRow | null>(null);
