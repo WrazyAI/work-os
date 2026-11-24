@@ -233,7 +233,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
               <Sources citations={finding.citations} />
             </div>
             <div className="payroll-attention-actions">
-              {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds.length} frame{finding.frameSummaryIds.length === 1 ? "" : "s"}</AdminButton> : null}
+              {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds?.length ?? 0} frame{(finding.frameSummaryIds?.length ?? 0) === 1 ? "" : "s"}</AdminButton> : null}
               {finding.requiredAction === "correct" ? <span className="admin-quiet">Correct the source, then re-analyze.</span>
                 : mutable && record.status === "needs_review" && finding.status === "needs_review" ? (
                   finding.requiredAction === "decide" ? <>
