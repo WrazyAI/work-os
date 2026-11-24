@@ -501,6 +501,7 @@ test("admin routes honor the selected organization", async () => {
   for (const path of [
     "src/app/api/work-os/admin/insights/route.ts",
     "src/app/api/work-os/organization/route.ts",
+    "src/app/api/work-os/organization/members/[membershipId]/password-reset/route.ts",
     "src/app/api/work-os/people/route.ts",
     "src/app/api/work-os/evidence/route.ts",
   ]) {

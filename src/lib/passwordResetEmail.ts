@@ -3,6 +3,7 @@ interface PasswordResetEmailParams {
   displayName: string;
   email: string;
   resetUrl: string;
+  initiatedByAdmin?: boolean;
 }
 
 function escapeHtml(input: string): string {
@@ -25,9 +26,16 @@ function getResendConfig() {
   };
 }
 
-/** The reset email a user receives after "Forgot password?". The link is the
- * Better Auth verification URL, so it must be delivered exactly as given. */
-export async function sendPasswordResetEmail({ appOrigin, displayName, email, resetUrl }: PasswordResetEmailParams) {
+/** The reset email a user receives after "Forgot password?" or an admin reset.
+ * The link is the Better Auth verification URL, so it must be delivered
+ * exactly as given. */
+export async function sendPasswordResetEmail({
+  appOrigin,
+  displayName,
+  email,
+  resetUrl,
+  initiatedByAdmin = false,
+}: PasswordResetEmailParams) {
   const { apiKey, from } = getResendConfig();
   const origin = appOrigin.replace(/\/$/, "");
   const logoUrl = `${origin}/icon.svg`;
@@ -35,14 +43,24 @@ export async function sendPasswordResetEmail({ appOrigin, displayName, email, re
   const safeResetUrl = escapeHtml(resetUrl);
 
   const subject = "Reset your WrazyOS password";
+  const leadText = initiatedByAdmin
+    ? "An administrator for your WrazyOS workspace sent you a password reset link."
+    : "We received a request to reset your WrazyOS password.";
+  const leadHtml = initiatedByAdmin
+    ? `Hi ${safeName}, an administrator for your WrazyOS workspace sent you a password reset link. Choose a new password with the button below. The link expires in one hour.`
+    : `Hi ${safeName}, we received a request to reset your WrazyOS password. Choose a new one with the button below. The link expires in one hour.`;
+  const footerText = initiatedByAdmin
+    ? "If you weren't expecting this, check with your workspace administrator — your password stays unchanged unless you use the link."
+    : "If you didn't request this, you can ignore this email — your password stays unchanged.";
+
   const text = [
     `Hi ${displayName || email},`,
     "",
-    "We received a request to reset your WrazyOS password.",
+    leadText,
     "Use this link to choose a new one (it expires in one hour):",
     resetUrl,
     "",
-    "If you didn't request this, you can ignore this email — your password stays unchanged.",
+    footerText,
   ].join("\n");
 
   const html = `<!doctype html>
@@ -69,8 +87,7 @@ export async function sendPasswordResetEmail({ appOrigin, displayName, email, re
             </tr>
             <tr>
               <td style="font-size:14px;line-height:22px;color:#9a9da6;padding-bottom:24px;">
-                Hi ${safeName}, we received a request to reset your WrazyOS password.
-                Choose a new one with the button below. The link expires in one hour.
+                ${leadHtml}
               </td>
             </tr>
             <tr>
@@ -88,7 +105,7 @@ export async function sendPasswordResetEmail({ appOrigin, displayName, email, re
             </tr>
             <tr>
               <td style="font-size:12px;line-height:20px;color:#6d7078;">
-                If you didn't request this, you can ignore this email — your password stays unchanged.
+                ${escapeHtml(footerText)}
               </td>
             </tr>
           </table>
