@@ -119,7 +119,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   const topApps = appItems.slice(0, 8);
   const otherApps = appItems.slice(8);
   const otherMs = otherApps.reduce((sum, app) => sum + app.durationMs, 0);
-  const appMax = Math.max(1, ...appItems.map((app) => app.durationMs));
+  const appMax = Math.max(1, otherMs, ...appItems.map((app) => app.durationMs));
   const dayItems = days.data?.items ?? [];
   const dayMax = Math.max(1, ...dayItems.map((day) => day.minutes.recommended));
   const framed = inactivity.filter((finding) => (finding.frameSummaryIds?.length ?? 0) > 0).slice(0, 5);

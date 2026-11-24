@@ -49,7 +49,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
   const topApps = apps.slice(0, 8);
   const otherApps = apps.slice(8);
   const otherMs = otherApps.reduce((sum, app) => sum + app.durationMs, 0);
-  const appMax = Math.max(1, ...apps.map((app) => app.durationMs));
+  const appMax = Math.max(1, otherMs, ...apps.map((app) => app.durationMs));
   const dayMax = Math.max(1, ...days.map((day) => day.minutes.recommended));
   const time = (ms: number) => {
     if (!Number.isFinite(ms)) return "Unavailable";
