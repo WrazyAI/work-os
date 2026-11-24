@@ -197,6 +197,8 @@ function insightsFixture(state: PreviewState) {
         substantiveUpdates: (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
         eodSubmitted: (dayIndex + personIndex) % 4 === 0 ? 1 : 0,
         observedMinutes: Math.round(person.trackedMinutes / 7 * (0.6 + ((dayIndex % 3) * 0.2))),
+        evidenceOutput: (dayIndex + personIndex) % 4 === 0 ? 2 : (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
+        evidenceActivity: (dayIndex * 2 + personIndex) % 4 === 0 ? 3 : 1,
       })),
     })),
     updateKinds: empty ? [] : [

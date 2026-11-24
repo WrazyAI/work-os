@@ -479,6 +479,8 @@ export function normalizeAdminInsights(raw: unknown): AdminInsights {
         substantiveUpdates: asNumber(day.substantiveUpdates),
         eodSubmitted: asNumber(day.eodSubmitted),
         observedMinutes: asNumber(day.observedMinutes),
+        evidenceOutput: asNumber(day.evidenceOutput),
+        evidenceActivity: asNumber(day.evidenceActivity),
       })),
     })),
     updateKinds: asRows(source.updateKinds).map((entry) => ({ kind: asText(entry.kind, "unclassified"), count: asNumber(entry.count) })),

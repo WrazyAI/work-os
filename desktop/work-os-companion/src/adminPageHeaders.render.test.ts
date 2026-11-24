@@ -136,15 +136,15 @@ describe("administration page headers", () => {
     expect(controls.indexOf('aria-label="Search people"')).toBeLessThan(controls.indexOf('aria-label="Filter by attendance"'));
   });
 
-  it("keeps the insights brief's range, person, and overdue chip in one controls row", () => {
+  it("gives the insights control room one toolbar for range and person and one matrix measure strip", () => {
     const markup = renderPage(createElement(InsightsPage, {}));
-    const card = cardOf(markup, "Brief");
-    expectCleanTitleRow(card, "Brief");
-    const controls = controlsBand(card);
-    expect(controls).toContain('aria-label="Insight range"');
-    expect(controls).toContain('aria-label="Filter insights by person"');
-    expect(controls).toContain("open overdue");
-    expect(controls.split('class="admin-controls"').slice(1)).toHaveLength(1);
+    expect(markup).toContain("Control room");
+    expect(markup).toContain("People × days");
+    expect(markup).toContain('aria-label="Insight range"');
+    expect(markup).toContain('aria-label="Filter insights by person"');
+    expect(markup).toContain('aria-label="Matrix measure"');
+    for (const label of ["Session time", "Outcomes", "Updates", "Evidence"]) expect(markup).toContain(label);
+    expect(markup).toContain("Session time runs clock-in to clock-out");
   });
 
   it("keeps the hybrid view switch at the top, above the record filters", () => {
@@ -167,7 +167,7 @@ describe("administration page headers", () => {
   });
 
   it("keeps the card pages' controls out of the title action slot and the evidence controls in their own bar", () => {
-    for (const page of ["ReviewPage", "TasksPage", "PeoplePage", "InsightsPage"]) {
+    for (const page of ["ReviewPage", "TasksPage", "PeoplePage"]) {
       const source = readText(resolve(root, `src/admin/${page}.tsx`));
       expect(source, page).toContain("controls={");
       expect(source, page).toMatch(/<AdminControls[\s>]/);

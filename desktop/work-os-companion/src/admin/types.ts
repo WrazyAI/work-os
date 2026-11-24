@@ -173,6 +173,8 @@ export interface AdminInsightPersonDay {
   substantiveUpdates: number;
   eodSubmitted: number;
   observedMinutes: number;
+  evidenceOutput: number;
+  evidenceActivity: number;
 }
 
 export interface AdminInsightPersonSeries {

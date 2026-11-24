@@ -550,10 +550,12 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   const insightsFor = (range: "7d" | "30d" | "90d"): AdminInsights => {
     const totals = { outcomesCompleted: 34, outcomesLate: 3, updates: 61, substantiveUpdates: 44, eodSubmitted: 21, eodApproved: 17, eodRejected: 2, planned: 48, plannedCompleted: 41, trackedMinutes: 9120, evidenceOutput: 38, evidenceActivity: 214, sessionsNeedingCorrection: 1, activePeople: 7 };
     const previous = { ...totals, outcomesCompleted: 28, updates: 52, substantiveUpdates: 36, eodSubmitted: 18, trackedMinutes: 8340, outcomesLate: 4, plannedCompleted: 33, planned: 46, sessionsNeedingCorrection: 2 };
-    const observedMinutes = new Map(timeSeries().flatMap((point) => point.people.map((person) => [`${person.personId}:${point.date}`, person.minutes] as const)));
+    const windowDates = range === "7d" ? DATES.slice(-5) : DATES;
+    const windowTimeSeries = timeSeries().filter((point) => windowDates.includes(point.date));
+    const observedMinutes = new Map(windowTimeSeries.flatMap((point) => point.people.map((person) => [`${person.personId}:${point.date}`, person.minutes] as const)));
     return {
       range,
-      from: DATES[0],
+      from: windowDates[0],
       through: today,
       totals,
       previous,
@@ -577,17 +579,19 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
         sessionsNeedingCorrection: index === 5 ? 1 : 0,
         lastActivityAt: `${today}T09:${String(40 - index).padStart(2, "0")}:00.000Z`,
       })),
-      series: DATES.map((date, index) => ({ date, outcomesCompleted: (index * 2) % 5, updates: 3 + (index % 6), eodSubmitted: index % 4 === 0 ? 1 : 0, trackedMinutes: 500 + (index * 90) % 700 })),
-      timeSeries: timeSeries(),
+      series: windowDates.map((date, index) => ({ date, outcomesCompleted: (index * 2) % 5, updates: 3 + (index % 6), eodSubmitted: index % 4 === 0 ? 1 : 0, trackedMinutes: 500 + (index * 90) % 700 })),
+      timeSeries: windowTimeSeries,
       peopleSeries: PEOPLE.map((person, personIndex) => ({
         personId: person.id,
-        days: DATES.map((date, dayIndex) => ({
+        days: windowDates.map((date, dayIndex) => ({
           date,
           outcomesCompleted: (dayIndex * 3 + personIndex) % 5 === 0 ? 1 : 0,
           updates: (dayIndex + personIndex * 2) % 3 === 0 ? 1 : 0,
           substantiveUpdates: (dayIndex + personIndex) % 4 === 0 ? 1 : 0,
           eodSubmitted: dayIndex % 4 === personIndex % 4 ? 1 : 0,
           observedMinutes: observedMinutes.get(`${person.id}:${date}`) ?? 0,
+          evidenceOutput: (dayIndex + personIndex) % 5 === 0 ? 2 : (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
+          evidenceActivity: (dayIndex * 2 + personIndex) % 4 === 0 ? 3 : 1,
         })),
       })),
       updateKinds: [
@@ -606,7 +610,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       ],
       overdueOpen: 5,
       notes: {
-        summary: `The workspace recorded 34 completed outcomes and 61 updates in ${DATES[0]} to ${today}. Activity context is descriptive and never a score.`,
+        summary: `The workspace recorded 34 completed outcomes and 61 updates in ${windowDates[0]} to ${today}. Activity context is descriptive and never a score.`,
         wins: [
           "34 task outcomes completed in this range, up from 28 in the equal earlier period.",
           "44 substantive progress updates recorded.",
@@ -623,9 +627,84 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       freshness: { generatedAt: `${today}T09:42:00.000Z` },
     };
   };
-  queryClient.setQueryData(adminKeys.insights("7d", ""), insightsFor("7d"));
-  queryClient.setQueryData(adminKeys.insights("30d", ""), insightsFor("30d"));
-  queryClient.setQueryData(adminKeys.insights("90d", ""), insightsFor("90d"));
+  const scopedInsights = (base: AdminInsights, person: typeof PEOPLE[number]): AdminInsights => {
+    const row = base.people.find((entry) => entry.personId === person.id);
+    if (!row) return base;
+    const personSeries = base.peopleSeries.find((entry) => entry.personId === person.id) ?? { personId: person.id, days: [] };
+    const dayByDate = new Map(personSeries.days.map((day) => [day.date, day]));
+    const series = base.series.map((point) => {
+      const day = dayByDate.get(point.date);
+      return {
+        date: point.date,
+        outcomesCompleted: day?.outcomesCompleted ?? 0,
+        updates: day?.updates ?? 0,
+        eodSubmitted: day?.eodSubmitted ?? 0,
+        trackedMinutes: 0,
+      };
+    });
+    const timeSeries = base.timeSeries.map((point) => {
+      const personPoint = point.people.find((entry) => entry.personId === person.id);
+      return { date: point.date, totalMinutes: personPoint?.minutes ?? 0, people: personPoint ? [personPoint] : [] };
+    });
+    const totals = {
+      ...base.totals,
+      outcomesCompleted: row.outcomesCompleted,
+      outcomesLate: row.outcomesLate,
+      updates: row.updates,
+      substantiveUpdates: row.substantiveUpdates,
+      eodSubmitted: row.eodSubmitted,
+      eodApproved: row.eodApproved,
+      eodRejected: row.eodRejected,
+      planned: row.planned,
+      plannedCompleted: row.plannedCompleted,
+      trackedMinutes: row.trackedMinutes,
+      evidenceOutput: row.evidenceOutput,
+      evidenceActivity: row.evidenceActivity,
+      sessionsNeedingCorrection: row.sessionsNeedingCorrection,
+      activePeople: row.outcomesCompleted > 0 || row.updates > 0 || row.trackedMinutes > 0 || row.eodSubmitted > 0 ? 1 : 0,
+    };
+    const previous = {
+      ...base.previous,
+      outcomesCompleted: Math.max(0, row.outcomesCompleted - 1),
+      updates: Math.max(0, row.updates - 2),
+      eodSubmitted: Math.max(0, row.eodSubmitted - 1),
+      trackedMinutes: Math.max(0, row.trackedMinutes - 60),
+    };
+    const commitment = row.planned ? Math.round((row.plannedCompleted / row.planned) * 100) : null;
+    const wins = [
+      row.outcomesCompleted ? `${row.outcomesCompleted} task outcomes completed in this range.` : null,
+      row.updates ? `${row.updates} progress updates recorded.` : null,
+      commitment !== null ? `${commitment}% of planned commitments were completed (${row.plannedCompleted} of ${row.planned}).` : null,
+      row.eodSubmitted ? `${row.eodSubmitted} EOD reports submitted for review.` : null,
+    ].filter((line): line is string => Boolean(line));
+    const attention = [
+      row.outcomesLate ? `${row.outcomesLate} completed outcomes landed after the recorded due date.` : null,
+      row.sessionsNeedingCorrection ? `${row.sessionsNeedingCorrection} sessions still need a correction.` : null,
+      row.eodSubmitted === 0 ? "No EOD reports were submitted in this range." : null,
+    ].filter((line): line is string => Boolean(line));
+    return {
+      ...base,
+      totals,
+      previous,
+      series,
+      timeSeries,
+      peopleSeries: [personSeries],
+      overdueOpen: null,
+      notes: {
+        summary: `${person.name} recorded ${row.outcomesCompleted} completed outcomes and ${row.updates} updates in ${base.from} to ${base.through}. Activity context is descriptive and never a score.`,
+        wins,
+        attention,
+        nextFocus: ["Review the person's record and confirm the week's outcomes."],
+      },
+    };
+  };
+  for (const range of ["7d", "30d", "90d"] as const) {
+    const base = insightsFor(range);
+    queryClient.setQueryData(adminKeys.insights(range, ""), base);
+    for (const person of PEOPLE) {
+      queryClient.setQueryData(adminKeys.insights(range, person.id), scopedInsights(base, person));
+    }
+  }
   for (const status of ["pending_review", "draft", "rejected", "approved", "all"]) {
     queryClient.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: reportFrom, to: today }), reportsResponse(status === "all" ? "" : status));
   }

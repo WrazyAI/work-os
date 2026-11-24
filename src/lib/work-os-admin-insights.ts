@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
-import { timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { timeSeriesFromSessions } from "@/lib/work-os-admin-time-series";
 import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -41,6 +41,8 @@ export interface AdminInsightPersonDay {
   substantiveUpdates: number;
   eodSubmitted: number;
   observedMinutes: number;
+  evidenceOutput: number;
+  evidenceActivity: number;
 }
 
 export interface AdminInsightPersonSeries {
@@ -479,6 +481,12 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
       return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
     },
   );
+  const evidenceDayKey = (row: Json) => {
+    const date = dateOnly(row.evidence_date);
+    return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+  };
+  const evidenceOutputDayCounts = countBy(currentEvidence.filter((row) => String(row.source) !== "worktivity"), evidenceDayKey);
+  const evidenceActivityDayCounts = countBy(currentEvidence.filter((row) => String(row.source) === "worktivity"), evidenceDayKey);
   const observedMinutesByPersonDay = new Map<string, number>();
   for (const point of timeSeries) {
     for (const person of point.people) observedMinutesByPersonDay.set(`${person.personId}:${point.date}`, person.minutes);
@@ -494,6 +502,8 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
         substantiveUpdates: substantiveUpdateDayCounts.get(`${personId}:${date}`) ?? 0,
         eodSubmitted: reportDayCounts.get(`${personId}:${date}`) ?? 0,
         observedMinutes: observedMinutesByPersonDay.get(`${personId}:${date}`) ?? 0,
+        evidenceOutput: evidenceOutputDayCounts.get(`${personId}:${date}`) ?? 0,
+        evidenceActivity: evidenceActivityDayCounts.get(`${personId}:${date}`) ?? 0,
       })),
     };
   });
