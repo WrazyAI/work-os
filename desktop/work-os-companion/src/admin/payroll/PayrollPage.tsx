@@ -95,7 +95,7 @@ export default function PayrollPage({ organizationId, userId }: { organizationId
         {roster.data && (cursors.length > 1 || roster.data.nextCursor) ? <div className="admin-card-body is-padded">
           <AdminControls>
             <AdminControlsGroup>
-              <span className="admin-quiet" role="status">Page {cursors.length} of payroll records</span>
+              <span className="admin-quiet" role="status">Showing {records.length} of {roster.data.total} records</span>
               <AdminButton disabled={cursors.length === 1} onClick={() => setCursors((current) => current.slice(0, -1))}>Previous</AdminButton>
               <AdminButton disabled={!roster.data.nextCursor} onClick={() => { if (roster.data?.nextCursor) setCursors((current) => [...current, roster.data!.nextCursor]); }}>Next</AdminButton>
             </AdminControlsGroup>
@@ -160,6 +160,7 @@ function NewPayrollAudit({ organizationId, userId, payDate, onClose, onStarted }
           <SelectField label="Employee" placeholder="Choose an employee" value={personId} onChange={setPersonId} options={candidates.map((person) => ({ value: person.personId, label: person.displayName }))} />
         </fieldset> : null}
         {roster.data && (pages.length > 1 || roster.data.nextCursor) ? <AdminControls>
+          <span className="admin-quiet" role="status">Showing {candidates.length} of {roster.data.total} employees</span>
           <AdminButton disabled={start.isPending || pages.length === 1} onClick={() => { setPersonId(""); setPages((current) => current.slice(0, -1)); }}>Previous</AdminButton>
           <AdminButton disabled={start.isPending || !roster.data.nextCursor} onClick={() => {
             const next = roster.data?.nextCursor;
