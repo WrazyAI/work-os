@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { migrationTargetLabel, resolveMigrationDbUrl } from "../scripts/resolve-migration-db-url.mjs";
@@ -758,4 +758,32 @@ test("Phase 1 ledger closure keeps one canonical exact completion event", async 
     person_id: "00000000-0000-0000-0000-000000000003",
     idempotency_key: "nifty:completed:provider-task:2026-08-10T20:16:52.120Z",
   }]);
+});
+
+test("migration directories enforce NNNN_snake_case.sql naming and unique numeric prefixes", async () => {
+  // Historical duplicate prefixes already applied to production databases are
+  // frozen here instead of renaming applied files. Every new migration must use
+  // a strictly unique four-digit prefix.
+  const LEGACY_DUPLICATE_PREFIXES = {
+    "supabase/migrations": new Set(["0073"]),
+    "neon/migrations": new Set(["0038"]),
+  };
+
+  for (const [dir, allowedDuplicates] of Object.entries(LEGACY_DUPLICATE_PREFIXES)) {
+    const files = (await readdir(dir)).filter((file) => file.endsWith(".sql")).sort();
+    assert.ok(files.length > 0, `${dir} contains SQL migrations`);
+    const byPrefix = new Map();
+    for (const file of files) {
+      assert.match(file, /^[0-9]{4}_[a-z0-9_]+\.sql$/, `${dir}/${file} must follow NNNN_snake_case.sql`);
+      const prefix = file.slice(0, 4);
+      byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), file]);
+    }
+    const unexpectedDuplicates = [...byPrefix.entries()]
+      .filter(([prefix, entries]) => entries.length > 1 && !allowedDuplicates.has(prefix));
+    assert.deepEqual(
+      unexpectedDuplicates,
+      [],
+      `${dir} has duplicate numeric migration prefixes: ${JSON.stringify(unexpectedDuplicates)}`,
+    );
+  }
 });
