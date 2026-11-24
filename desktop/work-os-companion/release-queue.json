@@ -504,6 +504,12 @@
       "type": "fix",
       "summary": "Admin side panels open below the menu bar, and EOD Review lists the newest report day first.",
       "verification": "Companion suite 235 files / 2,090 tests passed; Work OS suite main pass 1,419/0 with the payroll files re-run individually 17/0 after a Node 24 V8 JIT crash in the parallel payroll batch; rendered shell at 1440 and 700 measured drawers at y=34 under the 34px bar with the close button fully below it; queue fixture rendered newest report day first with no page errors; live API returned 72 reports in strictly descending report day order (Nov 20, Nov 17, Nov 17, Nov 12, Nov 11) and the deployed EOD Review page reads \"Newest report day first\" with no page errors."
+    },
+    {
+      "id": "admin-settings-retired-field-mappings",
+      "type": "fix",
+      "summary": "Admin Settings no longer shows a Failed to fetch error, and the retired Field mappings page is gone.",
+      "verification": "Focused companion render and normalizer tests 23 passed; full companion vitest 231 files/2055 tests passed; companion tsc and Vite production build passed; work-os:typecheck passed; full Work OS suite 1423 tests/1412 pass/0 fail/11 skipped. Rendered the admin shell at 1440 and 390: Field mappings is absent from the rail and section picker, Members renders with no error banner, and network capture showed no /api/work-os/field-mappings request. CodeRabbit's remaining question was verified against AdminWorkspace's visible-page guard and selectSettingsCardError's stale-key fallback."
     }
   ],
   "emergency": null,

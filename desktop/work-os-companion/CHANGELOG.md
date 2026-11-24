@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Admin Settings no longer shows a “Failed to fetch” error, and the retired Field mappings page is gone.
 - Admin side panels no longer hide under the menu bar, and EOD Review lists the newest report day first.
 
 ## 0.5.43 — 2026-11-23

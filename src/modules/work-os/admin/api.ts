@@ -28,7 +28,6 @@ export const adminKeys = {
   tasks: (filters: Record<string, string>) => ["work-os", "tasks", filters] as const,
   organization: () => ["work-os", "organization"] as const,
   connections: () => ["work-os", "connections"] as const,
-  fieldMappings: () => ["work-os", "field-mappings"] as const,
   blueprints: () => ["work-os", "blueprints"] as const,
   schedules: (personId: string) => ["work-os", "schedules", personId] as const,
   status: () => ["work-os", "system-status"] as const,

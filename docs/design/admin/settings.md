@@ -20,8 +20,8 @@ employee Settings page carries (profile, this device, page guides, reading
 & display, workday, sync & session, memory, suggestions, diagnostics, and
 reset), rendered by the one shared component so the two surfaces can never
 drift — then groups the workspace's system status, features, memberships,
-teams, provider connections, field mappings, and blueprints into sections
-with one action per decision area. Feature and membership states are switches,
+teams, provider connections, and blueprints into sections with one action per
+decision area. Feature and membership states are switches,
 not native checkboxes. Admin agent access is a summary band with Active and
 Inactive counts that opens a token-management modal, the same pattern as the
 employee surface. The record-dependent groups appear only

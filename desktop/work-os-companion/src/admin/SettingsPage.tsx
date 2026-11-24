@@ -8,13 +8,11 @@ import {
   ADMIN_STALE_MS,
   fetchBlueprints,
   fetchConnections,
-  fetchFieldMappings,
   fetchOrganization,
   fetchPeople,
   fetchSystemStatus,
   normalizeBlueprints,
   normalizeConnections,
-  normalizeFieldMappings,
   normalizeOrganization,
   normalizePeople,
   normalizeSystemStatus,
@@ -46,7 +44,26 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * device, appearance, or guide preferences. The shell's node also carries the
  * account's recap-follow group, which stays present without a personal
  * workday record; this page only hosts it above the workspace configuration. */
-export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "mappings" | "blueprints";
+export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "blueprints";
+
+/** Pick only the failures owned by the card on screen. The all-cards fallback
+ * is the legacy single-page render; the category workspace always names one. */
+export function selectSettingsCardError(
+  activeCard: AdminSettingsCardId | undefined,
+  errors: Record<AdminSettingsCardId, unknown[]>,
+): unknown {
+  // A restored or stale navigation value must never index a missing card.
+  const owned = activeCard ? errors[activeCard] : undefined;
+  return Array.isArray(owned) ? owned.find(Boolean) : Object.values(errors).flat().find(Boolean);
+}
+
+/** Mutation failures stay separate: a failed Add member must not hide behind
+ * an earlier role-change failure that has not been cleared. */
+export function SettingsErrorNotices({ errors }: { errors: unknown[] }) {
+  return <>{errors.filter(Boolean).map((error, index) => (
+    <Notice key={index} tone="err">{(error as Error).message}</Notice>
+  ))}</>;
+}
 
 export default function SettingsPage({ personalSettings, activeCard }: { personalSettings?: ReactNode; activeCard?: AdminSettingsCardId }) {
   const queryClient = useQueryClient();
@@ -61,7 +78,6 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
   const organization = useQuery({ queryKey: adminKeys.organization(), queryFn: fetchOrganization, select: normalizeOrganization, staleTime: ADMIN_STALE_MS });
   const status = useQuery({ queryKey: adminKeys.status(), queryFn: fetchSystemStatus, select: normalizeSystemStatus, staleTime: ADMIN_STALE_MS });
   const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, select: normalizeConnections, staleTime: ADMIN_STALE_MS });
-  const mappings = useQuery({ queryKey: adminKeys.fieldMappings(), queryFn: fetchFieldMappings, select: normalizeFieldMappings, staleTime: ADMIN_STALE_MS });
   const blueprints = useQuery({ queryKey: adminKeys.blueprints(), queryFn: fetchBlueprints, select: normalizeBlueprints, staleTime: ADMIN_STALE_MS });
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
 
@@ -124,7 +140,19 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
     notifications.persistent(ADMIN_STATUS_DEGRADED_KEY, degradedMessage, degradedTitle, "warning");
   }, [degradedTitle, degradedMessage, notifications]);
 
-  const error = organization.error || status.error || connections.error || mappings.error || blueprints.error || features.error || membership.error || action.error;
+  // Each settings page owns the reads and mutations its card shows. A failure
+  // in one optional card must never headline a page that does not read it.
+  const actionCard: AdminSettingsCardId | null =
+    action.variables?.type === "membership" ? "members" : action.variables ? "teams" : null;
+  const cardErrors: Record<AdminSettingsCardId, unknown[]> = {
+    status: [organization.error, status.error],
+    features: [organization.error, features.error],
+    members: [organization.error],
+    teams: [organization.error, people.error],
+    connections: [connections.error],
+    blueprints: [blueprints.error],
+  };
+  const error = selectSettingsCardError(activeCard, cardErrors);
   const flags = (organization.data?.organization?.feature_flags ?? {}) as Record<string, boolean>;
   const memberships = organization.data?.memberships ?? [];
   const teams = organization.data?.teams ?? [];
@@ -232,8 +260,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             </tbody>
           </table>
         </div>
-        {membership.error ? <Notice tone="err">{(membership.error as Error).message}</Notice> : null}
-        {action.error ? <Notice tone="err">{(action.error as Error).message}</Notice> : null}
+        <SettingsErrorNotices errors={[membership.error, actionCard === "members" ? action.error : null]} />
       </AdminCard>
 
       <AdminCard className="admin-card-teams" icon={UsersRound} title="Teams" detail="Teams scope what managers can review and what the planning surfaces group">
@@ -275,43 +302,26 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Add to team
           </AdminButton>
         </div>
+        <SettingsErrorNotices errors={[actionCard === "teams" ? action.error : null]} />
       </AdminCard>
 
-      <div className="admin-band">
-        <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
-          {connections.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : (connections.data?.connections ?? []).length ? (
-            <ul className="admin-rows spaced">
-              {(connections.data?.connections ?? []).map((connection) => (
-                <li key={String(connection.id)}>
-                  <span>{statusLabel(String(connection.provider ?? "provider"))}<small>{connection.external_workspace_id ? `workspace ${String(connection.external_workspace_id)}` : "no workspace id"}</small></span>
-                  <Pill tone={connection.active === false ? "neutral" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</Pill>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="admin-empty-note">No provider connections yet. Connect your evidence providers in the web console.</p>
-          )}
-          <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
-        </AdminCard>
-
-        <AdminCard className="admin-card-mappings" icon={Cable} title="Field mappings" detail="How provider fields land in the task record">
-          {mappings.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : (mappings.data?.mappings ?? []).length ? (
-            <ul className="admin-rows spaced">
-              {(mappings.data?.mappings ?? []).slice(0, 10).map((mapping, index) => (
-                <li key={String(mapping.id ?? index)}>
-                  <span>{statusLabel(String(mapping.field ?? mapping.local_field ?? "Field"))}<small>provider field {String(mapping.provider_field_id ?? mapping.provider_field ?? "—")}</small></span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="admin-empty-note">No custom field mappings are configured.</p>
-          )}
-        </AdminCard>
-      </div>
+      <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
+        {connections.isLoading ? (
+          <Skeleton className="h-20" />
+        ) : (connections.data?.connections ?? []).length ? (
+          <ul className="admin-rows spaced">
+            {(connections.data?.connections ?? []).map((connection) => (
+              <li key={String(connection.id)}>
+                <span>{statusLabel(String(connection.provider ?? "provider"))}<small>{connection.external_workspace_id ? `workspace ${String(connection.external_workspace_id)}` : "no workspace id"}</small></span>
+                <Pill tone={connection.active === false ? "neutral" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</Pill>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="admin-empty-note">No provider connections yet. Connect your evidence providers in the web console.</p>
+        )}
+        <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
+      </AdminCard>
 
       <AdminCard className="admin-card-blueprints" icon={PlugZap} title="Blueprints" detail="Reusable task templates the workspace can generate from" padded={false}>
         {(blueprints.data?.blueprints ?? []).length ? (

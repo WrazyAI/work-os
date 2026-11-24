@@ -52,10 +52,6 @@ export type {
 };export interface BlueprintsResponse {
   blueprints: Array<Record<string, any>>;
 }
-export interface FieldMappingsResponse {
-  mappings: Array<Record<string, any>>;
-}
-
 /** A `work_tasks` row as the admin task APIs return it. The database column is
  * `title`; `name` survives only on provider-shaped payloads, so the pages keep
  * a title-first fallback. Project and assignee embeds are attached by the API. */
@@ -117,7 +113,6 @@ export const adminKeys = {
   githubRepos: () => ["work-os", "admin", "github", "repos"] as const,
   organization: () => ["work-os", "admin", "organization"] as const,
   connections: () => ["work-os", "admin", "connections"] as const,
-  fieldMappings: () => ["work-os", "admin", "field-mappings"] as const,
   blueprints: () => ["work-os", "admin", "blueprints"] as const,
   schedules: (personId: string) => ["work-os", "admin", "schedules", personId] as const,
   status: () => ["work-os", "admin", "status"] as const,
@@ -178,7 +173,6 @@ export const fetchGithubActors = () => getNormalized("/api/work-os/admin/integra
 export const fetchGithubRepos = () => getNormalized("/api/work-os/admin/integrations/github/repos", normalizeGithubRepos);
 export const fetchOrganization = () => getNormalized("/api/work-os/organization", normalizeOrganization);
 export const fetchConnections = () => getNormalized("/api/work-os/integrations/connections", normalizeConnections);
-export const fetchFieldMappings = () => getNormalized("/api/work-os/field-mappings", normalizeFieldMappings);
 export const fetchBlueprints = () => getNormalized("/api/work-os/blueprints", normalizeBlueprints);
 export const fetchSystemStatus = () => getNormalized("/api/work-os/status", normalizeSystemStatus);
 
@@ -936,10 +930,6 @@ export function normalizeGithubRepos(raw: unknown): GithubIntegrationReposRespon
       reason: asTextOrNull(configuration.reason),
     },
   };
-}
-
-export function normalizeFieldMappings(raw: unknown): FieldMappingsResponse {
-  return { mappings: asRows(asRecord(raw).mappings) };
 }
 
 export function normalizeBlueprints(raw: unknown): BlueprintsResponse {
