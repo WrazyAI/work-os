@@ -98,7 +98,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   });
   const findings = useQuery({
     queryKey: [...keys, "findings", record.id, revision],
-    queryFn: ({ signal }) => api.findings(record.id, "", null, signal), enabled: revision > 0,
+    queryFn: ({ signal }) => api.findingsAll(record.id, signal), enabled: revision > 0,
     staleTime: ADMIN_DETAIL_STALE_MS, retry: false,
   });
   const time = (ms: number) => Number.isFinite(ms)
@@ -127,6 +127,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
     { key: "inactivity", label: "Inactivity", minutes: record.totals.inactivity, color: "var(--chart-2)" },
     { key: "held", label: "Held", minutes: record.totals.held, color: "var(--warning)" },
     { key: "outside", label: "Outside", minutes: record.totals.outside, color: "var(--chart-8)" },
+    { key: "manual", label: "Manual", minutes: record.totals.manualExcluded, color: "var(--chart-7)" },
   ].filter((row) => row.minutes > 0);
 
   return <>
@@ -151,6 +152,8 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
           <p className="admin-quiet">{record.recapStats.employeeReviewed} employee reviewed, {record.recapStats.autoApproved} system reviewed, {record.recapStats.pending} pending.</p>
           {!record.approval && record.recapStats.pending ? <Notice tone="warn">Pending recaps must be settled before approval.</Notice> : null}
         </> : null}
+        {findings.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void findings.refetch()}>Retry</AdminButton>}>Findings could not be loaded. {findings.error.message}</Notice> : null}
+        {days.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void days.refetch()}>Retry</AdminButton>}>Daily evidence could not be loaded. {days.error.message}</Notice> : null}
         {record.blockers.length ? <ul className="payroll-native-list">{record.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
         {canApprove ? <div><AdminButton variant="primary" onClick={() => setIntent({ kind: "approve" })}>Approve payable hours</AdminButton></div> : null}
         {record.approval ? <div>
@@ -207,7 +210,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         {record.apps && !record.apps.complete ? <p className="admin-quiet">App coverage is incomplete for this period.</p> : null}
       </AdminCard>
 
-      <AdminCard title="Needs attention" detail={`${attention.length} of ${allFindings.length} flags require a person`}>
+      {!findings.error ? <><AdminCard title="Needs attention" detail={`${attention.length} of ${allFindings.length} flags require a person`}>
         {attention.length ? <div className="payroll-attention">
           {attention.map((finding) => <section className="payroll-attention-row" key={finding.id}>
             <div>
@@ -241,7 +244,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         <ExcludedGroup title="Outside the eligible window"
           detail="Recorded time before the shift or after its grace end is never payable."
           findings={outside} onFrame={setFrameFinding} formatTime={time} empty="No outside-window intervals were excluded." />
-      </AdminCard>
+      </AdminCard></> : null}
 
       {framed.length ? <AdminCard title="Evidence frames" detail="Linked to excluded inactivity intervals. Access is guarded.">
         <div className="payroll-shots">
@@ -319,7 +322,7 @@ function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty }: 
         <span>{formatWorkOsFullDate(finding.date)}</span>
         <span>{finding.span ? `${formatTime(finding.span.startMs)}–${formatTime(finding.span.endMs)}` : "—"}</span>
         <span>{finding.minutes === 0 && finding.durationMs > 0 ? "Under 1 min" : formatMinutes(finding.minutes)}</span>
-        <span>{finding.kind === "break" ? "No frames by policy" : frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames"}</span>
+        <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames"}</span>
       </div>;
     })}</div> : <p className="admin-quiet">{empty}</p>}
   </section>;
@@ -336,14 +339,17 @@ function PayrollFrameDialog({ record, finding, onClose }: { record: PayrollRevie
   const load = async () => {
     if (!reason.trim() || busy) return;
     setBusy(true); setError(null);
+    const next: string[] = [];
     try {
-      const next: string[] = [];
       for (const summaryId of summaries) {
         next.push(URL.createObjectURL(await api.previewFrame(record.id, finding.key, summaryId, reason.trim())));
       }
       setUrls(next);
-    } catch (issue) { setError((issue as Error).message); }
-    finally { setBusy(false); }
+    } catch (issue) {
+      next.forEach((url) => URL.revokeObjectURL(url));
+      setUrls([]);
+      setError((issue as Error).message);
+    } finally { setBusy(false); }
   };
   return <Drawer open onClose={onClose} title={`Evidence · ${FINDING_LABELS[finding.kind]}`}
     footer={<>

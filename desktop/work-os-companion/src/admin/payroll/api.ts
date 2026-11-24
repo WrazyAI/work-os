@@ -19,13 +19,27 @@ export function desktopPayroll(organizationId: string) {
     { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : undefined }, { organizationId });
   const post = <T>(path: string, body: object, timeoutMs = 20_000) => apiRequest<T>(path,
     { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) }, { organizationId });
+  const findingsPage = (id: string, status: string, cursor: string | null, signal?: AbortSignal) =>
+    get<Page<PayrollFinding>>(pathWith(`${reviewPath(id)}/findings`, { status, cursor, limit: "100" }), signal);
   return {
     roster: (payDate: string, cursor: string | null, recordsOnly: boolean, signal?: AbortSignal) =>
       get<PayrollRosterPage>(pathWith(base, { payDate, cursor, view: recordsOnly ? "records" : null }), signal),
     review: (id: string, signal?: AbortSignal) => get<PayrollReview>(reviewPath(id), signal),
     days: (id: string, signal?: AbortSignal) => get<Page<PayrollDayResult>>(`${reviewPath(id)}/days`, signal),
-    findings: (id: string, status: string, cursor: string | null, signal?: AbortSignal) =>
-      get<Page<PayrollFinding>>(pathWith(`${reviewPath(id)}/findings`, { status, cursor, limit: "100" }), signal),
+    findings: findingsPage,
+    findingsAll: async (id: string, signal?: AbortSignal) => {
+      const items: PayrollFinding[] = [];
+      let cursor: string | null = null;
+      let total = 0;
+      for (let page = 0; page < 10; page += 1) {
+        const result = await findingsPage(id, "", cursor, signal);
+        items.push(...result.items);
+        total = result.total;
+        cursor = result.nextCursor;
+        if (!cursor) break;
+      }
+      return { items, total, nextCursor: cursor };
+    },
     start: (input: { personId: string; payDate: string; requestKey: string }) => post<PayrollRun>(base, input),
     decide: (id: string, input: PayrollCommand & { findingIds: string[]; action: "payable" | "excluded" | "acknowledged"; note: string }) =>
       post<PayrollReview>(`${reviewPath(id)}/decisions`, input),
@@ -42,7 +56,7 @@ export function desktopPayroll(organizationId: string) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summary_id: summaryId, reason, request_key: crypto.randomUUID() }),
-      }, { timeoutMs: 30_000 });
+      }, { timeoutMs: 30_000, organizationId });
       if (!response.ok) {
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error || "The evidence frame could not be opened.");

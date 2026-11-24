@@ -25,9 +25,10 @@ const fullDate = (value: string) => {
 
 type Decision = { finding: PayrollFinding; action: "payable" | "excluded" | "acknowledged" };
 
-export function PayrollReviewView({ review, displayName, busy, days = [], findings = [], daysLoading, findingsLoading, onApprove, onReopen, onAdvance, onDecide }: {
+export function PayrollReviewView({ review, displayName, busy, days = [], findings = [], daysLoading, findingsLoading, daysError, findingsError, onRetryEvidence, onApprove, onReopen, onAdvance, onDecide }: {
   review: PayrollReview; displayName?: string; busy?: boolean;
   days?: PayrollDayResult[]; findings?: PayrollFinding[]; daysLoading?: boolean; findingsLoading?: boolean;
+  daysError?: string; findingsError?: string; onRetryEvidence?: () => void;
   onApprove?: () => void; onReopen?: () => void; onAdvance?: () => void;
   onDecide?: (key: string, action: Decision["action"], note: string) => Promise<void>;
 }) {
@@ -58,6 +59,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
     { key: "inactivity", label: "Inactivity", color: "var(--payroll-clay)" },
     { key: "held", label: "Held", color: "var(--payroll-amber)" },
     { key: "outside", label: "Outside", color: "var(--payroll-slate)" },
+    { key: "manualExcluded", label: "Manual", color: "var(--payroll-c6)" },
   ];
   const visibleStack = stack.filter((row) => review.totals[row.key] > 0);
 
@@ -89,6 +91,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         {review.recapStats.employeeReviewed} employee-reviewed · {review.recapStats.autoApproved} system-reviewed · {review.recapStats.pending} pending
         {review.recapStats.pending ? " — pending recaps must be settled before approval." : ""}
       </p> : null}
+      {daysError || findingsError ? <p className="payroll-blocker" role="alert">{(daysError ?? findingsError)} {onRetryEvidence ? <button type="button" onClick={onRetryEvidence}>Retry evidence</button> : null}</p> : null}
       {review.blockers.map((blocker) => <p className="payroll-blocker" key={blocker}>{blocker}</p>)}
 
       {review.token.analysisRevision > 0 ? <>
@@ -131,7 +134,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
           {review.apps && !review.apps.complete ? <p className="payroll-footnote">App coverage is incomplete for this period.</p> : null}
         </section>
 
-        <section className="payroll-panel" aria-labelledby="attention-title">
+        {!findingsError ? <section className="payroll-panel" aria-labelledby="attention-title">
           <div className="payroll-report-head"><h2 id="attention-title">Needs attention</h2><p>{attention.length} of {findings.length} flags require a person.</p></div>
           {findingsLoading ? <p role="status">Loading findings…</p> : null}
           {!findingsLoading && !attention.length ? <p className="payroll-empty">Nothing needs a decision on this page.</p> : null}
@@ -150,14 +153,14 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
                 </> : <button type="button" onClick={() => setDecision({ finding, action: "acknowledged" })}>Acknowledge</button>) : null}
             </div>
           </section>)}</div>
-        </section>
+        </section> : null}
 
-        <section className="payroll-panel" aria-labelledby="excluded-title">
+        {!findingsError ? <section className="payroll-panel" aria-labelledby="excluded-title">
           <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excluded.length} intervals · {hours(excludedMinutes)} removed from pay.</p></div>
           <ExcludedGroup title="Continuous inactivity · 3 minutes or more" detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it." findings={inactivity} review={review} empty="No inactivity intervals were excluded." />
           <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} empty="No break intervals were excluded." />
           <ExcludedGroup title="Outside the eligible window" detail="Recorded time before the shift or after its grace end is never payable." findings={outside} review={review} empty="No outside-window intervals were excluded." />
-        </section>
+        </section> : null}
 
         <h2 className="payroll-section-title">Weekly briefs</h2>
         <div className="payroll-briefs">
@@ -214,7 +217,7 @@ function ExcludedGroup({ title, detail, findings, review, empty }: {
       <span>{fullDate(finding.date)}</span>
       <span>{finding.span ? `${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.startMs))}–${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.endMs))}` : "—"}</span>
       <span>{hours(finding.minutes)}</span>
-      <span>{finding.kind === "break" ? "No frames by policy" : (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames"}</span>
+      <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames"}</span>
     </div>)}</div> : <p className="payroll-empty">{empty}</p>}
   </section>;
 }
@@ -229,12 +232,15 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
   const load = async () => {
     if (!reason.trim() || busy) return;
     setBusy(true); setError(null);
+    const next: string[] = [];
     try {
-      const next: string[] = [];
       for (const summaryId of finding.frameSummaryIds ?? []) next.push(URL.createObjectURL(await payrollApi.previewFrame(review.id, finding.key, summaryId, reason.trim())));
       setUrls(next);
-    } catch (issue) { setError((issue as Error).message); }
-    finally { setBusy(false); }
+    } catch (issue) {
+      next.forEach((url) => URL.revokeObjectURL(url));
+      setUrls([]);
+      setError((issue as Error).message);
+    } finally { setBusy(false); }
   };
   return <>
     <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{finding.frameSummaryIds?.length ?? 0} frames</button>

@@ -28,6 +28,19 @@ export const payrollApi = {
     query.set("limit", "100");
     return adminFetch<Page<PayrollFinding>>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings?${query}`);
   },
+  findingsAll: async (reviewId: string) => {
+    const items: PayrollFinding[] = [];
+    let cursor: string | null = null;
+    let total = 0;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await payrollApi.findings(reviewId, "", cursor);
+      items.push(...result.items);
+      total = result.total;
+      cursor = result.nextCursor;
+      if (!cursor) break;
+    }
+    return { items, total, nextCursor: cursor };
+  },
   decide: (reviewId: string, body: Record<string, unknown>) =>
     adminFetch<PayrollReview>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/decisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   approve: (reviewId: string, body: Record<string, unknown>) =>

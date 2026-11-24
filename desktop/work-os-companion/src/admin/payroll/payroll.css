@@ -138,7 +138,7 @@
 .payroll-shot-meta b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 600; }
 .payroll-frame-grid { display: grid; gap: 10px; }
 .payroll-frame-grid img { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
-.payroll-askbar { position: fixed; left: 0; right: 0; bottom: 18px; z-index: 60; display: flex; justify-content: center; padding: 0 24px; pointer-events: none; }
+.payroll-askbar { position: fixed; left: 0; right: 0; bottom: 18px; z-index: 40; display: flex; justify-content: center; padding: 0 24px; pointer-events: none; }
 .payroll-askpill { pointer-events: auto; width: min(660px, 100%); min-height: 54px; border-radius: 999px; border: 1px solid var(--line-strong, var(--border)); background: var(--paper); box-shadow: 0 10px 30px rgba(0, 0, 0, .12); display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 20px; color: var(--muted); }
 .payroll-askpill > span:first-child { flex: 1; min-width: 0; font-size: 12px; }
 .payroll-soon { font-size: 9.5px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); border: 1px solid var(--border); border-radius: 999px; padding: 3px 7px; white-space: nowrap; }

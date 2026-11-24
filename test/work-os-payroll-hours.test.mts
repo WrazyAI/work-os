@@ -128,6 +128,17 @@ test("inactivity needs three continuous minutes and never reaches into a gap", a
   assert.ok(sparse.findings.some((finding) => finding.kind === "unverified_gap" && finding.durationMs === 15 * 60_000));
 });
 
+test("sparse zero samples never bridge into a continuous inactivity run", async () => {
+  const { calculatePayrollDay } = await hours();
+  const start = t("09:00");
+  const day = calculatePayrollDay(input({
+    sessions: [session(spanMs(start, start + 11 * 60_000), spanMs(start, start + 11 * 60_000))],
+    captures: [cap(start, start + 60_000, 0), cap(start + 5 * 60_000, start + 6 * 60_000, 0), cap(start + 10 * 60_000, start + 11 * 60_000, 0)],
+  }));
+  assert.equal(day.minutes.inactivity, 0);
+  assert.equal(day.minutes.recommended, 11);
+});
+
 test("a null sample and an unknown capture split a zero run instead of extending it", async () => {
   const { calculatePayrollDay } = await hours();
   const start = t("09:00");
