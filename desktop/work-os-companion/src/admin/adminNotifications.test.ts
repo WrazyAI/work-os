@@ -42,11 +42,11 @@ describe("administration notifications", () => {
     }
   });
 
-  it("keeps the admin flyout stack on the shared top-right position", () => {
+  it("keeps the admin flyout stack on the shared top-center position", () => {
     const css = readFileSync(new URL("./admin.css", import.meta.url), "utf8");
     // One position for every surface: the admin stylesheet declares no rule for
-    // the shared stack, so an administration receipt lands in the window's
-    // top-right corner exactly as it does in the employee view.
+    // the shared stack, so an administration receipt lands at the top center of
+    // the window exactly as it does in the employee view.
     expect(css).not.toContain("notification-flyouts");
   });
 
@@ -54,10 +54,11 @@ describe("administration notifications", () => {
     const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
     // The base contract the admin workspace now inherits verbatim.
     expect(css).toContain("top: max(18px, env(safe-area-inset-top))");
-    expect(css).toContain("right: max(18px, env(safe-area-inset-right))");
+    expect(css).toContain("left: 50%");
+    expect(css).toContain("transform: translateX(-50%)");
     expect(css).toContain("width: min(340px, calc(100vw - 36px))");
     expect(css).toContain("max-height: calc(100vh - 36px)");
-    expect(css).toContain(".notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; }");
+    expect(css).toContain(".notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; transform: none; }");
   });
 
   it("keeps the open notifications panel above the admin receipt stack", () => {
