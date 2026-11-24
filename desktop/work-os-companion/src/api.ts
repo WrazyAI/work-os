@@ -278,12 +278,15 @@ function rawDeadlineSignal(external: AbortSignal | undefined, timeoutMs: number)
 export async function apiRequestRaw(
   path: string,
   init: RequestInit = {},
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; organizationId?: string } = {},
 ): Promise<Response> {
   if (syncBypassActive) throw new SyncBypassError();
   const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
   if (!session || isSessionExpired(session)) {
     throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
+  }
+  if (options.organizationId && options.organizationId !== session.organizationId) {
+    throw new ApiRequestError("The workspace changed. Reopen this page in the current workspace.", 409, false);
   }
   const deadline = rawDeadlineSignal(init.signal ?? undefined, options.timeoutMs ?? 20_000);
   let response: Response;
