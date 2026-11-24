@@ -537,11 +537,5 @@
     }
   ],
   "emergency": null,
-  "operatorOverride": {
-    "version": "0.5.43",
-    "updateId": "evidence-hybrid",
-    "approvedBy": "operator",
-    "reason": "Operator authorized shipping the Evidence record/coverage revamp with the queued Otto menu and planning dark-mode fixes before the five-outcome batch.",
-    "approvedAt": "2026-11-23"
-  }
+  "operatorOverride": null
 }
