@@ -461,6 +461,19 @@ function installAdminFetchStub(state: PreviewState) {
     if (url.includes("/api/work-os/people")) return json(peopleFixture(state));
     if (url.includes("/api/work-os/tasks")) return json(tasksFixture(state));
     if (url.includes("/api/work-os/projects")) return json(projectsFixture());
+    if (url.includes("/api/work-os/organization/members/") && url.endsWith("/password-reset")) {
+      const membershipId = url.split("/members/")[1]?.split("/")[0] ?? "mem-0";
+      const match = organizationFixture(state).memberships.find((m: { id: string; person?: { email?: string | null } | null }) => String(m.id) === membershipId);
+      const now = new Date();
+      return json({
+        sent: true,
+        membershipId,
+        email: match?.person?.email ?? "member@wrazyos.com",
+        sentAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        emailId: "preview-reset-1",
+      });
+    }
     if (url.includes("/api/work-os/organization")) return json(organizationFixture(state));
     if (url.includes("/api/work-os/integrations/connections")) return json(connectionsFixture());
     if (url.includes("/api/work-os/blueprints")) return json(blueprintsFixture());

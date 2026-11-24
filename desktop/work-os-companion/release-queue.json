@@ -516,6 +516,12 @@
       "type": "feature",
       "summary": "Admin Insights is a control room: session time, outcomes, updates, and evidence by teammate and day, with a full-day tooltip on every cell.",
       "verification": "Companion suite 236 files / 2,092 tests passed; Work OS full suite 1,419 main + 127 payroll tests passed with 0 failures and 16 skipped; typecheck and production Vite build passed; rendered the control room at 1440, 820, 520, and dark mode; 7d/30d matrix buckets, range and person scoping, all four measures (session time, outcomes, updates, evidence), the person drawer, and the full-day hover/focus tooltip verified with no page errors."
+    },
+    {
+      "id": "admin-member-password-reset",
+      "type": "feature",
+      "summary": "Administrators can send an individual password reset email to any active member from Settings → Members.",
+      "verification": "New member password reset backend suite 6/6 passed; full Work OS suite passed (30 gate, 14 migration/release, 1,419 main / 11 opt-in PG skipped, 122 payroll / 5 opt-in PG skipped, 0 failures); companion suite 236 files / 2,096 tests passed; work-os:typecheck and companion tsc + Vite build passed; Playwright rendered checks on Desktop (1280 light/dark, 420 narrow) and Web (1280 light, 390 narrow) verified stacked member names/emails, native dialog autofocus/Escape/focus-return, confirmation receipts, and error notices with 0 page errors; CodeRabbit review completed."
     }
   ],
   "emergency": null,

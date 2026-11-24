@@ -404,10 +404,20 @@ export interface OrganizationMembershipRow {
   id: string;
   user_id: string;
   person_id: string | null;
+  email?: string | null;
   role: string;
   active: boolean;
   feature_flags?: Record<string, boolean> | null;
   person?: { id: string; display_name: string | null; email: string | null } | null;
+}
+
+export interface MemberPasswordResetResponse {
+  sent: true;
+  membershipId: string;
+  email: string;
+  sentAt: string;
+  expiresAt: string;
+  emailId: string | null;
 }
 
 export interface OrganizationResponse {
