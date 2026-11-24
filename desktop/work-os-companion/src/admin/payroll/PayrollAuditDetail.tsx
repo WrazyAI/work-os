@@ -167,7 +167,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             <div><dt>Held</dt><dd>{formatMinutes(day.minutes.held)}</dd></div>
             <div><dt>Manual exclusions</dt><dd>{formatMinutes(day.minutes.manualExcluded)}</dd></div>
           </dl>
-          {day.evidence ? <p className="admin-quiet">{day.evidence.sessions.length} sessions, {day.evidence.sampledFrames} frames analyzed.</p> : null}
+          {day.evidence ? <p className="admin-quiet">{day.evidence.sessions.length} session{day.evidence.sessions.length === 1 ? "" : "s"}, {day.evidence.sampledFrames} frames analyzed.</p> : null}
           {day.evidence?.sessions.length ? <ul className="payroll-native-list">{day.evidence.sessions.map((session, i) => (
             <li key={i}>Session {i + 1}: {session.recorded ? `${time(session.recorded.startMs)} to ${time(session.recorded.endMs)}` : "Recorded time unavailable"}</li>
           ))}</ul> : null}
