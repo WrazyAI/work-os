@@ -6,6 +6,7 @@ import { payrollApi } from "./api";
 import { PayrollBrief } from "./PayrollBrief";
 import { PayrollProgress } from "./PayrollProgress";
 import { payrollReviewModel } from "./model";
+import { groupBreakFindings } from "@/modules/work-os/payroll/break-groups";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
   inactivity: "Inactivity", break: "Unpaid break", outside_window: "Outside schedule",
@@ -38,9 +39,11 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
   const attention = findings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = findings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
-  const breaks = excluded.filter((finding) => finding.kind === "break");
+  const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
+  const excludedCount = inactivity.length + breaks.length + outside.length
+    + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
   const apps = review.apps?.items ?? [];
   const appTotal = apps.reduce((sum, app) => sum + app.durationMs, 0);
   const topApps = apps.slice(0, 8);
@@ -112,7 +115,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               </div>
               <div className="payroll-hours-stats">
                 <div><span className="payroll-label">Flags</span><strong>{findings.length}</strong><span>{attention.length} need attention</span></div>
-                <div><span className="payroll-label">Excluded</span><strong>{excluded.length}</strong><span>intervals by rule</span></div>
+                <div><span className="payroll-label">Excluded</span><strong>{excludedCount}</strong><span>intervals by rule</span></div>
                 <div><span className="payroll-label">Recaps</span><strong>{review.recapStats?.employeeReviewed ?? 0}</strong><span>employee reviewed</span></div>
               </div>
             </div>
@@ -164,7 +167,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         </section> : null}
 
         {!findingsError ? <section className="payroll-panel" aria-labelledby="excluded-title">
-          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excluded.length} intervals · {hours(excludedMinutes)} removed from pay.</p></div>
+          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excludedCount} intervals · {hours(excludedMinutes)} removed from pay.</p></div>
           <ExcludedGroup title="Continuous inactivity · 3 minutes or more" detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it." findings={inactivity} review={review} empty="No inactivity intervals were excluded." />
           <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} collapsed empty="No break intervals were excluded." />
           <ExcludedGroup title="Outside the eligible window" detail="Recorded time before the shift or after its grace end is never payable." findings={outside} review={review} empty="No outside-window intervals were excluded." />

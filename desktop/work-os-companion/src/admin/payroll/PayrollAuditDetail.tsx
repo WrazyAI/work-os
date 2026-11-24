@@ -7,6 +7,7 @@ import { formatWorkOsDateTime, formatWorkOsFullDate, formatWorkOsTime } from "..
 import { ADMIN_DETAIL_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
 import { desktopPayroll, desktopPayrollKey } from "./api";
+import { groupBreakFindings } from "../../../../../src/modules/work-os/payroll/break-groups";
 import "./payroll.css";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
@@ -108,9 +109,11 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   const attention = allFindings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = allFindings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
-  const breaks = excluded.filter((finding) => finding.kind === "break");
+  const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
+  const excludedCount = inactivity.length + breaks.length + outside.length
+    + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
   const appItems = record.apps?.items ?? [];
   const appTotal = appItems.reduce((sum, app) => sum + app.durationMs, 0);
   const topApps = appItems.slice(0, 8);
@@ -183,7 +186,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             </div>
             <div className="payroll-hours-stats">
               <div><span className="payroll-label">Flags</span><strong>{allFindings.length}</strong><span>{attention.length} need attention</span></div>
-              <div><span className="payroll-label">Excluded</span><strong>{excluded.length}</strong><span>intervals by rule</span></div>
+              <div><span className="payroll-label">Excluded</span><strong>{excludedCount}</strong><span>intervals by rule</span></div>
               <div><span className="payroll-label">Recaps</span><strong>{record.recapStats?.employeeReviewed ?? 0}</strong><span>employee reviewed</span></div>
             </div>
           </div>
@@ -242,7 +245,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         </div> : <p className="admin-quiet">Nothing needs a decision on this page.</p>}
       </AdminCard>
 
-      <AdminCard title="Excluded by rule" detail={`${excluded.length} intervals · ${formatMinutes(excludedMinutes)} removed from pay`}>
+      <AdminCard title="Excluded by rule" detail={`${excludedCount} intervals · ${formatMinutes(excludedMinutes)} removed from pay`}>
         <ExcludedGroup title="Continuous inactivity · 3 minutes or more"
           detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it."
           findings={inactivity} onFrame={setFrameFinding} formatTime={time} empty="No inactivity intervals were excluded." />
