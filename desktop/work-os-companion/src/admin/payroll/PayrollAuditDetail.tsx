@@ -129,8 +129,10 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
           <div><dt>Held</dt><dd>{formatMinutes(record.totals.held)}</dd></div>
           <div><dt>Approved</dt><dd>{record.approval ? formatMinutes(record.approval.totals.approved) : "—"}</dd></div>
         </dl> : null}
-        {record.recapStats ? <p className="admin-quiet">{record.recapStats.employeeReviewed} employee reviewed, {record.recapStats.autoApproved} system reviewed, {record.recapStats.pending} pending.</p> : null}
-        {!record.approval && record.recapStats?.pending ? <Notice tone="warn">Pending recaps must be settled before approval.</Notice> : null}
+        {revision > 0 && record.recapStats ? <>
+          <p className="admin-quiet">{record.recapStats.employeeReviewed} employee reviewed, {record.recapStats.autoApproved} system reviewed, {record.recapStats.pending} pending.</p>
+          {!record.approval && record.recapStats.pending ? <Notice tone="warn">Pending recaps must be settled before approval.</Notice> : null}
+        </> : null}
         {record.blockers.length ? <ul className="payroll-native-list">{record.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
         {canApprove ? <div><AdminButton variant="primary" onClick={() => setIntent({ kind: "approve" })}>Approve payable hours</AdminButton></div> : null}
         {record.approval ? <div>
