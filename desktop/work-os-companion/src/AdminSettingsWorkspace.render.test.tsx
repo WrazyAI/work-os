@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { AdminSettingsContent, adminSettingsPages } from "./AdminSettingsWorkspace";
+import { selectSettingsCardError, SettingsErrorNotices, type AdminSettingsCardId } from "./admin/SettingsPage";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 import { NotificationProvider } from "./NotificationFlyouts";
 
@@ -90,5 +91,37 @@ describe("administration settings takeover", () => {
     const markup = render("general");
     expect(markup).toContain("This device");
     expect(markup).not.toContain("Workspace status");
+  });
+
+  it("does not offer the retired Field mappings destination", () => {
+    const ids = adminSettingsPages(true, true).map((page) => page.id);
+    expect(ids).not.toContain("mappings");
+    expect(render("workspace-status")).not.toContain("Field mappings");
+  });
+
+  it("shows only the failures owned by the settings card on screen", () => {
+    const membersError = new Error("members failed");
+    const connectionsError = new Error("connections failed");
+    const errors = {
+      status: [],
+      features: [],
+      members: [membersError],
+      teams: [],
+      connections: [connectionsError],
+      blueprints: [],
+    };
+    expect(selectSettingsCardError("members", errors)).toBe(membersError);
+    expect(selectSettingsCardError("connections", errors)).toBe(connectionsError);
+    expect(selectSettingsCardError("teams", errors)).toBeUndefined();
+    expect(selectSettingsCardError(undefined, errors)).toBe(membersError);
+    expect(selectSettingsCardError("mappings" as AdminSettingsCardId, errors)).toBe(membersError);
+  });
+
+  it("keeps consecutive Members mutation failures visible together", () => {
+    const markup = renderToStaticMarkup(createElement(SettingsErrorNotices, {
+      errors: [new Error("Role change failed"), new Error("Add member failed")],
+    }));
+    expect(markup).toContain("Role change failed");
+    expect(markup).toContain("Add member failed");
   });
 });

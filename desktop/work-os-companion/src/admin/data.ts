@@ -15,6 +15,7 @@ import type {
   EvidenceRow,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
+  MemberPasswordResetResponse,
   OrganizationResponse,
   PeopleResponse,
   PersonDetailResponse,
@@ -42,6 +43,7 @@ export type {
   EvidenceRow,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
+  MemberPasswordResetResponse,
   OrganizationResponse,
   PeopleResponse,
   PersonDetailResponse,
@@ -52,10 +54,6 @@ export type {
 };export interface BlueprintsResponse {
   blueprints: Array<Record<string, any>>;
 }
-export interface FieldMappingsResponse {
-  mappings: Array<Record<string, any>>;
-}
-
 /** A `work_tasks` row as the admin task APIs return it. The database column is
  * `title`; `name` survives only on provider-shaped payloads, so the pages keep
  * a title-first fallback. Project and assignee embeds are attached by the API. */
@@ -117,7 +115,6 @@ export const adminKeys = {
   githubRepos: () => ["work-os", "admin", "github", "repos"] as const,
   organization: () => ["work-os", "admin", "organization"] as const,
   connections: () => ["work-os", "admin", "connections"] as const,
-  fieldMappings: () => ["work-os", "admin", "field-mappings"] as const,
   blueprints: () => ["work-os", "admin", "blueprints"] as const,
   schedules: (personId: string) => ["work-os", "admin", "schedules", personId] as const,
   status: () => ["work-os", "admin", "status"] as const,
@@ -178,7 +175,6 @@ export const fetchGithubActors = () => getNormalized("/api/work-os/admin/integra
 export const fetchGithubRepos = () => getNormalized("/api/work-os/admin/integrations/github/repos", normalizeGithubRepos);
 export const fetchOrganization = () => getNormalized("/api/work-os/organization", normalizeOrganization);
 export const fetchConnections = () => getNormalized("/api/work-os/integrations/connections", normalizeConnections);
-export const fetchFieldMappings = () => getNormalized("/api/work-os/field-mappings", normalizeFieldMappings);
 export const fetchBlueprints = () => getNormalized("/api/work-os/blueprints", normalizeBlueprints);
 export const fetchSystemStatus = () => getNormalized("/api/work-os/status", normalizeSystemStatus);
 
@@ -208,6 +204,8 @@ export const disconnectGithubRepo = (repo: string) =>
 export const saveOrganizationFeatures = (featureFlags: Record<string, boolean>) => send<Record<string, unknown>>("/api/work-os/organization", "PATCH", { feature_flags: featureFlags });
 export const organizationAction = (body: Record<string, unknown>) => send<Record<string, unknown>>("/api/work-os/organization", "POST", body);
 export const organizationMembershipPatch = (body: Record<string, unknown>) => send<Record<string, unknown>>("/api/work-os/organization", "PATCH", body);
+export const sendOrganizationMemberPasswordReset = (membershipId: string) =>
+  send<MemberPasswordResetResponse>(`/api/work-os/organization/members/${encodeURIComponent(membershipId)}/password-reset`, "POST", {});
 export const requestScreenshotAccess = (summaryId: string, reason: string) =>
   send<{ url: string }>(`/api/work-os/evidence/screenshots/${encodeURIComponent(summaryId)}/access`, "POST", { reason });
 
@@ -476,6 +474,19 @@ export function normalizeAdminInsights(raw: unknown): AdminInsights {
       trackedMinutes: asNumber(point.trackedMinutes),
     })),
     timeSeries: normalizeTimeSeries(source.timeSeries),
+    peopleSeries: asRows(source.peopleSeries).map((series) => ({
+      personId: asText(series.personId),
+      days: asRows(series.days).map((day) => ({
+        date: asText(day.date),
+        outcomesCompleted: asNumber(day.outcomesCompleted),
+        updates: asNumber(day.updates),
+        substantiveUpdates: asNumber(day.substantiveUpdates),
+        eodSubmitted: asNumber(day.eodSubmitted),
+        observedMinutes: asNumber(day.observedMinutes),
+        evidenceOutput: asNumber(day.evidenceOutput),
+        evidenceActivity: asNumber(day.evidenceActivity),
+      })),
+    })),
     updateKinds: asRows(source.updateKinds).map((entry) => ({ kind: asText(entry.kind, "unclassified"), count: asNumber(entry.count) })),
     topApps: asRows(source.topApps).map((entry) => ({ name: asText(entry.name, "Unknown"), minutes: asNumber(entry.minutes) })),
     overdueOpen: source.overdueOpen == null ? null : asNumber(source.overdueOpen),
@@ -838,14 +849,16 @@ export function normalizeOrganization(raw: unknown): OrganizationResponse {
     },
     memberships: asRows(source.memberships).map((row) => {
       const person = row.person && typeof row.person === "object" ? asRecord(row.person) : null;
+      const personEmail = person ? asTextOrNull(person.email) : null;
       return {
         id: asText(row.id),
         user_id: asText(row.user_id),
         person_id: asTextOrNull(row.person_id),
+        email: asTextOrNull(row.email) ?? personEmail,
         role: asText(row.role, "employee"),
         active: asBoolean(row.active, true),
         feature_flags: row.feature_flags && typeof row.feature_flags === "object" ? (row.feature_flags as Record<string, boolean>) : null,
-        person: person ? { id: asText(person.id), display_name: asTextOrNull(person.display_name), email: asTextOrNull(person.email) } : null,
+        person: person ? { id: asText(person.id), display_name: asTextOrNull(person.display_name), email: personEmail } : null,
       };
     }),
     teams: asRows(source.teams).map((team) => ({ ...team, id: asText(team.id), name: asText(team.name, "Team") })),
@@ -936,10 +949,6 @@ export function normalizeGithubRepos(raw: unknown): GithubIntegrationReposRespon
       reason: asTextOrNull(configuration.reason),
     },
   };
-}
-
-export function normalizeFieldMappings(raw: unknown): FieldMappingsResponse {
-  return { mappings: asRows(asRecord(raw).mappings) };
 }
 
 export function normalizeBlueprints(raw: unknown): BlueprintsResponse {

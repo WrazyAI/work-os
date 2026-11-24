@@ -158,3 +158,20 @@ describe("administration masthead refresh control", () => {
     expect(markup).toContain("lucide-refresh-cw");
   });
 });
+
+describe("administration masthead copy and floating notices", () => {
+  it("omits the removed Evidence subtitle line while keeping other section subtitles", () => {
+    const evidence = render({ section: "evidence" });
+    expect(evidence).not.toContain("The workspace record: provider actions, observed activity, coverage, and the provenance behind it.");
+    expect(evidence).not.toContain('class="admin-purpose"');
+    const overview = render({ section: "overview" });
+    expect(overview).toContain('class="admin-purpose"');
+    expect(overview).toContain("What is happening across the workspace right now.");
+  });
+
+  it("does not embed an in-flow notification region inside the page shell", () => {
+    const markup = render({ section: "overview" });
+    expect(markup).not.toContain("work-os-notification-region");
+    expect(markup).not.toContain("notification-region");
+  });
+});

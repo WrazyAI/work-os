@@ -24,14 +24,14 @@ import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
 import "../insight-dashboard.css";
 import "./admin.css";
 
-export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose: string }> = {
+export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose?: string }> = {
   overview: { title: "Overview", purpose: "What is happening across the workspace right now." },
   people: { title: "People", purpose: "Roster, schedules, and each teammate's recent record." },
   tasks: { title: "Tasks", purpose: "The workspace task record and what is still open." },
   review: { title: "EOD Review", purpose: "Submitted end-of-day reports and the decision they need." },
   payroll: { title: "Payroll", purpose: "Review recorded evidence and approve payable hours." },
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
-  evidence: { title: "Evidence", purpose: "The workspace record: provider actions, observed activity, coverage, and the provenance behind it." },
+  evidence: { title: "Evidence" },
   settings: { title: "Settings", purpose: "Your own settings, then the workspace's configuration, members, and provider connections." },
 };
 
@@ -271,9 +271,8 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
           </div>
           {/* One calm header: the page's purpose sits inside the masthead
               block, directly under its title, instead of under the rule. */}
-          {session.role === "admin" ? <p className="admin-purpose">{meta.purpose}</p> : null}
+          {session.role === "admin" && meta.purpose ? <p className="admin-purpose">{meta.purpose}</p> : null}
         </header>
-        <div id="work-os-notification-region" className="notification-region" />
         <div id="work-os-main" className="skip-target" tabIndex={-1} />
         <main className="page admin-page">
           {ottoNotice ? <Notice tone="warn">{ottoNotice}</Notice> : null}

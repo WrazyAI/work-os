@@ -166,6 +166,22 @@ export interface AdminInsightPersonRow {
   lastActivityAt: string | null;
 }
 
+export interface AdminInsightPersonDay {
+  date: string;
+  outcomesCompleted: number;
+  updates: number;
+  substantiveUpdates: number;
+  eodSubmitted: number;
+  observedMinutes: number;
+  evidenceOutput: number;
+  evidenceActivity: number;
+}
+
+export interface AdminInsightPersonSeries {
+  personId: string;
+  days: AdminInsightPersonDay[];
+}
+
 export interface AdminInsightTotals {
   outcomesCompleted: number;
   outcomesLate: number;
@@ -199,6 +215,7 @@ export interface AdminInsights {
   people: AdminInsightPersonRow[];
   series: Array<{ date: string; outcomesCompleted: number; updates: number; eodSubmitted: number; trackedMinutes: number }>;
   timeSeries: AdminTimeSeriesPoint[];
+  peopleSeries: AdminInsightPersonSeries[];
   updateKinds: Array<{ kind: string; count: number }>;
   topApps: Array<{ name: string; minutes: number }>;
   overdueOpen: number | null;
@@ -387,10 +404,20 @@ export interface OrganizationMembershipRow {
   id: string;
   user_id: string;
   person_id: string | null;
+  email?: string | null;
   role: string;
   active: boolean;
   feature_flags?: Record<string, boolean> | null;
   person?: { id: string; display_name: string | null; email: string | null } | null;
+}
+
+export interface MemberPasswordResetResponse {
+  sent: true;
+  membershipId: string;
+  email: string;
+  sentAt: string;
+  expiresAt: string;
+  emailId: string | null;
 }
 
 export interface OrganizationResponse {

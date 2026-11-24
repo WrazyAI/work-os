@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
-import { timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
+import { timeSeriesFromSessions } from "@/lib/work-os-admin-time-series";
 import { hasScheduledShiftOnDate, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { workdayDates } from "@/modules/work-os/calendar";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -32,6 +32,22 @@ export interface AdminInsightPersonRow {
   evidenceActivity: number;
   sessionsNeedingCorrection: number;
   lastActivityAt: string | null;
+}
+
+export interface AdminInsightPersonDay {
+  date: string;
+  outcomesCompleted: number;
+  updates: number;
+  substantiveUpdates: number;
+  eodSubmitted: number;
+  observedMinutes: number;
+  evidenceOutput: number;
+  evidenceActivity: number;
+}
+
+export interface AdminInsightPersonSeries {
+  personId: string;
+  days: AdminInsightPersonDay[];
 }
 
 export interface AdminInsightTotals {
@@ -442,6 +458,55 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     now,
     (personId) => nameById.get(personId) ?? null,
   );
+  // Per-person, per-day facts let the admin page compare a teammate's days
+  // without inventing a daily split from a range total. Counts come from the
+  // same rows as the aggregate totals; observed minutes reuse the session
+  // series so the matrix and the stacked time chart agree exactly.
+  const eventDayCounts = countBy(currentEvents, (row) => {
+    const date = dateOnly(row.local_date);
+    return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+  });
+  const updateDayCounts = countBy(currentUpdates, (row) => {
+    const date = dateOnly(row.shift_date);
+    return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+  });
+  const substantiveUpdateDayCounts = countBy(currentUpdates.filter((row) => row.substantive === true), (row) => {
+    const date = dateOnly(row.shift_date);
+    return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+  });
+  const reportDayCounts = countBy(
+    currentReports.filter((row) => ["pending_review", "approved"].includes(String(row.status))),
+    (row) => {
+      const date = dateOnly(row.report_date);
+      return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+    },
+  );
+  const evidenceDayKey = (row: Json) => {
+    const date = dateOnly(row.evidence_date);
+    return row.person_id && date ? `${String(row.person_id)}:${date}` : null;
+  };
+  const evidenceOutputDayCounts = countBy(currentEvidence.filter((row) => String(row.source) !== "worktivity"), evidenceDayKey);
+  const evidenceActivityDayCounts = countBy(currentEvidence.filter((row) => String(row.source) === "worktivity"), evidenceDayKey);
+  const observedMinutesByPersonDay = new Map<string, number>();
+  for (const point of timeSeries) {
+    for (const person of point.people) observedMinutesByPersonDay.set(`${person.personId}:${point.date}`, person.minutes);
+  }
+  const peopleSeries: AdminInsightPersonSeries[] = people.map((person) => {
+    const personId = String(person.id);
+    return {
+      personId,
+      days: workdayDates(current.from, current.through).map((date) => ({
+        date,
+        outcomesCompleted: eventDayCounts.get(`${personId}:${date}`) ?? 0,
+        updates: updateDayCounts.get(`${personId}:${date}`) ?? 0,
+        substantiveUpdates: substantiveUpdateDayCounts.get(`${personId}:${date}`) ?? 0,
+        eodSubmitted: reportDayCounts.get(`${personId}:${date}`) ?? 0,
+        observedMinutes: observedMinutesByPersonDay.get(`${personId}:${date}`) ?? 0,
+        evidenceOutput: evidenceOutputDayCounts.get(`${personId}:${date}`) ?? 0,
+        evidenceActivity: evidenceActivityDayCounts.get(`${personId}:${date}`) ?? 0,
+      })),
+    };
+  });
 
   const outstandingDays = await countOutstandingDays(organizationId, now, { personId: personFilter, allowedSet });
 
@@ -454,6 +519,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     people: peopleRows,
     series,
     timeSeries,
+    peopleSeries,
     updateKinds: [...updateKindCounts.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
     topApps: [...topApps.entries()].map(([name, minutes]) => ({ name, minutes: Math.round(minutes) })).sort((left, right) => right.minutes - left.minutes).slice(0, 6),
     overdueOpen: overdueResult.count,

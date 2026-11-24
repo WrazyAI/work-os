@@ -188,6 +188,19 @@ function insightsFixture(state: PreviewState) {
     people,
     series,
     timeSeries: empty ? [] : timeSeriesForDates(series.map((point) => point.date)),
+    peopleSeries: empty ? [] : people.map((person, personIndex) => ({
+      personId: person.personId,
+      days: series.map((point, dayIndex) => ({
+        date: point.date,
+        outcomesCompleted: (dayIndex * 2 + personIndex) % 4 === 0 ? 1 : 0,
+        updates: (dayIndex + personIndex * 2) % 3 === 0 ? 1 : 0,
+        substantiveUpdates: (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
+        eodSubmitted: (dayIndex + personIndex) % 4 === 0 ? 1 : 0,
+        observedMinutes: Math.round(person.trackedMinutes / 7 * (0.6 + ((dayIndex % 3) * 0.2))),
+        evidenceOutput: (dayIndex + personIndex) % 4 === 0 ? 2 : (dayIndex + personIndex) % 3 === 0 ? 1 : 0,
+        evidenceActivity: (dayIndex * 2 + personIndex) % 4 === 0 ? 3 : 1,
+      })),
+    })),
     updateKinds: empty ? [] : [
       { kind: "material_progress", count: 18 },
       { kind: "blocked", count: 4 },
@@ -404,10 +417,6 @@ function projectsFixture() {
   return { projects: [{ id: "pr-1", name: "Platform", provider_project_id: "nifty-pr-1" }, { id: "pr-2", name: "Finance", provider_project_id: "nifty-pr-2" }] };
 }
 
-function fieldMappingsFixture() {
-  return { mappings: [{ id: "fm-1", semantic_field: "priority", provider_field_id: "field-123" }] };
-}
-
 function installAdminFetchStub(state: PreviewState) {
   if (typeof window === "undefined") return;
   const flag = window as unknown as { __adminPreviewStub?: boolean };
@@ -452,9 +461,21 @@ function installAdminFetchStub(state: PreviewState) {
     if (url.includes("/api/work-os/people")) return json(peopleFixture(state));
     if (url.includes("/api/work-os/tasks")) return json(tasksFixture(state));
     if (url.includes("/api/work-os/projects")) return json(projectsFixture());
+    if (url.includes("/api/work-os/organization/members/") && url.endsWith("/password-reset")) {
+      const membershipId = url.split("/members/")[1]?.split("/")[0] ?? "mem-0";
+      const match = organizationFixture(state).memberships.find((m: { id: string; person?: { email?: string | null } | null }) => String(m.id) === membershipId);
+      const now = new Date();
+      return json({
+        sent: true,
+        membershipId,
+        email: match?.person?.email ?? "member@wrazyos.com",
+        sentAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        emailId: "preview-reset-1",
+      });
+    }
     if (url.includes("/api/work-os/organization")) return json(organizationFixture(state));
     if (url.includes("/api/work-os/integrations/connections")) return json(connectionsFixture());
-    if (url.includes("/api/work-os/field-mappings")) return json(fieldMappingsFixture());
     if (url.includes("/api/work-os/blueprints")) return json(blueprintsFixture());
     if (url.includes("/api/work-os/readiness")) return json(overviewFixture(state).readiness);
     return json({});

@@ -255,17 +255,18 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 }
 
 /** Action button in the workspace's quiet product language. */
-export function AdminButton({ children, onClick, variant = "secondary", disabled, title, icon: Icon, type = "button" }: {
+export function AdminButton({ children, onClick, variant = "secondary", disabled, title, ariaLabel, icon: Icon, type = "button" }: {
   children?: ReactNode;
   onClick?: () => void;
   variant?: "primary" | "secondary" | "ghost" | "danger";
   disabled?: boolean;
   title?: string;
+  ariaLabel?: string;
   icon?: typeof X;
   type?: "button" | "submit";
 }) {
   return (
-    <button type={type} className={`admin-button ${variant}`} onClick={onClick} disabled={disabled} title={title}>
+    <button type={type} className={`admin-button ${variant}`} onClick={onClick} disabled={disabled} title={title} aria-label={ariaLabel}>
       {Icon ? <Icon size={13} aria-hidden /> : null}
       {children}
     </button>

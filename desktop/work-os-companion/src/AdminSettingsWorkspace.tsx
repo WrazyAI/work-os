@@ -4,7 +4,7 @@ import { SettingsContent } from "./SettingsContent";
 import { SETTINGS_PAGES, type SettingsNavPage, type SettingsPageId } from "./settingsSections";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 
-export type AdminSettingsPageId = SettingsPageId | "workspace-status" | "features" | "members" | "teams" | "connections" | "mappings" | "blueprints" | "recap-follows";
+export type AdminSettingsPageId = SettingsPageId | "workspace-status" | "features" | "members" | "teams" | "connections" | "blueprints" | "recap-follows";
 
 const ADMIN_PAGES: SettingsNavPage<AdminSettingsPageId>[] = [
   { id: "workspace-status", label: "Workspace status", group: "Workspace", icon: ShieldCheck, description: "Schema readiness and the workspace database.", keywords: ["status", "schema", "database", "workspace"] },
@@ -12,7 +12,6 @@ const ADMIN_PAGES: SettingsNavPage<AdminSettingsPageId>[] = [
   { id: "members", label: "Members", group: "Workspace", icon: Users, description: "Who belongs to the workspace and the role each person can open.", keywords: ["members", "roles", "access", "people"] },
   { id: "teams", label: "Teams", group: "Workspace", icon: UsersRound, description: "Teams scope what managers can review and what planning groups.", keywords: ["teams", "managers", "groups"] },
   { id: "connections", label: "Connections", group: "Integrations", icon: Cable, description: "Provider connections and mapped evidence accounts.", keywords: ["connections", "providers", "github", "worktivity", "nifty"] },
-  { id: "mappings", label: "Field mappings", group: "Integrations", icon: Cable, description: "How provider fields land in the task record.", keywords: ["mappings", "fields", "providers"] },
   { id: "blueprints", label: "Blueprints", group: "Integrations", icon: PlugZap, description: "Reusable task templates the workspace can generate from.", keywords: ["blueprints", "templates", "tasks"] },
 ];
 
@@ -22,7 +21,6 @@ const ADMIN_CARD_BY_PAGE: Partial<Record<AdminSettingsPageId, AdminSettingsCardI
   members: "members",
   teams: "teams",
   connections: "connections",
-  mappings: "mappings",
   blueprints: "blueprints",
 };
 

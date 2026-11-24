@@ -39,13 +39,39 @@ strip wraps to three then two tiles; nothing gains horizontal scroll.
 
 ## Administration Insights
 
-**Insights** uses fixed ranges with deterministic facts first: a written
-brief, one facts record whose four leading numbers sit in a bounded band and
-whose three supporting facts sit on a quiet line beneath it, one labeled
-daily-record chart with a legend, observed-app context, backlog pressure, and
-a per-person facts table with a detail drawer. It never converts activity into
-a productivity score. Chart series read as one record: ink for outcomes,
-muted ink for updates, cool observation for submissions; green is state only.
+**Insights** is the Control room: one instrument, not a card wall. A range and
+person toolbar scopes the payload server-side; the masthead keeps the page
+title. The instrument leads with the selected range and four range facts
+(outcomes, commitments landed, people with recorded work, EOD submitted), then
+the people × days/weeks matrix.
+
+- **Matrix measures.** Session time (default), outcomes, updates, and evidence.
+  A cell is the selected measure for one teammate in one day (7d) or one
+  Monday-based week (30/90d). Session time is clock-in to clock-out minus
+  pauses; it is not app/site tracking and never a productivity score. Outcomes
+  are completed task outcomes, updates are recorded check-ins, and evidence
+  counts output + activity evidence rows.
+- **Exact facts.** The row header keeps the teammate's range outcomes and
+  commitment rate; the right total is the selected measure's total over the
+  displayed buckets. Hovering or focusing a cell always shows the full record
+  for that bucket — session time, outcomes, updates, EOD reports, and evidence —
+  regardless of the active measure. The tooltip sits beside the cell, stays
+  inside the viewport, and follows the material. Keyboard focus gets the same
+  readout through the cell's accessible name.
+- **Range fidelity.** 7d renders the range's workdays; 30/90d group the same
+  workdays into Monday-based weeks. The matrix never shows a fixed 14-day slice
+  unrelated to the selected range. Person/team scoping follows the server
+  filter; the person drawer carries the day-level record, commitment, and the
+  session/app-site/evidence distinction.
+- **Supporting record.** The attention rail, update mix, observed session-time
+  chart, plan reliability, person record (including app/site tracked minutes),
+  and app/site context share the instrument. Green is progress and state only;
+  session time and activity context stay cool observation ink. Evidence counts
+  rows, not minutes, and tracked context is app/site minutes, distinct from
+  session time.
+- **States.** Loading reserves the instrument's geometry; empty ranges name the
+  missing record and the next action; errors stay local. Empty, loading, and
+  degraded states follow the data-truth matrix.
 
 ## Administration chart provenance and states
 

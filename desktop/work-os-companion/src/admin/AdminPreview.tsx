@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { setDebugSession } from "../api";
+import { useNotifications } from "../NotificationFlyouts";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
@@ -42,7 +43,9 @@ export const PREVIEW_ADMIN_OTTO_TRANSPORT = ADMIN_FIXTURE_TRANSPORT;
  * instead (see `src/adminShell.ts`). */
 export default function AdminPreview() {
   const queryClient = useQueryClient();
+  const notificationsApi = useNotifications();
   const params = new URLSearchParams(window.location.search);
+  const toastFixture = params.get("toasts");
   const requested = params.get("section");
   const initialSection = SECTIONS.find((value) => value === requested) ?? "overview";
   const requestedState = params.get("state");
@@ -89,6 +92,40 @@ export default function AdminPreview() {
       offset: input.cursor ? 2 : 0,
     });
   };
+  useEffect(() => {
+    if (toastFixture !== "stack") return;
+    notificationsApi.persistent(
+      "preview-update",
+      "Version 0.5.30 is ready to download now, or later from Settings.",
+      "Update 0.5.30 is ready",
+      "info",
+      {
+        actions: [
+          { label: "Download update", kind: "primary", onClick: () => undefined },
+          { label: "Later", kind: "quiet", onClick: () => notificationsApi.clearPersistent("preview-update") },
+        ],
+      },
+    );
+    notificationsApi.persistent(
+      "preview-recap",
+      "1 recap is waiting in the administration inbox.",
+      "Reviewed recap ready",
+      "info",
+      {
+        icon: "otto",
+        actions: [
+          { label: "Listen", kind: "primary", onClick: () => undefined },
+          { label: "View recaps", kind: "quiet", onClick: () => undefined },
+        ],
+      },
+    );
+    notificationsApi.success("The workspace confirmed the task update.", "Task updated");
+    return () => {
+      notificationsApi.clearPersistent("preview-update");
+      notificationsApi.clearPersistent("preview-recap");
+    };
+  }, [notificationsApi, toastFixture]);
+
   const fixtureTransport = {
     ...ADMIN_FIXTURE_TRANSPORT,
     send: ottoState === "evidence"

@@ -75,7 +75,9 @@ rows beneath it (`.admin-controls`, [inputs, search, and filters](../patterns/co
 segmented views, search, selects, and the primary Add task on one compact
 controls row that wraps deliberately at narrow widths. Overview stays quiet meta
 only; Settings gives each field group its own gutter section instead of a
-header.
+header. Insights is the deliberate exception to the card title row: its range
+and person controls sit in one toolbar above the instrument, and the matrix
+owns its measure strip; the masthead still owns the page title and purpose.
 
 ## Cached state
 

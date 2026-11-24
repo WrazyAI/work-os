@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
+import { Cable, KeyRound, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, workspaceDegradedNotice } from "./adminNotifications";
 import {
@@ -8,13 +8,11 @@ import {
   ADMIN_STALE_MS,
   fetchBlueprints,
   fetchConnections,
-  fetchFieldMappings,
   fetchOrganization,
   fetchPeople,
   fetchSystemStatus,
   normalizeBlueprints,
   normalizeConnections,
-  normalizeFieldMappings,
   normalizeOrganization,
   normalizePeople,
   normalizeSystemStatus,
@@ -22,8 +20,10 @@ import {
   organizationMembershipPatch,
   relativeTime,
   saveOrganizationFeatures,
+  sendOrganizationMemberPasswordReset,
   statusLabel,
 } from "./data";
+import type { OrganizationMembershipRow } from "./types";
 import { AdminButton, AdminCard, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
 
 const FEATURES: Array<{ key: string; label: string; detail: string }> = [
@@ -46,13 +46,43 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * device, appearance, or guide preferences. The shell's node also carries the
  * account's recap-follow group, which stays present without a personal
  * workday record; this page only hosts it above the workspace configuration. */
-export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "mappings" | "blueprints";
+export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "blueprints";
+
+/** Pick only the failures owned by the card on screen. The all-cards fallback
+ * is the legacy single-page render; the category workspace always names one. */
+export function selectSettingsCardError(
+  activeCard: AdminSettingsCardId | undefined,
+  errors: Record<AdminSettingsCardId, unknown[]>,
+): unknown {
+  // A restored or stale navigation value must never index a missing card.
+  const owned = activeCard ? errors[activeCard] : undefined;
+  return Array.isArray(owned) ? owned.find(Boolean) : Object.values(errors).flat().find(Boolean);
+}
+
+/** Mutation failures stay separate: a failed Add member must not hide behind
+ * an earlier role-change failure that has not been cleared. */
+export function SettingsErrorNotices({ errors }: { errors: unknown[] }) {
+  return <>{errors.filter(Boolean).map((error, index) => (
+    <Notice key={index} tone="err">{(error as Error).message}</Notice>
+  ))}</>;
+}
+
+function formatResetSentTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "just now";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 export default function SettingsPage({ personalSettings, activeCard }: { personalSettings?: ReactNode; activeCard?: AdminSettingsCardId }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
+  const confirmTitleId = useId();
+  const confirmDialogRef = useRef<HTMLDialogElement | null>(null);
+  const confirmPressedOutside = useRef(false);
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("employee");
+  const [confirmResetMember, setConfirmResetMember] = useState<OrganizationMembershipRow | null>(null);
+  const [sentResets, setSentResets] = useState<Record<string, { sentAt: string; email: string }>>({});
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState("");
   const [teamPersonId, setTeamPersonId] = useState("");
@@ -61,7 +91,6 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
   const organization = useQuery({ queryKey: adminKeys.organization(), queryFn: fetchOrganization, select: normalizeOrganization, staleTime: ADMIN_STALE_MS });
   const status = useQuery({ queryKey: adminKeys.status(), queryFn: fetchSystemStatus, select: normalizeSystemStatus, staleTime: ADMIN_STALE_MS });
   const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, select: normalizeConnections, staleTime: ADMIN_STALE_MS });
-  const mappings = useQuery({ queryKey: adminKeys.fieldMappings(), queryFn: fetchFieldMappings, select: normalizeFieldMappings, staleTime: ADMIN_STALE_MS });
   const blueprints = useQuery({ queryKey: adminKeys.blueprints(), queryFn: fetchBlueprints, select: normalizeBlueprints, staleTime: ADMIN_STALE_MS });
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
 
@@ -110,6 +139,22 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
       }
     },
   });
+  const passwordReset = useMutation({
+    mutationFn: (member: OrganizationMembershipRow) => sendOrganizationMemberPasswordReset(member.id),
+    onSuccess: (result) => {
+      setSentResets((previous) => ({
+        ...previous,
+        [result.membershipId]: { sentAt: result.sentAt, email: result.email },
+      }));
+      notifications.success(`Sent a 1-hour password reset link to ${result.email}.`, "Password reset sent");
+    },
+  });
+
+  useEffect(() => {
+    const dialog = confirmDialogRef.current;
+    if (!confirmResetMember || !dialog) return;
+    if (!dialog.open) dialog.showModal();
+  }, [confirmResetMember]);
   // One standing condition for this page: the workspace status endpoint says
   // the schema or the Nifty connection is degraded. Stable key, cleared when
   // the status is healthy again.
@@ -124,7 +169,19 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
     notifications.persistent(ADMIN_STATUS_DEGRADED_KEY, degradedMessage, degradedTitle, "warning");
   }, [degradedTitle, degradedMessage, notifications]);
 
-  const error = organization.error || status.error || connections.error || mappings.error || blueprints.error || features.error || membership.error || action.error;
+  // Each settings page owns the reads and mutations its card shows. A failure
+  // in one optional card must never headline a page that does not read it.
+  const actionCard: AdminSettingsCardId | null =
+    action.variables?.type === "membership" ? "members" : action.variables ? "teams" : null;
+  const cardErrors: Record<AdminSettingsCardId, unknown[]> = {
+    status: [organization.error, status.error],
+    features: [organization.error, features.error],
+    members: [organization.error],
+    teams: [organization.error, people.error],
+    connections: [connections.error],
+    blueprints: [blueprints.error],
+  };
+  const error = selectSettingsCardError(activeCard, cardErrors);
   const flags = (organization.data?.organization?.feature_flags ?? {}) as Record<string, boolean>;
   const memberships = organization.data?.memberships ?? [];
   const teams = organization.data?.teams ?? [];
@@ -194,47 +251,157 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Add member
           </AdminButton>
         </div>
-        <div className="admin-table-wrap">
+        <div className="admin-table-wrap" tabIndex={0} role="region" aria-label="Workspace members">
           <table className="admin-table">
-            <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Active</th></tr></thead>
+            <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Active</th><th className="admin-col-end">Password</th></tr></thead>
             <tbody>
-              {memberships.map((member) => (
-                <tr key={member.id} className="static">
-                  <td data-label="Member">
-                    <span className="min-w-0">
-                      <b>{member.person?.display_name ?? member.person?.email ?? "Unmapped member"}</b>
-                      <small>{member.person?.email ?? member.user_id}</small>
-                    </span>
-                  </td>
-                  <td data-label="Person" className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
-                  <td data-label="Role">
-                    <SelectField
-                      ariaLabel={`Role for ${member.person?.display_name ?? member.id}`}
-                      value={member.role}
-                      onChange={(next) => membership.mutate({ membership_id: member.id, role: next })}
-                      options={[{ value: "employee", label: "Employee" }, { value: "manager", label: "Manager" }, { value: "admin", label: "Administrator" }]}
-                    />
-                  </td>
-                  <td data-label="Active">
-                    <label className="admin-toggle">
-                      <input
-                        type="checkbox"
-                        checked={member.active}
-                        disabled={membership.isPending}
-                        onChange={(event) => membership.mutate({ membership_id: member.id, active: event.target.checked })}
+              {memberships.map((member) => {
+                const displayName = member.person?.display_name ?? member.email ?? member.person?.email ?? "Unmapped member";
+                const loginEmail = member.email ?? member.person?.email ?? null;
+                const sentRecord = sentResets[member.id];
+                const isSendingThis = passwordReset.isPending && passwordReset.variables?.id === member.id;
+                return (
+                  <tr key={member.id} className="static">
+                    <td data-label="Member">
+                      <span className="admin-member-identity">
+                        <b>{displayName}</b>
+                        <small>{loginEmail ?? member.user_id}</small>
+                      </span>
+                    </td>
+                    <td data-label="Person" className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
+                    <td data-label="Role">
+                      <SelectField
+                        ariaLabel={`Role for ${displayName}`}
+                        value={member.role}
+                        onChange={(next) => membership.mutate({ membership_id: member.id, role: next })}
+                        options={[{ value: "employee", label: "Employee" }, { value: "manager", label: "Manager" }, { value: "admin", label: "Administrator" }]}
                       />
-                      <span aria-hidden />
-                      <em>{member.active ? "Active" : "Inactive"}</em>
-                    </label>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td data-label="Active">
+                      <label className="admin-toggle">
+                        <input
+                          type="checkbox"
+                          checked={member.active}
+                          disabled={membership.isPending}
+                          onChange={(event) => membership.mutate({ membership_id: member.id, active: event.target.checked })}
+                        />
+                        <span aria-hidden />
+                        <em>{member.active ? "Active" : "Inactive"}</em>
+                      </label>
+                    </td>
+                    <td data-label="Password" className="admin-member-reset-cell">
+                      {!member.active ? (
+                        <AdminButton
+                          variant="secondary"
+                          disabled
+                          title="Activate this member before sending a password reset email"
+                          ariaLabel={`Password reset unavailable for inactive member ${displayName}`}
+                        >
+                          Inactive
+                        </AdminButton>
+                      ) : isSendingThis ? (
+                        <AdminButton variant="secondary" disabled icon={KeyRound}>
+                          Sending…
+                        </AdminButton>
+                      ) : sentRecord ? (
+                        <span className="admin-member-reset-sent">
+                          <span className="admin-member-reset-receipt">Sent {formatResetSentTime(sentRecord.sentAt)}</span>
+                          <button
+                            type="button"
+                            className="admin-member-reset-resend"
+                            disabled={passwordReset.isPending}
+                            onClick={() => {
+                              passwordReset.reset();
+                              setConfirmResetMember(member);
+                            }}
+                          >
+                            Resend
+                          </button>
+                        </span>
+                      ) : (
+                        <AdminButton
+                          variant="secondary"
+                          icon={KeyRound}
+                          disabled={passwordReset.isPending}
+                          ariaLabel={`Send password reset email to ${displayName}`}
+                          onClick={() => {
+                            passwordReset.reset();
+                            setConfirmResetMember(member);
+                          }}
+                        >
+                          Send reset
+                        </AdminButton>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        {membership.error ? <Notice tone="err">{(membership.error as Error).message}</Notice> : null}
-        {action.error ? <Notice tone="err">{(action.error as Error).message}</Notice> : null}
+        <SettingsErrorNotices errors={[membership.error, passwordReset.error, actionCard === "members" ? action.error : null]} />
       </AdminCard>
+      {confirmResetMember ? (
+        <dialog
+          ref={confirmDialogRef}
+          className="admin-confirm-dialog"
+          aria-labelledby={confirmTitleId}
+          {...({ closedby: "any" } as Record<string, string>)}
+          onPointerDown={(event) => {
+            if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            confirmPressedOutside.current =
+              event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+          }}
+          onPointerUp={(event) => {
+            if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const releasedOutside =
+              event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+            if (confirmPressedOutside.current && releasedOutside) event.currentTarget.close("");
+            confirmPressedOutside.current = false;
+          }}
+          onClose={(event) => {
+            const dialog = event.currentTarget;
+            const choice = dialog.returnValue;
+            dialog.returnValue = "";
+            const target = confirmResetMember;
+            setConfirmResetMember(null);
+            if (choice === "confirm" && target) {
+              passwordReset.mutate(target);
+            }
+          }}
+        >
+          <div className="admin-confirm-dialog-body">
+            <h1 id={confirmTitleId}>Send password reset email?</h1>
+            <p className="admin-confirm-dialog-copy">
+              This sends a one-time link to choose a new WrazyOS password. Their current password stays unchanged until they complete the reset.
+            </p>
+            <dl className="admin-confirm-dialog-meta">
+              <div>
+                <dt>Member</dt>
+                <dd>{confirmResetMember.person?.display_name ?? confirmResetMember.email ?? confirmResetMember.person?.email ?? "Workspace member"}</dd>
+              </div>
+              <div>
+                <dt>Sign-in email</dt>
+                <dd className="is-mono">{confirmResetMember.email ?? confirmResetMember.person?.email ?? "Resolved from account"}</dd>
+              </div>
+              <div>
+                <dt>Link expiry</dt>
+                <dd>1 hour</dd>
+              </div>
+            </dl>
+            <form method="dialog" className="admin-confirm-dialog-actions">
+              <button type="submit" value="cancel" className="admin-button secondary" autoFocus>
+                Cancel
+              </button>
+              <button type="submit" value="confirm" className="admin-button primary">
+                Send reset email
+              </button>
+            </form>
+          </div>
+        </dialog>
+      ) : null}
 
       <AdminCard className="admin-card-teams" icon={UsersRound} title="Teams" detail="Teams scope what managers can review and what the planning surfaces group">
         <div className="admin-inline-fields">
@@ -275,43 +442,26 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Add to team
           </AdminButton>
         </div>
+        <SettingsErrorNotices errors={[actionCard === "teams" ? action.error : null]} />
       </AdminCard>
 
-      <div className="admin-band">
-        <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
-          {connections.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : (connections.data?.connections ?? []).length ? (
-            <ul className="admin-rows spaced">
-              {(connections.data?.connections ?? []).map((connection) => (
-                <li key={String(connection.id)}>
-                  <span>{statusLabel(String(connection.provider ?? "provider"))}<small>{connection.external_workspace_id ? `workspace ${String(connection.external_workspace_id)}` : "no workspace id"}</small></span>
-                  <Pill tone={connection.active === false ? "neutral" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</Pill>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="admin-empty-note">No provider connections yet. Connect your evidence providers in the web console.</p>
-          )}
-          <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
-        </AdminCard>
-
-        <AdminCard className="admin-card-mappings" icon={Cable} title="Field mappings" detail="How provider fields land in the task record">
-          {mappings.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : (mappings.data?.mappings ?? []).length ? (
-            <ul className="admin-rows spaced">
-              {(mappings.data?.mappings ?? []).slice(0, 10).map((mapping, index) => (
-                <li key={String(mapping.id ?? index)}>
-                  <span>{statusLabel(String(mapping.field ?? mapping.local_field ?? "Field"))}<small>provider field {String(mapping.provider_field_id ?? mapping.provider_field ?? "—")}</small></span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="admin-empty-note">No custom field mappings are configured.</p>
-          )}
-        </AdminCard>
-      </div>
+      <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
+        {connections.isLoading ? (
+          <Skeleton className="h-20" />
+        ) : (connections.data?.connections ?? []).length ? (
+          <ul className="admin-rows spaced">
+            {(connections.data?.connections ?? []).map((connection) => (
+              <li key={String(connection.id)}>
+                <span>{statusLabel(String(connection.provider ?? "provider"))}<small>{connection.external_workspace_id ? `workspace ${String(connection.external_workspace_id)}` : "no workspace id"}</small></span>
+                <Pill tone={connection.active === false ? "neutral" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</Pill>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="admin-empty-note">No provider connections yet. Connect your evidence providers in the web console.</p>
+        )}
+        <p className="admin-quiet">{(connections.data?.accounts ?? []).length} mapped provider account{(connections.data?.accounts ?? []).length === 1 ? "" : "s"}.</p>
+      </AdminCard>
 
       <AdminCard className="admin-card-blueprints" icon={PlugZap} title="Blueprints" detail="Reusable task templates the workspace can generate from" padded={false}>
         {(blueprints.data?.blueprints ?? []).length ? (
