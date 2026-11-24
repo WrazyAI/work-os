@@ -13,6 +13,7 @@ import { AdminOttoSpeechChangedError } from "../adminOtto/api";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester } from "../adminOtto/audioOwner";
 import { useAdminOttoRecapAudio } from "../adminOtto/useAdminOttoRecapAudio";
 import { parseAdminRecordHref } from "../adminOtto/recordLinks";
+import { seedPayrollPreview } from "./payroll/preview";
 
 const PREVIEW_SESSION: SessionResponse = {
   organizationId: "org-preview",
@@ -22,7 +23,7 @@ const PREVIEW_SESSION: SessionResponse = {
   featureFlags: { employee_companion: true, desktop_companion: true },
 };
 
-const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
+const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "payroll", "insights", "evidence", "settings"];
 const SCOPE = { userId: PREVIEW_SESSION.userId, organizationId: PREVIEW_SESSION.organizationId, mode: "admin" as const };
 /** The fixture New chat is a real action: it answers locally, so rendered QA
  * never sends a request or needs a live admin account. */
@@ -205,6 +206,7 @@ export default function AdminPreview() {
   };
   useMemo(() => {
     seedAdminFixtures(queryClient, state);
+    seedPayrollPreview(queryClient, PREVIEW_SESSION, state === "empty");
   }, [queryClient, state]);
   useEffect(() => {
     if (!stubApi) return;

@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Administrators can review payroll records, run audits, and record findings from the desktop app.
+
 - Admin side panels no longer hide under the menu bar, and EOD Review lists the newest report day first.
 
 ## 0.5.43 — 2026-11-23

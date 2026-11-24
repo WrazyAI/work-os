@@ -175,11 +175,12 @@ export function reconcileGuideState(
 /** The administration sections were named to read well on their own; their
  * guide keys are the same names under an `admin_` prefix, so a flag can never
  * be mistaken for an employee page's. */
-const ADMIN_GUIDE_FOR_SECTION: Record<AdminSection, AdminGuideView> = {
+const ADMIN_GUIDE_FOR_SECTION: Record<AdminSection, AdminGuideView | null> = {
   overview: "admin_overview",
   people: "admin_people",
   tasks: "admin_tasks",
   review: "admin_review",
+  payroll: null,
   insights: "admin_insights",
   evidence: "admin_evidence",
   settings: "admin_settings",
@@ -196,7 +197,9 @@ const ADMIN_SECTION_FOR_GUIDE: Record<AdminGuideView, AdminSection> = {
 };
 
 /** The guide that answers for an administration section. */
-export function guideViewForAdminSection(section: AdminSection): AdminGuideView {
+export function guideViewForAdminSection(section: Exclude<AdminSection, "payroll">): AdminGuideView;
+export function guideViewForAdminSection(section: AdminSection): AdminGuideView | null;
+export function guideViewForAdminSection(section: AdminSection): AdminGuideView | null {
   return ADMIN_GUIDE_FOR_SECTION[section];
 }
 

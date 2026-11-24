@@ -24,6 +24,32 @@ vi.mock("./diagnostics", () => ({
 }));
 
 import { apiRequest, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
+import { desktopPayroll } from "./admin/payroll/api";
+
+it("refuses a scoped payroll request after the desktop workspace changes", async () => {
+  const transport = vi.fn(async () => Response.json({ items: [] }));
+  vi.stubGlobal("fetch", transport);
+  try {
+    await expect(apiRequest("/api/work-os/admin/payroll", {}, { organizationId: "org-previous" })).rejects.toThrow(/workspace changed/i);
+    expect(transport).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("queues a native audit only for the chosen employee and period with the supplied retry key", async () => {
+  const transport = vi.fn(async () => Response.json({ reviewId: "review-123" }, { status: 202 }));
+  vi.stubGlobal("fetch", transport);
+  try {
+    const input = { personId: "person-123", payDate: "2026-11-16", requestKey: "audit-retry-key" };
+    await expect(desktopPayroll("org-a").start(input)).resolves.toMatchObject({ reviewId: "review-123" });
+    expect(transport).toHaveBeenCalledExactlyOnceWith("https://work.example.test/api/work-os/admin/payroll",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input),
+        headers: expect.objectContaining({ "X-Work-OS-Organization-Id": "org-a" }) }));
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 describe("offline action replay", () => {
   beforeEach(() => {

@@ -359,7 +359,7 @@ body:has(.admin-workspace) .notifications-card {
 
 .admin-button:hover:not(:disabled) {
   border-color: var(--line-strong, #c5cec1);
-  background: #f2f4ee;
+  background: var(--inset);
 }
 
 .admin-button:disabled {
@@ -374,7 +374,7 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 .admin-button.primary:hover:not(:disabled) {
-  background: #24301f;
+  background: color-mix(in srgb, var(--ink) 88%, var(--paper));
 }
 
 .admin-button.ghost {

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { NotificationProvider } from "../NotificationFlyouts";
 import type { AdminSection, SessionResponse } from "./types";
+import SidebarNav from "../SidebarNav";
 
 const noop = () => undefined;
 
@@ -42,6 +43,29 @@ function render(overrides: Partial<Parameters<typeof AdminWorkspace>[0]> = {}) {
         createElement(Component, { session, notifications, section: "overview", focus: {}, onNavigate: noop, onOpenRecaps: noop, onSwitchToEmployee: noop, onSignOut: noop, ...overrides }))),
   );
 }
+
+describe("native Payroll navigation", () => {
+  it("appears in the administration rail", () => {
+    expect(render()).toContain('aria-label="Payroll"');
+  });
+
+  it("opens the native records stage, never for a non-admin session", () => {
+    expect(render({ section: "payroll" })).toContain("Loading payroll records");
+    expect(render({ section: "payroll", session: { ...session, role: "employee" } })).not.toContain("Loading payroll records");
+  });
+
+  it("offers New audit on the records-first view, without an approval action", () => {
+    const markup = render({ section: "payroll" });
+    expect(markup).toContain("New audit");
+    expect(markup).toMatch(/aria-pressed="true">Records/);
+    expect(markup).not.toContain("Approve payable hours");
+  });
+
+  it("is absent from the personal workspace rail", () => {
+    const markup = renderToStaticMarkup(createElement(SidebarNav, { mode: "employee", activeView: "day", onNavigate: noop, onNewChat: noop }));
+    expect(markup).not.toContain('aria-label="Payroll"');
+  });
+});
 
 describe("administration masthead profile entry", () => {
   it("opens the account's profile through the same avatar contract as the employee masthead", () => {

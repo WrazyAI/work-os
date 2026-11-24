@@ -504,6 +504,12 @@
       "type": "fix",
       "summary": "Admin side panels open below the menu bar, and EOD Review lists the newest report day first.",
       "verification": "Companion suite 235 files / 2,090 tests passed; Work OS suite main pass 1,419/0 with the payroll files re-run individually 17/0 after a Node 24 V8 JIT crash in the parallel payroll batch; rendered shell at 1440 and 700 measured drawers at y=34 under the 34px bar with the close button fully below it; queue fixture rendered newest report day first with no page errors; live API returned 72 reports in strictly descending report day order (Nov 20, Nov 17, Nov 17, Nov 12, Nov 11) and the deployed EOD Review page reads \"Newest report day first\" with no page errors."
+    },
+    {
+      "id": "desktop-payroll-audits",
+      "type": "feature",
+      "summary": "Administrators can review payroll records, run audits, and record findings from the desktop app.",
+      "verification": "Companion typecheck and Vite production build passed; companion suite 236 files / 2,098 tests passed; the real admin shell rendered in Chromium at 1440 light, 1024 dark, and 390 light with reduced motion, covering Records by default, New audit selection gating, the review and finding decision dialogs, keyboard focus, an empty period, and a hover contrast check of at least 4.5:1."
     }
   ],
   "emergency": null,
