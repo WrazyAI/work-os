@@ -9,7 +9,7 @@ import { NotificationProvider } from "./NotificationFlyouts";
 
 const noop = () => undefined;
 
-function props(): PersonalSettingsProps {
+function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettingsProps {
   return {
     hasPersonalRecord: true,
     tourScope: "admin",
@@ -42,6 +42,8 @@ function props(): PersonalSettingsProps {
     queueCount: 0,
     queueAttentionCount: 0,
     sessionApiBase: "https://app.wrazyos.com",
+    agentAccessSurface: "admin",
+    adminAgentApiEnabled: true,
     onSignOut: noop,
     memory: { facts: [], loading: false, error: null },
     onOpenMemory: noop,
@@ -50,10 +52,11 @@ function props(): PersonalSettingsProps {
     onExportDiagnostics: noop,
     onResetOnboarding: noop,
     busy: false,
+    ...overrides,
   };
 }
 
-function render(active: "workspace-status" | "general") {
+function render(active: "workspace-status" | "general" | "session", overrides: Partial<PersonalSettingsProps> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(NotificationProvider, null, createElement(AdminSettingsContent, {
@@ -62,7 +65,7 @@ function render(active: "workspace-status" | "general") {
       query: "",
       onSelect: noop,
       onQuery: noop,
-      personalSettingsProps: props(),
+      personalSettingsProps: props(overrides),
     }))),
   );
 }
@@ -91,6 +94,23 @@ describe("administration settings takeover", () => {
     const markup = render("general");
     expect(markup).toContain("This device");
     expect(markup).not.toContain("Workspace status");
+  });
+
+  it("puts the administrator token surface and its guide on Session", () => {
+    const markup = render("session");
+    expect(markup).toContain("Agent access");
+    expect(markup).toContain("Admin tokens");
+    expect(markup).toContain("Admin API guide");
+    expect(markup).toContain("https://app.wrazyos.com/docs/agent-api/admin");
+    expect(markup).not.toContain("User API guide");
+  });
+
+  it("states that admin tokens are off when the workspace has not enabled the API", () => {
+    const markup = render("session", { adminAgentApiEnabled: false });
+    expect(markup).toContain("Admin agent access is off");
+    expect(markup).toContain("Admin API guide");
+    expect(markup).toContain("https://app.wrazyos.com/docs/agent-api/admin");
+    expect(markup).not.toContain("Manage tokens");
   });
 
   it("does not offer the retired Field mappings destination", () => {

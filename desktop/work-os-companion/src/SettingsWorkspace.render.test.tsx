@@ -43,6 +43,7 @@ function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettings
     queueCount: 0,
     queueAttentionCount: 0,
     sessionApiBase: "https://app.wrazyos.com",
+    agentAccessSurface: "employee",
     onSignOut: noop,
     memory: { facts: [], loading: false, error: null },
     onOpenMemory: noop,
@@ -117,6 +118,15 @@ describe("settings sidebar takeover", () => {
     expect(markup).toContain("This device");
     expect(markup).toContain("Start with Windows");
     expect(markup).not.toContain("Reading &amp; display");
+  });
+
+  it("puts the employee token surface and its guide on Session", () => {
+    const markup = renderContent({ active: "session" });
+    expect(markup).toContain("Agent access");
+    expect(markup).toContain("Scoped tokens");
+    expect(markup).toContain("User API guide");
+    expect(markup).toContain("https://app.wrazyos.com/docs/agent-api/user");
+    expect(markup).not.toContain("Admin tokens");
   });
 
   it("embeds the profile form on the Profile page instead of opening a modal", () => {

@@ -2534,9 +2534,9 @@ export default function App() {
   const proposedMemoryQuery = useMemoryFactsQuery("candidate", memoryPagesEnabled);
   const memoryModalFacts = [
     ...new Map((rememberedQuery.data?.pages.flatMap(page => page.facts)
-      ?? memoryQuery.data?.facts.filter(fact => fact.review_status === "confirmed") ?? []).map(fact => [fact.id, fact])).values(),
+      ?? memoryQuery.data?.facts?.filter(fact => fact.review_status === "confirmed") ?? []).map(fact => [fact.id, fact])).values(),
     ...new Map((proposedMemoryQuery.data?.pages.flatMap(page => page.facts)
-      ?? memoryQuery.data?.facts.filter(fact => fact.review_status === "candidate") ?? []).map(fact => [fact.id, fact])).values(),
+      ?? memoryQuery.data?.facts?.filter(fact => fact.review_status === "candidate") ?? []).map(fact => [fact.id, fact])).values(),
   ];
   const memoryFactPaging = memoryQuery.data?.factTotals ? {
     confirmed: {
@@ -3199,7 +3199,7 @@ export default function App() {
     try {
       const result = await reviewMemoryFact(id, status);
       if (result.fact?.id !== id || result.fact.review_status !== status) throw new Error("The memory decision was not confirmed. Please retry.");
-      const fact = memoryModalFacts.find(row => row.id === id) ?? memoryQuery.data?.facts.find(row => row.id === id);
+      const fact = memoryModalFacts.find(row => row.id === id) ?? memoryQuery.data?.facts?.find(row => row.id === id);
       if (fact) applyMemoryReviewToCaches(queryClient, fact, status);
       await queryClient.invalidateQueries({ queryKey: workOsKeys.memory() });
       return true;
@@ -5841,6 +5841,8 @@ export default function App() {
       queueCount,
       queueAttentionCount,
       sessionApiBase: visibleSession?.apiBase ?? "",
+      agentAccessSurface: surface,
+      adminAgentApiEnabled: workSessionQuery.data?.featureFlags?.admin_agent_api === true,
       onSignOut: () => void logout(),
       memory: {
         facts: memoryQuery.data?.facts ?? [],

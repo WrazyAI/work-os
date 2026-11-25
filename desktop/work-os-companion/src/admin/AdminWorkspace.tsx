@@ -32,7 +32,7 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose?: str
   payroll: { title: "Payroll", purpose: "Review recorded evidence and approve payable hours." },
   insights: { title: "Insights", purpose: "Recorded outcomes and activity context across the selected range." },
   evidence: { title: "Evidence" },
-  settings: { title: "Settings", purpose: "Your own settings, then the workspace's configuration, members, and provider connections." },
+  settings: { title: "Settings" },
 };
 
 type Focus = AdminSectionFocus;

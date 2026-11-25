@@ -99,7 +99,7 @@ export const ADMIN_SHELL_SESSION: SessionResponse = {
   role: "admin",
   personId: "debug-person-1",
   userId: "user-admin-shell",
-  featureFlags: { employee_companion: true, desktop_companion: true },
+  featureFlags: { employee_companion: true, desktop_companion: true, admin_agent_api: true },
 };
 
 /** The guide flags the harness boots with. `fresh` (the default) is a

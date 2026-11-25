@@ -83,6 +83,7 @@ export default function SettingsWorkspacePreview() {
           queueCount={0}
           queueAttentionCount={0}
           sessionApiBase="app.wrazyos.com"
+          agentAccessSurface="employee"
           onSignOut={() => undefined}
           memory={{ facts: [], factTotals: { confirmed: 3, candidate: 1 }, loading: false, error: null }}
           onOpenMemory={() => undefined}
