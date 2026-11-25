@@ -55,22 +55,16 @@ export default function EmployeeReview() {
   const outstanding = useOutstandingEods();
   const now = useNow();
   const [selectedDate, setSelectedDate] = useState("");
-  /** The EOD page keeps the moment after a submission: the confirmation stays
-   * until the employee returns to the EOD list. */
-  const [eodConfirmation, setEodConfirmation] = useState(false);
+  /** The confirmation names the day actually submitted, not whichever day is
+   * selected when a late response lands. */
+  const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<{ date: string; at: string | null } | null>(null);
   const [prepareNote, setPrepareNote] = useState<string | null>(null);
   const preparedDates = useRef(new Set<string>());
-  const selectedDateRef = useRef(selectedDate);
-  selectedDateRef.current = selectedDate;
 
   useEffect(() => {
     if (day.data?.shiftDate) setSelectedDate((current) => current || day.data!.shiftDate);
   }, [day.data?.shiftDate]);
-
-  // The confirmation names the day that was submitted; changing the day must
-  // never leave it looking like that report was just filed.
-  useEffect(() => { setEodConfirmation(false); }, [selectedDate]);
 
   const historical = !!selectedDate && !!day.data?.shiftDate && selectedDate !== day.data.shiftDate;
   const selectedDay = useQuery<EmployeeDayResponse>({
@@ -214,7 +208,7 @@ export default function EmployeeReview() {
   ) : null;
 
   const eodPanel = (() => {
-    if (eodConfirmation) {
+    if (confirmedDate === selectedDate) {
       return (
         <div className={styles.confirm} role="status">
           <CheckedMoment className="!h-[168px] !w-[168px]" />
@@ -222,7 +216,7 @@ export default function EmployeeReview() {
           <p className={styles.confirmCopy}>
             {historical ? `Your report for ${calendarDateLabel(selectedDate)} is with your manager.` : "Your report is with your manager. You are done for today."}
           </p>
-          <button type="button" className={styles.secondaryButton} onClick={() => setEodConfirmation(false)}>
+          <button type="button" className={styles.secondaryButton} onClick={() => setConfirmedDate(null)}>
             <ArrowLeft size={13} /> All EODs
           </button>
         </div>
@@ -261,7 +255,7 @@ export default function EmployeeReview() {
               setRefusal(null);
               void refresh();
               if (historical) void selectedDay.refetch();
-              if (String(submitted?.report_date ?? "") === selectedDateRef.current) setEodConfirmation(true);
+              setConfirmedDate(String(submitted?.report_date ?? selectedDate));
             }}
           />
         </div>
