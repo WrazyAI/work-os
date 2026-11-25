@@ -16,6 +16,8 @@ import {
 } from "@wrazy/work-os-shared/eod-structured";
 
 export {
+  EOD_MAX_LINE_CHARS,
+  EOD_MAX_LINES,
   EOD_STRUCTURED_VERSION,
   cleanEodLines,
   cleanEodText,

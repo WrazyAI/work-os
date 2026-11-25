@@ -52,6 +52,7 @@ describe("EodStructuredComposer", () => {
     expect(markup).toContain("Next");
     expect(markup).toContain("Waiting on your entries");
     expect(markup).toContain("Submit for review");
+    expect(markup).toContain('maxLength="240"');
     expect(submitTag(markup)).toContain("disabled");
   });
 

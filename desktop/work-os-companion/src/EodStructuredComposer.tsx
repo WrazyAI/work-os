@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Lock, Plus, RotateCw, Trash2, Video } from "lucide-react";
 import {
+  EOD_MAX_LINE_CHARS,
+  EOD_MAX_LINES,
   cleanEodLines,
   createSaveFlight,
   eodCompositionIsComplete,
@@ -65,7 +67,7 @@ const FIELD_META: Record<FieldKey, { number: string; title: string; description:
 };
 const FIELDS: FieldKey[] = ["completed", "inProgress", "next"];
 const SUGGESTIONS_PER_PAGE = 2;
-const MAX_LINES = 12;
+const MAX_LINES = EOD_MAX_LINES;
 const SAVE_DEBOUNCE_MS = 700;
 
 function formatAt(value: string | null): string | null {
@@ -114,6 +116,8 @@ export function EodStructuredComposer({
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string; conflict?: boolean } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  const [reloadPending, setReloadPending] = useState(false);
 
   const setLines = useCallback((field: FieldKey, value: string[]) => {
     if (field === "completed") setCompleted(value);
@@ -153,11 +157,12 @@ export function EodStructuredComposer({
   const firstRender = useRef(true);
   const saveRef = useRef(onSave);
   const summaryAbort = useRef<AbortController | null>(null);
+  const recovery = useRef<EodCompositionInput | null>(null);
+  const suppressSave = useRef(false);
 
   useEffect(() => { latest.current = input; }, [input]);
   useEffect(() => { saveRef.current = onSave; }, [onSave]);
-  useEffect(() => {
-    if (dirty.current) return;
+  const adoptStructured = useCallback(() => {
     setCompleted(linesFor(structured.completed));
     setInProgress(linesFor(structured.inProgress));
     setNext(linesFor(structured.next));
@@ -166,7 +171,14 @@ export function EodStructuredComposer({
     setSummarySource(structured.summarySource);
     setSummarySignature(structured.summarySignature);
     setLoomUrl(structured.loomUrl ?? "");
+    dirty.current = false;
   }, [structured]);
+
+  useEffect(() => {
+    if (dirty.current && !reloadPending) return;
+    adoptStructured();
+    setReloadPending(false);
+  }, [structured, reloadPending, adoptStructured]);
 
   const markDirty = useCallback(() => {
     dirty.current = true;
@@ -200,7 +212,7 @@ export function EodStructuredComposer({
   }, [completed, inProgress, next, summary, summaryGeneratedAt, summarySource, summarySignature, loomUrl, writing, submitting, summaryStreaming, persistLatest]);
 
   const flush = useCallback(() => {
-    if (dirty.current) void flight(latest.current);
+    if (!suppressSave.current && dirty.current) void flight(latest.current);
   }, [flight]);
 
   useEffect(() => {
@@ -294,18 +306,47 @@ export function EodStructuredComposer({
 
   const submit = async () => {
     if (!complete || !current || writing || submitting) return;
+    suppressSave.current = true;
     setSubmitting(true);
     setNotice(null);
     try {
       const result = await onSubmit(input, crypto.randomUUID());
+      dirty.current = false;
       if (result === "queued") {
         setNotice({ tone: "info", text: "Queued on this device — your report will be sent when the connection returns." });
       }
     } catch (error) {
+      suppressSave.current = false;
       setNotice({ tone: "error", text: error instanceof Error ? error.message : "The report could not be submitted." });
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const reloadReport = () => {
+    recovery.current = latest.current;
+    setRecoveryAvailable(true);
+    setReloadPending(true);
+    setNotice({ tone: "info", text: "The saved report is loaded. Your earlier text is kept; restore it if it is still yours." });
+    adoptStructured();
+    setReloadPending(false);
+    onReload?.();
+  };
+
+  const restoreRecovery = () => {
+    const saved = recovery.current;
+    if (!saved) return;
+    setCompleted(linesFor(cleanEodLines(saved.completed)));
+    setInProgress(linesFor(cleanEodLines(saved.inProgress)));
+    setNext(linesFor(cleanEodLines(saved.next)));
+    setSummary(typeof saved.summary === "string" ? saved.summary : "");
+    setSummaryGeneratedAt(typeof saved.summaryGeneratedAt === "string" ? saved.summaryGeneratedAt : null);
+    setSummarySource(saved.summarySource === "otto" || saved.summarySource === "assembled" ? saved.summarySource : null);
+    setSummarySignature(typeof saved.summarySignature === "string" ? saved.summarySignature : null);
+    setLoomUrl(normalizeLoomShareUrl(saved.loomUrl) ?? "");
+    dirty.current = true;
+    setRecoveryAvailable(false);
+    setNotice(null);
   };
 
   const reason = saveState === "saving"
@@ -413,6 +454,7 @@ export function EodStructuredComposer({
                     value={line}
                     onChange={(event) => updateLine(field, index, event.target.value)}
                     aria-label={`${meta.title} line ${index + 1}`}
+                    maxLength={EOD_MAX_LINE_CHARS}
                     placeholder={index === 0 ? meta.placeholder : "Add another line…"}
                   />
                   <button type="button" className="eod-structured-line-remove" onClick={() => removeLine(field, index)} aria-label={`Delete ${meta.title} line ${index + 1}`} title="Delete this line">
@@ -500,7 +542,8 @@ export function EodStructuredComposer({
 
       {notice ? <p className={`eod-structured-notice is-${notice.tone}`} role="status">
         {notice.text}
-        {notice.conflict && onReload ? <button type="button" className="eod-structured-reload" onClick={onReload}>Reload report</button> : null}
+        {notice.conflict && onReload ? <button type="button" className="eod-structured-reload" onClick={reloadReport}>Reload report</button> : null}
+        {recoveryAvailable ? <button type="button" className="eod-structured-reload" onClick={restoreRecovery}>Restore my text</button> : null}
       </p> : null}
 
       <footer className="eod-structured-footer">

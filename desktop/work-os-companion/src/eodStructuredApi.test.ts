@@ -41,6 +41,14 @@ describe("companion structured EOD API", () => {
     expect(result.source).toBe("otto");
   });
 
+  it("stops reading when the caller aborts a stalled stream", async () => {
+    vi.mocked(apiRequestRaw).mockResolvedValue(new Response(new ReadableStream({ start() {} })));
+    const controller = new AbortController();
+    const pending = streamEodSummary("2026-11-25", input, () => {}, controller.signal);
+    setTimeout(() => controller.abort(), 0);
+    await expect(pending).rejects.toThrow();
+  });
+
   it("passes a queued submit through unchanged", async () => {
     vi.mocked(sendOrQueue).mockResolvedValue({ queued: true });
     await expect(submitStructuredEod("r-1", input, "key-1")).resolves.toEqual({ queued: true });

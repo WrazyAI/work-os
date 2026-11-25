@@ -1,6 +1,22 @@
 import { apiRequest, apiRequestRaw, sendOrQueue } from "./api";
 import type { EodCompositionInput } from "./eodStructured";
 
+function stoppedError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error("The summary stopped responding. Try again.");
+}
+
+async function readBodyChunk(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) throw stoppedError(signal);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      void reader.cancel().catch(() => undefined);
+      reject(stoppedError(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader.read().then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
 export type EodStructuredWriteResult = {
   report?: Record<string, unknown>;
   queued?: true;
@@ -78,7 +94,8 @@ export async function streamEodSummary(
       const parsed = JSON.parse(body) as { error?: unknown };
       if (typeof parsed.error === "string" && parsed.error.trim()) message = parsed.error;
     } catch {
-      if (body.trim()) message = body.trim();
+      const raw = body.trim();
+      if (raw) message = raw.startsWith("<") ? "The summary could not be written. Try again." : raw.slice(0, 240);
     }
     throw new Error(message);
   }
@@ -86,13 +103,24 @@ export async function streamEodSummary(
   if (!response.body) throw new Error("The summary came back empty. Try again.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    if (text) onChunk(text);
+  const bodyAbort = new AbortController();
+  const onAbort = () => bodyAbort.abort(signal.reason);
+  if (signal.aborted) onAbort();
+  else signal.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => bodyAbort.abort(new Error("The summary stopped responding. Try again.")), 60_000);
+  try {
+    while (true) {
+      const { done, value } = await readBodyChunk(reader, bodyAbort.signal);
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      if (text) onChunk(text);
+    }
+    const tail = decoder.decode();
+    if (tail) onChunk(tail);
+    return { source };
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
+    try { reader.releaseLock(); } catch { /* the reader may already be cancelled */ }
   }
-  const tail = decoder.decode();
-  if (tail) onChunk(tail);
-  return { source };
 }
