@@ -232,7 +232,7 @@ test("employee edits are validated per operation and never overwrite the agent's
 });
 
 test("both chat surfaces render the batch card and keep the shared card for the rest", () => {
-  for (const path of ["desktop/work-os-companion/src/App.tsx", "desktop/work-os-companion/src/AvatarApp.tsx", "desktop/work-os-companion/src/chat/HistoryTurn.tsx"]) {
+  for (const path of ["desktop/work-os-companion/src/app/views/AssistantOperations.tsx", "desktop/work-os-companion/src/AvatarApp.tsx", "desktop/work-os-companion/src/chat/HistoryTurn.tsx"]) {
     const source = read(path);
     assert.match(source, /BatchApprovalCards/, `${path} must render the batch cards`);
     assert.match(source, /isBatchToolOp/, `${path} must split batches out of the shared approval card`);

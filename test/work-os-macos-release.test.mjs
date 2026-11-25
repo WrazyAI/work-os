@@ -191,9 +191,14 @@ test("packaged startup gate accepts a settled launch and rejects a crash, a stuc
 test("root CI still reports lint failure while executing independent verification", () => {
   const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert.match(ci, /name: Install dependencies\n        id: install/);
-  for (const name of ["Typecheck (work-os)", "Tests"]) {
+  for (const name of ["Typecheck (work-os)", "Site, film and publication checks", "Production build"]) {
     assert(ci.includes(`- name: ${name}\n        if: \${{ !cancelled() && steps.install.outcome == 'success' }}`));
   }
+  // Sharded Work OS tests run as an independent job (no `needs: verify`), so a
+  // lint failure still fails CI without suppressing the test suite.
+  assert.match(ci, /\n  tests:\n[\s\S]*?fail-fast: false[\s\S]*?node scripts\/run-work-os-tests\.mjs --suite=work-os --shard=\$\{\{ matrix\.shard \}\}/);
+  const testsJob = ci.slice(ci.indexOf("\n  tests:\n"), ci.indexOf("\n  companion:\n"));
+  assert.doesNotMatch(testsJob, /\n    needs:/);
   assert.match(ci, /name: Lint\n        run: npm run lint/);
   assert.doesNotMatch(ci, /continue-on-error/);
 });

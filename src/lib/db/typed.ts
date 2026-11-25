@@ -42,8 +42,11 @@ export async function execSql(
   sql: string,
   params: readonly unknown[] = [],
 ): Promise<number> {
-  const result = await db.query(sql, params as unknown[]);
-  return result.rowCount ?? 0;
+  const result = await db.query(sql, params as unknown[]) as {
+    rowCount?: number | null;
+    affectedRows?: number | null;
+  };
+  return result.rowCount ?? result.affectedRows ?? 0;
 }
 
 /** Runs `fn` inside a `BEGIN` / `COMMIT` transaction, always rolling back on failure and releasing the client. */
