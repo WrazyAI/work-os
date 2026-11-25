@@ -6,7 +6,7 @@ import { adminPersonTaskPageSql } from "../src/lib/work-os-admin-task-pagination
 test("admin person task pages extend past 1,000 without duplicate or cross-organization rows", async () => {
   const pg = new PGlite();
   try {
-    await pg.exec(`
+    await pg.exec(String.raw`
       CREATE TABLE work_people (id uuid PRIMARY KEY, organization_id uuid, user_id text, nifty_member_id text);
       CREATE TABLE work_tasks (
         id integer PRIMARY KEY, organization_id uuid, user_id text, status text, completed boolean,
@@ -14,7 +14,7 @@ test("admin person task pages extend past 1,000 without duplicate or cross-organ
         raw jsonb, created_at timestamptz
       );
       INSERT INTO work_people VALUES
-        ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000010', 'owner', ' legacy-id ');
+        ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000010', 'owner', U&'\0009\00A0legacy-id\000A\FEFF');
       INSERT INTO work_tasks
         SELECT i,
           (CASE WHEN i = 1006 THEN '00000000-0000-0000-0000-000000000020' ELSE '00000000-0000-0000-0000-000000000010' END)::uuid,

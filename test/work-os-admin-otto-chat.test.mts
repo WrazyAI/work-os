@@ -81,8 +81,8 @@ async function seedPerson(db: Db, input: {
   id: string; name: string; timezone?: string; active?: boolean; organizationId?: string;
 }) {
   const organizationId = input.organizationId ?? org;
-  await db.query(`insert into work_people (id, organization_id, display_name, active, nifty_member_id)
-    values ($1,$2,$3,$4,null)`, [input.id, organizationId, input.name, input.active ?? true]);
+  await db.query(`insert into work_people (id, organization_id, user_id, display_name, active, nifty_member_id)
+    values ($1,$2,$3,$4,$5,null)`, [input.id, organizationId, adminUser, input.name, input.active ?? true]);
   await db.query(`insert into work_employee_onboarding (organization_id, person_id, timezone)
     values ($1,$2,$3)`, [organizationId, input.id, input.timezone ?? "UTC"]);
 }
@@ -2292,8 +2292,8 @@ test("two_client_context_version_cas_uses_real_postgres", {
     await pool.query(prerequisites);
     await pool.query(await migration());
     globalThis.__workOsPgPool = pool;
-    await pool.query(`insert into work_people (id, organization_id, display_name, active)
-      values ($1,$2,'Alex Rivera',true)`, [personA, org]);
+    await pool.query(`insert into work_people (id, organization_id, user_id, display_name, active)
+      values ($1,$2,$3,'Alex Rivera',true)`, [personA, org, adminUser]);
     await pool.query(`insert into work_employee_onboarding (organization_id, person_id, timezone)
       values ($1,$2,'UTC')`, [org, personA]);
     await pool.query(`insert into work_tasks
