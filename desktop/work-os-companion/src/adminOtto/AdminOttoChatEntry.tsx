@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
-import type { AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminRead, ChatRequest, ChatResult, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { fetchAdminOttoThread, sendAdminOttoChat, type AdminOttoThreadView } from "./api";
 import { createAdminOttoEntryController, type AdminOttoEntryRecovery } from "./chatEntry";
 

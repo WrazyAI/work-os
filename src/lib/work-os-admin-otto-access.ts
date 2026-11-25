@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUserProfile } from "@/lib/supabase/auth";
+import type { WorkDesktopSessionScopeRow, WorkOrgMemberScopeRow } from "@/lib/db/rows/admin-otto";
 import { requireWorkOsAccess, type WorkOsAccess } from "@/lib/work-os-api";
 import { selectWorkOsMembership, type WorkOsMembershipCandidate } from "@/lib/work-os-membership";
 import type { OttoScope } from "@/modules/work-os/admin-otto/contracts";
@@ -45,7 +46,7 @@ export async function requireAdminOttoAccess(
     const match = authorization.match(/^Bearer\s+([^\s]+)$/i);
     if (!match) return denied(401);
     const { data: session, error } = await createAdminClient()
-      .from("work_desktop_sessions")
+      .from<WorkDesktopSessionScopeRow>("work_desktop_sessions")
       .select("organization_id")
       .eq("token_hash", createHash("sha256").update(match[1]).digest("hex"))
       .maybeSingle();
@@ -53,7 +54,7 @@ export async function requireAdminOttoAccess(
     if (!session?.organization_id) return denied(401);
     // This lookup selects scope only; the shared resolver still authoritatively
     // checks bearer expiry/revocation, the profile and active membership.
-    return requireScopedAdminOttoAccess(req, session.organization_id as string, capability);
+    return requireScopedAdminOttoAccess(req, session.organization_id, capability);
   }
 
   let ctx: Awaited<ReturnType<typeof requireUserProfile>>;
@@ -65,7 +66,7 @@ export async function requireAdminOttoAccess(
     throw error;
   }
   const { data, error } = await createAdminClient()
-    .from("work_org_members")
+    .from<WorkOrgMemberScopeRow>("work_org_members")
     .select("id, organization_id, role, person_id, feature_flags, created_at")
     .eq("user_id", ctx.profile.id)
     .eq("active", true);

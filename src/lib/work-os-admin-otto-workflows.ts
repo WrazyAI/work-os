@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
+import { execSql, queryOne } from "@/lib/db/typed";
+import type { IdRow } from "@/lib/db/rows/payroll";
+import type { WorkAdminOttoWorkflowProgressEntry, WorkAdminOttoWorkflowRow } from "@/lib/db/rows/admin-otto";
 import { getAdminPreviewRecord } from "@/lib/work-admin-action-previews";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { normalizeAdminOttoSteps } from "@/lib/work-os-admin-otto-intent";
 import type { AdminOttoOperation, AdminOttoPendingAction, AdminOttoPlanStep, AdminOttoWorkflowView, AdminRead, ReadIntent } from "@/modules/work-os/admin-otto/contracts";
 
-type Progress = { action?: AdminOttoPendingAction; refs?: unknown; message: string; failed?: boolean; revision?: number };
-type WorkflowRow = { id: string; request_hash: string; plan: AdminOttoPlanStep[]; progress: Record<string, Progress>; abandoned_at: string | null };
+type Progress = WorkAdminOttoWorkflowProgressEntry;
+type WorkflowRow = WorkAdminOttoWorkflowRow;
 export type OttoWorkflowDeps = {
   read: (intent: ReadIntent) => Promise<{ result: AdminRead | null; refs: unknown; reply: string }>;
   replayRead: (refs: unknown) => Promise<{ result: AdminRead | null; reply: string }>;
@@ -20,15 +23,16 @@ const label = (step: AdminOttoPlanStep) => step.operation
 
 async function row(access: WorkOsAccess, id: string): Promise<WorkflowRow> {
   if (!UUID.test(id)) throw unavailable();
-  const { rows } = await getPool().query<WorkflowRow>(
+  const found = await queryOne<WorkflowRow>(
+    getPool(),
     `select w.id,w.request_hash,w.plan,w.progress,w.abandoned_at from work_admin_otto_workflows w
      join work_org_members m on m.id=w.membership_id and m.organization_id=w.organization_id and m.user_id=w.user_id
      where w.id=$1 and w.organization_id=$2 and w.membership_id=$3 and w.user_id=$4
        and w.abandoned_at is null and m.active=true and m.role='admin' and w.created_at > now()-interval '30 days'`,
     [id, access.organizationId, access.membershipId, access.ctx.user.id],
   );
-  if (!rows[0]) throw unavailable();
-  return rows[0];
+  if (!found) throw unavailable();
+  return found;
 }
 
 export async function assertOttoWorkflowActive(access: WorkOsAccess, id: string) {
@@ -49,10 +53,13 @@ export async function currentOttoAction(access: WorkOsAccess, action: AdminOttoP
   // create is keyed by its preview, so look the row up before offering a
   // replacement preview (which would use a different key).
   if (!record.result && !record.confirmedAt && key) {
-    const { rows } = await getPool().query<{ id: string }>(`select id from work_tasks
+    const task = await queryOne<IdRow>(
+      getPool(),
+      `select id from work_tasks
       where organization_id=$1 and agent_token_id is null and agent_idempotency_key=$2 limit 1`,
-    [access.organizationId, key]);
-    reconciled = rows[0]?.id ?? null;
+      [access.organizationId, key],
+    );
+    reconciled = task?.id ?? null;
   }
   return {
     ...action,
@@ -92,15 +99,16 @@ export async function startOttoWorkflow(access: WorkOsAccess, requestId: string,
   // Text binds replay identity; an overlapping retry never substitutes a new
   // model interpretation for the already stored plan.
   const hash = createHash("sha256").update(text).digest("hex");
-  const { rows } = await getPool().query<{ id: string; request_hash: string }>(
+  const saved = await queryOne<Pick<WorkflowRow, "id" | "request_hash">>(
+    getPool(),
     `insert into work_admin_otto_workflows (organization_id,membership_id,user_id,request_id,request_hash,plan)
      values ($1,$2,$3,$4,$5,$6::jsonb)
      on conflict (organization_id,membership_id,user_id,request_id) do update
        set request_id=excluded.request_id returning id,request_hash`,
     [access.organizationId, access.membershipId, access.ctx.user.id, requestId, hash, JSON.stringify(plan)],
   );
-  if (rows[0].request_hash !== hash) throw new WorkOsConflictError("This request id was used with different text.", "request_id_reused");
-  return prepareOttoWorkflow(access, rows[0].id, deps);
+  if (!saved || saved.request_hash !== hash) throw new WorkOsConflictError("This request id was used with different text.", "request_id_reused");
+  return prepareOttoWorkflow(access, saved.id, deps);
 }
 
 export async function loadOttoWorkflow(access: WorkOsAccess, id: string, deps: OttoWorkflowDeps) {
@@ -124,13 +132,14 @@ export async function prepareOttoWorkflow(access: WorkOsAccess, id: string, deps
       // Expiry and replacement are one conditional step: a confirm that claimed
       // the preview after the status read makes this update affect no row, and
       // no replacement may be issued while that action is being applied.
-      const { rows } = await getPool().query(
+      const expired = await queryOne<IdRow>(
+        getPool(),
         `update work_admin_action_previews set expires_at=least(expires_at,now())
          where id=$1 and organization_id=$2 and user_id=$3 and token_id is null and source='otto' and confirmed_at is null
          returning id`,
         [old.action.previewId, access.organizationId, access.ctx.user.id],
       );
-      if (!rows.length) continue;
+      if (!expired) continue;
     }
     let taskId: string | undefined;
     if (step.depends_on !== null) {
@@ -161,13 +170,15 @@ export async function prepareOttoWorkflow(access: WorkOsAccess, id: string, deps
     }
     // A concurrent reset must win over late preparation. A concurrent initial
     // prepare can reuse its stable preview but cannot replace an existing step.
-    const { rows } = await getPool().query<{ progress: WorkflowRow["progress"] }>(
+    const updated = await queryOne<Pick<WorkflowRow, "progress">>(
+      getPool(),
       `update work_admin_otto_workflows set progress=jsonb_set(progress,array[$2::text],$3::jsonb)
        where id=$1 and abandoned_at is null and coalesce((progress->$2::text->>'revision')::int,-1)=$4
-       returning progress`, [id, String(index), JSON.stringify(progress), old?.revision ?? -1],
+       returning progress`,
+      [id, String(index), JSON.stringify(progress), old?.revision ?? -1],
     );
-    if (!rows.length) return loadOttoWorkflow(access, id, deps);
-    workflow.progress = rows[0].progress;
+    if (!updated) return loadOttoWorkflow(access, id, deps);
+    workflow.progress = updated.progress;
   }
   return view(access, workflow, deps);
 }
@@ -176,11 +187,17 @@ export async function prepareOttoWorkflow(access: WorkOsAccess, id: string, deps
  * before this boundary was explicitly authorized and may still finish. */
 export async function abandonOttoWorkflow(access: WorkOsAccess, id: string): Promise<void> {
   await row(access, id);
-  await getPool().query(`update work_admin_otto_workflows set abandoned_at=now() where id=$1
+  await execSql(
+    getPool(),
+    `update work_admin_otto_workflows set abandoned_at=now() where id=$1
     and organization_id=$2 and membership_id=$3 and user_id=$4`,
-  [id, access.organizationId, access.membershipId, access.ctx.user.id]);
-  await getPool().query(`update work_admin_action_previews set expires_at=least(expires_at,now())
+    [id, access.organizationId, access.membershipId, access.ctx.user.id],
+  );
+  await execSql(
+    getPool(),
+    `update work_admin_action_previews set expires_at=least(expires_at,now())
     where organization_id=$1 and user_id=$2 and source='otto' and token_id is null
       and idempotency_key like $3 and confirmed_at is null`,
-  [access.organizationId, access.ctx.user.id, `otto-workflow:${id}:%`]);
+    [access.organizationId, access.ctx.user.id, `otto-workflow:${id}:%`],
+  );
 }

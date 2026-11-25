@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readMainAppSource } from "./app/readMainAppSource";
 import { BOOT_PHASE_KEY, CLEAN_EXIT, createBootTrace, type BootStorage } from "./bootTrace";
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -78,7 +79,7 @@ describe("boot trace wiring", () => {
   });
 
   it("marks an update install as an intentional exit, not a crash", () => {
-    const app = read("App.tsx");
+    const app = readMainAppSource();
     const mark = app.indexOf("markCleanExit()");
     const install = app.indexOf("await flow.update.install()");
     expect(mark).toBeGreaterThan(-1);

@@ -1,4 +1,4 @@
-import type { AdminOttoPendingAction, AdminOttoWorkflowView, AdminRead, ChatRequest, ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminOttoWorkflowView, AdminRead, ChatRequest, ChatResult, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import type { AdminOttoThreadView } from "./api";
 
 export type AdminOttoEntryTurn = {

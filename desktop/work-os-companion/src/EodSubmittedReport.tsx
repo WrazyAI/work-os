@@ -2,7 +2,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import { formatWorkOsFullDate } from "./dateFormat";
 import { CheckedMoment } from "./CheckedMoment";
 import EodReportDocument from "./EodReportDocument";
-import { parseEodMarkdown } from "../../../src/modules/work-os/eod-document";
+import { parseEodMarkdown } from "@wrazy/work-os-shared/eod-document";
 
 /** Compact day reads carry only submitted_at; a rejected report remains editable. */
 export function submittedEodStatus(report: Record<string, unknown> | null | undefined): "submitted" | "approved" | null {

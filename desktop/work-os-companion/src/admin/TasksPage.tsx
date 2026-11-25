@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { apiRequestBlob } from "../api";
 import { TaskEvidenceList } from "../CompletionEvidence";
-import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
@@ -32,11 +32,11 @@ import {
   adminTaskDates,
   adminTaskStatusRank,
   compareAdminTaskDefaultOrder,
-} from "../../../../src/modules/work-os/admin-task-model";
+} from "@wrazy/work-os-shared/admin-task-model";
 import { OverflowPanText } from "../OverflowPan";
 import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } from "../taskActions";
 import { EllipsisMenu, TaskActionMenuItems, toggleAssigneeIds } from "../taskSurfaces";
-import { isCalendarDate, type TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import { isCalendarDate, type TaskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { TaskAttachmentIndicator } from "./TaskAttachmentIndicator";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 

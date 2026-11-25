@@ -6,13 +6,13 @@ import { ProgressComposer, TasksWorkspace } from "./App";
 import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation, TaskCarryOverFlyout } from "./taskSurfaces";
 import { TaskEvidenceDialog, type TaskEvidenceDialogPhase } from "./CompletionEvidence";
 import { TaskSelectionCard } from "./TaskSelectionCard";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 import { DEFAULT_TASK_SORT, suggestDailyGoal, taskKind, unfinishedBefore, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { taskDueDateSeed } from "./taskActions";
 import type { DailyPlan } from "./types";
 import { formatWorkOsDate } from "./dateFormat";
 import { TaskDateNavigator } from "./TaskDateNavigator";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 
 const CURRENT_DATE = "2026-08-21";
 const PREVIEW_PEOPLE = [

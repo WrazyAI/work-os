@@ -16,11 +16,11 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalLatestData, ActivityIntervalsData, DailyPlan, DashboardWeekData, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryFact, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
-import { validateTaskFinderFilters, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
-import { reviewedMemoryPages, reviewedMemorySummary } from "../../../src/modules/work-os/memory-review-cache";
+import { validateTaskFinderFilters, type TaskFinderFilters } from "@wrazy/work-os-shared/task-finder";
+import { reviewedMemoryPages, reviewedMemorySummary } from "@wrazy/work-os-shared/memory-review-cache";
 
 export type TaskDetails = {
   task: Record<string, any>;

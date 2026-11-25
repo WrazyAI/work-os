@@ -38,7 +38,7 @@ function mediaBlock(source: string, query: string): string {
  */
 describe("admin Otto design contract", () => {
   const css = read("./adminOtto.css");
-  const styles = read("../styles.css");
+  const styles = [read("../styles/tokens-base.css"), read("../styles/legacy-surfaces.css")].join("\n");
   const chat = read("./AdminOttoChat.tsx");
   const inbox = read("./AdminRecapInbox.tsx");
   const recap = read("./AdminRecapView.tsx");

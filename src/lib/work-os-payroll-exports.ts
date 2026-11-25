@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { getPool } from "@/lib/db/pool";
+import { execSql, queryOne, queryRows, withTransaction } from "@/lib/db/typed";
+import type { PayrollApprovalExportJoinRow, WorkPayrollExportRow } from "@/lib/db/rows/payroll";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { approvalFromRow, payrollDateKey } from "@/lib/work-os-payroll-decisions";
 import type { PayrollApproval, PayrollTotals } from "@/modules/work-os/payroll/contracts";
@@ -101,11 +103,15 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   if (!ids.length) throw new WorkOsValidationError("At least one approval is required.");
   if (ids.length > 100) throw new WorkOsValidationError("At most 100 approvals may be exported at once.");
   if (!input.requestKey.trim()) throw new WorkOsValidationError("An export request key is required.");
-  const rows = (await getPool().query(`SELECT a.*, r.person_id AS review_person_id, r.pay_date AS review_pay_date,
+  const rows = await queryRows<PayrollApprovalExportJoinRow>(
+    getPool(),
+    `SELECT a.*, r.person_id AS review_person_id, r.pay_date AS review_pay_date,
       r.current_approval_id, r.timezone, r.retention_expires_at
     FROM work_payroll_approvals a JOIN work_payroll_reviews r
       ON r.organization_id=a.organization_id AND r.id=a.review_id AND r.person_id=a.person_id
-    WHERE a.organization_id=$1 AND a.id=ANY($2::uuid[]) ORDER BY a.id`, [access.organizationId, ids])).rows as Row[];
+    WHERE a.organization_id=$1 AND a.id=ANY($2::uuid[]) ORDER BY a.id`,
+    [access.organizationId, ids],
+  );
   if (rows.length !== ids.length) throw new WorkOsValidationError("One or more payroll approvals were not found.");
   for (const row of rows) {
     const expiry = row.retention_expires_at instanceof Date ? row.retention_expires_at.getTime() : Date.parse(String(row.retention_expires_at ?? ""));
@@ -113,7 +119,7 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   }
   const payDates = new Set(rows.map((row) => String(payrollDateKey(row.review_pay_date))));
   if (payDates.size !== 1) throw new WorkOsConflictError("Bulk payroll export requires one pay date.", "payroll_mixed_pay_dates");
-  const approvals = rows.map((row) => approvalFromRow(row, { organizationId: access.organizationId, personId: String(row.person_id) }, periodOf(row)));
+  const approvals = rows.map((row) => approvalFromRow(row as unknown as Row, { organizationId: access.organizationId, personId: String(row.person_id) }, periodOf(row)));
   const historical = approvals.some((approval, index) => String(rows[index].current_approval_id ?? "") !== approval.id);
   const table = input.kind === "daily" ? DAILY_COLUMNS : SUMMARY_COLUMNS;
   const body = approvals.flatMap((approval) => input.kind === "daily" ? dailyRows(approval, historical) : summaryRows(approval, historical));
@@ -126,37 +132,44 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
     const payload = Buffer.from(csv([[...table], ...rowsForApproval], input.kind === "daily" ? DAILY_TEXT : SUMMARY_TEXT), "utf8");
     return [approval.id, { payload, hash: hash(payload) }] as const;
   }));
-  const client = await getPool().connect();
-  try {
-    await client.query("BEGIN");
+  await withTransaction(async (client) => {
     for (const approval of approvals) {
       const file = individual.get(approval.id)!;
-      await client.query(`INSERT INTO work_payroll_exports
+      await execSql(
+        client,
+        `INSERT INTO work_payroll_exports
         (organization_id,review_id,person_id,approval_id,kind,schema_version,snapshot_hash,payload,payload_hash,actor_user_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (organization_id,approval_id,kind,schema_version) DO NOTHING`,
-      [access.organizationId, approval.reviewId, approval.scope.personId, approval.id, input.kind, SCHEMA,
-        approval.snapshotHash, file.payload, file.hash, access.ctx.user.id]);
-      await client.query(`UPDATE work_payroll_reviews SET
+        [access.organizationId, approval.reviewId, approval.scope.personId, approval.id, input.kind, SCHEMA,
+          approval.snapshotHash, file.payload, file.hash, access.ctx.user.id],
+      );
+      await execSql(
+        client,
+        `UPDATE work_payroll_reviews SET
         first_export_at=coalesce(first_export_at,$3), last_exported_at=$3,
         retention_expires_at=greatest(retention_expires_at, pay_date + interval '30 days', coalesce(first_export_at,$3::timestamptz) + interval '30 days'),
         updated_at=now() WHERE organization_id=$1 AND id=$2`,
-      [access.organizationId, approval.reviewId, at.toISOString()]);
-      await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
+        [access.organizationId, approval.reviewId, at.toISOString()],
+      );
+      await execSql(
+        client,
+        `INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
         VALUES ($1,$2,'payroll.exported','payroll_approval',$3,$4::jsonb)`,
-      [access.organizationId, access.ctx.user.id, approval.id, JSON.stringify({ kind: input.kind, hash: digest, requestKey: input.requestKey, approvalCount: ids.length })]);
+        [access.organizationId, access.ctx.user.id, approval.id, JSON.stringify({ kind: input.kind, hash: digest, requestKey: input.requestKey, approvalCount: ids.length })],
+      );
     }
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally { client.release(); }
-  const stored = await getPool().query<{ payload: Buffer; payload_hash: string }>(`SELECT payload,payload_hash FROM work_payroll_exports
-    WHERE organization_id=$1 AND approval_id=$2 AND kind=$3 AND schema_version=$4`, [access.organizationId, approvals[0].id, input.kind, SCHEMA]);
+  });
+  const stored = await queryOne<Pick<WorkPayrollExportRow, "payload" | "payload_hash">>(
+    getPool(),
+    `SELECT payload,payload_hash FROM work_payroll_exports
+    WHERE organization_id=$1 AND approval_id=$2 AND kind=$3 AND schema_version=$4`,
+    [access.organizationId, approvals[0].id, input.kind, SCHEMA],
+  );
   if (approvals.length > 1) {
     return { bytes, filename: `payroll-${payDates.values().next().value}-${input.kind}-${digest.slice(0, 12)}.csv`, hash: digest };
   }
-  const storedBytes = stored.rows[0]?.payload ? new Uint8Array(stored.rows[0].payload) : bytes;
-  const storedHash = String(stored.rows[0]?.payload_hash ?? digest);
+  const storedBytes = stored?.payload ? new Uint8Array(stored.payload) : bytes;
+  const storedHash = String(stored?.payload_hash ?? digest);
   return {
     bytes: storedBytes,
     filename: `payroll-${payDates.values().next().value}-${input.kind}-${storedHash.slice(0, 12)}.csv`,
@@ -164,7 +177,7 @@ export async function createPayrollExport(access: WorkOsAccess, input: {
   };
 }
 
-function periodOf(row: Row): PayrollApproval["period"] {
+function periodOf(row: Pick<PayrollApprovalExportJoinRow, "snapshot" | "review_pay_date" | "timezone">): PayrollApproval["period"] {
   const snapshot = object(row.snapshot);
   const period = object(snapshot.period);
   return {
@@ -176,11 +189,14 @@ function periodOf(row: Row): PayrollApproval["period"] {
 
 export async function loadPayrollPrint(access: WorkOsAccess, approvalId: string): Promise<PayrollApproval> {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll print is admin-only.");
-  const { rows } = await getPool().query(`SELECT a.*, r.current_approval_id, r.timezone, r.pay_date AS review_pay_date
+  const row = await queryOne<PayrollApprovalExportJoinRow>(
+    getPool(),
+    `SELECT a.*, r.current_approval_id, r.timezone, r.pay_date AS review_pay_date
     FROM work_payroll_approvals a JOIN work_payroll_reviews r
       ON r.organization_id=a.organization_id AND r.id=a.review_id AND r.person_id=a.person_id
-    WHERE a.organization_id=$1 AND a.id=$2`, [access.organizationId, approvalId]);
-  if (!rows.length) throw new WorkOsValidationError("Payroll approval not found.");
-  const row = rows[0] as Row;
-  return approvalFromRow(row, { organizationId: access.organizationId, personId: String(row.person_id) }, periodOf(row));
+    WHERE a.organization_id=$1 AND a.id=$2`,
+    [access.organizationId, approvalId],
+  );
+  if (!row) throw new WorkOsValidationError("Payroll approval not found.");
+  return approvalFromRow(row as unknown as Row, { organizationId: access.organizationId, personId: String(row.person_id) }, periodOf(row));
 }

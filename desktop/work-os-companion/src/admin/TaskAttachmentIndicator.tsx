@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon } from "lucide-react";
-import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 
 /** Files and images are the two attachment classes the admin row needs to
  * distinguish. A PDF, doc, archive, or note is a file; only image content

@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
+import { queryOne, queryRows, withTransaction } from "@/lib/db/typed";
+import type { WorkAdminOttoRequestFenceRow } from "@/lib/db/rows/admin-otto";
 import { recapReviewLabel } from "@/modules/work-os/recap-review";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import {
@@ -438,35 +440,28 @@ function threadIntent(value: unknown): ReadIntent | null {
 }
 
 function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
-  return (async () => {
-    const client = await getPool().connect();
-    try {
-      await client.query("BEGIN");
-      const result = await run(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally { client.release(); }
-  })();
+  return withTransaction(run);
 }
 
 async function assertCurrentAccess(client: PoolClient, access: WorkOsAccess) {
-  const { rows } = await client.query<{ allowed: boolean }>(`select
+  const row = await queryOne<{ allowed: boolean }>(
+    client,
+    `select
       work_admin_otto_effective_access(m.feature_flags, o.feature_flags, m.role, m.active) as allowed
     from work_org_members m
     join work_organizations o on o.id = m.organization_id
     where m.organization_id = $1 and m.id = $2 and m.user_id = $3`,
-  [access.organizationId, access.membershipId, access.ctx.user.id]);
-  if (rows[0]?.allowed !== true) {
+    [access.organizationId, access.membershipId, access.ctx.user.id],
+  );
+  if (row?.allowed !== true) {
     throw new WorkOsConflictError("Admin Otto access is not active for this membership.", "otto_access_revoked");
   }
 }
 
 async function loadThread(access: WorkOsAccess, id: string, client?: Pool | PoolClient): Promise<ThreadRow | undefined> {
-  const queryable = client ?? getPool();
-  const { rows } = await queryable.query<ThreadRow>(`select t.*
+  const row = await queryOne<ThreadRow>(
+    client ?? getPool(),
+    `select t.*
     from work_admin_otto_threads t
     join work_org_members m
       on m.organization_id = t.organization_id and m.id = t.membership_id
@@ -474,12 +469,15 @@ async function loadThread(access: WorkOsAccess, id: string, client?: Pool | Pool
     where t.organization_id = $1 and t.id = $2 and t.membership_id = $3
       and m.user_id = $4
       and work_admin_otto_effective_access(m.feature_flags, o.feature_flags, m.role, m.active)`,
-  [access.organizationId, id, access.membershipId, access.ctx.user.id]);
-  return rows[0];
+    [access.organizationId, id, access.membershipId, access.ctx.user.id],
+  );
+  return row ?? undefined;
 }
 
 async function loadTurns(access: WorkOsAccess, threadId: string): Promise<TurnRow[]> {
-  const { rows } = await getPool().query<TurnRow>(`select id, role, text, source_refs, created_at
+  const rows = await queryRows<TurnRow>(
+    getPool(),
+    `select id, role, text, source_refs, created_at
     from work_admin_otto_turns
     where organization_id = $1 and thread_id = $2 and membership_id = $3
       and created_at >= clock_timestamp() - interval '${RETENTION_DAYS} days'
@@ -487,18 +485,22 @@ async function loadTurns(access: WorkOsAccess, threadId: string): Promise<TurnRo
     -- in this descending, limited slice. The result is reversed below.
     order by created_at desc, request_id desc, role asc, id desc
     limit $4`,
-  [access.organizationId, threadId, access.membershipId, MAX_TURNS]);
+    [access.organizationId, threadId, access.membershipId, MAX_TURNS],
+  );
   return rows.reverse();
 }
 
 async function findDuplicateTurn(access: WorkOsAccess, threadId: string, requestId: string): Promise<TurnRow | undefined> {
-  const { rows } = await getPool().query<TurnRow>(`select id, role, text, source_refs, created_at
+  const row = await queryOne<TurnRow>(
+    getPool(),
+    `select id, role, text, source_refs, created_at
     from work_admin_otto_turns
     where organization_id = $1 and thread_id = $2 and membership_id = $3
       and request_id = $4 and role = 'assistant'
       and created_at >= clock_timestamp() - interval '${RETENTION_DAYS} days'`,
-  [access.organizationId, threadId, access.membershipId, requestId]);
-  return rows[0];
+    [access.organizationId, threadId, access.membershipId, requestId],
+  );
+  return row ?? undefined;
 }
 
 function normalizeRequest(input: ChatRequest): {
@@ -1634,10 +1636,13 @@ export async function executeAdminOttoChat(
 ): Promise<ChatResult> {
   requireAdmin(access);
   const request = normalizeRequest(input);
-  const fence = await getPool().query<{ abandoned: boolean }>(`select abandoned from work_admin_otto_request_fences
+  const fence = await queryOne<WorkAdminOttoRequestFenceRow>(
+    getPool(),
+    `select abandoned from work_admin_otto_request_fences
     where organization_id=$1 and membership_id=$2 and user_id=$3 and request_id=$4`,
-  [access.organizationId, access.membershipId, access.ctx.user.id, request.requestId]);
-  if (fence.rows[0]?.abandoned) throw new WorkOsConflictError("This chat was discarded. Start a new request.", "conversation_unavailable");
+    [access.organizationId, access.membershipId, access.ctx.user.id, request.requestId],
+  );
+  if (fence?.abandoned) throw new WorkOsConflictError("This chat was discarded. Start a new request.", "conversation_unavailable");
   const now = deps.now?.() ?? new Date();
   const newId = deps.newId ?? randomUUID;
 

@@ -1,11 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Check, CircleAlert, LogOut, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { AttendanceProjection, OnboardingData, OnboardingSchedule, ProfileItemKind, WorkProfileItem } from "./types";
-import { supportedTimezones, timezoneLabel } from "../../../src/modules/work-os/timezones";
+import { supportedTimezones, timezoneLabel } from "@wrazy/work-os-shared/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm, type DraftSaveState } from "./onboardingDraftState";
 import { OnboardingStage, STAGE_POSE, type StagePose } from "./OnboardingStage";
 import { FadeArc } from "./LoadingUi";
-import { WorkArrangementFields } from "../../../src/modules/work-os/WorkArrangementFields";
+import { WorkArrangementFields } from "@wrazy/work-os-shared/ui/WorkArrangementFields";
 
 /**
  * First run.

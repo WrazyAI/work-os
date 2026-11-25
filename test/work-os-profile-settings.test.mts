@@ -32,7 +32,10 @@ test("profile routes require Work OS access and expose only authenticated media"
   const onboarding = await source("src/lib/work-os-onboarding.ts");
   const profileService = await source("src/lib/work-os-profile.ts");
   const profileSettings = await source("desktop/work-os-companion/src/ProfileSettings.tsx");
-  const profileStyles = await source("desktop/work-os-companion/src/styles.css");
+  const profileStyles = [
+    await source("desktop/work-os-companion/src/styles/tokens-base.css"),
+    await source("desktop/work-os-companion/src/styles/legacy-surfaces.css"),
+  ].join("\n");
   const scheduleMigration = await source("supabase/migrations/0051_work_os_employee_schedule_settings.sql");
 
   assert.match(profileRoute, /requireWorkOsAccess/);
@@ -59,7 +62,10 @@ test("the profile payload returns only the person's own mapped accounts", async 
   const onboarding = await source("src/lib/work-os-onboarding.ts");
   const profileSettings = await source("desktop/work-os-companion/src/ProfileSettings.tsx");
   const pills = await source("desktop/work-os-companion/src/ProfilePills.tsx");
-  const styles = await source("desktop/work-os-companion/src/styles.css");
+  const styles = [
+    await source("desktop/work-os-companion/src/styles/tokens-base.css"),
+    await source("desktop/work-os-companion/src/styles/legacy-surfaces.css"),
+  ].join("\n");
 
   assert.match(onboarding, /work_source_accounts/);
   assert.match(onboarding, /eq\("person_id", access\.personId\)/);

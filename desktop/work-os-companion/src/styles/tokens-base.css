@@ -1,0 +1,985 @@
+:root {
+  font-family: Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: #1a1c18;
+  background: var(--canvas);
+  font-synthesis: none;
+  --ink: #171914;
+  --muted: #696c64;
+  --paper: #f5f4ed;
+  --white: #fbfaf4;
+  --line: #dcdcd3;
+  --signal: #b8ff5a;
+  /* Text-safe danger: the blueprint's #c94e43 measures 4.3:1 on paper and
+     4.0:1 on canvas, and it is used as status text at 8–12px. */
+  --danger: #b84035;
+}* {
+  box-sizing: border-box;
+}.skip-link {
+  position: fixed;
+  z-index: 10000;
+  top: 10px;
+  left: 10px;
+  padding: 9px 13px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  transform: translateY(-180%);
+}.skip-link:focus-visible {
+  transform: none;
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}.skip-target {
+  scroll-margin-top: 16px;
+  outline: none;
+}html {
+  overscroll-behavior: none;
+}body {
+  margin: 0;
+  min-width: 360px;
+  min-height: 100vh;
+  overscroll-behavior: none;
+}/* Scroll containment belongs to regions that really scroll. Applying
+   `contain` to every element also stops the wheel dead over decorative
+   `overflow: hidden` cards: Chrome treats them as scroll containers even when
+   they have no scroll range, so a task table or tool card freezes the page
+   under the pointer. The shell owns edge behaviour on html/body; real scroll
+   panels opt in where they need it. Horizontal-only wrappers keep containment
+   on the X axis and let the vertical wheel chain to the page. */.admin-table-wrap,
+.insight-table-wrap,
+.scroll-fade-region,
+.heatmap-scroll,
+.chat-markdown-table-wrap,
+.chat-markdown-code,
+.chat-task-filters,
+.chat-task-list,
+.work-queue-tabs,
+.workos-chat-tabs,
+.eod-shot-carousel {
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+}button,
+input,
+textarea,
+select {
+  font: inherit;
+}button {
+  cursor: pointer;
+  color: inherit;
+}button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(133, 192, 53, 0.35);
+  outline-offset: 2px;
+}.workspace {
+  display: grid;
+  min-height: 100vh;
+}.rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 3;
+}.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.12em;
+}.wordmark span,
+.rail nav span,
+.rail-foot div { display: none; }.wordmark b {
+  color: var(--signal);
+}.rail nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  text-align: left;
+}.rail nav button:active {
+  transform: scale(0.97);
+}.rail nav button.active:before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  width: 3px;
+  height: 18px;
+  border-radius: 0 3px 3px 0;
+  background: var(--signal);
+}.rail nav em {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  margin: 0;
+  min-width: 15px;
+  height: 15px;
+  background: var(--signal);
+  color: #171914;
+  border-radius: 9px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--ink);
+}.rail nav button::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: var(--ink);
+  color: #f3f1e8;
+  font: 600 11.5px/1 Manrope, Inter, "Segoe UI", sans-serif;
+  padding: 7px 11px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  box-shadow: 0 6px 18px rgba(13, 15, 12, 0.3);
+}.rail nav button:hover::after,
+.rail nav button:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}.rail-foot {
+  margin-top: auto;
+  border-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}.rail-foot div {
+  display: none;
+}.rail-foot strong {
+  font-size: 12px;
+}.rail-foot small {
+  font-size: 10px;
+  margin-top: 2px;
+}.presence {
+  width: 8px;
+  height: 8px;
+  background: #666b61;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px #262821;
+}.presence.live {
+  background: var(--signal);
+}.presence.observed {
+  background: #c99519;
+  box-shadow: 0 0 0 4px #4a4025;
+}.stage {
+  padding: 0 34px 48px;
+}.masthead {
+  display: flex;
+  justify-content: space-between;
+}.masthead p {
+  margin: 0 0 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}.masthead h1 {
+  margin: 0;
+  font: 600 24px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.mast-actions {
+  display: flex;
+  align-items: center;
+}.provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}.icon,
+.avatar {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+}.avatar {
+  border-radius: 50%;
+  font-size: 10px;
+  border: 0;
+}.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid;
+}.notice button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+}.notice.error {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}.notice.debug {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--ink);
+}.notification-flyouts {
+  position: fixed;
+  z-index: 5000;
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 36px));
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.notification-flyouts::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.notification-flyouts[data-expanded="false"] {
+  overflow: visible;
+}
+/* One floating deck for every notification (transient receipts and standing
+   notices): when more than one is present, cards stack behind the front card
+   and fan out to a flat floating list on hover or keyboard focus. */
+.notification-stack {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  pointer-events: auto;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"] .notification-stack {
+  display: block;
+  height: var(--stack-height);
+  transition: height 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.notification-flyouts[data-stacked="true"][data-expanded="true"] .notification-stack {
+  margin-bottom: 12px;
+}
+/* Toasts: one compact, rounded raised surface. The tone lives in the icon tile
+   and the action colour; there is no coloured rail (design.md §2.3). */
+.notification-flyout {
+  --notification-accent: #2e617d;
+  --notification-tile: #e8f1f7;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  align-content: start;
+  gap: 10px;
+  overflow: hidden;
+  padding: 10px 8px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(20, 30, 18, 0.05), 0 12px 32px rgba(20, 30, 18, 0.12));
+  pointer-events: auto;
+  animation: notification-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"] .notification-flyout {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  transform-origin: bottom center;
+  animation: none;
+  transition:
+    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease,
+    height 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="0"] {
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="1"] {
+  height: var(--front-height);
+  transform: translate3d(0, 10px, 0) scale(0.955);
+  opacity: 0.94;
+  border-color: var(--line-strong);
+  background: var(--paper);
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="2"] {
+  height: var(--front-height);
+  transform: translate3d(0, 20px, 0) scale(0.91);
+  opacity: 0.84;
+  border-color: var(--line-strong);
+  background: var(--inset);
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-behind="hidden"] {
+  height: var(--front-height);
+  transform: translate3d(0, 24px, 0) scale(0.87);
+  opacity: 0;
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout:not([data-stack-index="0"]) > * {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="true"] .notification-flyout {
+  height: var(--card-height);
+  transform: translate3d(0, var(--stack-offset, 0px), 0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="true"] .notification-flyout > * {
+  opacity: 1;
+  transition: opacity 180ms ease 40ms;
+}
+.notification-flyouts[data-paused="true"] .notification-flyout > i {
+  animation-play-state: paused;
+}
+.notification-flyout.info { --notification-accent: var(--observed); --notification-tile: var(--observed-soft); }
+.notification-flyout.success { --notification-accent: var(--tool-success); --notification-tile: var(--tool-success-soft); }
+.notification-flyout.error { --notification-accent: var(--danger); --notification-tile: var(--danger-soft); }
+.notification-flyout.warning { --notification-accent: var(--warning); --notification-tile: var(--warning-soft); }
+/* Re-assert the card's own box: the generic .error rule above would otherwise
+   turn an error toast into a flex row with its own colour and padding. */
+.notification-flyout.error {
+  display: grid;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 8px 10px 10px;
+  border-radius: 16px;
+  border-color: rgba(184, 64, 53, 0.28);
+  background: var(--danger-soft);
+  color: var(--ink);
+}
+.notification-flyout.persistent {
+  border-color: var(--line-strong);
+}
+.notification-flyout.persistent.success { border-color: rgba(44, 110, 63, 0.28); }.notification-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--notification-tile);
+  color: var(--notification-accent);
+}.notification-icon > svg { width: 15px; height: 15px; }/* Reviewer reminders wear the agent's own mark — the same identity the chat
+   window uses — instead of a tone glyph. */.notification-icon.is-mascot {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}.notification-icon.is-mascot .chat-mascot-mark,
+.notification-icon.is-mascot .chat-mascot-art { display: block; width: 100%; height: 100%; }.notification-flyout > div { min-width: 0; padding-top: 4px; }.notification-flyout strong { display: block; font-size: 12px; font-weight: 700; line-height: 1.3; letter-spacing: -0.005em; }.notification-flyout p { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }.notification-dismiss {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #7b8278;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}.notification-dismiss > svg { width: 14px; height: 14px; }.notification-dismiss:hover { background: rgba(24, 32, 24, 0.07); color: var(--ink); }.notification-dismiss:focus-visible,
+.notification-action:focus-visible { outline: 2px solid var(--notification-accent); outline-offset: 2px; }.notification-action {
+  margin-top: 8px;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, var(--notification-accent) 40%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--notification-accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 140ms ease;
+}.notification-action:hover { background: color-mix(in srgb, var(--notification-accent) 10%, transparent); }.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}.notification-actions .notification-action { margin-top: 0; }.notification-action.quiet {
+  border-color: transparent;
+  color: var(--muted);
+}.notification-action.quiet:hover { background: rgba(24, 32, 24, 0.07); color: var(--ink); }.notification-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--notification-accent) 16%, transparent);
+  overflow: hidden;
+}.notification-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--notification-accent);
+  transition: width 160ms linear;
+}.notification-flyout.locked { grid-template-columns: 28px minmax(0, 1fr); }/* The auto-dismiss countdown is a hairline inside the rounded edge. */.notification-flyout > i {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--notification-accent) 55%, transparent);
+  transform-origin: left;
+  animation: notification-life var(--notification-duration) linear both;
+}@keyframes notification-enter {
+  from { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.97); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}@keyframes notification-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }@media (max-width: 560px) {
+  /* Fixed inset edges, not 100vw: a desktop scrollbar makes 100vw wider than
+     the layout viewport and pushes the stack's leading edge off screen. */
+  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; transform: none; }
+}@media (prefers-reduced-motion: reduce) {
+  .notification-stack, .notification-flyout, .notification-flyout > *, .notification-flyout > i { animation: none; transition: none; }
+}.day-grid {
+  margin: 0 auto;
+  display: grid;
+}.hero-card,
+.pulse-card,
+.capture-card,
+.focus-card,
+.panel,
+.metric,
+.evidence-list {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 16px;
+}.hero-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}.hero-copy {
+  position: relative;
+  z-index: 1;
+}.kicker,
+.page-intro > span {
+  display: inline-block;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.hero-copy h2 {
+  font: 600 clamp(30px, 4vw, 48px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.hero-copy p {
+  line-height: 1.55;
+}.hero-actions {
+  display: flex;
+  gap: 8px;
+}.hero-actions button,
+.primary {
+  border: 1px solid #3b3e35;
+  border-radius: 9px;
+  background: #262822;
+  color: #fff;
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}.primary {
+  background: var(--signal);
+  color: #141611;
+  border-color: #a6e852;
+  font-weight: 600;
+  box-shadow: 0 5px 14px rgba(143, 203, 64, 0.15);
+}button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}.pulse-card {
+  display: flex;
+  flex-direction: column;
+}.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}.card-title > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 13px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.card-title small {
+  color: var(--muted);
+  font-size: 10px;
+}.card-title button {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}.pulse-time {
+  font: 600 48px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.06em;
+}.meter {
+  height: 5px;
+  background: #dddcd3;
+  border-radius: 8px;
+  overflow: hidden;
+}.meter i {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  border-radius: inherit;
+}.stat-row {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}.stat-row span {
+  display: grid;
+}.stat-row small {
+  font-size: 9px;
+  color: var(--muted);
+}.stat-row strong {
+  margin-top: 3px;
+  font-size: 12px;
+}.capture-card,
+.focus-card {
+  padding: 22px;
+}.capture-card textarea,
+.intent textarea {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  background: #e9e8e0;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 98px;
+  color: var(--ink);
+}.capture-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+}.capture-actions select {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: #555950;
+}.focus-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}.focus-row > b {
+  font: 500 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: #92958d;
+}.focus-row div {
+  display: grid;
+  gap: 3px;
+}.focus-row strong {
+  font-size: 12px;
+}.focus-row small {
+  font-size: 10px;
+  color: var(--muted);
+}.focus-row > span,
+.evidence-kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #73766e;
+}.page {
+  margin: 0 auto;
+}.page-intro h2 {
+  font: 600 clamp(32px, 5vw, 54px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.page-intro p {
+  color: var(--muted);
+}.intent {
+  display: grid;
+  gap: 8px;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.plan-list {
+  margin-top: 20px;
+}.plan-list article {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  transition: opacity 0.2s;
+}.plan-list article.deferred {
+  opacity: 0.46;
+}.plan-list article > b {
+  font-size: 10px;
+  color: #8a8d84;
+}.plan-list article div:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}.plan-list article strong {
+  font-size: 13px;
+}.plan-list article small {
+  font-size: 10px;
+  color: var(--muted);
+}.plan-controls {
+  display: flex;
+  gap: 5px;
+}.plan-controls button,
+.settings-panel button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--inset);
+  padding: 0 9px;
+}.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}.metric {
+  display: grid;
+  gap: 10px;
+}.metric small {
+  color: var(--muted);
+}.metric strong {
+  font: 600 18px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.insight {
+  margin-top: 12px;
+}.insight h3 {
+  font: 600 16px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}.signal-bars {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}.signal-bars span {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}.signal-bars span:after {
+  content: "";
+  height: 7px;
+  background: #dfded6;
+  border-radius: 8px;
+  grid-column: 2;
+  grid-row: 1;
+}.signal-bars b {
+  height: 7px;
+  background: var(--ink);
+  border-radius: 8px;
+  grid-column: 2;
+  grid-row: 1;
+  z-index: 1;
+}.insight p {
+  font-size: 11px;
+  color: var(--muted);
+}.evidence-list article {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+}.evidence-list article:first-child {
+  border: 0;
+}.evidence-kind.output {
+  color: #4f8119;
+}.evidence-kind.activity {
+  color: #806d58;
+}.task-state {
+  width: max-content;
+  min-width: 58px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+}.task-state.open {
+  border-color: transparent;
+  background: var(--inset);
+  color: var(--ink-soft);
+}/* Manual workflow statuses share open's quiet treatment; the label carries the
+   difference, and neither state competes with the overdue or done pills. */.task-state.pending,
+.task-state.in_progress {
+  border-color: transparent;
+  background: var(--inset);
+  color: var(--ink-soft);
+}.task-state.complete {
+  border-color: transparent;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
+}.task-state.overdue {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}.task-state.sync-issue {
+  border-color: transparent;
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}.evidence-list h3 {
+  font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  margin: 0 0 5px;
+}.evidence-list p,
+.evidence-list time {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0;
+}.setting {
+  border-top: 1px solid var(--line);
+  justify-content: space-between;
+}.setting:first-child {
+  border: 0;
+}.setting > div {
+  display: grid;
+  gap: 4px;
+}.setting strong {
+  font-size: 12px;
+}.setting small {
+  font-size: 10px;
+  color: var(--muted);
+  max-width: 460px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}.setting input {
+  accent-color: #78ad33;
+}.danger {
+  color: var(--danger) !important;
+}.empty {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #85887f;
+  padding: 20px;
+}.empty strong {
+  color: #55584f;
+  margin: 8px 0 4px;
+}.empty p {
+  font-size: 11px;
+  max-width: 300px;
+  margin: 0;
+  line-height: 1.5;
+}/* First-run connect screen: the stage's first frame -------------------------
+ * The connect screen is the welcome's first frame: the same dark stage, with
+ * Otto carrying the secure sign-in in his own voice. The only surface it adds
+ * is the advanced server override, which belongs to the connect action and
+ * lives in the bubble — so its controls wear the bubble's dark treatment. */.otto-bubble .connect-settings {
+  margin-top: 12px;
+  color: #a9ad9f;
+  font-size: 11px;
+  animation: onboarding-action-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--otto-settle, 0ms);
+}.otto-bubble .connect-settings summary {
+  cursor: pointer;
+  color: #9aa093;
+}.otto-bubble .connect-settings summary:hover {
+  color: #c6cabb;
+}.otto-bubble .connect-settings-row {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}.otto-bubble .connect-settings-row label {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}.otto-bubble .connect-settings-controls {
+  display: flex;
+  gap: 8px;
+}.otto-bubble .connect-settings-controls input {
+  min-width: 0;
+  flex: 1;
+  max-width: 300px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #41443b;
+  background: #23251f;
+  color: #fff;
+}.otto-bubble .connect-settings-controls button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #3a3d34;
+  border-radius: 8px;
+  background: #23251f;
+  color: #cfd3c8;
+  cursor: pointer;
+}.otto-bubble .connect-settings-controls button:hover {
+  border-color: #5a5f4f;
+  color: #fff;
+}.loading {
+  min-height: 100vh;
+  background: #171914;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}.loading img {
+  width: 54px;
+}.loading h1 {
+  font: 600 28px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  margin: 18px 0 5px;
+}.loading p {
+  color: var(--muted);
+}@media (max-width: 850px) {
+  .workspace {
+    grid-template-columns: 68px 1fr;
+  }
+  .rail {
+    width: 68px;
+    padding: 18px 10px;
+    align-items: center;
+  }
+  .wordmark {
+    justify-content: center;
+  }
+  .wordmark span,
+  .rail nav span,
+  .rail-foot div {
+    display: none;
+  }
+  .rail nav {
+    margin-top: 28px;
+    gap: 6px;
+    width: 100%;
+  }
+  .rail nav button {
+    justify-content: center;
+    width: 48px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    margin: 0 auto;
+  }
+  .rail nav button.active:before {
+    left: -10px;
+    height: 18px;
+  }
+  .rail nav button {
+    position: relative;
+  }
+  .rail nav button::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--ink);
+    color: #f3f1e8;
+    font: 600 11.5px/1 Manrope, Inter, "Segoe UI", sans-serif;
+    padding: 7px 11px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    box-shadow: 0 6px 18px rgba(13, 15, 12, 0.3);
+  }
+  .rail nav button:hover::after,
+  .rail nav button:focus-visible::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+  .rail nav em {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    margin: 0;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--ink);
+  }
+  .rail-foot {
+    width: 100%;
+    justify-content: center;
+    border-top: 0;
+    padding: 0;
+  }
+  .rail-foot .presence {
+    width: 10px;
+    height: 10px;
+  }
+  .stage {
+    padding: 0 18px 40px;
+  }
+  .day-grid {
+    grid-template-columns: 1fr;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hero-copy {
+    max-width: 70%;
+  }
+}@media (max-width: 560px) {
+  .rail {
+    position: fixed;
+    inset: auto 0 0;
+    height: 62px;
+    flex-direction: row;
+    z-index: 10;
+    padding: 7px;
+    background: #171914;
+  }
+  .rail > .wordmark,
+  .rail-foot {
+    display: none;
+  }
+  .rail nav {
+    margin: 0;
+    display: flex;
+    width: 100%;
+    justify-content: space-around;
+  }
+  .rail nav button {
+    min-height: 48px;
+  }
+  .rail nav button.active:before {
+    left: 50%;
+    top: -7px;
+    width: 20px;
+    height: 3px;
+  }
+  .rail nav button:nth-child(4),
+  .rail nav button:nth-child(5) {
+    display: none;
+  }
+  .provider {
+    display: none;
+  }
+  .capture-actions select,
+  .capture-actions button {
+    min-height: 40px;
+  }
+  .metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .signal-bars span {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .signal-bars span:after,
+  .signal-bars b {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}/* High-end application polish */

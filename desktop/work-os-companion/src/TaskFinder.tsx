@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Search, X } from "lucide-react";
-import { TASK_FINDER_STATUSES, type TaskFinderFilters } from "../../../src/modules/work-os/task-finder";
+import { TASK_FINDER_STATUSES, type TaskFinderFilters } from "@wrazy/work-os-shared/task-finder";
 import { formatWorkOsFullDate } from "./dateFormat";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { TaskRow } from "./taskWorkspace";

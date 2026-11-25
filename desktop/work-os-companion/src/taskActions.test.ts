@@ -4,10 +4,11 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { COMPLETION_BLOCKED_LABEL, completionClosesTaskPanel, completionTaskCapabilities, currentTaskStatus, displayTaskState, hasTaskMenu, patchedTaskCapabilities, taskActionItems, taskCheckboxA11y, taskCheckboxEnabled, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusLabel, taskStatusOptions, taskStatusWriteRequired } from "./taskActions";
 import { TaskActionMenuItems } from "./taskSurfaces";
 import { taskState } from "./taskWorkspace";
+import { readMainAppSource } from "./app/readMainAppSource";
 
 const today = "2026-10-27";
 const base = { completed: false, due_date: today, assignee_person_ids: ["worker"], assigned_by_person_id: "owner" };
@@ -15,7 +16,7 @@ const row = (personId: string, extra = {}, role: "employee" | "admin" = "employe
   const task = { ...base, ...extra };
   return { ...task, capabilities: taskCapabilities(task, { role, personId }, today) };
 };
-const appSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "App.tsx"), "utf8");
+const appSource = readMainAppSource();
 /** The whole status menu markup, so the assertion sees its disabled attribute
  *  rather than only its visible label. */
 const menuItemTag = (markup: string, label: string) => [...markup.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readMainAppSource } from "./app/readMainAppSource";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,11 +24,11 @@ describe("companion artwork", () => {
     const stageCss = readFileSync(resolve(root, "src/onboarding-stage.css"), "utf8");
     expect(stageCss).toMatch(/\.mascot-stage\s*\{/);
     expect(stageCss).toMatch(/\.mascot-stage-art\s*\{/);
-    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const app = readMainAppSource();
     expect(app).toContain('from "./MascotPet"');
     // The connect screen is the first-run stage's first frame, so its mascot is
     // the stage's figure — one art path, not a second hero that could drift.
-    expect(app).toContain('import { OnboardingStage } from "./OnboardingStage"');
+    expect(app).toMatch(/import \{ OnboardingStage \} from "(?:\.\/|\.\.\/\.\.\/)OnboardingStage"/);
     expect(app).toContain('pose="waiting"');
     expect(app).not.toContain("mascot-connect");
     expect(app).not.toContain("work-os-task-stack");
@@ -35,11 +36,14 @@ describe("companion artwork", () => {
 
   it("includes the redesign styles in the packaged application entrypoint", () => {
     const main = readFileSync(resolve(root, "src/main.tsx"), "utf8");
-    expect(main).toContain('import "./styles.css"');
-    expect(main).toContain('import "./workspace-redesign.css"');
+    expect(main).toContain('import "./styles/tokens-base.css"');
+    expect(main).toContain('import "./styles/legacy-surfaces.css"');
+    expect(main).toContain('import "./styles/workspace-shell.css"');
+    expect(main).toContain('import "./styles/workspace-surfaces.css"');
+    expect(main).toContain('import "./styles/dashboard.css"');
     expect(main).toContain('import "./otto.css"');
     expect(readFileSync(resolve(root, "src/App.tsx"), "utf8")).toContain('import "./plan-insights.css"');
-    expect(readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8")).toContain(".workspace");
+    expect(readFileSync(resolve(root, "src/styles/workspace-shell.css"), "utf8")).toContain(".workspace");
   });
 
   it("uses an alpha PNG for the packaged app icon", () => {
@@ -243,7 +247,7 @@ describe("floating companion integration", () => {
 
   it("shares the per-workday conversation between the main window and avatar", () => {
     const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
-    const main = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const main = readMainAppSource();
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
 
     expect(vault).toContain("saveConversation");
@@ -289,7 +293,7 @@ describe("floating companion integration", () => {
   });
 
   it("names the EOD drafting action for what it does", () => {
-    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const app = readMainAppSource();
     expect(app).toContain('"Draft today’s EOD"');
     expect(app).not.toContain('"Drafts today’s EOD"');
     expect(app).not.toContain('"Create EOD draft"');
@@ -418,7 +422,7 @@ describe("floating companion integration", () => {
     expect(api).toContain('"work-os://desktop-session-rejected"');
     const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
     expect(vault).toContain("sessionStateFrom(await get<DesktopSession>(\"session\"), httpsOrigin)");
-    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const app = readMainAppSource();
     expect(app).toContain("secureState.sessionState()");
     expect(app).toContain("setConnectNotice(sessionNotice(stored.reason))");
     expect(app).toContain('listen("work-os://desktop-session-rejected"');

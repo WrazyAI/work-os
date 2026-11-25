@@ -3,9 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readMainAppSource } from "./app/readMainAppSource";
+import { readBaseStyles, readDashboardStyles, readWorkspaceStyles } from "./styles/readStyles";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const readText = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
-const app = readText(resolve(root, "src/App.tsx"));
+const app = readMainAppSource();
 const insightsView = readText(resolve(root, "src/InsightsView.tsx"));
 const sidebar = readText(resolve(root, "src/SidebarNav.tsx"));
 const sidebarStyles = readText(resolve(root, "src/sidebar.css"));
@@ -15,9 +18,9 @@ const avatarApp = readText(resolve(root, "src/AvatarApp.tsx"));
 const avatarStyles = readText(resolve(root, "src/avatar.css"));
 const chatPreview = readText(resolve(root, "src/ChatPreview.tsx"));
 const taskSurfaces = readText(resolve(root, "src/taskSurfaces.tsx"));
-const styles = readText(resolve(root, "src/styles.css"));
-const workspaceStyles = readText(resolve(root, "src/workspace-redesign.css"));
-const dashboardStyles = readText(resolve(root, "src/dashboard-overhaul.css"));
+const styles = readBaseStyles();
+const workspaceStyles = readWorkspaceStyles();
+const dashboardStyles = readDashboardStyles();
 const dashboardSurface = readText(resolve(root, "src/DashboardSurface.tsx"));
 const insightStyles = readText(resolve(root, "src/plan-insights.css"));
 const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
@@ -35,7 +38,7 @@ const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
 const personalSettings = readText(resolve(root, "src/PersonalSettings.tsx"));
-const memoryStyles = readText(resolve(root, "src/workspace-redesign.css"));
+const memoryStyles = workspaceStyles;
 const listShift = readText(resolve(root, "src/listShift.ts"));
 const appMenuBar = readText(resolve(root, "src/AppMenuBar.tsx"));
 const windowChrome = readText(resolve(root, "src/windowChrome.ts"));
@@ -844,7 +847,8 @@ describe("operational visualizations", () => {
     // they can never drift: the employee Settings page and the administration
     // shell's Settings section mount the same component shape.
     expect(personalSettings).toContain("export function PersonalSettings");
-    expect(app).toContain('import { PersonalSettings } from "./PersonalSettings"');
+    expect(settingsSections).toContain('import type { PersonalSettingsProps } from "./PersonalSettings"');
+    expect(app).toContain('import { SettingsContent } from "./SettingsContent"');
     expect(app).toContain('const settingsPropsFor = (surface: "employee" | "admin")');
     expect(app).toContain('settingsPropsFor("employee")');
     expect(app).toContain('personalSettingsProps={settingsPropsFor("admin")}');

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ChatResult, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { ChatResult, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { suspendAdminOttoChat } from "./AdminOttoChat";
 import { createAdminOttoEntryController } from "./chatEntry";
 

@@ -1,0 +1,29 @@
+{
+  "name": "@wrazy/work-os-shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency shared contracts, domain rules, and arrangement primitives for Work OS web and desktop companion.",
+  "exports": {
+    "./admin-otto/contracts": "./src/admin-otto/contracts.ts",
+    "./task-permissions": "./src/task-permissions.ts",
+    "./completion-evidence": "./src/completion-evidence.ts",
+    "./evidence-kinds": "./src/evidence-kinds.ts",
+    "./eod-document": "./src/eod-document.ts",
+    "./task-finder": "./src/task-finder.ts",
+    "./onboarding": "./src/onboarding.ts",
+    "./admin-readiness": "./src/admin-readiness.ts",
+    "./shift-gate": "./src/shift-gate.ts",
+    "./timezones": "./src/timezones.ts",
+    "./recap-review": "./src/recap-review.ts",
+    "./plan-timeouts": "./src/plan-timeouts.ts",
+    "./memory-review-cache": "./src/memory-review-cache.ts",
+    "./calendar": "./src/calendar.ts",
+    "./admin-task-model": "./src/admin-task-model.ts",
+    "./schedule-validation": "./src/schedule-validation.ts",
+    "./work-arrangement": "./src/work-arrangement.ts",
+    "./payroll/contracts": "./src/payroll/contracts.ts",
+    "./payroll/break-groups": "./src/payroll/break-groups.ts",
+    "./ui/WorkArrangementFields": "./src/ui/WorkArrangementFields.tsx",
+    "./ui/ArrangementReview": "./src/ui/ArrangementReview.tsx"
+  }
+}

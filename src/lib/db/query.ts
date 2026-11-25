@@ -7,12 +7,13 @@ export type DbError = {
   hint?: string | null;
 };
 
-// Deliberately loose row typing (any) to mirror supabase-js untyped behavior —
-// call sites destructure row properties directly.
+// Deliberately loose default row typing (`any`) to preserve supabase-js
+// backwards compatibility, while allowing incremental `<TRow>` typing on
+// `client.from<MyRow>("table")` call sites.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type ExecResult = { data: any; error: DbError | null; count?: number | null };
-export type ListResult = { data: any[] | null; error: DbError | null; count?: number | null };
-export type SingleResult = { data: any; error: DbError | null; count?: number | null };
+export type ListResult<TRow = any> = { data: TRow[] | null; error: DbError | null; count?: number | null };
+export type SingleResult<TRow = any> = { data: TRow | null; error: DbError | null; count?: number | null };
 
 export type DbResult<T> = {
   data: T;
@@ -106,7 +107,7 @@ function castParam(colType: string, val: unknown): unknown {
   return val;
 }
 
-export class PostgrestQuery {
+export class PostgrestQuery<TRow = any> {
   private table = "";
   private selectSpec: string | undefined;
   private filters: Filter[] = [];
@@ -180,14 +181,14 @@ export class PostgrestQuery {
     return this;
   }
 
-  single(): PostgrestSingleQuery {
+  single(): PostgrestSingleQuery<TRow> {
     this.wantSingle = "single";
-    return new PostgrestSingleQuery(this);
+    return new PostgrestSingleQuery<TRow>(this);
   }
 
-  maybeSingle(): PostgrestSingleQuery {
+  maybeSingle(): PostgrestSingleQuery<TRow> {
     this.wantSingle = "maybeSingle";
-    return new PostgrestSingleQuery(this);
+    return new PostgrestSingleQuery<TRow>(this);
   }
 
   insert(values: Record<string, unknown> | Record<string, unknown>[], options?: { onConflict?: string; ignoreDuplicates?: boolean; defaultToNull?: boolean }): this {
@@ -314,11 +315,11 @@ export class PostgrestQuery {
     }
   }
 
-  then<TResult1 = ListResult, TResult2 = never>(
-    onfulfilled?: ((value: ListResult) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = ListResult<TRow>, TResult2 = never>(
+    onfulfilled?: ((value: ListResult<TRow>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
-    return this.exec().then((r) => r as ListResult).then(onfulfilled, onrejected);
+    return this.exec().then((r) => r as ListResult<TRow>).then(onfulfilled, onrejected);
   }
 
   async exec(): Promise<ExecResult> {
@@ -669,27 +670,27 @@ async function primaryKeyColumn(table: string): Promise<string> {
 
 // Type-level wrapper: awaits of a .single()/.maybeSingle() chain resolve an
 // object row (data: any), while plain chains resolve row arrays (data: any[]).
-export class PostgrestSingleQuery implements PromiseLike<SingleResult> {
-  constructor(private readonly inner: PostgrestQuery) {}
+export class PostgrestSingleQuery<TRow = any> implements PromiseLike<SingleResult<TRow>> {
+  constructor(private readonly inner: PostgrestQuery<TRow>) {}
 
-  then<TResult1 = SingleResult, TResult2 = never>(
-    onfulfilled?: ((value: SingleResult) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = SingleResult<TRow>, TResult2 = never>(
+    onfulfilled?: ((value: SingleResult<TRow>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
-    return (this.inner as unknown as PromiseLike<SingleResult>).then(onfulfilled, onrejected);
+    return (this.inner as unknown as PromiseLike<SingleResult<TRow>>).then(onfulfilled, onrejected);
   }
 }
 
 export type DbClient = {
-  from: (table: string) => PostgrestQuery;
-  rpc: (fn: string, args?: Record<string, unknown>) => PostgrestQuery;
+  from: <TRow = any>(table: string) => PostgrestQuery<TRow>;
+  rpc: <TRow = any>(fn: string, args?: Record<string, unknown>) => PostgrestQuery<TRow>;
 };
 
 export function createDbClient(): DbClient {
   return {
-    from: (table: string) => new PostgrestQuery().from(table),
-    rpc: (fn: string, args?: Record<string, unknown>) => {
-      const q = new PostgrestQuery();
+    from: <TRow = any>(table: string) => new PostgrestQuery<TRow>().from(table),
+    rpc: <TRow = any>(fn: string, args?: Record<string, unknown>) => {
+      const q = new PostgrestQuery<TRow>();
       q.rpc(fn, args);
       return q;
     },

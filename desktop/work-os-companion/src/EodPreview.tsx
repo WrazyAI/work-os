@@ -3,7 +3,7 @@ import { ArrowLeft, FileCheck2 } from "lucide-react";
 import { EodComposer, EodLoadingState, EodShiftOpenNotice } from "./taskSurfaces";
 import { CheckedMoment } from "./CheckedMoment";
 import { EodSubmittedReport } from "./EodSubmittedReport";
-import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
+import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "@wrazy/work-os-shared/shift-gate";
 import type { EodScreenshotGallery } from "./types";
 
 const draft = [

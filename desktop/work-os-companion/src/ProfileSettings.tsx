@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Camera, Check, Trash2, UserRound } from "lucide-react";
-import { WorkArrangementFields } from "../../../src/modules/work-os/WorkArrangementFields";
+import { WorkArrangementFields } from "@wrazy/work-os-shared/ui/WorkArrangementFields";
 import { apiRequestBlob } from "./api";
 import { ItemPillGroup, ProviderAccountPills } from "./ProfilePills";
 import { SettingsSwitch } from "./SettingsSwitch";
 import type { OnboardingData, OnboardingSchedule, WorkProfileItem } from "./types";
-import { supportedTimezones, timezoneLabel } from "../../../src/modules/work-os/timezones";
+import { supportedTimezones, timezoneLabel } from "@wrazy/work-os-shared/timezones";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);

@@ -1,5 +1,5 @@
-import type { ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
-import { recapReviewLabel } from "../../../../src/modules/work-os/recap-review";
+import type { ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
+import { recapReviewLabel } from "@wrazy/work-os-shared/recap-review";
 import { formatWorkOsFullDate } from "../dateFormat";
 
 /** The one vocabulary administration uses for a reviewed recap. */

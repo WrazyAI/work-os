@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readMainAppSource } from "./app/readMainAppSource";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 describe("the recap read is offered wherever a recap is", () => {
   it("reads in the main window with the same machine as the floating companion", () => {
-    const app = read("./App.tsx");
+    const app = readMainAppSource();
     // One player, built from the shared factory, with the browser adapter that
     // keeps the element alive across the press-to-clip gap.
     expect(app).toContain("createRecapSpeechPlayer({");

@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   PayrollApproval, PayrollDayResult, PayrollFinding, PayrollPeriod, PayrollReview, PayrollRosterPage, PayrollTotals,
-} from "../../../../../src/modules/work-os/payroll/contracts";
+} from "@wrazy/work-os-shared/payroll/contracts";
 import { defaultPayDate } from "./PayrollPage";
 import { desktopPayrollKey } from "./api";
 

@@ -1,4 +1,13 @@
 import { getPool } from "@/lib/db/pool";
+import { queryOne, queryRows } from "@/lib/db/typed";
+import type {
+  CountRow,
+  PayrollDayProjectionRow,
+  PayrollFindingWithDateRow,
+  PayrollRosterQueryRow,
+  PayrollStatusCountRow,
+  WorkPayrollReviewRow,
+} from "@/lib/db/rows/payroll";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
 export { loadPayrollReview } from "@/lib/work-os-payroll-decisions";
@@ -20,11 +29,14 @@ function decodeCursor(value: string | null): { name?: string; id?: string; date?
   try { const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Record<string, unknown>; return { name: typeof parsed.name === "string" ? parsed.name : undefined, id: typeof parsed.id === "string" ? parsed.id : undefined, date: typeof parsed.date === "string" ? parsed.date : undefined, key: typeof parsed.key === "string" ? parsed.key : undefined }; }
   catch { return null; }
 }
-async function assertLiveReview(access: WorkOsAccess, reviewId: string): Promise<Row> {
+async function assertLiveReview(access: WorkOsAccess, reviewId: string): Promise<WorkPayrollReviewRow> {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll records are admin-only.");
-  const { rows } = await getPool().query(`SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2`, [access.organizationId, reviewId]);
-  if (!rows.length) throw new WorkOsValidationError("Payroll review not found");
-  const review = rows[0] as Row;
+  const review = await queryOne<WorkPayrollReviewRow>(
+    getPool(),
+    `SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2`,
+    [access.organizationId, reviewId],
+  );
+  if (!review) throw new WorkOsValidationError("Payroll review not found");
   const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
   if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
   return review;
@@ -33,8 +45,12 @@ async function assertLiveReview(access: WorkOsAccess, reviewId: string): Promise
 export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate: string; cursor: string | null; limit: number; recordsOnly?: boolean }): Promise<PayrollRosterPage> {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll roster is admin-only.");
   const scope = { organizationId: access.organizationId };
-  const person = await getPool().query(`SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o WHERE o.organization_id=p.organization_id AND o.person_id=p.id),to_jsonb(p)->>'timezone','UTC') AS timezone FROM work_people p WHERE p.organization_id=$1 LIMIT 1`, [scope.organizationId]);
-  const period = resolvePayrollPeriod(filters.payDate, String(person.rows[0]?.timezone ?? "UTC"));
+  const person = await queryOne<{ timezone: string | null }>(
+    getPool(),
+    `SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o WHERE o.organization_id=p.organization_id AND o.person_id=p.id),to_jsonb(p)->>'timezone','UTC') AS timezone FROM work_people p WHERE p.organization_id=$1 LIMIT 1`,
+    [scope.organizationId],
+  );
+  const period = resolvePayrollPeriod(filters.payDate, String(person?.timezone ?? "UTC"));
   const limit = Math.max(1, Math.min(100, filters.limit || 50));
   const cursor = decodeCursor(filters.cursor);
   const rosterFilter = filters.recordsOnly ? "r.id IS NOT NULL" : "(r.id IS NOT NULL OR (p.active AND p.worktivity_employee_id IS NOT NULL))";
@@ -42,7 +58,9 @@ export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate
   let after = "";
   if (cursor?.name && cursor.id) { values.push(cursor.name, cursor.id); after = "AND (p.display_name,p.id) > ($3,$4::uuid)"; }
   values.push(limit + 1);
-  const { rows } = await getPool().query(`SELECT r.id AS review_id,r.status,r.totals,p.id AS person_id,p.display_name,p.active,
+  const rows = await queryRows<PayrollRosterQueryRow>(
+    getPool(),
+    `SELECT r.id AS review_id,r.status,r.totals,p.id AS person_id,p.display_name,p.active,
     (SELECT u.status FROM work_payroll_runs u
       WHERE u.organization_id=p.organization_id AND u.review_id=r.id AND u.person_id=p.id
       ORDER BY u.target_revision DESC LIMIT 1) AS audit_status,
@@ -53,13 +71,22 @@ export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate
       ON r.organization_id=p.organization_id AND r.person_id=p.id AND r.pay_date=$2::date AND r.retention_expires_at > now()
     WHERE p.organization_id=$1 AND ${rosterFilter}
       ${after}
-    ORDER BY p.display_name,p.id LIMIT $${values.length}`, values);
-  const pageRows = rows.slice(0, limit) as Row[];
-  const totalQuery = await getPool().query(`SELECT count(*)::int AS n FROM work_people p LEFT JOIN work_payroll_reviews r
+    ORDER BY p.display_name,p.id LIMIT $${values.length}`,
+    values,
+  );
+  const pageRows = rows.slice(0, limit);
+  const totalQuery = await queryOne<CountRow>(
+    getPool(),
+    `SELECT count(*)::int AS n FROM work_people p LEFT JOIN work_payroll_reviews r
     ON r.organization_id=p.organization_id AND r.person_id=p.id AND r.pay_date=$2::date AND r.retention_expires_at > now()
     WHERE p.organization_id=$1 AND ${rosterFilter}`,
-  [scope.organizationId, filters.payDate]);
-  const counts = await getPool().query(`SELECT status,count(*)::int AS n FROM work_payroll_reviews WHERE organization_id=$1 AND pay_date=$2::date AND retention_expires_at > now() GROUP BY status`, [scope.organizationId, filters.payDate]);
+    [scope.organizationId, filters.payDate],
+  );
+  const counts = await queryRows<PayrollStatusCountRow>(
+    getPool(),
+    `SELECT status,count(*)::int AS n FROM work_payroll_reviews WHERE organization_id=$1 AND pay_date=$2::date AND retention_expires_at > now() GROUP BY status`,
+    [scope.organizationId, filters.payDate],
+  );
   return {
     items: pageRows.map((row) => ({
       personId: String(row.person_id), displayName: String(row.display_name ?? "Employee"), active: row.active === true,
@@ -68,9 +95,9 @@ export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate
       auditStatus: row.audit_status as PayrollRunStatus | null,
       workdays: 0,
     })),
-    total: Number(totalQuery.rows[0]?.n ?? 0),
+    total: Number(totalQuery?.n ?? 0),
     nextCursor: rows.length > limit && pageRows.length ? encodeCursor({ name: pageRows[pageRows.length - 1].display_name, id: pageRows[pageRows.length - 1].person_id }) : null,
-    period, counts: Object.fromEntries((counts.rows as Row[]).map((row) => [String(row.status), Number(row.n)])),
+    period, counts: Object.fromEntries(counts.map((row) => [String(row.status), Number(row.n)])),
   };
 }
 
@@ -79,7 +106,7 @@ const dayColumns = `d.id,d.result,d.local_date::text,d.schedule_snapshot,
     AND f.review_id=d.review_id AND f.person_id=d.person_id AND f.analysis_revision=d.analysis_revision
     AND f.day_id=d.id) AS sampled_frames`;
 
-function dayFromRow(row: Row): PayrollDayResult {
+function dayFromRow(row: PayrollDayProjectionRow): PayrollDayResult {
   const schedule = object(row.schedule_snapshot);
   const span = (value: unknown): Span | null => {
     const { startMs, endMs } = object(value);
@@ -107,12 +134,20 @@ export async function listPayrollDays(access: WorkOsAccess, reviewId: string, fi
   let after = "";
   if (cursor?.date) { values.push(cursor.date); after = "AND local_date > $4::date"; }
   values.push(limit + 1);
-  const { rows } = await getPool().query(`SELECT ${dayColumns} FROM work_payroll_days d WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${after} ORDER BY d.local_date LIMIT $${values.length}`, values);
-  const page = rows.slice(0, limit) as Row[];
-  const total = await getPool().query(`SELECT count(*)::int AS n FROM work_payroll_days WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3`, [access.organizationId, reviewId, review.analysis_revision]);
+  const rows = await queryRows<PayrollDayProjectionRow>(
+    getPool(),
+    `SELECT ${dayColumns} FROM work_payroll_days d WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${after} ORDER BY d.local_date LIMIT $${values.length}`,
+    values,
+  );
+  const page = rows.slice(0, limit);
+  const total = await queryOne<CountRow>(
+    getPool(),
+    `SELECT count(*)::int AS n FROM work_payroll_days WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3`,
+    [access.organizationId, reviewId, review.analysis_revision],
+  );
   return {
     items: page.map(dayFromRow),
-    total: Number(total.rows[0]?.n ?? 0), nextCursor: rows.length > limit && page.length ? encodeCursor({ date: page[page.length - 1].local_date }) : null,
+    total: Number(total?.n ?? 0), nextCursor: rows.length > limit && page.length ? encodeCursor({ date: page[page.length - 1].local_date }) : null,
   };
 }
 
@@ -129,25 +164,36 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
     after = `AND (d.local_date,f.finding_key) > ($${values.length - 1}::date,$${values.length})`;
   }
   values.push(limit + 1);
-  const { rows } = await getPool().query(`SELECT f.*, d.local_date::text AS local_date FROM work_payroll_findings f JOIN work_payroll_days d
+  const rows = await queryRows<PayrollFindingWithDateRow>(
+    getPool(),
+    `SELECT f.*, d.local_date::text AS local_date FROM work_payroll_findings f JOIN work_payroll_days d
     ON d.organization_id=f.organization_id AND d.id=f.day_id
     WHERE f.organization_id=$1 AND f.review_id=$2 AND f.analysis_revision=$3 ${status} ${after}
-    ORDER BY d.local_date,f.finding_key LIMIT $${values.length}`, values);
-  const page = rows.slice(0, limit) as Row[];
+    ORDER BY d.local_date,f.finding_key LIMIT $${values.length}`,
+    values,
+  );
+  const page = rows.slice(0, limit);
   const last = page.at(-1);
-  const frames = await getPool().query(`SELECT day_id, screenshot_summary_id
+  const frames = await queryRows<{ day_id: string; screenshot_summary_id: string }>(
+    getPool(),
+    `SELECT day_id, screenshot_summary_id
     FROM work_payroll_frame_findings
     WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
-    ORDER BY captured_at LIMIT 500`, [access.organizationId, reviewId, review.analysis_revision]);
+    ORDER BY captured_at LIMIT 500`,
+    [access.organizationId, reviewId, review.analysis_revision],
+  );
   const framesByDay = new Map<string, string[]>();
-  for (const frame of frames.rows as Row[]) {
+  for (const frame of frames) {
     const day = String(frame.day_id);
     const list = framesByDay.get(day) ?? [];
     if (list.length < 3) list.push(String(frame.screenshot_summary_id));
     framesByDay.set(day, list);
   }
-  const total = await getPool().query(`SELECT count(*)::int AS n FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${filters.status ? "AND status=$4" : ""}`,
-    filters.status ? [access.organizationId, reviewId, review.analysis_revision, filters.status] : [access.organizationId, reviewId, review.analysis_revision]);
+  const total = await queryOne<CountRow>(
+    getPool(),
+    `SELECT count(*)::int AS n FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${filters.status ? "AND status=$4" : ""}`,
+    filters.status ? [access.organizationId, reviewId, review.analysis_revision, filters.status] : [access.organizationId, reviewId, review.analysis_revision],
+  );
   return {
     items: page.map((row) => ({
       id: String(row.id), key: String(row.finding_key), scope: { organizationId: access.organizationId, personId: String(review.person_id) }, dayId: String(row.day_id),
@@ -158,14 +204,18 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
       reason: String(row.reason), citations: Array.isArray(row.citations) ? row.citations as PayrollFinding["citations"] : [],
       frameSummaryIds: row.kind === "break" ? [] : framesByDay.get(String(row.day_id)) ?? [],
     })),
-    total: Number(total.rows[0]?.n ?? 0),
+    total: Number(total?.n ?? 0),
     nextCursor: rows.length > limit && last ? encodeCursor({ date: last.local_date, key: last.finding_key }) : null,
   };
 }
 
 export async function loadPayrollDay(access: WorkOsAccess, reviewId: string, dayId: string): Promise<PayrollDayResult> {
   const review = await assertLiveReview(access, reviewId);
-  const { rows } = await getPool().query(`SELECT ${dayColumns} FROM work_payroll_days d WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 AND id=$4`, [access.organizationId, reviewId, review.analysis_revision, dayId]);
-  if (!rows.length) throw new WorkOsValidationError("Payroll day not found");
-  return dayFromRow(rows[0]);
+  const row = await queryOne<PayrollDayProjectionRow>(
+    getPool(),
+    `SELECT ${dayColumns} FROM work_payroll_days d WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 AND id=$4`,
+    [access.organizationId, reviewId, review.analysis_revision, dayId],
+  );
+  if (!row) throw new WorkOsValidationError("Payroll day not found");
+  return dayFromRow(row);
 }

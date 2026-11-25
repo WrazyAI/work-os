@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readMainAppSource } from "./app/readMainAppSource";
 import { describe, expect, it, vi } from "vitest";
 import { assertDesktopConnectUrl, buildDesktopConnectUrl, DESKTOP_REDIRECT_URI, discardPendingAuthentication, errorMessage } from "./auth";
 import { secureState } from "./vault";
@@ -53,7 +54,7 @@ describe("connect error surfacing", () => {
   });
 
   it("shows Connect failures instead of swallowing .message on strings", () => {
-    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const app = readMainAppSource();
     expect(app).toContain("errorMessage");
     expect(app).not.toContain("beginAuthentication().catch((value) => setError(value.message))");
     expect(app).toContain("Opening browser");
@@ -65,7 +66,7 @@ describe("connect error surfacing", () => {
     expect(auth).toContain("pending ?? await secureState.pendingAuth()");
     expect(auth).toContain("await challenge(current.verifier)");
     expect(auth).toContain("current.state");
-    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const app = readMainAppSource();
     expect(app).toContain("reopenPendingAuthentication");
     expect(app).toContain("awaitingApproval");
     expect(app).toContain("Reopen browser");

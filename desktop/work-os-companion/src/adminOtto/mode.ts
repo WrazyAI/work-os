@@ -1,4 +1,4 @@
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 
 export const OTTO_CONTEXT_EVENT = "work-os://otto-context-changed";
 export const OTTO_CHANGED_EVENT = "work-os://admin-otto-changed";

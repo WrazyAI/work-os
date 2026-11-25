@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { TaskEvidenceDialog, TaskEvidenceList } from "./CompletionEvidence";
 import { EvidencePreviewBody, EvidencePreviewDialog, EvidenceSelectionPreview, EvidenceTypeTile } from "./EvidencePreview";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 
 const evidence: TaskEvidenceRecord = {
   id: "evidence-1",

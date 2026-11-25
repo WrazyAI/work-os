@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { taskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { TaskDetailsModal, TaskEditModal, TaskEditModalForm, toggleAssigneeIds } from "./taskSurfaces";
 
 const noop = () => undefined;

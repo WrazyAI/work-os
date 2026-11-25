@@ -121,7 +121,10 @@ test("draft context and hourly synthesis share the workday window", async () => 
 });
 
 test("the companion stops waiting when the provider has no frames for the day", async () => {
-  const app = await source("desktop/work-os-companion/src/App.tsx");
+  const app = [
+    await source("desktop/work-os-companion/src/App.tsx"),
+    await source("desktop/work-os-companion/src/app/views/EodReviewView.tsx"),
+  ].join("\n");
   assert.match(app, /if \(preparation\.unavailable \|\| preparation\.total === 0\)/);
   assert.match(app, /Worktivity has no retrievable screenshots for this day\./);
   assert.match(app, /screenshotNotice=\{eodScreenshotNotice\}/);

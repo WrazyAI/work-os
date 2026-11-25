@@ -1,7 +1,7 @@
 import {
   evidenceKind,
   type EvidenceKind,
-} from "../../../../src/modules/work-os/evidence-kinds";
+} from "@wrazy/work-os-shared/evidence-kinds";
 import { one, type EvidenceCoverage, type EvidenceRow, type EvidenceSummary } from "./types";
 
 export type EvidenceTone = "observed" | "quiet" | "warn" | "danger";

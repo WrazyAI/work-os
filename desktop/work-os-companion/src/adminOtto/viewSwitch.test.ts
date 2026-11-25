@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT, OTTO_VIEW_STATE_EVENT, buildOttoViewState, parseOttoViewRequest, parseOttoViewResult, parseOttoViewState, resolveViewAvailability, resolveWorkspaceSwitch } from "./viewSwitch";
 
 const scope: OttoScope = { userId: "user-1", organizationId: "org-1", mode: "admin" };

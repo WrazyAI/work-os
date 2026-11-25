@@ -1,4 +1,4 @@
-import type { OttoScope } from "../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 
 /** The identity this window would present to the cross-window audio broker. */
 export type AvatarAudioContext = { scope: OttoScope; epoch: number };

@@ -1,5 +1,5 @@
-import { taskDisplayState, taskIsOverdue, type TaskCapabilities, type TaskDisplayState } from "../../../src/lib/work-os-task-permissions";
-import { taskRequiresCompletionEvidence } from "../../../src/modules/work-os/completion-evidence";
+import { taskDisplayState, taskIsOverdue, type TaskCapabilities, type TaskDisplayState } from "@wrazy/work-os-shared/task-permissions";
+import { taskRequiresCompletionEvidence } from "@wrazy/work-os-shared/completion-evidence";
 import { safeTaskText, type TaskRow } from "./taskWorkspace";
 
 export type TaskMenuAction = "pending" | "in_progress" | "complete" | "reopen" | "edit" | "assign" | "archive" | "delete";

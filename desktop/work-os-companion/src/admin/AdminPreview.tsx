@@ -7,7 +7,7 @@ import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
 import { adminPreviewNotifications, adminPreviewOverview, seedAdminFixtures } from "./adminFixtures";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
-import type { AdminOttoPendingAction, AdminRead } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminRead } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { ADMIN_FIXTURE_TRANSPORT, ADMIN_OTTO_FOLLOW_SCENARIOS, FIXTURE_ACTIONS, adminFixtureSpeak, createAdminOttoFollowFixture, fixtureInboxPage, FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "../adminOtto/fixtures";
 import type { AdminOttoFollowFixtureScenario } from "../adminOtto/fixtures";
 import { AdminOttoSpeechChangedError } from "../adminOtto/api";

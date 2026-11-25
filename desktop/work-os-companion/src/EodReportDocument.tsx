@@ -1,4 +1,4 @@
-import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow, type EodDocument, type EodSection, type EodSectionLine } from "../../../src/modules/work-os/eod-document";
+import { parseEodInline, parseEodMarkdown, splitEodNoteRow, splitEodRecapRow, splitEodTaskRow, type EodDocument, type EodSection, type EodSectionLine } from "@wrazy/work-os-shared/eod-document";
 import EodSectionIcon from "./EodSectionIcon";
 
 function Inline({ text }: { text: string }) {

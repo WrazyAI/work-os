@@ -5,7 +5,7 @@ import { machineCadenceHeaders } from "./localSettings";
 import { isSessionExpired } from "./sessionState";
 import { emit } from "./tauriEvents";
 import type { OfflineAction } from "./types";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 
 const MAX_QUEUE_ATTEMPTS = 6;
 

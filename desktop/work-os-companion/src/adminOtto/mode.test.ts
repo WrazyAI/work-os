@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { isPersistedQueryKey, workOsKeys } from "../queryClient";
 import { adminOttoKeys } from "./queryKeys";
 import { createAdminOttoEntryController } from "./chatEntry";
 import { onOttoAudioStop, requestOttoAudioStop } from "./audioOwner";
 import { createRecapSpeechPlayer, type RecapAudio } from "../recapSpeechPlayer";
-import type { ChatResult } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { ChatResult } from "@wrazy/work-os-shared/admin-otto/contracts";
 import {
   OTTO_CONTEXT_EVENT,
   OTTO_CHANGED_EVENT,

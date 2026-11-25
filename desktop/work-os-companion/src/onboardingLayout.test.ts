@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const styles = readFileSync(fileURLToPath(new URL("./styles.css", import.meta.url)), "utf8");
+import { readBaseStyles } from "./styles/readStyles";
+
+const styles = readBaseStyles();
 const formStyles = readFileSync(fileURLToPath(new URL("./onboarding-form.css", import.meta.url)), "utf8");
 
 /** The setup panel's column: masthead, optional scenario banner, scrolling

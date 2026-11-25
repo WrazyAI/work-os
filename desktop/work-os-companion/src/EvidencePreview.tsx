@@ -21,7 +21,7 @@ import {
   resolveCompletionEvidenceType,
   type CompletionEvidencePreviewKind,
   type TaskEvidenceRecord,
-} from "../../../src/modules/work-os/completion-evidence";
+} from "@wrazy/work-os-shared/completion-evidence";
 
 /** The authenticated read is performed by the caller. The component never
  * receives a token, so an `<img>` or `<iframe>` can only use the short-lived
