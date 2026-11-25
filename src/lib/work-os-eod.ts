@@ -33,6 +33,42 @@ import {
 import { listGithubActivity } from "@/lib/work-os-github-activity";
 import { eodGhlFactsFromActivity, listGhlActivity, resolveGhlScope } from "@/lib/work-os-ghl-activity";
 import { registerGhlContentForPersonDay } from "@/lib/work-os-ghl-retention";
+import { applyStructuredBrief, buildEodEvidenceGroups, buildEodSuggestions, composeStructuredEodMarkdown } from "@/lib/work-os-eod-structured";
+import {
+  emptyEodStructuredReport,
+  eodCompositionIsComplete,
+  eodSummaryIsCurrent,
+  mergeEodComposition,
+  normalizeEodStructuredReport,
+  normalizeLoomShareUrl,
+  type EodStructuredReport,
+} from "@/modules/work-os/eod-structured";
+
+type EodCompositionSource = "scheduled" | "employee" | "admin";
+
+async function registerReportRetention(access: WorkOsAccess, report: Json) {
+  if (!report.person_id || !report.report_date) return;
+  await registerGhlContentForPersonDay({
+    organizationId: access.organizationId,
+    personId: String(report.person_id),
+    date: String(report.report_date),
+    consumerTable: "work_reports",
+    consumerId: String(report.id),
+    fields: ["markdown", "submitted_markdown", "structured_report"],
+  });
+}
+
+async function registerVersionRetention(access: WorkOsAccess, report: Json, versionId: string) {
+  if (!report.person_id || !report.report_date) return;
+  await registerGhlContentForPersonDay({
+    organizationId: access.organizationId,
+    personId: String(report.person_id),
+    date: String(report.report_date),
+    consumerTable: "work_report_versions",
+    consumerId: versionId,
+    fields: ["markdown", "structured_report"],
+  });
+}
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -42,24 +78,32 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
     markdown,
     metrics: report.metrics ?? {},
     missing_evidence: report.missing_evidence ?? [],
+    structured_report: report.structured_report ?? {},
     idempotency_key: idempotencyKey ?? null,
     created_by: access.ctx.user.id,
   };
   const query = idempotencyKey
     ? db().from("work_report_versions").upsert(payload, { onConflict: "organization_id,idempotency_key", ignoreDuplicates: true })
     : db().from("work_report_versions").insert(payload);
-  const { error } = await query;
+  const { data: versionRow, error } = await query.select("id").maybeSingle();
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
   if (report.person_id) {
     try {
-      await registerGhlContentForPersonDay({
-        organizationId: access.organizationId,
-        personId: String(report.person_id),
-        date: String(report.report_date),
-        consumerTable: "work_reports",
-        consumerId: String(report.id),
-        fields: ["generated_markdown", "submitted_markdown"],
-      });
+      await registerReportRetention(access, report);
+      let versionId = versionRow?.id ? String(versionRow.id) : null;
+      if (!versionId) {
+        // An idempotent replay may not return the existing row; registering the
+        // latest version is the safe fallback for that replay path.
+        const version = await db().from("work_report_versions")
+          .select("id")
+          .eq("organization_id", access.organizationId)
+          .eq("report_id", report.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        versionId = version.data?.id ? String(version.data.id) : null;
+      }
+      if (versionId) await registerVersionRetention(access, report, versionId);
     } catch {
       // Report saving must not fail because a retention reference could not be
       // written; the content still expires and a later save retries it.
@@ -309,6 +353,13 @@ export async function buildDailyWorkspaceEodContent(
         triggered: { workflowRun: triggered.workflow_run, deployment: triggered.deployment, pullRequest: triggered.pull_request, review: triggered.review, issue: triggered.issue },
         commits: activity.counts.commitsPushed,
         pullRequests,
+        items: activity.items.slice(0, 12).map((item) => ({
+          description: item.description,
+          url: item.url,
+          relation: item.relation,
+          at: item.at,
+          repository: item.repository,
+        })),
       };
     } catch {
       github = null;
@@ -394,11 +445,27 @@ export async function buildDailyWorkspaceEodContent(
   };
   const content = buildEodReportMarkdown(facts);
   const title = `EOD Report: ${displayName} — ${formatReportDate(reportDate)}`;
+  const structured: EodStructuredReport = {
+    ...emptyEodStructuredReport(),
+    suggestions: buildEodSuggestions(facts),
+    evidence: buildEodEvidenceGroups(facts),
+  };
   return {
     title,
     markdown: content.markdown,
     metrics: content.metrics,
+    facts,
+    structured,
   };
+}
+
+function hasEodComposition(structured: EodStructuredReport): boolean {
+  return Boolean(
+    structured.summary
+    || structured.completed.length
+    || structured.inProgress.length
+    || structured.next.length,
+  );
 }
 
 async function persistDailyWorkspaceEod(
@@ -406,39 +473,88 @@ async function persistDailyWorkspaceEod(
   personId: string,
   reportDate: string,
   draftKey: string | null,
-  options: { loom?: EodLoomContext | null } = {},
+  options: { loom?: EodLoomContext | null; source?: EodCompositionSource } = {},
 ) {
   const ownerId = await organizationOwnerId(access.organizationId);
   const content = await buildDailyWorkspaceEodContent(access, personId, reportDate, ownerId, options);
+  const preparedAt = new Date().toISOString();
+  const finalize = async (row: Json) => {
+    try {
+      await registerReportRetention(access, row);
+    } catch {
+      // A prepared draft must not fail because a retention reference could not
+      // be written; the next preparation retries it.
+    }
+    return row;
+  };
   const { data: existing, error: existingError } = await db().from("work_reports").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
     .eq("report_date", reportDate)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw new Error(`load existing daily EOD: ${existingError.message}`);
+
   if (existing) {
     if (!["draft", "rejected"].includes(String(existing.status))) {
       throw new WorkOsConflictError("This day's EOD was already submitted and is read-only unless a manager requests changes.");
     }
-    const { data: updated, error: updateError } = await db().from("work_reports").update({
-      status: "draft",
-      title: content.title,
-      markdown: content.markdown,
-      metrics: content.metrics,
-      missing_evidence: [],
-      updated_at: new Date().toISOString(),
-      ...(draftKey ? { draft_idempotency_key: draftKey } : {}),
-    }).eq("organization_id", access.organizationId).eq("id", existing.id)
-      .in("status", ["draft", "rejected"]).select("*").maybeSingle();
+    const current = normalizeEodStructuredReport(existing.structured_report);
+    const hasComposition = hasEodComposition(current);
+    // The scheduled analysis may refresh its suggestions and evidence until the
+    // employee starts writing. Once they have, their evidence record is fixed.
+    const refreshServerData = !hasComposition || current.evidence.length === 0;
+    const buildStructured = (base: EodStructuredReport, at: string): EodStructuredReport => ({
+      ...base,
+      suggestions: refreshServerData ? content.structured.suggestions : base.suggestions,
+      evidence: refreshServerData ? content.structured.evidence : base.evidence,
+      preparedAt: at,
+      source: base.source ?? options.source ?? "employee",
+    });
+    const structured = buildStructured(current, preparedAt);
+    const composed = composeStructuredEodMarkdown(content.facts, structured);
+    const saveDraft = (row: Json, nextStructured: EodStructuredReport, markdown: string, metrics: ReturnType<typeof composeStructuredEodMarkdown>["metrics"], at: string) =>
+      db().from("work_reports").update({
+        status: "draft",
+        title: content.title,
+        markdown,
+        metrics,
+        structured_report: nextStructured,
+        prepared_at: at,
+        missing_evidence: [],
+        updated_at: at,
+        ...(draftKey ? { draft_idempotency_key: draftKey } : {}),
+      }).eq("organization_id", access.organizationId).eq("id", row.id)
+        .eq("updated_at", row.updated_at)
+        .in("status", ["draft", "rejected"]).select("*").maybeSingle();
+    const { data: updated, error: updateError } = await saveDraft(existing, structured, composed.markdown, composed.metrics, preparedAt);
     if (updateError) throw new Error(`refresh daily workspace EOD: ${updateError.message}`);
-    if (updated) return updated as Json;
-    const { data: current, error: currentError } = await db().from("work_reports").select("*")
+    if (updated) return finalize(updated as Json);
+
+    // A composition save won the race. Never write the earlier snapshot back
+    // over the employee's words; if the newer row is still only a prepared
+    // draft, refresh its server-owned fields once and try again.
+    const { data: raced, error: currentError } = await db().from("work_reports").select("*")
       .eq("organization_id", access.organizationId).eq("id", existing.id).maybeSingle();
     if (currentError) throw new Error(`reload daily workspace EOD: ${currentError.message}`);
-    if (current && !["draft", "rejected"].includes(String(current.status))) {
+    if (raced && !["draft", "rejected"].includes(String(raced.status))) {
       throw new WorkOsConflictError("This day's EOD was already submitted and is read-only unless a manager requests changes.");
     }
-    throw new Error("EOD report changed while it was being drafted");
+    if (!raced) throw new Error("EOD report changed while it was being prepared");
+    const latest = normalizeEodStructuredReport(raced.structured_report);
+    if (hasEodComposition(latest)) return finalize(raced as Json);
+    const retryAt = new Date().toISOString();
+    const retryStructured = buildStructured(latest, retryAt);
+    const retryComposed = composeStructuredEodMarkdown(content.facts, retryStructured);
+    const { data: retried, error: retryError } = await saveDraft(raced, retryStructured, retryComposed.markdown, retryComposed.metrics, retryAt);
+    if (retryError) throw new Error(`refresh daily workspace EOD: ${retryError.message}`);
+    return finalize((retried ?? raced) as Json);
   }
+
+  const structured: EodStructuredReport = {
+    ...content.structured,
+    preparedAt,
+    source: options.source ?? "employee",
+  };
+  const composed = composeStructuredEodMarkdown(content.facts, structured);
   const { data, error } = await db().from("work_reports").insert({
     user_id: ownerId,
     organization_id: access.organizationId,
@@ -447,8 +563,10 @@ async function persistDailyWorkspaceEod(
     kind: "eod",
     status: "draft",
     title: content.title,
-    markdown: content.markdown,
-    metrics: content.metrics,
+    markdown: composed.markdown,
+    metrics: composed.metrics,
+    structured_report: structured,
+    prepared_at: preparedAt,
     missing_evidence: [],
     draft_idempotency_key: draftKey,
   }).select("*").single();
@@ -458,11 +576,11 @@ async function persistDailyWorkspaceEod(
         .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
         .eq("report_date", reportDate).order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (racedError) throw new Error(`reload raced daily EOD: ${racedError.message}`);
-      if (raced) return raced as Json;
+      if (raced) return finalize(raced as Json);
     }
     throw new Error(`create daily workspace EOD: ${error.message}`);
   }
-  return data as Json;
+  return finalize(data as Json);
 }
 
 /** Builds the deterministic document without persisting it. Used when a Loom
@@ -495,10 +613,81 @@ export async function draftWorkOsEod(access: WorkOsAccess, personId: string, bod
   const gate = await eodDraftShiftGate(access, personId, reportDate);
   if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
   const loom = body.loom && typeof body.loom === "object" ? body.loom as EodLoomContext : null;
-  const report = await persistDailyWorkspaceEod(access, personId, reportDate, draftKey, loom ? { loom } : {});
-  await saveReportVersion(access, report, "draft", text(report.markdown) ?? "", draftKey);
-  await audit(access, "report.drafted", "report", report.id as string, { personId, reportDate: report.report_date });
+  const source: EodCompositionSource = access.role === "admin" && personId !== access.personId ? "admin" : "employee";
+  const savedKey = draftKey ?? dailyEodDraftKey(personId, reportDate);
+  const report = await persistDailyWorkspaceEod(access, personId, reportDate, savedKey, { ...(loom ? { loom } : {}), source });
+  await saveReportVersion(access, report, "draft", text(report.markdown) ?? "", savedKey);
+  await audit(access, "report.drafted", "report", report.id as string, { personId, reportDate: report.report_date, source });
   return report;
+}
+
+/** One deterministic draft key per person-day. The unique idempotency index
+ * turns concurrent scheduler, fallback and admin preparation into one row. */
+function dailyEodDraftKey(personId: string, reportDate: string) {
+  return `eod-day:${personId}:${reportDate}`;
+}
+
+/** Server-side preparation. The scheduled job and the employee page's silent
+ * fallback both use this, so the employee never has to press "Draft" to get
+ * the analysis. It is idempotent for one day: an existing draft keeps the
+ * employee's words and refreshes only server-owned suggestions/evidence. */
+export async function prepareWorkOsEod(
+  access: WorkOsAccess,
+  personId: string,
+  reportDate: string,
+  source: EodCompositionSource = "scheduled",
+) {
+  // A submitted report is terminal here. Returning it lets the employee page
+  // reconcile a report filed from another client instead of retrying a 409 in
+  // a loop while the EOD window is open.
+  const { data: existing, error: existingError } = await db().from("work_reports").select("*")
+    .eq("organization_id", access.organizationId)
+    .eq("person_id", personId)
+    .eq("kind", "eod")
+    .eq("report_date", reportDate)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw new Error(`load EOD preparation target: ${existingError.message}`);
+  if (existing && !["draft", "rejected"].includes(String(existing.status))) {
+    return existing as Json;
+  }
+  const gate = await eodDraftShiftGate(access, personId, reportDate);
+  if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
+  return persistDailyWorkspaceEod(access, personId, reportDate, dailyEodDraftKey(personId, reportDate), { source });
+}
+
+/** Saves the employee's composition. Suggestions and evidence stay
+ * server-owned; the client can only replace the fields it actually wrote. */
+export async function saveWorkOsEodComposition(access: WorkOsAccess, reportId: string, body: Json) {
+  const { data: report, error: loadError } = await db().from("work_reports")
+    .select("*").eq("organization_id", access.organizationId).eq("id", reportId).maybeSingle();
+  if (loadError) throw new Error(`load EOD composition: ${loadError.message}`);
+  if (!report) throw new WorkOsConflictError("That EOD report no longer exists.");
+  if (!report.person_id || !(await canAccessWorkOsPerson(access, String(report.person_id)))) throw new Error("forbidden");
+  if (!["draft", "rejected"].includes(String(report.status))) {
+    throw new WorkOsConflictError("A submitted EOD is with your manager and cannot be edited here.");
+  }
+  const requestedLoom = typeof body.loomUrl === "string" ? body.loomUrl.trim() : "";
+  if (requestedLoom && !normalizeLoomShareUrl(requestedLoom)) {
+    throw new WorkOsConflictError("Use a loom.com share link.");
+  }
+  const base = normalizeEodStructuredReport(report.structured_report);
+  const structured = mergeEodComposition(base, body);
+  const markdown = applyStructuredBrief(String(report.markdown ?? ""), structured);
+  const { data: updated, error: updateError } = await db().from("work_reports").update({
+    markdown,
+    structured_report: structured,
+    loom_url: structured.loomUrl,
+    updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("id", reportId)
+    .eq("updated_at", report.updated_at)
+    .in("status", ["draft", "rejected"]).select("*").maybeSingle();
+  if (updateError) throw new Error(`save EOD composition: ${updateError.message}`);
+  if (!updated) {
+    throw new WorkOsConflictError("The report changed while it was being saved. Reload it before editing again.");
+  }
+  return updated as Json;
 }
 
 /** Deletes an unsubmitted EOD draft. A submitted report is the manager's
@@ -706,13 +895,50 @@ export async function submitWorkOsEod(access: WorkOsAccess, reportId: string, bo
     if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
   }
   if (!["draft", "rejected"].includes(report.status)) throw new Error("only draft or rejected reports can be submitted");
-  const markdown = text(body.markdown) ?? text(report.markdown);
-  if (!markdown) throw new Error("markdown is required");
+  const structuredInput = body.structured && typeof body.structured === "object" && !Array.isArray(body.structured)
+    ? body.structured as Record<string, unknown>
+    : null;
+  let structuredReport = normalizeEodStructuredReport(report.structured_report);
+  let markdown = "";
+  if (structuredInput) {
+    if (!reportDate) throw new WorkOsConflictError("The report date is missing, so its composition cannot be filed.");
+    const requestedLoom = typeof structuredInput.loomUrl === "string" ? structuredInput.loomUrl.trim() : "";
+    if (requestedLoom && !normalizeLoomShareUrl(requestedLoom)) {
+      throw new WorkOsConflictError("Use a loom.com share link.");
+    }
+    const merged = mergeEodComposition(structuredReport, structuredInput);
+    if (!eodCompositionIsComplete(merged)) {
+      throw new WorkOsConflictError("Write at least one line in Completed, In progress and Next before submitting.");
+    }
+    if (!merged.summary.trim()) {
+      throw new WorkOsConflictError("Write the summary before submitting.");
+    }
+    if (!eodSummaryIsCurrent(merged)) {
+      throw new WorkOsConflictError("The summary is out of date. Regenerate it before submitting.");
+    }
+    const content = await renderDailyWorkspaceEod(access, String(report.person_id), reportDate);
+    const hasSuggestions = merged.suggestions.completed.length
+      || merged.suggestions.inProgress.length
+      || merged.suggestions.next.length;
+    structuredReport = {
+      ...merged,
+      suggestions: hasSuggestions ? merged.suggestions : content.structured.suggestions,
+      evidence: merged.evidence.length ? merged.evidence : content.structured.evidence,
+      preparedAt: merged.preparedAt ?? new Date().toISOString(),
+      source: merged.source ?? "employee",
+    };
+    markdown = composeStructuredEodMarkdown(content.facts, structuredReport).markdown;
+  } else {
+    markdown = text(body.markdown) ?? text(report.markdown) ?? "";
+    if (!markdown) throw new Error("markdown is required");
+  }
   const submittedAt = new Date().toISOString();
   const { data: submitted, error: submitError } = await db().from("work_reports").update({
     status: "pending_review",
     markdown,
     submitted_markdown: markdown,
+    structured_report: structuredReport,
+    loom_url: structuredReport.loomUrl,
     submitted_by: access.ctx.user.id,
     submitted_at: submittedAt,
     submission_idempotency_key: submissionKey,
@@ -763,16 +989,25 @@ export async function reviewWorkOsEod(access: WorkOsAccess, reportId: string, bo
   const ownerId = await organizationOwnerId(access.organizationId);
   const reviewed = await reviewReport(ownerId, reportId, access.ctx.user.id, body) as Json;
   if (typeof body.markdown === "string" && body.markdown !== report.markdown) {
-    const { error: versionError } = await db().from("work_report_versions").insert({
+    const { data: version, error: versionError } = await db().from("work_report_versions").insert({
       organization_id: access.organizationId,
       report_id: reportId,
       version_kind: "manager_edit",
       markdown: body.markdown,
       metrics: report.metrics ?? {},
       missing_evidence: report.missing_evidence ?? [],
+      structured_report: report.structured_report ?? {},
       created_by: access.ctx.user.id,
-    });
+    }).select("id").maybeSingle();
     if (versionError) throw new Error(`save manager EOD edit: ${versionError.message}`);
+    if (version?.id) {
+      try {
+        await registerVersionRetention(access, report as Json, String(version.id));
+      } catch {
+        // The decision must not fail because a retention reference was missed;
+        // the version still expires with the source content.
+      }
+    }
   }
   await audit(access, `report.${String(body.status)}`, "report", reportId, {
     personId: report.person_id,

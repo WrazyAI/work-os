@@ -442,8 +442,9 @@ test("web Insights follows the selected through date", async () => {
   assert.match(insights, /through=\$\{encodeURIComponent\(through\)\}/);
 });
 
-test("web Review drafts EODs for outstanding historical days", async () => {
+test("web Review prepares structured EODs and keeps the outstanding history", async () => {
   const review = await source("src/modules/work-os/employee/EmployeeReview.tsx");
+  const composer = await source("src/modules/work-os/employee/EmployeeEodComposer.tsx");
   const dayHook = await source("src/modules/work-os/employee/useEmployeeDay.ts");
   assert.match(dayHook, /eod\/outstanding\?days=14/);
   assert.match(review, /\/api\/work-os\/me\/day\?date=\$\{encodeURIComponent\(selectedDate\)\}/);
@@ -451,19 +452,21 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(review, /body: JSON\.stringify\(\{ date \}\)/);
   assert.match(review, /employee-eod-panel/);
   assert.match(review, /employee-eod-editor/);
-  assert.match(review, /Draft EOD for \$\{calendarDateLabel\(selectedDate\)\}/);
-  assert.match(review, /outstandingRowMeta/);
-  assert.match(review, /Outstanding EODs/);
-  // The initial draft is deterministic on both surfaces; the assistant is
-  // kept for the employee's own refinement and Loom requests.
-  assert.match(review, /\/api\/work-os\/me\/eod\/ai-draft/);
-  assert.match(review, /stripBottleneckSection\(reportMarkdown\)/);
-  assert.match(review, /prepareOneScreenshotRound\(date\)/);
-  assert.match(review, /Rebuild from record/);
+  assert.match(review, /\/api\/work-os\/me\/eod\/prepare/);
+  assert.match(review, /preparedDates/);
+  assert.match(review, /EmployeeEodComposer/);
+  assert.match(review, /EodStructuredView/);
   assert.match(review, /EodReportDocument/);
-  assert.match(review, /editingReport/);
+  assert.doesNotMatch(review, /\/api\/work-os\/me\/eod\/ai-draft/);
+  assert.doesNotMatch(review, /Draft EOD for/);
+  assert.match(composer, /\/api\/work-os\/me\/eod\/summary/);
+  assert.match(composer, /Summary\s*<\/strong>/);
+  assert.match(composer, /Regenerate summary/);
+  assert.match(composer, /normalizeLoomShareUrl/);
+  assert.match(composer, /EodEvidenceSources/);
   assert.match(await source("src/modules/work-os/employee/EodReportDocument.tsx"), /EodSectionIcon/);
   assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EodSectionIcon/);
+  assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EodStructuredView/);
   assert.match(await source("src/modules/work-os/employee/EmployeeEodEvidence.tsx"), /EvidenceImageDialog/);
   assert.match(await source("src/modules/work-os/admin/AdminReview.tsx"), /EvidenceImageDialog/);
   assert.match(await source("src/modules/work-os/evidence-image-dialog.tsx"), /evidenceScreenshotUrl/);

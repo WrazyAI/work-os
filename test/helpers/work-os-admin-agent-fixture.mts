@@ -259,6 +259,9 @@ create table work_reports (
   markdown text not null default '',
   submitted_markdown text,
   submitted_at timestamptz,
+  structured_report jsonb not null default '{}'::jsonb,
+  loom_url text,
+  prepared_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -270,6 +273,7 @@ create table work_report_versions (
   markdown text not null,
   metrics jsonb not null default '{}'::jsonb,
   missing_evidence jsonb not null default '[]'::jsonb,
+  structured_report jsonb not null default '{}'::jsonb,
   created_by uuid,
   idempotency_key text,
   created_at timestamptz not null default now()

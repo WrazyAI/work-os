@@ -101,6 +101,7 @@ const manyTaskRows = Array.from({ length: 125 }, (_, index) => {
 const historyFixture = (date: string, goal: string) => ({
   shiftDate: date,
   shift: { startsAt: `${date}T09:00:00.000Z`, endsAt: `${date}T17:00:00.000Z`, timezone: "Atlantic/Reykjavik", breaks: [] },
+  dayShift: { startsAt: `${date}T09:00:00.000Z`, endsAt: `${date}T17:00:00.000Z` },
   prompt: { kind: "optional", nextPromptAt: null, required: false, reason: "Historical workspace." },
   niftySync: { fresh: true, syncedAt: new Date().toISOString() },
   tasks: [],
@@ -122,9 +123,91 @@ const rejectedFixture = (date: string) => ({
   report: {
     id: "report-2026-09-03",
     status: "rejected",
+    structured_report: rejectedStructuredReport,
+    loom_url: null,
     markdown: "## Summary\nReconciled the settlement batch and documented the handoff.\n\n## Completed today\n- Reconcile September 3 payments [Payments · 3:30 PM]\n\n## Evidence\n- 1 work deliverable.",
   },
 });
+
+const todayStructuredReport = {
+  version: 1,
+  summary: "",
+  summaryGeneratedAt: null,
+  summarySource: null,
+  summarySignature: null,
+  completed: [],
+  inProgress: [],
+  next: [],
+  suggestions: {
+    completed: [
+      "Reconcile September settlements",
+      "Ship the handoff checklist",
+      "Refine companion approvals and controls",
+      "Verify the EOD refinement flow",
+      "Review the intake checklist",
+    ],
+    inProgress: [
+      "Work OS retry screen and preview failure",
+      "Companion approvals and controls",
+    ],
+    next: [
+      "Update the intake checklist",
+      "Confirm the settlement handoff",
+    ],
+  },
+  evidence: [
+    {
+      source: "tasks",
+      label: "Tasks",
+      items: [
+        { id: "task-1", title: "Reconcile September settlements", meta: "Payments · 3:30 PM", kind: "completed" },
+        { id: "task-2", title: "Ship the handoff checklist", meta: "Payments · 4:10 PM", kind: "completed" },
+        { id: "task-3", title: "Refine companion approvals and controls", meta: "Work OS · 4:46 PM", kind: "completed" },
+        { id: "task-4", title: "Verify the EOD refinement flow", meta: "Work OS · 5:05 PM", kind: "completed" },
+        { id: "task-5", title: "Review the intake checklist", meta: "Work OS · 5:06 PM", kind: "completed" },
+        { id: "task-6", title: "Document the handoff", meta: "Payments · 5:07 PM", kind: "completed" },
+      ],
+    },
+    {
+      source: "worktivity",
+      label: "Worktivity",
+      items: [
+        { id: "recap-1", title: "Work OS retry screen and preview failure", summary: "The interval moved between Work OS and a local preview that would not load.", meta: "2:00–2:30 PM · Employee confirmed", kind: "recap" },
+        { id: "recap-2", title: "Companion approvals and controls", summary: "The interval shows the approvals flow and a task panel.", meta: "4:00–4:30 PM · Employee amended", kind: "recap" },
+      ],
+    },
+    {
+      source: "github",
+      label: "GitHub",
+      items: [
+        { id: "gh-1", title: "Opened pull request #134 · Refine approval controls", url: "https://github.com/WrazyAI/work-os/pull/134", meta: "Performed by you · work-os · 4:18 PM", kind: "performed" },
+        { id: "gh-2", title: "Pushed 3 commits to work-os", url: "https://github.com/WrazyAI/work-os/commits/main", meta: "Performed by you · work-os · 4:42 PM", kind: "performed" },
+        { id: "gh-3", title: "Deployment succeeded · work-os-web", url: "https://github.com/WrazyAI/work-os/actions", meta: "Triggered by your work · 5:02 PM", kind: "triggered" },
+      ],
+    },
+    {
+      source: "loom",
+      label: "Loom",
+      items: [
+        { id: "loom-1", title: "Settlement walkthrough", summary: "Walked through the reconciliation steps and the open edge cases.", meta: "Recording · 5:26", url: "https://www.loom.com/share/6f2a9c4b8e1d4f5a6b7c8d9e0f1a2b3c", kind: "recording" },
+      ],
+    },
+  ],
+  loomUrl: null,
+  preparedAt: `${TODAY}T11:45:00.000Z`,
+  source: "scheduled",
+};
+
+const rejectedStructuredReport = {
+  ...todayStructuredReport,
+  summary: "Reconciled the settlement batch and documented the handoff for the next reviewer.",
+  summarySource: "otto",
+  summaryGeneratedAt: "2026-09-03T17:02:00.000Z",
+  summarySignature: null,
+  completed: ["Reconcile September 3 payments"],
+  inProgress: ["Settlement handoff review"],
+  next: ["Update the intake checklist"],
+};
 
 const todayFixture = () => ({
   ...historyFixture(TODAY, "Ship the outstanding EOD flow."),
@@ -133,6 +216,8 @@ const todayFixture = () => ({
   report: {
     id: "report-today",
     status: "draft",
+    structured_report: todayStructuredReport,
+    loom_url: null,
     markdown: [
       "# EOD Report: Preview Employee — September 2, 2026",
       "",
@@ -409,6 +494,11 @@ function installFetchStub() {
     }
     if (url.includes("/api/work-os/me/onboarding")) return respond(onboardingFixture);
     if (url.includes("/api/work-os/me/eod/outstanding")) return respond(outstandingFixture);
+    if (url.includes("/api/work-os/me/eod/prepare")) return respond({ report: todayFixture().report });
+    if (url.includes("/api/work-os/me/eod/summary")) {
+      const summary = "A day of finished work, with the settlement handoff ready for review. The companion approvals flow moved forward while the retry screen stayed open. Tomorrow starts with the intake checklist and a final pass on the settlement handoff.";
+      return Promise.resolve(new Response(summary, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "X-Work-OS-Summary-Source": "otto" } }));
+    }
     if (url.includes("/api/work-os/me/eod/ai-draft")) return respond(aiDraftFixture);
     if (url.includes("/api/work-os/me/eod/screenshots/prepare")) return respond({ date: TODAY, analyzed: 2, failed: 0, pending: 1, total: 6, sampled: 2, unavailable: false });
     if (url.includes("/api/work-os/me/eod/screenshots")) return respond(screenshotGalleryFixture);
@@ -437,6 +527,10 @@ function installFetchStub() {
       });
     }
     if (url.includes("/api/work-os/me/plan")) return respond(todayFixture().plan);
+    if (url.includes("/api/work-os/reports/report-today/submit")) return respond({ report: { ...todayFixture().report, status: "pending_review", submitted_at: new Date().toISOString() } });
+    if (url.includes("/api/work-os/reports/report-2026-09-03/submit")) return respond({ report: { ...rejectedFixture("2026-09-03").report, status: "pending_review", submitted_at: new Date().toISOString() } });
+    if (url.includes("/api/work-os/reports/report-today")) return respond({ report: todayFixture().report });
+    if (url.includes("/api/work-os/reports/report-2026-09-03")) return respond({ report: rejectedFixture("2026-09-03").report });
     if (url.includes("/api/work-os/me/day?date=2026-09-03")) return respond(rejectedFixture("2026-09-03"));
     if (url.includes("/api/work-os/me/day?date=2026-09-10")) return respond(historyFixture("2026-09-10", "Finish the settlement reconciliation."));
     if (url.includes("/api/work-os/me/day")) return respond(todayFixture());
