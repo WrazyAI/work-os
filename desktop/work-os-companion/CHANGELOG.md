@@ -26,6 +26,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Employees and administrators can create, review, and revoke agent tokens from Settings → Session, with the API guide for their role.
+- The scenario debugger's Incomplete onboarding preset opens setup even while you're in the Administration workspace.
+- The debugger window uses the Mac window controls on macOS, with the title clear of them.
 - Administrators can review payroll records, run audits, and record findings from the desktop app.
 - Notifications now float in a stack at the top center and spread out when you hover over them; the Evidence page no longer repeats its description.
 - Send an individual password reset email to any active member right from Settings → Members.

@@ -714,11 +714,15 @@ export default function App() {
    * different guided surface from the employee pages. The dev-only shell
    * fixture boots without a vault session, so its fabricated session counts as
    * the settled one. */
+  const debugOnboardingPreview = debugScenario.enabled
+    && debugScenario.onboardingState === "missing"
+    && visibleOnboarding?.onboardingRequired === true;
   const landing = bootSurface({
     vault: vaultGate.status === "failed" ? "failed" : vaultGate.status === "pending" ? "pending" : "ready",
     signedIn: !!visibleSession,
     onboardingLoaded: !!visibleOnboarding,
     onboardingRequired: visibleOnboarding?.onboardingRequired === true,
+    onboardingPreview: debugOnboardingPreview,
     workspace,
     role: workSessionQuery.data?.role ?? null,
     syncBypass,

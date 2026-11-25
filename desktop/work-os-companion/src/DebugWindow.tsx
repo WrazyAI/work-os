@@ -96,7 +96,13 @@ function optionLabel<T extends string>(options: Array<{ value: T; label: string 
 
 export default function DebugWindow() {
   const notifications = useNotifications();
-  const mac = isMacOS();
+  /* A browser cannot draw Tauri's native macOS lights, so DEV accepts the same
+     `?mac-chrome` switch the shell uses and rehearses them over the reserved
+     track. Real macOS builds keep the system controls and draw nothing here. */
+  const macPreview = import.meta.env.DEV && typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).has("mac-chrome");
+  const mac = isMacOS() || macPreview;
+  const showTrafficLights = mac && !isTauri();
   const appWindow = useMemo(() => (isTauri() ? getCurrentWindow() : null), []);
   const [maximized, setMaximized] = useState(false);
   const [section, setSection] = useState<DebugSectionId>("overview");
@@ -243,6 +249,9 @@ export default function DebugWindow() {
 
   return <main className="debug-shell">
     <header className="debug-header" data-tauri-drag-region data-platform={mac ? "mac" : "windows"}>
+      {showTrafficLights && <span className="debug-traffic" aria-hidden="true">
+        <i className="debug-traffic-close" /><i className="debug-traffic-min" /><i className="debug-traffic-zoom" />
+      </span>}
       <div className="debug-title" data-tauri-drag-region="deep"><Bug size={18} aria-hidden="true" /><span><strong>Work OS debugger</strong><small>Developer diagnostics</small></span></div>
       <div className="debug-header-actions">
         {statuses.map((status) => <span className={`debug-status ${status.tone}`} key={status.key}>{status.label}</span>)}

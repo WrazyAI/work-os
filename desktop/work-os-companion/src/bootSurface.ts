@@ -37,6 +37,12 @@ export interface BootInput {
   /** The onboarding record has arrived; until then nothing can be decided. */
   onboardingLoaded: boolean;
   onboardingRequired: boolean;
+  /**
+   * The debugger is replaying employee setup over whatever shell this device
+   * chose. Preview-only: without it, an administrator reviewing the
+   * incomplete-onboarding preset would stay in the console and see nothing.
+   */
+  onboardingPreview?: boolean;
   /** The shell this device last chose, or "employee" when it never has. */
   workspace: "employee" | "admin";
   /** The signed-in account's role, once the session query has answered. */
@@ -67,6 +73,15 @@ export function bootSurface(input: BootInput): BootSurface {
   if (input.vault === "pending") return "vault_loading";
   if (input.vault === "failed") return "vault_failed";
   if (!input.signedIn) return "connect";
+
+  /*
+   * A debugger replay owns the screen until setup is finished, including over
+   * the administration bootstrap. That branch otherwise answers "admin" first,
+   * so an administrator could never review the incomplete-onboarding preset.
+   * This input is only ever set from the debug scenario; real boot flows leave
+   * it undefined and keep administration's own gate order.
+   */
+  if (input.onboardingPreview) return input.onboardingLoaded ? "onboarding" : "data_loading";
 
   /*
    * The administration branch owns its own bootstrap. It waits for the

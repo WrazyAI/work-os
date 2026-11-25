@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import DebugWindow from "./DebugWindow";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { DEBUG_SECTIONS } from "./debugSections";
@@ -48,5 +48,22 @@ describe("debugger category workspace", () => {
     expect(html).toContain('aria-label="Maximize"');
     expect(html).toContain('aria-label="Close window"');
     expect(html).not.toContain('class="debug-close"');
+  });
+
+  it("swaps in macOS traffic lights and reserved track on a mac", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15" });
+    try {
+      const html = render();
+      expect(html).toContain('data-platform="mac"');
+      expect(html).toContain('class="debug-traffic"');
+      expect(html).toContain("debug-traffic-close");
+      expect(html).toContain("debug-traffic-min");
+      expect(html).toContain("debug-traffic-zoom");
+      // The Windows caption buttons must not double up beside the native ones.
+      expect(html).not.toContain('aria-label="Minimize"');
+      expect(html).not.toContain('aria-label="Maximize"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

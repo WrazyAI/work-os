@@ -49,6 +49,20 @@ describe("boot surface", () => {
     expect(surface({ role: "admin", workspace: "admin" })).toBe("admin");
   });
 
+  it("lets a debugger replay of setup win over an active admin console", () => {
+    const activeAdmin = { status: "ready" as const, personId: null, active: true };
+    expect(surface({
+      role: "admin", workspace: "admin", onboardingRequired: true,
+      adminOtto: activeAdmin, onboardingPreview: true,
+    })).toBe("onboarding");
+    // The record still has to arrive before the replay can show a step.
+    expect(surface({ onboardingLoaded: false, onboardingPreview: true })).toBe("data_loading");
+    // The preview flag never changes an ordinary administration boot.
+    expect(surface({
+      role: "admin", workspace: "admin", onboardingRequired: true, adminOtto: activeAdmin,
+    })).toBe("admin");
+  });
+
   it("keeps an administrator on the employee shell when that is what they chose", () => {
     expect(surface({ role: "admin", workspace: "employee" })).toBe("workspace");
   });
@@ -95,6 +109,12 @@ describe("boot gate wiring", () => {
     expect(app).toMatch(/const landing = bootSurface\(\{/);
     // The administration gate still reads the seam's answer, not its own copy.
     expect(app).toMatch(/landing === "admin"/);
+  });
+
+  it("sends the debugger's incomplete-onboarding replay through the seam", () => {
+    expect(app).toMatch(/onboardingPreview:\s*debugOnboardingPreview/);
+    expect(app).toMatch(/debugScenario\.enabled[\s\S]{0,120}debugScenario\.onboardingState === "missing"/);
+    expect(app).toMatch(/visibleOnboarding\?\.onboardingRequired === true/);
   });
 
   it("renders every content surface through the one boot overlay", () => {

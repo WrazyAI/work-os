@@ -540,6 +540,12 @@
       "type": "feature",
       "summary": "Employees and administrators can create, review, and revoke scoped agent tokens from Settings → Session, with the one-time secret and the API guide for their role.",
       "verification": "Companion tsc and Vite production build passed; focused Agent access, settings, admin, and source-guard tests 58 passed; full companion suite 239/240 files and 2,114/2,117 tests passed, with the three vault-persistence failures re-run alone at 13/13. Rendered the employee preview and the real admin shell at 1280, 720, and 390 in dark mode: the Session summary band, the inline Agent access view with Back to Session, employee and administrator scopes, the disabled admin feature state, the empty ledger, no horizontal overflow, and focus returning to the heading on back. The Settings purpose subtitle is gone from the administrator masthead. Live create and revoke were not exercised in the desktop dev harness because it has no signed-in session; both endpoints are the shipped web routes and the component uses the same apiRequest bearer path as the rest of the companion."
+    },
+    {
+      "id": "debugger-onboarding-preset-and-mac-caption",
+      "type": "fix",
+      "summary": "The scenario debugger opens the incomplete-onboarding flow even from the Administration workspace, and its macOS window keeps native traffic lights clear of the title on a reserved track.",
+      "verification": "bootSurface 15/15 including admin-console replay; DebugWindow render 5/5 including macOS traffic lights; companion 238 files/2111 tests; companion typecheck and production build; full-app control run reproduced admin staying on Overview, fixed run opened setup; rendered 1000x800 light/dark and 620x520 macOS previews with lights at 18,19 and title at 92px."
     }
   ],
   "emergency": null,
