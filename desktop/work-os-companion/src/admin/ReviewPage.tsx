@@ -25,6 +25,8 @@ import {
 } from "./data";
 import { parseEodMarkdown, eodMetricFacts, eodSnippet } from "./eod";
 import EodSectionIcon from "../EodSectionIcon";
+import { EodStructuredReadingView } from "../EodStructuredReadingView";
+import { eodStructuredFromReport } from "../eodStructured";
 import { ScreenshotImage } from "../ScreenshotGallery";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 import { one, type EvidenceRow, type EvidenceResponse, type ReportsResponse, type WorkOsReportRow } from "./types";
@@ -600,6 +602,7 @@ function ReportRecapsPanel({ personId, date, onOpenRecaps }: { personId: string;
 
 function ReportBody({ report, onOpenEvidence, onOpenRecaps }: { report: WorkOsReportRow; onOpenEvidence?: (personId: string) => void; onOpenRecaps?: () => void }) {
   const document = parseEodMarkdown(report.submitted_markdown ?? report.markdown);
+  const structuredReport = eodStructuredFromReport(report);
   const facts = eodMetricFacts(report.metrics);
 
   const renderEodSection = (section: (typeof document.sections)[number]) => (
@@ -645,7 +648,7 @@ function ReportBody({ report, onOpenEvidence, onOpenRecaps }: { report: WorkOsRe
       ) : null}
 
       <section className="admin-block">
-        {document.sections.map(renderEodSection)}
+        {structuredReport ? <EodStructuredReadingView report={structuredReport} variant="admin" /> : document.sections.map(renderEodSection)}
         {document.appendix.length ? (
           <details className="admin-report-appendix">
             <summary>

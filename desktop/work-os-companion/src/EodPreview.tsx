@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, FileCheck2 } from "lucide-react";
 import { EodComposer, EodLoadingState, EodShiftOpenNotice } from "./taskSurfaces";
+import { EodStructuredComposer } from "./EodStructuredComposer";
+import { eodCompositionSignature, type EodStructuredReport } from "./eodStructured";
 import { CheckedMoment } from "./CheckedMoment";
 import { EodSubmittedReport } from "./EodSubmittedReport";
 import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "@wrazy/work-os-shared/shift-gate";
@@ -63,6 +65,65 @@ const draft = [
   "- 4:00–4:30 PM — Updated by you: Companion approvals and controls",
   "  The interval shows the approvals flow and a task panel.",
 ].join("\n");
+
+const structuredPreviewReport: EodStructuredReport = (() => {
+  const completed = [
+    "Reconcile September settlements",
+    "Ship the handoff checklist",
+    "Refine companion approvals and controls",
+  ];
+  const inProgress = ["Work OS retry screen and preview failure"];
+  const next = ["Update the intake checklist"];
+  return {
+    version: 1,
+    summary: "A day of finished threads. The settlement reconciliation and handoff checklist are closed, the companion approvals flow is in review, and tomorrow starts with the intake checklist.",
+    summaryGeneratedAt: "2026-09-14T17:01:00.000Z",
+    summarySource: "otto",
+    summarySignature: eodCompositionSignature({ completed, inProgress, next }),
+    completed,
+    inProgress,
+    next,
+    suggestions: {
+      completed: ["Verify the EOD refinement flow", "Review the intake checklist"],
+      inProgress: ["Companion approvals and controls"],
+      next: ["Confirm the settlement handoff"],
+    },
+    evidence: [
+      {
+        source: "tasks",
+        label: "Tasks",
+        items: [
+          { id: "preview-task-1", title: "Reconcile September settlements", summary: null, meta: "Payments · completed by you", url: null, at: "2026-09-14T15:30:00.000Z", kind: "completed" },
+          { id: "preview-task-2", title: "Ship the handoff checklist", summary: null, meta: "Payments · completed by you", url: null, at: "2026-09-14T16:10:00.000Z", kind: "completed" },
+        ],
+      },
+      {
+        source: "github",
+        label: "GitHub",
+        items: [
+          { id: "preview-gh-1", title: "Pull request #482 · Reconcile Q4 supplier ledger", summary: null, meta: "Performed by you · work-os", url: "https://github.com/WrazyAI/work-os/pull/482", at: "2026-09-14T16:12:00.000Z", kind: "performed" },
+        ],
+      },
+      {
+        source: "worktivity",
+        label: "Worktivity",
+        items: [
+          { id: "preview-recap-1", title: "Settlement reconciliation and handoff", summary: "Frames show the ledger and the handoff note.", meta: "2:00–3:30 PM · employee confirmed", url: null, at: "2026-09-14T15:30:00.000Z", kind: "recap" },
+        ],
+      },
+      {
+        source: "loom",
+        label: "Loom",
+        items: [
+          { id: "preview-loom-1", title: "Settlement walkthrough", summary: "Walked through the reconciliation and the open edge cases.", meta: "Recording · 5:26", url: "https://www.loom.com/share/6f2a9c4b8e1d4f5a6b7c8d9e0f1a2b3c", at: "2026-09-14T17:02:00.000Z", kind: "recording" },
+        ],
+      },
+    ],
+    loomUrl: "https://www.loom.com/share/6f2a9c4b8e1d4f5a6b7c8d9e0f1a2b3c",
+    preparedAt: "2026-09-14T16:50:00.000Z",
+    source: "scheduled",
+  };
+})();
 
 const shot = (hue: number, label: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="hsl(${hue} 28% 24%)"/><rect x="12" y="14" width="296" height="172" rx="8" fill="hsl(${hue} 32% 38%)"/><text x="24" y="42" fill="rgba(255,255,255,.86)" font-family="sans-serif" font-size="15">${label}</text></svg>`)}`;
 
@@ -164,8 +225,76 @@ const STRESS_RESOLVE_SRC = (summaryId: string, size: "thumb" | "preview" | "full
   return index < 0 ? null : shot(150 + index * 7, size === "preview" ? `Stress ${index + 1}` : `Frame ${index + 1}`);
 };
 
+const structuredPreviewMarkdown = [
+  "# EOD Report: Preview Employee — September 14, 2026",
+  "",
+  "Role profile: Product engineer",
+  "Goal: Ship the settlement handoff and leave the record ready for review",
+  "",
+  "## Summary",
+  "A day of finished threads. The settlement reconciliation and handoff checklist are closed, the companion approvals flow is in review, and tomorrow starts with the intake checklist.",
+  "",
+  "## Completed today",
+  "- Reconcile September settlements [Payments · 3:30 PM]",
+  "- Ship the handoff checklist [Payments · 4:10 PM]",
+  "- Refine companion approvals and controls [Work OS · 4:46 PM]",
+  "",
+  "## In progress",
+  "- Work OS retry screen and preview failure",
+  "",
+  "## Next",
+  "- Update the intake checklist [Work OS]",
+  "",
+  "## Full record",
+  "",
+  "### Work completed (3)",
+  "- Reconcile September settlements [Payments · 3:30 PM]",
+  "- Ship the handoff checklist [Payments · 4:10 PM]",
+  "- Refine companion approvals and controls [Work OS · 4:46 PM]",
+  "",
+  "### Other tasks (1)",
+  "- Choose a walking route — Personal task",
+  "",
+  "### Activity context (1)",
+  "- 2:00–3:30 PM — Confirmed: Settlement reconciliation and handoff",
+].join("\n");
+
+function StructuredEodPreview({ initialSubmitted = false }: { initialSubmitted?: boolean }) {
+  const [submitted, setSubmitted] = useState(initialSubmitted);
+  return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 14</p><h1>EOD review</h1></div></header><main className="page">
+    {submitted ? <EodSubmittedReport
+      status="submitted"
+      date="2026-09-14"
+      markdown={structuredPreviewMarkdown}
+      report={{ structured_report: structuredPreviewReport, markdown: structuredPreviewMarkdown }}
+      onAllEods={() => setSubmitted(false)}
+      onToday={() => setSubmitted(false)}
+    /> : <EodStructuredComposer
+      reportId="preview-structured-eod"
+      structured={structuredPreviewReport}
+      dayLabel="today"
+      loomEnabled
+      onSave={async () => "saved"}
+      onWriteSummary={async (_input, onChunk, signal) => {
+        const text = "A day of finished threads. The settlement reconciliation and handoff checklist are closed, the companion approvals flow is in review, and tomorrow starts with the intake checklist.";
+        for (const chunk of text.match(/.{1,20}/g) ?? []) {
+          if (signal.aborted) break;
+          onChunk(chunk);
+          await new Promise((resolve) => window.setTimeout(resolve, 24));
+        }
+        return { source: "otto" as const };
+      }}
+      onSubmit={async () => { setSubmitted(true); return "saved"; }}
+      onRedraft={() => undefined}
+      onDelete={() => undefined}
+    />}
+  </main></section></div>;
+}
+
 export default function EodPreview() {
   const params = new URLSearchParams(window.location.search);
+  const structuredPreview = params.get("preview-eod") === "structured" || params.get("preview-eod") === "structured-submitted";
+  if (structuredPreview) return <StructuredEodPreview initialSubmitted={params.get("preview-eod") === "structured-submitted"} />;
   const refiningPreview = params.has("refining");
   /* The two states the EOD composer owns beyond the draft itself: an open
      shift (the draft cannot be rebuilt) and the destructive delete action. */

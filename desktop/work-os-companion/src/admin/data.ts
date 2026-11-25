@@ -582,6 +582,8 @@ function normalizeReportRow(row: Loose): WorkOsReportRow {
     markdown: asText(row.markdown),
     submitted_markdown: asTextOrNull(row.submitted_markdown),
     metrics: row.metrics && typeof row.metrics === "object" ? (row.metrics as Record<string, unknown>) : null,
+    structured_report: row.structured_report && typeof row.structured_report === "object" ? row.structured_report : null,
+    loom_url: asTextOrNull(row.loom_url),
     manager_notes: asTextOrNull(row.manager_notes),
     submitted_at: asIsoOrNull(row.submitted_at),
     reviewed_at: asIsoOrNull(row.reviewed_at),

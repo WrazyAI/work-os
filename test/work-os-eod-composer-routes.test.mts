@@ -11,7 +11,7 @@ test("the structured EOD contract is additive and versioned", async () => {
   assert.match(migration, /add column if not exists loom_url text/);
   assert.match(migration, /add column if not exists prepared_at timestamptz/);
   assert.match(migration, /work_report_versions[\s\S]*structured_report jsonb not null default '\{\}'::jsonb/);
-  const contract = await source("src/modules/work-os/eod-structured.ts");
+  const contract = await source("packages/work-os-shared/src/eod-structured.ts");
   assert.match(contract, /EOD_STRUCTURED_VERSION = 1/);
   assert.match(contract, /eodCompositionSignature/);
   assert.match(contract, /normalizeLoomShareUrl/);

@@ -35,6 +35,55 @@ describe("submitted EOD review", () => {
     expect(html).not.toMatch(/textarea|contenteditable|Submit EOD|Refine draft|Prepare today/);
   });
 
+  it("renders the structured brief and keeps the full recorded day behind a disclosure", () => {
+    const html = renderToStaticMarkup(createElement(EodSubmittedReport, {
+      ...props,
+      markdown: "## Summary\nThe full deterministic record.\n\n## Full record\n### Other tasks\n- Appendix row",
+      report: {
+        structured_report: {
+          version: 1,
+          summary: "A day of finished threads. The settlement reconciliation closed.",
+          summarySource: "otto",
+          completed: ["Reconcile September settlements", "Ship the handoff checklist"],
+          inProgress: ["Companion approvals review"],
+          next: ["Update the intake checklist"],
+          suggestions: { completed: [], inProgress: [], next: [] },
+          evidence: [{ source: "tasks", label: "Tasks", items: [{ id: "t1", title: "Reconcile September settlements", summary: null, meta: "Payments · completed by you", url: null, at: "2026-11-04T15:30:00Z", kind: "completed" }] }],
+          loomUrl: null,
+        },
+      },
+    }));
+    expect(html).toContain("Otto · written from your entries");
+    expect(html).toContain("Reconcile September settlements");
+    expect(html).toContain("Companion approvals review");
+    expect(html).toContain("Full recorded day");
+    expect(html).toContain("Appendix row");
+    expect(html).not.toMatch(/textarea|contenteditable/);
+    expect(html).not.toContain("Submit for review");
+  });
+
+  it("keeps a structured brief readable when the markdown text is unavailable", () => {
+    const html = renderToStaticMarkup(createElement(EodSubmittedReport, {
+      ...props,
+      report: {
+        structured_report: {
+          version: 1,
+          summary: "A finished day.",
+          summarySource: "otto",
+          completed: ["Shipped the handoff"],
+          inProgress: ["Review is open"],
+          next: ["Send the note"],
+          suggestions: { completed: [], inProgress: [], next: [] },
+          evidence: [],
+          loomUrl: null,
+        },
+      },
+    }));
+    expect(html).toContain("A finished day.");
+    expect(html).toContain("Shipped the handoff");
+    expect(html).not.toContain("text is not available");
+  });
+
   it("distinguishes an approved report from an awaiting-review report", () => {
     const html = renderToStaticMarkup(createElement(EodSubmittedReport, { ...props, status: "approved" }));
     expect(html).toContain("EOD approved");

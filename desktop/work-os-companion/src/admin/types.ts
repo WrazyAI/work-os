@@ -232,6 +232,8 @@ export interface WorkOsReportRow {
   markdown: string;
   submitted_markdown: string | null;
   metrics: Record<string, unknown> | null;
+  structured_report?: unknown;
+  loom_url?: string | null;
   manager_notes: string | null;
   submitted_at: string | null;
   reviewed_at: string | null;

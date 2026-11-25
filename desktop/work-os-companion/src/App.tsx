@@ -171,6 +171,8 @@ import { useUpdaterFlow } from "./app/hooks/useUpdaterFlow";
 import { ActiveDayWorkspace, DashboardTaskCard, KpiStrip } from "./app/views/ActiveDayWorkspace";
 import { ConnectScreen } from "./app/views/ConnectScreen";
 import { EodReviewView } from "./app/views/EodReviewView";
+import { eodStructuredFromReport, shouldPrepareStructuredEod, type EodCompositionInput } from "./eodStructured";
+import { prepareStructuredEod, saveStructuredEod, streamEodSummary, submitStructuredEod } from "./eodStructuredApi";
 import { EvidenceView } from "./app/views/EvidenceView";
 import { LoadingScreen } from "./app/views/LoadingScreen";
 import { ProgressComposer } from "./app/views/ProgressComposer";
@@ -233,6 +235,8 @@ export default function App() {
   const [dayLive, setDayLive] = useState(false);
   const planningAutoOpenedRef = useRef(false);
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
+  /** One silent structured-EOD prepare attempt per day; the timer normally did it. */
+  const preparedReviewDates = useRef(new Set<string>());
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
   // The settings rail replaces the app rail while Settings is on screen; Back
@@ -3264,6 +3268,38 @@ export default function App() {
     });
   }
 
+  async function saveStructuredComposition(input: EodCompositionInput) {
+    const reportId = String(reviewDay?.report?.id ?? "");
+    if (!reportId) throw new Error("The report is not ready to save.");
+    const result = await saveStructuredEod(reportId, input);
+    if (result.queued) return "queued" as const;
+    if (result.report) applyReportToDay(eodDate, result.report as NonNullable<DayData["report"]>);
+    return "saved" as const;
+  }
+
+  async function writeStructuredSummary(input: EodCompositionInput, onChunk: (text: string) => void, signal: AbortSignal) {
+    const date = reviewDay?.shiftDate ?? eodDate ?? "";
+    if (!date) throw new Error("The report date is missing.");
+    return streamEodSummary(date, input, onChunk, signal);
+  }
+
+  async function submitStructuredComposition(input: EodCompositionInput, idempotencyKey: string) {
+    const reportId = String(reviewDay?.report?.id ?? "");
+    if (!reportId) throw new Error("The report is not ready to submit.");
+    const result = await submitStructuredEod(reportId, input, idempotencyKey);
+    const queued = result.queued === true;
+    setEodQueued(queued);
+    setEodSubmitted(true);
+    invalidateOutstandingEods();
+    if (eodDate) void queryClient.invalidateQueries({ queryKey: workOsKeys.reportDay(eodDate) });
+    return queued ? "queued" as const : "saved" as const;
+  }
+
+  function reloadStructuredReport() {
+    if (eodDate) void reportDayQuery.refetch();
+    else void refresh();
+  }
+
   function bypassAct(label: string, mutator?: (day: DayData) => DayData) {
     diagnostics.info("ui.action.bypass", label, { activeView: view });
     if (mutator) setDay((current) => {
@@ -3805,6 +3841,7 @@ export default function App() {
   const openTasks = visibleTodayTasks.filter((task) => !task.completed);
   const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
   const reviewSubmittedStatus = submittedEodStatus(reviewDay?.report);
+  const reviewDetailsReady = eodDate ? Boolean(reportDayQuery.data) : dayDetailsLoaded;
   /* Today's report opens in the final ten minutes before its scheduled
      clock-out. The server and the web use the same predicate; this prompt
      explains the wait before the employee reaches for the button. */
@@ -3822,6 +3859,19 @@ export default function App() {
     scheduledEndsAt: reviewDay?.dayShift?.endsAt ?? null,
     now: pulseNow.getTime(),
   })));
+  useEffect(() => {
+    if (view !== "review" || eodLanding || eodDate) return;
+    const currentDate = visibleDay?.shiftDate ?? null;
+    if (!shouldPrepareStructuredEod(reviewDay?.report, currentDate)) return;
+    const date = String(reviewDay?.report?.report_date ?? currentDate ?? "");
+    if (!date) return;
+    if (preparedReviewDates.current.has(date)) return;
+    preparedReviewDates.current.add(date);
+    void prepareStructuredEod(date).then((result) => {
+      if (result.report) applyReportToDay(null, result.report as NonNullable<DayData["report"]>);
+    }).catch(() => undefined);
+  }, [view, reviewDay, eodLanding, eodDate, visibleDay?.shiftDate, applyReportToDay]);
+
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
@@ -5855,6 +5905,7 @@ export default function App() {
         reviewSubmittedStatus={reviewSubmittedStatus}
         reviewDay={reviewDay}
         visibleDay={visibleDay}
+        detailsReady={reviewDetailsReady}
         reportDayLoading={reportDayQuery.isLoading}
         reportDayError={Boolean(reportDayQuery.error)}
         eodGate={eodGate}
@@ -5881,6 +5932,10 @@ export default function App() {
         onDeleteDraft={() => setEodDeleteConfirmation(true)}
         onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
         onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
+        onStructuredSave={saveStructuredComposition}
+        onStructuredSummary={writeStructuredSummary}
+        onStructuredSubmit={submitStructuredComposition}
+        onReloadStructured={reloadStructuredReport}
         onResetSubmitted={() => { setEodSubmitted(false); setEodDate(null); setEodLanding(true); }}
         onHideLanding={() => setEodLanding(false)}
         onCreateDraft={() => { setEodLanding(false); void createEodDraft(reviewDay); }}
