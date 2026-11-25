@@ -9,7 +9,7 @@ export const FALLBACK_TIMEZONES = [
 
 export function supportedTimezones() {
   try {
-    const values = Intl.supportedValuesOf?.("timeZone") ?? [];
+    const values = Intl.supportedValuesOf?.("timeZone") ?? FALLBACK_TIMEZONES;
     return [...new Set(["UTC", ...values])];
   } catch {
     return [...FALLBACK_TIMEZONES];

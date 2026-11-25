@@ -42,7 +42,8 @@ export function recapReviewActor(status: unknown, source: unknown = undefined): 
  * already resolved in the employee's timezone by the caller. */
 export function payrollRecapNotice(payDate: string): string {
   const text = String(payDate ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(`${text}T00:00:00Z`))) {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : null;
+  if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) {
     throw new Error("payroll notice requires a YYYY-MM-DD payment date");
   }
   return `Auto-approved for payroll on ${text} because the payroll cutoff passed. This is a system approval, not an employee confirmation. You can still add a correction.`;
