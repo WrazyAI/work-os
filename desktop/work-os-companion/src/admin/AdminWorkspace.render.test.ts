@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { NotificationProvider } from "../NotificationFlyouts";
 import type { AdminSection, SessionResponse } from "./types";
+import SidebarNav from "../SidebarNav";
 
 const noop = () => undefined;
 
@@ -42,6 +43,29 @@ function render(overrides: Partial<Parameters<typeof AdminWorkspace>[0]> = {}) {
         createElement(Component, { session, notifications, section: "overview", focus: {}, onNavigate: noop, onOpenRecaps: noop, onSwitchToEmployee: noop, onSignOut: noop, ...overrides }))),
   );
 }
+
+describe("native Payroll navigation", () => {
+  it("appears in the administration rail", () => {
+    expect(render()).toContain('aria-label="Payroll"');
+  });
+
+  it("opens the native records stage, never for a non-admin session", () => {
+    expect(render({ section: "payroll" })).toContain("Loading payroll records");
+    expect(render({ section: "payroll", session: { ...session, role: "employee" } })).not.toContain("Loading payroll records");
+  });
+
+  it("offers New audit on the records-first view, without an approval action", () => {
+    const markup = render({ section: "payroll" });
+    expect(markup).toContain("New audit");
+    expect(markup).toMatch(/aria-pressed="true">Records/);
+    expect(markup).not.toContain("Approve payable hours");
+  });
+
+  it("is absent from the personal workspace rail", () => {
+    const markup = renderToStaticMarkup(createElement(SidebarNav, { mode: "employee", activeView: "day", onNavigate: noop, onNewChat: noop }));
+    expect(markup).not.toContain('aria-label="Payroll"');
+  });
+});
 
 describe("administration masthead profile entry", () => {
   it("opens the account's profile through the same avatar contract as the employee masthead", () => {
@@ -132,5 +156,22 @@ describe("administration masthead refresh control", () => {
     const button = markup.slice(markup.indexOf('aria-label="Refresh this page"'));
     expect(button.slice(0, 200)).not.toContain("disabled");
     expect(markup).toContain("lucide-refresh-cw");
+  });
+});
+
+describe("administration masthead copy and floating notices", () => {
+  it("omits the removed Evidence subtitle line while keeping other section subtitles", () => {
+    const evidence = render({ section: "evidence" });
+    expect(evidence).not.toContain("The workspace record: provider actions, observed activity, coverage, and the provenance behind it.");
+    expect(evidence).not.toContain('class="admin-purpose"');
+    const overview = render({ section: "overview" });
+    expect(overview).toContain('class="admin-purpose"');
+    expect(overview).toContain("What is happening across the workspace right now.");
+  });
+
+  it("does not embed an in-flow notification region inside the page shell", () => {
+    const markup = render({ section: "overview" });
+    expect(markup).not.toContain("work-os-notification-region");
+    expect(markup).not.toContain("notification-region");
   });
 });

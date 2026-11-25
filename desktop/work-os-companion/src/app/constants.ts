@@ -61,6 +61,7 @@ export const ADMIN_MENU_SECTIONS: Array<{ id: AdminSection; label: string }> = [
   { id: "people", label: "People" },
   { id: "tasks", label: "Tasks" },
   { id: "review", label: "EOD Review" },
+  { id: "payroll", label: "Payroll" },
   { id: "insights", label: "Insights" },
   { id: "evidence", label: "Evidence" },
   { id: "settings", label: "Settings" },

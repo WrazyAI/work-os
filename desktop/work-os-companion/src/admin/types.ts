@@ -6,7 +6,7 @@
 
 import type { EvidenceKind } from "@wrazy/work-os-shared/evidence-kinds";
 
-export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
+export type AdminSection = "overview" | "people" | "tasks" | "review" | "payroll" | "insights" | "evidence" | "settings";
 
 /** Deep-link focus carried when navigating between administration sections:
  * a person, report, or task opens its drawer, and the evidence section can
@@ -404,10 +404,20 @@ export interface OrganizationMembershipRow {
   id: string;
   user_id: string;
   person_id: string | null;
+  email?: string | null;
   role: string;
   active: boolean;
   feature_flags?: Record<string, boolean> | null;
   person?: { id: string; display_name: string | null; email: string | null } | null;
+}
+
+export interface MemberPasswordResetResponse {
+  sent: true;
+  membershipId: string;
+  email: string;
+  sentAt: string;
+  expiresAt: string;
+  emailId: string | null;
 }
 
 export interface OrganizationResponse {

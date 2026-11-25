@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { setDebugSession } from "../api";
+import { useNotifications } from "../NotificationFlyouts";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { AdminOttoChat } from "../adminOtto/AdminOttoChat";
 import { AdminOttoSettings } from "../adminOtto/AdminOttoSettings";
@@ -13,6 +14,7 @@ import { AdminOttoSpeechChangedError } from "../adminOtto/api";
 import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester } from "../adminOtto/audioOwner";
 import { useAdminOttoRecapAudio } from "../adminOtto/useAdminOttoRecapAudio";
 import { parseAdminRecordHref } from "../adminOtto/recordLinks";
+import { seedPayrollPreview } from "./payroll/preview";
 
 const PREVIEW_SESSION: SessionResponse = {
   organizationId: "org-preview",
@@ -22,7 +24,7 @@ const PREVIEW_SESSION: SessionResponse = {
   featureFlags: { employee_companion: true, desktop_companion: true },
 };
 
-const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
+const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "payroll", "insights", "evidence", "settings"];
 const SCOPE = { userId: PREVIEW_SESSION.userId, organizationId: PREVIEW_SESSION.organizationId, mode: "admin" as const };
 /** The fixture New chat is a real action: it answers locally, so rendered QA
  * never sends a request or needs a live admin account. */
@@ -41,7 +43,9 @@ export const PREVIEW_ADMIN_OTTO_TRANSPORT = ADMIN_FIXTURE_TRANSPORT;
  * instead (see `src/adminShell.ts`). */
 export default function AdminPreview() {
   const queryClient = useQueryClient();
+  const notificationsApi = useNotifications();
   const params = new URLSearchParams(window.location.search);
+  const toastFixture = params.get("toasts");
   const requested = params.get("section");
   const initialSection = SECTIONS.find((value) => value === requested) ?? "overview";
   const requestedState = params.get("state");
@@ -88,6 +92,40 @@ export default function AdminPreview() {
       offset: input.cursor ? 2 : 0,
     });
   };
+  useEffect(() => {
+    if (toastFixture !== "stack") return;
+    notificationsApi.persistent(
+      "preview-update",
+      "Version 0.5.30 is ready to download now, or later from Settings.",
+      "Update 0.5.30 is ready",
+      "info",
+      {
+        actions: [
+          { label: "Download update", kind: "primary", onClick: () => undefined },
+          { label: "Later", kind: "quiet", onClick: () => notificationsApi.clearPersistent("preview-update") },
+        ],
+      },
+    );
+    notificationsApi.persistent(
+      "preview-recap",
+      "1 recap is waiting in the administration inbox.",
+      "Reviewed recap ready",
+      "info",
+      {
+        icon: "otto",
+        actions: [
+          { label: "Listen", kind: "primary", onClick: () => undefined },
+          { label: "View recaps", kind: "quiet", onClick: () => undefined },
+        ],
+      },
+    );
+    notificationsApi.success("The workspace confirmed the task update.", "Task updated");
+    return () => {
+      notificationsApi.clearPersistent("preview-update");
+      notificationsApi.clearPersistent("preview-recap");
+    };
+  }, [notificationsApi, toastFixture]);
+
   const fixtureTransport = {
     ...ADMIN_FIXTURE_TRANSPORT,
     send: ottoState === "evidence"
@@ -205,6 +243,7 @@ export default function AdminPreview() {
   };
   useMemo(() => {
     seedAdminFixtures(queryClient, state);
+    seedPayrollPreview(queryClient, PREVIEW_SESSION, state === "empty");
   }, [queryClient, state]);
   useEffect(() => {
     if (!stubApi) return;
@@ -218,6 +257,13 @@ export default function AdminPreview() {
   }, [stubApi]);
   return (
     <>
+      {section === "payroll" ? (
+        <p role="note" style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 40, margin: 0, padding: "6px 10px",
+          border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper)",
+          color: "var(--muted)", font: "600 10.5px/1.3 Manrope, Inter, sans-serif",
+        }}>Synthetic payroll preview</p>
+      ) : null}
       <AdminWorkspace
         session={PREVIEW_SESSION}
         notifications={notifications}

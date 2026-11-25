@@ -42,6 +42,7 @@ async function deps(f: Awaited<ReturnType<typeof payrollFixture>>): Promise<Payr
     now: () => new Date("2026-11-16T06:05:00Z"),
     ensureRecaps: async () => ({ approved: 0, pending: 0, skipped: 0, complete: true }),
     fetchProviderPage: async () => ({ logs: [], nextCursor: null, complete: true, watermark: "" }),
+    fetchApps: async () => [],
     loadSources: async () => manifest,
     classifyFrame: async (_scope, frame) => ({ category: "unclear", confidence: 0, reason: "No image in fixture.", app: frame.app, sourceHash: frame.sourceHash, model: "fixture", promptVersion: "v1", classificationKey: "key" }),
     calculateDay: () => dayResult("2026-11-05"),

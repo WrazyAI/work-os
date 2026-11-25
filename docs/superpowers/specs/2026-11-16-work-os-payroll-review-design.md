@@ -385,14 +385,12 @@ positive aggregate disagreement is a blocking `break_mismatch`; the
 administrator must reconcile the interval or record a bounded residual
 exclusion with a reason and non-overlap attestation. Provider-authoritative
 organizations do not gain synthetic scheduled breaks when their policy has
-disabled them. Recorded scheduled-break work is disputed, not automatically
-unpaid twice. A disputed break span is held once, rather than both excluded and
-held. Unrelated missing evidence remains included.
-
-If recorded activity appears during a scheduled break, or the derived break
-total disagrees materially with the provider's break seconds, the interval is
-flagged `activity_during_break` or `break_mismatch` for review instead of
-silently paying or excluding it.
+disabled them. Break time is never payable, including when an activity sample
+falls inside a break. Worktivity captures no screenshots during a break, so
+there is no work evidence to weigh and no `activity_during_break` decision. A
+material disagreement between derived and provider break totals is still a
+`break_mismatch` acknowledgement; the break itself is excluded once and never
+silently paid.
 
 ### 6.5 Inactivity
 
@@ -437,22 +435,19 @@ not a requirement to cover every minute.
 | Continuous verified 0%, no exception signal, and app/title or frame indicates non-work | `auto_excluded` — deducted, visible, reversible in review |
 | Continuous verified 0%, frame or stored summary establishes meeting, training, or work-related reading | `auto_payable` — visible, not deducted |
 | Continuous verified 0%, frame classified `work` at or above the confidence floor | `auto_payable` — visible, not deducted |
-| Continuous verified 0%, no frame, and app/title is unknown or generic | `needs_review` — confirmed zero span held out, never auto-deducted |
-| Continuous verified 0%, frame classified `unclear` or below the confidence floor | `needs_review` — held out, never auto-deducted |
-| Continuous verified 0%, contradictory exception evidence | `needs_review` — held out |
-| Sparse/gapped zero samples without continuous coverage | `needs_review` — held out |
-| Person context names the app as legitimate, but the frame is `idle`/`nonwork` | `needs_review` — context explains a flag, it does not override a clear non-work frame |
+| Continuous verified 0% for 3 minutes or more with no payable exception | `auto_excluded` — the whole run is removed from pay |
+| Continuous verified 0%, contradictory exception evidence | `needs_review` — held until the conflict is resolved |
+| Sparse/gapped zero samples without continuous coverage | no inactivity deduction; the gap is `unverified_gap` |
+| Person context names the app as legitimate, but the frame is `idle`/`nonwork` | `auto_excluded`; context explains a flag, it does not override a clear non-work frame |
 
 Auto-exclusion requires continuous verified zero coverage over the whole
-candidate run and no exception or contradiction. A meeting app name or generic
-role context alone is a possible exception, not proof of attendance or
-work-related reading/training; if it conflicts with the zero run, review. Where
-an exception occupies only part of a qualifying run, that subspan remains
-payable and only its non-exempt subspans may be excluded; never count it twice.
-
-A consent-withdrawn or image-expired employee can still reach a ready review,
-but a run whose app/title is unknown and has no usable frame is held for
-administrator resolution rather than silently deducted.
+candidate run. Meeting, training, reading, or work evidence covering the run
+keeps that subspan payable; where an exception occupies only part of a run, only
+its non-exempt subspans are excluded. A contradiction between payable and
+non-work evidence is held rather than guessed. A consent-withdrawn or
+image-expired employee can still reach a ready review; zero activity is deducted
+when it meets the continuous threshold, and the interval is listed with its
+available frame count.
 
 A single one-minute 0% capture cannot qualify, even if the next sample arrives
 15 minutes later. Contiguous verified zero slices qualify at 180 elapsed seconds;
@@ -508,7 +503,7 @@ Every finding carries an `effect` so a decision moves the total exactly once:
 | `inactivity` with `auto_excluded` | `exclude` | Resolving payable moves its span from excluded to payable |
 | `inactivity` with `auto_payable` | `payable` | Already included; visible only |
 | `inactivity` with `needs_review` | `hold` | Payable resolution moves held to payable; excluded resolution moves held to excluded |
-| `activity_during_break` | `hold` | Replaces the overlapping break exclusion; resolution moves the span once |
+| `activity_during_break` (legacy only) | `hold` | Historical reviews only; new analyses never create it. Break time stays excluded. |
 | `unverified_gap` | `acknowledge` | Minutes remain in recommended; a manual exclusion subtracts them |
 | `low_evidence` | `acknowledge` | Minutes remain in recommended; a manual exclusion subtracts them |
 | `break_mismatch` | `acknowledge` | No automatic total change; the administrator may adjust |
@@ -572,18 +567,16 @@ evidence and no exception, and a separate 10-minute qualifying run held for revi
 ```
 tracked      370m
 break        −20m
-inactivity   −45m
-held         −10m (out of the recommended total, not deducted)
+inactivity   −55m
+held         0m
 recommended  295m = 4h 55m
 ```
 
 Time at 22:01 would be outside the window and excluded. A 22-minute meeting at
 0% activity inside the day would be payable, not deducted.
-The boundary itself, 22:00, is already outside. Resolving the held 10 minutes
-payable gives 305m; resolving it excluded leaves 295m with held 0m and inactivity
-55m. Repeating either request changes nothing. A 10-minute disputed span within
-the 20-minute break would replace that part of the break, not subtract another
-10 minutes.
+The boundary itself, 22:00, is already outside. The second 10-minute zero run
+is auto-excluded inactivity; there is no held inactivity decision. A disputed
+span within the 20-minute break remains part of the break and is never paid.
 
 ## 7. Evidence model
 

@@ -1,7 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, Check, Info, X } from "lucide-react";
-import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 
 export type NotificationTone = "success" | "error" | "warning" | "info";
@@ -144,59 +142,234 @@ export function useNotifications() {
   return value;
 }
 
-/** The in-flow slot the employee and administration shells render under their
- * mastheads. Standing conditions (a stale record, a setup blocker) belong in
- * the page's reading order; only transient receipts keep the floating stack
- * design.md §16.1 pins to the top-right corner. */
-export const NOTIFICATION_REGION_ID = "work-os-notification-region";
+const STACK_GAP_PX = 8;
+const STACK_PEEK_PX = 10;
+const STACK_MAX_VISIBLE_BEHIND = 2;
 
-export function NotificationFlyouts({ notifications, onDismiss }: { notifications: AppNotification[]; onDismiss: (id: string) => void }) {
-  const [region, setRegion] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const locate = () => {
-      const next = document.getElementById(NOTIFICATION_REGION_ID);
-      setRegion((current) => (current === next ? current : next));
-    };
-    locate();
-    // The shell can mount after the notification exists (boot, workspace
-    // switch), so watch the tree instead of sampling once.
-    const observer = new MutationObserver(locate);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-  const transient = notifications.filter((notification) => (notification.persistence ?? "transient") === "transient");
-  const persistent = notifications.filter((notification) => notification.persistence === "persistent");
-  const cards = (items: AppNotification[]) => items.map((notification) => <NotificationCard key={notification.id} notification={notification} onDismiss={onDismiss} />);
-  const fixedHasPersistent = !region && persistent.length > 0;
-  return <>
-    <section className={`notification-flyouts${fixedHasPersistent ? " has-persistent" : ""}`} aria-label="Application notifications">
-      {cards(transient)}
-      {!region ? cards(persistent) : null}
-    </section>
-    {region && persistent.length ? createPortal(
-      <section className="notification-region-list" aria-label="Workspace notices">{cards(persistent)}</section>,
-      region,
-    ) : null}
-  </>;
+/** Orders notifications front-to-back for the floating stack: newest transient
+ * receipts sit at the front so fresh feedback is immediately visible, followed
+ * by newest persistent notices stacked cleanly behind them. */
+export function orderNotificationStack(notifications: AppNotification[]): AppNotification[] {
+  const transient = notifications.filter((notification) => (notification.persistence ?? "transient") === "transient").reverse();
+  const persistent = notifications.filter((notification) => notification.persistence === "persistent").reverse();
+  return [...transient, ...persistent];
 }
 
-function NotificationCard({ notification, onDismiss }: { notification: AppNotification; onDismiss: (id: string) => void }) {
+function measureCardNaturalHeight(card: HTMLElement): number {
+  const prevTransition = card.style.transition;
+  const prevHeight = card.style.height;
+  card.style.transition = "none";
+  card.style.height = "auto";
+  const measured = Math.ceil(card.getBoundingClientRect().height);
+  card.style.height = prevHeight;
+  card.style.transition = prevTransition;
+  return measured;
+}
+
+export function NotificationFlyouts({ notifications, onDismiss }: { notifications: AppNotification[]; onDismiss: (id: string) => void }) {
+  const ordered = useMemo(() => orderNotificationStack(notifications), [notifications]);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [heights, setHeights] = useState<Record<string, number>>({});
+  const stackRef = useRef<HTMLDivElement | null>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const stacked = ordered.length > 1;
+  const expanded = stacked && (hovered || focused);
+  const paused = ordered.length > 0 && (hovered || focused);
+
+  useEffect(() => {
+    if (ordered.length === 0) {
+      setHovered(false);
+      setFocused(false);
+    }
+  }, [ordered.length]);
+
+  const measureAll = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const next: Record<string, number> = {};
+    for (const item of ordered) {
+      const node = cardRefs.current.get(item.id);
+      if (!node) continue;
+      const h = measureCardNaturalHeight(node);
+      if (h > 0) next[item.id] = h;
+    }
+    setHeights((current) => {
+      const keys = Object.keys(next);
+      if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
+      return next;
+    });
+  }, [ordered]);
+
+  useLayoutEffect(() => {
+    measureAll();
+  }, [measureAll]);
+
+  useEffect(() => {
+    const container = stackRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    let lastWidth = Math.round(container.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width ?? lastWidth);
+      if (width !== lastWidth) {
+        lastWidth = width;
+        measureAll();
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [measureAll, ordered.length]);
+
+  const registerCard = useCallback((id: string, node: HTMLDivElement | null) => {
+    if (node) cardRefs.current.set(id, node);
+    else cardRefs.current.delete(id);
+  }, []);
+
+  const handleDismiss = useCallback((id: string) => {
+    const focusInside = typeof document !== "undefined" && stackRef.current?.contains(document.activeElement);
+    const index = ordered.findIndex((item) => item.id === id);
+    const nextId = index >= 0 ? (ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null) : null;
+    onDismiss(id);
+    if (focusInside && nextId && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const nextNode = cardRefs.current.get(nextId);
+        nextNode?.querySelector<HTMLElement>("button")?.focus();
+      });
+    }
+  }, [onDismiss, ordered]);
+
+  const measured = ordered.length > 0 && ordered.every((item) => (heights[item.id] ?? 0) > 0);
+  const frontHeight = ordered[0] ? (heights[ordered[0].id] ?? 0) : 0;
+  const offsets: number[] = [];
+  let expandedHeight = 0;
+  for (let index = 0; index < ordered.length; index += 1) {
+    offsets.push(expandedHeight);
+    expandedHeight += (heights[ordered[index]!.id] ?? 0) + (index < ordered.length - 1 ? STACK_GAP_PX : 0);
+  }
+  const collapsedHeight = frontHeight + Math.min(Math.max(ordered.length - 1, 0), STACK_MAX_VISIBLE_BEHIND) * STACK_PEEK_PX;
+  const stackStyle = stacked && measured
+    ? ({
+        "--stack-height": `${expanded ? expandedHeight : collapsedHeight}px`,
+        "--front-height": `${frontHeight}px`,
+      } as CSSProperties)
+    : undefined;
+
+  return (
+    <section
+      className="notification-flyouts"
+      aria-label="Application notifications"
+      data-stacked={stacked ? "true" : "false"}
+      data-expanded={expanded ? "true" : "false"}
+      data-measured={measured ? "true" : "false"}
+      data-paused={paused ? "true" : "false"}
+    >
+      {ordered.length > 0 && (
+        <div
+          ref={stackRef}
+          className="notification-stack"
+          style={stackStyle}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          onFocus={() => setFocused(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && expanded) {
+              setHovered(false);
+              setFocused(false);
+              (document.activeElement as HTMLElement | null)?.blur?.();
+            }
+          }}
+        >
+          {ordered.map((notification, index) => (
+            <NotificationCard
+              key={notification.id}
+              notification={notification}
+              index={index}
+              total={ordered.length}
+              offset={offsets[index] ?? 0}
+              cardHeight={heights[notification.id]}
+              paused={paused}
+              onRegister={registerCard}
+              onDismiss={handleDismiss}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NotificationCard({
+  notification,
+  index,
+  total,
+  offset,
+  cardHeight,
+  paused,
+  onRegister,
+  onDismiss,
+}: {
+  notification: AppNotification;
+  index: number;
+  total: number;
+  offset: number;
+  cardHeight?: number;
+  paused: boolean;
+  onRegister: (id: string, node: HTMLDivElement | null) => void;
+  onDismiss: (id: string) => void;
+}) {
   const duration = notificationAutoDismissMs(notification);
+  const remainingRef = useRef<number | null>(duration);
+  const startedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    remainingRef.current = duration;
+  }, [duration, notification.id]);
+
   useEffect(() => {
     if (duration === null) return;
-    const timer = window.setTimeout(() => onDismiss(notification.id), duration);
-    return () => window.clearTimeout(timer);
-  }, [duration, notification.id, onDismiss]);
-    const Icon = notification.tone === "success" ? Check : notification.tone === "error" || notification.tone === "warning" ? AlertTriangle : Info;
+    if (paused) {
+      if (startedAtRef.current !== null && remainingRef.current !== null) {
+        remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAtRef.current));
+        startedAtRef.current = null;
+      }
+      return;
+    }
+    const wait = remainingRef.current ?? duration;
+    if (wait <= 0) {
+      onDismiss(notification.id);
+      return;
+    }
+    startedAtRef.current = Date.now();
+    const timer = window.setTimeout(() => onDismiss(notification.id), wait);
+    return () => {
+      window.clearTimeout(timer);
+      if (startedAtRef.current !== null && remainingRef.current !== null) {
+        remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAtRef.current));
+        startedAtRef.current = null;
+      }
+    };
+  }, [duration, notification.id, onDismiss, paused]);
+
+  const Icon = notification.tone === "success" ? Check : notification.tone === "error" || notification.tone === "warning" ? AlertTriangle : Info;
   const actions = notification.actions ?? (notification.action ? [{ ...notification.action, kind: "primary" as const }] : []);
   const progress = notification.progress;
   const progressPercent = progress && progress.value !== null && progress.max > 0 ? Math.max(0, Math.min(100, Math.round((progress.value / progress.max) * 100))) : null;
+  const cardStyle: CSSProperties = {
+    ...(duration === null ? {} : { "--notification-duration": `${duration}ms` }),
+    ...(cardHeight ? { "--card-height": `${cardHeight}px`, "--stack-offset": `${offset}px` } : {}),
+    zIndex: total - index,
+  } as CSSProperties;
+
   return <div
+    ref={(node) => onRegister(notification.id, node)}
     className={`notification-flyout ${notification.tone} ${notification.persistence ?? "transient"}${notification.locked ? " locked" : ""}`}
     role={notificationAriaRole(notification.tone)}
     aria-atomic="true"
-    style={duration === null ? undefined : { "--notification-duration": `${duration}ms` } as CSSProperties}
+    data-stack-index={index}
+    data-stack-behind={index > STACK_MAX_VISIBLE_BEHIND ? "hidden" : undefined}
+    style={cardStyle}
   >
     <span className={`notification-icon${notification.icon === "otto" ? " is-mascot" : ""}`}>{notification.icon === "otto" ? <MascotMark className="notification-mascot" /> : <Icon size={15} />}</span>
     <div>
@@ -211,8 +384,8 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
         aria-valuenow={progress.value ?? undefined}
         aria-valuetext={progress.valueText}
       ><i style={{ width: `${progressPercent}%` }} /></div>}
-      {actions.length > 0 && <div className="notification-actions">{actions.map((entry, index) => <button
-        key={`${entry.label}-${index}`}
+      {actions.length > 0 && <div className="notification-actions">{actions.map((entry, actionIndex) => <button
+        key={`${entry.label}-${actionIndex}`}
         className={`notification-action${entry.kind === "quiet" ? " quiet" : ""}`}
         type="button"
         onClick={entry.onClick}

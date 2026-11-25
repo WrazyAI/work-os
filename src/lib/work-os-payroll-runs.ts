@@ -35,6 +35,7 @@ export type PayrollRunDeps = {
   calculateDay: typeof calculatePayrollDay;
   advanceBrief: typeof advancePayrollWeekBrief;
   resolveConnection?: typeof resolvePayrollProviderConnection;
+  fetchApps?: (input: { employeeId: string; start: string; end: string }) => Promise<Array<{ name: string; minutes: number; productivity: number | null; category: string | null }>>;
   providerDeps?: ReturnType<typeof payrollProviderDeps>;
   policy?: PayrollAiPolicy;
   signal?: AbortSignal;
@@ -50,6 +51,7 @@ export function payrollRunDeps(scope: PayrollScope): PayrollRunDeps {
     calculateDay: calculatePayrollDay,
     advanceBrief: advancePayrollWeekBrief,
     resolveConnection: resolvePayrollProviderConnection,
+    fetchApps: async (input) => (await import("@/lib/worktivityAudit")).fetchAppsSummary(input),
     providerDeps: payrollProviderDeps(scope),
     policy: resolvePayrollAiPolicy(),
   };
@@ -326,11 +328,23 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       const previousProvider = object(artifact.provider);
       const watermark = String(page.watermark && page.watermark > String(previousProvider.watermark ?? "")
         ? page.watermark : previousProvider.watermark ?? "");
+      let apps = object(artifact.apps);
+      if (page.complete && !Array.isArray(apps.items)) {
+        try {
+          const usage = await (deps.fetchApps ?? (async (input) => (await import("@/lib/worktivityAudit")).fetchAppsSummary(input)))({ employeeId: connection.employeeId, start: period.from, end: period.through });
+          apps = {
+            items: usage.map((item) => ({ name: item.name, durationMs: item.minutes * 60_000, productivityCode: item.productivity, category: item.category })),
+            complete: true, coverage: [], enumLabels: {},
+          };
+        } catch {
+          apps = { items: [], complete: false, coverage: ["App usage unavailable for this period"], enumLabels: {} };
+        }
+      }
       await persistRun(scope, runId, token, at, {
         phase: page.complete ? "classify" : "evidence",
         fetchCursor: { cursor: page.nextCursor },
         inputArtifact: {
-          ...artifact, logs: combinedLogs,
+          ...artifact, logs: combinedLogs, apps,
           provider: {
             complete: page.complete,
             watermark,
@@ -396,12 +410,12 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
         const providerVerifiedAt = iso(providerState.verifiedAt);
         const providerFingerprint = String(providerState.fingerprint ?? "") || payrollProviderFingerprint(logs);
         await getPool().query(`INSERT INTO work_payroll_analysis_revisions
-          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb)
+          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy,apps_summary)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb,$14::jsonb)
           ON CONFLICT (organization_id,review_id,person_id,analysis_revision) DO NOTHING`,
         [scope.organizationId, run.review_id, scope.personId, run.target_revision, manifest.hash, manifest.policyVersion,
           run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash,
-          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint })]);
+          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint }), JSON.stringify(object(artifact.apps))]);
         await persistDay(scope, run, result, at, token, artifact.frameResults as Record<string, PayrollFrameResult>, days[dayIndex].frameCandidates, days[dayIndex]);
         await persistRun(scope, runId, token, at, { progress: { message: "Calculating daily hours.", days: days.length, daysDone: dayIndex + 1, framesClassified: 0, framesReused: 0, findings: result.findings.length, remaining: days.length - dayIndex - 1 } });
       }
@@ -450,11 +464,11 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
         const providerFingerprint = String(providerState.fingerprint ?? "")
           || payrollProviderFingerprint(Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : []);
         await client.query(`INSERT INTO work_payroll_analysis_revisions
-          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb)
+          (organization_id,review_id,person_id,analysis_revision,source_hash,policy_version,as_of,input_manifest,citation_snapshot,source_token,provider_watermark,provider_verified_at,resolved_policy,apps_summary)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb,$14::jsonb)
           ON CONFLICT (organization_id,review_id,person_id,analysis_revision) DO NOTHING`,
         [scope.organizationId, run.review_id, scope.personId, run.target_revision, manifest.hash, manifest.policyVersion, run.as_of, JSON.stringify(manifest), JSON.stringify({ weekSources: manifest.weekSources }), run.source_hash,
-          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint })]);
+          providerWatermark, providerVerifiedAt, JSON.stringify({ providerFingerprint }), JSON.stringify(object(artifact.apps))]);
         const blocked = results.some((day) => day.blockers.length || day.findings.some((finding) => finding.blocksApproval));
         const published = await client.query(`UPDATE work_payroll_reviews SET
           status=$4, analysis_revision=$5, row_version=row_version+1, source_hash=$6, totals=$7::jsonb,

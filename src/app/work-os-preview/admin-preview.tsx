@@ -224,6 +224,64 @@ function insightsFixture(state: PreviewState) {
   };
 }
 
+const structuredEodReport = {
+  version: 1,
+  summary: "A day of finished threads. Luis closed the Q4 supplier reconciliation and shipped the pricing review, while the supplier scorecard stayed with legal. Tomorrow opens on the December close checklist.",
+  summaryGeneratedAt: `${TODAY}T13:35:00.000Z`,
+  summarySource: "otto" as const,
+  summarySignature: "preview",
+  completed: [
+    "Closed the Q4 supplier reconciliation — three exceptions cleared",
+    "Shipped the pricing model review with Nadia",
+    "Cleared the support backlog — 9 tickets resolved",
+  ],
+  inProgress: [
+    "Supplier scorecard v2 — waiting on legal review",
+    "Renewal forecast for the enterprise book",
+  ],
+  next: [
+    "Finalize the December close checklist",
+    "Send the supplier scorecard to legal",
+  ],
+  suggestions: { completed: [], inProgress: [], next: [] },
+  evidence: [
+    {
+      source: "github",
+      label: "GitHub",
+      items: [
+        { id: "gh-1", title: "Pull request #482 · Reconcile Q4 supplier ledger", summary: null, meta: "Performed by you · work-os · 4:12 PM", url: "https://github.com/WrazyAI/work-os/pull/482", at: `${TODAY}T16:12:00.000Z`, kind: "performed" },
+        { id: "gh-2", title: "Pushed 3 commits to work-os", summary: null, meta: "Performed by you · work-os · 3:38 PM", url: "https://github.com/WrazyAI/work-os/commits/main", at: `${TODAY}T15:38:00.000Z`, kind: "performed" },
+      ],
+    },
+    {
+      source: "tasks",
+      label: "Tasks",
+      items: [
+        { id: "task-1", title: "Reconcile Q4 supplier ledger", summary: null, meta: "Ledger · 4:10 PM", url: null, at: `${TODAY}T16:10:00.000Z`, kind: "completed" },
+        { id: "task-2", title: "Pricing model review with Nadia", summary: null, meta: "Pricing · 2:45 PM", url: null, at: `${TODAY}T14:45:00.000Z`, kind: "completed" },
+        { id: "task-3", title: "Clear the support backlog", summary: null, meta: "Support · 1:18 PM", url: null, at: `${TODAY}T13:18:00.000Z`, kind: "completed" },
+      ],
+    },
+    {
+      source: "worktivity",
+      label: "Worktivity",
+      items: [
+        { id: "recap-1", title: "Q4 supplier reconciliation and pricing review", summary: "Frames show the ledger, the pricing model, and a review thread with Nadia.", meta: "2:00–3:30 PM · Employee confirmed", url: null, at: `${TODAY}T15:30:00.000Z`, kind: "recap" },
+      ],
+    },
+    {
+      source: "loom",
+      label: "Loom",
+      items: [
+        { id: "loom-1", title: "Pricing review walkthrough", summary: "Walked through the pricing model and the open supplier scorecard.", meta: "Recording · 6:12", url: "https://www.loom.com/share/6f2a9c4b8e1d4f5a6b7c8d9e0f1a2b3c", at: null, kind: "recording" },
+      ],
+    },
+  ],
+  loomUrl: "https://www.loom.com/share/6f2a9c4b8e1d4f5a6b7c8d9e0f1a2b3c",
+  preparedAt: `${TODAY}T13:10:00.000Z`,
+  source: "scheduled" as const,
+};
+
 function reportsFixture(state: PreviewState) {
   const empty = state === "empty";
   const markdown = [
@@ -258,9 +316,9 @@ function reportsFixture(state: PreviewState) {
     "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
   ].join("\n");
   const reports = empty ? [] : [
-    { id: "r-1", person_id: "p-luis", report_date: TODAY, status: "pending_review", title: "EOD Report: Luis Moreno — Sep 30, 2026", markdown, submitted_markdown: markdown, metrics: { completed: 2, progressed: 1, deferred: 0, carried: 0, unplanned: 1 }, manager_notes: null, submitted_at: `${TODAY}T13:40:00.000Z`, reviewed_at: null, created_at: `${TODAY}T13:10:00.000Z`, person: { id: "p-luis", display_name: "Luis Moreno", email: "luis@example.com" }, versions: [{ id: "v-1", version_kind: "draft", created_at: `${TODAY}T13:10:00.000Z` }, { id: "v-2", version_kind: "employee_submission", created_at: `${TODAY}T13:40:00.000Z` }] },
+    { id: "r-1", person_id: "p-luis", report_date: TODAY, status: "pending_review", title: "EOD Report: Luis Moreno — Sep 30, 2026", markdown, submitted_markdown: markdown, structured_report: structuredEodReport, loom_url: structuredEodReport.loomUrl, metrics: { completed: 2, progressed: 1, deferred: 0, carried: 0, unplanned: 1 }, manager_notes: null, submitted_at: `${TODAY}T13:40:00.000Z`, reviewed_at: null, created_at: `${TODAY}T13:10:00.000Z`, person: { id: "p-luis", display_name: "Luis Moreno", email: "luis@example.com" }, versions: [{ id: "v-1", version_kind: "draft", created_at: `${TODAY}T13:10:00.000Z` }, { id: "v-2", version_kind: "employee_submission", created_at: `${TODAY}T13:40:00.000Z` }] },
     { id: "r-2", person_id: "p-ada", report_date: "2026-09-29", status: "pending_review", title: "EOD Report: Ada Okafor — Sep 29, 2026", markdown: markdown.replace("Luis Moreno", "Ada Okafor"), submitted_markdown: null, metrics: { completed: 3, progressed: 2 }, manager_notes: null, submitted_at: "2026-09-29T17:05:00.000Z", reviewed_at: null, created_at: "2026-09-29T16:40:00.000Z", person: { id: "p-ada", display_name: "Ada Okafor", email: "ada@example.com" }, versions: [] },
-    { id: "r-3", person_id: "p-mei", report_date: "2026-09-28", status: "approved", title: "EOD Report: Mei Tanaka — Sep 28, 2026", markdown, submitted_markdown: markdown, metrics: { completed: 1 }, manager_notes: "Clean report; keep the vendor thread linked.", submitted_at: "2026-09-28T16:30:00.000Z", reviewed_at: "2026-09-29T09:10:00.000Z", created_at: "2026-09-28T16:00:00.000Z", person: { id: "p-mei", display_name: "Mei Tanaka", email: "mei@example.com" }, versions: [] },
+    { id: "r-3", person_id: "p-mei", report_date: "2026-09-28", status: "approved", title: "EOD Report: Mei Tanaka — Sep 28, 2026", markdown, submitted_markdown: markdown, structured_report: structuredEodReport, loom_url: structuredEodReport.loomUrl, metrics: { completed: 1 }, manager_notes: "Clean report; keep the vendor thread linked.", submitted_at: "2026-09-28T16:30:00.000Z", reviewed_at: "2026-09-29T09:10:00.000Z", created_at: "2026-09-28T16:00:00.000Z", person: { id: "p-mei", display_name: "Mei Tanaka", email: "mei@example.com" }, versions: [] },
   ];
   return { reports, counts: { draft: empty ? 0 : 1, pending_review: empty ? 0 : 2, approved: empty ? 0 : 1, rejected: empty ? 0 : 1, total: empty ? 0 : 5 },
     series: Array.from({ length: 14 }, (_, index) => {
@@ -461,6 +519,19 @@ function installAdminFetchStub(state: PreviewState) {
     if (url.includes("/api/work-os/people")) return json(peopleFixture(state));
     if (url.includes("/api/work-os/tasks")) return json(tasksFixture(state));
     if (url.includes("/api/work-os/projects")) return json(projectsFixture());
+    if (url.includes("/api/work-os/organization/members/") && url.endsWith("/password-reset")) {
+      const membershipId = url.split("/members/")[1]?.split("/")[0] ?? "mem-0";
+      const match = organizationFixture(state).memberships.find((m: { id: string; person?: { email?: string | null } | null }) => String(m.id) === membershipId);
+      const now = new Date();
+      return json({
+        sent: true,
+        membershipId,
+        email: match?.person?.email ?? "member@wrazyos.com",
+        sentAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        emailId: "preview-reset-1",
+      });
+    }
     if (url.includes("/api/work-os/organization")) return json(organizationFixture(state));
     if (url.includes("/api/work-os/integrations/connections")) return json(connectionsFixture());
     if (url.includes("/api/work-os/blueprints")) return json(blueprintsFixture());

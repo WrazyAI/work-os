@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { appendNotification, notificationAriaRole, notificationAutoDismissMs, notificationTimeoutMs, NotificationFlyouts, type AppNotification } from "./NotificationFlyouts";
+import { appendNotification, notificationAriaRole, notificationAutoDismissMs, notificationTimeoutMs, NotificationFlyouts, orderNotificationStack, type AppNotification } from "./NotificationFlyouts";
 
 describe("application notification flyouts", () => {
   it("renders failures as assertive red flyouts and successes as green status flyouts", () => {
@@ -155,5 +155,27 @@ describe("application notification flyouts", () => {
     expect(advanced[0]?.id).toBe(started[0]?.id);
     expect(advanced[0]?.progress?.value).toBe(50);
     expect(advanced[0]?.locked).toBe(true);
+  });
+
+  it("stacks multiple floating notifications front-to-back without embedding persistent cards in page flow", () => {
+    const notifications: AppNotification[] = [
+      { id: "t-old", tone: "info", title: "Older receipt", message: "First transient." },
+      { id: "t-new", tone: "success", title: "Latest receipt", message: "Newest transient." },
+      { id: "p-old", tone: "info", title: "Update ready", message: "Version 0.5.30 ready.", persistence: "persistent", persistenceKey: "update" },
+      { id: "p-new", tone: "info", title: "Reviewed recap ready", message: "1 recap is waiting.", persistence: "persistent", persistenceKey: "recap" },
+    ];
+    expect(orderNotificationStack(notifications).map((item) => item.id)).toEqual(["t-new", "t-old", "p-new", "p-old"]);
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications, onDismiss: () => undefined }));
+    expect(markup).toContain('data-stacked="true"');
+    expect(markup).toContain('data-expanded="false"');
+    expect(markup).toContain('class="notification-stack"');
+    expect(markup).toContain('data-stack-index="0"');
+    expect(markup).toContain('data-stack-index="1"');
+    expect(markup).toContain('data-stack-index="2"');
+    expect(markup).toContain('data-stack-behind="hidden"');
+    expect(markup).not.toContain("notification-region-list");
+    // Single notification stays unstacked.
+    const single = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notifications[3]!], onDismiss: () => undefined }));
+    expect(single).toContain('data-stacked="false"');
   });
 });

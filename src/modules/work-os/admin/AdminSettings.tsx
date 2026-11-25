@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers3, Plus, Search } from "lucide-react";
+import { KeyRound, Layers3, Plus, Search } from "lucide-react";
 import AdminAgentAccess from "./AdminAgentAccess";
 import { adminFetch, adminKeys, type SystemStatusResponse } from "./api";
 import {
@@ -33,8 +33,26 @@ const FEATURES: Array<{ key: string; label: string; detail: string; comingSoon?:
   { key: "seo_mission_control", label: "SEO Mission Control", detail: "The SEO operations surface for this workspace." },
 ];
 
+type MemberPasswordResetResult = {
+  sent: true;
+  membershipId: string;
+  email: string;
+  sentAt: string;
+  expiresAt: string;
+  emailId: string | null;
+};
+
+function formatResetSentTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "just now";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
+  const confirmTitleId = useId();
+  const confirmDialogRef = useRef<HTMLDialogElement | null>(null);
+  const confirmPressedOutside = useRef(false);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["work-os"] });
 
   const organization = useQuery<{ organization: AnyRow; memberships: AnyRow[]; teams: AnyRow[]; teamMembers: AnyRow[] }>({
@@ -81,6 +99,19 @@ export default function AdminSettingsPage() {
     }),
     onSuccess: invalidate,
   });
+  const passwordReset = useMutation({
+    mutationFn: (member: AnyRow) =>
+      adminFetch<MemberPasswordResetResult>(`/api/work-os/organization/members/${encodeURIComponent(String(member.id))}/password-reset`, {
+        method: "POST",
+      }),
+    onSuccess: (result) => {
+      setSentResets((previous) => ({
+        ...previous,
+        [result.membershipId]: { sentAt: result.sentAt, email: result.email },
+      }));
+      setLastResetReceipt(`Sent a 1-hour password reset link to ${result.email}.`);
+    },
+  });
   const saveConnection = useMutation({
     mutationFn: (body: AnyRow) => adminFetch("/api/work-os/integrations/connections", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -97,6 +128,15 @@ export default function AdminSettingsPage() {
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("employee");
   const [memberQuery, setMemberQuery] = useState("");
+  const [confirmResetMember, setConfirmResetMember] = useState<AnyRow | null>(null);
+  const [sentResets, setSentResets] = useState<Record<string, { sentAt: string; email: string }>>({});
+  const [lastResetReceipt, setLastResetReceipt] = useState<string | null>(null);
+
+  useEffect(() => {
+    const dialog = confirmDialogRef.current;
+    if (!confirmResetMember || !dialog) return;
+    if (!dialog.open) dialog.showModal();
+  }, [confirmResetMember]);
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState("");
   const [teamPersonId, setTeamPersonId] = useState("");
@@ -111,13 +151,13 @@ export default function AdminSettingsPage() {
 
   const organizationFlags = (organization.data?.organization?.feature_flags ?? {}) as Record<string, boolean>;
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: person.id, label: person.display_name }));
-  const error = organization.error || connections.error || blueprints.error || features.error || membershipAction.error || membershipPatch.error || saveConnection.error || generateBlueprint.error;
+  const error = organization.error || connections.error || blueprints.error || features.error || membershipAction.error || membershipPatch.error || passwordReset.error || saveConnection.error || generateBlueprint.error;
 
   const memberships = useMemo(() => {
     const list = organization.data?.memberships ?? [];
     const needle = memberQuery.trim().toLowerCase();
     if (!needle) return list;
-    return list.filter((member) => `${member.person?.display_name ?? ""} ${member.person?.email ?? ""} ${member.user_id ?? ""}`.toLowerCase().includes(needle));
+    return list.filter((member) => `${member.person?.display_name ?? ""} ${member.email ?? ""} ${member.person?.email ?? ""} ${member.user_id ?? ""}`.toLowerCase().includes(needle));
   }, [organization.data, memberQuery]);
 
   return (
@@ -219,23 +259,28 @@ export default function AdminSettingsPage() {
           </span>
         </div>
 
-        <div className="mt-2 hidden gap-3 border-b pb-2 text-[10px] font-medium text-[var(--text-tertiary)] md:grid md:grid-cols-[minmax(0,1fr)_108px_84px_72px_56px]" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="mt-2 hidden gap-3 border-b pb-2 text-[10px] font-medium text-[var(--text-tertiary)] md:grid md:grid-cols-[minmax(0,1fr)_108px_72px_60px_52px_124px]" style={{ borderColor: "var(--border-subtle)" }}>
           <span>Person</span>
           <span>Role</span>
           <span>Companion</span>
           <span>Desktop</span>
           <span>Active</span>
+          <span className="text-right">Password</span>
         </div>
         <ul>
           {memberships.map((member) => {
-            const label = member.person?.display_name ?? member.user_id;
+            const label = member.person?.display_name ?? member.email ?? member.person?.email ?? member.user_id;
+            const loginEmail = member.email ?? member.person?.email ?? null;
+            const isActive = member.active !== false;
+            const sentRecord = sentResets[String(member.id)];
+            const isSendingThis = passwordReset.isPending && String(passwordReset.variables?.id) === String(member.id);
             return (
-              <li key={String(member.id)} className="grid gap-x-3 gap-y-2 border-b py-2.5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_108px_84px_72px_56px] md:items-center" style={{ borderColor: "var(--border-subtle)" }}>
+              <li key={String(member.id)} className="grid gap-x-3 gap-y-2 border-b py-2.5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_108px_72px_60px_52px_124px] md:items-center" style={{ borderColor: "var(--border-subtle)" }}>
                 <span className="min-w-0">
                   <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">
-                    {member.person?.display_name || member.person?.email || String(member.user_id)}
+                    {member.person?.display_name || loginEmail || String(member.user_id)}
                   </span>
-                  <span className="block truncate text-[10.5px] text-[var(--text-tertiary)]">{member.person?.email ?? "No mapped person"}</span>
+                  <span className="block truncate text-[10.5px] text-[var(--text-tertiary)]">{loginEmail ?? "No mapped person"}</span>
                 </span>
                 <select
                   aria-label={`Role for ${label}`}
@@ -261,10 +306,59 @@ export default function AdminSettingsPage() {
                 <span className="flex items-center gap-1.5">
                   <Switch
                     ariaLabel={`Active for ${label}`}
-                    checked={member.active !== false}
+                    checked={isActive}
                     onChange={(next) => membershipPatch.mutate({ membership_id: member.id, active: next })}
                   />
                   <span className="text-[10.5px] text-[var(--text-tertiary)] md:hidden">Active</span>
+                </span>
+                <span className="flex items-center gap-2 md:justify-end">
+                  {!isActive ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled
+                      title="Activate this member before sending a password reset email"
+                      aria-label={`Password reset unavailable for inactive member ${label}`}
+                    >
+                      Inactive
+                    </Button>
+                  ) : isSendingThis ? (
+                    <Button size="sm" variant="secondary" disabled>
+                      <KeyRound size={12} aria-hidden /> Sending…
+                    </Button>
+                  ) : sentRecord ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-[11px] font-medium" style={{ color: "var(--status-ok)" }}>
+                        Sent {formatResetSentTime(sentRecord.sentAt)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={passwordReset.isPending}
+                        onClick={() => {
+                          passwordReset.reset();
+                          setLastResetReceipt(null);
+                          setConfirmResetMember(member);
+                        }}
+                        className="min-h-[34px] text-[11px] font-medium text-[var(--text-tertiary)] underline underline-offset-2 transition hover:text-[var(--text-primary)] disabled:opacity-50"
+                      >
+                        Resend
+                      </button>
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={passwordReset.isPending}
+                      aria-label={`Send password reset email to ${label}`}
+                      onClick={() => {
+                        passwordReset.reset();
+                        setLastResetReceipt(null);
+                        setConfirmResetMember(member);
+                      }}
+                    >
+                      <KeyRound size={12} aria-hidden /> Send reset
+                    </Button>
+                  )}
                 </span>
               </li>
             );
@@ -275,6 +369,75 @@ export default function AdminSettingsPage() {
             </li>
           ) : null}
         </ul>
+        {lastResetReceipt ? <div className="mt-3"><Notice tone="ok">{lastResetReceipt}</Notice></div> : null}
+        {confirmResetMember ? (
+          <dialog
+            ref={confirmDialogRef}
+            aria-labelledby={confirmTitleId}
+            {...({ closedby: "any" } as Record<string, string>)}
+            className="work-os-confirm-dialog m-auto w-[min(440px,calc(100vw-32px))] rounded-[16px] border p-0 text-[var(--text-primary)] shadow-xl"
+            style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}
+            onPointerDown={(event) => {
+              if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              confirmPressedOutside.current =
+                event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+            }}
+            onPointerUp={(event) => {
+              if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const releasedOutside =
+                event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+              if (confirmPressedOutside.current && releasedOutside) event.currentTarget.close("");
+              confirmPressedOutside.current = false;
+            }}
+            onClose={(event) => {
+              const dialog = event.currentTarget;
+              const choice = dialog.returnValue;
+              dialog.returnValue = "";
+              const target = confirmResetMember;
+              setConfirmResetMember(null);
+              if (choice === "confirm" && target) {
+                passwordReset.mutate(target);
+              }
+            }}
+          >
+            <div className="flex flex-col gap-3.5 p-5">
+              <h1 id={confirmTitleId} className="m-0 text-[16px] font-semibold tracking-[-0.015em] text-[var(--text-primary)]">
+                Send password reset email?
+              </h1>
+              <p className="m-0 text-[12.5px] leading-5 text-[var(--text-secondary)]">
+                This sends a one-time link to choose a new WrazyOS password. Their current password stays unchanged until they complete the reset.
+              </p>
+              <dl className="m-0 flex flex-col gap-2 rounded-[10px] border px-3.5 py-3 text-[12px]" style={{ borderColor: "var(--border)", background: "var(--color-canvas)" }}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[var(--text-tertiary)]">Member</dt>
+                  <dd className="m-0 text-right font-semibold text-[var(--text-primary)]">
+                    {confirmResetMember.person?.display_name || confirmResetMember.email || confirmResetMember.person?.email || "Workspace member"}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[var(--text-tertiary)]">Sign-in email</dt>
+                  <dd className="m-0 break-all text-right font-mono text-[11.5px] font-semibold text-[var(--text-primary)]">
+                    {confirmResetMember.email || confirmResetMember.person?.email || "Resolved from account"}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[var(--text-tertiary)]">Link expiry</dt>
+                  <dd className="m-0 text-right font-semibold text-[var(--text-primary)]">1 hour</dd>
+                </div>
+              </dl>
+              <form method="dialog" className="flex items-center justify-end gap-2 pt-1">
+                <Button type="submit" value="cancel" variant="secondary" autoFocus>
+                  Cancel
+                </Button>
+                <Button type="submit" value="confirm" variant="primary">
+                  Send reset email
+                </Button>
+              </form>
+            </div>
+          </dialog>
+        ) : null}
       </Group>
 
       <Group label="Teams" detail="Teams scope manager review to their own members.">

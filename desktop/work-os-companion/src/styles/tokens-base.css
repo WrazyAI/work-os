@@ -227,7 +227,8 @@ select:focus-visible {
   position: fixed;
   z-index: 5000;
   top: max(18px, env(safe-area-inset-top));
-  right: max(18px, env(safe-area-inset-right));
+  left: 50%;
+  transform: translateX(-50%);
   width: min(340px, calc(100vw - 36px));
   display: grid;
   gap: 8px;
@@ -237,25 +238,31 @@ select:focus-visible {
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
-}.notification-flyouts::-webkit-scrollbar { display: none; width: 0; height: 0; }/* Standing conditions sit in the page's reading order under the masthead.
-   Only the fallback for shell-less surfaces keeps the floating stack, offset
-   below the header so it can never cover the page identity or its actions. */.notification-flyouts.has-persistent {
-  top: max(92px, env(safe-area-inset-top));
-}@media (max-width: 560px) {
-  .notification-flyouts.has-persistent {
-    top: max(80px, env(safe-area-inset-top));
-  }
-}.notification-region {
-  width: min(100%, 1200px);
-  margin: 12px auto 0;
-}.notification-region:empty { display: none; }.notification-region-list {
+}
+.notification-flyouts::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.notification-flyouts[data-expanded="false"] {
+  overflow: visible;
+}
+/* One floating deck for every notification (transient receipts and standing
+   notices): when more than one is present, cards stack behind the front card
+   and fan out to a flat floating list on hover or keyboard focus. */
+.notification-stack {
+  position: relative;
   display: grid;
-  gap: 10px;
-}.notification-region-list .notification-flyout {
-  width: 100%;
-  animation: none;
-}/* Toasts: one compact, rounded raised surface. The tone lives in the icon tile
-   and the action colour; there is no coloured rail (design.md §2.3). */.notification-flyout {
+  gap: 8px;
+  pointer-events: auto;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"] .notification-stack {
+  display: block;
+  height: var(--stack-height);
+  transition: height 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.notification-flyouts[data-stacked="true"][data-expanded="true"] .notification-stack {
+  margin-bottom: 12px;
+}
+/* Toasts: one compact, rounded raised surface. The tone lives in the icon tile
+   and the action colour; there is no coloured rail (design.md §2.3). */
+.notification-flyout {
   --notification-accent: #2e617d;
   --notification-tile: #e8f1f7;
   position: relative;
@@ -263,6 +270,7 @@ select:focus-visible {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: start;
+  align-content: start;
   gap: 10px;
   overflow: hidden;
   padding: 10px 8px 10px 10px;
@@ -270,11 +278,75 @@ select:focus-visible {
   border-radius: 16px;
   background: var(--white);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.05), 0 12px 32px rgba(20, 30, 18, 0.12);
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(20, 30, 18, 0.05), 0 12px 32px rgba(20, 30, 18, 0.12));
   pointer-events: auto;
   animation: notification-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}.notification-flyout.info { --notification-accent: var(--observed); --notification-tile: var(--observed-soft); }.notification-flyout.success { --notification-accent: var(--tool-success); --notification-tile: var(--tool-success-soft); }.notification-flyout.error { --notification-accent: var(--danger); --notification-tile: var(--danger-soft); }.notification-flyout.warning { --notification-accent: var(--warning); --notification-tile: var(--warning-soft); }/* Re-assert the card's own box: the generic .error rule above would otherwise
-   turn an error toast into a flex row with its own colour and padding. */.notification-flyout.error {
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"] .notification-flyout {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  transform-origin: bottom center;
+  animation: none;
+  transition:
+    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease,
+    height 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="0"] {
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="1"] {
+  height: var(--front-height);
+  transform: translate3d(0, 10px, 0) scale(0.955);
+  opacity: 0.94;
+  border-color: var(--line-strong);
+  background: var(--paper);
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-index="2"] {
+  height: var(--front-height);
+  transform: translate3d(0, 20px, 0) scale(0.91);
+  opacity: 0.84;
+  border-color: var(--line-strong);
+  background: var(--inset);
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout[data-stack-behind="hidden"] {
+  height: var(--front-height);
+  transform: translate3d(0, 24px, 0) scale(0.87);
+  opacity: 0;
+  pointer-events: none;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="false"] .notification-flyout:not([data-stack-index="0"]) > * {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="true"] .notification-flyout {
+  height: var(--card-height);
+  transform: translate3d(0, var(--stack-offset, 0px), 0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.notification-flyouts[data-stacked="true"][data-measured="true"][data-expanded="true"] .notification-flyout > * {
+  opacity: 1;
+  transition: opacity 180ms ease 40ms;
+}
+.notification-flyouts[data-paused="true"] .notification-flyout > i {
+  animation-play-state: paused;
+}
+.notification-flyout.info { --notification-accent: var(--observed); --notification-tile: var(--observed-soft); }
+.notification-flyout.success { --notification-accent: var(--tool-success); --notification-tile: var(--tool-success-soft); }
+.notification-flyout.error { --notification-accent: var(--danger); --notification-tile: var(--danger-soft); }
+.notification-flyout.warning { --notification-accent: var(--warning); --notification-tile: var(--warning-soft); }
+/* Re-assert the card's own box: the generic .error rule above would otherwise
+   turn an error toast into a flex row with its own colour and padding. */
+.notification-flyout.error {
   display: grid;
   align-items: start;
   gap: 10px;
@@ -283,7 +355,11 @@ select:focus-visible {
   border-color: rgba(184, 64, 53, 0.28);
   background: var(--danger-soft);
   color: var(--ink);
-}.notification-flyout.error.persistent { align-items: center; padding: 8px 8px 8px 10px; }.notification-flyout.persistent.success { border-color: rgba(44, 110, 63, 0.28); }.notification-icon {
+}
+.notification-flyout.persistent {
+  border-color: var(--line-strong);
+}
+.notification-flyout.persistent.success { border-color: rgba(44, 110, 63, 0.28); }.notification-icon {
   width: 28px;
   height: 28px;
   display: grid;
@@ -352,21 +428,15 @@ select:focus-visible {
   background: color-mix(in srgb, var(--notification-accent) 55%, transparent);
   transform-origin: left;
   animation: notification-life var(--notification-duration) linear both;
-}/* Standing notices read as one slim banner row: title and detail inline, the
-   action at the trailing edge. */.notification-flyout.persistent { align-items: center; padding: 8px 8px 8px 10px; }.notification-flyout.persistent > div { padding-top: 0; }.notification-region-list .notification-flyout.persistent > div {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 12px;
-}.notification-region-list .notification-flyout.persistent strong { flex: 0 0 auto; }.notification-region-list .notification-flyout.persistent p { flex: 1 1 220px; margin: 0; }.notification-region-list .notification-flyout.persistent .notification-actions { flex: 0 0 auto; margin: 0 0 0 auto; }.notification-region-list .notification-flyout.persistent .notification-progress { flex: 1 1 100%; margin-top: 6px; }.notification-flyout.persistent { box-shadow: 0 1px 2px rgba(20, 30, 18, 0.04); }@keyframes notification-enter {
-  from { opacity: 0; transform: translate3d(16px, -4px, 0) scale(0.97); }
+}@keyframes notification-enter {
+  from { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.97); }
   to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }@keyframes notification-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }@media (max-width: 560px) {
   /* Fixed inset edges, not 100vw: a desktop scrollbar makes 100vw wider than
      the layout viewport and pushes the stack's leading edge off screen. */
-  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; }
+  .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; transform: none; }
 }@media (prefers-reduced-motion: reduce) {
-  .notification-flyout, .notification-flyout > i { animation: none; }
+  .notification-stack, .notification-flyout, .notification-flyout > *, .notification-flyout > i { animation: none; transition: none; }
 }.day-grid {
   margin: 0 auto;
   display: grid;

@@ -15,6 +15,7 @@ import type {
   EvidenceRow,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
+  MemberPasswordResetResponse,
   OrganizationResponse,
   PeopleResponse,
   PersonDetailResponse,
@@ -42,6 +43,7 @@ export type {
   EvidenceRow,
   GithubIntegrationActorsResponse,
   GithubIntegrationReposResponse,
+  MemberPasswordResetResponse,
   OrganizationResponse,
   PeopleResponse,
   PersonDetailResponse,
@@ -202,6 +204,8 @@ export const disconnectGithubRepo = (repo: string) =>
 export const saveOrganizationFeatures = (featureFlags: Record<string, boolean>) => send<Record<string, unknown>>("/api/work-os/organization", "PATCH", { feature_flags: featureFlags });
 export const organizationAction = (body: Record<string, unknown>) => send<Record<string, unknown>>("/api/work-os/organization", "POST", body);
 export const organizationMembershipPatch = (body: Record<string, unknown>) => send<Record<string, unknown>>("/api/work-os/organization", "PATCH", body);
+export const sendOrganizationMemberPasswordReset = (membershipId: string) =>
+  send<MemberPasswordResetResponse>(`/api/work-os/organization/members/${encodeURIComponent(membershipId)}/password-reset`, "POST", {});
 export const requestScreenshotAccess = (summaryId: string, reason: string) =>
   send<{ url: string }>(`/api/work-os/evidence/screenshots/${encodeURIComponent(summaryId)}/access`, "POST", { reason });
 
@@ -845,14 +849,16 @@ export function normalizeOrganization(raw: unknown): OrganizationResponse {
     },
     memberships: asRows(source.memberships).map((row) => {
       const person = row.person && typeof row.person === "object" ? asRecord(row.person) : null;
+      const personEmail = person ? asTextOrNull(person.email) : null;
       return {
         id: asText(row.id),
         user_id: asText(row.user_id),
         person_id: asTextOrNull(row.person_id),
+        email: asTextOrNull(row.email) ?? personEmail,
         role: asText(row.role, "employee"),
         active: asBoolean(row.active, true),
         feature_flags: row.feature_flags && typeof row.feature_flags === "object" ? (row.feature_flags as Record<string, boolean>) : null,
-        person: person ? { id: asText(person.id), display_name: asTextOrNull(person.display_name), email: asTextOrNull(person.email) } : null,
+        person: person ? { id: asText(person.id), display_name: asTextOrNull(person.display_name), email: personEmail } : null,
       };
     }),
     teams: asRows(source.teams).map((team) => ({ ...team, id: asText(team.id), name: asText(team.name, "Team") })),

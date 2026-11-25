@@ -81,15 +81,15 @@ function zeroRun(seconds: number, frame = true): PayrollDayInput {
   });
 }
 
-test("the 370-minute example partitions once and resolves a held run exactly once", async () => {
-  const { calculatePayrollDay, applyPayrollDecisions } = await hours();
+test("the 370-minute example partitions once and excludes every inactivity run of 3 minutes or more", async () => {
+  const { calculatePayrollDay } = await hours();
   const day = calculatePayrollDay(example370m());
   assert.equal(day.minutes.eligibleTracked, 370);
   assert.equal(day.minutes.recorded, 370);
   assert.equal(day.minutes.outside, 0);
   assert.equal(day.minutes.break, 20);
-  assert.equal(day.minutes.inactivity, 45);
-  assert.equal(day.minutes.held, 10);
+  assert.equal(day.minutes.inactivity, 55);
+  assert.equal(day.minutes.held, 0);
   assert.equal(day.minutes.manualExcluded, 0);
   assert.equal(day.minutes.recommended, 295);
   assert.equal(day.minutes.approved, 0);
@@ -103,15 +103,8 @@ test("the 370-minute example partitions once and resolves a held run exactly onc
   assert.deepEqual(unionSpans(day.partition.map((item) => item.span)), recorded);
   assert.equal(day.partition.reduce((sum, item) => sum + item.span.endMs - item.span.startMs, 0),
     recorded.reduce((sum, item) => sum + item.endMs - item.startMs, 0), "the partition has no overlaps");
-
-  const decision = payHeld(day);
-  const paid = applyPayrollDecisions(day, [decision]);
-  assert.equal(paid.minutes.recommended, 305);
-  assert.equal(paid.minutes.held, 0);
-  assert.equal(paid.exactMs.held, 0);
-  assert.equal(paid.findings.find((finding) => finding.key === decision.findingKey)?.status, "resolved_payable");
-  assert.deepEqual(applyPayrollDecisions(paid, [decision]), paid, "replaying a decision is inert");
-  assert.deepEqual(applyPayrollDecisions(day, [decision, decision]), paid, "duplicate decisions apply once");
+  assert.equal(day.findings.some((finding) => finding.kind === "inactivity" && finding.status === "needs_review"), false);
+  assert.ok(day.findings.some((finding) => finding.kind === "inactivity" && finding.status === "auto_excluded" && finding.minutes === 10));
 });
 
 test("inactivity needs three continuous minutes and never reaches into a gap", async () => {
@@ -133,6 +126,17 @@ test("inactivity needs three continuous minutes and never reaches into a gap", a
   assert.equal(sparse.minutes.held, 0);
   assert.equal(sparse.minutes.recommended, 60);
   assert.ok(sparse.findings.some((finding) => finding.kind === "unverified_gap" && finding.durationMs === 15 * 60_000));
+});
+
+test("sparse zero samples never bridge into a continuous inactivity run", async () => {
+  const { calculatePayrollDay } = await hours();
+  const start = t("09:00");
+  const day = calculatePayrollDay(input({
+    sessions: [session(spanMs(start, start + 11 * 60_000), spanMs(start, start + 11 * 60_000))],
+    captures: [cap(start, start + 60_000, 0), cap(start + 5 * 60_000, start + 6 * 60_000, 0), cap(start + 10 * 60_000, start + 11 * 60_000, 0)],
+  }));
+  assert.equal(day.minutes.inactivity, 0);
+  assert.equal(day.minutes.recommended, 11);
 });
 
 test("a null sample and an unknown capture split a zero run instead of extending it", async () => {
@@ -176,7 +180,8 @@ test("meeting, training and reading exceptions are payable; a partial exception 
     exceptions: [{ span: spanMs(start, start + 15 * 60_000), kind: "meeting", citations: [] }],
   }));
   assert.equal(noNonwork.minutes.recommended, 15);
-  assert.equal(noNonwork.minutes.held, 30);
+  assert.equal(noNonwork.minutes.held, 0);
+  assert.equal(noNonwork.minutes.inactivity, 30);
 });
 
 test("contradictory zero-run evidence is held rather than paid or deducted", async () => {
@@ -193,8 +198,8 @@ test("contradictory zero-run evidence is held rather than paid or deducted", asy
   assert.equal(day.minutes.recommended, 0);
 });
 
-test("breaks union across sources and a disputed break is held once, not paid and deducted", async () => {
-  const { calculatePayrollDay, applyPayrollDecisions } = await hours();
+test("breaks union across sources and activity during a break never becomes payable", async () => {
+  const { calculatePayrollDay } = await hours();
   const overlapping = calculatePayrollDay(input({
     sessions: [session(sp("15:00", "16:00"), sp("15:00", "16:00"))],
     captures: [...everyMinute("15:00", "15:10", 30), ...everyMinute("15:30", "16:00", 30)],
@@ -207,19 +212,27 @@ test("breaks union across sources and a disputed break is held once, not paid an
     captures: [...everyMinute("15:00", "15:10", 30), ...everyMinute("15:10", "15:30", 5), ...everyMinute("15:30", "16:00", 30)],
     breaks: [{ span: sp("15:10", "15:30"), source: "scheduled" }],
   }));
-  assert.equal(disputed.minutes.break, 0);
-  assert.equal(disputed.minutes.held, 20);
+  assert.equal(disputed.minutes.break, 20);
+  assert.equal(disputed.minutes.held, 0);
   assert.equal(disputed.minutes.recommended, 40);
-  const finding = disputed.findings.find((item) => item.kind === "activity_during_break")!;
-  const paid = applyPayrollDecisions(disputed, [{ requestKey: "pay-break", findingKey: finding.key, sourceHash: finding.sourceHash, action: "payable", note: "Worked through the scheduled break" }]);
-  assert.equal(paid.minutes.recommended, 60);
-  assert.equal(paid.minutes.break, 0);
-  assert.equal(paid.minutes.held, 0);
-  const excludedAgain = applyPayrollDecisions(disputed, [{ requestKey: "exclude-break", findingKey: finding.key, sourceHash: finding.sourceHash, action: "excluded", note: "The break was not worked" }]);
-  assert.equal(excludedAgain.minutes.break, 20);
-  const restored = applyPayrollDecisions(excludedAgain, [{ requestKey: "pay-break-2", findingKey: finding.key, sourceHash: finding.sourceHash, action: "payable", note: "Correction: the break was worked" }]);
-  assert.equal(restored.minutes.break, 0);
-  assert.equal(restored.minutes.recommended, 60);
+  assert.equal(disputed.findings.some((item) => item.kind === "activity_during_break"), false);
+  const finding = disputed.findings.find((item) => item.kind === "break")!;
+  assert.equal(finding.status, "auto_excluded");
+  assert.match(finding.reason, /break/i);
+  assert.match(finding.reason, /not work/i);
+});test("near-adjacent provider break slices merge into one break run", async () => {
+  const { calculatePayrollDay } = await hours();
+  const day = calculatePayrollDay(input({
+    sessions: [session(spanMs(t("15:00"), t("15:10")), spanMs(t("15:00"), t("15:10")))],
+    captures: everyMinute("15:00", "15:10", 30),
+    breaks: [
+      { span: spanMs(t("15:02"), t("15:03")), source: "provider" },
+      { span: spanMs(t("15:03") + 3_000, t("15:04") + 3_000), source: "provider" },
+    ],
+  }));
+  const findings = day.findings.filter((finding) => finding.kind === "break");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.minutes, 2);
 });
 
 test("pre-shift and end-plus-sixty boundaries are excluded exactly", async () => {
@@ -291,13 +304,20 @@ test("no schedule, open sessions, leave work and no work are explicit blockers",
 
 test("decisions reject stale, structurally invalid and reasonless changes", async () => {
   const { calculatePayrollDay, applyPayrollDecisions } = await hours();
-  const day = calculatePayrollDay(example370m());
+  const start = t("09:00");
+  const day = calculatePayrollDay(input({
+    sessions: [session(spanMs(start, start + 180_000), spanMs(start, start + 180_000))],
+    captures: [cap(start, start + 180_000, 0)],
+    exceptions: [{ span: spanMs(start, start + 180_000), kind: "meeting", citations: [] }],
+    frameSignals: [{ span: spanMs(start, start + 180_000), category: "nonwork", confidence: 0.9, citations: [] }],
+  }));
   const decision = payHeld(day);
   assert.throws(() => applyPayrollDecisions(day, [{ ...decision, sourceHash: "old-source" }]), /stale|source/i);
   assert.throws(() => applyPayrollDecisions(day, [{ ...decision, note: "" }]), /reason|note/i);
   assert.throws(() => applyPayrollDecisions(day, [{ ...decision, action: "acknowledged" }]), /acknowledge/i);
-  const breakFinding = day.findings.find((finding) => finding.kind === "break")!;
-  assert.throws(() => applyPayrollDecisions(day, [{ requestKey: "pay-break", findingKey: breakFinding.key, sourceHash: breakFinding.sourceHash, action: "payable", note: "Pay it" }]), /break/i);
+  const breakDay = calculatePayrollDay(example370m());
+  const breakFinding = breakDay.findings.find((finding) => finding.kind === "break")!;
+  assert.throws(() => applyPayrollDecisions(breakDay, [{ requestKey: "pay-break", findingKey: breakFinding.key, sourceHash: breakFinding.sourceHash, action: "payable", note: "Pay it" }]), /break/i);
   const gapDay = calculatePayrollDay(input({ sessions: [session(sp("15:00", "16:00"), sp("15:00", "16:00"))], captures: everyMinute("15:00", "15:10", 30) }));
   const gap = gapDay.findings.find((finding) => finding.kind === "unverified_gap")!;
   const excluded = applyPayrollDecisions(gapDay, [{ requestKey: "exclude-gap", findingKey: gap.key, sourceHash: gap.sourceHash, action: "excluded", note: "No evidence of work in this interval" }]);

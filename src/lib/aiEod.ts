@@ -325,3 +325,158 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
   const hours = await ensureHourlyScreenshotSummaries({ organizationId, personId, date });
   return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), pending, hours };
 }
+
+export interface EodSummaryComposition {
+  completed: string[];
+  inProgress: string[];
+  next: string[];
+}
+
+/** Streams the employee-facing opening paragraph from their own three
+ * sections, grounded in the recorded day. Returns the provider text stream;
+ * the route owns the response and the fallback when the model is offline. */
+export async function streamEodSummary(
+  grounding: EodGrounding,
+  composition: EodSummaryComposition,
+): Promise<{ ok: true; stream: ReadableStream<Uint8Array> } | { ok: false; reason: EodFailure; detail: string }> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
+  const lines = (items: string[]) => items.length ? items.map((line) => `- ${line}`).join("\n") : "- none";
+  const employeeWords = [
+    "Completed:",
+    lines(composition.completed),
+    "",
+    "In progress:",
+    lines(composition.inProgress),
+    "",
+    "Next:",
+    lines(composition.next),
+  ].join("\n");
+  let response: Response;
+  try {
+    response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(aiRequestBody(EOD_MODEL, {
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You write the opening summary paragraph of an employee's Work OS end-of-day report.",
+              "Write 2 to 4 sentences, 45 to 90 words, in plain past tense. No bullets, headings, labels, markdown, emojis, or quotation marks around the whole paragraph.",
+              "The employee's three sections are their own words and the only claims you may state. Use the recorded facts only to keep names, projects, and context accurate; never add a completion, outcome, timing, or evidence claim that is not in their lines.",
+              "Synthesize rather than copy: connect the main completed outcome to what remains in progress and what starts next. Do not repeat the same sentence pattern.",
+            ].join(" "),
+          },
+          {
+            role: "user",
+            content: `Employee's EOD sections:\n${employeeWords}\n\nRecorded day facts (context only; do not add claims):\n${buildEodFactBlock(grounding)}\n\nReturn only the summary paragraph.`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: AI_TOKEN_BUDGETS.eodSummary,
+        stream: true,
+      })),
+      signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
+  }
+  if (!response.ok || !response.body) {
+    return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
+  }
+  const body = response.body;
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = "";
+  let closed = false;
+  let terminal = false;
+  return {
+    ok: true,
+    stream: new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const emitData = (data: string): "done" | "text" | "skip" => {
+          if (!data) return "skip";
+          if (data === "[DONE]") {
+            terminal = true;
+            return "done";
+          }
+          try {
+            const payload = JSON.parse(data) as {
+              choices?: Array<{ delta?: { content?: unknown }; finish_reason?: string }>;
+              usage?: Record<string, unknown>;
+              error?: unknown;
+            };
+            if (payload.error) throw new Error("The summary provider stopped before finishing.");
+            if (payload.usage) recordAiUsage("eod_summary", EOD_MODEL, payload);
+            const choice = payload.choices?.[0];
+            // "length" means the model was cut off. A partial paragraph must
+            // not be stored as a successful summary; the client falls back to
+            // the explicit assembled paragraph.
+            if (choice?.finish_reason === "error" || choice?.finish_reason === "length" || choice?.finish_reason === "content_filter") {
+              throw new Error("The summary provider stopped before finishing.");
+            }
+            if (choice?.finish_reason === "stop") terminal = true;
+            const content = choice?.delta?.content;
+            if (typeof content === "string" && content) {
+              controller.enqueue(encoder.encode(content));
+              return "text";
+            }
+            return "skip";
+          } catch (error) {
+            // A malformed or partial event is skipped; the next read completes
+            // it. A provider error event is not malformed and must surface.
+            if (error instanceof SyntaxError) return "skip";
+            throw error;
+          }
+        };
+        try {
+          while (!closed) {
+            const { done, value } = await reader.read();
+            if (done) {
+              // A final event without its blank-line delimiter still counts.
+              const tail = buffer.trim();
+              if (tail) {
+                for (const line of tail.split(/\r\n|\r|\n/)) {
+                  if (!line.startsWith("data:")) continue;
+                  if (emitData(line.slice(5).trim()) === "done") break;
+                }
+              }
+              if (!terminal) throw new Error("The summary stream ended before completion.");
+              closed = true;
+              controller.close();
+              return;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            // SSE permits LF, CRLF and CR event boundaries. The buffer keeps a
+            // delimiter that arrives across reads until it is complete.
+            const events = buffer.split(/\r\n\r\n|\r\r|\n\n/);
+            buffer = events.pop() ?? "";
+            let emitted = false;
+            for (const event of events) {
+              for (const line of event.split(/\r\n|\r|\n/)) {
+                if (!line.startsWith("data:")) continue;
+                const result = emitData(line.slice(5).trim());
+                if (result === "done") {
+                  closed = true;
+                  controller.close();
+                  return;
+                }
+                if (result === "text") emitted = true;
+              }
+            }
+            if (emitted) return;
+          }
+        } catch (error) {
+          closed = true;
+          controller.error(error);
+        }
+      },
+      cancel() {
+        closed = true;
+        void reader.cancel().catch(() => {});
+      },
+    }),
+  };
+}

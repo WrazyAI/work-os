@@ -37,12 +37,35 @@ export async function GET(req: Request) {
       db.from("work_team_members").select("team_id,person_id,is_manager,person:work_people(id,display_name,email)"),
     ]);
     for (const result of [organization, memberships, teams, teamMembers]) if (result.error) throw result.error;
-    const teamIds = new Set((teams.data ?? []).map((team: any) => team.id));
+    const rawMemberships = (memberships.data ?? []) as Array<{
+      id: string;
+      user_id: string | null;
+      person_id: string | null;
+      role: string;
+      active: boolean;
+      feature_flags: Record<string, boolean> | null;
+      person?: { id?: string; display_name?: string | null; email?: string | null } | null;
+    }>;
+    const userIds = [...new Set(rawMemberships.map((member) => String(member.user_id || "")).filter(Boolean))];
+    const profileEmailByUserId = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await db.from("profiles").select("id,email").in("id", userIds);
+      if (profilesError) throw profilesError;
+      for (const profile of profiles ?? []) {
+        if (profile?.id && typeof profile.email === "string" && profile.email.trim()) {
+          profileEmailByUserId.set(String(profile.id), profile.email.trim());
+        }
+      }
+    }
+    const teamIds = new Set(((teams.data ?? []) as Array<{ id: string }>).map((team) => team.id));
     return NextResponse.json({
       organization: organization.data,
-      memberships: memberships.data ?? [],
+      memberships: rawMemberships.map((member) => ({
+        ...member,
+        email: profileEmailByUserId.get(String(member.user_id || "")) ?? member.person?.email ?? null,
+      })),
       teams: teams.data ?? [],
-      teamMembers: (teamMembers.data ?? []).filter((member: any) => teamIds.has(member.team_id)),
+      teamMembers: ((teamMembers.data ?? []) as Array<{ team_id: string }>).filter((member) => teamIds.has(member.team_id)),
     });
   } catch (error) {
     return jsonError(error);

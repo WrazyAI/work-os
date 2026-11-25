@@ -359,7 +359,7 @@ body:has(.admin-workspace) .notifications-card {
 
 .admin-button:hover:not(:disabled) {
   border-color: var(--line-strong, #c5cec1);
-  background: #f2f4ee;
+  background: var(--inset);
 }
 
 .admin-button:disabled {
@@ -374,7 +374,7 @@ body:has(.admin-workspace) .notifications-card {
 }
 
 .admin-button.primary:hover:not(:disabled) {
-  background: #24301f;
+  background: color-mix(in srgb, var(--ink) 88%, var(--paper));
 }
 
 .admin-button.ghost {
@@ -3165,5 +3165,176 @@ body:has(.admin-workspace) .notifications-card {
 @media (max-width: 560px) {
   .admin-kpi-strip > :last-child {
     grid-column: 1 / -1;
+  }
+}
+
+.admin-member-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-member-identity b {
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-member-identity small {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-table thead th.admin-col-end,
+.admin-table tbody td.admin-member-reset-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-member-reset-sent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-member-reset-receipt {
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--status-ok, #3a7318);
+}
+
+.admin-member-reset-resend {
+  padding: 4px 2px;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 550 12px/1.2 Inter, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.admin-member-reset-resend:hover {
+  color: var(--ink);
+}
+
+.admin-member-reset-resend:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.admin-member-reset-resend:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Native confirmation dialog: never set display unconditionally on <dialog>;
+   scope layout to [open] and stop scroll chaining over the modal & backdrop. */
+dialog.admin-confirm-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 20px 54px rgba(15, 23, 18, 0.24);
+}
+
+dialog.admin-confirm-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog.admin-confirm-dialog::backdrop {
+  background: rgba(12, 16, 14, 0.52);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.admin-confirm-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+}
+
+.admin-confirm-dialog-body h1 {
+  margin: 0;
+  font: 680 16px/1.3 Manrope, Inter, sans-serif;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.admin-confirm-dialog-copy {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.admin-confirm-dialog-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  font-size: 12px;
+}
+
+.admin-confirm-dialog-meta > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-confirm-dialog-meta dt {
+  color: var(--muted);
+}
+
+.admin-confirm-dialog-meta dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+  word-break: break-word;
+}
+
+.admin-confirm-dialog-meta dd.is-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.admin-confirm-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+[data-theme="dark"] .admin-member-reset-receipt {
+  color: #8fd24a;
+}
+
+@media (max-width: 720px) {
+  .admin-table tbody td.admin-member-reset-cell {
+    text-align: left;
+  }
+
+  .admin-member-reset-sent {
+    justify-content: flex-start;
   }
 }

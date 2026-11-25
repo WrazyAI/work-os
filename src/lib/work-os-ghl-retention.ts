@@ -11,8 +11,8 @@ export const GHL_EXPIRED_EVIDENCE_NOTICE = "[GHL email evidence expired and was 
 const CONSUMER_FIELDS: Record<string, Set<string>> = {
   work_activity_intervals: new Set(["headline", "ai_detail", "structured_summary"]),
   work_evidence: new Set(["summary"]),
-  work_reports: new Set(["generated_markdown", "submitted_markdown"]),
-  work_report_versions: new Set(["markdown"]),
+  work_reports: new Set(["markdown", "submitted_markdown", "structured_report"]),
+  work_report_versions: new Set(["markdown", "structured_report"]),
 };
 
 export async function registerGhlContentReference(input: {
@@ -99,14 +99,18 @@ export async function purgeExpiredGhlContent(now: Date): Promise<{ expired: numb
       const table = String(reference.consumer_table);
       const field = String(reference.consumer_field);
       if (!CONSUMER_FIELDS[table]?.has(field) || !spans.length) continue;
-      let expression = field === "structured_summary" ? `${field}::text` : field;
+      // structured_summary and structured_report are JSONB; redact through
+      // their text representation, then cast back so the stored value stays
+      // valid JSON. Only the registered span changes.
+      const jsonbField = field === "structured_summary" || field === "structured_report";
+      let expression = jsonbField ? `${field}::text` : field;
       spans.forEach((_, index) => {
         expression = `replace(${expression}, $${index + 1}, $${spans.length + 1})`;
       });
-      if (field === "structured_summary") expression = `${expression}::jsonb`;
+      if (jsonbField) expression = `${expression}::jsonb`;
       const updated = await getPool().query(
         `update ${table} set ${field} = ${expression} where id = $${spans.length + 2}::uuid
-           and (${spans.map((_, index) => `${field}${field === "structured_summary" ? "::text" : ""} like '%' || $${index + 1} || '%'`).join(" or ")})
+           and (${spans.map((_, index) => `${field}${jsonbField ? "::text" : ""} like '%' || $${index + 1} || '%'`).join(" or ")})
          returning id`,
         [...spans, GHL_EXPIRED_EVIDENCE_NOTICE, String(reference.consumer_id)],
       );

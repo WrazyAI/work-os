@@ -104,7 +104,7 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
       ? (await client.query(`SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND id=$3`, [scope.organizationId, reviewId, review.current_approval_id])).rows[0]
       : null;
     const briefs = (await client.query(`SELECT * FROM work_payroll_week_briefs WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY week`, [scope.organizationId, reviewId, review.analysis_revision])).rows;
-    const revisionToken = (await client.query(`SELECT source_token,provider_verified_at FROM work_payroll_analysis_revisions WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`, [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
+    const revisionToken = (await client.query(`SELECT source_token,provider_verified_at,apps_summary FROM work_payroll_analysis_revisions WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`, [scope.organizationId, reviewId, scope.personId, review.analysis_revision])).rows[0];
     const sourceChanged = Boolean(approval && revisionToken?.source_token && (await readPayrollSourceToken(scope)) !== String(revisionToken.source_token));
     const recapStatsRow = (await client.query(`SELECT
         count(*) FILTER (WHERE review_status IN ('confirmed','amended') AND coalesce(review_source,'employee')='employee')::int AS employee_reviewed,
@@ -136,6 +136,9 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
         autoApproved: Number(recapStatsRow?.auto_approved ?? 0),
         pending: Number(recapStatsRow?.pending ?? 0),
       },
+      apps: Array.isArray(object(revisionToken?.apps_summary).items)
+        ? object(revisionToken?.apps_summary) as unknown as PayrollReview["apps"]
+        : null,
     };
   } finally { client.release(); }
 }

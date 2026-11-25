@@ -68,6 +68,8 @@ and the caption menu run the same actions.
 ## Navigation states
 
 Navigation is a stable noun: My Day, Tasks, EOD Review, Insights, Evidence, Settings.
+Administration mode replaces these with Overview, People, Tasks, EOD Review,
+Payroll, Insights, Evidence, and Settings.
 The active destination uses a quiet inset surface, ink/signal icon treatment,
 and a visible focus ring. A narrow marker is allowed only for the primary
 navigation rail itself; it is not allowed beside content rows, task rows, cards,

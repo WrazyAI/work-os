@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
+import { Cable, KeyRound, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, workspaceDegradedNotice } from "./adminNotifications";
 import {
@@ -20,8 +20,10 @@ import {
   organizationMembershipPatch,
   relativeTime,
   saveOrganizationFeatures,
+  sendOrganizationMemberPasswordReset,
   statusLabel,
 } from "./data";
+import type { OrganizationMembershipRow } from "./types";
 import { AdminButton, AdminCard, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
 
 const FEATURES: Array<{ key: string; label: string; detail: string }> = [
@@ -65,11 +67,22 @@ export function SettingsErrorNotices({ errors }: { errors: unknown[] }) {
   ))}</>;
 }
 
+function formatResetSentTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "just now";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export default function SettingsPage({ personalSettings, activeCard }: { personalSettings?: ReactNode; activeCard?: AdminSettingsCardId }) {
   const queryClient = useQueryClient();
   const notifications = useNotifications();
+  const confirmTitleId = useId();
+  const confirmDialogRef = useRef<HTMLDialogElement | null>(null);
+  const confirmPressedOutside = useRef(false);
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("employee");
+  const [confirmResetMember, setConfirmResetMember] = useState<OrganizationMembershipRow | null>(null);
+  const [sentResets, setSentResets] = useState<Record<string, { sentAt: string; email: string }>>({});
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState("");
   const [teamPersonId, setTeamPersonId] = useState("");
@@ -126,6 +139,22 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
       }
     },
   });
+  const passwordReset = useMutation({
+    mutationFn: (member: OrganizationMembershipRow) => sendOrganizationMemberPasswordReset(member.id),
+    onSuccess: (result) => {
+      setSentResets((previous) => ({
+        ...previous,
+        [result.membershipId]: { sentAt: result.sentAt, email: result.email },
+      }));
+      notifications.success(`Sent a 1-hour password reset link to ${result.email}.`, "Password reset sent");
+    },
+  });
+
+  useEffect(() => {
+    const dialog = confirmDialogRef.current;
+    if (!confirmResetMember || !dialog) return;
+    if (!dialog.open) dialog.showModal();
+  }, [confirmResetMember]);
   // One standing condition for this page: the workspace status endpoint says
   // the schema or the Nifty connection is degraded. Stable key, cleared when
   // the status is healthy again.
@@ -222,46 +251,157 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Add member
           </AdminButton>
         </div>
-        <div className="admin-table-wrap">
+        <div className="admin-table-wrap" tabIndex={0} role="region" aria-label="Workspace members">
           <table className="admin-table">
-            <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Active</th></tr></thead>
+            <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Active</th><th className="admin-col-end">Password</th></tr></thead>
             <tbody>
-              {memberships.map((member) => (
-                <tr key={member.id} className="static">
-                  <td data-label="Member">
-                    <span className="min-w-0">
-                      <b>{member.person?.display_name ?? member.person?.email ?? "Unmapped member"}</b>
-                      <small>{member.person?.email ?? member.user_id}</small>
-                    </span>
-                  </td>
-                  <td data-label="Person" className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
-                  <td data-label="Role">
-                    <SelectField
-                      ariaLabel={`Role for ${member.person?.display_name ?? member.id}`}
-                      value={member.role}
-                      onChange={(next) => membership.mutate({ membership_id: member.id, role: next })}
-                      options={[{ value: "employee", label: "Employee" }, { value: "manager", label: "Manager" }, { value: "admin", label: "Administrator" }]}
-                    />
-                  </td>
-                  <td data-label="Active">
-                    <label className="admin-toggle">
-                      <input
-                        type="checkbox"
-                        checked={member.active}
-                        disabled={membership.isPending}
-                        onChange={(event) => membership.mutate({ membership_id: member.id, active: event.target.checked })}
+              {memberships.map((member) => {
+                const displayName = member.person?.display_name ?? member.email ?? member.person?.email ?? "Unmapped member";
+                const loginEmail = member.email ?? member.person?.email ?? null;
+                const sentRecord = sentResets[member.id];
+                const isSendingThis = passwordReset.isPending && passwordReset.variables?.id === member.id;
+                return (
+                  <tr key={member.id} className="static">
+                    <td data-label="Member">
+                      <span className="admin-member-identity">
+                        <b>{displayName}</b>
+                        <small>{loginEmail ?? member.user_id}</small>
+                      </span>
+                    </td>
+                    <td data-label="Person" className="admin-quiet">{member.person_id ? "Mapped" : "No person mapping"}</td>
+                    <td data-label="Role">
+                      <SelectField
+                        ariaLabel={`Role for ${displayName}`}
+                        value={member.role}
+                        onChange={(next) => membership.mutate({ membership_id: member.id, role: next })}
+                        options={[{ value: "employee", label: "Employee" }, { value: "manager", label: "Manager" }, { value: "admin", label: "Administrator" }]}
                       />
-                      <span aria-hidden />
-                      <em>{member.active ? "Active" : "Inactive"}</em>
-                    </label>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td data-label="Active">
+                      <label className="admin-toggle">
+                        <input
+                          type="checkbox"
+                          checked={member.active}
+                          disabled={membership.isPending}
+                          onChange={(event) => membership.mutate({ membership_id: member.id, active: event.target.checked })}
+                        />
+                        <span aria-hidden />
+                        <em>{member.active ? "Active" : "Inactive"}</em>
+                      </label>
+                    </td>
+                    <td data-label="Password" className="admin-member-reset-cell">
+                      {!member.active ? (
+                        <AdminButton
+                          variant="secondary"
+                          disabled
+                          title="Activate this member before sending a password reset email"
+                          ariaLabel={`Password reset unavailable for inactive member ${displayName}`}
+                        >
+                          Inactive
+                        </AdminButton>
+                      ) : isSendingThis ? (
+                        <AdminButton variant="secondary" disabled icon={KeyRound}>
+                          Sending…
+                        </AdminButton>
+                      ) : sentRecord ? (
+                        <span className="admin-member-reset-sent">
+                          <span className="admin-member-reset-receipt">Sent {formatResetSentTime(sentRecord.sentAt)}</span>
+                          <button
+                            type="button"
+                            className="admin-member-reset-resend"
+                            disabled={passwordReset.isPending}
+                            onClick={() => {
+                              passwordReset.reset();
+                              setConfirmResetMember(member);
+                            }}
+                          >
+                            Resend
+                          </button>
+                        </span>
+                      ) : (
+                        <AdminButton
+                          variant="secondary"
+                          icon={KeyRound}
+                          disabled={passwordReset.isPending}
+                          ariaLabel={`Send password reset email to ${displayName}`}
+                          onClick={() => {
+                            passwordReset.reset();
+                            setConfirmResetMember(member);
+                          }}
+                        >
+                          Send reset
+                        </AdminButton>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <SettingsErrorNotices errors={[membership.error, actionCard === "members" ? action.error : null]} />
+        <SettingsErrorNotices errors={[membership.error, passwordReset.error, actionCard === "members" ? action.error : null]} />
       </AdminCard>
+      {confirmResetMember ? (
+        <dialog
+          ref={confirmDialogRef}
+          className="admin-confirm-dialog"
+          aria-labelledby={confirmTitleId}
+          {...({ closedby: "any" } as Record<string, string>)}
+          onPointerDown={(event) => {
+            if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            confirmPressedOutside.current =
+              event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+          }}
+          onPointerUp={(event) => {
+            if (typeof HTMLDialogElement !== "undefined" && "closedBy" in HTMLDialogElement.prototype) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const releasedOutside =
+              event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+            if (confirmPressedOutside.current && releasedOutside) event.currentTarget.close("");
+            confirmPressedOutside.current = false;
+          }}
+          onClose={(event) => {
+            const dialog = event.currentTarget;
+            const choice = dialog.returnValue;
+            dialog.returnValue = "";
+            const target = confirmResetMember;
+            setConfirmResetMember(null);
+            if (choice === "confirm" && target) {
+              passwordReset.mutate(target);
+            }
+          }}
+        >
+          <div className="admin-confirm-dialog-body">
+            <h1 id={confirmTitleId}>Send password reset email?</h1>
+            <p className="admin-confirm-dialog-copy">
+              This sends a one-time link to choose a new WrazyOS password. Their current password stays unchanged until they complete the reset.
+            </p>
+            <dl className="admin-confirm-dialog-meta">
+              <div>
+                <dt>Member</dt>
+                <dd>{confirmResetMember.person?.display_name ?? confirmResetMember.email ?? confirmResetMember.person?.email ?? "Workspace member"}</dd>
+              </div>
+              <div>
+                <dt>Sign-in email</dt>
+                <dd className="is-mono">{confirmResetMember.email ?? confirmResetMember.person?.email ?? "Resolved from account"}</dd>
+              </div>
+              <div>
+                <dt>Link expiry</dt>
+                <dd>1 hour</dd>
+              </div>
+            </dl>
+            <form method="dialog" className="admin-confirm-dialog-actions">
+              <button type="submit" value="cancel" className="admin-button secondary" autoFocus>
+                Cancel
+              </button>
+              <button type="submit" value="confirm" className="admin-button primary">
+                Send reset email
+              </button>
+            </form>
+          </div>
+        </dialog>
+      ) : null}
 
       <AdminCard className="admin-card-teams" icon={UsersRound} title="Teams" detail="Teams scope what managers can review and what the planning surfaces group">
         <div className="admin-inline-fields">

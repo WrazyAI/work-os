@@ -79,6 +79,11 @@ test("manager, resolved, expired, sensitive and revoked-consent frames are refus
     await assert.rejects(previewPayrollScreenshot(manager, { reviewId, findingId: findingKey, summaryId, reason: "Manager", requestKey: "p" }, now), /admin/i);
     await f.db.query("update work_payroll_findings set status='resolved_payable' where review_id=$1", [reviewId]);
     await assert.rejects(previewPayrollScreenshot(adminAccess, { reviewId, findingId: findingKey, summaryId, reason: "Resolved", requestKey: "p" }, now), /unresolved|disputed/i);
+    await f.db.query("update work_payroll_findings set status='auto_excluded', kind='inactivity', effect='exclude' where review_id=$1", [reviewId]);
+    const excludedImage = await previewPayrollScreenshot(adminAccess, { reviewId, findingId: findingKey, summaryId, reason: "Checking an excluded inactivity interval", requestKey: "excluded" }, now, {
+      loadImage: async () => ({ bytes: new Uint8Array([4, 5]), contentType: "image/jpeg" }),
+    });
+    assert.deepEqual([...excludedImage.bytes], [4, 5]);
     await f.db.query("update work_payroll_findings set status='needs_review' where review_id=$1", [reviewId]);
     await f.db.query("update work_screenshot_summaries set expires_at='2026-01-01T00:00:00Z' where id=$1", [summaryId]);
     await assert.rejects(previewPayrollScreenshot(adminAccess, { reviewId, findingId: findingKey, summaryId, reason: "Expired", requestKey: "p" }, now), /expired/i);

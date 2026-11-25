@@ -143,6 +143,20 @@ function keysFor(date: string) {
   };
 }
 
+/** Provider break captures arrive about one minute apart with a few seconds
+ * of clock drift. Merge those near-adjacent slices into one break run; leave
+ * genuinely separated breaks alone. */
+function mergeBreakRuns(spans: Span[], toleranceMs = 90_000): Span[] {
+  const merged = unionSpans(spans);
+  const out: Span[] = [];
+  for (const span of merged) {
+    const last = out.at(-1);
+    if (last && span.startMs - last.endMs <= toleranceMs) last.endMs = Math.max(last.endMs, span.endMs);
+    else out.push({ ...span });
+  }
+  return out;
+}
+
 export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   assertInput(input);
   const nextKey = keysFor(input.date);
@@ -175,23 +189,15 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
     ...outside.map((span) => ({ span, category: "outside" as const, findingKey: null })),
   ];
 
-  const breakSpans = intersectSpans(unionSpans(input.breaks.map((item) => item.span)), tracked);
-  const activitySpans = unionSpans(input.captures
-    .filter((capture) => capture.span && capture.activity !== null && capture.activity > 0)
-    .map((capture) => capture.span!));
-  const disputedBreaks = intersectSpans(breakSpans, activitySpans);
-  const cleanBreaks = subtractSpans(breakSpans, disputedBreaks);
-  for (const span of cleanBreaks) {
+  // Break time is unpaid, full stop. Worktivity captures no screenshots during
+  // a break, so activity samples inside one are not work evidence and never
+  // become a payable decision.
+  const breakSpans = intersectSpans(mergeBreakRuns(input.breaks.map((item) => item.span)), tracked);
+  for (const span of breakSpans) {
     const key = nextKey("break", span);
     parts = applyZone(parts, span, "break", key, (part) => part.category === "payable");
     findings.push(finding(input, key, "break", "auto_excluded", "exclude", span, span.endMs - span.startMs,
-      "Recorded break time is unpaid and is excluded once.", false, "none"));
-  }
-  for (const span of disputedBreaks) {
-    const key = nextKey("activity_during_break", span);
-    parts = applyZone(parts, span, "held", key, (part) => part.category === "payable");
-    findings.push(finding(input, key, "activity_during_break", "needs_review", "hold", span, span.endMs - span.startMs,
-      "Recorded activity overlaps a scheduled or provider break; decide whether the break was worked.", true, "decide"));
+      "Recorded break time is unpaid and excluded once; activity during a break is not work evidence.", false, "none"));
   }
 
   const zeroSpans = unionSpans(input.captures
@@ -231,13 +237,17 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
         findings.push(finding(input, key, "inactivity", "auto_excluded", "exclude", zone, zone.endMs - zone.startMs,
           "Continuous verified zero activity with clear non-work evidence; the whole run is excluded.", false, "none"));
       }
-      for (const zone of [...contradictionZones, ...heldZones]) {
+      for (const zone of heldZones) {
+        const key = nextKey("inactivity", zone);
+        parts = applyZone(parts, zone, "inactivity", key, (part) => part.category === "payable");
+        findings.push(finding(input, key, "inactivity", "auto_excluded", "exclude", zone, zone.endMs - zone.startMs,
+          "Continuous verified zero activity for 3 minutes or more is excluded from pay.", false, "none"));
+      }
+      for (const zone of contradictionZones) {
         const key = nextKey("inactivity", zone);
         parts = applyZone(parts, zone, "held", key, (part) => part.category === "payable");
         findings.push(finding(input, key, "inactivity", "needs_review", "hold", zone, zone.endMs - zone.startMs,
-          contradictionZones.some((item) => item.startMs === zone.startMs && item.endMs === zone.endMs)
-            ? "Zero-activity evidence conflicts with work-related evidence; hold the run for review."
-            : "Continuous verified zero activity has no clear non-work signal; hold the run for review.", true, "decide"));
+          "Zero-activity evidence conflicts with work-related evidence; hold the run for review.", true, "decide"));
       }
     }
   }

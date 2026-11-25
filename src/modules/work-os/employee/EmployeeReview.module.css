@@ -571,3 +571,9 @@
   .reveal, .skeleton, .skeletonBlock { animation: none !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+
+/* Submitted report: the structured brief first, the complete record beneath. */
+.fullRecord { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--border); }
+.fullRecord > summary { cursor: pointer; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+.fullRecord > div { margin-top: 14px; }

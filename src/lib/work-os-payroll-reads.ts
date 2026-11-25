@@ -174,6 +174,21 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
   );
   const page = rows.slice(0, limit);
   const last = page.at(-1);
+  const frames = await queryRows<{ day_id: string; screenshot_summary_id: string }>(
+    getPool(),
+    `SELECT day_id, screenshot_summary_id
+    FROM work_payroll_frame_findings
+    WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
+    ORDER BY captured_at LIMIT 500`,
+    [access.organizationId, reviewId, review.analysis_revision],
+  );
+  const framesByDay = new Map<string, string[]>();
+  for (const frame of frames) {
+    const day = String(frame.day_id);
+    const list = framesByDay.get(day) ?? [];
+    if (list.length < 3) list.push(String(frame.screenshot_summary_id));
+    framesByDay.set(day, list);
+  }
   const total = await queryOne<CountRow>(
     getPool(),
     `SELECT count(*)::int AS n FROM work_payroll_findings WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ${filters.status ? "AND status=$4" : ""}`,
@@ -187,6 +202,7 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
       durationMs: Number(row.duration_ms), minutes: Number(row.minutes), sourceHash: String(row.source_hash),
       blocksApproval: row.blocks_approval === true, requiredAction: row.required_action as PayrollFinding["requiredAction"],
       reason: String(row.reason), citations: Array.isArray(row.citations) ? row.citations as PayrollFinding["citations"] : [],
+      frameSummaryIds: row.kind === "break" ? [] : framesByDay.get(String(row.day_id)) ?? [],
     })),
     total: Number(total?.n ?? 0),
     nextCursor: rows.length > limit && last ? encodeCursor({ date: last.local_date, key: last.finding_key }) : null,
