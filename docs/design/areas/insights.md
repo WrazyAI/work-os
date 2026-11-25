@@ -69,6 +69,12 @@ the people × days/weeks matrix.
   session time and activity context stay cool observation ink. Evidence counts
   rows, not minutes, and tracked context is app/site minutes, distinct from
   session time.
+- **People excluded from Insights.** Settings → Insights exclusions marks test
+  accounts, shared inboxes, and service identities. The Insights query excludes
+  them before counts, so they disappear from the person list, matrix, totals,
+  and denominator, while the roster keeps them for mapping and restoration. The
+  default is included; each switch saves immediately and names the person and
+  state in its receipt.
 - **States.** Loading reserves the instrument's geometry; empty ranges name the
   missing record and the next action; errors stay local. Empty, loading, and
   degraded states follow the data-truth matrix.

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, KeyRound, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
+import { Cable, Gauge, KeyRound, PlugZap, ShieldCheck, Users, UsersRound } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, workspaceDegradedNotice } from "./adminNotifications";
 import {
@@ -22,6 +22,7 @@ import {
   saveOrganizationFeatures,
   sendOrganizationMemberPasswordReset,
   statusLabel,
+  updateAdminPerson,
 } from "./data";
 import type { OrganizationMembershipRow } from "./types";
 import { AdminButton, AdminCard, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
@@ -46,7 +47,7 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * device, appearance, or guide preferences. The shell's node also carries the
  * account's recap-follow group, which stays present without a personal
  * workday record; this page only hosts it above the workspace configuration. */
-export type AdminSettingsCardId = "status" | "features" | "members" | "teams" | "connections" | "blueprints";
+export type AdminSettingsCardId = "status" | "features" | "insights" | "members" | "teams" | "connections" | "blueprints";
 
 /** Pick only the failures owned by the card on screen. The all-cards fallback
  * is the legacy single-page render; the category workspace always names one. */
@@ -106,6 +107,16 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
       if (feature && changed) {
         notifications.success(`“${feature.label}” is now ${changed[1] ? "on" : "off"} for every member.`, changed[1] ? "Feature turned on" : "Feature turned off");
       }
+    },
+  });
+  const exclusion = useMutation({
+    mutationFn: ({ id, excluded }: { id: string; name: string; excluded: boolean }) => updateAdminPerson({ id, excluded_from_insights: excluded }),
+    onSuccess: (_result, variables) => {
+      invalidate();
+      notifications.success(
+        `${variables.name} is ${variables.excluded ? "hidden from" : "included in"} Insights.`,
+        variables.excluded ? "Insights exclusion saved" : "Insights exclusion cleared",
+      );
     },
   });
   const membership = useMutation({
@@ -176,6 +187,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
   const cardErrors: Record<AdminSettingsCardId, unknown[]> = {
     status: [organization.error, status.error],
     features: [organization.error, features.error],
+    insights: [people.error, exclusion.error],
     members: [organization.error],
     teams: [organization.error, people.error],
     connections: [connections.error],
@@ -230,6 +242,43 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             </li>
           ))}
         </ul>
+      </AdminCard>
+
+      <AdminCard className="admin-card-insights" icon={Gauge} title="Insights exclusions" detail="People left out of Insights and its totals; they stay in the roster and can still sign in">
+        <p className="admin-quiet">Use this for test accounts, shared inboxes, or owners who should not be counted in team analytics. Excluded people are omitted from the Insights person list, its matrix, and its totals.</p>
+        {people.isLoading ? (
+          <Skeleton className="h-24" />
+        ) : people.data?.people?.length ? (
+          <ul className="admin-feature-list admin-exclusion-list">
+            {people.data.people.map((person) => {
+              const id = String(person.id);
+              const name = String(person.display_name ?? person.email ?? "Unnamed person");
+              const excluded = person.excluded_from_insights === true;
+              return (
+                <li key={id}>
+                  <span>
+                    <b>{name}</b>
+                    <small>{person.email ? String(person.email) : "No email"}</small>
+                  </span>
+                  <label className="admin-toggle">
+                    <input
+                      type="checkbox"
+                      checked={excluded}
+                      disabled={exclusion.isPending}
+                      onChange={(event) => exclusion.mutate({ id, name, excluded: event.target.checked })}
+                      aria-label={`Exclude ${name} from Insights`}
+                    />
+                    <span aria-hidden />
+                    <em>{excluded ? "Excluded" : "Included"}</em>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="admin-empty-note">No active people to manage.</p>
+        )}
+        <SettingsErrorNotices errors={[exclusion.error]} />
       </AdminCard>
 
       <AdminCard className="admin-card-members" icon={Users} title="Members" detail={`${memberships.length} member${memberships.length === 1 ? "" : "s"} · roles decide which workspace each person can open`}>

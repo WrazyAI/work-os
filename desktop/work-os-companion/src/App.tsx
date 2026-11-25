@@ -1,5 +1,5 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "./tauriEvents";
@@ -12,7 +12,7 @@ import { displayUpdateVersion, shouldAutoCheckUpdate, updateRowCopy } from "./up
 import { changelogBulletsFor, changelogHistory } from "./whatsNew";
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
-import { AlertTriangle, BriefcaseBusiness, Bug, ChevronRight, CircleHelp, CirclePlay, LayoutDashboard, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, BriefcaseBusiness, Bug, ChevronRight, CircleHelp, CirclePlay, Clock3, LayoutDashboard, RefreshCw, X } from "lucide-react";
 import { ApiRequestError, apiRequest, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
 import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
@@ -4719,6 +4719,9 @@ export default function App() {
       attempts: 16,
       intervalMs: 2_000,
       timeoutMs: 20_000,
+      // The controller may need one controlled Worktivity restart, wait for
+      // its renderer, then wait for the control to become actionable.
+      executeTimeoutMs: 60_000,
       onPhase: setWorktivityControlPhase,
     }).finally(() => setWorktivityControlPhase(null));
   }
@@ -6018,9 +6021,41 @@ export default function App() {
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} dueDate={editDueDate} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onDueDate={editRequest.task.capabilities?.canEdit === true ? setEditDueDate : undefined} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {renderGlobalOverlays()}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
-    {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
+    {clockInConfirmation && (
+      <AttendanceConfirmation
+        title={clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}
+        description={clockInConfirmation.kind === "late"
+          ? clockInLateProlonged
+            ? "This clock-in is 30 or more minutes after the scheduled start. Add the reason now, or from the reminder on your dashboard."
+            : "This clock-in is after the scheduled start. Your acknowledgement is kept in the audit record."
+          : "No scheduled shift can be started right now. Add a reason, and Work OS will start an exception session for today."}
+        confirmLabel="Confirm clock-in"
+        busy={busy}
+        reason={clockInConfirmation.kind === "exception" || clockInLateProlonged ? {
+          label: clockInConfirmation.kind === "late" ? "Reason for the late start" : "Reason for the exception",
+          value: clockInConfirmation.reason,
+          required: clockInConfirmation.kind === "exception",
+          placeholder: clockInConfirmation.kind === "late" ? "What delayed the start?" : "What happened, and what are you starting on?",
+          onChange: (reason) => setClockInConfirmation((current) => current ? { ...current, reason } : current),
+        } : undefined}
+        onCancel={() => setClockInConfirmation(null)}
+        onConfirm={confirmClockIn}
+      />
+    )}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
-    {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut || clockOutExtendedPrompt ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => { setClockOutConfirmation(false); setClockOutExtendedPrompt(false); }}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
+    {clockOutConfirmation && (
+      <AttendanceConfirmation
+        title={extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Confirm clock-out"}
+        description={extendedClockOut || clockOutExtendedPrompt
+          ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift. The acknowledgement is kept in the audit record."
+          : "Clock out and close today’s workspace?"}
+        confirmLabel={extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Clock out"}
+        busy={busy}
+        tone={extendedClockOut || clockOutExtendedPrompt ? "warning" : "neutral"}
+        onCancel={() => { setClockOutConfirmation(false); setClockOutExtendedPrompt(false); }}
+        onConfirm={confirmClockOut}
+      />
+    )}
   </div>;
   };
 
@@ -6092,5 +6127,67 @@ export default function App() {
     menuGroups.push({ label: "Help", items: helpItems });
   }
   return frameWindow(<BootOverlay surface={landing}>{bootContent}</BootOverlay>, menuGroups, pageLabel, statusLabel);
+}
+
+/** Attendance acknowledgements share one decision card: the change being
+ *  acknowledged, the reason (when the policy requires or accepts one), and one
+ *  signal action. Task delete/archive confirmations keep their own destructive
+ *  treatment. */
+function AttendanceConfirmation({ title, description, confirmLabel, busy, tone = "warning", reason, onCancel, onConfirm }: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  busy: boolean;
+  tone?: "warning" | "neutral";
+  reason?: {
+    label: string;
+    value: string;
+    required: boolean;
+    placeholder: string;
+    onChange: (value: string) => void;
+  };
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const reasonId = useId();
+  const reasonHintId = useId();
+  const reasonMissing = reason?.required === true && !reason.value.trim();
+  return <div className="task-modal-backdrop confirmation-backdrop">
+    <section className="delete-confirmation attendance-confirmation" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} aria-busy={busy || undefined}>
+      <header className="attendance-confirmation-header">
+        <span className={`attendance-confirmation-icon${tone === "neutral" ? " is-neutral" : ""}`} aria-hidden="true">{tone === "neutral" ? <Clock3 size={19} /> : <AlertTriangle size={19} />}</span>
+        <div>
+          <h2 id={titleId}>{title}</h2>
+          <p id={descriptionId}>{description}</p>
+        </div>
+      </header>
+      {reason && <div className="attendance-reason">
+        <div className="attendance-reason-label">
+          <label htmlFor={reasonId}>{reason.label}</label>
+          <small>{reason.required ? "Required" : "Optional"}</small>
+        </div>
+        <textarea
+          id={reasonId}
+          autoFocus
+          maxLength={1000}
+          value={reason.value}
+          onChange={(event) => reason.onChange(event.target.value)}
+          placeholder={reason.placeholder}
+          aria-required={reason.required}
+          aria-describedby={reasonHintId}
+        />
+        <small className="attendance-reason-hint" id={reasonHintId}>
+          <span>Kept in today’s attendance record.</span>
+          <span aria-hidden="true">{reason.value.length}/1000</span>
+        </small>
+      </div>}
+      <div className="attendance-actions">
+        <button type="button" className="attendance-action attendance-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className="attendance-action primary" disabled={busy || reasonMissing} onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    </section>
+  </div>;
 }
 

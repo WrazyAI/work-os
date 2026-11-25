@@ -181,6 +181,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(adminInsightsSource, /peopleSeries/, "the admin payload carries per-person day facts");
   assert.match(adminInsightsSource, /evidenceOutput/, "per-person days include output evidence");
   assert.match(adminInsightsSource, /evidenceActivity/, "per-person days include activity evidence");
+  assert.match(adminInsightsSource, /\.eq\("excluded_from_insights", false\)/, "Insights leaves excluded people out of its population");
+  assert.match(await source("src/lib/work-os.ts"), /excluded_from_insights/, "the person update seam accepts the Insights exclusion");
   assert.match(await source("src/lib/work-os-admin-overview.ts"), /workdayDates\(addDaysIso/, "overview charts skip weekend dates");
   assert.match(day, /date must be a valid calendar date/);
   assert.match(day, /localDate/);

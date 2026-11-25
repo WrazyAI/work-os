@@ -554,6 +554,30 @@
       "verification": "Companion suite 245 files / 2,143 tests passed with --maxWorkers=2; companion typecheck and Vite production build passed; the full Work OS suite reached 1,661/1,678 before the final shared-contract test path correction, and the corrected route, package-boundary and desktop-static tests pass 10/10; rendered the composer and submitted reading view at 1000 light/dark, 720 and 560, the admin review drawer, the full-record disclosure, and the compose -> submitted preview."
     },
     {
+      "id": "admin-insights-exclusions",
+      "type": "feature",
+      "summary": "Admin Insights can leave test and shared accounts out of the page and its totals, managed from Settings → Insights exclusions.",
+      "verification": "Feature-branch companion suite 236 files / 2,096 tests passed; Work OS full suite 1,419 main + 127 payroll tests passed with 0 failures and 16 skipped; after rebasing onto the structured-EOD main, focused settings and route-contract tests passed; migration 0082 applied to Neon and the default seed excluded four accounts (E2E Verify, harryp@maigreeks.com, L.Perry, lperry); live API returns four included people and the four excluded accounts with excluded_from_insights true; deployed 076c99d1."
+    },
+    {
+      "id": "attendance-confirmation-redesign",
+      "type": "fix",
+      "summary": "Exception, late, and clock-out confirmations give the reason field room, show whether it is required, and make the primary action unmistakable.",
+      "verification": "Companion suite 245 files / 2,145 tests passed; Work OS typecheck and desktop-static checks passed; rendered the confirmation shell in dark, light, focused, and 360px states, including the real clock-out dialog and the exception reason variant."
+    },
+    {
+      "id": "worktivity-clock-in-recovery",
+      "type": "fix",
+      "summary": "Clock in from Work OS now waits for Worktivity to finish opening and recognizes its current Clock in control, so a normal clock-in no longer fails with “clock control not available.”",
+      "verification": "Live Worktivity 2.6.7 CDP probe on Windows found 'Not clocked in' with an enabled 'Clock in' button; the old one-shot controller returned not_ready, while the new readiness loop found the control at 6.6s. The dry-run controller returned clicked; companion suite 245 files / 2,145 tests and desktop-static checks passed. The live clock-in click was not exercised to avoid starting a real attendance session."
+    },
+    {
+      "id": "worktivity-early-clockout-confirmation",
+      "type": "fix",
+      "summary": "Clocking out before the daily target now confirms Worktivity's early Clock out prompt in the same action, so you only click Clock out once.",
+      "verification": "Extracted the controller's exact action expression and ran it against live Worktivity 2.6.7 with a synthetic early-clock-out modal: both the already-open modal and active-page-to-modal flows returned clicked and confirmed the modal button. Companion suite 245 files / 2,145 tests passed; work-os:typecheck and desktop-static checks passed; live Worktivity clock-out showed Not clocked in after confirmation."
+    },
+    {
       "id": "desktop-admin-task-pagination",
       "type": "fix",
       "summary": "In desktop Admin Tasks, use Show more to browse past the first 100 tasks.",

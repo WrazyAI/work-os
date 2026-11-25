@@ -598,6 +598,20 @@ assert.match(rust, /fn finish_worktivity_control/);
 assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /finish_worktivity_control/);
 assert.doesNotMatch(worktivityController, /\$ports\s*\+=\s*\$DefaultPort/);
 assert.doesNotMatch(worktivityController, /Tracking\/CreateActivityLog|api\.useworktivity\.com|Authorization|Bearer/i);
+// Worktivity 2.6.x renders "Clock in" (space) and "Not clocked in"; the
+// controller must keep polling until that control is available, and it must
+// preserve the default 9222 control port instead of restarting the provider.
+assert.match(worktivityController, /\["clock in", "clock-in", "start work", "start tracking"\]/);
+assert.match(worktivityController, /button\.disabled/);
+assert.match(worktivityController, /\$script:RestoreRequired = \$port -ne \$DefaultPort/);
+assert.match(worktivityController, /debugPorts \| Where-Object \{ \$_ -ne \$DefaultPort \}/);
+// Worktivity may ask "Clock out early?" with a Keep working/Clock out modal;
+// the controller must confirm it in the same action instead of stopping at
+// the first click and leaving the modal open.
+assert.match(worktivityController, /clock out early/i);
+assert.match(worktivityController, /keep working/i);
+assert.match(worktivityController, /modalConfirm/);
+assert.match(worktivityController, /setTimeout/);
 
 const webEmployee = [
   readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeToday.tsx"), "utf8"),

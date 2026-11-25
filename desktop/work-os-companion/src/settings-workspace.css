@@ -481,6 +481,7 @@
    on screen. */
 .admin-grid[data-active-card="status"] .admin-card:not(.admin-card-status),
 .admin-grid[data-active-card="features"] .admin-card:not(.admin-card-features),
+.admin-grid[data-active-card="insights"] .admin-card:not(.admin-card-insights),
 .admin-grid[data-active-card="members"] .admin-card:not(.admin-card-members),
 .admin-grid[data-active-card="teams"] .admin-card:not(.admin-card-teams),
 .admin-grid[data-active-card="connections"] .admin-card:not(.admin-card-connections),

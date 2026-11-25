@@ -54,7 +54,12 @@ function Get-WorktivityProcesses([string]$Executable) {
 function Get-Target([int]$Port) {
     try {
         $targets = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/json/list" -TimeoutSec 2
-        return @($targets | Where-Object { $_.type -eq "page" -and $_.url -match $TargetPattern } | Select-Object -First 1)
+        $pages = @($targets | Where-Object { $_.type -eq "page" -and $_.url -match $TargetPattern })
+        if ($pages.Count -eq 0) { return @() }
+        # Prefer the visible desktop page over any transient app:// surface.
+        $main = @($pages | Where-Object { $_.title -eq "Worktivity Desktop" } | Select-Object -First 1)
+        if ($main.Count -gt 0) { return $main }
+        return @($pages | Select-Object -First 1)
     } catch {
         return @()
     }
@@ -68,8 +73,14 @@ function Get-ExistingTarget([object[]]$Processes) {
         }
     }
     foreach ($port in @($ports | Select-Object -Unique)) {
-        $target = @(Get-Target $port)
-        if ($target.Count -gt 0) { return @{ port = $port; target = $target[0] } }
+        # Worktivity can expose the target before the renderer has painted the
+        # clock controls. Wait briefly instead of killing a healthy launch.
+        $deadline = (Get-Date).AddSeconds(5)
+        do {
+            $target = @(Get-Target $port)
+            if ($target.Count -gt 0) { return @{ port = $port; target = $target[0] } }
+            Start-Sleep -Milliseconds 500
+        } while ((Get-Date) -lt $deadline)
     }
     return $null
 }
@@ -132,59 +143,111 @@ function Stop-WorktivityForRestart([object[]]$Processes) {
     if (@(Get-WorktivityProcesses $script:Executable).Count -gt 0) { throw "Worktivity did not close for its controlled restart." }
 }
 
-function Invoke-CdpAction([object]$Target, [string]$RequestedAction) {
-    $socket = New-Object System.Net.WebSockets.ClientWebSocket
-    $cancellation = New-Object System.Threading.CancellationTokenSource
-    $cancellation.CancelAfter([TimeSpan]::FromSeconds(8))
-    try {
-        $token = $cancellation.Token
-        $null = $socket.ConnectAsync([Uri]$Target.webSocketDebuggerUrl, $token).GetAwaiter().GetResult()
-        $actionJson = ConvertTo-Json -InputObject $RequestedAction -Compress
-        $expression = @"
-(() => {
+function Invoke-CdpAction([object]$Target, [string]$RequestedAction, [int]$TimeoutSeconds = 15) {
+    $actionJson = ConvertTo-Json -InputObject $RequestedAction -Compress
+    $expression = @"
+(async () => {
   const action = $actionJson;
-  const text = (document.body && document.body.innerText || "").toLowerCase();
-  const buttons = [...document.querySelectorAll("button")];
-  const current = /you are on break now/.test(text) ? "paused"
-    : /you are working now/.test(text) ? "active"
-    : /you haven't started|clock-in|start work|start tracking/.test(text) ? "off_shift"
-    : "unknown";
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const label = (button) => clean(button.innerText || button.getAttribute("aria-label") || button.textContent);
+  const mainButtons = () => [...document.querySelectorAll("button")];
+  const findIn = (buttons, labels) => {
+    for (const candidate of labels) {
+      const button = buttons.find((item) => label(item) === candidate);
+      if (button) return button;
+    }
+    return null;
+  };
+  const find = (labels) => findIn(mainButtons(), labels);
+  const modalConfirm = () => {
+    const buttons = mainButtons();
+    const keepWorking = buttons.find((item) => label(item) === "keep working");
+    const open = keepWorking
+      || /clock out early/i.test(document.body && document.body.innerText || "");
+    if (!open) return undefined;
+    if (keepWorking) {
+      let root = keepWorking.parentElement;
+      while (root && root !== document.body) {
+        const confirm = [...root.querySelectorAll("button")]
+          .find((item) => label(item) === "clock out" && !item.disabled);
+        if (confirm) return confirm;
+        root = root.parentElement;
+      }
+    }
+    return null;
+  };
+  if (action === "clock_out") {
+    const existing = modalConfirm();
+    if (existing) { existing.click(); return "clicked"; }
+  }
+  const clockIn = find(["clock in", "clock-in", "start work", "start tracking"]);
+  const resume = find(["resume work"]);
+  const pause = find(["take a break", "working away"]);
+  const clockOut = find(["clock out", "clock-out"]);
+  const current = clockIn ? "off_shift" : resume ? "paused" : (pause || clockOut) ? "active" : "unknown";
   const target = action === "clock_out" ? "off_shift"
     : action === "pause" ? "paused"
     : "active";
   if (current === target) return "already_target";
   if (current === "unknown") return "not_ready";
   const labels = {
-    clock_in: /^(clock-in|start work|resume work|start tracking)$/i,
-    clock_out: /^clock[- ]?out$/i,
-    pause: /^take a break$/i,
-    resume: /^resume work$/i
+    clock_in: ["clock in", "clock-in", "start work", "start tracking", "resume work"],
+    clock_out: ["clock out", "clock-out"],
+    pause: ["take a break", "working away"],
+    resume: ["resume work"]
   };
-  const button = buttons.find((candidate) => labels[action].test((candidate.innerText || "").trim()));
-  if (!button) return "not_ready";
-  if (button.disabled) return "not_ready";
+  const button = find(labels[action]);
+  if (!button || button.disabled) return "not_ready";
   button.click();
+  if (action === "clock_out") {
+    let sawModal = false;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const confirm = modalConfirm();
+      if (confirm) { confirm.click(); return "clicked"; }
+      if (confirm === null) sawModal = true;
+    }
+    if (sawModal) return "not_ready";
+  }
   return "clicked";
 })()
 "@
-        $payload = @{ id = 1; method = "Runtime.evaluate"; params = @{ expression = $expression; returnByValue = $true; awaitPromise = $true } } | ConvertTo-Json -Compress -Depth 6
-        $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
-        $segment = New-Object "System.ArraySegment[byte]" -ArgumentList @(, $bytes)
-        $null = $socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $token).GetAwaiter().GetResult()
-        $buffer = New-Object byte[] 65536
-        $memory = New-Object System.IO.MemoryStream
-        do {
-            $receive = New-Object "System.ArraySegment[byte]" -ArgumentList @(, $buffer)
-            $result = $socket.ReceiveAsync($receive, $token).GetAwaiter().GetResult()
-            $memory.Write($buffer, 0, $result.Count)
-        } while (-not $result.EndOfMessage)
-        $response = [Text.Encoding]::UTF8.GetString($memory.ToArray()) | ConvertFrom-Json
-        if ($response.id -ne 1 -or $response.error -or $response.result.exceptionDetails) { return "not_ready" }
-        return [string]$response.result.result.value
-    } finally {
-        $cancellation.Dispose()
-        $socket.Dispose()
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $last = "not_ready"
+    while ((Get-Date) -lt $deadline) {
+        $socket = $null
+        $cancellation = $null
+        try {
+            $socket = New-Object System.Net.WebSockets.ClientWebSocket
+            $cancellation = New-Object System.Threading.CancellationTokenSource
+            $cancellation.CancelAfter([TimeSpan]::FromSeconds(5))
+            $token = $cancellation.Token
+            $null = $socket.ConnectAsync([Uri]$Target.webSocketDebuggerUrl, $token).GetAwaiter().GetResult()
+            $payload = @{ id = 1; method = "Runtime.evaluate"; params = @{ expression = $expression; returnByValue = $true; awaitPromise = $true } } | ConvertTo-Json -Compress -Depth 6
+            $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
+            $segment = New-Object "System.ArraySegment[byte]" -ArgumentList @(, $bytes)
+            $null = $socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $token).GetAwaiter().GetResult()
+            $buffer = New-Object byte[] 65536
+            $memory = New-Object System.IO.MemoryStream
+            do {
+                $receive = New-Object "System.ArraySegment[byte]" -ArgumentList @(, $buffer)
+                $result = $socket.ReceiveAsync($receive, $token).GetAwaiter().GetResult()
+                $memory.Write($buffer, 0, $result.Count)
+            } while (-not $result.EndOfMessage)
+            $response = [Text.Encoding]::UTF8.GetString($memory.ToArray()) | ConvertFrom-Json
+            if ($response.id -eq 1 -and -not $response.error -and -not $response.result.exceptionDetails) {
+                $last = [string]$response.result.result.value
+                if ($last -eq "clicked" -or $last -eq "already_target") { return $last }
+            }
+        } catch {
+            $last = "not_ready"
+        } finally {
+            if ($cancellation) { $cancellation.Dispose() }
+            if ($socket) { $socket.Dispose() }
+        }
+        Start-Sleep -Milliseconds 500
     }
+    return $last
 }
 
 try {
@@ -198,6 +261,14 @@ try {
         $processes = @(Get-WorktivityProcesses $script:Executable)
         $debugProcesses = @($processes | Where-Object { $_.CommandLine -match '--remote-debugging-port(?:=|\s+)\d{2,5}' })
         if ($debugProcesses.Count -eq 0) { Write-Result "restored" }
+        $debugPorts = @($debugProcesses | ForEach-Object {
+            if ($_.CommandLine -match '--remote-debugging-port(?:=|\s+)(\d{2,5})') { [int]$Matches[1] }
+        })
+        if (@($debugPorts | Where-Object { $_ -ne $DefaultPort }).Count -eq 0) {
+            # 9222 is the companion/watchdog control port. Keep it so the next
+            # clock action reuses the live page instead of restarting the app.
+            Write-Result "restored"
+        }
         Stop-WorktivityForRestart $processes
         $null = Start-Process -FilePath $script:Executable -ErrorAction Stop
         $deadline = (Get-Date).AddSeconds(20)
@@ -214,7 +285,7 @@ try {
     if ($existing) {
         try {
             $result = Invoke-CdpAction $existing.target $Action
-            if ($result -eq "clicked" -or $result -eq "already_target") { Write-Result $result "" $true }
+            if ($result -eq "clicked" -or $result -eq "already_target") { Write-Result $result "" $false }
             if ($result -eq "not_ready") { Write-Result "not_ready" "Worktivity is responding, but its current page is not ready for this control." $false }
         } catch {
             # A stale CDP target is recoverable: restart once with a controlled
@@ -230,10 +301,12 @@ try {
         Write-Result "not_ready" "Worktivity opened, but no free local control port is available."
     }
     $arguments = @("--remote-debugging-port=$port", "--remote-debugging-address=127.0.0.1")
-    $script:RestoreRequired = $true
+    # Keep the default loopback control port for the next action. A non-default
+    # port is temporary and is removed by finish_worktivity_control.
+    $script:RestoreRequired = $port -ne $DefaultPort
     $null = Start-Process -FilePath $script:Executable -ArgumentList $arguments -PassThru -ErrorAction Stop
 
-    $deadline = (Get-Date).AddSeconds(30)
+    $deadline = (Get-Date).AddSeconds(20)
     $target = @()
     do {
         Start-Sleep -Milliseconds 500

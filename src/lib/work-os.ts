@@ -56,6 +56,9 @@ export async function listPeople(userId: string) {
 }
 
 export async function updatePerson(userId: string, personId: string, patch: Json) {
+  if ("excluded_from_insights" in patch && typeof patch.excluded_from_insights !== "boolean") {
+    throw new Error("excluded_from_insights must be a boolean");
+  }
   if (typeof patch.role_profile_id === "string") {
     const profile = await ensureNoError(
       db().from("work_role_profiles").select("id").eq("user_id", userId).eq("id", patch.role_profile_id).maybeSingle(),
@@ -64,7 +67,7 @@ export async function updatePerson(userId: string, personId: string, patch: Json
     if (!profile) throw new Error("role profile must belong to the organization");
   }
   const allowed: Json = {};
-  for (const key of ["display_name", "email", "role_profile_id", "nifty_member_id", "worktivity_employee_id", "active"]) {
+  for (const key of ["display_name", "email", "role_profile_id", "nifty_member_id", "worktivity_employee_id", "active", "excluded_from_insights"]) {
     if (key in patch) allowed[key] = patch[key];
   }
   allowed.updated_at = new Date().toISOString();

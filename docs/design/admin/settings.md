@@ -19,14 +19,24 @@
 employee Settings page carries (profile, this device, page guides, reading
 & display, workday, sync & session, memory, suggestions, diagnostics, and
 reset), rendered by the one shared component so the two surfaces can never
-drift — then groups the workspace's system status, features, memberships,
-teams, provider connections, and blueprints into sections with one action per
-decision area. Feature and membership states are switches,
+drift — then groups the workspace's system status, features, Insights exclusions,
+memberships, teams, provider connections, and blueprints into sections with one
+action per decision area. Feature and membership states are switches,
 not native checkboxes. Admin agent access is a summary band with Active and
 Inactive counts that opens a token-management modal, the same pattern as the
 employee surface. The record-dependent groups appear only
 for accounts with a personal workday; the device, display, guides, and
 diagnostics half always shows.
+
+## Insights exclusions
+
+**Insights exclusions.** A workspace settings page lists the active people with
+one switch per person. An excluded person stays in the roster and can still
+sign in, but is omitted from the Insights person list, matrix, and every total
+and denominator. Use it for test accounts, shared inboxes, and service
+identities; the default is included. Each switch saves immediately with a
+receipt naming the person and the new state, and a failed save stays visible
+until retried. The page never deactivates, unmaps, or removes the person.
 
 ## Recap follows
 

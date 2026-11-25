@@ -179,8 +179,8 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
 
   const [peopleResult, eventsResult, checkInsResult, reportsResult, evidenceResult, sessionsResult, plansResult, overdueResult] = await Promise.all([
     db.from("work_people")
-      .select("id,display_name,active,role_profile:work_role_profiles(id,name)")
-      .eq("organization_id", organizationId).eq("active", true).order("display_name"),
+      .select("id,display_name,active,excluded_from_insights,role_profile:work_role_profiles(id,name)")
+      .eq("organization_id", organizationId).eq("active", true).eq("excluded_from_insights", false).order("display_name"),
     db.from("work_task_day_events")
       .select("id,person_id,local_date,event_type,task_snapshot,observed_at")
       .eq("organization_id", organizationId).eq("event_type", "completed")
