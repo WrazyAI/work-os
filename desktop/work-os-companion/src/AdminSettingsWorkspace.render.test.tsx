@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { AdminSettingsContent, adminSettingsPages } from "./AdminSettingsWorkspace";
+import { AdminSettingsContent, adminSettingsPages, type AdminSettingsPageId } from "./AdminSettingsWorkspace";
 import { selectSettingsCardError, SettingsErrorNotices, type AdminSettingsCardId } from "./admin/SettingsPage";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 import { NotificationProvider } from "./NotificationFlyouts";
@@ -56,7 +56,7 @@ function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettings
   };
 }
 
-function render(active: "workspace-status" | "general" | "session", overrides: Partial<PersonalSettingsProps> = {}) {
+function render(active: AdminSettingsPageId, overrides: Partial<PersonalSettingsProps> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client }, createElement(NotificationProvider, null, createElement(AdminSettingsContent, {
@@ -77,9 +77,17 @@ describe("administration settings takeover", () => {
     expect(ids).toContain("general");
     expect(ids).toContain("workspace-status");
     expect(ids).toContain("features");
+    expect(ids).toContain("insights");
     expect(ids).toContain("connections");
     expect(ids).toContain("recap-follows");
     expect(ids).toContain("about");
+  });
+
+  it("renders the Insights exclusions card on its own settings page", () => {
+    const markup = render("insights");
+    expect(markup).toContain("Insights exclusions");
+    expect(markup).toContain("People left out of Insights");
+    expect(markup).toContain('data-active-card="insights"');
   });
 
   it("renders the workspace cards on Workspace settings", () => {
@@ -125,6 +133,7 @@ describe("administration settings takeover", () => {
     const errors = {
       status: [],
       features: [],
+      insights: [],
       members: [membersError],
       teams: [],
       connections: [connectionsError],

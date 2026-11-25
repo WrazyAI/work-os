@@ -1,14 +1,15 @@
-import { Bell, Cable, PlugZap, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
+import { Bell, Cable, Gauge, PlugZap, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
 import SettingsPage, { type AdminSettingsCardId } from "./admin/SettingsPage";
 import { SettingsContent } from "./SettingsContent";
 import { SETTINGS_PAGES, type SettingsNavPage, type SettingsPageId } from "./settingsSections";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 
-export type AdminSettingsPageId = SettingsPageId | "workspace-status" | "features" | "members" | "teams" | "connections" | "blueprints" | "recap-follows";
+export type AdminSettingsPageId = SettingsPageId | "workspace-status" | "features" | "insights" | "members" | "teams" | "connections" | "blueprints" | "recap-follows";
 
 const ADMIN_PAGES: SettingsNavPage<AdminSettingsPageId>[] = [
   { id: "workspace-status", label: "Workspace status", group: "Workspace", icon: ShieldCheck, description: "Schema readiness and the workspace database.", keywords: ["status", "schema", "database", "workspace"] },
   { id: "features", label: "Features", group: "Workspace", icon: SlidersHorizontal, description: "One switch per workspace capability; changes apply to every member.", keywords: ["features", "capabilities", "switches"] },
+  { id: "insights", label: "Insights exclusions", group: "Workspace", icon: Gauge, description: "Choose who is left out of Insights and its totals while staying in the roster.", keywords: ["insights", "exclude", "hidden", "test accounts", "analytics", "people"] },
   { id: "members", label: "Members", group: "Workspace", icon: Users, description: "Who belongs to the workspace and the role each person can open.", keywords: ["members", "roles", "access", "people"] },
   { id: "teams", label: "Teams", group: "Workspace", icon: UsersRound, description: "Teams scope what managers can review and what planning groups.", keywords: ["teams", "managers", "groups"] },
   { id: "connections", label: "Connections", group: "Integrations", icon: Cable, description: "Provider connections and mapped evidence accounts.", keywords: ["connections", "providers", "github", "worktivity", "nifty"] },
@@ -18,6 +19,7 @@ const ADMIN_PAGES: SettingsNavPage<AdminSettingsPageId>[] = [
 const ADMIN_CARD_BY_PAGE: Partial<Record<AdminSettingsPageId, AdminSettingsCardId>> = {
   "workspace-status": "status",
   features: "features",
+  insights: "insights",
   members: "members",
   teams: "teams",
   connections: "connections",

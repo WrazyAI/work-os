@@ -35,6 +35,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Admin Settings no longer shows a “Failed to fetch” error, and the retired Field mappings page is gone.
 - Admin side panels no longer hide under the menu bar, and EOD Review lists the newest report day first.
 - Admin Insights is now a control room: session time, outcomes, updates, and evidence by teammate and day, with a full-day tooltip on every cell.
+- Admin Insights leaves test and shared accounts out of the page and its totals, managed from Settings → Insights exclusions.
 
 ## 0.5.43 — 2026-11-23
 
