@@ -552,6 +552,12 @@
       "type": "feature",
       "summary": "Write your end-of-day report from suggested work, then let Otto draft the summary; the desktop now matches the web.",
       "verification": "Companion suite 245 files / 2,143 tests passed with --maxWorkers=2; companion typecheck and Vite production build passed; the full Work OS suite reached 1,661/1,678 before the final shared-contract test path correction, and the corrected route, package-boundary and desktop-static tests pass 10/10; rendered the composer and submitted reading view at 1000 light/dark, 720 and 560, the admin review drawer, the full-record disclosure, and the compose -> submitted preview."
+    },
+    {
+      "id": "admin-insights-exclusions",
+      "type": "feature",
+      "summary": "Admin Insights can leave test and shared accounts out of the page and its totals, managed from Settings → Insights exclusions.",
+      "verification": "Feature-branch companion suite 236 files / 2,096 tests passed; Work OS full suite 1,419 main + 127 payroll tests passed with 0 failures and 16 skipped; after rebasing onto the structured-EOD main, focused settings and route-contract tests passed; migration 0082 applied to Neon and the default seed excluded four accounts (E2E Verify, harryp@maigreeks.com, L.Perry, lperry); live API returns four included people and the four excluded accounts with excluded_from_insights true; deployed 076c99d1."
     }
   ],
   "emergency": null,
