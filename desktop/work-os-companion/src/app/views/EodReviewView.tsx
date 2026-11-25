@@ -6,6 +6,10 @@ import { EodSubmittedReport } from "../../EodSubmittedReport";
 import { OUTSTANDING_STATUS_META, outstandingRowMeta } from "../../NotificationsBell";
 import { Empty } from "../../SharedUi";
 import { EodComposer, EodLoadingState, EodShiftOpenNotice } from "../../taskSurfaces";
+import { EodStructuredComposer } from "../../EodStructuredComposer";
+import { EodSubmitReceipt } from "../../EodSubmitReceipt";
+import { EodScreenshotPanel } from "../../ScreenshotGallery";
+import { eodStructuredFromReport, type EodCompositionInput } from "../../eodStructured";
 import type { DayData, EodScreenshotGallery, OutstandingEodDay } from "../../types";
 import type { EodScreenshotContext, View } from "../types";
 
@@ -64,6 +68,11 @@ export function EodReviewView({
   onDeleteDraft,
   onRefine,
   onSubmit,
+  onStructuredSave,
+  onStructuredSummary,
+  onStructuredSubmit,
+  onReloadStructured,
+  detailsReady,
   onResetSubmitted,
   onHideLanding,
   onCreateDraft,
@@ -108,17 +117,25 @@ export function EodReviewView({
   onDeleteDraft: () => void;
   onRefine: (markdown: string, feedback: string, annotations?: Array<{ quote: string; comment: string }>) => Promise<boolean>;
   onSubmit: (markdown: string, idempotencyKey: string) => void;
+  onStructuredSave: (input: EodCompositionInput) => Promise<"saved" | "queued">;
+  onStructuredSummary: (input: EodCompositionInput, onChunk: (text: string) => void, signal: AbortSignal) => Promise<{ source: "otto" | "assembled" }>;
+  onStructuredSubmit: (input: EodCompositionInput, idempotencyKey: string) => Promise<"saved" | "queued">;
+  onReloadStructured: () => void;
+  detailsReady: boolean;
   onResetSubmitted: () => void;
   onHideLanding: () => void;
   onCreateDraft: () => void;
 }) {
+  const structuredReview = eodStructuredFromReport(reviewDay?.report);
   return <main className="page">
     {eodDate && !eodSubmitted && !reviewSubmittedStatus && <div className="eod-day-context"><button type="button" onClick={onClearEodDate}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
     {eodDate && reportDayLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
       : eodDate && reportDayError ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={onRetryReportDay}>Try again</button></div></section>
+        : reviewDay?.report && !detailsReady && !eodSubmitted ? <EodLoadingState title="Loading your report…" detail={`Fetching the ${eodDate ? "recorded" : "structured"} draft${eodDate ? "" : " and today’s recorded work"}.`} />
         : reviewSubmittedStatus && !eodSubmitted && !eodLanding ? <EodSubmittedReport
             status={reviewSubmittedStatus}
             markdown={reviewDay?.report?.markdown}
+            report={reviewDay?.report}
             date={reviewDay?.shiftDate ?? ""}
             onAllEods={onShowAllEods}
             onToday={() => { onClearEodDate(); onOpenView("day"); }}
@@ -136,7 +153,30 @@ export function EodReviewView({
             onDraftAnyway={onDraftAnyway}
           />
             : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <EodLoadingState title="Drafting your EOD…" detail={`Checking ${eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.`} />
-            : reviewDay?.report && !eodSubmitted && !eodLanding && (!eodRedrafting || eodDraft) ? <EodComposer
+            : reviewDay?.report && !eodSubmitted && !eodLanding && (!eodRedrafting || eodDraft) ? (structuredReview ? <EodStructuredComposer
+                key={String(reviewDay.report.id)}
+                reportId={String(reviewDay.report.id)}
+                structured={structuredReview}
+                dayLabel={eodDate ? formatWorkOsDate(eodDate) : "today"}
+                clockedOut={eodClockedOut}
+                shiftOpen={reviewShiftOpen}
+                loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}
+                onOpenDashboard={() => onOpenView("day")}
+                onSave={onStructuredSave}
+                onWriteSummary={onStructuredSummary}
+                onSubmit={onStructuredSubmit}
+                onReload={onReloadStructured}
+                onRedraft={onRedraft}
+                onDelete={["draft", "rejected"].includes(String(reviewDay.report.status)) && !reviewDay.report.submitted_at ? onDeleteDraft : undefined}
+                screenshots={screenshotGallery && ((screenshotGallery.processed ?? 0) > 0 || (screenshotGallery.pending ?? 0) > 0 || (screenshotGallery.viewable?.length ?? 0) > 0) ? <>
+                  {eodScreenshotNotice ? <p className="eod-screenshot-unavailable" role="status">Screenshot context: {eodScreenshotNotice}</p> : null}
+                  {eodDraft?.screenshotSyncUnavailable ? <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses the recorded work only.</p> : null}
+                  <details className="eod-screenshot-context" open={false}>
+                    <summary>{(screenshotGallery.processed ?? 0)} screenshot sample{(screenshotGallery.processed ?? 0) === 1 ? "" : "s"} analyzed for this day{(screenshotGallery.pending ?? 0) > 0 ? ` · ${screenshotGallery.pending} still analyzing` : ""}</summary>
+                    <div className="eod-screenshot-body"><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p><EodScreenshotPanel context={eodDraft?.screenshots ?? null} gallery={screenshotGallery} /></div>
+                  </details>
+                </> : null}
+              /> : <EodComposer
                 initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
                 source={eodDraft?.source ?? "deterministic"}
                 dayLabel={eodDate ? formatWorkOsDate(eodDate) : "today"}
@@ -159,13 +199,8 @@ export function EodReviewView({
                 onOpenDashboard={() => onOpenView("day")}
                 onRefine={onRefine}
                 onSubmit={onSubmit}
-              />
-              : eodSubmitted ? <section className="panel eod-submitted" role="status">
-                  <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={onResetSubmitted}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
-                  <CheckedMoment />
-                  <strong>EOD submitted</strong>
-                  <p>{eodQueued ? "Queued on this device — your report will be sent when the connection returns." : eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p>
-                </section>
+              />)
+              : eodSubmitted ? <EodSubmitReceipt queued={eodQueued} date={eodDate} onAllEods={onResetSubmitted} />
                 : eodLanding || !reviewDay?.report ? <section className="panel eod-start">
                     <header className="eod-start-head">
                       <FileCheck2 size={20} />

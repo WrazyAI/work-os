@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## 0.5.44 — 2026-11-25
 
+- Write your end-of-day report from suggested work, then let Otto draft the summary; the desktop now matches the web.
 - Employees and administrators can create, review, and revoke agent tokens from Settings → Session, with the API guide for their role.
 - The scenario debugger's Incomplete onboarding preset opens setup even while you're in the Administration workspace.
 - The debugger window uses the Mac window controls on macOS, with the title clear of them.
