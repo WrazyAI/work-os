@@ -436,7 +436,12 @@ select:focus-visible {
      the layout viewport and pushes the stack's leading edge off screen. */
   .notification-flyouts { top: 12px; right: 12px; left: 12px; width: auto; transform: none; }
 }@media (prefers-reduced-motion: reduce) {
-  .notification-stack, .notification-flyout, .notification-flyout > *, .notification-flyout > i { animation: none; transition: none; }
+  /* !important: the measured-stack selectors above are more specific, so a plain
+     override would leave the deck animating under reduced motion. */
+  .notification-flyouts .notification-stack,
+  .notification-flyouts .notification-flyout,
+  .notification-flyouts .notification-flyout > *,
+  .notification-flyouts .notification-flyout > i { animation: none !important; transition: none !important; }
 }.day-grid {
   margin: 0 auto;
   display: grid;

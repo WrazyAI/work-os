@@ -178,4 +178,13 @@ describe("application notification flyouts", () => {
     const single = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notifications[3]!], onDismiss: () => undefined }));
     expect(single).toContain('data-stacked="false"');
   });
+
+  it("keeps the stack operable: reduced motion beats the stack selectors and focused controls scroll into reach", () => {
+    const css = readFileSync(new URL("./styles/tokens-base.css", import.meta.url), "utf8");
+    const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)", css.indexOf(".notification-flyouts .notification-stack,")));
+    expect(reduced).toContain(".notification-flyouts .notification-stack,");
+    expect(reduced).toContain("animation: none !important; transition: none !important;");
+    const source = readFileSync(new URL("./NotificationFlyouts.tsx", import.meta.url), "utf8");
+    expect(source).toContain('scrollIntoView({ block: "nearest" })');
+  });
 });
