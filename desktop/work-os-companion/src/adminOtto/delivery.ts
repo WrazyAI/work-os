@@ -2,7 +2,7 @@ import type {
   DeliveryLease,
   InboxPage,
   OttoScope,
-} from "../../../../src/modules/work-os/admin-otto/contracts";
+} from "@wrazy/work-os-shared/admin-otto/contracts";
 import type { AdminRecapPresentationFence } from "./notifications";
 
 /** One feed poll while the process runs. The main window is deliberately not

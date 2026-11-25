@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AdminOttoPendingAction, AdminRead } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminRead } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { AdminActionBatch, AdminReadCard, createAdminActionSession, type AdminToolAction } from "./AdminToolCards";
 import { FIXTURE_REVIEWED_RECAP, fixtureRecordsResult, fixtureTaskResult } from "./fixtures";
 

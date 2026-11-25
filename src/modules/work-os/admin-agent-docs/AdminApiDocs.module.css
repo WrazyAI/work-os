@@ -1,0 +1,90 @@
+.hero h1 {
+  margin: 0 0 14px;
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.boundary { margin: 0; }
+.boundary figcaption {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.boundary strong {
+  color: #f3f6ef;
+  font-size: 14px;
+  font-weight: 650;
+}
+.boundary figcaption strong { font-size: 22px; letter-spacing: -0.025em; }
+.boundary span { color: #d0dace; font-size: 12px; line-height: 1.5; }
+.boundary ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border: 1px dashed #90a495;
+  border-radius: 10px;
+  counter-reset: stage;
+  list-style: none;
+}
+.boundary li {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px;
+  counter-increment: stage;
+}
+.boundary li strong::before {
+  content: counter(stage) ". ";
+  font-variant-numeric: tabular-nums;
+}
+.boundary li + li { border-left: 1px solid #90a495; }
+.boundary li + li strong { color: #a8f15b; }
+
+.guide {
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card);
+}
+.auth {
+  max-width: 70ch;
+  margin: 12px 0 0;
+  padding-inline-start: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  list-style: disc;
+}
+.auth li + li { margin-top: 6px; }
+.code {
+  margin: 12px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.adminDocs dd { margin: 0; }
+.adminDocs dd strong { font-size: 12px; font-weight: 600; }
+.adminDocs .groupTitle { border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.errors caption {
+  padding-bottom: 10px;
+  color: var(--text-secondary);
+  text-align: left;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .adminDocs .endpoint { grid-template-columns: minmax(0, 1fr); }
+  .adminDocs .endpoint > * { grid-column: 1; grid-row: auto; }
+  .adminDocs .errors thead th:first-child { width: 43%; }
+  .adminDocs .errors thead th:nth-child(2) { width: 13%; }
+}

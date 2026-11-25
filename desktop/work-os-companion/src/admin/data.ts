@@ -1,6 +1,6 @@
 import { apiRequest } from "../api";
 import { workOsQueryClient } from "../queryClient";
-import { readinessQueryOptions, type AdminReadiness } from "../../../../src/modules/work-os/admin-readiness";
+import { readinessQueryOptions, type AdminReadiness } from "@wrazy/work-os-shared/admin-readiness";
 import type {
   AdminInsights,
   AdminInsightRange,
@@ -24,9 +24,9 @@ import type {
   SystemStatusResponse,
   WorkOsReportRow,
 } from "./types";
-import type { TaskCapabilities } from "../../../../src/lib/work-os-task-permissions";
-import type { TaskEvidenceRecord } from "../../../../src/modules/work-os/completion-evidence";
-import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
+import type { TaskCapabilities } from "@wrazy/work-os-shared/task-permissions";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
+import type { EvidenceKind } from "@wrazy/work-os-shared/evidence-kinds";
 
 /** Response contracts the desktop shares with the web admin module. */
 export type {

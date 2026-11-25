@@ -14,7 +14,50 @@
 - Changing administration EOD review: [Administration EOD review](../admin/eod-review.md).
 - Changing the manager Team review console: [Manager role routing](web-workspace.md#manager-team-review).
 
-**Implementation starting points:** [EodReportDocument.tsx](../../../desktop/work-os-companion/src/EodReportDocument.tsx), [EmployeeReview.tsx](../../../src/modules/work-os/employee/EmployeeReview.tsx), [work-os-eod-shift-gate.ts](../../../src/lib/work-os-eod-shift-gate.ts).
+**Implementation starting points:** [EmployeeEodComposer.tsx](../../../src/modules/work-os/employee/EmployeeEodComposer.tsx), [eod-structured-view.tsx](../../../src/modules/work-os/eod-structured-view.tsx), [work-os-eod-structured.ts](../../../src/lib/work-os-eod-structured.ts), [work-os-eod-schedule.ts](../../../src/lib/work-os-eod-schedule.ts), [EodReportDocument.tsx](../../../desktop/work-os-companion/src/EodReportDocument.tsx), [EmployeeReview.tsx](../../../src/modules/work-os/employee/EmployeeReview.tsx), [work-os-eod-shift-gate.ts](../../../src/lib/work-os-eod-shift-gate.ts).
+
+## The structured web composer
+
+The employee's web EOD is a structured composition, not a markdown editor.
+The deterministic report remains the day's full record; the composer owns the
+three short sections the employee signs their name to.
+
+- **Prepared before the employee arrives.** A bounded scheduler calls
+  `POST /api/work-os/eod/run-scheduled` (the `work-os-eod.timer` unit) and
+  prepares each due day with the same shift gate the employee surface uses.
+  It stores server-owned suggestions and an evidence snapshot. Opening the
+  page before the scheduler ran asks the same server-side preparation once; the
+  employee never presses a "Draft EOD" button.
+- **Suggestions are the analysis, not a filled report.** Up to five lines per
+  field come from the day's completed work, the employee-reviewed activity
+  recaps, and the carried plan. They render as a horizontally scrollable pill
+  rail (two visible at a time on desktop). Clicking a pill adds one reviewable
+  line; the employee can type their own. The structured draft starts with empty
+  fields.
+- **Summary last.** Once Completed, In progress and Next each have a line, the
+  employee can write the summary. The model streams a short paragraph from the
+  employee's own lines, grounded in the recorded facts. The server stores the
+  composition signature with the summary; any later edit makes it stale, and
+  submission is refused until it is regenerated. A provider outage produces an
+  explicitly labelled assembled fallback rather than blocking the day.
+- **Evidence is fixed.** The evidence snapshot is grouped by source and shown
+  as a read-only accordion. The employee cannot edit or remove a source here.
+  GitHub and Loom records keep their reviewable links. Raw screenshot evidence
+  remains in its existing gallery below the report.
+- **Optional Loom.** The composer accepts one optional Loom share link. It is
+  employee-provided, not system-recorded evidence, and it does not change the
+  recorded evidence count. This pass stores and displays the link only; it is
+  not analyzed by Otto.
+- **One richer report everywhere.** The employee's submitted view and the
+  admin review render the same `EodStructuredView` (summary, three sections,
+  Loom, source-grouped evidence). Historical reports without a structured
+  payload fall back to the parsed markdown. The admin also keeps the deep raw
+  evidence and activity-context panels.
+- **The full record still belongs to the server.** Submission composes the
+  employee's words into the deterministic document's brief and keeps the
+  `## Full record` appendix. Memory, versions and the companion's document read
+  that markdown; the structured payload is the source for the web composer and
+  the admin brief.
 
 ## EOD drafts before clock-out, and deleting a draft
 
@@ -58,9 +101,10 @@ their explicit availability rule below; they have no scheduled end to wait for.
   the surface that closes a shift. The prompt replaces the draft action rather
   than sitting beside it; once the window opens, the draft action replaces the
   prompt without a refresh.
-- **Deleting a draft.** The EOD composer carries one destructive action
-  beside its draft-building controls: `Delete draft`, in red, with a trash
-  glyph. It is offered only for an unsubmitted draft, it asks for confirmation
+- **Deleting a draft.** The companion composer and the legacy web editor carry
+  one destructive action beside their draft-building controls: `Delete draft`,
+  in red, with a trash glyph. The structured web composer does not expose
+  deletion. It is offered only for an unsubmitted draft, it asks for confirmation
   in the shared removal dialog, and it is refused by the server for a report
   that is already with a manager. A deletion is written to the audit log; the
   report's versions go with it.
@@ -68,8 +112,12 @@ their explicit availability rule below; they have no scheduled end to wait for.
 ## The EOD document: a brief, then the full record
 
 The draft is deterministic. The same recorded facts always produce the same
-document; no model decides what the day contained. AI remains available only
-for the employee's own `Refine draft` request and for reading an attached Loom.
+document; no model decides what the day contained. The web composer is the one
+place a model writes: its summary is constrained to the employee's own three
+sections and is stored with the signature of the composition it was written
+for. It never chooses what the day contained, and the full record appendix
+below it stays deterministic. The older `Refine draft` and Loom-analysis paths
+remain for the companion and legacy clients, not the web composer.
 
 - **The brief** is the first reading depth: `Summary`, `Completed today` (at
   most eight ranked work deliverables), `In progress` (at most three confirmed

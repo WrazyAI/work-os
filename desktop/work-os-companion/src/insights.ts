@@ -1,5 +1,5 @@
 import type { DayData, InsightConsistency, InsightDay, InsightsData, InsightUpdateKinds } from "./types";
-import { isWeekendDate } from "../../../src/modules/work-os/calendar";
+import { isWeekendDate } from "@wrazy/work-os-shared/calendar";
 
 export interface InsightSignal {
   label: string;

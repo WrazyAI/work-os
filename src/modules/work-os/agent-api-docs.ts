@@ -8,11 +8,23 @@
 
 export const AGENT_API_BASE_URL = "https://app.wrazyos.com/api/agent/v1";
 export const AGENT_API_OPENAPI_URL = `${AGENT_API_BASE_URL}/openapi.yaml`;
-export const AGENT_API_GUIDE_URL = "https://app.wrazyos.com/docs/agent-api";
-export const AGENT_API_LLMS_URL = `${AGENT_API_GUIDE_URL}/llms.txt`;
+export const AGENT_API_GUIDE_PATH = "/docs/agent-api/user";
+export const AGENT_API_GUIDE_URL = `https://app.wrazyos.com${AGENT_API_GUIDE_PATH}`;
+export const AGENT_API_LLMS_PATH = `${AGENT_API_GUIDE_PATH}/llms.txt`;
+export const AGENT_API_LLMS_URL = `https://app.wrazyos.com${AGENT_API_LLMS_PATH}`;
 export const AGENT_API_AGENT_PROMPT = `Read the agent instructions at ${AGENT_API_LLMS_URL}`;
 export const AGENT_API_MCP_URL = "https://app.wrazyos.com/api/mcp";
 export const AGENT_API_TOKEN_PREFIX = "wos_agent_";
+
+export const ADMIN_AGENT_API_GUIDE_PATH = "/docs/agent-api/admin";
+export const ADMIN_AGENT_API_GUIDE_URL = `https://app.wrazyos.com${ADMIN_AGENT_API_GUIDE_PATH}`;
+export const ADMIN_AGENT_API_LLMS_PATH = `${ADMIN_AGENT_API_GUIDE_PATH}/llms.txt`;
+export const ADMIN_AGENT_API_LLMS_URL = `https://app.wrazyos.com${ADMIN_AGENT_API_LLMS_PATH}`;
+export const ADMIN_AGENT_API_AGENT_PROMPT = `Read the administrator agent instructions at ${ADMIN_AGENT_API_LLMS_URL}`;
+export const ADMIN_AGENT_API_BASE_URL = "https://app.wrazyos.com/api/agent/admin/v1";
+export const ADMIN_AGENT_API_OPENAPI_URL = `${ADMIN_AGENT_API_BASE_URL}/openapi.yaml`;
+export const ADMIN_AGENT_API_MCP_URL = "https://app.wrazyos.com/api/agent/admin/mcp";
+export const ADMIN_AGENT_API_TOKEN_PREFIX = "wos_admin_";
 
 export type AgentApiScopeId =
   | "tasks:read"

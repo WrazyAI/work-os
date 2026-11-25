@@ -180,7 +180,7 @@ describe("application notification flyouts", () => {
   });
 
   it("keeps the stack operable: reduced motion beats the stack selectors and focused controls scroll into reach", () => {
-    const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+    const css = readFileSync(new URL("./styles/tokens-base.css", import.meta.url), "utf8");
     const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)", css.indexOf(".notification-flyouts .notification-stack,")));
     expect(reduced).toContain(".notification-flyouts .notification-stack,");
     expect(reduced).toContain("animation: none !important; transition: none !important;");

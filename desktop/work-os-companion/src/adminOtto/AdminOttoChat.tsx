@@ -12,7 +12,7 @@ import type {
   ReviewedRecap,
   TaskCard,
   WorkRecord,
-} from "../../../../src/modules/work-os/admin-otto/contracts";
+} from "@wrazy/work-os-shared/admin-otto/contracts";
 import { ChatTabs, ChatTimeDivider, ChatTurn, ConversationSurface, WorkOsPromptBar, shouldShowChatDivider, type ChatTab } from "../WorkOsChat";
 import type { VoiceInput } from "../chat/voiceInput";
 import { useVoiceInput } from "../chat/voiceInput";

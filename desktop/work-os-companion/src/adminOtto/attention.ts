@@ -1,4 +1,4 @@
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import type { AdminOverview, AdminOverviewActivity } from "../admin/types";
 import { isOttoScope } from "./mode";
 

@@ -471,12 +471,13 @@ test("a routed voice event is addressed, so only one window ever acts on it", ()
   /* Both windows: check the address, and name themselves as the target. */
   for (const path of ["desktop/work-os-companion/src/App.tsx", "desktop/work-os-companion/src/AvatarApp.tsx"]) {
     const source = read(path);
-    assert.match(source, /import \{ isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL \} from "\.\/chat\/voiceInput";/);
+    assert.match(source, /import \{ isVoiceEventFor, useVoiceInput(?:, VOICE_HOTKEY_LABEL)? \} from "\.\/chat\/voiceInput";/);
     assert.match(source, /const label = .*getCurrentWindow\(\)\.label.*;/);
     assert.match(source, /if \(!isVoiceEventFor\(event\.payload, label\)\) return;/);
     assert.match(source, /\}, \{ target: label \}\)/);
     assert.ok(!source.includes('listen("work-os://voice/start", () => voiceRef.current.start'), "the raw untargeted listener must be gone");
   }
+  assert.match(read("desktop/work-os-companion/src/app/views/ProgressComposer.tsx"), /import \{ VOICE_HOTKEY_LABEL \} from "\.\.\/\.\.\/chat\/voiceInput";/);
 
   /* The shim must forward the target, or the listener stays `Any`. */
   assert.match(read("desktop/work-os-companion/src/tauriEvents.ts"), /options\?: ListenOptions,/);

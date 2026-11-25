@@ -2,9 +2,9 @@
  * reads the same shared document as the web admin, including the full-record
  * appendix, so the two review surfaces cannot drift. */
 
-import { parseEodMarkdown, type EodDocument } from "../../../../src/modules/work-os/eod-document";
+import { parseEodMarkdown, type EodDocument } from "@wrazy/work-os-shared/eod-document";
 
-export type { EodDocument, EodMetaLine, EodSection, EodSectionLine } from "../../../../src/modules/work-os/eod-document";
+export type { EodDocument, EodMetaLine, EodSection, EodSectionLine } from "@wrazy/work-os-shared/eod-document";
 export { parseEodMarkdown };
 
 /** One-line snippet for queue rows: the first completed fact, else the first

@@ -26,6 +26,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@wrazy/work-os-shared/*": [
+        "./packages/work-os-shared/src/*"
       ]
     }
   },

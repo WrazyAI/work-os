@@ -36,7 +36,7 @@ import {
   evidenceScreenshot,
   evidenceShortDate,
 } from "./evidenceModel";
-import { evidenceKindBucket } from "../../../../src/modules/work-os/evidence-kinds";
+import { evidenceKindBucket } from "@wrazy/work-os-shared/evidence-kinds";
 import type { ActivityIntervalView, EvidenceRow, EvidenceSummary } from "./types";
 import "./evidence-hybrid.css";
 

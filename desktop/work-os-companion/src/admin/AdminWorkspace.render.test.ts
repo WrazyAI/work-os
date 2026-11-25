@@ -67,6 +67,14 @@ describe("native Payroll navigation", () => {
   });
 });
 
+describe("administration Settings masthead", () => {
+  it("does not repeat a purpose subtitle under the Settings title", () => {
+    const markup = render({ section: "settings" });
+    expect(markup).toContain("Settings");
+    expect(markup).not.toContain("Your own settings, then the workspace's configuration");
+  });
+});
+
 describe("administration masthead profile entry", () => {
   it("opens the account's profile through the same avatar contract as the employee masthead", () => {
     const markup = render({ profile: { name: "Ada Lovelace", avatarUrl: null, onOpen: noop } });

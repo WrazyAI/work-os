@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { workProfileCatalog } from "../../../src/modules/work-os/onboarding";
+import { workProfileCatalog } from "@wrazy/work-os-shared/onboarding";
 import { PREVIEW_DATA } from "./OnboardingPreview";
 
 describe("onboarding layout fixture", () => {

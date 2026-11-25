@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import type { PayrollCitation, PayrollFinding, PayrollReview } from "../../../../../src/modules/work-os/payroll/contracts";
+import type { PayrollCitation, PayrollFinding, PayrollReview } from "@wrazy/work-os-shared/payroll/contracts";
 import { formatWorkOsDateTime, formatWorkOsFullDate, formatWorkOsTime } from "../../dateFormat";
 import { ADMIN_DETAIL_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
 import { desktopPayroll, desktopPayrollKey } from "./api";
-import { groupBreakFindings } from "../../../../../src/modules/work-os/payroll/break-groups";
+import { groupBreakFindings } from "@wrazy/work-os-shared/payroll/break-groups";
 import "./payroll.css";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {

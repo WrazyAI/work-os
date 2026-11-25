@@ -8,7 +8,7 @@ import type {
   OttoScope,
   Page,
   PersonRef,
-} from "../../../../src/modules/work-os/admin-otto/contracts";
+} from "@wrazy/work-os-shared/admin-otto/contracts";
 import { emit } from "../tauriEvents";
 import {
   AdminOttoApiError,

@@ -7,7 +7,7 @@ import type {
   Page,
   PersonRef,
   ReviewedRecap,
-} from "../../../../src/modules/work-os/admin-otto/contracts";
+} from "@wrazy/work-os-shared/admin-otto/contracts";
 import type { AdminOttoFollowTransport } from "./AdminOttoSettings";
 import { AdminOttoApiError, type AdminOttoThreadView } from "./api";
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
-import type { AdminOttoPendingAction, AdminRead, Page, PersonRef, ReviewedRecap, WorkRecord } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { AdminOttoPendingAction, AdminRead, Page, PersonRef, ReviewedRecap, WorkRecord } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { AdminRecapView, type AdminRecapPlayback } from "./AdminRecapView";
 import { adminCalendarDate, adminRecapDate, adminReviewStatusLabel } from "./labels";
 import { safeAdminRecordHref } from "./recordLinks";

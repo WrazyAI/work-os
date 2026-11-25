@@ -59,6 +59,15 @@ export interface EodGithubFacts {
   commits: number;
   /** Unique performed pull requests, e.g. "work-os#134". */
   pullRequests: string[];
+  /** Reviewable provider records. The brief keeps counts; the structured
+   * evidence view keeps the actual links and timestamps. */
+  items?: Array<{
+    description: string;
+    url: string | null;
+    relation: "performed" | "triggered";
+    at: string;
+    repository: string | null;
+  }>;
 }
 
 export interface EodGhlFacts {

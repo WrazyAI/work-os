@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { attachmentSummary, TaskAttachmentIndicator } from "./admin/TaskAttachmentIndicator";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 
 function evidence(overrides: Partial<TaskEvidenceRecord> = {}): TaskEvidenceRecord {
   return {

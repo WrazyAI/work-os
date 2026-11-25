@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { Square, Volume2 } from "lucide-react";
-import type { ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { RecapPrompter } from "../RecapPrompter";
 import type { RecapSpeechLine } from "../recapSpeech";
 import type { RecapSpeechSnapshot } from "../recapSpeechPlayer";

@@ -13,7 +13,7 @@ import {
   taskRequiresCompletionEvidence,
   validateCompletionEvidenceUpload,
   type TaskEvidenceRecord,
-} from "../../../src/modules/work-os/completion-evidence";
+} from "@wrazy/work-os-shared/completion-evidence";
 
 export type TaskEvidenceDialogPhase = "idle" | "saving" | "failed" | "evidence_saved" | "done";
 

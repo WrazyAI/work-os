@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FollowSettings, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { FollowSettings, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { setDebugSession } from "../api";
 import { PersonalSettings, type PersonalSettingsProps } from "../PersonalSettings";
 import SettingsPage from "../admin/SettingsPage";
@@ -84,6 +84,7 @@ function personalProps(overrides: Partial<PersonalSettingsProps> = {}): Personal
     queueCount: 0,
     queueAttentionCount: 0,
     sessionApiBase: "https://app.wrazyos.com",
+    agentAccessSurface: "employee",
     onSignOut: noop,
     memory: { facts: [], loading: false, error: null },
     onOpenMemory: noop,

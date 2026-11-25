@@ -19,7 +19,7 @@ import { ActivityDetailDrawer, activityRecordFromOverview, type ActivityDetailRe
 import { ADMIN_OVERVIEW_STALE_KEY, overviewStaleMessage } from "./adminNotifications";
 import { StackedTimeBars } from "./charts";
 import { adminKeys, adminReadinessQueryOptions, attendanceLabel, attendanceTone, fetchAdminOverview, formatDuration, normalizeAdminOverview, relativeTime, statusLabel, todayIso } from "./data";
-import { readinessAttention } from "../../../../src/modules/work-os/admin-readiness";
+import { readinessAttention } from "@wrazy/work-os-shared/admin-readiness";
 import { AdminButton, AdminCard, Avatar, Empty, Notice, Pill, Skeleton } from "./ui";
 import type { AdminOverview, AdminSection, AdminSectionFocus } from "./types";
 

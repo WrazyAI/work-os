@@ -10,16 +10,16 @@ import { TaskEvidenceList } from "./CompletionEvidence";
 import type { EvidenceLoader } from "./EvidencePreview";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
-import type { TaskEvidenceRecord } from "../../../src/modules/work-os/completion-evidence";
+import type { TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 import { ProgressRing } from "./ProgressRing";
 import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
 import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
-import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
+import { EOD_SHIFT_OPEN_LINK_LABEL, EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "@wrazy/work-os-shared/shift-gate";
 import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
 import { displayTaskState, taskActionItems, taskCheckboxA11y, taskStatusLabel, taskStatusOptions } from "./taskActions";
-import type { TaskCapabilities } from "../../../src/lib/work-os-task-permissions";
+import type { TaskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 
 export function TaskActionMenuItems({ task, currentDate, busy, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete, onClose }: {
   task: TaskRow; currentDate: string; busy: boolean;

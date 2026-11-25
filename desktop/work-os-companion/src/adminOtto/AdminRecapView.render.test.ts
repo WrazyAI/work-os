@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdminRecapView } from "./AdminRecapView";
-import type { ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { FIXTURE_CONFIRMED_RECAP, FIXTURE_REVIEWED_RECAP } from "./fixtures";
 
 export const reviewed: ReviewedRecap = {

@@ -1,3 +1,4 @@
+import { readMainAppSource } from "../desktop/work-os-companion/src/app/readMainAppSource";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -89,7 +90,7 @@ assert.match(onboarding, /e\.key==="End"/);
 assert.match(onboarding, /createCoalescedDraftQueue/);
 assert.match(onboarding, /I accept Work OS tracking and the sampled screenshot-analysis policy/);
 assert.doesNotMatch(onboarding, /Allow neutral screenshot summaries/);
-const styles = read("src/styles.css");
+const styles = [read("src/styles/tokens-base.css"), read("src/styles/legacy-surfaces.css")].join("\n");
 assert.match(styles, /prefers-reduced-motion/);
 // Page-level rubber-banding stays off, but containment must not be universal:
 // Chromium treats decorative `overflow: hidden` cards as scroll containers,
@@ -110,18 +111,19 @@ const scrollRegion = read("src/ScrollFadeRegion.tsx");
 assert.match(scrollRegion, /const scrollable = edges\.start \|\| edges\.end/);
 assert.match(scrollRegion, /\$\{scrollable \? " is-scrollable" : ""\}/);
 assert.match(read("src/chat/tool-surfaces.css"), /data-workos-tool-surface="task-selection"[\s\S]*?overscroll-behavior-y:\s*auto/);
-const redesignStyles = read("src/workspace-redesign.css");
+const redesignStyles = [read("src/styles/workspace-shell.css"), read("src/styles/workspace-surfaces.css")].join("\n");
 assert.match(redesignStyles, /\.goal-composer-panel/);
 assert.match(redesignStyles, /\.goal-card-edit/);
 assert.match(redesignStyles, /\.goal-editor-actions/);
 assert.match(redesignStyles, /\.focus-edit-button/);
 
-const app = read("src/App.tsx");
+const app = readMainAppSource();
 const boot = read("src/BootHandoff.tsx");
 const bootModel = read("src/bootSurface.ts");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
 const settingsSections = read("src/settingsSections.tsx");
+const sessionSettings = read("src/SessionSettings.tsx");
 
 // First run is the one place the employee meets the product, so the companion
 // hosts it: the stage carries Otto and his spoken line, and the loading screen
@@ -269,7 +271,8 @@ assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 // every account store. The ordered helper owns the secureState.clearAccount call.
 assert.match(app, /clearWorkOsAccountCache\(queryClient, session\?\.token \?\? null\)/);
 assert.match(read("src/queryClient.ts"), /await secureState\.clearAccount\(expectedToken\)/);
-assert.match(settingsSections, /Account session/);
+assert.match(settingsSections, /<SessionSettings/);
+assert.match(sessionSettings, /Account session/);
 assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
 assert.match(app, /shiftPulse/);
@@ -927,7 +930,7 @@ assert.match(app, /pageCounts\.total : serverCounts\?\.total/);
 assert.match(styles, /\.sort-header-row/);
 assert.match(styles, /\.sort-header-row \{\n  display: flex;\n  flex-wrap: wrap;/);
 assert.match(styles, /\.active-task-sort-note/);
-const dashboardStyles = read("src/dashboard-overhaul.css");
+const dashboardStyles = read("src/styles/dashboard.css");
 assert.match(dashboardStyles, /\.tasks-column-sort \{/);
 assert.match(dashboardStyles, /grid-template-columns: 30px minmax\(0, 1fr\) 36px 100px 116px 38px/);
 assert.match(dashboardStyles, /\.task-record\.workspace-task \{[^\n]*grid-template-columns: 30px minmax\(0, 1fr\) 36px 100px 116px 38px/);

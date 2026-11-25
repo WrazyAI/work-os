@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FollowSettings, OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { FollowSettings, OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { emit } from "../tauriEvents";
 import {
   ADMIN_OTTO_FOLLOW_CHANGED_EVENT,

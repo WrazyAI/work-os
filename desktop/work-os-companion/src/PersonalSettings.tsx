@@ -55,6 +55,15 @@ export type PersonalSettingsProps = {
   queueCount: number;
   queueAttentionCount: number;
   sessionApiBase: string;
+  /** Which agent-token surface the Session page manages: the employee's own
+   * tokens or the administrator's organization-wide tokens. */
+  agentAccessSurface: "employee" | "admin";
+  /** Admin tokens are available only after the workspace enables the admin
+   * agent API feature; the employee surface is always available. */
+  adminAgentApiEnabled?: boolean;
+  /** SettingsContent supplies this when it renders the Session page; the
+   * inline Agent access view owns the rest. */
+  onManageAgentAccess?: () => void;
   onSignOut: () => void;
   memory: { facts: MemoryFact[]; factTotals?: { confirmed: number; candidate: number }; loading: boolean; error: string | null };
   onOpenMemory: () => void;

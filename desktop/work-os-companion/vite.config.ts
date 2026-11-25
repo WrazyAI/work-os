@@ -9,11 +9,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     dedupe: ["react", "react-dom"],
-    // Shared modules under the repository's src/modules/work-os resolve their
-    // React imports from this package. The companion CI installs only its own
-    // dependencies, so point every React entry at the companion copy instead
-    // of walking up to a root node_modules that is not installed there.
+    // Shared modules under packages/work-os-shared resolve their React imports
+    // from this package. The companion CI installs only its own dependencies,
+    // so map @wrazy/work-os-shared/* directly and point every React entry at
+    // the companion copy instead of walking up to a root node_modules that is
+    // not installed there.
     alias: [
+      { find: /^@wrazy\/work-os-shared\/(.*)$/, replacement: resolve(__dirname, "../../packages/work-os-shared/src/$1") },
       { find: /^react$/, replacement: resolve(__dirname, "node_modules/react/index.js") },
       { find: /^react\/jsx-runtime$/, replacement: resolve(__dirname, "node_modules/react/jsx-runtime.js") },
       { find: /^react-dom$/, replacement: resolve(__dirname, "node_modules/react-dom/index.js") },

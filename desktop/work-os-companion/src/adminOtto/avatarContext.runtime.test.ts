@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { createAvatarContextController } from "./avatarContext";
 import type { OttoContextEvent } from "./mode";
 import { buildOttoViewState, type OttoViewState } from "./viewSwitch";

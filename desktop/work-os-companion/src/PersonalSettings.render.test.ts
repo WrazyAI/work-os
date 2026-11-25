@@ -42,6 +42,7 @@ function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettings
     queueCount: 0,
     queueAttentionCount: 0,
     sessionApiBase: "https://app.wrazyos.com",
+    agentAccessSurface: "employee",
     onSignOut: noop,
     memory: { facts: [], loading: false, error: null },
     onOpenMemory: noop,

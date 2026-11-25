@@ -1,7 +1,7 @@
 import { apiRequest, apiRequestRaw } from "../../api";
 import type {
   Page, PayrollCommand, PayrollDayResult, PayrollFinding, PayrollReview, PayrollRosterPage, PayrollRun,
-} from "../../../../../src/modules/work-os/payroll/contracts";
+} from "@wrazy/work-os-shared/payroll/contracts";
 
 const base = "/api/work-os/admin/payroll";
 export const desktopPayrollKey = (organizationId: string, userId: string) => ["work-os", "admin", "payroll", organizationId, userId] as const;

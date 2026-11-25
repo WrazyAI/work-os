@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, KeyRound, Plus, ShieldCheck, Trash2, X } from "lucide-react";
+import { ADMIN_AGENT_API_GUIDE_PATH } from "@/modules/work-os/agent-api-docs";
 import { adminFetch } from "./api";
 import {
   Button,
@@ -381,7 +383,15 @@ export default function AdminAgentAccess() {
 
             <footer className="flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3" style={{ borderColor: "var(--border-subtle)" }}>
               <span className="text-[10px] text-[var(--text-tertiary)]">Every issue and revocation is recorded against this administrator.</span>
-              <Button onClick={() => setOpen(false)}>Close</Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href={ADMIN_AGENT_API_GUIDE_PATH}
+                  className="text-[10.5px] font-semibold text-[var(--text-secondary)] underline decoration-[var(--border)] underline-offset-4 transition hover:text-[var(--text-primary)]"
+                >
+                  Admin API guide
+                </Link>
+                <Button onClick={() => setOpen(false)}>Close</Button>
+              </div>
             </footer>
           </div>
         </div>

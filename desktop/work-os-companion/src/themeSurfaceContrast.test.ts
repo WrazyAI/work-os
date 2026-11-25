@@ -3,12 +3,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { readBaseStyles, readDashboardStyles, readWorkspaceStyles } from "./styles/readStyles";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
 const read = (name: string) => readFileSync(resolve(root, name), "utf8").replace(/\r\n/g, "\n");
 const theme = read("theme.css");
-const dashboard = read("dashboard-overhaul.css");
-const workspace = read("workspace-redesign.css");
-const styles = read("styles.css");
+const dashboard = readDashboardStyles();
+const workspace = readWorkspaceStyles();
+const styles = readBaseStyles();
 const chat = read("chat/chat.css");
 const workOsChat = read("work-os-chat.css");
 const avatar = read("avatar.css");
@@ -246,7 +248,11 @@ describe("focus goal surfaces", () => {
 });
 
 describe("planning dialog surfaces", () => {
-  const planning = workspace.slice(0, workspace.indexOf("body {\n  background: #eef1eb;"));
+  // Scope the literal audit to every planning rule block across the workspace
+  // stylesheets instead of relying on an unrelated sentinel selector.
+  const planning = [...workspace.matchAll(/[^\n}]*\.planning-[^{]*\{[\s\S]*?\}/g)]
+    .map((match) => match[0])
+    .join("\n");
   const tokensFrom = (source: string) => new Map(
     [...source.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [match[1], match[2].toLowerCase()]),
   );

@@ -1,7 +1,7 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
-import { taskCapabilities } from "../../../../src/lib/work-os-task-permissions";
+import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
-import { evidenceKind, evidenceKindBucket } from "../../../../src/modules/work-os/evidence-kinds";
+import { evidenceKind, evidenceKindBucket } from "@wrazy/work-os-shared/evidence-kinds";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
 import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData, PendingSuggestion } from "../types";

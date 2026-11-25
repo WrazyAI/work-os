@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OttoScope } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { OttoScope } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { createWorkspaceOwner, effectiveWorkspaceMode } from "./workspaceOwner";
 
 const actor = { userId: "user-1", organizationId: "org-1" };

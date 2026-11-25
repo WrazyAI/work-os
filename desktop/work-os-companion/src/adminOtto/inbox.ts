@@ -1,4 +1,4 @@
-import type { InboxPage } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { InboxPage } from "@wrazy/work-os-shared/admin-otto/contracts";
 
 export const ADMIN_INBOX_PAGE_SIZE = 12;
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { RefreshCw, Square, Volume2 } from "lucide-react";
-import type { InboxPage, OttoScope, ReviewedRecap } from "../../../../src/modules/work-os/admin-otto/contracts";
+import type { InboxPage, OttoScope, ReviewedRecap } from "@wrazy/work-os-shared/admin-otto/contracts";
 import { fetchAdminOttoInbox } from "./api";
 import { ADMIN_INBOX_PAGE_SIZE, createAdminInboxController, type AdminInboxController, type AdminInboxLoad } from "./inbox";
 import { adminRecapWindow, adminReviewStatusLabel } from "./labels";

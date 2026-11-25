@@ -4,7 +4,7 @@
  * same record; the desktop keeps its own copy so the Vite bundle never imports
  * Next.js modules. Rows whose database shape is wide stay loose on purpose. */
 
-import type { EvidenceKind } from "../../../../src/modules/work-os/evidence-kinds";
+import type { EvidenceKind } from "@wrazy/work-os-shared/evidence-kinds";
 
 export type AdminSection = "overview" | "people" | "tasks" | "review" | "payroll" | "insights" | "evidence" | "settings";
 
@@ -344,7 +344,7 @@ export type ActivityIntervalView = {
 };
 
 export interface PersonDetailResponse {
-  arrangementProposal?: import("../../../../src/modules/work-os/ArrangementReview").ArrangementReviewData | null;
+  arrangementProposal?: import("@wrazy/work-os-shared/ui/ArrangementReview").ArrangementReviewData | null;
   person: {
     id: string;
     display_name: string;

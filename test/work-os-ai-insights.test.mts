@@ -32,7 +32,7 @@ test("the prompt grounds the model in exact values, hrs/mins durations, and the 
   assert.match(prompt, /4 outcomes on time, 1 outcomes late/);
   assert.match(prompt, /2 blockers/);
   assert.match(prompt, /6\/7 days with a written goal/);
-  assert.match(prompt, /Earlier equal period: 3 Nifty outcomes, 4h observed/);
+  assert.match(prompt, /Earlier equal period: 3 task outcomes, 4h observed/);
   assert.match(prompt, /never use decimal hours such as 2\.8h/i);
   assert.match(prompt, /bold the most important figure/i);
   assert.match(prompt, /short paragraph/i);
