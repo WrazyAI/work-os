@@ -80,7 +80,7 @@ const migrations = [
     "supabase/migrations/0079_work_payroll_recap_provenance.sql",
     "supabase/migrations/0080_work_payroll_mapping_inheritance.sql",
     "supabase/migrations/0081_work_payroll_source_token_scope.sql",
-    "supabase/migrations/0082_work_payroll_app_usage.sql",
+    "supabase/migrations/0084_work_payroll_app_usage.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
