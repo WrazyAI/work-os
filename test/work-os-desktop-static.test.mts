@@ -322,6 +322,27 @@ assert.match(app, /useOutstandingEodsQuery/);
 assert.match(app, /useReportDayQuery/);
 assert.match(app, /eod-day-context/);
 assert.match(app, /Back to today/);
+assert.match(app, /EodStructuredComposer/, "the Review view renders the structured composer");
+assert.match(app, /eodStructuredFromReport/, "the structured composer is selected by payload, not build");
+assert.match(app, /saveStructuredEod/, "structured autosave uses the report route");
+assert.match(app, /submitStructuredEod/, "structured submit uses the submit route");
+assert.match(app, /streamEodSummary/, "the summary streams through the API helper");
+assert.match(app, /reviewDetailsReady/, "the review waits for the details payload before opening an editor");
+assert.match(app, /EodSubmitReceipt/, "a queued submit has an honest receipt");
+assert.match(app, /shouldPrepareStructuredEod/, "only today's draft is silently prepared");
+const structuredComposerSource = read("src/EodStructuredComposer.tsx");
+assert.match(structuredComposerSource, /visibilitychange/, "a hidden window flushes a dirty draft");
+assert.match(structuredComposerSource, /onReload/, "a save conflict offers a reload affordance");
+assert.doesNotMatch(structuredComposerSource, /setSummary\(""\)/, "a summary refresh never clears the stored summary");
+const eodPreview = read("src/EodPreview.tsx");
+assert.match(eodPreview, /EodStructuredComposer/, "the dev fixture renders the structured composer");
+const redesign = read("src/workspace-redesign.css");
+assert.match(redesign, /\.eod-structured-section/, "the structured composer has its own layout");
+const adminReviewPage = read("src/admin/ReviewPage.tsx");
+assert.match(adminReviewPage, /EodStructuredReadingView/, "the admin review renders the structured brief");
+assert.match(read("src/admin/data.ts"), /structured_report/, "the admin row keeps the structured payload");
+assert.match(read("src/EodSubmittedReport.tsx"), /EodStructuredReadingView/, "the submitted report renders the structured brief");
+assert.match(read("src/EodSubmittedReport.tsx"), /Full recorded day/, "the full record stays a disclosure");
 // The EOD draft gate and the shared alert window agree: an open shift only
 // blocks the draft before its final ten minutes.
 assert.match(app, /eodDraftBlocked/);

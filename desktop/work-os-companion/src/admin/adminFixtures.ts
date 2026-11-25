@@ -364,6 +364,40 @@ function reportsResponse(status: string): ReportsResponse {
       markdown,
       submitted_markdown: row.status === "draft" ? null : markdown,
       metrics: { completed: 4, progressed: 2, deferred: 1, carried: 3, unplanned: 1 },
+      structured_report: row.status === "draft" ? null : {
+        version: 1,
+        summary: "Completed 4 work tasks today, including the billing retry handoff and the settings review.",
+        summarySource: "otto",
+        completed: [
+          "Shipped retry handling for failed billing webhooks",
+          "Confirmed the settings information architecture",
+          "Reviewed two pull requests and left substantive comments",
+        ],
+        inProgress: ["Flaky upload test — one failure left to isolate"],
+        next: ["Confirm the staging handoff"],
+        suggestions: { completed: [], inProgress: [], next: [] },
+        evidence: [
+          {
+            source: "tasks",
+            label: "Tasks",
+            items: [
+              { id: `${row.id}-task-1`, title: "Shipped retry handling for failed billing webhooks", summary: null, meta: "Billing · completed by you", url: null, at: `${row.date}T15:30:00.000Z`, kind: "completed" },
+              { id: `${row.id}-task-2`, title: "Reviewed two pull requests", summary: null, meta: "Engineering · completed by you", url: null, at: `${row.date}T16:10:00.000Z`, kind: "completed" },
+            ],
+          },
+          {
+            source: "github",
+            label: "GitHub",
+            items: [
+              { id: `${row.id}-gh-1`, title: "Pull request #482 · Retry billing webhooks", summary: null, meta: "Performed by the employee · work-os", url: "https://github.com/WrazyAI/work-os/pull/482", at: `${row.date}T16:12:00.000Z`, kind: "performed" },
+            ],
+          },
+        ],
+        loomUrl: null,
+        preparedAt: `${row.date}T08:00:00.000Z`,
+        source: "scheduled",
+      },
+      loom_url: null,
       manager_notes: row.status === "rejected" ? "Add the staging plan before resubmitting." : null,
       submitted_at: row.status === "draft" ? null : `${row.date}T08:40:00.000Z`,
       reviewed_at: row.status === "approved" || row.status === "rejected" ? `${row.date}T09:10:00.000Z` : null,
