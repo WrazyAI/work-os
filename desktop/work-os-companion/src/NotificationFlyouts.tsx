@@ -184,6 +184,17 @@ export function NotificationFlyouts({ notifications, onDismiss }: { notification
     }
   }, [ordered.length]);
 
+  // Keyboard users tab into a collapsed deck, which then fans out; a control that
+  // lands below a short viewport must scroll into reach once the cards settle.
+  useEffect(() => {
+    if (!expanded || !focused || typeof window === "undefined") return;
+    const timer = window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && stackRef.current?.contains(active)) active.scrollIntoView({ block: "nearest" });
+    }, 240);
+    return () => window.clearTimeout(timer);
+  }, [expanded, focused]);
+
   const measureAll = useCallback(() => {
     if (typeof window === "undefined") return;
     const next: Record<string, number> = {};
