@@ -146,18 +146,40 @@ function Stop-WorktivityForRestart([object[]]$Processes) {
 function Invoke-CdpAction([object]$Target, [string]$RequestedAction, [int]$TimeoutSeconds = 15) {
     $actionJson = ConvertTo-Json -InputObject $RequestedAction -Compress
     $expression = @"
-(() => {
+(async () => {
   const action = $actionJson;
   const clean = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
-  const buttons = [...document.querySelectorAll("button")];
   const label = (button) => clean(button.innerText || button.getAttribute("aria-label") || button.textContent);
-  const find = (labels) => {
+  const mainButtons = () => [...document.querySelectorAll("button")];
+  const findIn = (buttons, labels) => {
     for (const candidate of labels) {
       const button = buttons.find((item) => label(item) === candidate);
       if (button) return button;
     }
     return null;
   };
+  const find = (labels) => findIn(mainButtons(), labels);
+  const modalConfirm = () => {
+    const buttons = mainButtons();
+    const keepWorking = buttons.find((item) => label(item) === "keep working");
+    const open = keepWorking
+      || /clock out early/i.test(document.body && document.body.innerText || "");
+    if (!open) return undefined;
+    if (keepWorking) {
+      let root = keepWorking.parentElement;
+      while (root && root !== document.body) {
+        const confirm = [...root.querySelectorAll("button")]
+          .find((item) => label(item) === "clock out" && !item.disabled);
+        if (confirm) return confirm;
+        root = root.parentElement;
+      }
+    }
+    return null;
+  };
+  if (action === "clock_out") {
+    const existing = modalConfirm();
+    if (existing) { existing.click(); return "clicked"; }
+  }
   const clockIn = find(["clock in", "clock-in", "start work", "start tracking"]);
   const resume = find(["resume work"]);
   const pause = find(["take a break", "working away"]);
@@ -177,6 +199,16 @@ function Invoke-CdpAction([object]$Target, [string]$RequestedAction, [int]$Timeo
   const button = find(labels[action]);
   if (!button || button.disabled) return "not_ready";
   button.click();
+  if (action === "clock_out") {
+    let sawModal = false;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const confirm = modalConfirm();
+      if (confirm) { confirm.click(); return "clicked"; }
+      if (confirm === null) sawModal = true;
+    }
+    if (sawModal) return "not_ready";
+  }
   return "clicked";
 })()
 "@

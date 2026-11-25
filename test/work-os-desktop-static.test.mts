@@ -605,6 +605,13 @@ assert.match(worktivityController, /\["clock in", "clock-in", "start work", "sta
 assert.match(worktivityController, /button\.disabled/);
 assert.match(worktivityController, /\$script:RestoreRequired = \$port -ne \$DefaultPort/);
 assert.match(worktivityController, /debugPorts \| Where-Object \{ \$_ -ne \$DefaultPort \}/);
+// Worktivity may ask "Clock out early?" with a Keep working/Clock out modal;
+// the controller must confirm it in the same action instead of stopping at
+// the first click and leaving the modal open.
+assert.match(worktivityController, /clock out early/i);
+assert.match(worktivityController, /keep working/i);
+assert.match(worktivityController, /modalConfirm/);
+assert.match(worktivityController, /setTimeout/);
 
 const webEmployee = [
   readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeToday.tsx"), "utf8"),
