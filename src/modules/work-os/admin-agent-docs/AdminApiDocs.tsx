@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import WorkOsViewModeForm from "../WorkOsViewModeForm";
 import {
   ADMIN_AGENT_API_AGENT_PROMPT,
   ADMIN_AGENT_API_BASE_URL,
@@ -76,9 +77,15 @@ export default function AdminApiDocs() {
                   <li key={text}><span className={shared.stepNumber} aria-hidden="true">{index + 1}</span><p>{text}</p></li>
                 ))}
               </ol>
-              <div className={shared.inlineAction}>
-                <Link className={shared.primaryLink} href="/work-os/admin/settings">Open Administration settings</Link>
-              </div>
+              <WorkOsViewModeForm
+                mode="admin"
+                next="/work-os/admin/settings"
+                formClassName={shared.inlineAction}
+                buttonClassName={shared.primaryLink}
+                ariaLabel="Open Administration settings in the administrator view"
+              >
+                Open Administration settings
+              </WorkOsViewModeForm>
               <div className={shared.codeStack}>
                 <h3>First call: verify the token and administrator identity</h3>
                 <pre className={styles.code}><code>{ADMIN_AGENT_API_FIRST_CALL}</code></pre>

@@ -239,6 +239,10 @@ test("the administrator page has a separate guide and an employee route switch",
     assert.match(component, new RegExp(`ADMIN_AGENT_API_${model}[.]`));
   }
   assert.match(component, /Get a token/);
+  // The settings entry must select the administrator view before redirecting:
+  // a saved "My workspace" preference otherwise sends this link to /work-os/today.
+  assert.match(component, /<WorkOsViewModeForm[\s\S]*?mode="admin"[\s\S]*?next="\/work-os\/admin\/settings"/);
+  assert.doesNotMatch(component, /href="\/work-os\/admin\/settings"/);
 });
 
 test("admin docs match the OpenAPI base, method/path/scope map, and vocabulary", async () => {
