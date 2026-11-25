@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as web from "../../../src/modules/work-os/eod-structured";
+import * as shared from "@wrazy/work-os-shared/eod-structured";
 import {
   EOD_STRUCTURED_VERSION,
   createSaveFlight,
@@ -72,13 +72,13 @@ describe("companion structured EOD helpers", () => {
   });
 
   it("pins the mirrored contract version", () => {
-    expect(EOD_STRUCTURED_VERSION).toBe(web.EOD_STRUCTURED_VERSION);
+    expect(EOD_STRUCTURED_VERSION).toBe(shared.EOD_STRUCTURED_VERSION);
   });
 
   it("matches the web normalization and signature exactly", () => {
     for (const value of ["loom.com/share/0123456789abcdef0123456789abcdef", "https://www.loom.com/share/0123456789ABCDEF0123456789ABCDEF", "https://example.com/share/0123456789abcdef0123456789abcdef", "not a url"]) {
-      expect(normalizeLoomShareUrl(value)).toBe(web.normalizeLoomShareUrl(value));
+      expect(normalizeLoomShareUrl(value)).toBe(shared.normalizeLoomShareUrl(value));
     }
-    expect(eodCompositionSignature(composition)).toBe(web.eodCompositionSignature(composition));
+    expect(eodCompositionSignature(composition)).toBe(shared.eodCompositionSignature(composition));
   });
 });
