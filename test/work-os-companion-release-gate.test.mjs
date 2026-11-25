@@ -96,6 +96,16 @@ test("only the one-time shared-vault test-count correction is accepted", () => {
   assert.equal(gate.isAllowedVerificationCorrection(before, { ...after, verification: `${after.verification} and a rewrite` }), false);
 });
 
+test("verification evidence is bounded but accepts evidence-rich entries", () => {
+  const current = queue(5);
+  // The agent-token outcome legitimately records several suites and rendered
+  // checks; 800 characters cut real evidence off. Keep a bound, not a straitjacket.
+  current.updates[0].verification = "x".repeat(1000);
+  assert.equal(evaluate(current).eligible, true);
+  current.updates[0].verification = "x".repeat(1201);
+  assert.throws(() => evaluate(current), /update|outcome|verification/i);
+});
+
 test("empty, malformed, unverified, or internal-only outcomes fail closed", () => {
   for (const malformed of [null, {}, { ...queue(), schemaVersion: 2 }, { ...queue(), updates: null }]) {
     assert.throws(() => evaluate(malformed), /queue|schema/i);

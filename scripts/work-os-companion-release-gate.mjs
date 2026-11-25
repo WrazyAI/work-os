@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 export const QUEUE_PATH = "desktop/work-os-companion/release-queue.json";
 export const INITIAL_VERSION = "0.5.16";
 const THRESHOLD = 5;
+// Verification records real commands and results, and a single outcome may need
+// several suites plus rendered checks. 800 cut that evidence off; keep a bound
+// so the queue stays evidence rather than unbounded prose.
+const MAX_VERIFICATION = 1200;
 const PRE_POLICY_BASELINES = new Map([
   ["0.5.17", "0.5.17.json"],
   ["0.5.18", "0.5.18.json"],
@@ -54,7 +58,7 @@ function validateQueue(queue) {
   const summaries = new Set();
   for (const entry of queue.updates) {
     if (!entry || !text(entry.id, 100) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id)
-      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification, 800)) {
+      || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification, MAX_VERIFICATION)) {
       throw new Error("Each update needs a stable ID, feature/fix type, outcome summary and verification");
     }
     const summary = entry.summary.trim().toLowerCase();
