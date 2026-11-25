@@ -51,7 +51,10 @@ describe("administration notifications", () => {
   });
 
   it("leaves the employee flyout position untouched", () => {
-    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    const css = [
+      readFileSync(new URL("../styles/tokens-base.css", import.meta.url), "utf8"),
+      readFileSync(new URL("../styles/legacy-surfaces.css", import.meta.url), "utf8"),
+    ].join("\n");
     // The base contract the admin workspace now inherits verbatim.
     expect(css).toContain("top: max(18px, env(safe-area-inset-top))");
     expect(css).toContain("right: max(18px, env(safe-area-inset-right))");

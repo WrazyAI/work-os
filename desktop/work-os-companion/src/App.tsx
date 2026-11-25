@@ -1,25 +1,19 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
-import { TaskFocusDetails } from "./TaskFocusDetails";
-import { OverflowPanText } from "./OverflowPan";
-import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
-import { readStoredFlag, writeStoredFlag } from "./storedFlags";
 import { emit, listen } from "./tauriEvents";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
-import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
-import { getVersion } from "@tauri-apps/api/app";
+import { isVoiceEventFor, useVoiceInput } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import type { Update } from "@tauri-apps/plugin-updater";
-import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, canRunBackgroundUpdateCheck, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, resolvePendingUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
-import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnnounceUpdate, updateInstalledCopy, WHATS_NEW_ANNOUNCE_KEY, writeAnnouncedVersion } from "./whatsNew";
+import { displayUpdateVersion, shouldAutoCheckUpdate, updateRowCopy } from "./updater";
+import { changelogBulletsFor, changelogHistory } from "./whatsNew";
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, ExternalLink, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
-import { ApiRequestError, apiRequest, apiRequestAudio, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
+import { AlertTriangle, BriefcaseBusiness, Bug, ChevronRight, CircleHelp, CirclePlay, LayoutDashboard, RefreshCw, X } from "lucide-react";
+import { ApiRequestError, apiRequest, apiRequestBlob, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion, uploadTaskCompletionEvidence } from "./api";
 import { TaskEvidenceDialog, type TaskEvidenceAttachResult } from "./CompletionEvidence";
 import { taskRequiresCompletionEvidence, type TaskEvidenceRecord } from "@wrazy/work-os-shared/completion-evidence";
 import { PLAN_INTERPRET_TIMEOUT_MS, PLAN_REFINE_TIMEOUT_MS } from "@wrazy/work-os-shared/plan-timeouts";
@@ -30,60 +24,42 @@ import { startInstanceHeartbeat } from "./instanceHeartbeat";
 import { loadMachineCadence } from "./localSettings";
 import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
-import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
+import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime } from "./dateFormat";
 import { useNotifications, type NotificationAction } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
-import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { alignOfflineClock } from "./offlineClock";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_REASON, EOD_SHIFT_OPEN_SUFFIX, eodDraftBlocked, eodDraftWindowOpen } from "@wrazy/work-os-shared/shift-gate";
-import { AssigneeTags, EllipsisMenu, TaskActionMenuItems, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, EodShiftOpenNotice, TaskRemovalConfirmation } from "./taskSurfaces";
-import { completionClosesTaskPanel, completionTaskCapabilities, hasTaskMenu, displayTaskState, patchedTaskCapabilities, taskCheckboxA11y, taskCheckboxEnabled, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusLabel, taskStatusWriteRequired } from "./taskActions";
-import { ChatSectionBoundary } from "./ErrorBoundary";
-import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
-import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
+import { EOD_SHIFT_OPEN_REASON, eodDraftBlocked, eodDraftWindowOpen } from "@wrazy/work-os-shared/shift-gate";
+import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation } from "./taskSurfaces";
+import { completionClosesTaskPanel, completionTaskCapabilities, taskCompletionNeedsEvidenceStep, taskCompletionReceipt, taskDueDateSeed, taskStatusWriteRequired } from "./taskActions";
+import type { AvatarThinkingStage } from "./AvatarThinking";
 import type { RecapNextStepItem } from "./types";
 import type { RecapNextStepState } from "./RecapNextStepsCard";
-import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, simulateAiEod, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
-import { NavigateButton } from "./NavigateButton";
-import { ChatMarkdown } from "./ChatMarkdown";
-import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
-import { BatchApprovalCards } from "./TaskBatchCard";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
-import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
-import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
-import { TaskFinder } from "./TaskFinder";
-import { buildFocusPlan } from "./focusPlan";
+import { dayScopedTasks, isOverdueTask, mergeDayTasks, parentTasks, readTaskSort, safeTaskText, suggestDailyGoal, taskKind, unfinishedBefore, uniqueTasks, writeTaskSort, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { filterFinderTasks } from "./taskFinderFilters";
-import type { TaskFinderSource } from "./workOsQueries";
-import { updateTaskHistoryPages, useLatestActivityIntervalQuery } from "./workOsQueries";
-import { SortHeaderRow } from "./SortHeaderRow";
-import { taskViewTabIndex } from "./taskViewTabs";
-import { ProgressRing } from "./ProgressRing";
+import { useLatestActivityIntervalQuery } from "./workOsQueries";
 import { prefersReducedMotion, useListShift } from "./listShift";
-import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
+import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
 import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { clearWorkOsAccountCache, resetSessionScopedReads, restoreWorkOsQueryCache, TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, updateTaskBacklogCaches, useActivityIntervalsQuery, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, normalizeDay, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useDashboardInsightsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOpenTaskCountQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskHistoryQuery, useTaskOptionsQuery, type TaskDetails } from "./workOsQueries";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
-import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
+import { NotificationsBell } from "./NotificationsBell";
 import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, recapSurfaceDecision, type RecapWatermark, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
-import { CheckedMoment } from "./CheckedMoment";
-import { EodSubmittedReport, submittedEodStatus } from "./EodSubmittedReport";
+import { submittedEodStatus } from "./EodSubmittedReport";
 import { BootOverlay, useBootRise } from "./BootHandoff";
-import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
+import { DashboardSkeleton, FadeArc } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { classifyPlanSaveFailure, type PlanningConfirmResult } from "./planningSave";
-import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { applyMemoryReviewToCaches, requestMemoryFactPage, useMemoryFactsQuery } from "./workOsQueries";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
@@ -93,9 +69,8 @@ import NativeAppMenu from "./NativeAppMenu";
 import { installContextMenuSuppression } from "./contextMenu";
 import { SIDEBAR_TOGGLE_EVENT } from "./windowChrome";
 import { COMPANION_VISIBILITY_EVENT, ottoVisibilityMenuItem, shouldApplyVisibilityPoll } from "./ottoVisibility";
-import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
+import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase } from "./worktivityControl";
 import { MemoryModal } from "./MemorySettings";
-import { PersonalSettings } from "./PersonalSettings";
 import { SettingsContent } from "./SettingsContent";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { useSettingsNavigation } from "./settingsNavigation";
@@ -104,7 +79,6 @@ import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
-import { browserRecapAudio, createRecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
 import { APPEARANCE_DEFAULTS, APPEARANCE_EVENT, applyAppearance, normalizeAppearance, rememberTheme, watchSystemTheme, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
 import ThemePrompt from "./ThemePrompt";
 import { shouldOpenThemePrompt } from "./themePromptState";
@@ -132,11 +106,11 @@ import { adminOttoKeys } from "./adminOtto/queryKeys";
 import { adminOttoChangedEvent, captureScopeStillCurrent, createOttoModeController, ottoContextEvent, parseAdminOttoChangedEvent, sameOttoScope, OTTO_CHANGED_EVENT, OTTO_CONTEXT_CLEARED_EVENT, OTTO_CONTEXT_EVENT, type AdminOttoContext, type OttoModeController, type OttoModeSnapshot } from "./adminOtto/mode";
 import { startAuthorizedAdminRecapDelivery, type AdminRecapDeliveryHandle } from "./adminOtto/delivery";
 import { eodArrivalCopy, presentAdminArrival, recapArrivalCopy } from "./adminOtto/notifications";
-import { ADMIN_ATTENTION_SEEN_KEY, OTTO_ADMIN_ATTENTION_EVENT, OTTO_ADMIN_ATTENTION_OPEN_EVENT, adminAttentionEvent, adminAttentionSeenKey, eodAttentionFromOverview, parseAdminAttentionEvent, parseAdminAttentionSeen, recapAttentionItem, shouldAutoSwitchWorkspace, type AdminAttentionItem, type AdminAttentionSeen } from "./adminOtto/attention";
+import { OTTO_ADMIN_ATTENTION_EVENT, OTTO_ADMIN_ATTENTION_OPEN_EVENT, adminAttentionEvent, adminAttentionSeenKey, eodAttentionFromOverview, parseAdminAttentionEvent, recapAttentionItem, shouldAutoSwitchWorkspace, type AdminAttentionItem, type AdminAttentionSeen } from "./adminOtto/attention";
 import { personalBootstrapAccess, runPersonalBootstrapRefresh, type PersonalBootstrapSource } from "./adminOtto/personalBootstrap";
 import { deliveryOwnershipKey, startDeliveryOwnership } from "./adminOtto/ownership";
 import { createAdminOttoContextRetry } from "./adminOtto/context";
-import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, onOttoSpeechStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
+import { createLocalAudioBus, createOttoAudioBroker, createOttoAudioRequester, installOttoAudioRequester, onOttoAudioStop, requestOttoAudio, requestOttoAudioStop, requestOttoSpeechStop, tauriAudioBus, type OttoAudioLease } from "./adminOtto/audioOwner";
 import { clearAdminOttoSurface } from "./adminOtto/modeSurface";
 import { createAdminConversationClient, createAdminConversationOwner, createLocalAdminConversationTransport, OTTO_CONVERSATION_EVENT, OTTO_CONVERSATION_REQUEST_EVENT, OTTO_CONVERSATION_RESULT_EVENT, parseAdminConversationRequest, type AdminConversationClient, type AdminConversationOwner, type AdminConversationState } from "./adminOtto/conversationSync";
 import { buildOttoViewState, OTTO_RECORD_NAV_EVENT, OTTO_VIEW_REQUEST_EVENT, OTTO_VIEW_RESULT_EVENT, OTTO_VIEW_STATE_EVENT, parseOttoRecordNavigationEvent, parseOttoViewRequest, type OttoViewState } from "./adminOtto/viewSwitch";
@@ -144,13 +118,11 @@ import { createWorkspaceOwner, effectiveWorkspaceMode, type WorkspaceOwner } fro
 import { createViewWorkFence } from "./adminOtto/viewWorkFence";
 import type { AdminOttoEntryRecovery } from "./adminOtto/chatEntry";
 import { ADMIN_SHELL_SESSION, adminShellGuideStateFor, adminShellNotificationStateFor, adminShellOttoStateFor, adminShellOverlayFor, adminShellSettingsAccountFor, adminShellSettingsStateFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOttoState, type AdminShellOverlay, type AdminShellSettingsState } from "./adminShell";
-import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
-import { overlayScrollLockActive, useModalScrollLock } from "./modalScrollLock";
-import { ScrollFadeRegion } from "./ScrollFadeRegion";
+import { overlayScrollLockActive } from "./modalScrollLock";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
-import SidebarNav, { type SidebarView } from "./SidebarNav";
+import SidebarNav from "./SidebarNav";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { TaskDateNavigator } from "./TaskDateNavigator";
 import { resolveDashboardShift } from "./dashboardModel";
@@ -160,19 +132,61 @@ import { useAttendanceWatch } from "./useAttendanceWatch";
 import { useDayMonitor } from "./useDayMonitor";
 import "./plan-insights.css";
 import "./insight-charts.css";
+import type {
+  ClockInConfirmation,
+  EodScreenshotContext,
+  MissedClockOutCorrection,
+  PendingWorktivityControl,
+  ProgressPanel,
+  ProgressReceipt,
+  ProgressUpdateKind,
+  TaskAssigneeOption,
+  TaskDeletionRequest,
+  TaskEditRequest,
+  TaskEvidenceRequest,
+  TaskView,
+  View,
+} from "./app/types";
+import {
+  ADMIN_MENU_SECTIONS,
+  ADMIN_SECTION_LABELS,
+  actionSuccessMessages,
+  EOD_PREPARE_ROUNDS,
+  isWorktivityControlResult,
+  moveDate,
+  NOTIFICATION_POLL_MS,
+  proposalFilingTransport,
+  readAdminAttentionSeen,
+  readSeenIds,
+  timeRemaining,
+  views,
+  WORKSPACE_MODE_KEY,
+  worktivityControlTransport,
+  writeAdminAttentionSeen,
+  writeSeenIds,
+} from "./app/constants";
+import { useModalFocusTrap } from "./app/hooks/useModalFocusTrap";
+import { useTaskCacheMutations } from "./app/hooks/useTaskCacheMutations";
+import { useUpdaterFlow } from "./app/hooks/useUpdaterFlow";
+import { ActiveDayWorkspace, DashboardTaskCard, KpiStrip } from "./app/views/ActiveDayWorkspace";
+import { ConnectScreen } from "./app/views/ConnectScreen";
+import { EodReviewView } from "./app/views/EodReviewView";
+import { EvidenceView } from "./app/views/EvidenceView";
+import { LoadingScreen } from "./app/views/LoadingScreen";
+import { ProgressComposer } from "./app/views/ProgressComposer";
+import { ShiftPulseCard } from "./app/views/ShiftPulseCard";
+import { TasksWorkspace } from "./app/views/TasksWorkspace";
 
-type View = SidebarView;
-type TaskView = "today" | "unfinished" | "completed" | "all";
-type EodScreenshotContext = { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] };
-
-/** Bounded interactive preparation before an EOD draft: four batches of a few
- * frames is enough to cover a day's sampled context without letting a single
- * press run away with vision cost. */
-const EOD_PREPARE_ROUNDS = 4;
-
-/** Remembers which workspace this device last opened. The choice is a view
- * preference; the account's role stays the authority on what it may open. */
-const WORKSPACE_MODE_KEY = "work-os.workspace-mode";
+export {
+  ActiveDayWorkspace,
+  ConnectScreen,
+  DashboardTaskCard,
+  KpiStrip,
+  LoadingScreen,
+  ProgressComposer,
+  ShiftPulseCard,
+  TasksWorkspace,
+};
 
 /** DEV-only boot harness for the real shell in the administration workspace;
  * see `adminShell.ts` for the `?admin-shell[&overlay=…]` contract. Resolved
@@ -204,149 +218,6 @@ const ADMIN_SHELL_SETTINGS: AdminShellSettingsState | null = ADMIN_SHELL_BOOT
 const ADMIN_SHELL_SETTINGS_ACCOUNT: string | null = ADMIN_SHELL_BOOT
   ? adminShellSettingsAccountFor(window.location.search, import.meta.env.DEV)
   : null;
-
-const worktivityControlTransport: WorktivityControlTransport = {
-  preflight: (request) => apiRequest<WorktivityPreflight>("/api/work-os/me/workday/worktivity-control", {
-    method: "POST",
-    headers: { "Idempotency-Key": request.operation_id, "X-Work-OS-Desktop-Control": "companion" },
-    body: JSON.stringify(request),
-  }),
-  execute: (action) => invoke<WorktivityDesktopResult>("worktivity_control", { action }),
-  restore: (desktop) => !desktop || desktop.restore_required
-    ? invoke<void>("finish_worktivity_control")
-    : Promise.resolve(),
-  confirm: (request) => apiRequest<Extract<WorktivityControlResult, { status: "confirmed" | "pending" | "blocked" | "not_applied" }>>("/api/work-os/me/workday/worktivity-control", {
-    method: "POST",
-    headers: { "Idempotency-Key": request.operation_id, "X-Work-OS-Desktop-Control": "companion" },
-    body: JSON.stringify(request),
-  }),
-  sleep: (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
-};
-
-type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
-type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
-type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
-type TaskEvidenceRequest = { task: Record<string, any>; mode: "complete" | "attach"; refreshDetails: boolean; savedEvidence?: TaskEvidenceRecord | null };
-type ClockInConfirmation = { kind: "late" | "exception"; reason: string; operationId?: string };
-type PendingWorktivityControl = { action: WorktivityControlAction; operationId: string; body: Record<string, unknown>; message: string };
-function isWorktivityControlResult(value: unknown): value is WorktivityControlResult {
-  return !!value && typeof value === "object" && "operation_id" in value && "status" in value
-    && ["confirmed", "not_applied", "pending", "desktop_failed", "blocked", "confirmation_required"].includes(String((value as { status: unknown }).status));
-}
-type MissedClockOutCorrection = { sessionId: string; date: string; clockedInAt: string | null };
-type ProgressUpdateKind = "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
-type ProgressReceipt = { text: string; message: string; kind: ProgressUpdateKind; queued?: boolean; createdAt: string };
-type ProgressPanel = "update" | "goal";
-/** Update delivery flow shared by the flyout and the Settings row. The
- * plugin's Update object stays referenced while it holds native resources
- * (downloaded installer bytes, version catalog entry). */
-type UpdateFlow =
-  | { status: "idle" }
-  | { status: "checking" }
-  | { status: "available"; update: Update; headers: Record<string, string> }
-  | { status: "downloading"; update: Update; headers: Record<string, string>; progress: UpdateDownloadProgress }
-  | { status: "downloaded"; update: Update }
-  | { status: "failed"; update: Update; headers: Record<string, string>; message: string }
-  | { status: "installing"; update: Update };
-type ComposerMode = "progress" | "agenda";
-const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
-  { id: "day", label: "My Day", icon: LayoutDashboard }, { id: "tasks", label: "Tasks", icon: ListChecks },
-  { id: "review", label: "EOD Review", icon: MessageSquareText }, { id: "insights", label: "Insights", icon: Gauge },
-  { id: "evidence", label: "Evidence", icon: ShieldCheck }, { id: "settings", label: "Settings", icon: Settings },
-];
-const ADMIN_MENU_SECTIONS: Array<{ id: AdminSection; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "people", label: "People" },
-  { id: "tasks", label: "Tasks" },
-  { id: "review", label: "EOD Review" },
-  { id: "insights", label: "Insights" },
-  { id: "evidence", label: "Evidence" },
-  { id: "settings", label: "Settings" },
-];
-const ADMIN_SECTION_LABELS: Record<AdminSection, string> = Object.fromEntries(
-  ADMIN_MENU_SECTIONS.map((section) => [section.id, section.label]),
-) as Record<AdminSection, string>;
-
-const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
-const initials = (value?: string | null) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
-const timeRemaining = (value?: string | null) => {
-  const remaining = value ? Math.max(0, Date.parse(value) - Date.now()) : 0;
-  const minutes = Math.floor(remaining / 60_000);
-  return value ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : "—";
-};
-const actionSuccessMessages: Record<string, string> = {
-  "check_in.create": "Your update was saved.",
-  "proposal.reject": "The proposal was rejected.",
-  "proposal.accept": "The proposal was approved.",
-  "shift.clock_in": "You are clocked in.",
-  "shift.clock_out": "Your workday was closed.",
-  "shift.pause_toggle": "Your session status was updated.",
-  "shift.resolve_missed_clock_out": "The missed clock-out was corrected.",
-  "report.submit": "Your EOD was submitted for review.",
-  "task.create": "The task was created.",
-  "task.complete": "The task was marked complete.",
-  "task.reopen": "The task was reopened.",
-  "task.update": "The task was updated.",
-  "task.subtask_create": "The subtask was created.",
-  "task.subtask_move": "The subtask was moved.",
-  "task.archive": "The task was archived.",
-  "task.delete": "The task was permanently deleted.",
-  "workspace.task_surface": "The task was added to today.",
-  "workspace.task_defer": "The task was deferred.",
-};
-
-/** One filing transport for approvals and retries: the accept request plus the
- * owner-scoped readback used to reconcile an interrupted response. */
-function proposalFilingTransport() {
-  return {
-    reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
-    readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
-    reviewBatch: (batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown>; clear_fields?: string[] }> }) => apiRequest(`/api/work-os/proposal-batches/${encodeURIComponent(batchId)}`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) }),
-  };
-}
-
-
-/** How often the review-notification sources (memory, activity intervals) are
- * re-read while the app is open. Matches the day poll cadence. */
-const NOTIFICATION_POLL_MS = 60_000;
-/** Device-local memory for the Focus tab's goal section (§7.2.1). */
-const GOAL_COLLAPSE_KEY = "work-os.focus.goal-collapsed.v1";
-
-/** The seen registries are best-effort local memory: losing them only means a
- * reminder may be announced once more, never that one is lost. */
-function readSeenIds(key: string): string[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSeenIds(key: string, ids: string[]): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(ids));
-  } catch { /* best effort */ }
-}
-
-/** The EOD attention baseline is a watermark plus ids, not just a list: it
- * catches a report submitted while the app was closed without re-announcing
- * one that was already seen. */
-function readAdminAttentionSeen(): AdminAttentionSeen | null {
-  try {
-    const raw = window.localStorage.getItem(ADMIN_ATTENTION_SEEN_KEY);
-    return raw ? parseAdminAttentionSeen(JSON.parse(raw)) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeAdminAttentionSeen(value: AdminAttentionSeen): void {
-  try {
-    window.localStorage.setItem(ADMIN_ATTENTION_SEEN_KEY, JSON.stringify(value));
-  } catch { /* best effort */ }
-}
 
 /** Main companion shell: coordinates cached workday data, task history, and routed workspaces. */
 export default function App() {
@@ -385,7 +256,6 @@ export default function App() {
   const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
   const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
   const composerConversationSignature = useRef("");
-  const launchUpdateCheckRef = useRef(false);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[]; reviewId?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [composerThinking, setComposerThinking] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
@@ -563,17 +433,27 @@ export default function App() {
   const [queueAttentionCount, setQueueAttentionCount] = useState(0);
   const [apiBase, setApiBase] = useState("");
   const [autoStart, setAutoStart] = useState(false);
-  const [updateFlow, setUpdateFlow] = useState<UpdateFlow>({ status: "idle" });
-  const updateFlowRef = useRef<UpdateFlow>({ status: "idle" });
-  const updateCheckInFlightRef = useRef(false);
-  const updatePaintRef = useRef<unknown>(null);
-  const updateRowSummary: UpdateRowCopyInput =
-    updateFlow.status === "available" ? { status: "available", version: updateFlow.update.version }
-    : updateFlow.status === "downloading" ? { status: "downloading", version: updateFlow.update.version, progress: updateFlow.progress }
-    : updateFlow.status === "downloaded" ? { status: "downloaded", version: updateFlow.update.version }
-    : updateFlow.status === "failed" ? { status: "failed", version: updateFlow.update.version, message: updateFlow.message }
-    : updateFlow.status === "installing" ? { status: "installing", version: updateFlow.update.version }
-    : { status: updateFlow.status };
+  const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
+    const message = errorMessage(value, fallback);
+    setError(message);
+    notifications.error(message, title);
+    return message;
+  }, [notifications]);
+  const {
+    updateFlow,
+    updateRowSummary,
+    autoCheckUpdates,
+    setAutoCheckUpdates,
+    installedVersion,
+    installedVersionRaw,
+    whatsNew,
+    setWhatsNew,
+    launchUpdateCheckRef,
+    beginUpdateDownload,
+    installDownloadedUpdate,
+    checkForUpdates,
+    toggleAutoCheckUpdates,
+  } = useUpdaterFlow({ session, apiBase, notifications, showError });
   const [vaultGate, setVaultGate] = useState<VaultGateState>({ status: "pending" });
   const vaultAttemptRef = useRef<VaultAttempt | null>(null);
   /** The query cache hydrates only after the gate has opened the vault. */
@@ -584,7 +464,6 @@ export default function App() {
   // mistake surfaces as a failure screen instead of a silently skipped vault.
   const applyVaultStateRef = useRef<() => Promise<void>>(() => Promise.reject(new Error("The vault opener is not ready yet.")));
   const [refreshing, setRefreshing] = useState(false);
-  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
   const [theme, setTheme] = useState<ThemePreference>(APPEARANCE_DEFAULTS.theme);
@@ -598,9 +477,6 @@ export default function App() {
   const confirmedThemeRef = useRef<ThemePreference>(APPEARANCE_DEFAULTS.theme);
   const appearanceRef = useRef({ textSize, mascotSize, theme });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
-  const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
-  const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
-  const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [debugPageGuide, setDebugPageGuide] = useState<GuideView | null>(null);
   /** The whole-workspace walk-through: which workspace's pages it walks, so
@@ -1414,19 +1290,6 @@ export default function App() {
     };
   }, [openPageGuide, pageGuideView]);
 
-  const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
-    const message = errorMessage(value, fallback);
-    setError(message);
-    notifications.error(message, title);
-    return message;
-  }, [notifications]);
-
-  /** Either announcement choice marks the running build seen: the success
-   * flyout is a one-time notice per version per device (design §19.8). */
-  const markUpdateAnnounced = useCallback((version: string) => {
-    writeAnnouncedVersion(version);
-    notifications.clearPersistent(WHATS_NEW_ANNOUNCE_KEY);
-  }, [notifications]);
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
@@ -1573,172 +1436,20 @@ export default function App() {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
   }, [queryClient]);
 
-  /** Stable row identity shared by optimistic cache updates and provider-backed rows. */
-  const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
   /** The employee's current day, used to recompute the overdue lock when a cache
    * patch flips completion or moves a due date without a server payload to read
    * it from. */
   const taskCalendarDate = visibleDay?.shiftDate || new Date().toISOString().slice(0, 10);
-  /** Merge a partial patch into one row and keep its capability payload truthful
-   * when a write moves the overdue lock: a just-completed row offers Reopen
-   * immediately, and a just-reopened or rescheduled row reflects the due date
-   * without waiting for a refetch. */
-  const taskAfterPatch = (task: Record<string, any>, patch: Record<string, any>) => {
-    const next = { ...task, ...patch };
-    const affectsCapabilities = typeof patch.completed === "boolean" || "due_date" in patch;
-    if (affectsCapabilities && next.capabilities && typeof next.capabilities === "object") {
-      next.capabilities = patchedTaskCapabilities(next, taskCalendarDate);
-    }
-    return next;
-  };
-  /** Apply a partial task patch only to the matching provider-backed cache row. */
-  const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
-    taskRowId(task) === rowId ? taskAfterPatch(task, patch) : task;
-
-  /** Update every loaded sorted-history variant, then revalidate active ones so
-   * completion filters and page boundaries stay authoritative after writes. */
-  const updateTaskHistoryVariants = useCallback((
-    updater: (current: InfiniteData<TaskHistoryPage>, completedOnly: boolean) => InfiniteData<TaskHistoryPage>,
-  ) => {
-    updateTaskHistoryPages(queryClient, updater);
-  }, [queryClient]);
-  /** Refetch active sorted-history variants after a mutation changes membership or order. */
-  const revalidateTaskHistoryVariants = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory(), refetchType: "active" });
-  }, [queryClient]);
-
-  /** Surgical cache updates: a task write patches loaded rows immediately, then
-   * active sorted pages revalidate so changed sort keys cannot stay misplaced. */
-  const patchTaskCaches = useCallback((rowId: string, patch: Record<string, any>) => {
-    updateTaskHistoryVariants((current, completedOnly) => ({
-      ...current,
-      pages: current.pages.map((page) => ({
-        ...page,
-        tasks: page.tasks.flatMap((task) => {
-          if (taskRowId(task) !== rowId) return [task];
-          const next = taskAfterPatch(task, patch);
-          return completedOnly && next.completed !== true ? [] : [next];
-        }),
-      })),
-    }));
-    for (const variant of ["compact", "details"] as const) {
-      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
-        ...current,
-        tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
-      } : current);
-    }
-    if (typeof patch.completed === "boolean") {
-      // The confirmed task write also advances selected plan items and embedded
-      // subtask rows on the server. Refresh the day so the focus meter and
-      // hierarchy show that confirmed state instead of waiting for the poll.
-      void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
-      void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
-    }
-    if (patch.completed === true) {
-      // The backlog is open-only: completing a task removes it and shifts the
-      // counts immediately, then a refetch confirms the server totals.
-      updateTaskBacklogCaches(queryClient, (current) => {
-        if (!current || !current.counts || !current.tasks.some((task) => taskRowId(task) === rowId)) return current;
-        return {
-          tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
-          counts: { total: Math.max(0, current.counts.total - 1), open: Math.max(0, current.counts.open - 1), completed: current.counts.completed + 1 },
-        };
-      });
-      void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
-    } else {
-      updateTaskBacklogCaches(queryClient, (current) => current ? {
-        ...current,
-        tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
-      } : current);
-      if (patch.completed === false) void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
-    }
-    revalidateTaskHistoryVariants();
-  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants, taskCalendarDate]);
-
-  /** Remove a task from every loaded task-history, day, and backlog cache. */
-  const removeTaskFromCaches = useCallback((rowId: string) => {
-    updateTaskHistoryVariants((current) => ({
-      ...current,
-      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.filter((task) => taskRowId(task) !== rowId) })),
-    }));
-    for (const variant of ["compact", "details"] as const) {
-      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
-        ...current,
-        tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
-      } : current);
-    }
-    updateTaskBacklogCaches(queryClient, (current) => {
-      if (!current) return current;
-      const tasks = current.tasks.filter((task) => taskRowId(task) !== rowId);
-      if (!current.counts) return { ...current, tasks };
-      const removed = current.tasks.length - tasks.length;
-      return { tasks, counts: { ...current.counts, total: Math.max(0, current.counts.total - removed), open: Math.max(0, current.counts.open - removed) } };
-    });
-    revalidateTaskHistoryVariants();
-  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
-
-  /** Swap a pending row for the server row in the same slot, so the list
-   * never loses or gains a row while the swap happens. */
-  const replaceTaskInCaches = useCallback((rowId: string, task: Record<string, any>) => {
-    updateTaskHistoryVariants((current, completedOnly) => ({
-      ...current,
-      pages: current.pages.map((page) => ({
-        ...page,
-        tasks: page.tasks.flatMap((row) => {
-          if (taskRowId(row) !== rowId) return [row];
-          return completedOnly && task.completed !== true ? [] : [task];
-        }),
-      })),
-    }));
-    for (const variant of ["compact", "details"] as const) {
-      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
-        ...current,
-        tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
-      } : current);
-    }
-    updateTaskBacklogCaches(queryClient, (current) => current ? {
-      ...current,
-      tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
-    } : current);
-    revalidateTaskHistoryVariants();
-  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
-
-  /** Optimistically insert a task into loaded list caches, respecting completed-only history variants. */
-  const insertTaskIntoCaches = useCallback((task: Record<string, any>) => {
-    updateTaskHistoryVariants((current, completedOnly) => {
-      if (completedOnly && task.completed !== true) return current;
-      if (!current.pages.length) return current;
-      const exists = current.pages.some((page) => page.tasks.some((row) => taskRowId(row) === taskRowId(task)));
-      if (exists) return current;
-      return { ...current, pages: [{ ...current.pages[0], tasks: [task, ...current.pages[0].tasks] }, ...current.pages.slice(1)] };
-    });
-    for (const variant of ["compact", "details"] as const) {
-      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => {
-        if (!current) return current;
-        if (current.tasks.some((row) => taskRowId(row) === taskRowId(task))) return current;
-        return { ...current, tasks: [task, ...current.tasks] };
-      });
-    }
-    updateTaskBacklogCaches(queryClient, (current) => {
-      if (!current || current.tasks.some((row) => taskRowId(row) === taskRowId(task))) return current;
-      if (!current.counts) return { ...current, tasks: [task, ...current.tasks] };
-      return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
-    });
-  }, [queryClient, updateTaskHistoryVariants]);
-  /** Optimistic adds are cache rows like any other, carrying `pending_status`
-   * until the server record replaces them in place. Two commits (one for the
-   * pending row, one for the real row) would move the list down and back up
-   * around a task that never actually moved. */
-  const insertPendingTaskIntoCaches = useCallback((pending: { id: string; title: string; description: string; dueDate?: string | null }) => {
-    insertTaskIntoCaches({
-      id: pending.id,
-      title: pending.title,
-      description: pending.description,
-      completed: false,
-      due_date: pending.dueDate ?? null,
-      pending_status: "syncing",
-    });
-  }, [insertTaskIntoCaches]);
+  const {
+    taskRowId,
+    updateTaskHistoryVariants,
+    revalidateTaskHistoryVariants,
+    patchTaskCaches,
+    removeTaskFromCaches,
+    replaceTaskInCaches,
+    insertTaskIntoCaches,
+    insertPendingTaskIntoCaches,
+  } = useTaskCacheMutations(queryClient, taskCalendarDate);
 
   const detailsViews = view === "review" || view === "evidence";
   const selectedTaskDate = planHistoryDate || visibleDay?.shiftDate || "";
@@ -2964,39 +2675,6 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()).catch(() => { /* noop */ }); };
   }, [notifications, refresh, showError]);
 
-  useEffect(() => {
-    if (!isTauri()) {
-      setInstalledVersion("Unavailable in browser preview");
-      return;
-    }
-    void getVersion().then((value) => {
-      setInstalledVersionRaw(value);
-      setInstalledVersion(displayUpdateVersion(value));
-      if (!shouldAnnounceUpdate(value, readAnnouncedVersion())) return;
-      const copy = updateInstalledCopy(value);
-      notifications.persistent(WHATS_NEW_ANNOUNCE_KEY, copy.message, copy.title, "success", {
-        actions: [
-          { label: copy.changelogLabel, kind: "primary", onClick: () => { markUpdateAnnounced(value); setWhatsNew({ version: value }); } },
-          { label: copy.dismissLabel, kind: "quiet", onClick: () => markUpdateAnnounced(value) },
-        ],
-      });
-    }).catch(() => setInstalledVersion("Unavailable"));
-  }, [markUpdateAnnounced, notifications]);
-
-  // The companion is a long-lived tray app, so releases dropped mid-session
-  // would otherwise go unnoticed until a restart. Re-check silently on the
-  // shared cadence; a downloaded-but-uninstalled update still allows checks
-  // (a newer release replaces it), while a live download or install blocks.
-  useEffect(() => { updateFlowRef.current = updateFlow; }, [updateFlow]);
-  useEffect(() => {
-    if (!isTauri() || !session || !autoCheckUpdates) return;
-    const timer = window.setInterval(() => {
-      const flow = updateFlowRef.current;
-      if (!canRunBackgroundUpdateCheck(flow.status)) return;
-      void checkForUpdates({ silent: true });
-    }, UPDATE_CHECK_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [autoCheckUpdates, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -3790,179 +3468,6 @@ export default function App() {
     }
   }
 
-  /** Closes the plugin's native download resource when a pending entry is
-   * replaced, so superseded installers cannot pin memory. Downloaded entries
-   * hold the same native resource as available/failed ones. */
-  function discardUpdateEntry(flow: UpdateFlow) {
-    if (flow.status === "available" || flow.status === "failed" || flow.status === "downloaded") {
-      void flow.update.close().catch(() => undefined);
-    }
-  }
-
-  /** Raises the persistent install prompt for a downloaded update. Reusing the
-   * stable key replaces a visible prompt and re-raises one the user dismissed
-   * with "Later". */
-  function raiseDownloadedUpdateNotification(version: string) {
-    const copy = updateDownloadedCopy(version);
-    notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
-      actions: [
-        { label: "Update now", kind: "primary", onClick: () => void installDownloadedUpdate() },
-        { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
-      ],
-    });
-  }
-
-  async function beginUpdateDownload() {
-    const flow = updateFlowRef.current;
-    if (flow.status !== "available" && flow.status !== "failed") return;
-    const { update, headers } = flow;
-    const display = displayUpdateVersion(update.version);
-    updatePaintRef.current = null;
-    setUpdateFlow({ status: "downloading", update, headers, progress: INITIAL_UPDATE_DOWNLOAD_PROGRESS });
-    const publishProgress = (progress: UpdateDownloadProgress, force = false) => {
-      const details = updateProgressDetails(progress);
-      const paintKey = details.percent ?? Math.floor(progress.receivedBytes / (256 * 1024));
-      if (!force && updatePaintRef.current === paintKey) return;
-      updatePaintRef.current = paintKey;
-      notifications.persistent(UPDATE_AVAILABLE_KEY, `Downloading ${display}… ${details.valueText}`, "Downloading update", "info", {
-        progress: { value: details.percent, max: 100, valueText: details.valueText },
-        locked: true,
-      });
-    };
-    publishProgress(INITIAL_UPDATE_DOWNLOAD_PROGRESS, true);
-    let progress = INITIAL_UPDATE_DOWNLOAD_PROGRESS;
-    try {
-      await update.download((event) => {
-        progress = applyDownloadEvent(progress, event);
-        setUpdateFlow((current) => current.status === "downloading" ? { ...current, progress } : current);
-        publishProgress(progress);
-      }, { headers });
-    } catch (value) {
-      const message = errorMessage(value, "The download did not finish.");
-      diagnostics.warn("updater.download_failed", message);
-      setUpdateFlow({ status: "failed", update, headers, message });
-      const copy = updateDownloadFailedCopy(update.version, message);
-      notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "error", {
-        actions: [{ label: "Retry", kind: "primary", onClick: () => void beginUpdateDownload() }],
-      });
-      return;
-    }
-    setUpdateFlow({ status: "downloaded", update });
-    raiseDownloadedUpdateNotification(update.version);
-  }
-
-  async function installDownloadedUpdate() {
-    const flow = updateFlowRef.current;
-    if (flow.status !== "downloaded") return;
-    // The install step ends in the process exiting on Windows (the installer
-    // closes and relaunches the app), so the exit watchdog is armed first and
-    // disarmed again if the install rejects, keeping the app alive. Arming is a
-    // safety net, not a prerequisite: if the command is unavailable (for
-    // example after an ACL regression) the install still proceeds and the gap is
-    // reported to diagnostics instead of blocking the update.
-    notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
-    setUpdateFlow({ status: "installing", update: flow.update });
-    // The install step ends this process on purpose, so the next launch must not
-    // report the exit as a crash.
-    markCleanExit();
-    let watchdogArmed = false;
-    try {
-      await invoke("arm_update_exit_watchdog");
-      watchdogArmed = true;
-    } catch (value) {
-      diagnostics.warn("updater.watchdog_unavailable", errorMessage(value, "The exit watchdog could not be armed."));
-    }
-    try {
-      await flow.update.install();
-    } catch (value) {
-      if (watchdogArmed) await invoke("disarm_update_exit_watchdog").catch(() => undefined);
-      const message = errorMessage(value, "The update could not be installed.");
-      diagnostics.warn("updater.install_failed", message);
-      setUpdateFlow({ status: "downloaded", update: flow.update });
-      // A failed install must stay visible and retryable: antivirus holds can
-      // reject the first attempt, and a transient toast would strand the user
-      // with no path back. The downloaded artifact is kept, so Retry resumes.
-      notifications.persistent(UPDATE_AVAILABLE_KEY, `${message} Retry the install, or quit Work OS from the system tray and run the setup installer again.`, "Update failed", "error", {
-        actions: [
-          { label: "Retry", kind: "primary", onClick: () => void installDownloadedUpdate() },
-          { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
-        ],
-      });
-      return;
-    }
-    await relaunch();
-  }
-
-  async function checkForUpdates({ silent = false }: { silent?: boolean } = {}) {
-    if (updateCheckInFlightRef.current) return;
-    const previous = updateFlowRef.current;
-    if (!canRunBackgroundUpdateCheck(previous.status)) return;
-    updateCheckInFlightRef.current = true;
-    setUpdateFlow({ status: "checking" });
-    try {
-      const saved = await secureState.session();
-      if (!saved) {
-        setUpdateFlow(previous);
-        if (!silent) notifications.info("Sign in first, then check for updates.", "Not signed in");
-        return;
-      }
-      const result = await queryAvailableUpdate(saved);
-      if (result.status === "managed") {
-        setUpdateFlow(previous);
-        if (!silent) notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
-        return;
-      }
-      if (result.status === "current") {
-        // A pending entry may be stale (for example a pulled release).
-        if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") discardUpdateEntry(previous);
-        setUpdateFlow({ status: "idle" });
-        if (!silent) notifications.success("You already have the latest internal build.", "Work OS is up to date");
-        return;
-      }
-      if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") {
-        const resolution = resolvePendingUpdate({ status: previous.status, version: previous.update.version }, result.update.version);
-        if (resolution !== "replace") {
-          // Same version already pending: keep its state and release the
-          // redundant check result. A downloaded update re-raises the install
-          // prompt, so a "Later" dismissal comes back on the next check.
-          void result.update.close().catch(() => undefined);
-          setUpdateFlow(previous);
-          if (resolution === "re-raise") raiseDownloadedUpdateNotification(previous.update.version);
-          return;
-        }
-        // A newer release supersedes the pending entry; release its native
-        // resource before surfacing the replacement.
-        discardUpdateEntry(previous);
-      }
-      setUpdateFlow({ status: "available", update: result.update, headers: result.headers });
-      const copy = updateAvailableCopy(result.update.version);
-      notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
-        action: { label: copy.actionLabel, onClick: () => void beginUpdateDownload() },
-      });
-    } catch (value) {
-      const message = errorMessage(value, "The update catalog could not be checked.");
-      diagnostics.warn("updater.check_failed", message);
-      // A failed check must never drop a pending entry: a downloaded update
-      // stays installable and an available/failed entry keeps its retry.
-      const keepPrevious = previous.status === "available" || previous.status === "failed" || previous.status === "downloaded";
-      setUpdateFlow(keepPrevious ? previous : { status: "idle" });
-      if (!silent) showError(message, message, "Update failed");
-    } finally {
-      updateCheckInFlightRef.current = false;
-    }
-  }
-
-  async function toggleAutoCheckUpdates(enabled: boolean) {
-    const previous = autoCheckUpdates;
-    setAutoCheckUpdates(enabled);
-    try {
-      await secureState.saveSettings({ apiBase, autoCheckUpdates: enabled });
-      notifications.success(enabled ? `Work OS will check for updates on launch and ${UPDATE_CHECK_CADENCE_COPY}.` : "Work OS will no longer check for updates automatically.", "Update setting saved");
-    } catch (value) {
-      setAutoCheckUpdates(previous);
-      showError(errorMessage(value, "The update setting could not be saved."), "The update setting could not be saved.", "Setting not saved");
-    }
-  }
 
   /** Apply first, persist second: the choice must land instantly in both
    * windows, and a failed save rolls the visible state back rather than
@@ -5861,38 +5366,7 @@ export default function App() {
    * it: nothing counts on the boot screens, and within a workspace branch the
    * employee-only flags count only where they render (design §9). */
   const modalOpen = (adminWorkspaceBranch || employeeWorkspaceBranch) && overlayScrollLockActive(employeeWorkspaceBranch, { global: globalOverlaysOpen, employeeOnly: employeeOnlyOverlaysOpen });
-  useModalScrollLock(modalOpen);
-
-  useEffect(() => {
-    if (!modalOpen || taskFinderOpen) return; // Native finder dialog owns inertness/focus.
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => {
-      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-      const dialog = dialogs.item(dialogs.length - 1);
-      if (!dialog || dialog.contains(document.activeElement)) return;
-      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])')?.focus();
-    });
-    const onKey = (event: KeyboardEvent) => {
-      if (moveMenuFocus(event)) return;
-      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-      const dialog = dialogs.item(dialogs.length - 1);
-      if (!dialog) return;
-      if (event.key === "Escape") { event.preventDefault(); dismissTopLayer(); return; }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((item) => item.offsetParent !== null);
-      if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [dismissTopLayer, modalOpen, taskFinderOpen]);
+  useModalFocusTrap({ modalOpen, taskFinderOpen, dismissTopLayer });
 
   /* The View menu owns the floating companion's visibility. `null` means the
      first visibility read has not landed, and showing is the safe action:
@@ -6368,97 +5842,46 @@ export default function App() {
         onDismissPendingTask={dismissPendingTask}
         onRetryGoalSave={() => setPlanDirty(true)}
       />}
-      {view === "review" && <main className="page">
-        {eodDate && !eodSubmitted && !reviewSubmittedStatus && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
-        {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
-          : eodDate && reportDayQuery.error ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={() => void reportDayQuery.refetch()}>Try again</button></div></section>
-            : reviewSubmittedStatus && !eodSubmitted && !eodLanding ? <EodSubmittedReport
-                status={reviewSubmittedStatus}
-                markdown={reviewDay?.report?.markdown}
-                date={reviewDay?.shiftDate ?? ""}
-                onAllEods={() => { setEodDate(null); setEodLanding(true); }}
-                onToday={() => { setEodDate(null); setView("day"); }}
-              />
-            : eodGate && !eodSubmitted ? <section className="panel"><Empty
-                title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
-                body={eodGate.detail}
-              /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(reviewDay); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section>
-              : eodPreparing && !eodDraft ? <EodLoadingState
-                title="Preparing Worktivity analysis…"
-                detail={`Checking ${eodDate ? "that day’s" : "today’s"} screenshots.`}
-                progress={eodPreparing.pending == null
-                  ? null
-                  : `${eodPreparing.analyzed} of ${eodPreparing.total} frames analyzed${eodPreparing.pending > 0 ? ` — ${eodPreparing.pending} still analyzing` : ""}.`}
-                onDraftAnyway={draftEodAnyway}
-              />
-                : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <EodLoadingState title="Drafting your EOD…" detail={`Checking ${eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.`} />
-                : reviewDay?.report && !eodSubmitted && !eodLanding && (!eodRedrafting || eodDraft) ? <EodComposer
-                    initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
-                    source={eodDraft?.source ?? "deterministic"}
-                    dayLabel={eodDate ? formatWorkOsDate(eodDate) : "today"}
-                    redrafting={eodRedrafting}
-                    clockedOut={eodClockedOut}
-                    screenshotContext={eodDraft?.screenshots ?? null}
-                    screenshotGallery={screenshotGalleryQuery.data ?? null}
-                    screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
-                    screenshotNotice={eodScreenshotNotice}
-                    preparing={eodPreparing}
-                    onDraftAnyway={draftEodAnyway}
-                    loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}
-                    loomAttached={eodDraft?.loom ?? null}
-                    onLoomPreview={(url) => previewLoomLink(url, reviewDay?.shiftDate)}
-                    onLoomDraft={draftEodWithLoom}
-                    busy={busy}
-                    onRedraft={() => void redraftEod(reviewDay)}
-                    onDelete={["draft", "rejected"].includes(String(reviewDay.report.status)) && !reviewDay.report.submitted_at ? () => setEodDeleteConfirmation(true) : undefined}
-                    shiftOpen={reviewShiftOpen}
-                    onOpenDashboard={() => setView("day")}
-                    onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
-                    onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
-                  />
-                  : eodSubmitted ? <section className="panel eod-submitted" role="status">
-                      <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={() => { setEodSubmitted(false); setEodDate(null); setEodLanding(true); }}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
-                      <CheckedMoment />
-                      <strong>EOD submitted</strong>
-                      <p>{eodQueued ? "Queued on this device — your report will be sent when the connection returns." : eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p>
-                    </section>
-                    : eodLanding || !reviewDay?.report ? <section className="panel eod-start">
-                        <header className="eod-start-head">
-                          <FileCheck2 size={20} />
-                          <div>
-                            <h2>{reviewSubmittedStatus ? "Your EODs" : eodDate ? `Draft the EOD for ${formatWorkOsDate(eodDate)}` : "Prepare today’s EOD"}</h2>
-                            <p>{reviewSubmittedStatus ? "Read your submitted report or finish an earlier day’s EOD." : eodDate ? "Build the report from that day’s recorded work, review every line, then submit it. Drafting does not submit anything." : "Build the report from today’s recorded work, review every line, then submit it. Drafting does not submit anything."}</p>
-                          </div>
-                        </header>
-                        {reviewSubmittedStatus ? <div className="eod-start-earlier"><ul><li><button type="button" onClick={() => setEodLanding(false)}>
-                          <span className="eod-start-earlier-main"><strong>{formatWorkOsDate(reviewDay?.shiftDate)}</strong><small>Read submitted report</small></span>
-                          <span className={`eod-pill ${reviewSubmittedStatus}`}>{reviewSubmittedStatus === "approved" ? "Approved" : "Submitted"}</span><ChevronRight size={14} aria-hidden="true" />
-                        </button></li></ul></div> : null}
-                        {!eodDate && outstandingDays.length > 0 ? <section className="eod-start-earlier" aria-label="Earlier days without a submitted EOD">
-                          <header><strong>Earlier days</strong><small>{outstandingDays.length} still need an EOD</small></header>
-                          <ul>{outstandingDays.slice(0, 5).map((day) => {
-                            const status = OUTSTANDING_STATUS_META[day.status];
-                            return <li key={day.date}><button type="button" onClick={() => { setEodLanding(false); setEodDate(day.date); }}>
-                              <span className="eod-start-earlier-main"><strong>{formatWorkOsDate(day.date)}</strong><small>{outstandingRowMeta(day) || "Recorded workday"}</small></span>
-                              <span className={`eod-pill ${status.className}`}>{status.label}</span>
-                              <ChevronRight size={14} />
-                            </button></li>;
-                          })}</ul>
-                          {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setNotificationsOpen(true)}>Show all {outstandingDays.length} days</button> : null}
-                        </section> : null}
-                        {reviewShiftOpen && !reviewSubmittedStatus ? <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companion} onClockOut={() => setView("day")} /> : null}
-                        <div className="eod-start-actions">
-                          {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
-                          {reviewShiftOpen || reviewSubmittedStatus ? null
-                            : reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
-                              ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
-                              : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Draft today’s EOD"}</button>}
-                        </div>
-                      </section>
-                      : null}
-      </main>}
+      {view === "review" && <EodReviewView
+        eodDate={eodDate}
+        eodSubmitted={eodSubmitted}
+        eodQueued={eodQueued}
+        eodLanding={eodLanding}
+        reviewSubmittedStatus={reviewSubmittedStatus}
+        reviewDay={reviewDay}
+        visibleDay={visibleDay}
+        reportDayLoading={reportDayQuery.isLoading}
+        reportDayError={Boolean(reportDayQuery.error)}
+        eodGate={eodGate}
+        eodPreparing={eodPreparing}
+        eodDraft={eodDraft}
+        eodRedrafting={eodRedrafting}
+        eodClockedOut={eodClockedOut}
+        screenshotGallery={screenshotGalleryQuery.data ?? null}
+        eodScreenshotNotice={eodScreenshotNotice}
+        reviewShiftOpen={reviewShiftOpen}
+        outstandingDays={outstandingDays}
+        busy={busy}
+        onClearEodDate={() => setEodDate(null)}
+        onRetryReportDay={() => void reportDayQuery.refetch()}
+        onShowAllEods={() => { setEodDate(null); setEodLanding(true); }}
+        onOpenView={setView}
+        onOpenNotifications={() => setNotificationsOpen(true)}
+        onSelectOutstandingDay={(date) => { setEodLanding(false); setEodDate(date); }}
+        onRetryEodGate={() => { setEodGate(null); void redraftEod(reviewDay); }}
+        onDraftAnyway={draftEodAnyway}
+        onLoomPreview={previewLoomLink}
+        onLoomDraft={draftEodWithLoom}
+        onRedraft={() => void redraftEod(reviewDay)}
+        onDeleteDraft={() => setEodDeleteConfirmation(true)}
+        onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
+        onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
+        onResetSubmitted={() => { setEodSubmitted(false); setEodDate(null); setEodLanding(true); }}
+        onHideLanding={() => setEodLanding(false)}
+        onCreateDraft={() => { setEodLanding(false); void createEodDraft(reviewDay); }}
+      />}
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onOpenToday={() => setView("day")} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
-      {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
+      {view === "evidence" && <EvidenceView visibleDay={visibleDay} />}
        {view === "settings" && (
         <main className="page settings-page settings-workspace-page">
           <SettingsContent
@@ -6611,935 +6034,3 @@ export default function App() {
   return frameWindow(<BootOverlay surface={landing}>{bootContent}</BootOverlay>, menuGroups, pageLabel, statusLabel);
 }
 
-function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
-function moveDate(date: string, amount: number) {
-  return shiftWorkOsDate(date, amount);
-}
-
-
-type ConnectScreenProps = {
-  apiBase: string;
-  setApiBase: (value: string) => void;
-  connecting: boolean;
-  /** The browser is open and the app is waiting for the deep-link callback. */
-  awaiting?: boolean;
-  onConnect: () => void;
-  onSave: () => Promise<void>;
-  /** Why this device was signed out, when it was. */
-  notice?: string | null;
-};
-
-function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced settings" }: Pick<ConnectScreenProps, "apiBase" | "setApiBase" | "onSave"> & { summary?: string }) {
-  return <details className="connect-settings">
-    <summary>{summary}</summary>
-    <div className="connect-settings-row">
-      <label htmlFor="workspace-server-url">Workspace server URL</label>
-      <div className="connect-settings-controls">
-        <input id="workspace-server-url" value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" />
-        <button onClick={() => void onSave()}>Save</button>
-      </div>
-    </div>
-  </details>;
-}
-
-/** The first frame of first run. The connect screen is the same stage the
- *  setup flow opens on, so the sign-in round-trip never leaves Otto's world:
- *  he carries the sequence in his own voice, and the stage carries the one
- *  action. The advanced server override stays a quiet disclosure in the
- *  bubble, beside the action it changes. */
-export function ConnectScreen({ apiBase, setApiBase, connecting, awaiting = false, onConnect, onSave, notice }: ConnectScreenProps) {
-  return <main className="guided-onboarding" data-stage="welcome">
-    <OnboardingStage
-      pose="waiting"
-      eyebrow="Desktop companion"
-      title="Connect your workspace."
-      line={awaiting
-        ? "I’ve opened your browser. Approve this device there, and I’ll be waiting here when you’re back."
-        : "I’m Otto. First, let me get you in — I’ll open your browser for a secure sign-in. Approve this device, and I’ll be right here when you’re back."}
-      replayKey="connect"
-    >
-      <div className="otto-bubble-actions">
-        <button className="primary" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : awaiting ? <ExternalLink size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : awaiting ? "Reopen browser" : "Connect workspace"}</button>
-        {awaiting ? null : <span className="otto-bubble-note">About a minute.</span>}
-      </div>
-      {awaiting && !connecting && <p className="otto-bubble-status" role="status">Waiting for approval in your browser. I’ll finish connecting here.</p>}
-      {notice && <p className="otto-bubble-notice" role="status">{notice}</p>}
-      <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
-    </OnboardingStage>
-  </main>;
-}
-export function LoadingScreen({ failed, retry, note, stage, onReset, onDebug, onOffline }: {
-  failed: boolean;
-  retry: () => void;
-  /** Bounded explanation of what is wrong, replacing the generic hint. */
-  note?: string;
-  /** What is actually happening right now. Only ever pass what is true. */
-  stage?: string;
-  /** Starts this device fresh; only offered when nothing else can recover. */
-  onReset?: () => void | Promise<void>;
-  onDebug: () => void;
-  /** Only surfaces that can actually run offline pass this. */
-  onOffline?: () => void;
-}) {
-  // A destructive recovery is armed on the first click and only runs on the
-  // second, so a stray click on a failure screen can never discard local data.
-  const [resetArmed, setResetArmed] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  useEffect(() => {
-    if (!resetArmed) return;
-    const timer = setTimeout(() => setResetArmed(false), 8_000);
-    return () => clearTimeout(timer);
-  }, [resetArmed]);
-  // The non-failed launch surface lives in BootHandoff.tsx (First Light); this
-  // component is the local-vault recovery path only.
-  const hint = onReset
-    ? resetArmed
-      ? "This deletes this device's saved session and queued updates. Tasks and updates already filed with the server stay, and you'll connect this device again."
-      : "Start fresh only if the saved data can't be opened — it replaces this device's local copy."
-    : onOffline
-      ? "Offline mode uses local fixtures only — nothing reaches the server."
-      : "Retry re-checks this device's saved key.";
-  return <main className="loading"><div className="loading-shell">
-    <MascotPet isolated agent="blocked" workday="active" className="mascot-loading" artClassName="mascot-loading-art" />
-    <h1>Work OS needs another try</h1>
-    <p>{note ?? "The details are in the notification above."}</p>
-    <button className="primary" onClick={retry} disabled={resetting}>Retry</button>
-    <div className="loading-alternatives">
-      {onOffline && <button onClick={onOffline} disabled={resetting}>Continue offline</button>}
-      {onReset && <button
-        className={resetArmed ? "danger" : ""}
-        disabled={resetting}
-        title={resetArmed ? "This deletes this device's saved Work OS data" : "Replace this device's unreadable local data"}
-        onClick={async () => {
-          if (!resetArmed) { setResetArmed(true); return; }
-          setResetting(true);
-          try { await onReset(); } finally { setResetting(false); setResetArmed(false); }
-        }}
-      >{resetting ? "Starting fresh…" : resetArmed ? "Delete local data and start fresh" : "Start fresh on this device"}</button>}
-      <button className="quiet" onClick={onDebug} disabled={resetting}><Bug size={14} /> Scenario debugger</button>
-    </div>
-    <small>{hint}</small>
-  </div></main>;
-}
-
-function remainingShiftLabel(endsAt: string | undefined, now: Date) {
-  const remaining = endsAt ? Math.max(0, Date.parse(endsAt) - now.getTime()) : 0;
-  if (!endsAt || !Number.isFinite(remaining)) return "—";
-  const minutes = Math.ceil(remaining / 60_000);
-  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
-}
-
-function ShiftDetailsFloatingCard({ view, progressPercent, shiftStart, remaining, shiftEnd, elapsed, openTasks, attendance, timezone, observedActive, providerBreak, onBack, onClose }: {
-  view: "shift" | "worktivity"; progressPercent: number; shiftStart: string; remaining: string; shiftEnd: string; elapsed: string;
-  openTasks: number; attendance: DayData["attendance"] | null; timezone?: string; observedActive: string; providerBreak: string; onBack: () => void; onClose: () => void;
-}) {
-  return <section className="shift-detail-popover" role="dialog" aria-label={view === "shift" ? "Workday status" : "Worktivity details"}>
-    <header><button className="detail-back" aria-label="Back to detail options" onClick={onBack}><ChevronLeft size={16} /></button><div><span>{view === "shift" ? <Clock3 size={15} /> : <Activity size={15} />}{view === "shift" ? "Workday status" : "Worktivity details"}</span><small>{view === "shift" ? "Schedule and mirrored session context" : "Provider attendance and activity details"}</small></div><button aria-label="Close details" onClick={onClose}><X size={16} /></button></header>
-    {view === "shift" ? <><div className="shift-pulse-visual"><div className="shift-progress-ring" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}><span><small>Scheduled shift</small><strong>{Math.round(progressPercent)}%</strong><em>elapsed</em></span></div><div className="shift-track-summary"><div><span><small>Shift start</small><strong>{shiftStart}</strong></span><span><small>Time remaining</small><strong>{remaining}</strong></span><span><small>Shift end</small><strong>{shiftEnd}</strong></span></div><div className="shift-detail-track"><i style={{ width: `${progressPercent}%` }} /><b style={{ left: `${progressPercent}%` }} /></div></div></div><div className="shift-detail-grid"><span><small>Elapsed</small><strong>{elapsed}</strong></span><span><small>Open tasks</small><strong>{openTasks}</strong></span></div></> : <><div className="worktivity-state"><span className={`presence ${attendance?.state === "active" ? "live" : ""}`} /><div><small>Worktivity attendance</small><strong>{attendance?.status ? sentence(attendance.status) : "Unavailable"}</strong></div></div><div className="shift-detail-grid worktivity-grid"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{worktivityClockOutLabel(attendance, timezone)}</strong></span><span><small>Last activity</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>Observed active time</small><strong>{observedActive}</strong></span><span><small>Provider refresh</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>OnBreak deducted</small><strong>{providerBreak}</strong></span></div></>}
-  </section>;
-}
-
-function worktivityClockOutLabel(attendance: DayData["attendance"] | null | undefined, timezone?: string) {
-  if (attendance?.clockedOutAt) return `${attendance.clockedOutAtInferred ? "Inferred · " : ""}${formatTime(attendance.clockedOutAt, timezone)}`;
-  if (attendance?.state === "active" || attendance?.state === "paused") return "Still active";
-  return attendance?.clockedInAt ? "Not observed" : "—";
-}
-
-function TaskLifecycleMenu({ task, currentDate = "", busy, initialOpen = false, onStatus, onComplete, onEdit, onAssign, onArchive, onDelete }: {
-  task: TaskRow; currentDate?: string; busy: boolean; initialOpen?: boolean; onStatus?: (status: "pending" | "in_progress") => void; onComplete?: (completed: boolean) => void; onEdit: (task: TaskRow) => void; onAssign?: (task: TaskRow) => void; onArchive: (task: TaskRow) => void; onDelete: (task: TaskRow) => void;
-}) {
-  const [open, setOpen] = useState(initialOpen);
-  if (!hasTaskMenu(task, currentDate)) return null;
-  return <div className={`dashboard-task-menu ${open ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={open} label={`Actions for ${safeTaskText(task.title, "task")}`} disabled={busy} onToggle={() => setOpen((current) => !current)} onClose={() => setOpen(false)}>
-    <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatus?.(status)} onComplete={(completed) => onComplete?.(completed)} onEdit={() => onEdit(task)} onAssign={onAssign ? () => onAssign(task) : undefined} onArchive={() => onArchive(task)} onDelete={() => onDelete(task)} onClose={() => setOpen(false)} />
-  </EllipsisMenu></div>;
-}
-
-function PendingTaskControls({ status, error, onRetry, onDismiss }: { status: "syncing" | "failed"; error?: string; onRetry: () => void; onDismiss: () => void }) {
-  if (status === "syncing") {
-    return <span className="pending-indicator" role="status" title="Adding to your workspace…"><FadeArc size={15} /><span className="sr-only">Adding task</span></span>;
-  }
-  return <span className="pending-indicator failed">
-    <button type="button" className="pending-retry" title={error ? `Failed to add this task — ${error}. Click to retry.` : "Failed to add this task — click to retry."} aria-label="Retry adding this task" onClick={(event) => { event.stopPropagation(); onRetry(); }}><RefreshCw size={14} /></button>
-    <button type="button" className="pending-dismiss" title="Discard this task" aria-label="Discard this failed task" onClick={(event) => { event.stopPropagation(); onDismiss(); }}><X size={12} /></button>
-  </span>;
-}
-
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onAssignTask, onPause, onClockOut, kpiStrip = null, goalSaveState = "saved", onRetryGoalSave, onRetryPendingTask, onDismissPendingTask, taskFlight, onStatusTask }: {
-  onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
-  focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number;
-  shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number;
-  initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; initialTaskMenuId?: string | null; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
-  onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; currentDate?: string; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
-  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onAssignTask?: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void; kpiStrip?: ReactNode; goalSaveState?: "saved" | "saving" | "offline" | "conflict"; onRetryGoalSave?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void;
-  taskFlight?: ReadonlyMap<string, "completing" | "leaving">;
-}) {
-  const [tab, setTab] = useState<"today" | "previous" | "other">("today");
-  const [sort, setSort] = useState<TaskSort>(() => readTaskSort(DAY_SORT_STORAGE_KEY));
-  useEffect(() => { writeTaskSort(DAY_SORT_STORAGE_KEY, sort); }, [sort]);
-  const [detailsMenuOpen, setDetailsMenuOpen] = useState(initialDetailsMenuOpen || initialDetailView !== null);
-  const [detailView, setDetailView] = useState<"shift" | "worktivity" | null>(initialDetailView);
-  const today = currentDate || new Date().toISOString().slice(0, 10);
-  // Completed work leaves the day list the moment it is checked off; the hero
-  // ring and the KPI strip keep counting it.
-  const openToday = tasks.filter((task) => task.completed !== true);
-  const rawDisplayed = tab === "today" ? openToday : tab === "previous" ? previousTasks : otherTasks;
-  const displayed = sortTaskList(rawDisplayed, sort, today);
-  const completed = tasks.filter((task) => task.completed === true).length;
-  const listRef = useRef<HTMLDivElement | null>(null);
-  useListShift(listRef);
-  // One strict overdue definition across the whole tab set (design §27.3):
-  // due-dated open work before today. Undated older work stays carry-over.
-  const overdueCount = uniqueTasks([...previousTasks, ...otherTasks]).filter((task) => isOverdueTask(task, today)).length;
-  const tabLabel = tab === "today" ? "Today tasks" : tab === "previous" ? "Previous day tasks" : "Older tasks";
-  const pendingPrevious = previousTasks.filter((task) => task.completed !== true).length;
-  const observedStart = attendance?.clockedInAt ? Date.parse(attendance.clockedInAt) : Number.NaN;
-  const observedEnd = attendance?.clockedOutAt ? Date.parse(attendance.clockedOutAt) : attendance?.observedAt ? Date.parse(attendance.observedAt) : Number.NaN;
-  const observedSeconds = Number.isFinite(observedStart) && Number.isFinite(observedEnd) ? Math.max(0, Math.floor((observedEnd - observedStart) / 1000) - providerBreakSeconds) : 0;
-  const observedActive = `${String(Math.floor(observedSeconds / 3600)).padStart(2, "0")}:${String(Math.floor(observedSeconds % 3600 / 60)).padStart(2, "0")}`;
-  const providerBreak = `${String(Math.floor(providerBreakSeconds / 3600)).padStart(2, "0")}:${String(Math.floor(providerBreakSeconds % 3600 / 60)).padStart(2, "0")}`;
-  return <main className="active-day-page">
-    <section className="active-day-card">
-      <header className="active-day-header">
-        <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{observedOnly ? paused ? "Worktivity break" : "Activity observed" : paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div></div>
-        <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open workday details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close workday details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} openTasks={tasks.filter((task) => !task.completed).length} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Workday status</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
-      </header>
-      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}{goalSaveState === "saving" ? <FadeArc size={11} /> : goalSaveState === "offline" || goalSaveState === "conflict" ? <button type="button" className="goal-retry" title="Goal not saved — click to retry." aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show unfinished work in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
-        <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><ProgressRing completed={completed} total={tasks.length} size={44} stroke={5} label="tasks done" trailing="tasks done"><strong>{completed}</strong><small>of {tasks.length}</small></ProgressRing></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
-      <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{openToday.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><small className="active-task-sort-note">Sorted by {taskSortNote(sort)}</small><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
-      {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
-      <div className="active-task-list" ref={listRef}>
-        {displayed.length ? <SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={`Sort ${tabLabel.toLowerCase()}`} className="day-task-sort" /> : null}
-        {displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null; const progress = subtaskProgress(task); const flight = taskFlight?.get(taskId) ?? null; return <article className={`${task.completed ? "completed" : ""}${pendingStatus ? " pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-list-key={taskId} key={taskId}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} {...taskCheckboxA11y(task, flight === "completing", task.title)} aria-busy={flight === "completing"} disabled={pendingStatus !== null || !taskCheckboxEnabled(task)} onClick={() => { if (!pendingStatus && !flight) onToggleTask(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={15} /> : null}</button><button className="active-task-copy" onClick={() => { if (!pendingStatus) onOpenTask(task); }}><strong>{task.title}</strong><small>{pendingStatus ? pendingStatus === "syncing" ? "Adding to your workspace…" : "Failed to add — retry or discard" : task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : null}{!pendingStatus && <TaskLifecycleMenu task={task} currentDate={today} busy={busy} initialOpen={initialTaskMenuId === taskId} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onToggleTask(task, completed)} onEdit={onEditTask} onAssign={onAssignTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />}</article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
-      <footer className="active-day-footer"><span>Changes save to your workday record.</span><button className="workspace-link-button" onClick={onManageTasks}><span>Open full Tasks workspace</span><ChevronRight size={14} aria-hidden="true" /></button></footer>
-    </section>
-    {kpiStrip}
-  </main>;
-}
-
-export function KpiStrip({ scheduledCount, yesterdayDueCount, completedCount, onScheduled, onYesterday, onCompleted }: {
-  scheduledCount: number; yesterdayDueCount: number; completedCount: number;
-  onScheduled: () => void; onYesterday: () => void; onCompleted: () => void;
-}) {
-  return <section className="kpi-strip" aria-label="Today at a glance">
-    <button className="kpi-card" onClick={onScheduled}><small><ListChecks size={13} aria-hidden="true" /> Scheduled today</small><strong>{scheduledCount}</strong><em>{scheduledCount ? "Open the day view" : "Plan your day"}</em></button>
-    <button className="kpi-card" disabled={!yesterdayDueCount} onClick={onYesterday}><small><AlertTriangle size={13} aria-hidden="true" /> Due from yesterday</small><strong className={yesterdayDueCount ? "kpi-danger" : undefined}>{yesterdayDueCount}</strong><em className={yesterdayDueCount ? "kpi-attention" : undefined}>{yesterdayDueCount ? "Review unfinished work" : "Nothing carried forward"}</em></button>
-    <button className="kpi-card" disabled={!completedCount} onClick={onCompleted}><small><CheckCircle2 size={13} aria-hidden="true" /> Completed today</small><strong>{completedCount}</strong><em>{completedCount ? "Review the record" : "Finish a task first"}</em></button>
-  </section>;
-}
-
-export function DashboardTaskCard({ task, currentDate, onOpen, flight = null, onComplete, onRetryPendingTask, onDismissPendingTask }: { task: TaskRow; currentDate: string; onOpen: () => void; flight?: "completing" | "leaving" | null; onComplete?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void }) {
-  const state = taskState(task, currentDate);
-  const dueDate = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
-  const title = safeTaskText(task.title, "Untitled task");
-  const description = safeTaskText(task.description, "");
-  const progress = subtaskProgress(task);
-  const projectName = safeTaskText(task.project?.name, "Work OS");
-  const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null;
-  return <article className={`dashboard-task-card${pendingStatus ? " pending" : ""}${flight === "leaving" ? " is-leaving" : ""}`} role="button" tabIndex={0} data-list-key={String(task.provider_task_id || task.id)} onClick={() => { if (!pendingStatus && !flight) onOpen(); }} onKeyDown={(event) => { if (pendingStatus || flight) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }} aria-label={`Open ${title}`}>
-    <div className="dashboard-task-head">
-      <span className={`task-due-chip ${state === "overdue" ? "danger" : ""}`}><CalendarDays size={12} aria-hidden="true" /> {pendingStatus ? "Adding to today" : dueDate ? `Due ${formatWorkOsDate(dueDate)}` : task.priority ? `${sentence(String(task.priority))} priority` : "No due date"}</span>
-      {!pendingStatus && <button className={`task-check card-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${title}` : `Complete ${title}`} aria-busy={flight === "completing"} onClick={(event) => { event.stopPropagation(); if (!flight) onComplete?.(); }}>{flight === "completing" ? <FadeArc size={12} /> : flight === "leaving" ? <Check size={13} /> : null}</button>}
-    </div>
-    <h3>{title}</h3>
-    {description && <p>{description}</p>}
-    <div className="dashboard-task-foot">
-      {pendingStatus
-        ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} />
-        : progress.total > 0
-          ? <ProgressRing completed={progress.completed} total={progress.total} label="subtasks" />
-          : <span className="task-due">{projectName !== "Work OS" ? projectName : "Work OS task"}</span>}
-    </div>
-  </article>;
-}
-
-function AssistantOperations({ interpretation, busy, toolContext, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
-  interpretation: { operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] };
-  busy: boolean;
-  toolContext: import("./interpretation").ApprovedOpContext;
-  onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
-  onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void;
-  onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void;
-  onRetryOperation?: (result: ToolCallResult) => void;
-}) {
-  const mutating = interpretation.operations.filter(isMutatingToolOp);
-  const actionable = mutating.filter((op) => !op.failure);
-  const unfiled = mutating.filter((op) => !!op.failure);
-  const allMutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
-  const mutationResults = allMutationResults.filter((result) => !usesGroupedCard(result.op));
-  const hasResults = allMutationResults.length > 0;
-  const hasPendingMutations = actionable.some((op) => !usesGroupedCard(op) && !mutationResults.some((result) => sameToolCall(result.op, op)));
-  const proposedTaskIds = interpretation.operations
-    .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => sameToolCall(result.op, op)))
-    .map((op) => op.taskId)
-    .filter((id): id is string => !!id);
-  // The assistant sometimes returns the same view twice; render one card.
-  const seenDisplayCards = new Set<string>();
-  return <>
-    {hasResults ? null : <strong>{!actionable.length && unfiled.length ? "Updates not filed" : actionable.length ? "Review proposed actions" : "Assistant shortcuts"}</strong>}
-    {interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}
-    {hasResults ? null : <p>{!actionable.length && unfiled.length ? "Nothing was recorded. The reasons are listed below." : actionable.length ? "Choose what to record. Nothing changes until the final confirmation." : "Loaded inline below. Viewing never needs approval."}</p>}
-    <ChatSectionBoundary label="assistant actions">
-      <div className="interpretation-list">
-        {interpretation.operations.map((op, index) => {
-          const result = interpretation.results?.find((item) => sameToolCall(item.op, op));
-          if (isMutatingToolOp(op)) return null;
-          if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={`${op.op}-${index}`} page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} />;
-          if (!isDisplayToolOp(op)) return null;
-          if (result?.status === "failed") return <p key={`${op.op}-${index}`} className="tool-display-error">{result.message}</p>;
-          const selection = taskSelectionFromResult(result);
-          if (!selection) return null;
-          const displayKey = `${op.op}:${selection.view}:${selection.tasks.map((task) => String(task.id ?? "")).join(",")}`;
-          if (seenDisplayCards.has(displayKey)) return null;
-          seenDisplayCards.add(displayKey);
-          const selectionTasks: TaskSelectionCardTask[] = selection.tasks.map((task) => ({
-            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled task",
-            description: typeof task.description === "string" ? task.description : null,
-            dueDate: typeof task.due_date === "string" ? task.due_date : null,
-            projectName: typeof task.project_name === "string" ? task.project_name : null,
-            priority: typeof task.priority === "string" ? task.priority : null,
-            state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
-            subtaskTotal: Number(task.subtask_total ?? 0) || 0,
-            subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
-          })).filter((task) => !!task.id);
-          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
-        })}
-        {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-        {hasPendingMutations && mutating.some((op) => !isBatchToolOp(op) && !isPlanImportOp(op)) ? <ApprovalFlow operations={mutating.filter((op) => !isBatchToolOp(op) && !isPlanImportOp(op))} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
-        <BatchApprovalCards operations={actionable.filter((op) => isBatchToolOp(op) || isPlanImportOp(op))} results={interpretation.results ?? []} busy={busy} context={toolContext} onApprove={(op) => onReviewOperations?.([op], [])} onSkip={(op) => onReviewOperations?.([], [op])} onRetry={onRetryOperation} />
-        {unfiled.map((op, index) => <p key={`unfiled-${index}`} className="tool-display-error">{op.taskTitle ? `${op.taskTitle}: ` : ""}{op.failure}</p>)}
-      </div>
-    </ChatSectionBoundary>
-  </>;
-}
-
-/** The working card for a pending update before the real trace starts. It owns
- * its start instant so the elapsed readout never resets on a re-render. */
-function WorkingNowTrace({ label }: { label: string }) {
-  const [startedAt] = useState(() => Date.now());
-  return <AvatarThinking stages={[{ label }]} active={0} startedAt={startedAt} activeLabel="Thinking" />;
-}
-
-export function ProgressComposer({ headerLeading, mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, recapVoice = DEFAULT_RECAP_VOICE, onRecapStale, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, audioScope = null, audioEpoch = 1, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
-  headerLeading?: ReactNode;
-  mode?: ComposerMode; displayName?: string | null;
-  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
-  goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
-  activityDate?: string | null; activityTimezone?: string | null; activityPollMs?: number;
-  /** How recaps are read aloud on this device (provider voice id). */
-  recapVoice?: string;
-  /** The recap behind a clip changed while it was synthesized. */
-  onRecapStale?: () => void;
-  /** The employee's cross-window audio scope. Absent in isolated previews. */
-  audioScope?: OttoScope | null;
-  audioEpoch?: number;
-  onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onApplyGoal: (value: string, fromSuggestion: boolean) => void; onRetryGoalSave?: () => void;
-  interpretation?: { status: "loading" | "ready"; reviewId?: string; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
-  thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
-  toolContext?: import("./interpretation").ApprovedOpContext;
-  aiUnavailable?: string | null;
-  voice?: import("./chat/voiceInput").VoiceInput;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
-  onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void; onDecideNextStep?: (turnId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => void;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, open]);
-  // Focus panel: a saved goal renders as a card; the editor appears only when
-  // no goal exists yet or the employee chose to edit. Nothing saves until Apply.
-  const goalPanelOpen = open && panel === "goal";
-  const [goalEditing, setGoalEditing] = useState(false);
-  const [goalCollapsed, setGoalCollapsed] = useState(() => readStoredFlag(GOAL_COLLAPSE_KEY));
-  const toggleGoalCollapsed = () => setGoalCollapsed((current) => {
-    const next = !current;
-    writeStoredFlag(GOAL_COLLAPSE_KEY, next);
-    return next;
-  });
-  const [goalDraft, setGoalDraft] = useState(goal);
-  const [goalFromSuggestion, setGoalFromSuggestion] = useState(false);
-  const [pendingGoal, setPendingGoal] = useState<string | null>(null);
-
-  /* Recaps are read with the same one-player machine the floating companion
-     uses, so the Tasks tab's cards offer the same Listen control and the same
-     rules: one audio owner, a prime inside the press (a webview forgets the
-     gesture while the clip is synthesized), and a visible reason when a read
-     cannot start instead of a silent press. */
-  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>({
-    status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, reviewKey: null, intervalId: null, slow: false, retryIntervalId: null,
-  });
-  const [recapSpeechError, setRecapSpeechError] = useState<string | null>(null);
-  const employeeAudioLease = useRef<OttoAudioLease | null>(null);
-  const audioContextRef = useRef({ scope: audioScope, epoch: audioEpoch });
-  // Before paint, so an async media callback cannot read a stale scope.
-  useLayoutEffect(() => {
-    audioContextRef.current = { scope: audioScope, epoch: audioEpoch };
-  }, [audioScope, audioEpoch]);
-  /* The exact read this player is speaking. A late snapshot from an account
-   * or mode the window has already left cannot update the visible words. */
-  const employeeReadRef = useRef<{ scope: OttoScope | null; epoch: number } | null>(null);
-  // The factory records async callbacks; it never reads the refs during render.
-  // eslint-disable-next-line react-hooks/refs
-  const [recapPlayer] = useState(() => createRecapSpeechPlayer({
-    fetchClip: (input) => apiRequestAudio("/api/work-os/voice/recap", input),
-    createAudio: browserRecapAudio,
-    isPlaybackAllowed: () => {
-      const requested = employeeReadRef.current;
-      if (!requested) return false;
-      const current = audioContextRef.current;
-      if (requested.scope && (!sameOttoScope(current.scope, requested.scope) || current.epoch !== requested.epoch)) return false;
-      return requested.scope ? !!employeeAudioLease.current?.isActive() : true;
-    },
-    onSnapshot: (snapshot) => {
-      const requested = employeeReadRef.current;
-      if (!requested) return;
-      const current = audioContextRef.current;
-      if (requested.scope && (!sameOttoScope(current.scope, requested.scope) || current.epoch !== requested.epoch)) {
-        employeeReadRef.current = null;
-        return;
-      }
-      if (snapshot.status === "idle") employeeReadRef.current = null;
-      setRecapSpeech(snapshot);
-    },
-    onFailure: (message) => {
-      const requested = employeeReadRef.current;
-      const current = audioContextRef.current;
-      if (requested?.scope && (!sameOttoScope(current.scope, requested.scope) || current.epoch !== requested.epoch)) return;
-      setRecapSpeechError(message);
-    },
-    // The card moved on while the clip was made: the host refreshes the stream
-    // so the words on screen are the words that play next time.
-    onStaleCard: () => { onRecapStale?.(); },
-  }));
-  const toggleRecapRead = useCallback((id: string, revision: number | null): void => {
-    const active = recapPlayer.snapshot();
-    if (active.intervalId === id && active.status !== "idle") {
-      employeeAudioLease.current?.release();
-      employeeAudioLease.current = null;
-      employeeReadRef.current = null;
-      recapPlayer.stop();
-      return;
-    }
-    if (active.status !== "idle") {
-      // Stop the old read before releasing or requesting ownership, so the
-      // next owner never starts beside audio that is still playing here.
-      employeeAudioLease.current?.release();
-      employeeAudioLease.current = null;
-      employeeReadRef.current = null;
-      recapPlayer.stop();
-    }
-    setRecapSpeechError(null);
-    const requested = { scope: audioScope, epoch: audioEpoch };
-    if (!requested.scope) {
-      employeeReadRef.current = requested;
-      void recapPlayer.toggle({ intervalId: id, revision, voice: recapVoice, enabled: !!voice });
-      return;
-    }
-    void requestOttoAudio(requested.scope, requested.epoch, "speech").then(async (lease) => {
-      if (!lease.isActive()) { lease.release(); return; }
-      const current = audioContextRef.current;
-      if (!sameOttoScope(current.scope, requested.scope) || current.epoch !== requested.epoch) {
-        lease.release();
-        return;
-      }
-      employeeAudioLease.current?.release();
-      employeeAudioLease.current = lease;
-      employeeReadRef.current = requested;
-      await recapPlayer.toggle({ intervalId: id, revision, voice: recapVoice, enabled: !!voice });
-    }).catch((failure: unknown) => {
-      setRecapSpeechError(failure instanceof Error && failure.message ? failure.message : "Audio is busy in another companion window.");
-    });
-  }, [audioEpoch, audioScope, recapPlayer, recapVoice, voice]);
-  /* A new actor/org/mode/epoch drops the old words, error and ownership. */
-  useEffect(() => {
-    employeeAudioLease.current?.release();
-    employeeAudioLease.current = null;
-    employeeReadRef.current = null;
-    recapPlayer.stop();
-    setRecapSpeech({
-      status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, reviewKey: null, intervalId: null, slow: false, retryIntervalId: null,
-    });
-    setRecapSpeechError(null);
-  }, [audioEpoch, audioScope?.mode, audioScope?.organizationId, audioScope?.userId, recapPlayer]);
-  useEffect(() => onOttoSpeechStop(() => {
-    employeeAudioLease.current?.release();
-    employeeAudioLease.current = null;
-    employeeReadRef.current = null;
-    recapPlayer.stop();
-  }), [recapPlayer]);
-  useEffect(() => {
-    if (recapSpeech.status !== "idle" && recapSpeech.status !== "finished") return;
-    employeeAudioLease.current?.release();
-    employeeAudioLease.current = null;
-  }, [recapSpeech.status]);
-  /* One audio owner: a recording never starts on top of a read, and a hidden
-     window never speaks to an empty room. */
-  useEffect(() => {
-    if (voice && voice.state !== "idle") {
-      employeeAudioLease.current?.release();
-      employeeAudioLease.current = null;
-      employeeReadRef.current = null;
-      recapPlayer.stop();
-    }
-  }, [voice, recapPlayer]);
-  useEffect(() => {
-    const onVisibility = () => { if (document.visibilityState === "hidden") recapPlayer.stop(); };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      recapPlayer.dispose();
-    };
-  }, [recapPlayer]);
-  useEffect(() => {
-    if (!goalPanelOpen || goalEditing) return;
-    setGoalDraft(goal);
-    setGoalFromSuggestion(false);
-  }, [goalPanelOpen, goalEditing, goal]);
-  // The card shows the applied text until the saved plan catches up, and falls
-  // back to the authoritative goal whenever that changes (save, resync, conflict).
-  useEffect(() => { setPendingGoal(null); }, [goal]);
-  const cardGoal = pendingGoal ?? goal;
-  const goalApplyDisabled = saveState === "saving" || goalDraft.trim() === cardGoal.trim();
-  const applyGoalDraft = () => {
-    const next = goalDraft.trim();
-    onApplyGoal(next, goalFromSuggestion);
-    setPendingGoal(next);
-    setGoalEditing(false);
-  };
-  const conversationRef = useRef<HTMLDivElement | null>(null);
-  const launcherRef = useRef<HTMLButtonElement | null>(null);
-  const [sweepSignal, setSweepSignal] = useState(0);
-  const bumpSweep = () => setSweepSignal((value) => value + 1);
-  const wasOpenRef = useRef(open);
-  const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
-  useEffect(() => {
-    const justOpened = open && !wasOpenRef.current;
-    wasOpenRef.current = open;
-    const el = conversationRef.current;
-    if (!el) return;
-    const newest = el.lastElementChild as HTMLElement | null;
-    const isTurn = !!newest && !newest.classList.contains("progress-history");
-    /* Compare the reader's position against the height before this arrival, so a
-       reply that grows the thread does not look like a scroll-up. */
-    const previousHeight = threadMetricsRef.current?.scrollHeight ?? el.scrollHeight;
-    const wasAtBottom = previousHeight - el.scrollTop - el.clientHeight < 48;
-    const target = threadScrollTarget({
-      clientHeight: el.clientHeight,
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      newestHeight: isTurn ? newest!.offsetHeight : 0,
-      newestTop: isTurn ? newest!.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
-      wasAtBottom,
-      forceBottom: justOpened,
-    });
-    if (target !== null) el.scrollTop = target;
-    threadMetricsRef.current = { scrollHeight: el.scrollHeight };
-  }, [history.length, interpretation, pending, receipt, open]);
-  const previousOpenRef = useRef(open);
-  useEffect(() => {
-    if (!open && previousOpenRef.current) {
-      const frame = window.requestAnimationFrame(() => launcherRef.current?.focus());
-      previousOpenRef.current = open;
-      return () => window.cancelAnimationFrame(frame);
-    }
-    previousOpenRef.current = open;
-    return undefined;
-  }, [open]);
-  const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
-    { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },
-    { kind: "blocked", label: "Blocker" }, { kind: "priority_change", label: "Priority change" }, { kind: "new_task", label: "New task" },
-  ];
-  const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
-  const agendaMode = mode === "agenda";
-  const visibleHistory = collapseConsecutiveAssistantDuplicates(history);
-  const showLiveAssistantMark = visibleHistory.at(-1)?.role !== "assistant";
-  const lastAssistantText = [...visibleHistory].reverse().find((turn) => turn.role === "assistant")?.text.trim() ?? null;
-  const echoReply = interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply && interpretation.reply.trim() !== lastAssistantText ? interpretation.reply : null;
-  // A live turn's clock is the moment it first appeared; once it lands in
-  // history, the persisted turn's own createdAt takes over.
-  const echoReplyAt = useMemo(() => new Date().toISOString(), [echoReply]);
-  // One live reply keeps one arrival time: key on the review identity and
-  // status, not the object, so result merges never reset the clock.
-  const interpretationAt = useMemo(() => new Date().toISOString(), [interpretation?.reviewId, interpretation?.status]);
-  const receiptTitle = receipt?.kind === "new_task"
-    ? receipt.queued ? "Task queued" : "Task added"
-    : receipt?.queued ? "Update queued" : "Update recorded";
-  return <ConversationSurface
-    surface="in-app"
-    open={open}
-    ariaLabel={panel === "goal" ? "Daily focus editor" : "Daily update conversation"}
-    className={`progress-dock ${agendaMode ? "agenda-dock" : "progress-mode"} ${open ? "open" : ""}`}
-  >
-    {open ? <div className="chat-surface is-open" id="conversation-panel">
-    <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
-      <header className="workos-chat-head">{headerLeading ?? <span className="conversation-pane-title">{MASCOT.name}</span>}<ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Recaps" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
-      {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
-        {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">
-          <section className={`focus-goal${goalCollapsed ? " is-collapsed" : ""}`} aria-labelledby="focus-goal-heading">
-            <header className="focus-goal-head">
-              <span className="focus-goal-eyebrow" id="focus-goal-heading">Today’s focus</span>
-              <button type="button" className="focus-goal-disclosure" aria-expanded={!goalCollapsed} aria-controls="focus-goal-body" aria-label={goalCollapsed ? "Show today’s focus" : "Hide today’s focus"} title={goalCollapsed ? "Show today’s focus" : "Hide today’s focus"} onClick={toggleGoalCollapsed}>
-                <ChevronDown size={16} aria-hidden="true" className={`chat-task-chevron${goalCollapsed ? "" : " is-open"}`} />
-              </button>
-            </header>
-            <div id="focus-goal-body" className="focus-goal-body" hidden={goalCollapsed}>{cardGoal && !goalEditing ? <div className="goal-card">
-         <button type="button" className="goal-card-edit" aria-label="Edit today’s focus" title="Edit today’s focus" onClick={() => { setGoalDraft(cardGoal); setGoalFromSuggestion(false); setGoalEditing(true); }}><Pencil size={14} aria-hidden="true" /></button>
-         <p className="goal-card-text">{cardGoal}</p>
-       </div> : <>
-         <div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goalDraft} onChange={(event) => { setGoalDraft(event.target.value); setGoalFromSuggestion(false); }} placeholder="Add context that is not obvious from your tasks" /></div>
-         {!cardGoal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button type="button" onClick={() => { setGoalDraft(goalSuggestion.text); setGoalFromSuggestion(true); }}>Use suggestion</button></div>}
-         <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
-               </>}</div>
-          </section>
-          {recapSpeechError ? <p className="chat-activity-error" role="alert">{recapSpeechError}</p> : null}
-          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onListen={voice ? toggleRecapRead : undefined} listeningId={recapSpeech.status !== "idle" ? recapSpeech.intervalId : null} onViewRecaps={onOpenGoal} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
-  {shouldShowChatDivider(visibleHistory, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
-  <HistoryTurn
-  turn={{
-    ...turn,
-    meta: turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null,
-    operations: turn.operations as HistoryTurnData["operations"],
-    toolResults: turn.toolResults as HistoryTurnData["toolResults"],
-  }}
-  busy={busy}
-  toolContext={toolContext}
-  showMark={index === 0 || visibleHistory[index - 1]?.role !== "assistant"}
-  collapseCards={index < visibleHistory.length - 1}
-  onReviewOperations={(approved, rejected) => onReviewHistoryOperations?.(turn.id, approved, rejected)}
-  onMarkSelectedDone={onMarkSelectedDone}
-  onLoadSubtasks={onLoadSubtasks}
-  onNavigateView={onNavigateView}
-  onDecideNextStep={(item, decision, edits) => onDecideNextStep?.(turn.id, item, decision, edits)}
-  onRetryOperation={(result) => onRetryHistoryOperation?.(turn.id, result)}
-  />
-</Fragment>)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} timestamp={receipt.createdAt} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" variant="tool">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <WorkingNowTrace label="Sending your update" />}</ChatTurn>
-   : echoReply ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} text={echoReply} stream onSettled={bumpSweep} timestamp={echoReplyAt} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }} timestamp={interpretationAt}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
-
-  : interpretation?.status === "ready" ? null
-   : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div></div>}
-    </section>
-    <div className="progress-input-shell">
-      <WorkOsPromptBar autoFocus={open && panel === "update"} voice={voice} hotkeyLabel={VOICE_HOTKEY_LABEL} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} sendLabel="Review update type" />
-    </div>
-    </div>
-    : <ConversationLauncher ref={launcherRef} mode={agendaMode ? "agenda" : "progress"} required={required} onOpen={onOpen} />}
-  </ConversationSurface>;
-}
-
-export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialDetailsOpen = false, initialMenuOpen = false }: {
-  pulse: ReturnType<typeof shiftPulse>; now: Date; shift: DayData["shift"];
-  active: boolean; attendance: DayData["attendance"] | null; initialDetailsOpen?: boolean; initialMenuOpen?: boolean;
-}) {
-  const [menuOpen, setMenuOpen] = useState(initialMenuOpen);
-  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
-  const disclosureRef = useRef<HTMLDivElement>(null);
-  const timezone = shift?.timezone;
-  const progress = Math.round(pulse.progressPercent);
-  const observationEnded = Boolean(attendance?.clockedOutAt);
-  const providerState = attendance?.stale
-    ? "Stale"
-    : observationEnded
-      ? "Observed session ended"
-      : attendance?.clockedInAt && attendance?.state === "off_shift"
-        ? "Last activity observed"
-      : attendance?.status
-        ? sentence(attendance.status)
-        : "Unavailable";
-  const state = active
-    ? "Work OS live"
-    : attendance?.state === "active" || attendance?.state === "paused"
-      ? "Activity observed"
-      : observationEnded
-        ? "Observation complete"
-        : attendance?.clockedInAt && attendance?.state === "off_shift"
-          ? "No current activity"
-        : "Waiting";
-  const observationClass = attendance?.stale
-    ? "stale"
-    : attendance?.status === "break"
-      ? "break"
-      : attendance?.state === "active"
-        ? "active"
-        : "idle";
-  const providerClockOut = worktivityClockOutLabel(attendance, timezone);
-  const scheduleLabel = pulse.schedulePhase === "upcoming" ? "Next shift" : "Scheduled shift";
-  const scheduleStatus = pulse.schedulePhase === "upcoming" ? "upcoming" : pulse.schedulePhase === "complete" ? "complete" : "elapsed";
-  const middleLabel = pulse.schedulePhase === "upcoming" ? "Starts in" : pulse.schedulePhase === "complete" ? "Shift status" : "Time remaining";
-  const middleValue = pulse.schedulePhase === "upcoming"
-    ? remainingShiftLabel(shift?.startsAt, now)
-    : pulse.schedulePhase === "complete"
-      ? "Complete"
-      : remainingShiftLabel(shift?.endsAt, now);
-  const scheduleAria = pulse.schedulePhase === "upcoming"
-    ? "The next scheduled shift has not started"
-    : `${progress}% of the scheduled shift has passed`;
-  const phaseCaption = pulse.schedulePhase === "upcoming"
-    ? `Starts at ${formatTime(shift?.startsAt, timezone)}`
-    : pulse.schedulePhase === "complete"
-      ? `Ended at ${formatTime(shift?.endsAt, timezone)}`
-      : `Ends at ${formatTime(shift?.endsAt, timezone)}`;
-
-  useEffect(() => {
-    if (!menuOpen && !detailsOpen) return;
-    const close = (event: KeyboardEvent | MouseEvent) => {
-      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
-      if (event instanceof MouseEvent && disclosureRef.current?.contains(event.target as Node)) return;
-      setMenuOpen(false);
-      setDetailsOpen(false);
-    };
-    window.addEventListener("keydown", close);
-    window.addEventListener("pointerdown", close);
-    return () => {
-      window.removeEventListener("keydown", close);
-      window.removeEventListener("pointerdown", close);
-    };
-  }, [detailsOpen, menuOpen]);
-
-  return <section className="pulse-card pre-shift-pulse">
-    <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><div className="pulse-card-controls"><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small><div className="pulse-disclosure" ref={disclosureRef}><button className="ellipsis-button pulse-more" aria-label="Shift pulse options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setDetailsOpen(false); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="pulse-menu" role="menu" onKeyDown={(event) => moveMenuFocus(event.nativeEvent)}><button role="menuitem" autoFocus onClick={() => { setMenuOpen(false); setDetailsOpen(true); }}><Activity size={15} /><span><strong>Worktivity status</strong><small>View provider attendance</small></span><ChevronRight size={14} /></button></div>}{detailsOpen && <section className={`pulse-provider-popover ${observationClass}`} role="dialog" aria-label="Worktivity status"><header><div><Activity size={16} /><span><small>Worktivity attendance</small><strong>{providerState}</strong></span></div><button aria-label="Close Worktivity status" onClick={() => setDetailsOpen(false)}><X size={15} /></button></header><div className="pulse-provider-facts"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{providerClockOut}</strong></span><span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span><span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span><span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span><span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span></div><footer>Worktivity is the attendance source; Work OS mirrors fresh provider status.</footer></section>}</div></div></div>
-    <div className="pulse-countdown" role="img" aria-label={scheduleAria}>
-      <div className="pulse-countdown-copy"><small>{middleLabel}</small><strong>{middleValue}</strong><span>{phaseCaption}</span></div>
-      <div className="pulse-window"><CalendarDays size={17} /><div><small>{scheduleLabel}</small><strong>{formatTime(shift?.startsAt, timezone)} <i>to</i> {formatTime(shift?.endsAt, timezone)}</strong></div></div>
-    </div>
-    <div className="pulse-compact-track" aria-hidden="true"><div><i style={{ width: `${pulse.progressPercent}%` }} /><b style={{ left: `clamp(5px, ${pulse.progressPercent}%, calc(100% - 5px))` }} /></div><span><small>{formatTime(shift?.startsAt, timezone)}</small><small>{scheduleStatus}</small><small>{formatTime(shift?.endsAt, timezone)}</small></span></div>
-    <p className="pulse-separation-note"><Clock3 size={13} /> Worktivity owns clock actions; the Windows Companion waits for provider confirmation.</p>
-  </section>;
-}
-
-/** Render the employee Tasks workspace with shared day history and sorted paginated views. */
-export function TasksWorkspace({ finderScope, finderSource, onFinderOpenChange, currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, focusTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, unfinishedHistory = null, pageCounts = null, pageTotal = null, taskSearch = "", filterFrom = "", filterTo = "", historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, loadMoreError = false, hasMore, busy, initialTaskMenuId = null, initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight, onStatusTask, onAssignTask }: {
-  finderScope?: string; finderSource?: TaskFinderSource; onFinderOpenChange?: (open: boolean) => void;
-  onStatusTask?: (task: TaskRow, status: "pending" | "in_progress") => void;
-  onAssignTask?: (task: TaskRow) => void;
-  currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
-  goalProvenance: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
-  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; focusTasks?: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null; unfinishedHistory?: TaskRow[] | null;
-  pageCounts?: { total: number; open: number; completed: number } | null; pageTotal?: number | null;
-  taskSearch?: string; filterFrom?: string; filterTo?: string;
-  historyOrder?: "server" | "local"; historyError?: boolean; historyHasData?: boolean; onRetryHistory?: () => void;
-  carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
-  backlog?: TaskBacklog | null; backlogLoading?: boolean; backlogError?: boolean;
-  loadingMore: boolean; loadMoreError?: boolean; hasMore: boolean; busy: boolean; onTaskView: (view: TaskView) => void; onTaskSort: (sort: TaskSort) => void; onDate: (date: string) => Promise<void>;
-  onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
-  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
-  onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
-  taskFlight?: ReadonlyMap<string, "completing" | "leaving">;
-  onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void; onRetryGoalSave?: () => void;
-  initialTaskMenuId?: string | null; initialFiltersOpen?: boolean; loading?: boolean;
-  onTaskSearch?: (value: string) => void; onFilterFrom?: (value: string) => void; onFilterTo?: (value: string) => void;
-}) {
-  const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
-  const [finderEntry, setFinderEntry] = useState<"search" | "date" | null>(initialFiltersOpen ? "date" : null);
-  useEffect(() => { onFinderOpenChange?.(finderEntry !== null); }, [finderEntry, onFinderOpenChange]);
-  useEffect(() => () => onFinderOpenChange?.(false), [onFinderOpenChange]);
-  const taskTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const selectedDate = historyDate || currentDate;
-  const historical = selectedDate !== currentDate;
-  const shownPlan = historical ? historicalPlan : currentPlan;
-  const planTasks = historical ? historicalTasks : focusTasks ?? todayTasks;
-  const focusPlan = buildFocusPlan(shownPlan, planTasks);
-  const focusPlanPercent = focusPlan.total ? Math.round((focusPlan.completed / focusPlan.total) * 100) : 0;
-  const historyById = new Map<string, TaskRow>();
-  for (const task of [...taskHistory, ...workspaceHistory, ...(completedHistory ?? []), ...historicalTasks]) {
-    historyById.set(String(task.id), task);
-    if (task.provider_task_id) historyById.set(String(task.provider_task_id), task);
-  }
-  const surfaced = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => historyById.get(String(item.task_id)) ?? {
-    id: item.task_id, title: item.title_snapshot, completed: item.completion_state === "completed", workspace_source: item.source,
-  });
-  const surfacedIds = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => String(item.task_id));
-  const rowId = (task: TaskRow) => String(task.provider_task_id || task.id);
-  // My day is strictly day-scoped and shares one definition with the dashboard
-  // hero (design §27.3), so both surfaces count the identical set.
-  const myDayTasks = dayScopedTasks(todayTasks, currentPlan?.items ?? [], currentDate, [...taskHistory, ...historicalTasks]);
-  const myDayIds = new Set(myDayTasks.map(rowId));
-  // Live Unfinished pages are server-filtered and cursor-paged. Until a page
-  // exists, the complete backlog minus today's workspace is the exact
-  // exclude-today set the Unfinished view renders.
-  const backlogParents = parentTasks(uniqueTasks(backlog?.tasks ?? []));
-  const unfinishedFallback = backlog
-    ? backlogParents.filter((task) => !myDayIds.has(rowId(task)))
-    : taskHistory.filter((task) => task.completed !== true && !myDayIds.has(rowId(task)));
-  const unfinishedTasks = unfinishedHistory ?? unfinishedFallback;
-  const completedTasks = completedHistory ?? taskHistory.filter((task) => task.completed === true);
-  const datedTasks = parentTasks(tasksForDate([...historicalTasks, ...surfaced], selectedDate, surfacedIds));
-  const displayedCandidates = historical
-    ? datedTasks
-    : taskView === "today" ? myDayTasks
-      : taskView === "unfinished" ? unfinishedTasks
-        : taskView === "completed" ? completedTasks
-          : workspaceHistory;
-  const unfiltered = parentTasks(uniqueTasks(displayedCandidates));
-  // Paginated history views arrive already filtered and sorted by the server;
-  // re-filtering here would re-apply the older client rules and could hide
-  // rows the server (and its counts) kept. My day still filters locally
-  // because `dayScopedTasks` merges plan-surfaced rows on the client.
-  const serverBackedRows = !historical && taskView !== "today";
-  const displayed = historyOrder === "server" && serverBackedRows
-    ? unfiltered
-    : filterWorkspaceTasks(unfiltered, currentDate, { query: taskSearch, from: filterFrom, to: filterTo });
-  const hasFilters = taskSearch.trim().length > 0 || filterFrom.length > 0 || filterTo.length > 0;
-  const viewLabel = taskView === "today" ? "My day" : taskView === "unfinished" ? "Unfinished" : taskView === "completed" ? "Completed" : "All tasks";
-  // Every chip counts the exact parents its view will render, subtasks and
-  // duplicates excluded, so a chip can never disagree with its own list.
-  const serverCounts = backlog?.counts ?? null;
-  // Null counts mean the server does not provide totals yet; chips fall back to
-  // the loaded window and no pagination note is claimed.
-  const chipCounts: Array<{ id: TaskView; label: string; count: number }> = [
-    { id: "today", label: "My day", count: dayTaskGroups(myDayTasks, currentDate, taskSort).reduce((sum, group) => sum + group.tasks.filter((task) => task.completed !== true).length, 0) },
-    { id: "unfinished", label: "Unfinished", count: taskView === "unfinished" ? pageCounts?.open ?? parentTasks(uniqueTasks(unfinishedTasks)).length : parentTasks(uniqueTasks(unfinishedFallback)).length },
-    { id: "completed", label: "Completed", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.completed : serverCounts?.completed ?? parentTasks(uniqueTasks(completedTasks)).length },
-    { id: "all", label: "All tasks", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.total : serverCounts?.total ?? parentTasks(uniqueTasks(workspaceHistory)).length },
-  ];
-  // Peer views keep one tab stop and move between views with the shared
-  // ←/→/Home/End contract (design §8.13).
-  const onTaskTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
-    const next = taskViewTabIndex(index, event.key, chipCounts.length);
-    if (next === null) return;
-    event.preventDefault();
-    onTaskView(chipCounts[next].id);
-    requestAnimationFrame(() => taskTabRefs.current[next]?.focus());
-  };
-  // Paginated views say how much of the server total is on screen so a chip
-  // can never look like it disagrees with its own list.
-  const viewTotal = pageTotal ?? (historical ? null : taskView === "all" ? serverCounts?.total ?? null : taskView === "completed" ? serverCounts?.completed ?? null : null);
-  const overflowNote = viewTotal !== null && unfiltered.length < viewTotal ? `Showing ${unfiltered.length} of ${viewTotal}` : null;
-  // My day is open work only: completed tasks move to the Completed view.
-  // All / Completed arrive globally ordered from SQL before pagination; do not
-  // re-sort flattened pages on the client or rows can cross page boundaries.
-  const rowsForDisplay = taskView === "today" && !historical
-    ? displayed.filter((task) => task.completed !== true)
-    : displayed;
-  // Only server-backed views arrive pre-sorted. My day is assembled on the
-  // client, so it must apply the active sort here or the header arrows lie.
-  const displayedTasks = !historical && historyOrder === "server" && serverBackedRows
-    ? rowsForDisplay
-    : sortTaskList(rowsForDisplay, taskSort, currentDate);
-
-  // My day renders urgency groups from the same rows the filters left behind.
-  const dayGroupsForDisplay = taskView === "today" && !historical
-    ? dayTaskGroups(displayedTasks, currentDate, taskSort)
-    : [];
-
-  // The project line only earns its space when the view actually mixes projects.
-  const showRowProjects = new Set(displayedTasks.map((task) => safeTaskText(task.project?.name, "Work OS"))).size > 1;
-  const listRef = useRef<HTMLDivElement | null>(null);
-  useListShift(listRef);
-  const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
-  const groups = new Map<string, typeof carryOver>();
-  for (const item of carryOver) {
-    const key = item.attribution.date ?? "Older";
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
-  const carryGroups = [...groups.entries()].map(([date, items]) => ({ date, label: date === moveDate(currentDate, -1) ? `Yesterday · ${formatWorkOsDate(date)}` : formatWorkOsDate(date), items }));
-  const agendaText = historical
-    ? shownPlan?.focus_summary ?? (shownPlan?.freeform_intent || "No focus note was recorded for this day.")
-    : goal || suggestion?.text || "Your open tasks define today’s work.";
-  const provenance = historical
-    ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "suggested" ? `Suggested by ${MASCOT.name}` : shownPlan.goal_provenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
-    : goal ? goalProvenance === "suggested" ? `Suggested by ${MASCOT.name}` : goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
-  const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
-  // One source for the day's groups: they are built from the same my-day list
-  // the view renders, so a group's count can never contradict the rows beneath
-  // it. The strip no longer restates those counts — it states the focus and the
-  // carry action, and the groups and view chips carry the numbers.
-  const dayGroups = dayTaskGroups(myDayTasks, currentDate, taskSort);
-  const emptyCopy = hasFilters
-    ? { title: "No tasks match these filters", body: "Try a different search or clear the date filters." }
-    : historical
-      ? { title: "No tasks surfaced", body: "No tasks were recorded for this day." }
-      : taskView === "today"
-        ? { title: "Nothing is scheduled for today yet", body: "Pull unfinished work forward or add a task to shape the day." }
-        : taskView === "unfinished"
-          ? { title: "No unfinished work", body: "Open tasks from previous days will appear here." }
-          : taskView === "completed"
-            ? { title: "No completed tasks", body: "Completed tasks will appear here." }
-            : { title: "No tasks yet", body: "Add your first task to get started." };
-  const renderTaskRow = (task: TaskRow) => {
-      const attribution = taskDateAttribution(task, currentDate);
-      const taskId = rowId(task);
-      const menuOpen = taskMenuId === taskId;
-      const progress = subtaskProgress(task);
-      // "On today" is a plan fact, not a selection. It used to be published as
-      // aria-selected, which is invalid on role="button" and — because every
-      // My day row is on today's plan — made the whole list wear §6.3's selected
-      // chrome at once, so selection stopped discriminating.
-      const onTodayPlan = selectedIds.has(String(task.id)) || selectedIds.has(String(task.provider_task_id));
-      const state = taskState(task, currentDate);
-      const displayState = displayTaskState(task, currentDate);
-      const title = safeTaskText(task.title, "Untitled task");
-      const description = safeTaskText(task.description, "");
-      // §6.2: the description renders only when it adds something beyond the
-      // title. Literal containment only caught a description that repeated the
-      // title's own words verbatim, so a reworded restatement still cost the row
-      // a third line; counting the title's vocabulary catches both.
-      const descriptionEchoesTitle = (() => {
-        const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-        const titleText = normalize(title);
-        const descriptionText = normalize(description);
-        if (descriptionText.length === 0) return true;
-        if (titleText.length === 0) return false;
-        if (descriptionText === titleText || descriptionText.includes(titleText)) return true;
-        // Words of four letters or more carry the meaning; articles and
-        // prepositions only dilute the comparison.
-        const contentWords = (value: string) => value.split(" ").filter((word) => word.length > 3);
-        const titleWords = new Set(contentWords(titleText));
-        const descriptionWords = contentWords(descriptionText);
-        if (titleWords.size === 0 || descriptionWords.length === 0) return false;
-        const carried = descriptionWords.filter((word) => titleWords.has(word)).length;
-        return carried / descriptionWords.length >= 0.8;
-      })();
-      const projectName = safeTaskText(task.project?.name, "Work OS");
-      const milestoneName = safeTaskText(task.milestone?.name, "");
-      const dueDate = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
-      const dueInline = dueDate ? (state === "overdue" ? `Overdue · ${formatWorkOsDate(dueDate)}` : dueDate === currentDate ? "Due today" : `Due ${formatWorkOsDate(dueDate)}`) : null;
-      const showProject = showRowProjects && projectName !== "Work OS";
-      const metaParts = [milestoneName || null, task.priority ? `${sentence(String(task.priority))} priority` : null].filter(Boolean) as string[];
-      // Per-row provenance is warning-only; a healthy "synced" chip on every
-      // row is noise. The detail modal keeps the full provenance chip.
-      const showSyncChip = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
-      const stateLabel = taskStatusLabel(displayState);
-      const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null;
-      const syncPending = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
-      const flight = taskFlight?.get(taskId) ?? null;
-      // Surface / defer / open-original-day are not capability-gated, so the
-      // trigger stays for open rows and for completed rows with a real action.
-      const hasMenu = hasTaskMenu(task, currentDate) || !task.completed || Boolean(attribution.date && attribution.date < currentDate);
-      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}${flight === "leaving" ? " is-leaving" : ""}`} data-pan-row="true" key={taskId} data-list-key={taskId}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} {...taskCheckboxA11y(task, flight === "completing", title)} aria-busy={flight === "completing"} disabled={historical || pendingStatus !== null || !taskCheckboxEnabled(task)} onClick={() => { if (!pendingStatus && !flight) onTaskCompletion(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={14} /> : null}</button><div className="task-row-body" onClick={(event) => { if (event.target instanceof Element && event.target.closest("button, a, input")) return; if (!pendingStatus && !flight) onOpenTask(task, historical); }}><div className="task-row-line primary-line"><h3><button type="button" className="task-open" aria-label={`Open task: ${title}`} onClick={() => { if (!pendingStatus && !flight) onOpenTask(task, historical); }}><OverflowPanText>{title}</OverflowPanText></button></h3>{onTodayPlan && taskView !== "today" && task.completed !== true && <span className="surfaced-tag">On today</span>}</div>{(showProject || metaParts.length > 0 || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{showProject ? <small className="task-meta-project">{projectName}</small> : null}{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{dueInline ? <small className={`task-meta-due${state === "overdue" ? " danger" : ""}`}>{dueInline}</small> : null}{description && !descriptionEchoesTitle ? <p className="task-row-desc"><OverflowPanText pan={false}>{description}</OverflowPanText></p> : null}</div>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{!pendingStatus && dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-state ${displayState}`}>{stateLabel}</span>}{!historical && !pendingStatus && hasMenu && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>
-        <TaskActionMenuItems task={task} currentDate={currentDate} busy={busy} onStatus={(status) => onStatusTask?.(task, status)} onComplete={(completed) => onTaskCompletion(task, completed)} onEdit={() => onEditTask(task)} onAssign={onAssignTask ? () => onAssignTask(task) : undefined} onArchive={() => onArchiveTask(task)} onDelete={() => onDeleteTask(task)} onClose={() => setTaskMenuId(null)} />
-        {!task.completed && !onTodayPlan && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}</article>;
-  };
-
-  return <main className="page tasks-workspace">
-    <TaskFocusDetails text={agendaText} provenance={provenance} date={formatWorkOsDate(selectedDate)} historical={historical} plan={shownPlan ?? null} tasks={planTasks} onEdit={onEditFocus}>
-      <div className="agenda-strip-focus">
-        <span className="task-focus-kicker"><span className="task-focus-mark" aria-hidden="true"><Target size={12} /></span> {historical ? "Workday focus" : "Today's focus"}</span>
-        <OverflowPanText className="agenda-strip-focus-scroll" lineClassName="agenda-strip-text">{agendaText}</OverflowPanText>
-        <small className="agenda-strip-meta">
-          <span className="agenda-strip-provenance">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</span>
-          {focusPlan.total > 0 && <span className="agenda-strip-plan" aria-label={`${focusPlan.open} open of ${focusPlan.total} planned tasks; ${focusPlan.completed} recorded done`}><b>{focusPlan.open}</b> open <span>of {focusPlan.total} planned</span><span className="agenda-strip-meter" aria-hidden="true"><i style={{ width: `${focusPlanPercent}%` }} /></span></span>}
-        </small>
-      </div>
-      {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" aria-label={`Review unfinished work — ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} title={`Review ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} onClick={() => onCarryOverOpen(true)}><span className="carry-count" aria-hidden="true"><b>{carryOver.length > 99 ? "99+" : carryOver.length}</b><small>{carryOver.length === 1 ? "unfinished task" : "unfinished tasks"}</small></span><AlertTriangle size={13} aria-hidden="true" /><span className="agenda-strip-carry-label">Review unfinished work</span><ChevronRight size={13} aria-hidden="true" /></button>}
-    </TaskFocusDetails>
-    <section className="panel task-list-panel" aria-label="Task list"><h2 className="sr-only">{historical ? `Tasks from ${formatWorkOsDate(selectedDate)}` : viewLabel}</h2>
-      <header className="task-list-header">
-        {!historical && <nav className="task-list-tabs" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }, index) => <button key={id} ref={(node) => { taskTabRefs.current[index] = node; }} id={`task-list-tab-${id}`} role="tab" aria-controls="task-list-panel" aria-selected={taskView === id} tabIndex={taskView === id ? 0 : -1} className={`task-list-tab ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)} onKeyDown={(event) => onTaskTabKeyDown(event, index)}>{label}<em>{count}</em></button>)}</nav>}
-        <section className="task-list-controls" aria-label="Task actions">
-          <button type="button" className="task-toolbar-icon" aria-label="Search tasks" title="Search tasks" aria-haspopup="dialog" onClick={() => setFinderEntry("search")}><Search size={17} aria-hidden="true" /></button>
-          <button type="button" className="task-toolbar-icon" aria-label="Search tasks by date" title="Search tasks by date" aria-haspopup="dialog" onClick={() => setFinderEntry("date")}><CalendarDays size={17} aria-hidden="true" /></button>
-          {!historical && <button type="button" className="task-toolbar-icon is-primary" aria-label="Add task" title="Add task" onClick={onAddTask}><Plus size={18} aria-hidden="true" /></button>}
-        </section>
-      </header>
-      {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{overflowNote ?? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}`}</p>}
-      <div className="evidence-list task-records" id="task-list-panel" ref={listRef} role={historical ? undefined : "tabpanel"} aria-labelledby={historical ? undefined : `task-list-tab-${taskView}`}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}<SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <>{taskView === "today" && !historical
-        ? dayGroupsForDisplay.flatMap((group) => group.tasks).map(renderTaskRow)
-        : displayedTasks.map(renderTaskRow)}</> : historyError && !historyHasData ? null : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading tasks…</> : loadMoreError ? "Retry load more" : "Load more"}</button>}</section>
-    {finderEntry && <TaskFinder entry={finderEntry} currentDate={currentDate} scope={finderScope} source={finderSource} onClose={() => setFinderEntry(null)} onOpenTask={task => onOpenTask(task, false)} />}
-    {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} taskFlight={taskFlight} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
-  </main>;
-}

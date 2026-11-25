@@ -5,7 +5,8 @@ import ErrorBoundary from "./ErrorBoundary";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { applyBootTheme } from "./appearance";
 import { NotificationProvider } from "./NotificationFlyouts";
-import "./styles.css";
+import "./styles/tokens-base.css";
+import "./styles/legacy-surfaces.css";
 import "./debug.css";
 import "./theme.css";
 
