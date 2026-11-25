@@ -129,11 +129,14 @@ test("the rendered guide consumes the contract-backed documentation model", asyn
 test("Settings and the token panel both lead to the guide", async () => {
   const settings = await read("src/modules/work-os/employee/EmployeeSettings.tsx");
   const tokenPanel = await read("src/modules/work-os/employee/AgentAccessSettings.tsx");
-  assert.match(settings, /href=(?:"\/docs\/agent-api(?:\/user)?"|\{AGENT_API_GUIDE_URL\})/);
+  assert.match(settings, /href=\{AGENT_API_GUIDE_PATH\}/);
   assert.match(settings, /Open API guide/);
-  assert.match(tokenPanel, /href=(?:"\/docs\/agent-api(?:\/user)?"|\{AGENT_API_GUIDE_URL\})/);
-  assert.match(tokenPanel, /API guide/);
+  assert.match(tokenPanel, /href=\{AGENT_API_GUIDE_PATH\}/);
+  assert.match(tokenPanel, /User API guide/);
   assert.match(tokenPanel, /id="agent-access"/);
+  const adminPanel = await read("src/modules/work-os/admin/AdminAgentAccess.tsx");
+  assert.match(adminPanel, /href=\{ADMIN_AGENT_API_GUIDE_PATH\}/);
+  assert.match(adminPanel, /Admin API guide/);
 });
 
 test("the token action enters Settings through a view-safe route", async () => {

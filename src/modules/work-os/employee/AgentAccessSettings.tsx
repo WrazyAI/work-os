@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Plus, Trash2, X } from "lucide-react";
+import { AGENT_API_GUIDE_PATH } from "@/modules/work-os/agent-api-docs";
 import { fetchJson, formatDateTimeShort } from "./model";
 import styles from "./EmployeeSettings.module.css";
 
@@ -276,7 +277,7 @@ export default function AgentAccessSettings() {
             </div>
 
             <footer className={styles.modalFooter}>
-              <Link href="/docs/agent-api" className={styles.linkButton}>API guide</Link>
+              <Link href={AGENT_API_GUIDE_PATH} className={styles.linkButton}>User API guide</Link>
               <button type="button" className={styles.secondaryButton} onClick={() => setOpen(false)}>Done</button>
             </footer>
           </div>
