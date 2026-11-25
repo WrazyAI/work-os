@@ -548,10 +548,16 @@
       "verification": "bootSurface 15/15 including admin-console replay; DebugWindow render 5/5 including macOS traffic lights; companion 238 files/2111 tests; companion typecheck and production build; full-app control run reproduced admin staying on Overview, fixed run opened setup; rendered 1000x800 light/dark and 620x520 macOS previews with lights at 18,19 and title at 92px."
     },
     {
+      "id": "desktop-structured-eod",
+      "type": "feature",
+      "summary": "Write your end-of-day report from suggested work, then let Otto draft the summary; the desktop now matches the web.",
+      "verification": "Companion suite 245 files / 2,143 tests passed with --maxWorkers=2; companion typecheck and Vite production build passed; the full Work OS suite reached 1,661/1,678 before the final shared-contract test path correction, and the corrected route, package-boundary and desktop-static tests pass 10/10; rendered the composer and submitted reading view at 1000 light/dark, 720 and 560, the admin review drawer, the full-record disclosure, and the compose -> submitted preview."
+    },
+    {
       "id": "desktop-admin-task-pagination",
       "type": "fix",
       "summary": "In desktop Admin Tasks, use Show more to browse past the first 100 tasks.",
-      "verification": "66 focused companion tests and focused TypeScript check passed; Chromium fixture loaded 245 tasks and retained rows on retry."
+      "verification": "77 focused companion tests, including mounted retry coverage, focused TypeScript, and PostgreSQL-compatible person paging beyond 1,000 passed. Chromium checked 245 tasks at wide and narrow widths."
     }
   ],
   "emergency": null,

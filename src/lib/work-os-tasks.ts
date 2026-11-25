@@ -1,3 +1,5 @@
+import { getPool } from "@/lib/db/pool";
+import { adminPersonTaskPageSql } from "@/lib/work-os-admin-task-pagination";
 import { attachTaskAssigneeIdentities } from "@/lib/work-os-task-assignees";
 import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 import { todayIso as today } from "@/lib/work-os-dates";
@@ -55,6 +57,7 @@ export interface TaskListOptions {
   search?: string | null;
   organizationId?: string | null;
   excludeTaskIds?: string[];
+  taskIds?: string[];
   /** SQL-side attribution filters for rows imported with provider creator/subscriber
    * metadata. Historical provenance only; no provider call is made. */
   rawCreatedBy?: string | null;
@@ -138,6 +141,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   if (opts.completed === "true") query = query.eq("completed", true);
   if (opts.completed === "false") query = query.eq("completed", false);
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
+  if (opts.taskIds) query = query.in("id", opts.taskIds);
   if (opts.providerProjectId) query = query.eq("provider_project_id", opts.providerProjectId);
   if (opts.personId) query = query.contains("assignee_person_ids", [opts.personId]);
   if (opts.assignedByPersonId) query = query.eq("assigned_by_person_id", opts.assignedByPersonId);
@@ -308,6 +312,23 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const niftyMemberId = typeof personResult.data?.nifty_member_id === "string"
     ? personResult.data.nifty_member_id.trim() || null
     : personResult.data?.nifty_member_id as string | null | undefined;
+  if (opts.order === "created_desc" && opts.organizationId && opts.includeLedgerHistory === true &&
+    !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false) {
+    const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
+    const { rows: page } = await getPool().query<{ id: string; delegated_only: boolean }>(adminPersonTaskPageSql, [
+      opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit,
+    ]);
+    if (!page.length) return [];
+    const tasks = await listTasks(userId, { ...opts, offset: 0, limit, taskIds: page.map(({ id }) => id) });
+    const byId = new Map((tasks ?? []).map((task) => [String(task.id), task]));
+    // Mapping in page order also keeps the results stable if hydration omits
+    // a row that changed between the two reads.
+    const selected = page.flatMap(({ id, delegated_only }) => {
+      const task = byId.get(id);
+      return task ? [delegated_only ? { ...task, attribution: "assigned_by" } : task] : [];
+    });
+    return hydratePersonTaskPage(userId, selected, opts.organizationId);
+  }
   // The Tasks workspace's All / Completed history is the only paginated path
   // that needs global Name / Due / Status ordering. Keep that work in one SQL
   // query so later pages do not reload the complete history through four
@@ -378,11 +399,15 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const selected = [...rows.values()]
     .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due", sortDate))
     .slice(offset, offset + limit);
+  return hydratePersonTaskPage(userId, selected, opts.organizationId);
+}
+
+async function hydratePersonTaskPage(userId: string, selected: Record<string, any>[], organizationId?: string | null) {
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
     .map((task) => String(task.provider_task_id));
   let childrenQuery = db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)");
-  if (opts.organizationId) childrenQuery = childrenQuery.eq("organization_id", opts.organizationId);
+  if (organizationId) childrenQuery = childrenQuery.eq("organization_id", organizationId);
   const childrenResult = parentProviderIds.length
     ? await childrenQuery.in("parent_provider_task_id", parentProviderIds)
     : { data: [], error: null };
@@ -399,7 +424,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
-  return hydrateTaskAssignees(userId, withProgress, opts.organizationId);
+  return hydrateTaskAssignees(userId, withProgress, organizationId);
 }
 
 export type PersonTaskPage = {

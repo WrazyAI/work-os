@@ -9,6 +9,8 @@ import { readBaseStyles, readDashboardStyles, readWorkspaceStyles } from "./styl
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const readText = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 const app = readMainAppSource();
+const eodReviewView = readText(resolve(root, "src/app/views/EodReviewView.tsx"));
+const submitReceipt = readText(resolve(root, "src/EodSubmitReceipt.tsx"));
 const insightsView = readText(resolve(root, "src/InsightsView.tsx"));
 const sidebar = readText(resolve(root, "src/SidebarNav.tsx"));
 const sidebarStyles = readText(resolve(root, "src/sidebar.css"));
@@ -206,8 +208,9 @@ describe("operational visualizations", () => {
     expect(app).toContain("mascot-hero");
     expect(app).toContain("OnboardingStage");
     // The EOD confirmation keeps the page and plays the checked animation.
-    expect(app).toContain("CheckedMoment");
-    expect(app).toContain("All EODs");
+    expect(eodReviewView).toContain("EodSubmitReceipt");
+    expect(submitReceipt).toContain("CheckedMoment");
+    expect(submitReceipt).toContain("All EODs");
     expect(app).not.toContain("mascot-celebrate");
     expect(app).not.toContain("CompanionPet");
     expect(workspaceStyles).toContain(".kpi-strip");
