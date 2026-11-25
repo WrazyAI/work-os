@@ -1,12 +1,6 @@
-import { buildAgentInstructions } from "@/modules/work-os/agent-api-llms";
-
-export const dynamic = "force-static";
+import { AGENT_API_LLMS_PATH } from "@/modules/work-os/agent-api-docs";
 
 export function GET() {
-  return new Response(buildAgentInstructions(), {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "public, max-age=300",
-    },
-  });
+  // Keep the client's origin: the deployment proxy forwards to a loopback server.
+  return new Response(null, { status: 308, headers: { location: AGENT_API_LLMS_PATH } });
 }

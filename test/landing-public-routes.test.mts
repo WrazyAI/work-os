@@ -4,8 +4,14 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server.js";
 import { proxy } from "../src/proxy.ts";
 
-test("anonymous visitors can follow the landing page legal links without signing in", async () => {
-  for (const route of ["/", "/privacy", "/terms", "/docs/agent-api", "/docs/agent-api/llms.txt", "/landing/task-workflow.mp4", "/landing/task-workflow.vtt"]) {
+test("anonymous visitors can follow legal and Agent API docs links without signing in", async () => {
+  for (const route of [
+    "/", "/privacy", "/terms",
+    "/docs/agent-api", "/docs/agent-api/llms.txt",
+    "/docs/agent-api/user", "/docs/agent-api/user/llms.txt",
+    "/docs/agent-api/admin", "/docs/agent-api/admin/llms.txt",
+    "/landing/task-workflow.mp4", "/landing/task-workflow.vtt",
+  ]) {
     const response = await proxy(new NextRequest(`https://app.wrazyos.com${route}`));
     assert.equal(response.status, 200, `${route} must remain public`);
     assert.equal(response.headers.get("location"), null);

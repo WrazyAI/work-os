@@ -1,5 +1,6 @@
-import { useRef } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Search } from "lucide-react";
+import { AgentAccessSettings, agentAccessViewDescription } from "./AgentAccessSettings";
 import { SettingsBlock, type SettingsPageId, type SettingsPageMeta } from "./settingsSections";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 
@@ -13,26 +14,63 @@ type SettingsContentProps = PersonalSettingsProps & {
 
 /** The stage half of Settings. The Work OS sidebar is already the settings
  * rail, so this component starts with the selected page title and embeds the
- * page's own settings groups directly in the stage. */
+ * page's own settings groups directly in the stage.
+ *
+ * Session is the one page with an inline sub-view: Agent access replaces the
+ * page body and title, and its back control returns to the Session summary.
+ * That keeps the settings stage as the only layer; the token ledger never
+ * stacks a second modal over it. */
 export function SettingsContent({ active, visiblePages, query, onSelect, onQuery, ...props }: SettingsContentProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const agentAccessBackRef = useRef<HTMLButtonElement | null>(null);
+  const [agentAccessOpen, setAgentAccessOpen] = useState(false);
   const page = visiblePages.find((entry) => entry.id === active) ?? null;
   const normalized = query.trim();
+  const inAgentAccess = active === "session" && agentAccessOpen;
+
+  useEffect(() => {
+    setAgentAccessOpen(false);
+  }, [active]);
+
+  useEffect(() => {
+    if (agentAccessOpen) agentAccessBackRef.current?.focus();
+  }, [agentAccessOpen]);
 
   const openResult = (next: SettingsPageId) => {
     onSelect(next);
     window.requestAnimationFrame(() => headingRef.current?.focus());
   };
 
+  const backToSession = () => {
+    setAgentAccessOpen(false);
+    window.requestAnimationFrame(() => headingRef.current?.focus());
+  };
+
   if (page) {
+    const sessionBody = active === "session" ? (
+      <div className="settings-view-enter" key={inAgentAccess ? "agent-access" : "session"}>
+        {inAgentAccess
+          ? <AgentAccessSettings
+            surface={props.agentAccessSurface}
+            apiBase={props.sessionApiBase}
+            adminEnabled={props.adminAgentApiEnabled !== false}
+          />
+          : <SettingsBlock block="session" {...props} onManageAgentAccess={() => setAgentAccessOpen(true)} />}
+      </div>
+    ) : null;
+
     return <section className="settings-content-page" aria-labelledby="settings-page-title">
       <header className="settings-content-head">
-        <p className="settings-content-eyebrow">{page.group || "Settings"}</p>
-        <h2 id="settings-page-title" ref={headingRef} tabIndex={-1}>{page.label}</h2>
-        <p>{page.description}</p>
+        {inAgentAccess
+          ? <button ref={agentAccessBackRef} type="button" className="settings-view-back" onClick={backToSession}>
+            <ArrowLeft size={14} aria-hidden /> Back to Session
+          </button>
+          : <p className="settings-content-eyebrow">{page.group || "Settings"}</p>}
+        <h2 id="settings-page-title" ref={headingRef} tabIndex={-1}>{inAgentAccess ? "Agent access" : page.label}</h2>
+        <p>{inAgentAccess ? agentAccessViewDescription(props.agentAccessSurface) : page.description}</p>
       </header>
       <div className="settings-content-body" data-hide-first-head={page.hideFirstGroupHead ? "true" : undefined}>
-        {page.blocks.map((block) => <SettingsBlock key={block} block={block} {...props} />)}
+        {sessionBody ?? page.blocks.map((block) => <SettingsBlock key={block} block={block} {...props} />)}
       </div>
     </section>;
   }

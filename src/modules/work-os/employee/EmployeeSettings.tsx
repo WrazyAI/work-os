@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Plus, RefreshCw, X } from "lucide-react";
+import { AGENT_API_GUIDE_PATH } from "@/modules/work-os/agent-api-docs";
 import type { ProfileItemKind, WorkArchetype, WorkProfileItem } from "@/modules/work-os/onboarding";
 import { supportedTimezones, timezoneLabel } from "../timezones";
 import EmployeeMemory from "./EmployeeMemory";
@@ -421,7 +422,7 @@ export default function EmployeeSettings() {
           <div className={styles.groupContent}>
             <p className={styles.companionCopy}>The guide covers authentication, endpoints, limits, and recovery. Tokens are created below.</p>
             <div className={styles.companionActions}>
-              <Link href="/docs/agent-api" className={styles.linkButton}>Open API guide</Link>
+              <Link href={AGENT_API_GUIDE_PATH} className={styles.linkButton}>Open API guide</Link>
             </div>
           </div>
         </section>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Activity, BookOpen, Bot, Bug, CalendarDays, ChevronRight, Info, KeyRound, LogOut, Palette, RotateCcw, SlidersHorizontal, UserRound } from "lucide-react";
+import { Activity, BookOpen, Bot, Bug, CalendarDays, ChevronRight, Info, KeyRound, Palette, RotateCcw, SlidersHorizontal, UserRound } from "lucide-react";
+import { SessionSettings } from "./SessionSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { MemorySummary } from "./MemorySettings";
 import { Setting } from "./Setting";
@@ -193,13 +194,16 @@ export function SettingsBlock({ block, ...props }: { block: SettingsBlockId } & 
       </section>;
 
     case "session":
-      return <section className="settings-group" aria-labelledby="settings-sync-title">
-        <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3></header>
-        <section className="settings-panel">
-          <Setting title="Offline queue" detail={props.queueAttentionCount ? `${props.queueAttentionCount} update${props.queueAttentionCount === 1 ? "" : "s"} need attention` : props.queueCount ? `${props.queueCount} updates waiting to sync` : "Everything is synced"}><span className={`status-chip${props.queueAttentionCount ? " attention" : ""}`}>{props.queueAttentionCount ? "Needs attention" : "Ready"}</span></Setting>
-          <Setting title="Account session" detail={`Signed in through ${props.sessionApiBase}`}><button type="button" className="quiet-action danger" disabled={props.busy} onClick={props.onSignOut}><LogOut size={15} /> Sign out</button></Setting>
-        </section>
-      </section>;
+      return <SessionSettings
+        queueCount={props.queueCount}
+        queueAttentionCount={props.queueAttentionCount}
+        sessionApiBase={props.sessionApiBase}
+        busy={props.busy}
+        onSignOut={props.onSignOut}
+        agentAccessSurface={props.agentAccessSurface}
+        adminAgentApiEnabled={props.adminAgentApiEnabled}
+        onManageAgentAccess={props.onManageAgentAccess ?? (() => undefined)}
+      />;
 
     case "memory":
       if (!props.hasPersonalRecord) return null;

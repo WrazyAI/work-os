@@ -534,6 +534,12 @@
       "type": "fix",
       "summary": "Notifications float in a stack at the top center and fan out when you hover them, and the Evidence page no longer repeats its description.",
       "verification": "Companion suite 235 files / 2,093 tests passed; work-os:typecheck and Vite production build passed; Playwright at 1280 and 390 in light and dark: standing notices no longer render in the page, the deck collapses and expands without overlap on hover and keyboard focus, no horizontal overflow, and the Evidence masthead has no description line."
+    },
+    {
+      "id": "desktop-agent-access-tokens",
+      "type": "feature",
+      "summary": "Employees and administrators can create, review, and revoke scoped agent tokens from Settings → Session, with the one-time secret and the API guide for their role.",
+      "verification": "Companion tsc and Vite production build passed; focused Agent access, settings, admin, and source-guard tests 58 passed; full companion suite 239/240 files and 2,114/2,117 tests passed, with the three vault-persistence failures re-run alone at 13/13. Rendered the employee preview and the real admin shell at 1280, 720, and 390 in dark mode: the Session summary band, the inline Agent access view with Back to Session, employee and administrator scopes, the disabled admin feature state, the empty ledger, no horizontal overflow, and focus returning to the heading on back. The Settings purpose subtitle is gone from the administrator masthead. Live create and revoke were not exercised in the desktop dev harness because it has no signed-in session; both endpoints are the shipped web routes and the component uses the same apiRequest bearer path as the rest of the companion."
     }
   ],
   "emergency": null,

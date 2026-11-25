@@ -10,6 +10,7 @@ import {
   AGENT_API_ERRORS,
   AGENT_API_EVIDENCE_MAX_BYTES,
   AGENT_API_EVIDENCE_TYPE_LABELS,
+  AGENT_API_GUIDE_URL,
   AGENT_API_LLMS_URL,
   AGENT_API_MCP_TOOLS,
   AGENT_API_RATE_LIMIT_REQUESTS,
@@ -29,11 +30,13 @@ const HTTP_METHODS = new Set(["get", "post", "patch", "delete"]);
 
 type SpecOperation = {
   "x-required-scope"?: string;
+  "x-required-scope-any"?: string[];
   security?: unknown[];
 };
 
-async function openapi() {
-  return yaml.load(await read("docs/openapi/work-os-agent-v1.yaml")) as {
+async function openapi(file = "work-os-agent-v1.yaml") {
+  return yaml.load(await read(`docs/openapi/${file}`)) as {
+    servers: { url: string }[];
     paths: Record<string, Record<string, SpecOperation>>;
     components: {
       schemas: {
@@ -114,23 +117,26 @@ test("the rendered guide consumes the contract-backed documentation model", asyn
   assert.match(component, /id="agent-setup"/);
   assert.match(component, /Want your agent to set it up for you\?/);
   assert.match(component, /href=\{AGENT_API_LLMS_URL\}/);
-  const route = await read("src/app/docs/agent-api/page.tsx");
-  assert.match(route, /data-work-os-workspace/);
-  assert.match(route, /ApiDocs/);
-  assert.match(route, /title: "Agent API"/);
-  assert.match(route, /auth\.api\.getSession/);
-  assert.match(route, /signedIn \? "Dashboard" : "Sign in"/);
-  assert.match(route, /\/docs\/agent-api/);
+  const route = await read("src/app/docs/agent-api/user/page.tsx");
+  assert.match(route, /<ApiDocs/);
+  assert.match(route, /<GuideSwitch current="user"/);
+  const layout = await read("src/app/docs/agent-api/layout.tsx");
+  assert.match(layout, /data-work-os-workspace/);
+  assert.match(layout, /auth\.api\.getSession/);
+  assert.match(layout, /signedIn \? "Dashboard" : "Sign in"/);
 });
 
 test("Settings and the token panel both lead to the guide", async () => {
   const settings = await read("src/modules/work-os/employee/EmployeeSettings.tsx");
   const tokenPanel = await read("src/modules/work-os/employee/AgentAccessSettings.tsx");
-  assert.match(settings, /href="\/docs\/agent-api"/);
+  assert.match(settings, /href=\{AGENT_API_GUIDE_PATH\}/);
   assert.match(settings, /Open API guide/);
-  assert.match(tokenPanel, /href="\/docs\/agent-api"/);
-  assert.match(tokenPanel, /API guide/);
+  assert.match(tokenPanel, /href=\{AGENT_API_GUIDE_PATH\}/);
+  assert.match(tokenPanel, /User API guide/);
   assert.match(tokenPanel, /id="agent-access"/);
+  const adminPanel = await read("src/modules/work-os/admin/AdminAgentAccess.tsx");
+  assert.match(adminPanel, /href=\{ADMIN_AGENT_API_GUIDE_PATH\}/);
+  assert.match(adminPanel, /Admin API guide/);
 });
 
 test("the token action enters Settings through a view-safe route", async () => {
@@ -186,9 +192,93 @@ test("the agent instructions carry the full public contract", () => {
   assert.ok(text.includes("evidence_required"));
 });
 
-test("the llms.txt route serves the instructions as public text", async () => {
-  const route = await read("src/app/docs/agent-api/llms.txt/route.ts");
-  assert.match(route, /buildAgentInstructions/);
-  assert.match(route, /text\/plain; charset=utf-8/);
-  assert.match(route, /public, max-age=300/);
+test("the chooser is indexable and links to both canonical guides", async () => {
+  const chooser = await read("src/app/docs/agent-api/page.tsx");
+  assert.match(chooser, /robots: \{ index: true, follow: true \}/);
+  assert.match(chooser, /Employee guide/);
+  assert.match(chooser, /Administrator guide/);
+  assert.match(chooser, /href=\{AGENT_API_GUIDE_PATH\}/);
+  assert.match(chooser, /href=\{ADMIN_AGENT_API_GUIDE_PATH\}/);
+  assert.doesNotMatch(chooser, /<ApiDocs/);
+  assert.equal(AGENT_API_GUIDE_URL, "https://app.wrazyos.com/docs/agent-api/user");
+  assert.equal(AGENT_API_LLMS_URL, "https://app.wrazyos.com/docs/agent-api/user/llms.txt");
+});
+
+test("the published llms.txt alias uses a permanent host-relative redirect", async () => {
+  const { GET } = await import("../src/app/docs/agent-api/llms.txt/route.ts");
+  const response = GET();
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.get("location"), "/docs/agent-api/user/llms.txt");
+});
+
+test("each guide's llms.txt serves its contract as cacheable public text", async () => {
+  const { GET: user } = await import("../src/app/docs/agent-api/user/llms.txt/route.ts");
+  const { GET: admin } = await import("../src/app/docs/agent-api/admin/llms.txt/route.ts");
+  for (const [get, base] of [
+    [user, "https://app.wrazyos.com/api/agent/v1"],
+    [admin, "https://app.wrazyos.com/api/agent/admin/v1"],
+  ] as const) {
+    const response = await get();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(response.headers.get("cache-control"), "public, max-age=300");
+    assert.ok((await response.text()).includes(base));
+  }
+  const text = await admin().text();
+  assert.match(text, /only POST \/previews\/\{previewId\}\/confirm applies it, exactly once/i);
+  assert.match(text, /admin_agent_api/);
+  assert.match(text, /Employee tokens are rejected with 401/);
+  assert.match(text, /Idempotency-Key.*24 hours.*Idempotent-Replay: true/);
+  assert.match(text, /\/api\/agent\/admin\/mcp/);
+  assert.match(text, /`confirm_action`/);
+});
+
+test("the administrator page has a separate guide and an employee route switch", async () => {
+  const route = await read("src/app/docs/agent-api/admin/page.tsx");
+  assert.match(route, /<AdminApiDocs/);
+  assert.match(route, /<GuideSwitch current="admin"/);
+  const component = await read("src/modules/work-os/admin-agent-docs/AdminApiDocs.tsx");
+  for (const model of ["ENDPOINTS", "SCOPES", "ERRORS", "MCP_TOOLS", "RULES"]) {
+    assert.match(component, new RegExp(`ADMIN_AGENT_API_${model}[.]`));
+  }
+  assert.match(component, /Get a token/);
+  // The settings entry must select the administrator view before redirecting:
+  // a saved "My workspace" preference otherwise sends this link to /work-os/today.
+  assert.match(component, /<WorkOsViewModeForm[\s\S]*?mode="admin"[\s\S]*?next="\/work-os\/admin\/settings"/);
+  assert.doesNotMatch(component, /href="\/work-os\/admin\/settings"/);
+});
+
+test("admin docs match the OpenAPI base, method/path/scope map, and vocabulary", async () => {
+  const spec = await openapi("work-os-admin-agent-v1.yaml");
+  const urls = await import("../src/modules/work-os/agent-api-docs.ts");
+  const docs = await import("../src/modules/work-os/admin-agent-api-docs.ts");
+  assert.equal(urls.ADMIN_AGENT_API_BASE_URL, spec.servers[0].url);
+  assert.equal(urls.ADMIN_AGENT_API_OPENAPI_URL, `${spec.servers[0].url}/openapi.yaml`);
+  assert.equal(urls.ADMIN_AGENT_API_MCP_URL, "https://app.wrazyos.com/api/agent/admin/mcp");
+  assert.equal(urls.ADMIN_AGENT_API_TOKEN_PREFIX, "wos_admin_");
+  assert.equal(urls.ADMIN_AGENT_API_GUIDE_URL, "https://app.wrazyos.com/docs/agent-api/admin");
+  assert.equal(urls.ADMIN_AGENT_API_LLMS_URL, "https://app.wrazyos.com/docs/agent-api/admin/llms.txt");
+  assert.ok(urls.ADMIN_AGENT_API_AGENT_PROMPT.includes(urls.ADMIN_AGENT_API_LLMS_URL));
+  const endpoints = docs.ADMIN_AGENT_API_ENDPOINTS
+    .map(({ method, path, requiredScope }) => ({ method, path, requiredScope }))
+    .sort((a, b) => `${a.method} ${a.path}`.localeCompare(`${b.method} ${b.path}`));
+  assert.deepEqual(endpoints, specEndpoints(spec));
+  for (const endpoint of docs.ADMIN_AGENT_API_ENDPOINTS) {
+    const operation = spec.paths[endpoint.path][endpoint.method.toLowerCase()];
+    assert.deepEqual(endpoint.requiredScopeAny, operation["x-required-scope-any"]);
+  }
+  assert.deepEqual(docs.ADMIN_AGENT_API_SCOPES.map(({ id }) => id).sort(), [...spec.components.schemas.Scope.enum].sort());
+  assert.deepEqual(docs.ADMIN_AGENT_API_ERRORS.map(({ code }) => code).sort(), [...spec.components.schemas.Error.properties.code.enum].sort());
+});
+
+test("admin docs list the live MCP tools and their direct or per-action scope", async () => {
+  const source = await read("src/lib/work-admin-agent-mcp.ts");
+  const { ADMIN_AGENT_API_MCP_TOOLS } = await import("../src/modules/work-os/admin-agent-api-docs.ts");
+  const tools = [...source.matchAll(/server\.registerTool\("([^"]+)",([\s\S]*?)(?=server\.registerTool|return server;)/g)];
+  assert.deepEqual(ADMIN_AGENT_API_MCP_TOOLS.map(({ name }) => name), tools.map(([, name]) => name));
+  for (const [, name, body] of tools) {
+    const scope = body.match(/runTool\(agent, "([^"]+)"/)?.[1];
+    if (!scope) assert.match(body, /adminPreviewActionScope|confirmAction/);
+    assert.equal(ADMIN_AGENT_API_MCP_TOOLS.find((tool) => tool.name === name)?.scope, scope ?? "Action write scope");
+  }
 });

@@ -123,6 +123,7 @@ const bootModel = read("src/bootSurface.ts");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
 const settingsSections = read("src/settingsSections.tsx");
+const sessionSettings = read("src/SessionSettings.tsx");
 
 // First run is the one place the employee meets the product, so the companion
 // hosts it: the stage carries Otto and his spoken line, and the loading screen
@@ -270,7 +271,8 @@ assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 // every account store. The ordered helper owns the secureState.clearAccount call.
 assert.match(app, /clearWorkOsAccountCache\(queryClient, session\?\.token \?\? null\)/);
 assert.match(read("src/queryClient.ts"), /await secureState\.clearAccount\(expectedToken\)/);
-assert.match(settingsSections, /Account session/);
+assert.match(settingsSections, /<SessionSettings/);
+assert.match(sessionSettings, /Account session/);
 assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
 assert.match(app, /shiftPulse/);
