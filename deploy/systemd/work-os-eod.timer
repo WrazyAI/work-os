@@ -1,9 +1,9 @@
 [Unit]
-Description=Prepare Work OS end-of-day reports every five minutes
+Description=Prepare Work OS end-of-day reports every minute, at each employee's due time
 
 [Timer]
-OnBootSec=5m
-OnUnitActiveSec=5m
+OnBootSec=2m
+OnUnitActiveSec=1min
 Persistent=true
 Unit=work-os-eod.service
 

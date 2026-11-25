@@ -53,6 +53,7 @@ function addReason(result: ScheduledEodRunResult, reason: EodRunReason) {
 export async function runScheduledEodPreparation(
   limit = 24,
   at = new Date(),
+  mode: "due" | "fallback" = "fallback",
 ): Promise<ScheduledEodRunResult> {
   if (!process.env.CRON_SECRET) {
     throw new Error("scheduled EOD preparation is not ready: CRON_SECRET is required");
@@ -67,6 +68,13 @@ export async function runScheduledEodPreparation(
     const pageSize = Math.max(600, bounded * 12);
     const through = addDaysIso(at.toISOString().slice(0, 10), 1);
     const from = addDaysIso(through, -3);
+    // The due dispatcher runs every minute. It targets each employee's own
+    // scheduled clock-out rather than a global five-minute sweep: the normal
+    // window is ten minutes before the end, with a two-minute safety margin
+    // for timer drift, and a 30-minute missed-tick window after it.
+    const dueFrom = new Date(at.getTime() + 8 * 60_000).toISOString();
+    const dueTo = new Date(at.getTime() + 12 * 60_000).toISOString();
+    const missedFrom = new Date(at.getTime() - 30 * 60_000).toISOString();
     const result: ScheduledEodRunResult = {
       attempted: 0,
       employees: 0,
@@ -76,22 +84,31 @@ export async function runScheduledEodPreparation(
       reasons: {},
     };
 
-    const [sessionsResult, plansResult] = await Promise.all([
-      db.from("work_sessions")
+    const sessionsQuery = mode === "due"
+      ? db.from("work_sessions")
+        .select("organization_id,person_id,shift_date")
+        .not("person_id", "is", null)
+        .not("scheduled_ends_at", "is", null)
+        .or(`and(scheduled_ends_at.gte.${dueFrom},scheduled_ends_at.lte.${dueTo}),and(scheduled_ends_at.gte.${missedFrom},scheduled_ends_at.lt.${at.toISOString()})`)
+        .order("scheduled_ends_at", { ascending: true })
+        .limit(240)
+      : db.from("work_sessions")
         .select("organization_id,person_id,shift_date")
         .not("person_id", "is", null)
         .gte("shift_date", from)
         .lte("shift_date", through)
         .order("shift_date", { ascending: false })
-        .limit(pageSize),
-      db.from("work_daily_plans")
+        .limit(pageSize);
+    const plansQuery = mode === "fallback"
+      ? db.from("work_daily_plans")
         .select("organization_id,person_id,shift_date")
         .not("person_id", "is", null)
         .gte("shift_date", from)
         .lte("shift_date", through)
         .order("shift_date", { ascending: false })
-        .limit(pageSize),
-    ]);
+        .limit(pageSize)
+      : Promise.resolve({ data: [], error: null });
+    const [sessionsResult, plansResult] = await Promise.all([sessionsQuery, plansQuery]);
     if (sessionsResult.error) throw new Error(`load scheduled EOD sessions: ${sessionsResult.error.message}`);
     if (plansResult.error) throw new Error(`load scheduled EOD plans: ${plansResult.error.message}`);
 

@@ -40,11 +40,16 @@ test("the scheduled EOD preparation is bounded, secret-gated and idempotent", as
   assert.match(route, /CRON_SECRET/);
   assert.match(route, /runScheduledEodPreparation/);
   assert.match(route, /Math\.min\(48/);
+  assert.match(route, /getUTCMinutes\(\) % 15/);
   const job = await source("src/lib/work-os-eod-schedule.ts");
   assert.match(job, /eodDraftShiftGate/);
   assert.match(job, /prepareWorkOsEod/);
   assert.match(job, /already_submitted/);
   assert.match(job, /scheduledRun/);
+  assert.match(job, /mode === "due"/, "the due dispatcher uses the employee-specific clock-out query");
+  assert.match(job, /scheduled_ends_at/, "the due dispatcher keys off each session's scheduled clock-out");
+  const timer = await source("deploy/systemd/work-os-eod.timer");
+  assert.match(timer, /OnUnitActiveSec=1min/, "the timer runs every minute so the ten-minute due time is not missed");
 });
 
 test("the summary is streamed and has an honest fallback", async () => {
