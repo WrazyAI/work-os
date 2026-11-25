@@ -570,6 +570,12 @@
       "type": "fix",
       "summary": "Clock in from Work OS now waits for Worktivity to finish opening and recognizes its current Clock in control, so a normal clock-in no longer fails with “clock control not available.”",
       "verification": "Live Worktivity 2.6.7 CDP probe on Windows found 'Not clocked in' with an enabled 'Clock in' button; the old one-shot controller returned not_ready, while the new readiness loop found the control at 6.6s. The dry-run controller returned clicked; companion suite 245 files / 2,145 tests and desktop-static checks passed. The live clock-in click was not exercised to avoid starting a real attendance session."
+    },
+    {
+      "id": "worktivity-early-clockout-confirmation",
+      "type": "fix",
+      "summary": "Clocking out before the daily target now confirms Worktivity's early Clock out prompt in the same action, so you only click Clock out once.",
+      "verification": "Extracted the controller's exact action expression and ran it against live Worktivity 2.6.7 with a synthetic early-clock-out modal: both the already-open modal and active-page-to-modal flows returned clicked and confirmed the modal button. Companion suite 245 files / 2,145 tests passed; work-os:typecheck and desktop-static checks passed; live Worktivity clock-out showed Not clocked in after confirmation."
     }
   ],
   "emergency": null,
