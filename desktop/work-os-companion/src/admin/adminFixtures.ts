@@ -1,6 +1,6 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
-import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
+import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, normalizeAdminTaskList, todayIso } from "./data";
 import { evidenceKind, evidenceKindBucket } from "@wrazy/work-os-shared/evidence-kinds";
 import { workOsKeys } from "../queryClient";
 import type { ReadyRecapSummary } from "../NotificationsBell";
@@ -517,6 +517,11 @@ function evidenceResponse(): EvidenceResponse {
   return { evidence, summary: summaryFor(evidence) };
 }
 
+export function seedAdminTaskPage(queryClient: QueryClient, page: unknown, date = todayIso()) {
+  const filters = { filter: "open", personId: "", projectId: "", limit: "100", completed: "false", date };
+  queryClient.setQueryData(adminKeys.tasks(filters), { pages: [normalizeAdminTaskList(page)], pageParams: [0] });
+}
+
 export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "empty" | "sparse") {
   const today = todayIso();
   const evidenceFrom = isoDaysAgo(13);
@@ -532,7 +537,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   if (state === "empty") {
     queryClient.setQueryData(adminKeys.overview(today), adminPreviewOverview("empty"));
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
-    queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
+    seedAdminTaskPage(queryClient, { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } }, today);
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
     const emptyEvidence = { evidence: [], summary: summaryFor([]) } satisfies EvidenceResponse;
     queryClient.setQueryData(adminKeys.evidence({ personId: "", unattributed: "", source: "", from: evidenceFrom, to: today, correction: "", q: "", kind: "all", summary: "1", limit: "500" }), emptyEvidence);
@@ -824,7 +829,6 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       { team_id: "team-2", person_id: "p-3", is_manager: true },
     ],
   } satisfies OrganizationResponse);
-  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today };
   // The dense record exercises the task-date rules: created stamps in both the
   // provider and local shapes, one task with no created date (both cells keep
   // their dash), and two tasks with no recorded due date — one created
@@ -842,7 +846,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     { provider_created_at: `${isoDaysAgo(1)}T08:30:00.000Z` },
     { created_at: `${isoDaysAgo(2)}T11:00:00.000Z` },
   ];
-  queryClient.setQueryData(adminKeys.tasks(taskFilters), {
+  seedAdminTaskPage(queryClient, {
     tasks: Array.from({ length: 10 }, (_, index) => {
       const row = {
         id: `t-${index + 1}`,
@@ -887,7 +891,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     }),
     nextOffset: null,
     summary: { open: 43, overdue: 5, completedWeek: 17 },
-  });
+  }, today);
   const detailTask = {
     id: "t-1",
     title: "Retry handling for failed billing webhooks",
@@ -1065,12 +1069,12 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
   });
 
   // Tasks: rows without project, assignees, labels, or due dates; no summary.
-  queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }), {
+  seedAdminTaskPage(queryClient, {
     tasks: [
       { id: "t-s1", name: "Retry handling for failed billing webhooks" },
       { id: "t-s2", title: "Design review for the admin surface", completed: false },
     ],
-  });
+  }, today);
   queryClient.setQueryData(adminKeys.taskDetails("t-s1"), {
     task: { id: "t-s1", title: "Retry handling for failed billing webhooks", completed: false },
   });

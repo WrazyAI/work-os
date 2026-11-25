@@ -41,14 +41,15 @@ and the lifecycle buttons — Mark complete or Reopen task, Edit task, Archive
 task, Delete task — under the same gate, and archiving or deleting waits for
 an explicit confirmation.
 
-**Existing paging gap.** The companion's
-[TasksPage](../../../desktop/work-os-companion/src/admin/TasksPage.tsx)
-requests up to 200 rows in one query and has no continuation control. The web
-[AdminTasks](../../../src/modules/work-os/admin/AdminTasks.tsx) starts at 100 and
+**Desktop paging.** The companion requests 100 rows at a time and appends
+each page with **Show more**, without replacing rows already loaded. Search
+and column sorting apply to the loaded rows. A failed continuation keeps those
+rows visible and provides a retry.
+
+**Remaining web paging gap.** [AdminTasks](../../../src/modules/work-os/admin/AdminTasks.tsx)
 increases the requested limit with Load more, but does not advance an offset;
 the [list endpoint](../../../src/app/api/work-os/tasks/route.ts) caps that limit
-at 200. These implementations do not yet satisfy the required paging contract.
-Resolving the gap requires a separate implementation change.
+at 200.
 
 ## Task dates and overdue counts
 

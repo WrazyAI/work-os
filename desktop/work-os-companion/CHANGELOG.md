@@ -23,6 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- In desktop Admin Tasks, use Show more to browse past the first 100 tasks.
+
 ## 0.5.44 — 2026-11-25
 
 - Employees and administrators can create, review, and revoke agent tokens from Settings → Session, with the API guide for their role.
