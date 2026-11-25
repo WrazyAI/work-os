@@ -23,6 +23,11 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- Exception, late, and clock-out confirmations now give you room to explain what happened, and the confirm button is clear about when it is ready.
+- Clock in from Work OS now waits for Worktivity to finish opening, so the Clock in control is available on the first try.
+
 ## 0.5.44 — 2026-11-25
 
 - Write your end-of-day report from suggested work, then let Otto draft the summary; the desktop now matches the web.
