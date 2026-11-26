@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -37,6 +37,12 @@ export function sectionForHref(href: string | null): AdminSection {
   return "overview";
 }
 
+const OverviewPrototype = import.meta.env.DEV ? lazy(() => import("./OverviewPrototype")) : null;
+
+function prototypeRequested() {
+  return import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("prototype");
+}
+
 function activityTone(kind: string): "ok" | "observed" | "neutral" | "warn" {
   if (kind === "task_completed") return "ok";
   if (kind === "eod_submitted") return "info" as unknown as "ok";
@@ -44,7 +50,22 @@ function activityTone(kind: string): "ok" | "observed" | "neutral" | "warn" {
   return "neutral";
 }
 
-export default function OverviewPage({ onOpenSection, onOpenPerson, onOpenRecaps }: {
+export default function OverviewPage(props: {
+  onOpenSection: (section: AdminSection, focus?: AdminSectionFocus) => void;
+  onOpenPerson: (personId: string) => void;
+  onOpenRecaps: () => void;
+}) {
+  if (OverviewPrototype && prototypeRequested()) {
+    return (
+      <Suspense fallback={<div className="admin-grid"><Skeleton className="h-28" /><Skeleton className="h-64" /><Skeleton className="h-64" /></div>}>
+        <OverviewPrototype {...props} />
+      </Suspense>
+    );
+  }
+  return <OverviewPageSurface {...props} />;
+}
+
+function OverviewPageSurface({ onOpenSection, onOpenPerson, onOpenRecaps }: {
   onOpenSection: (section: AdminSection, focus?: AdminSectionFocus) => void;
   onOpenPerson: (personId: string) => void;
   onOpenRecaps: () => void;
