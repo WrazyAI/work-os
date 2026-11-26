@@ -35,6 +35,13 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
 }) {
   const model = payrollReviewModel(review);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [decisionNotice, setDecisionNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (decision && !onDecide) {
+      setDecision(null);
+      setDecisionNotice("The review changed while this decision was open. Close and reopen the finding to try again.");
+    }
+  }, [decision, onDecide]);
   const running = review.run?.progress.status === "queued" || review.run?.progress.status === "running";
   const attention = findings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = findings.filter((finding) => finding.status === "auto_excluded");
@@ -108,6 +115,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
       </p> : null}
       {daysError || findingsError ? <p className="payroll-blocker" role="alert">{(daysError ?? findingsError)} {onRetryEvidence ? <button type="button" onClick={onRetryEvidence}>Retry evidence</button> : null}</p> : null}
       {[...new Set([...review.blockers, ...model.blockers])].map((blocker) => <p className="payroll-blocker" key={blocker}>{blocker}</p>)}
+      {decisionNotice ? <p className="payroll-blocker" role="alert">{decisionNotice}</p> : null}
 
       {review.token.analysisRevision > 0 ? <>
         <section className="payroll-panel payroll-hours-card" aria-labelledby="hours-title">
@@ -152,9 +160,9 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : null}
               {finding.requiredAction === "correct" ? <span className="payroll-quiet">Correct the source, then re-analyze.</span>
                 : onDecide && !busy ? (finding.requiredAction === "decide" ? <>
-                  <button type="button" onClick={() => setDecision({ finding, action: "payable" })}>Keep payable</button>
-                  <button type="button" onClick={() => setDecision({ finding, action: "excluded" })}>Exclude time</button>
-                </> : <button type="button" onClick={() => setDecision({ finding, action: "acknowledged" })}>Acknowledge</button>) : null}
+                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "payable" }); }}>Keep payable</button>
+                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "excluded" }); }}>Exclude time</button>
+                </> : <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "acknowledged" }); }}>Acknowledge</button>) : null}
             </div>
           </section>)}</div>
         </section> : null}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { currentPayrollWindowForDate, payrollPayDateForThrough, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
+import { currentPayrollWindowForDate, payrollIsStandardWindow, payrollPayDateForThrough, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
 import { payrollApi, payrollKeys } from "./api";
 import { PayrollOverviewView } from "./PayrollOverviewView";
 import { isPayrollDate, isPayrollPayDate, payrollDefaultWindow, payrollReviewHref, payrollWorkspaceHref } from "./paths";
@@ -41,7 +41,10 @@ export default function PayrollOverview({ tab, newAudit, initialPayDate }: {
   });
   const page = roster.data?.pages[0];
   const people = roster.data?.pages.flatMap((entry) => entry.items) ?? [];
-  const candidates = people.filter((person) => person.active && person.mapped && person.status !== "approved");
+  const standardRequest = isPayrollDate(fromInput) && isPayrollDate(throughInput)
+    ? payrollIsStandardWindow(effectivePayDate, fromInput, throughInput)
+    : true;
+  const candidates = people.filter((person) => person.active && person.mapped && (person.status !== "approved" || !standardRequest));
   const selected = candidates.find((person) => person.personId === personId);
   const items = people.filter((person) => person.reviewId && person.displayName.toLowerCase().includes(search.trim().toLowerCase()));
   const windowError = !fromInput || !throughInput ? "Choose a start and end date."

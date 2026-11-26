@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { currentPayrollWindowForDate, payrollPayDateForThrough, payrollStandardWindow, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
+import { currentPayrollWindowForDate, payrollIsStandardWindow, payrollPayDateForThrough, payrollStandardWindow, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
 import { formatWorkOsFullDate } from "../../dateFormat";
 import { ADMIN_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Empty, Notice, Pill, Segmented, SelectField, TextField } from "../ui";
@@ -156,7 +156,10 @@ function NewPayrollAudit({ organizationId, userId, payDate, onClose, onStarted }
     staleTime: ADMIN_STALE_MS,
     retry: false,
   });
-  const candidates = roster.data?.items.filter((row) => row.active && row.mapped && row.status !== "approved") ?? [];
+  const standardRequest = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(through)
+    ? payrollIsStandardWindow(effectivePayDate, from, through)
+    : true;
+  const candidates = roster.data?.items.filter((row) => row.active && row.mapped && (row.status !== "approved" || !standardRequest)) ?? [];
   const selected = candidates.find((person) => personId === person.personId);
   useEffect(() => { setPages([null]); setPersonId(""); }, [effectivePayDate]);
   const start = useMutation({
