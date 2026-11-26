@@ -23,8 +23,10 @@ flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
-## Unreleased
+## 0.5.45 — 2026-11-26
 
+- Write your end-of-day report from suggested work, then let Otto draft the summary; the desktop now matches the web.
+- Admin Insights can leave test and shared accounts out of the page and its totals, managed from Settings → Insights exclusions.
 - Exception, late, and clock-out confirmations now give you room to explain what happened, and the confirm button is clear about when it is ready.
 - Clock in from Work OS now waits for Worktivity to finish opening, so the Clock in control is available on the first try.
 - Clocking out before your daily target now closes Worktivity's early clock-out confirmation in the same action, so you only click Clock out once.
