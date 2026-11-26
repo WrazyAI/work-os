@@ -88,6 +88,7 @@ export function PayrollAuditDetail({ organizationId, userId, reviewId, personId,
   const record = review.data;
   return <div className="admin-grid payroll-native">
     <div ref={back}><AdminButton icon={ArrowLeft} variant="ghost" onClick={onBack}>Back to payroll</AdminButton></div>
+    <span className="sr-only" role="status">{review.isPending ? "Loading payroll audit" : ""}</span>
     {review.isPending ? <AdminRowsSkeleton label="Loading payroll audit" /> : null}
     {review.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void review.refetch()}>Retry</AdminButton>}>{review.error.message}</Notice> : null}
     {record && record.scope.organizationId === organizationId && record.scope.personId === personId ? (
@@ -290,6 +291,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
       </AdminCard> : null}
 
       <AdminCard title="Daily evidence" detail={`Times in ${record.period.timezone}`}>
+        <span className="sr-only" role="status">{days.isPending ? "Loading daily evidence" : ""}</span>
         {days.isPending ? <AdminRowsSkeleton label="Loading daily evidence" rows={3} /> : null}
         {days.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void days.refetch()}>Retry</AdminButton>}>{days.error.message}</Notice> : null}
         {dayItems.length === 0 ? <p className="admin-quiet">No daily records were saved.</p> : null}

@@ -44,6 +44,7 @@ export default function PayrollPage({ organizationId, userId }: { organizationId
     retry: false,
   });
   const records = roster.data?.items ?? [];
+  const loadingLabel = tab === "records" ? "Loading payroll records" : "Loading payroll audits";
   const validDate = /^(?!0000)\d{4}-(0[1-9]|1[0-2])-(01|16)$/.test(draftDate);
 
   if (selection) return <PayrollAuditDetail key={selection.reviewId} organizationId={organizationId} userId={userId} payDate={payDate}
@@ -70,7 +71,8 @@ export default function PayrollPage({ organizationId, userId }: { organizationId
         </AdminControls>}
         padded={false}
       >
-        {roster.isPending ? <AdminRowsSkeleton label={tab === "records" ? "Loading payroll records" : "Loading payroll audits"} /> : null}
+        <span className="sr-only" role="status">{roster.isPending ? loadingLabel : ""}</span>
+        {roster.isPending ? <AdminRowsSkeleton label={loadingLabel} /> : null}
         {roster.error ? <div className="admin-card-body is-padded"><Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void roster.refetch()}>Retry</AdminButton>}>{roster.error.message}</Notice></div> : null}
         {roster.data && records.length === 0 ? <Empty title={tab === "records" ? "No payroll records for this pay date" : "No audits for this pay date"} body="Choose another pay date or start a new audit." /> : null}
         {records.length > 0 ? (
@@ -184,6 +186,7 @@ function NewPayrollAudit({ organizationId, userId, payDate, onClose, onStarted }
       </>}>
       <div className="admin-grid">
         <p className="admin-quiet">Choose the window to review. It defaults to this pay period through today when the period is incomplete. Running an audit does not approve hours.</p>
+        <span className="sr-only" role="status">{roster.isPending ? "Loading eligible employees" : ""}</span>
         {roster.isPending ? <AdminRowsSkeleton label="Loading eligible employees" leading rows={3} /> : null}
         {roster.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void roster.refetch()}>Retry</AdminButton>}>{roster.error.message}</Notice> : null}
         {roster.data && !candidates.length ? <Empty title="No eligible employees on this page" body="The employee needs an active, verified mapping and an unapproved period." /> : null}
