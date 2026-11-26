@@ -13,3 +13,13 @@ describe("App memory payload resilience", () => {
     expect(app).not.toContain("memoryQuery.data?.facts.filter");
   });
 });
+
+describe("Tasks date ownership", () => {
+  it("follows the live workday instead of a cached snapshot or a rollover", () => {
+    // The cached day snapshot may describe yesterday. Letting it choose the
+    // Tasks date silently hides the view tabs and Add action in history mode.
+    expect(app).not.toContain("setPlanHistoryDate(snapshot.shiftDate)");
+    expect(app).toContain("setPlanHistoryDate((current) => resolveTaskHistoryDate(current, nextDay.shiftDate, taskDatePinnedRef.current));");
+    expect(app).toContain("taskDatePinnedRef.current = !!date && date !== (visibleDay?.shiftDate ?? \"\");");
+  });
+});
