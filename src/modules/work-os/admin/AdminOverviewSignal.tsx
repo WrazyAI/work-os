@@ -103,12 +103,23 @@ export default function AdminOverviewSignal({ data, attention, readiness }: Admi
     && !model.days.some((day) => day.completed || day.updates || day.recaps || day.evidence || day.minutes);
   if (isEmpty) {
     return (
-      <div className="rounded-[16px] border px-6 py-12" style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}>
-        <EmptyState
-          title="The window is empty"
-          body="No teammate, outcome, update, recap, evidence, or session minute was recorded in the last fourteen workdays. People are created through onboarding or membership mapping in Settings."
-          action={<Link href="/work-os/admin/settings" className="text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open Settings</Link>}
-        />
+      <div className="flex flex-col gap-5">
+        <div className="rounded-[16px] border px-6 py-12" style={{ borderColor: "var(--border)", background: "var(--color-paper)" }}>
+          <EmptyState
+            title="The window is empty"
+            body="No teammate, outcome, update, recap, evidence, or session minute was recorded in the last fourteen workdays. People are created through onboarding or membership mapping in Settings."
+            action={<Link href="/work-os/admin/settings" className="text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open Settings</Link>}
+          />
+        </div>
+        <section className="rounded-[16px] border bg-[var(--color-paper)] p-4 lg:p-5" style={{ borderColor: "var(--border)" }}>
+          <SectionHeading title="Needs a decision" detail="Every row opens the record that can resolve it." />
+          {readiness.pending ? <p className="mb-2 text-[11px] text-[var(--text-tertiary)]">Checking workspace setup…</p> : null}
+          {readiness.error ? (
+            <div className="mb-2"><Notice tone="warn" action={<Button size="sm" onClick={readiness.onRetry}>Retry setup checks</Button>}>Setup checks could not be refreshed.</Notice></div>
+          ) : null}
+          <Decisions attention={attention} />
+        </section>
+        <SetupAndSources data={data} readiness={readiness} />
       </div>
     );
   }
