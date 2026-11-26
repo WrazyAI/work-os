@@ -25,7 +25,7 @@ import {
   updateAdminPerson,
 } from "./data";
 import type { OrganizationMembershipRow } from "./types";
-import { AdminButton, AdminCard, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminRowsSkeleton, Notice, Pill, SelectField, TextField } from "./ui";
 
 const FEATURES: Array<{ key: string; label: string; detail: string }> = [
   { key: "employee_companion", label: "Employee workspace", detail: "Plans, updates, EOD reports, and the employee companion login." },
@@ -214,7 +214,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
         detail="Schema readiness and the workspace database"
       >
         {status.isLoading || organization.isLoading ? (
-          <Skeleton className="h-16" />
+          <AdminRowsSkeleton label="Loading workspace status" rows={1} />
         ) : (
           <div className="admin-chips">
             <Pill tone={status.data?.schema?.ready ? "ok" : "warn"}>{status.data?.schema?.ready ? "Work OS schema ready" : "Migration required"}</Pill>
@@ -225,7 +225,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
       </AdminCard>
 
       <AdminCard className="admin-card-features" icon={PlugZap} title="Features" detail="One switch per workspace capability; changes apply to every member">
-        <ul className="admin-feature-list">
+        {organization.isLoading ? <AdminRowsSkeleton label="Loading workspace features" /> : <ul className="admin-feature-list">
           {FEATURES.map((feature) => (
             <li key={feature.key}>
               <span className="min-w-0"><b>{feature.label}</b><small>{feature.detail}</small></span>
@@ -241,13 +241,13 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
               </label>
             </li>
           ))}
-        </ul>
+        </ul>}
       </AdminCard>
 
       <AdminCard className="admin-card-insights" icon={Gauge} title="Insights exclusions" detail="People left out of Insights and its totals; they stay in the roster and can still sign in">
         <p className="admin-quiet">Use this for test accounts, shared inboxes, or owners who should not be counted in team analytics. Excluded people are omitted from the Insights person list, its matrix, and its totals.</p>
         {people.isLoading ? (
-          <Skeleton className="h-24" />
+          <AdminRowsSkeleton label="Loading Insights exclusions" rows={3} leading />
         ) : people.data?.people?.length ? (
           <ul className="admin-feature-list admin-exclusion-list">
             {people.data.people.map((person) => {
@@ -300,7 +300,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Add member
           </AdminButton>
         </div>
-        <div className="admin-table-wrap" tabIndex={0} role="region" aria-label="Workspace members">
+        {organization.isLoading ? <AdminRowsSkeleton label="Loading workspace members" leading /> : <div className="admin-table-wrap" tabIndex={0} role="region" aria-label="Workspace members">
           <table className="admin-table">
             <thead><tr><th>Member</th><th>Person</th><th>Role</th><th>Active</th><th className="admin-col-end">Password</th></tr></thead>
             <tbody>
@@ -387,7 +387,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
               })}
             </tbody>
           </table>
-        </div>
+        </div>}
         <SettingsErrorNotices errors={[membership.error, passwordReset.error, actionCard === "members" ? action.error : null]} />
       </AdminCard>
       {confirmResetMember ? (
@@ -464,7 +464,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
             Create team
           </AdminButton>
         </div>
-        {teams.length ? (
+        {organization.isLoading ? <AdminRowsSkeleton label="Loading workspace teams" rows={2} /> : teams.length ? (
           <ul className="admin-rows spaced">
             {teams.map((team) => (
               <li key={String(team.id)}>
@@ -496,7 +496,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
 
       <AdminCard className="admin-card-connections" icon={Cable} title="Provider connections" detail="Read-only here; tokens and webhooks are managed in the web console">
         {connections.isLoading ? (
-          <Skeleton className="h-20" />
+          <AdminRowsSkeleton label="Loading provider connections" rows={2} />
         ) : (connections.data?.connections ?? []).length ? (
           <ul className="admin-rows spaced">
             {(connections.data?.connections ?? []).map((connection) => (
@@ -513,7 +513,7 @@ export default function SettingsPage({ personalSettings, activeCard }: { persona
       </AdminCard>
 
       <AdminCard className="admin-card-blueprints" icon={PlugZap} title="Blueprints" detail="Reusable task templates the workspace can generate from" padded={false}>
-        {(blueprints.data?.blueprints ?? []).length ? (
+        {blueprints.isLoading ? <AdminRowsSkeleton label="Loading blueprints" rows={3} /> : (blueprints.data?.blueprints ?? []).length ? (
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead><tr><th>Blueprint</th><th>Kind</th><th>Updated</th></tr></thead>

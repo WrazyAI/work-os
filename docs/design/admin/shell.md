@@ -99,6 +99,11 @@ window focus and reconnect, the Overview snapshot is the one deliberate poll
 (60 seconds, paused while the window is hidden), and the masthead refresh
 control is the explicit force-fresh path for the current section.
 
+On a cold read, the companion uses the employee workspace's shared skeleton
+and shimmer. Placeholders follow the incoming rows, metrics, or charts; row
+groups offset the beam slightly so they don't all brighten at once. Reduced
+motion keeps the same layout with a static fill.
+
 ## Data and authorization
 
 Administration endpoints are admin- or manager-scoped and organization-scoped

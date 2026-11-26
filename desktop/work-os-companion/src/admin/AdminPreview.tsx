@@ -34,7 +34,9 @@ export const PREVIEW_ADMIN_OTTO_TRANSPORT = ADMIN_FIXTURE_TRANSPORT;
  * shell and pages driven by seeded API-shaped fixtures. Deep-link a section or
  * a fixture state: `?preview-admin&section=insights&state=empty`, or
  * `state=sparse` for the deliberately partial payloads the data seam must
- * normalize. With `&api=stub`, a fabricated desktop session is registered so
+ * normalize. Use `state=loading&api=stub` with intercepted GETs to exercise
+ * the pages' real pending branches without seeded cache data.
+ * With `&api=stub`, a fabricated desktop session is registered so
  * write flows (review decisions, toggles, screenshot reasons) reach the API
  * layer, where rendered QA can stub the response; without it, writes stay
  * honestly "not connected" and no request leaves the preview. This page mounts
@@ -242,9 +244,10 @@ export default function AdminPreview() {
     },
   };
   useMemo(() => {
+    if (requestedState === "loading") return;
     seedAdminFixtures(queryClient, state);
     seedPayrollPreview(queryClient, PREVIEW_SESSION, state === "empty");
-  }, [queryClient, state]);
+  }, [queryClient, requestedState, state]);
   useEffect(() => {
     if (!stubApi) return;
     setDebugSession({

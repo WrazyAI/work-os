@@ -842,15 +842,3 @@
     transition: none;
   }
 }
-
-.control-loading-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(260px, .7fr);
-  gap: 14px;
-}
-
-@media (max-width: 1120px) {
-  .control-loading-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}

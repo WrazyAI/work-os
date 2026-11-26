@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, ChevronDown, Mi
 import { StackedTimeBars } from "./charts";
 import { attendanceLabel, attendanceTone, formatMinutes, relativeTime, shortDate } from "./data";
 import { AdminButton, Avatar, Pill } from "./ui";
+import { Skeleton } from "../LoadingUi";
 import type { AdminOverview, AdminSection, AdminSectionFocus } from "./types";
 import "./overview-signal.css";
 
@@ -216,10 +217,36 @@ export default function OverviewSignal({ data, attention, readiness, onOpenSecti
 
 export function OverviewSignalSkeleton() {
   return (
-    <div className="ovp ovp-loading" aria-busy="true">
-      <span className="ovp-skeleton is-tall" />
-      <span className="ovp-skeleton" />
-      <span className="ovp-skeleton" />
+    <div className="ovp ovp-signal" role="group" aria-label="Loading overview" aria-busy="true">
+      <div className="admin-loading-fields">
+        <Skeleton className="skeleton-line skeleton-kicker" />
+        <Skeleton className="skeleton-line skeleton-title" />
+      </div>
+      <div className="ovp-pulse">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="ovp-pulse-cell admin-loading-fields" key={index}>
+            <Skeleton className="skeleton-line skeleton-kicker" />
+            <Skeleton className="skeleton-line skeleton-value" />
+            <Skeleton className="skeleton-line skeleton-body short" />
+          </div>
+        ))}
+      </div>
+      <div className="ovp-board">
+        <div className="ovp-module ovp-span-8 admin-loading-fields">
+          <Skeleton className="skeleton-line skeleton-title" />
+          <div className="skeleton-bars ovp-loading-bars" aria-hidden="true">
+            {Array.from({ length: 14 }, (_, index) => (
+              <Skeleton className="skeleton-bar" key={index} style={{ height: `${30 + (index * 19) % 63}%` }} />
+            ))}
+          </div>
+        </div>
+        <div className="ovp-module ovp-span-4 admin-loading-fields">
+          <Skeleton className="skeleton-line skeleton-title" />
+          <Skeleton className="skeleton-line skeleton-value" />
+          <Skeleton className="skeleton-line skeleton-body" />
+          <Skeleton className="skeleton-line skeleton-body short" />
+        </div>
+      </div>
     </div>
   );
 }

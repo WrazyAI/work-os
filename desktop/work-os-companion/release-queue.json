@@ -612,6 +612,12 @@
       "type": "feature",
       "summary": "Admin Overview is now a signal board with a seven-workday pulse, a switchable trend, live coverage, observed time, and the people and decisions that need attention.",
       "verification": "Companion typecheck and Vite production build passed; focused admin suite 78 files / 580 tests passed; full companion suite 247 files / 2,152 tests passed; full Work OS suite 1,696 tests / 1,680 passed / 16 opt-in PostgreSQL skipped with 0 failures. Rendered 1440 light and dark plus 390 narrow, verified the observed-time bars replaced the duplicated consistency heatmap, the readout stays centered, keyboard trend review, exact-value tables, reduced motion, the empty state, the sources disclosure, and pulse navigation."
+    },
+    {
+      "id": "admin-loading-skeleton-parity",
+      "type": "fix",
+      "summary": "All eight Admin pages use content-shaped loading placeholders with the employee workspace's shimmer.",
+      "verification": "Full companion suite: 2,160 passed; companion and Work OS typechecks passed. Chromium checked all eight Admin pages at 1280px and 480px, staggered shimmer, static dark reduced-motion fills, and populated, empty, and error states."
     }
   ],
   "emergency": null,

@@ -24,7 +24,7 @@ import {
   isoDaysAgo,
   todayIso,
 } from "./data";
-import { AdminButton, Drawer, Notice, Pill, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminRowsSkeleton, Drawer, Notice, Pill, SelectField, TextField } from "./ui";
 import EvidenceRecordView, { type EvidenceKindFilter, type EvidenceRecordFilters } from "./EvidenceRecordView";
 import EvidenceCoverageView from "./EvidenceCoverageView";
 import EvidenceDetailDrawer from "./EvidenceDetailDrawer";
@@ -362,7 +362,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
             <SelectField label="Person" value={personId === "unattributed" ? "" : personId} onChange={(value) => setPersonId(value)} options={personOptions.filter((option) => option.value !== "unattributed")} />
           </div>
           {intervals.isLoading ? (
-            <div className="evidence-loading"><Skeleton className="h-32" /></div>
+            <AdminRowsSkeleton label="Loading activity windows" />
           ) : intervals.error ? (
             <div className="evidence-loading"><Notice tone="err">{(intervals.error as Error).message}</Notice></div>
           ) : recapRows.length ? (
@@ -421,7 +421,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
 
       <Drawer open={connectionsOpen} onClose={() => setConnectionsOpen(false)} title="Connections" subtitle="Provider evidence that feeds the record" width={560}>
         <div className="admin-grid">
-          {connections.isLoading ? <Skeleton className="h-32" /> : connections.error ? <Notice tone="err">{(connections.error as Error).message}</Notice> : (
+          {connections.isLoading ? <AdminRowsSkeleton label="Loading provider connections" rows={3} /> : connections.error ? <Notice tone="err">{(connections.error as Error).message}</Notice> : (
             <section className="admin-block">
               <h3>GitHub</h3>
               <div className="admin-kv-grid">
@@ -454,7 +454,7 @@ export default function EvidencePage({ initialTab = "evidence", initialPersonId 
       </Drawer>
 
       <Drawer open={reposOpen} onClose={() => setReposOpen(false)} title="GitHub repositories" subtitle={githubRepos.data?.organization ? `Organization ${githubRepos.data.organization}` : "Repository webhooks"} width={620}>
-        {githubRepos.isLoading ? <Skeleton className="h-40" /> : githubRepos.error ? <Notice tone="err">{(githubRepos.error as Error).message}</Notice> : (
+        {githubRepos.isLoading ? <AdminRowsSkeleton label="Loading GitHub repositories" rows={3} /> : githubRepos.error ? <Notice tone="err">{(githubRepos.error as Error).message}</Notice> : (
           <div className="admin-grid">
             {connect.error || disconnect.error ? <Notice tone="err">{((connect.error || disconnect.error) as Error).message}</Notice> : null}
             {githubRepos.data?.configuration?.repositoryManagementReady ? (

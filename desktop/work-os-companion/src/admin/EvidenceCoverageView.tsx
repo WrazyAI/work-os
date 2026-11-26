@@ -1,5 +1,5 @@
 import { List, Mail } from "lucide-react";
-import { AdminButton, Notice, Skeleton } from "./ui";
+import { AdminButton, AdminRowsSkeleton, Notice } from "./ui";
 import EvidenceLedger from "./EvidenceLedger";
 import { buildCoverageRows, coverageCell, coverageLevel, evidenceKindOf, evidenceShortDate } from "./evidenceModel";
 import type { EvidenceRow, EvidenceSummary } from "./types";
@@ -69,7 +69,7 @@ export default function EvidenceCoverageView({
       {summary?.capped ? <div className="evidence-partial">Coverage counts are capped at 20,000 records; narrow the window for exact counts.</div> : null}
 
       {loading ? (
-        <div className="evidence-loading"><Skeleton className="h-32" /></div>
+        <AdminRowsSkeleton label="Loading evidence coverage" leading />
       ) : error ? (
         <div className="evidence-loading"><Notice tone="err">{error.message}</Notice></div>
       ) : !rows.length ? (

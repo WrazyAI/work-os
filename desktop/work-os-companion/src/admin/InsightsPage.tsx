@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import { AdminButton, Notice, Skeleton } from "./ui";
+import { AdminButton, AdminRowsSkeleton, Notice } from "./ui";
+import { Skeleton } from "../LoadingUi";
 import { ADMIN_STALE_MS, adminKeys, fetchAdminInsights, normalizeAdminInsights } from "./data";
 import type { AdminInsightRange, AdminInsights } from "./types";
 import InsightsControlRoom from "./InsightsControlRoom";
@@ -22,12 +23,30 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
 
   if (insights.isLoading) {
     return (
-      <div className="insights-control-page">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-28" />
-        <div className="control-loading-grid">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
+      <div className="insights-control-page" role="group" aria-label="Loading insights" aria-busy="true">
+        <div className="control">
+          <header className="control-head">
+            <div className="control-title admin-loading-fields">
+              <Skeleton className="skeleton-line skeleton-title" />
+              <Skeleton className="skeleton-line skeleton-body" />
+            </div>
+            <div className="control-ribbon">
+              {Array.from({ length: 4 }, (_, index) => (
+                <div className="control-metric admin-loading-fields" key={index}>
+                  <Skeleton className="skeleton-line skeleton-kicker" />
+                  <Skeleton className="skeleton-line skeleton-value" />
+                </div>
+              ))}
+            </div>
+          </header>
+          <div className="control-grid">
+            <div className="control-matrix">
+              <AdminRowsSkeleton label="Loading activity matrix" leading rows={5} />
+            </div>
+            <aside className="control-rail">
+              <AdminRowsSkeleton label="Loading insights summary" rows={3} />
+            </aside>
+          </div>
         </div>
       </div>
     );

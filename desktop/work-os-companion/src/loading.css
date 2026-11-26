@@ -99,9 +99,14 @@
   display: block;
   border-radius: 7px;
   background:
-    linear-gradient(90deg, rgba(226, 231, 222, 0.55) 25%, rgba(244, 247, 241, 0.95) 45%, rgba(226, 231, 222, 0.55) 65%);
+    linear-gradient(90deg, var(--skeleton-base, rgba(226, 231, 222, 0.55)) 25%, var(--skeleton-beam, rgba(244, 247, 241, 0.95)) 45%, var(--skeleton-base, rgba(226, 231, 222, 0.55)) 65%);
   background-size: 220% 100%;
   animation: loading-ui-shimmer 1.4s ease-in-out infinite;
+}
+
+:root[data-theme="dark"] .skeleton {
+  --skeleton-base: var(--inset);
+  --skeleton-beam: var(--line-strong);
 }
 
 .skeleton-line {
@@ -605,6 +610,6 @@ main.loading::before {
   }
 
   .skeleton {
-    background: rgba(226, 231, 222, 0.6);
+    background: var(--skeleton-base, rgba(226, 231, 222, 0.6));
   }
 }

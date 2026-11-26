@@ -25,7 +25,7 @@ import {
   todayIso,
   updateAdminPerson,
 } from "./data";
-import { AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
+import { AdminCard, AdminControls, AdminControlsGroup, AdminRowsSkeleton, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField } from "./ui";
 import type { AdminOverview, AdminSection, AdminSectionFocus, PersonDetailResponse } from "./types";
 
 type AttendanceFilter = "all" | "active" | "paused" | "off_shift" | "unknown";
@@ -164,7 +164,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
         }
       >
         {overview.isLoading || roster.isLoading ? (
-          <div className="admin-card-body is-padded"><div className="admin-grid"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div></div>
+          <AdminRowsSkeleton label="Loading people" leading />
         ) : overview.error || roster.error ? (
           <div className="admin-card-body is-padded"><Notice tone="err">{((overview.error || roster.error) as Error).message}</Notice></div>
         ) : people.length ? (
@@ -228,7 +228,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport, onOpenSectio
         width={640}
       >
         {detail.isLoading ? (
-          <div className="admin-grid"><Skeleton className="h-24" /><Skeleton className="h-48" /></div>
+          <AdminRowsSkeleton label="Loading person details" rows={3} leading />
         ) : detail.error || !detail.data?.person ? (
           <Notice tone="err">{((detail.error as Error | null)?.message) ?? "The person record could not be loaded."}</Notice>
         ) : (

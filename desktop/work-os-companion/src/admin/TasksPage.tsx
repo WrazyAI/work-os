@@ -37,7 +37,8 @@ import { displayTaskState, hasTaskMenu, taskStatusLabel, taskStatusOptions } fro
 import { EllipsisMenu, TaskActionMenuItems, toggleAssigneeIds } from "../taskSurfaces";
 import { isCalendarDate, type TaskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { TaskAttachmentIndicator } from "./TaskAttachmentIndicator";
-import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, CheckField, Drawer, Notice, Pill, Segmented, SelectField, TextField } from "./ui";
+import { TaskDetailSkeleton, TaskListSkeleton } from "../LoadingUi";
 
 type TaskFilter = "open" | "completed" | "all";
 
@@ -651,7 +652,7 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
         }
       >
         {tasks.isLoading ? (
-          <div className="admin-card-body is-padded"><div className="admin-grid"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div></div>
+          <div className="admin-card-body is-padded"><TaskListSkeleton /></div>
         ) : tasks.isLoadingError ? (
           <div className="admin-card-body is-padded"><Notice tone="err" action={<AdminButton onClick={() => void tasks.refetch()}>Retry</AdminButton>}>Couldn’t load tasks.</Notice></div>
         ) : rows.length ? (
@@ -783,7 +784,7 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
         width={560}
       >
         {detail.isLoading ? (
-          <Skeleton className="h-48" />
+          <TaskDetailSkeleton />
         ) : detail.error || !drawerTask ? (
           <Notice tone="err">{((detail.error as Error | null)?.message) ?? "The task could not be loaded."}</Notice>
         ) : (
