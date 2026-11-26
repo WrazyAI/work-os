@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
@@ -39,6 +39,13 @@ export default function AdminPeoplePage() {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // The Overview's person rows deep-link here. Read the requested person once
+  // on mount so the roster and its drawer stay in the same client surface.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("person");
+    if (requested) setSelectedId(requested);
+  }, []);
 
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(today),
