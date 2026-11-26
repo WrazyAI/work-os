@@ -22,6 +22,7 @@ WITH person AS (
     AND t.status NOT IN ('archived', 'deleted')
     AND ($4::boolean IS NULL OR t.completed = $4)
     AND ($5::uuid IS NULL OR t.project_id = $5)
+    AND ($8::uuid[] IS NULL OR t.id = ANY($8))
 ), page AS (
   SELECT id, created_at, NOT directly_attributed AS delegated_only
   FROM candidates WHERE directly_attributed OR delegated

@@ -314,10 +314,10 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     : personResult.data?.nifty_member_id as string | null | undefined;
   if (opts.order === "created_desc" && opts.organizationId && opts.includeLedgerHistory === true &&
     !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false &&
-    !opts.taskIds && !opts.rawCreatedBy && !opts.rawSubscriber && !opts.providerAssignee && !opts.assignedByPersonId) {
+    !opts.rawCreatedBy && !opts.rawSubscriber && !opts.providerAssignee && !opts.assignedByPersonId) {
     const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
     const { rows: page } = await getPool().query<Record<string, any> & { delegated_only: boolean }>(adminPersonTaskPageSql, [
-      opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit,
+      opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit, opts.taskIds ?? null,
     ]);
     // Membership and base task details come from the same statement snapshot.
     // The remaining hydration only decorates rows, so it can't shorten a page.
