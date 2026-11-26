@@ -120,7 +120,26 @@ Verification:
   against the unchanged published revision), the production empty-week brief
   path, 31-day two-week coverage, and the “Show period” remount question.
 
-Pending production gates: apply `0085`/`0086`, deploy the code, reset the
-in-flight revision 8 to `activity` (or cancel and re-analyze) so it rebuilds
-its manifest with the newly linked frames, and verify a signed-in finding,
-frame, immediate run, partial window and prior window.
+## 2026-11-26 production rollout
+
+- Work OS PR **#233** merged at `28bd4af9`; Agent OS PR **#98** merged at
+  `52ed78c2`.
+- Neon migrations `0085`/`0086` applied. 11,159 summaries are scoped, 0
+  ownership mismatches, both window checks/indexes and both triggers exist;
+  existing review `c27599f7…` is keyed `2026-11-01_2026-11-15`.
+- Agent OS VPS redeployed at `52ed78c2`; live `https://app.wrazyos.com` returns
+  200, the new payroll strings/assets are present, and the runner was restarted
+  and its baseline marked.
+- Revision 8 was reset to `activity` and published: **30 frames / 52 findings /
+  3,316 recommended minutes**, week 1 brief ready, week 2 failed with a
+  grounding error. A live acknowledgement was recorded against
+  `break_mismatch:aggregate:2026-11-02` with the review reason; the review moved
+  to row version 5.
+- A live partial window (`84744d27-d3a2-420b-83bd-47e6796bddf7`, Nov 16–26,
+  pay date Dec 1) was created from the New audit form and completed:
+  **27 frames / 31 findings / both briefs ready**, approval blocked as
+  analysis-only. The guard frame dialog loaded 3 images and wrote the access
+  log reason.
+- Prior window Nov 1–15 remains the canonical completed review; the partial
+  Nov 16–26 review appears under Dec 1. The installed Companion remains
+  unreleased at 1 of 5 queued outcomes.
