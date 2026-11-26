@@ -131,6 +131,8 @@ function actionForCode(code: string) {
 }
 
 function buildOverviewModel(data: AdminOverview): Model {
+  // The admin overview endpoint supplies fourteen chronological workdays
+  // (weekends skipped), so the final seven rows are the last seven workdays.
   const minutesByDate = new Map(data.timeSeries.map((point) => [point.date, point]));
   const days: Day[] = data.series.map((point) => ({
     date: point.date,

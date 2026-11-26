@@ -606,6 +606,12 @@
       "type": "feature",
       "summary": "Administrators can review any payroll window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.",
       "verification": "c2201ad2: payroll suite 145 tests / 140 passed / 5 opt-in PostgreSQL skipped; work-os:typecheck; web and companion builds; companion suite 247 files / 2,152 tests; rendered Companion preview at 1558px and 375px with actionable findings, guarded frames, partial-window defaults, and the reordered review surface."
+    },
+    {
+      "id": "admin-overview-signal-board",
+      "type": "feature",
+      "summary": "Admin Overview is now a signal board with a seven-workday pulse, a switchable trend, live coverage, observed time, and the people and decisions that need attention.",
+      "verification": "Companion typecheck and Vite production build passed; focused admin suite 78 files / 580 tests passed; full companion suite 247 files / 2,152 tests passed; full Work OS suite 1,696 tests / 1,680 passed / 16 opt-in PostgreSQL skipped with 0 failures. Rendered 1440 light and dark plus 390 narrow, verified the observed-time bars replaced the duplicated consistency heatmap, the readout stays centered, keyboard trend review, exact-value tables, reduced motion, the empty state, the sources disclosure, and pulse navigation."
     }
   ],
   "emergency": null,
