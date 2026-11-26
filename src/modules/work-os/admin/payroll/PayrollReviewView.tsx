@@ -26,21 +26,29 @@ const fullDate = (value: string) => {
 
 type Decision = { finding: PayrollFinding; action: "payable" | "excluded" | "acknowledged" };
 
-export function PayrollReviewView({ review, displayName, busy, days = [], findings = [], daysLoading, findingsLoading, daysError, findingsError, onRetryEvidence, onApprove, onReopen, onAdvance, onDecide }: {
+export function PayrollReviewView({ review, displayName, busy, days = [], findings = [], daysLoading, findingsLoading, daysError, findingsError, onRetryEvidence, onApprove, onReopen, onAdvance, onCancel, onDecide }: {
   review: PayrollReview; displayName?: string; busy?: boolean;
   days?: PayrollDayResult[]; findings?: PayrollFinding[]; daysLoading?: boolean; findingsLoading?: boolean;
   daysError?: string; findingsError?: string; onRetryEvidence?: () => void;
-  onApprove?: () => void; onReopen?: () => void; onAdvance?: () => void;
+  onApprove?: () => void; onReopen?: () => void; onAdvance?: () => void; onCancel?: () => void;
   onDecide?: (key: string, action: Decision["action"], note: string) => Promise<void>;
 }) {
   const model = payrollReviewModel(review);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [decisionNotice, setDecisionNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (decision && !onDecide) {
+      setDecision(null);
+      setDecisionNotice("The review changed while this decision was open. Close and reopen the finding to try again.");
+    }
+  }, [decision, onDecide]);
   const running = review.run?.progress.status === "queued" || review.run?.progress.status === "running";
   const attention = findings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = findings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
   const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
+  const otherExcluded = excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
   const excludedCount = inactivity.length + breaks.length + outside.length
     + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
@@ -68,6 +76,8 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
     { key: "manualExcluded", label: "Manual", color: "var(--payroll-c6)" },
   ];
   const visibleStack = stack.filter((row) => review.totals[row.key] > 0);
+  const failedRun = review.run?.progress.status === "failed";
+  const failureBlocksApproval = review.status === "failed" || (failedRun && review.status !== "ready");
 
   return (
     <article className="payroll-shell payroll-report">
@@ -85,12 +95,18 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         <div className="payroll-actions">
           {model.canApprove && onApprove ? <button type="button" className="primary" disabled={busy} onClick={onApprove}>Approve payable hours</button> : null}
           {review.status === "approved" && onReopen ? <button type="button" disabled={busy} onClick={onReopen}>Reopen with reason</button> : null}
-          {!running && review.status !== "approved" && onAdvance ? <button type="button" disabled={busy} onClick={onAdvance}>Re-analyze</button> : null}
+          {running && onCancel ? <button type="button" disabled={busy} onClick={onCancel}>Cancel analysis</button> : null}
+          {!running && review.status !== "approved" && onAdvance ? <button type="button" disabled={busy} onClick={onAdvance}>{review.token.analysisRevision > 0 ? "Re-analyze" : "Run audit"}</button> : null}
         </div>
       </header>
       <PayrollProgress review={review} />
-      <div className="payroll-banner" data-tone={model.stale ? "warn" : review.status === "approved" ? "ok" : "neutral"}>
-        <strong>{model.stale ? "Evidence changed — re-analyze before approval" : review.status === "approved" ? "Approved payroll record" : "Review in progress"}</strong>
+      <div className="payroll-banner" data-tone={model.stale || failureBlocksApproval ? "warn" : review.status === "approved" ? "ok" : "neutral"}>
+        <strong>{failureBlocksApproval
+          ? "Analysis did not finish — re-analyze before approval"
+          : failedRun ? "Latest re-analysis did not finish; the published analysis is unchanged"
+          : running ? "Analysis in progress"
+            : model.stale ? (review.approval ? "Approved receipt unchanged — evidence changed after approval" : "Evidence changed — re-analyze before approval")
+              : review.status === "approved" ? "Approved payroll record" : "Review in progress"}</strong>
         <span>{model.retentionLabel}</span>
       </div>
       {review.recapStats ? <p className="payroll-provenance">
@@ -98,7 +114,8 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         {review.recapStats.pending ? " — pending recaps must be settled before approval." : ""}
       </p> : null}
       {daysError || findingsError ? <p className="payroll-blocker" role="alert">{(daysError ?? findingsError)} {onRetryEvidence ? <button type="button" onClick={onRetryEvidence}>Retry evidence</button> : null}</p> : null}
-      {review.blockers.map((blocker) => <p className="payroll-blocker" key={blocker}>{blocker}</p>)}
+      {[...new Set([...review.blockers, ...model.blockers])].map((blocker) => <p className="payroll-blocker" key={blocker}>{blocker}</p>)}
+      {decisionNotice ? <p className="payroll-blocker" role="alert">{decisionNotice}</p> : null}
 
       {review.token.analysisRevision > 0 ? <>
         <section className="payroll-panel payroll-hours-card" aria-labelledby="hours-title">
@@ -128,23 +145,6 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
           </div> : null}
         </section>
 
-        <section className="payroll-panel" aria-labelledby="apps-title">
-          <div className="payroll-report-head"><h2 id="apps-title">Apps and sites</h2><p>{appTotal ? `${hours(Math.round(appTotal / 60_000))} observed · Worktivity` : "App usage unavailable for this period"}</p></div>
-          {apps.length ? <div className="payroll-apps">
-            {topApps.map((app, index) => <div className="payroll-app-row" key={`${app.name}-${index}`}>
-              <span className="payroll-app-name"><b style={{ background: `var(--payroll-c${(index % 6) + 1})` }} />{app.name}</span>
-              <span className="payroll-track"><i style={{ width: `${Math.max(2, (app.durationMs / appMax) * 100)}%`, background: `var(--payroll-c${(index % 6) + 1})` }} /></span>
-              <span className="payroll-app-time">{hours(Math.round(app.durationMs / 60_000))} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
-            </div>)}
-            {otherApps.length ? <div className="payroll-app-row">
-              <span className="payroll-app-name"><b style={{ background: "var(--payroll-slate)" }} />Other ({otherApps.length} apps)</span>
-              <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--payroll-slate)" }} /></span>
-              <span className="payroll-app-time">{hours(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
-            </div> : null}
-          </div> : <p className="payroll-empty">No app distribution was captured. This does not change payable hours.</p>}
-          {review.apps && !review.apps.complete ? <p className="payroll-footnote">App coverage is incomplete for this period.</p> : null}
-        </section>
-
         {!findingsError ? <section className="payroll-panel" aria-labelledby="attention-title">
           <div className="payroll-report-head"><h2 id="attention-title">Needs attention</h2><p>{attention.length} of {findings.length} flags require a person.</p></div>
           {findingsLoading ? <p role="status">Loading findings…</p> : null}
@@ -160,9 +160,9 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : null}
               {finding.requiredAction === "correct" ? <span className="payroll-quiet">Correct the source, then re-analyze.</span>
                 : onDecide && !busy ? (finding.requiredAction === "decide" ? <>
-                  <button type="button" onClick={() => setDecision({ finding, action: "payable" })}>Keep payable</button>
-                  <button type="button" onClick={() => setDecision({ finding, action: "excluded" })}>Exclude time</button>
-                </> : <button type="button" onClick={() => setDecision({ finding, action: "acknowledged" })}>Acknowledge</button>) : null}
+                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "payable" }); }}>Keep payable</button>
+                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "excluded" }); }}>Exclude time</button>
+                </> : <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "acknowledged" }); }}>Acknowledge</button>) : null}
             </div>
           </section>)}</div>
         </section> : null}
@@ -172,15 +172,8 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
           <ExcludedGroup title="Continuous inactivity · 3 minutes or more" detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it." findings={inactivity} review={review} empty="No inactivity intervals were excluded." />
           <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} collapsed empty="No break intervals were excluded." />
           <ExcludedGroup title="Outside the eligible window" detail="Recorded time before the shift or after its grace end is never payable." findings={outside} review={review} empty="No outside-window intervals were excluded." />
+          {otherExcluded.length ? <ExcludedGroup title="Other rule exclusions" detail="These intervals were removed by a payroll rule and do not need a decision." findings={otherExcluded} review={review} empty="No other rule exclusions." /> : null}
         </section> : null}
-
-        <h2 className="payroll-section-title">Weekly briefs</h2>
-        <div className="payroll-briefs">
-          {review.period.weeks.map(({ week }) => {
-            const brief = review.briefs.find((entry) => entry.week === week);
-            return brief ? <PayrollBrief key={week} brief={brief} /> : <section key={week} className="payroll-panel"><h3>Week {week}</h3><p>No recap text is available for these dates.</p></section>;
-          })}
-        </div>
 
         <details className="payroll-panel payroll-daily">
           <summary>Daily evidence · {days.length} days {daysLoading ? "(loading…)" : ""}</summary>
@@ -190,7 +183,35 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
             <span>{hours(day.minutes.recorded)} recorded</span>
             <span>{hours(day.minutes.break)} break</span>
             <span>{hours(day.minutes.inactivity)} inactivity</span>
+            <span>{day.findings.length} {day.findings.length === 1 ? "flag" : "flags"}</span>
           </div>)}</div>
+        </details>
+
+        <details className="payroll-panel payroll-fold" open>
+          <summary><span><strong>Weekly briefs</strong><small>Grounded in recaps and evidence. This is not a productivity score.</small></span></summary>
+          <div className="payroll-briefs">
+            {review.period.weeks.filter(({ from, through }) => from <= through).map(({ week }) => {
+              const brief = review.briefs.find((entry) => entry.week === week);
+              return brief ? <PayrollBrief key={week} brief={brief} /> : <section key={week} className="payroll-panel"><h3>Week {week}</h3><p>No recap text is available for these dates.</p></section>;
+            })}
+          </div>
+        </details>
+
+        <details className="payroll-panel payroll-fold payroll-apps-fold">
+          <summary><span><strong>Apps and sites</strong><small>{appTotal ? `${hours(Math.round(appTotal / 60_000))} observed · Worktivity · context only, never payable hours` : "App usage unavailable for this period"}</small></span></summary>
+          {apps.length ? <div className="payroll-apps">
+            {topApps.map((app, index) => <div className="payroll-app-row" key={`${app.name}-${index}`}>
+              <span className="payroll-app-name"><b style={{ background: `var(--payroll-c${(index % 6) + 1})` }} />{app.name}</span>
+              <span className="payroll-track"><i style={{ width: `${Math.max(2, (app.durationMs / appMax) * 100)}%`, background: `var(--payroll-c${(index % 6) + 1})` }} /></span>
+              <span className="payroll-app-time">{hours(Math.round(app.durationMs / 60_000))} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
+            </div>)}
+            {otherApps.length ? <div className="payroll-app-row">
+              <span className="payroll-app-name"><b style={{ background: "var(--payroll-slate)" }} />Other ({otherApps.length} apps)</span>
+              <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--payroll-slate)" }} /></span>
+              <span className="payroll-app-time">{hours(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
+            </div> : null}
+          </div> : <p className="payroll-empty">No app distribution was captured. This does not change payable hours.</p>}
+          {review.apps && !review.apps.complete ? <p className="payroll-footnote">App coverage is incomplete for this period.</p> : null}
         </details>
       </> : null}
 
@@ -228,7 +249,9 @@ function ExcludedGroup({ title, detail, findings, review, empty, collapsed = fal
       <span>{fullDate(finding.date)}</span>
       <span>{finding.span ? `${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.startMs))}–${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.endMs))}` : "—"}</span>
       <span>{hours(finding.minutes)}</span>
-      <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames"}</span>
+      <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity"
+        ? ((finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames")
+        : "Not reviewable by policy"}</span>
     </div>)}</div> : <p className="payroll-empty">{empty}</p>;
   return collapsed ? <details className="payroll-rule"><summary>{head}</summary>{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
@@ -254,11 +277,11 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
     } finally { setBusy(false); }
   };
   return <>
-    <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{finding.frameSummaryIds?.length ?? 0} frames</button>
+    <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{(finding.frameSummaryIds?.length ?? 0)} {(finding.frameSummaryIds?.length ?? 0) === 1 ? "frame" : "frames"}</button>
     {open ? <div className="payroll-overlay" role="dialog" aria-modal="true" aria-label="Evidence frames" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="payroll-dialog">
         <div className="payroll-dialog-head"><h3>Evidence · {FINDING_LABELS[finding.kind]}</h3><button type="button" onClick={() => setOpen(false)}>Close</button></div>
-        <p className="payroll-quiet">{fullDate(finding.date)}. Access is recorded and limited to reviewable payroll evidence.</p>
+        <p className="payroll-quiet">{fullDate(finding.date)}. These frames were captured on the same day as this finding. Access is recorded and limited to reviewable payroll evidence.</p>
         {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
         <label className="payroll-field"><span>Reason</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
         {error ? <p className="payroll-blocker">{error}</p> : null}

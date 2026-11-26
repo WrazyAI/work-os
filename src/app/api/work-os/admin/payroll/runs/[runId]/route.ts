@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db/pool";
 import { payrollError, requirePayrollAdmin } from "@/lib/work-os-payroll-api";
-import { advancePayrollRun, cancelPayrollRun, payrollRunDeps } from "@/lib/work-os-payroll-runs";
+import { cancelPayrollRun, drainPayrollRun, payrollRunDeps } from "@/lib/work-os-payroll-runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 async function runScope(organizationId: string, runId: string) {
   const { rows } = await getPool().query(`SELECT person_id FROM work_payroll_runs WHERE organization_id=$1 AND id=$2`, [organizationId, runId]);
@@ -34,6 +35,6 @@ export async function POST(req: Request, context: { params: Promise<{ runId: str
       const command = { rowVersion: String(body.rowVersion ?? "") };
       return NextResponse.json(await cancelPayrollRun(auth.access, runId, command));
     }
-    return NextResponse.json(await advancePayrollRun(scope, runId, payrollRunDeps(scope), new Date()));
+    return NextResponse.json(await drainPayrollRun(scope, runId, payrollRunDeps(scope), { budgetMs: 45_000 }));
   } catch (error) { return payrollError(error); }
 }

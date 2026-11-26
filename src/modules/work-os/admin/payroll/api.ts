@@ -50,8 +50,11 @@ export const payrollApi = {
   run: (runId: string) => adminFetch<{ id: string; status: string; phase: string; progress: Record<string, unknown> }>(`/api/work-os/admin/payroll/runs/${encodeURIComponent(runId)}`),
   advance: (runId: string) => adminFetch(`/api/work-os/admin/payroll/runs/${encodeURIComponent(runId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "advance" }) }),
   cancel: (runId: string, rowVersion: string) => adminFetch(`/api/work-os/admin/payroll/runs/${encodeURIComponent(runId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel", rowVersion }) }),
-  start: (personId: string, payDate: string, requestKey: string) =>
-    adminFetch<PayrollRun>(`/api/work-os/admin/payroll`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ personId, payDate, requestKey }) }),
+  start: (personId: string, payDate: string, requestKey: string, from?: string, through?: string) =>
+    adminFetch<PayrollRun>(`/api/work-os/admin/payroll`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personId, payDate, requestKey, ...(from && through ? { from, through } : {}) }),
+    }),
   previewFrame: async (reviewId: string, findingKey: string, summaryId: string, reason: string) => {
     const response = await fetch(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings/${encodeURIComponent(findingKey)}/preview`, {
       method: "POST",

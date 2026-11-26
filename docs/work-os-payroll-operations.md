@@ -130,3 +130,27 @@ ambiguous run); the durable run owns the 48-frame per-person cap.
   winner.
 - Withdrawn tracking consent or screenshot consent: no new provider ingestion or
   frame processing; existing payroll receipts stay under retention policy.
+
+## Analysis windows and frame ownership (2026-11-26)
+
+- Migrations `0085_work_payroll_screenshot_person_scope.sql` and
+  `0086_work_payroll_analysis_windows.sql` are additive and must be applied
+  before deploying the code that writes `window_key`. 0085 backfills
+  `work_screenshot_summaries.person_id` from the evidence event and enforces it
+  on insert/update. 0086 replaces the fixed-period uniqueness/checks with a
+  derived `(period_start, period_end)` key while keeping `pay_date` as the
+  anchor.
+- The workspace defaults to the current payroll window through today. A prior
+  pay date defaults to its full period. Any 1–31 day window ending today or
+  earlier can be analyzed; a partial/arbitrary window cannot be approved.
+- Starting an audit schedules an immediate bounded drain; the admin page also
+  advances while a run is active, and the five-minute cron resumes any run that
+  outlives one pass. Cancel is available while a run is active. A provider page
+  that stops moving fails with `provider_pagination_incomplete` instead of
+  looping.
+- Frame linkage now requires a person-scoped summary. If a report says “No
+  linked frames,” check that the period has processed, unexpired interval
+  evidence and that its summaries have a non-null person.
+- To recover a run created before 0085, cancel it from the review and start it
+  again, or reset it to the `activity` phase so it rebuilds its source manifest
+  with the newly linked frames.

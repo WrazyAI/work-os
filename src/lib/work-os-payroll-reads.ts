@@ -67,8 +67,12 @@ export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate
     EXISTS (SELECT 1 FROM work_source_accounts a
       WHERE a.organization_id=p.organization_id AND a.person_id=p.id AND a.provider='worktivity'
         AND a.external_account_id=btrim(p.worktivity_employee_id) AND a.verified) AS mapped
-    FROM work_people p LEFT JOIN work_payroll_reviews r
-      ON r.organization_id=p.organization_id AND r.person_id=p.id AND r.pay_date=$2::date AND r.retention_expires_at > now()
+    FROM work_people p LEFT JOIN LATERAL (
+      SELECT r.id,r.status,r.totals FROM work_payroll_reviews r
+      WHERE r.organization_id=p.organization_id AND r.person_id=p.id
+        AND r.pay_date=$2::date AND r.retention_expires_at > now()
+      ORDER BY (r.status='approved') DESC, r.period_end DESC, r.period_start, r.updated_at DESC LIMIT 1
+    ) r ON true
     WHERE p.organization_id=$1 AND ${rosterFilter}
       ${after}
     ORDER BY p.display_name,p.id LIMIT $${values.length}`,
@@ -77,14 +81,22 @@ export async function listPayrollRoster(access: WorkOsAccess, filters: { payDate
   const pageRows = rows.slice(0, limit);
   const totalQuery = await queryOne<CountRow>(
     getPool(),
-    `SELECT count(*)::int AS n FROM work_people p LEFT JOIN work_payroll_reviews r
-    ON r.organization_id=p.organization_id AND r.person_id=p.id AND r.pay_date=$2::date AND r.retention_expires_at > now()
+    `SELECT count(*)::int AS n FROM work_people p LEFT JOIN LATERAL (
+      SELECT r.id FROM work_payroll_reviews r
+      WHERE r.organization_id=p.organization_id AND r.person_id=p.id
+        AND r.pay_date=$2::date AND r.retention_expires_at > now()
+      ORDER BY (r.status='approved') DESC, r.period_end DESC, r.period_start, r.updated_at DESC LIMIT 1
+    ) r ON true
     WHERE p.organization_id=$1 AND ${rosterFilter}`,
     [scope.organizationId, filters.payDate],
   );
   const counts = await queryRows<PayrollStatusCountRow>(
     getPool(),
-    `SELECT status,count(*)::int AS n FROM work_payroll_reviews WHERE organization_id=$1 AND pay_date=$2::date AND retention_expires_at > now() GROUP BY status`,
+    `WITH latest AS (
+      SELECT DISTINCT ON (person_id) person_id,status FROM work_payroll_reviews
+      WHERE organization_id=$1 AND pay_date=$2::date AND retention_expires_at > now()
+      ORDER BY person_id, (status='approved') DESC, period_end DESC, period_start, updated_at DESC
+    ) SELECT status,count(*)::int AS n FROM latest GROUP BY status`,
     [scope.organizationId, filters.payDate],
   );
   return {
@@ -176,17 +188,21 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
   const last = page.at(-1);
   const frames = await queryRows<{ day_id: string; screenshot_summary_id: string }>(
     getPool(),
-    `SELECT day_id, screenshot_summary_id
-    FROM work_payroll_frame_findings
-    WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
-    ORDER BY captured_at LIMIT 500`,
+    `SELECT f.day_id, f.screenshot_summary_id
+    FROM work_payroll_frame_findings f
+    JOIN work_screenshot_summaries s ON s.id=f.screenshot_summary_id
+      AND s.organization_id=f.organization_id AND s.person_id=f.person_id
+    WHERE f.organization_id=$1 AND f.review_id=$2 AND f.analysis_revision=$3
+      AND s.processing_status='processed' AND s.deleted_at IS NULL AND s.expires_at > now()
+    ORDER BY f.captured_at LIMIT 500`,
     [access.organizationId, reviewId, review.analysis_revision],
   );
   const framesByDay = new Map<string, string[]>();
   for (const frame of frames) {
     const day = String(frame.day_id);
+    const summaryId = String(frame.screenshot_summary_id);
     const list = framesByDay.get(day) ?? [];
-    if (list.length < 3) list.push(String(frame.screenshot_summary_id));
+    if (list.length < 3 && !list.includes(summaryId)) list.push(summaryId);
     framesByDay.set(day, list);
   }
   const total = await queryOne<CountRow>(

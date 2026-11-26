@@ -35,7 +35,7 @@ export function PayrollOverviewView({ page, payDate, tab = "records", filtered =
                   : <><td className="num">{person.reviewId && person.status !== "draft" && person.status !== "failed" ? money(person.totals.recommended) : "—"}</td>
                     <td className="num">{person.status === "approved" ? money(person.totals.approved) : "—"}</td></>}
                 <td className="actions">
-                  {person.reviewId ? <Link href={payrollReviewHref(person.personId, payDate)}>{tab === "records" ? "Open review" : "Open audit"}<span className="sr-only"> for {person.displayName}</span></Link> : null}
+                  {person.reviewId ? <Link href={payrollReviewHref(person.personId, payDate, person.reviewId)}>{tab === "records" ? "Open review" : "Open audit"}<span className="sr-only"> for {person.displayName}</span></Link> : null}
                 </td>
               </tr>
             ))}

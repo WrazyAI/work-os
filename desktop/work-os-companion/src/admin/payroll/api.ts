@@ -40,7 +40,9 @@ export function desktopPayroll(organizationId: string) {
       }
       return { items, total, nextCursor: cursor };
     },
-    start: (input: { personId: string; payDate: string; requestKey: string }) => post<PayrollRun>(base, input),
+    start: (input: { personId: string; payDate: string; requestKey: string; from?: string; through?: string }) => post<PayrollRun>(base, input),
+    advance: (runId: string) => post(`${base}/runs/${encodeURIComponent(runId)}`, { action: "advance" }, 60_000),
+    cancel: (runId: string, rowVersion: string) => post(`${base}/runs/${encodeURIComponent(runId)}`, { action: "cancel", rowVersion }),
     decide: (id: string, input: PayrollCommand & { findingIds: string[]; action: "payable" | "excluded" | "acknowledged"; note: string }) =>
       post<PayrollReview>(`${reviewPath(id)}/decisions`, input),
     approve: (id: string, input: PayrollCommand & { note: string }) =>

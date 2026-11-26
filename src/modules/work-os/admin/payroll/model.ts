@@ -1,3 +1,4 @@
+import { payrollIsStandardWindow, payrollPartialWindowBlocker, payrollPeriodHasEnded } from "@wrazy/work-os-shared/payroll/window";
 import { recapReviewLabel } from "@/modules/work-os/recap-review";
 import type { PayrollReview, PayrollTotals } from "@/modules/work-os/payroll/contracts";
 
@@ -11,15 +12,20 @@ export type PayrollReviewModel = {
   historicalApproval: boolean;
 };
 
-export function payrollReviewModel(review: PayrollReview): PayrollReviewModel {
+export function payrollReviewModel(review: PayrollReview, today = new Date().toISOString().slice(0, 10)): PayrollReviewModel {
   const stale = review.status === "stale" || review.status === "failed" || review.status === "analyzing" || review.evidenceChangedSinceApproval;
+  const partial = !payrollIsStandardWindow(review.period.payDate, review.period.from, review.period.through);
   const blockers = [...review.blockers];
   if (stale) blockers.push("Re-analyze before approval; the evidence or analysis changed.");
   if (review.status === "needs_review") blockers.push("Resolve the held or correction-required findings.");
   if (review.status !== "approved" && review.recapStats?.pending) blockers.push("Pending recaps must be settled before payroll approval.");
   if (review.run && ["queued", "running"].includes(review.run.progress.status)) blockers.push("Analysis is still running.");
+  const partialBlocker = payrollPartialWindowBlocker(review.period.from, review.period.through);
+  if (partial && !blockers.includes(partialBlocker)) blockers.push(partialBlocker);
+  const endedBlocker = `This payroll period has not ended (${review.period.through}). Approval is available after it ends.`;
+  if (!partial && !payrollPeriodHasEnded(review.period.through, today) && !blockers.includes(endedBlocker)) blockers.push(endedBlocker);
   const totals = review.totals;
-  const canApprove = review.status === "ready" && !review.approval && !stale
+  const canApprove = review.status === "ready" && !review.approval && !stale && !partial
     && !(review.run && ["queued", "running"].includes(review.run.progress.status))
     && totals.held === 0 && blockers.length === 0;
   const retention = Date.parse(review.retentionExpiresAt);

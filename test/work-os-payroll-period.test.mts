@@ -59,6 +59,50 @@ test("latest due period uses the employee's calendar rather than host timezone",
   assert.throws(() => latestDuePayrollPeriod(new Date(NaN), "UTC"), /instant/i);
 });
 
+test("arbitrary windows keep their exact dates and anchor to the next pay date", async () => {
+  const { resolvePayrollWindow, buildStoredPayrollPeriod, currentPayrollWindow } = await service();
+  const partial = resolvePayrollWindow("2026-11-01", "2026-11-10", "UTC", new Date("2026-11-12T12:00:00Z"));
+  assert.deepEqual(partial, {
+    payDate: "2026-11-16", from: "2026-11-01", through: "2026-11-10", timezone: "UTC",
+    weeks: [
+      { week: 1, from: "2026-11-01", through: "2026-11-07" },
+      { week: 2, from: "2026-11-08", through: "2026-11-10" },
+    ],
+  });
+  const secondHalf = resolvePayrollWindow("2026-11-16", "2026-11-30", "UTC", new Date("2026-12-01T12:00:00Z"));
+  assert.equal(secondHalf.payDate, "2026-12-01");
+  assert.deepEqual(secondHalf.weeks, [
+    { week: 1, from: "2026-11-16", through: "2026-11-22" },
+    { week: 2, from: "2026-11-23", through: "2026-11-30" },
+  ]);
+  const single = resolvePayrollWindow("2026-11-09", "2026-11-09", "UTC", new Date("2026-11-12T12:00:00Z"));
+  assert.deepEqual(single.weeks, [
+    { week: 1, from: "2026-11-09", through: "2026-11-09" },
+    { week: 2, from: "2026-11-10", through: "2026-11-09" },
+  ]);
+  assert.deepEqual(buildStoredPayrollPeriod("2026-11-01", "2026-11-10", "2026-11-16", "Atlantic/Reykjavik"), {
+    ...partial, timezone: "Atlantic/Reykjavik",
+  });
+  assert.deepEqual(currentPayrollWindow(new Date("2026-11-03T12:00:00Z"), "UTC"), {
+    from: "2026-11-01", through: "2026-11-03", payDate: "2026-11-16",
+  });
+  assert.deepEqual(currentPayrollWindow(new Date("2026-11-26T12:00:00Z"), "UTC"), {
+    from: "2026-11-16", through: "2026-11-26", payDate: "2026-12-01",
+  });
+});
+
+test("windows reject future, reversed, overlong and malformed ranges", async () => {
+  const { resolvePayrollWindow, buildStoredPayrollPeriod } = await service();
+  const now = new Date("2026-11-12T12:00:00Z");
+  assert.throws(() => resolvePayrollWindow("2026-11-01", "2026-11-20", "UTC", now), /future/i);
+  assert.throws(() => resolvePayrollWindow("2026-11-10", "2026-11-01", "UTC", now), /precede/i);
+  assert.throws(() => resolvePayrollWindow("2026-10-01", "2026-11-05", "UTC", now), /31 days/i);
+  assert.throws(() => resolvePayrollWindow("2026-11-02", "2026-11-05", "Mars/Olympus", now), /timezone/i);
+  assert.throws(() => resolvePayrollWindow("2026-02-30", "2026-03-01", "UTC", now), /date/i);
+  assert.throws(() => buildStoredPayrollPeriod("2026-11-01", "2026-11-16", "2026-11-16", "UTC"), /precede/i);
+  assert.throws(() => buildStoredPayrollPeriod("2026-11-01", "2026-11-15", "2026-11-02", "UTC"), /first or sixteenth/i);
+});
+
 test("payroll recap auto-approval waits until the local cutoff and catches up", async () => {
   const { resolvePayrollPeriod, payrollAutoApprovalDue } = await service();
   const period = resolvePayrollPeriod("2026-11-16", "Atlantic/Reykjavik");

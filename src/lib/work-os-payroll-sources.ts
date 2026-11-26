@@ -152,7 +152,8 @@ export async function loadPayrollSources(scope: PayrollScope, period: PayrollPer
         FROM work_activity_interval_evidence e
         JOIN work_screenshot_summaries s ON s.id=e.screenshot_summary_id
         WHERE e.interval_id=ANY($1::uuid[]) AND s.organization_id=$2 AND s.person_id=$3
-          AND s.processing_status='processed' AND s.deleted_at IS NULL`, [intervalIds, scope.organizationId, scope.personId])
+          AND s.processing_status='processed' AND s.deleted_at IS NULL AND s.expires_at > $4::timestamptz`,
+      [intervalIds, scope.organizationId, scope.personId, asOf.toISOString()])
     : { rows: [] };
   const framesByInterval = new Map<string, Array<Record<string, unknown>>>();
   for (const frame of frameQuery.rows as Array<Record<string, unknown>>) {

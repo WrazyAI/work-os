@@ -3,7 +3,9 @@ import { getPool } from "@/lib/db/pool";
 import { mapPayrollRun } from "@/lib/work-os-payroll-runs";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { loadPayrollSourceToken, readPayrollSourceToken, verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
-import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { buildStoredPayrollPeriod } from "@/lib/work-os-payroll-period";
+import { payrollIsStandardWindow, payrollPartialWindowBlocker, payrollPeriodHasEnded } from "@wrazy/work-os-shared/payroll/window";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 import { applyPayrollDecisions } from "@/lib/work-os-payroll-hours";
 import type {
   FindingDecision, PayrollApproval, PayrollCommand, PayrollDayResult, PayrollFinding,
@@ -112,11 +114,19 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
         count(*) FILTER (WHERE review_status='inferred' AND generation_status='ready')::int AS pending
       FROM work_activity_intervals WHERE organization_id=$1 AND person_id=$2 AND local_date::date BETWEEN $3::date AND $4::date`,
     [scope.organizationId, scope.personId, review.period_start, review.period_end])).rows[0] as Row | undefined;
-    const period = resolvePayrollPeriod(dateKey(review.pay_date)!, String(review.timezone));
+    const period = buildStoredPayrollPeriod(
+      dateKey(review.period_start)!, dateKey(review.period_end)!, dateKey(review.pay_date)!,
+      String(review.timezone),
+    );
     return {
       id: String(review.id), scope, period,
       token: { rowVersion: String(review.row_version), analysisRevision: Number(review.analysis_revision), sourceHash: String(review.source_hash ?? "") },
       status: String(review.status) as PayrollReview["status"], totals: totalsFromJson(review.totals),
+      blockers: payrollIsStandardWindow(period.payDate, period.from, period.through)
+        ? (payrollPeriodHasEnded(period.through, localDateForTimezone(new Date(), String(review.timezone)))
+          ? []
+          : [`This payroll period has not ended (${period.through}). Approval is available after it ends.`])
+        : [payrollPartialWindowBlocker(period.from, period.through)],
       briefs: briefs.map((brief: Row) => ({
         week: Number(brief.week) as 1 | 2, status: String(brief.status) as PayrollReview["briefs"][number]["status"],
         title: String(brief.title ?? ""), summary: String(brief.summary_markdown ?? ""),
@@ -125,7 +135,7 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
         openItems: Array.isArray(brief.open_items) ? brief.open_items as PayrollReview["briefs"][number]["openItems"] : [],
         gaps: Array.isArray(brief.gaps) ? brief.gaps as string[] : [], sourceHash: String(brief.source_hash ?? ""),
       })),
-      blockers: [], run: latestRun ? { ...mapPayrollRun(latestRun), rowVersion: String(review.row_version) } : null,
+      run: latestRun ? { ...mapPayrollRun(latestRun), rowVersion: String(review.row_version) } : null,
       approval: approval ? approvalFromRow(approval, scope, period) : null,
       retentionExpiresAt: iso(review.retention_expires_at) ?? "",
       firstExportAt: iso(review.first_export_at), evidenceChangedSinceApproval: review.evidence_changed_since_approval === true || sourceChanged,

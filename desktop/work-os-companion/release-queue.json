@@ -600,6 +600,12 @@
       "type": "fix",
       "summary": "The onboarding scrollbar now sits at the right edge of the window when the workspace is narrow.",
       "verification": "Moved scrolling to a full-width phase-scroll region; measured scroller right edge 1007.98/1008 at 1008px, 1000/1000 at 1000px, and 900/900 at 900px, with the form column still inset. Narrow layout uses the document scrollbar at the edge; layout Vitest 8 passed and typecheck passed."
+    },
+    {
+      "id": "payroll-analysis-windows-and-actions",
+      "type": "feature",
+      "summary": "Administrators can review any payroll window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.",
+      "verification": "c2201ad2: payroll suite 145 tests / 140 passed / 5 opt-in PostgreSQL skipped; work-os:typecheck; web and companion builds; companion suite 247 files / 2,152 tests; rendered Companion preview at 1558px and 375px with actionable findings, guarded frames, partial-window defaults, and the reordered review surface."
     }
   ],
   "emergency": null,

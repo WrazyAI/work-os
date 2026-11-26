@@ -348,6 +348,7 @@ async function processScreenshotLog(
   if (isExcludedScreenshot(log, config)) {
     const { data, error } = await db().from("work_screenshot_summaries").upsert({
       organization_id: access.organizationId,
+      person_id: personId,
       evidence_event_id: event.id,
       source_reference: sourceReference,
       processing_status: "excluded",
@@ -381,6 +382,7 @@ async function processScreenshotLog(
       storageRetained = false;
       const { data, error } = await db().from("work_screenshot_summaries").upsert({
         organization_id: access.organizationId,
+        person_id: personId,
         evidence_event_id: event.id,
         storage_path: null,
         source_reference: sourceReference,
@@ -406,6 +408,7 @@ async function processScreenshotLog(
     const needsReview = observation.confidence < 0.6;
     const { data, error } = await db().from("work_screenshot_summaries").upsert({
       organization_id: access.organizationId,
+      person_id: personId,
       evidence_event_id: event.id,
       storage_path: storageRetained ? storagePath : null,
       source_reference: sourceReference,
@@ -457,6 +460,7 @@ async function processScreenshotLog(
     const reason = error instanceof Error ? error.message : "Screenshot analysis failed";
     const { data, error: failureRecordError } = await db().from("work_screenshot_summaries").upsert({
       organization_id: access.organizationId,
+      person_id: personId,
       evidence_event_id: event.id,
       storage_path: storageRetained ? storagePath : null,
       source_reference: sourceReference,

@@ -60,6 +60,22 @@ test("roster, days, findings and one day read within the organization", async ()
   } finally { await f.close(); }
 });
 
+test("a stored partial window is reviewed as stored, not recomputed from the pay date", async () => {
+  const { listPayrollRoster, loadPayrollReview } = await reads();
+  const f = await payrollFixture();
+  try {
+    await seed(f);
+    await f.db.query("update work_payroll_reviews set period_end='2026-11-10' where id=$1", [reviewId]);
+    const review = await loadPayrollReview(adminAccess, reviewId);
+    assert.equal(review.period.from, "2026-11-01");
+    assert.equal(review.period.through, "2026-11-10");
+    assert.equal(review.period.payDate, "2026-11-16");
+    assert.equal(review.period.weeks[1].through, "2026-11-10");
+    const roster = await listPayrollRoster(adminAccess, { payDate: "2026-11-16", cursor: null, limit: 50 });
+    assert.equal(roster.items[0].reviewId, reviewId);
+  } finally { await f.close(); }
+});
+
 test("cross-org reads are not found and expired records are refused", async () => {
   const { listPayrollDays, loadPayrollDay } = await reads();
   const f = await payrollFixture();
