@@ -1,1 +1,243 @@
-aW1wb3J0IHsgcmVhZEZpbGUgfSBmcm9tICJub2RlOmZzL3Byb21pc2VzIjsKaW1wb3J0IHsgUEdsaXRlIH0gZnJvbSAiQGVsZWN0cmljLXNxbC9wZ2xpdGUiOwppbXBvcnQgdHlwZSB7IFBvb2wgfSBmcm9tICJwZyI7CmltcG9ydCB0eXBlIHsgV29ya09zQWNjZXNzIH0gZnJvbSAiLi4vLi4vc3JjL2xpYi93b3JrLW9zLWFwaSI7CgpleHBvcnQgY29uc3Qgb3JnID0gIjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSI7CmV4cG9ydCBjb25zdCBvdGhlck9yZyA9ICIxMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDIiOwpleHBvcnQgY29uc3QgYWRtaW5Vc2VyID0gIjQwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAxMSI7CmV4cG9ydCBjb25zdCBhZG1pbk1lbWJlcnNoaXAgPSAiNTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIjsKZXhwb3J0IGNvbnN0IG90aGVyQWRtaW5NZW1iZXJzaGlwID0gIjUwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyI7CmV4cG9ydCBjb25zdCBwZXJzb25BID0gIjIwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSI7CmV4cG9ydCBjb25zdCBwZXJzb25CID0gIjIwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiI7CmV4cG9ydCBjb25zdCBwZXJzb25DID0gIjIwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMyI7CmV4cG9ydCBjb25zdCBvdGhlclBlcnNvbiA9ICIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDQiOwpleHBvcnQgY29uc3QgaW50ZXJ2YWxBID0gIjMwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSI7CmV4cG9ydCBjb25zdCBpbnRlcnZhbEIgPSAiMzAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIjsKCmNvbnN0IGFkbWluID0gKG9yZ2FuaXphdGlvbklkOiBzdHJpbmcsIG1lbWJlcnNoaXBJZDogc3RyaW5nLCB1c2VySWQ6IHN0cmluZykgPT4gKHsKICBvcmdhbml6YXRpb25JZCwgcGVyc29uSWQ6IG51bGwsIG1lbWJlcnNoaXBJZCwgcm9sZTogImFkbWluIiwKICBjdHg6IHsgdXNlcjogeyBpZDogdXNlcklkIH0sIHByb2ZpbGU6IHsgaWQ6IHVzZXJJZCB9IH0sCiAgZmVhdHVyZUZsYWdzOiB7IGVtcGxveWVlX2NvbXBhbmlvbjogdHJ1ZSB9LCBvcmdhbml6YXRpb25Pd25lcklkOiBudWxsLAp9KSBhcyB1bmtub3duIGFzIFdvcmtPc0FjY2VzczsKCmV4cG9ydCBjb25zdCBhZG1pbkFjY2VzcyA9IGFkbWluKG9yZywgYWRtaW5NZW1iZXJzaGlwLCBhZG1pblVzZXIpOwpleHBvcnQgY29uc3Qgb3RoZXJPcmdBZG1pbkFjY2VzcyA9IGFkbWluKG90aGVyT3JnLCBvdGhlckFkbWluTWVtYmVyc2hpcCwgIjQwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAxMyIpOwoKZXhwb3J0IGNvbnN0IHByZXJlcXVpc2l0ZXMgPSBgCmNyZWF0ZSB0YWJsZSB3b3JrX29yZ2FuaXphdGlvbnMgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgZmVhdHVyZV9mbGFncyBqc29uYiBub3QgbnVsbCBkZWZhdWx0ICd7ImVtcGxveWVlX2NvbXBhbmlvbiI6dHJ1ZX0nOjpqc29uYgopOwpjcmVhdGUgdGFibGUgd29ya19vcmdfbWVtYmVycyAoCiAgaWQgdXVpZCBwcmltYXJ5IGtleSwKICBvcmdhbml6YXRpb25faWQgdXVpZCBub3QgbnVsbCByZWZlcmVuY2VzIHdvcmtfb3JnYW5pemF0aW9ucyhpZCksCiAgdXNlcl9pZCB1dWlkIG5vdCBudWxsLAogIHBlcnNvbl9pZCB1dWlkLAogIHJvbGUgdGV4dCBub3QgbnVsbCBjaGVjayAocm9sZSBpbiAoJ2VtcGxveWVlJywnbWFuYWdlcicsJ2FkbWluJykpLAogIGZlYXR1cmVfZmxhZ3MganNvbmIgbm90IG51bGwgZGVmYXVsdCAne30nOjpqc29uYiwKICBhY3RpdmUgYm9vbGVhbiBub3QgbnVsbCBkZWZhdWx0IHRydWUsCiAgdWlfc3RhdGUganNvbmIgbm90IG51bGwgZGVmYXVsdCAne30nOjpqc29uYiwKICBjcmVhdGVkX2F0IHRpbWVzdGFtcHR6IG5vdCBudWxsIGRlZmF1bHQgbm93KCksCiAgdXBkYXRlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpLAogIHVuaXF1ZSAob3JnYW5pemF0aW9uX2lkLCB1c2VyX2lkKQopOwpjcmVhdGUgdGFibGUgd29ya19wZW9wbGUgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIHVzZXJfaWQgdXVpZCBub3QgbnVsbCwKICBkaXNwbGF5X25hbWUgdGV4dCBub3QgbnVsbCwKICBhY3RpdmUgYm9vbGVhbiBub3QgbnVsbCBkZWZhdWx0IHRydWUsCiAgbmlmdHlfbWVtYmVyX2lkIHRleHQsCiAgcmF3IGpzb25iIG5vdCBudWxsIGRlZmF1bHQgJ3t9Jzo6anNvbmIsCiAgY3JlYXRlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpLAogIHVwZGF0ZWRfYXQgdGltZXN0YW1wdHogbm90IG51bGwgZGVmYXVsdCBub3coKQopOwpjcmVhdGUgdW5pcXVlIGluZGV4IHdvcmtfcGVvcGxlX29yZ19pZF9rZXkgb24gd29ya19wZW9wbGUgKG9yZ2FuaXphdGlvbl9pZCwgaWQpOwpjcmVhdGUgdGFibGUgd29ya19lbXBsb3llZV9vbmJvYXJkaW5nICgKICBvcmdhbml6YXRpb25faWQgdXVpZCBub3QgbnVsbCwKICBwZXJzb25faWQgdXVpZCBub3QgbnVsbCwKICB0aW1lem9uZSB0ZXh0LAogIHByaW1hcnkga2V5IChvcmdhbml6YXRpb25faWQsIHBlcnNvbl9pZCkKKTsKY3JlYXRlIHRhYmxlIHdvcmtfdGFza3MgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgdXNlcl9pZCB1dWlkIG5vdCBudWxsLAogIG9yZ2FuaXphdGlvbl9pZCB1dWlkIG5vdCBudWxsIHJlZmVyZW5jZXMgd29ya19vcmdhbml6YXRpb25zKGlkKSwKICBwcm92aWRlciB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ25pZnR5JywKICBwcm92aWRlcl90YXNrX2lkIHRleHQgbm90IG51bGwgZGVmYXVsdCAnJywKICBwcm92aWRlcl9wcm9qZWN0X2lkIHRleHQsCiAgcHJvamVjdF9pZCB1dWlkLAogIHRpdGxlIHRleHQgbm90IG51bGwsCiAgZGVzY3JpcHRpb24gdGV4dCwKICBzdGF0dXMgdGV4dCBub3QgbnVsbCBkZWZhdWx0ICdvcGVuJywKICBjb21wbGV0ZWQgYm9vbGVhbiBub3QgbnVsbCBkZWZhdWx0IGZhbHNlLAogIGFzc2lnbmVlX3Byb3ZpZGVyX2lkcyB0ZXh0W10gbm90IG51bGwgZGVmYXVsdCAne30nOjp0ZXh0W10sCiAgYXNzaWduZWVfcGVyc29uX2lkcyB1dWlkW10gbm90IG51bGwgZGVmYXVsdCAne30nOjp1dWlkW10sCiAgZHVlX2RhdGUgZGF0ZSwKICBzdGFydF9kYXRlIGRhdGUsCiAgY29tcGxldGVkX2F0IHRpbWVzdGFtcHR6LAogIGFzc2lnbmVkX2J5X3BlcnNvbl9pZCB1dWlkLAogIHBhcmVudF90YXNrX2lkIHV1aWQsCiAgcGFyZW50X3Byb3ZpZGVyX3Rhc2tfaWQgdGV4dCwKICBwcm92aWRlcl9jcmVhdGVkX2F0IHRpbWVzdGFtcHR6LAogIHByb3ZpZGVyX3VwZGF0ZWRfYXQgdGltZXN0YW1wdHosCiAgcmF3IGpzb25iIG5vdCBudWxsIGRlZmF1bHQgJ3t9Jzo6anNvbmIsCiAgY3JlYXRlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpLAogIHVwZGF0ZWRfYXQgdGltZXN0YW1wdHogbm90IG51bGwgZGVmYXVsdCBub3coKQopOwotLSBUaGUgYWRtaW4gdGFzayBwYWdlIGpvaW5zIHRoZXNlIHRhYmxlcyBpbiB0aGUgc2FtZSBzbmFwc2hvdCBhcyBpdHMgdGFzayByb3dzLgpjcmVhdGUgdGFibGUgd29ya19wcm9qZWN0cyAoCiAgaWQgdXVpZCBwcmltYXJ5IGtleSwKICB1c2VyX2lkIHV1aWQgbm90IG51bGwsCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIG5hbWUgdGV4dCBub3QgbnVsbAopOwpjcmVhdGUgdGFibGUgd29ya19ldmlkZW5jZSAoCiAgaWQgdXVpZCBwcmltYXJ5IGtleSwKICB1c2VyX2lkIHV1aWQgbm90IG51bGwsCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIHRhc2tfaWQgdXVpZCByZWZlcmVuY2VzIHdvcmtfdGFza3MoaWQpLAogIHNvdXJjZSB0ZXh0IG5vdCBudWxsLAogIHRpdGxlIHRleHQgbm90IG51bGwsCiAgZXZpZGVuY2VfZGF0ZSBkYXRlIG5vdCBudWxsIGRlZmF1bHQgY3VycmVudF9kYXRlCik7CmNyZWF0ZSB0YWJsZSB3b3JrX2NoZWNrX2lucyAoCiAgaWQgdXVpZCBwcmltYXJ5IGtleSwKICBvcmdhbml6YXRpb25faWQgdXVpZCBub3QgbnVsbCByZWZlcmVuY2VzIHdvcmtfb3JnYW5pemF0aW9ucyhpZCksCiAgcGVyc29uX2lkIHV1aWQgbm90IG51bGwsCiAga2luZCB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ2NhdGNoX3VwJywKICBpbnB1dF90ZXh0IHRleHQgbm90IG51bGwgZGVmYXVsdCAnJywKICBzdWJzdGFudGl2ZSBib29sZWFuIG5vdCBudWxsIGRlZmF1bHQgZmFsc2UsCiAgb2NjdXJyZWRfYXQgdGltZXN0YW1wdHosCiAgY3JlYXRlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpCik7CmNyZWF0ZSB0YWJsZSB3b3JrX3JlcG9ydHMgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIHBlcnNvbl9pZCB1dWlkIG5vdCBudWxsLAogIHJlcG9ydF9kYXRlIGRhdGUgbm90IG51bGwsCiAga2luZCB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ2VvZCcsCiAgc3RhdHVzIHRleHQgbm90IG51bGwgZGVmYXVsdCAnZHJhZnQnLAogIHRpdGxlIHRleHQgbm90IG51bGwgZGVmYXVsdCAnJywKICBtYXJrZG93biB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJycsCiAgc3VibWl0dGVkX21hcmtkb3duIHRleHQsCiAgc3VibWl0dGVkX2F0IHRpbWVzdGFtcHR6LAogIGNyZWF0ZWRfYXQgdGltZXN0YW1wdHogbm90IG51bGwgZGVmYXVsdCBub3coKSwKICB1cGRhdGVkX2F0IHRpbWVzdGFtcHR6IG5vdCBudWxsIGRlZmF1bHQgbm93KCkKKTsKY3JlYXRlIHRhYmxlIHdvcmtfc2Vzc2lvbnMgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIHBlcnNvbl9pZCB1dWlkIG5vdCBudWxsLAogIHNoaWZ0X2RhdGUgZGF0ZSBub3QgbnVsbCwKICBzdGF0ZSB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ3NjaGVkdWxlZCcsCiAgdGltZXpvbmUgdGV4dCBub3QgbnVsbCBkZWZhdWx0ICdVVEMnLAogIHNjaGVkdWxlZF9zdGFydHNfYXQgdGltZXN0YW1wdHosCiAgc2NoZWR1bGVkX2VuZHNfYXQgdGltZXN0YW1wdHosCiAgY2xvY2tlZF9pbl9hdCB0aW1lc3RhbXB0eiwKICBjbG9ja2VkX291dF9hdCB0aW1lc3RhbXB0eiwKICBwYXVzZWRfc2Vjb25kcyBpbnRlZ2VyIG5vdCBudWxsIGRlZmF1bHQgMCwKICBjcmVhdGVkX2F0IHRpbWVzdGFtcHR6IG5vdCBudWxsIGRlZmF1bHQgbm93KCksCiAgdXBkYXRlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpCik7CmNyZWF0ZSB0YWJsZSB3b3JrX3Rhc2tfZGF5X2V2ZW50cyAoCiAgaWQgdXVpZCBwcmltYXJ5IGtleSwKICBvcmdhbml6YXRpb25faWQgdXVpZCBub3QgbnVsbCByZWZlcmVuY2VzIHdvcmtfb3JnYW5pemF0aW9ucyhpZCksCiAgcGVyc29uX2lkIHV1aWQsCiAgdGFza19pZCB1dWlkIG5vdCBudWxsLAogIHByb3ZpZGVyIHRleHQgbm90IG51bGwgZGVmYXVsdCAnbmlmdHknLAogIHByb3ZpZGVyX3Rhc2tfaWQgdGV4dCBub3QgbnVsbCBkZWZhdWx0ICcnLAogIGxvY2FsX2RhdGUgZGF0ZSBub3QgbnVsbCwKICBldmVudF90eXBlIHRleHQgbm90IG51bGwsCiAgcHJvdmVuYW5jZSB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ2VtcGxveWVlX2V4cGxpY2l0JywKICBleGFjdF9hdCB0aW1lc3RhbXB0eiwKICBvYnNlcnZlZF9hdCB0aW1lc3RhbXB0eiBub3QgbnVsbCBkZWZhdWx0IG5vdygpLAogIHRhc2tfc25hcHNob3QganNvbmIgbm90IG51bGwgZGVmYXVsdCAne30nOjpqc29uYiwKICBtZXRhZGF0YSBqc29uYiBub3QgbnVsbCBkZWZhdWx0ICd7fSc6Ompzb25iLAogIGlkZW1wb3RlbmN5X2tleSB0ZXh0IG5vdCBudWxsLAogIGNyZWF0ZWRfYXQgdGltZXN0YW1wdHogbm90IG51bGwgZGVmYXVsdCBub3coKSwKICB1bmlxdWUgKG9yZ2FuaXphdGlvbl9pZCwgaWRlbXBvdGVuY3lfa2V5KQopOwpjcmVhdGUgdGFibGUgd29ya19hY3Rpdml0eV9pbnRlcnZhbHMgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgb3JnYW5pemF0aW9uX2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyB3b3JrX29yZ2FuaXphdGlvbnMoaWQpLAogIHBlcnNvbl9pZCB1dWlkIG5vdCBudWxsIHJlZmVyZW5jZXMgd29ya19wZW9wbGUoaWQpLAogIGdlbmVyYXRpb25fc3RhdHVzIHRleHQgZGVmYXVsdCAncmVhZHknLAogIHJldmlld19zdGF0dXMgdGV4dCBkZWZhdWx0ICdpbmZlcnJlZCcsCiAgaGVhZGxpbmUgdGV4dCwKICBhaV9kZXRhaWwgdGV4dCwKICBmaW5hbF9kZXRhaWwgdGV4dCwKICBlbXBsb3llZV9mZWVkYmFjayB0ZXh0LAogIHN0cnVjdHVyZWRfc3VtbWFyeSBqc29uYiBkZWZhdWx0ICd7fSc6Ompzb25iLAogIGNvdmVyYWdlIGpzb25iIGRlZmF1bHQgJ3t9Jzo6anNvbmIsCiAgc291cmNlX2hhc2ggdGV4dCwKICByZXZpc2lvbiBpbnQgZGVmYXVsdCAxLAogIGxvY2FsX2RhdGUgdGV4dCBkZWZhdWx0ICcyMDI2LTEwLTIxJywKICBwcm9tcHRfa2luZCB0ZXh0IGRlZmF1bHQgJ2hvdXJseV9mYWxsYmFjaycsCiAgZmFpbHVyZV9yZWFzb24gdGV4dCwKICBldmlkZW5jZV9leHBpcmVkX2F0IHRpbWVzdGFtcHR6LAogIHdpbmRvd19zdGFydCB0aW1lc3RhbXB0eiwKICB3aW5kb3dfZW5kIHRpbWVzdGFtcHR6LAogIHRpbWV6b25lIHRleHQgZGVmYXVsdCAnVVRDJywKICBnZW5lcmF0ZWRfYXQgdGltZXN0YW1wdHosCiAgcmV2aWV3ZWRfYXQgdGltZXN0YW1wdHosCiAgdXBkYXRlZF9hdCB0aW1lc3RhbXB0eiwKICBuZXh0X3N0ZXBzX3N0YXR1cyB0ZXh0IGRlZmF1bHQgJ25vdF9yZXF1ZXN0ZWQnCik7CmNyZWF0ZSB1bmlxdWUgaW5kZXggd29ya19hY3Rpdml0eV9pbnRlcnZhbHNfb3JnX3BlcnNvbl9pZF9rZXkKICBvbiB3b3JrX2FjdGl2aXR5X2ludGVydmFscyAob3JnYW5pemF0aW9uX2lkLCBwZXJzb25faWQsIGlkKTsKY3JlYXRlIHRhYmxlIHdvcmtfYXVkaXRfbG9nICgKICBpZCBiaWdpbnQgZ2VuZXJhdGVkIGFsd2F5cyBhcyBpZGVudGl0eSBwcmltYXJ5IGtleSwKICBvcmdhbml6YXRpb25faWQgdXVpZCBub3QgbnVsbCByZWZlcmVuY2VzIHdvcmtfb3JnYW5pemF0aW9ucyhpZCksCiAgYWN0b3JfdXNlcl9pZCB1dWlkLAogIGFjdGlvbiB0ZXh0IG5vdCBudWxsLAogIHRhcmdldF90eXBlIHRleHQgbm90IG51bGwsCiAgdGFyZ2V0X2lkIHRleHQsCiAgbWV0YWRhdGEganNvbmIgZGVmYXVsdCAne30nCik7CmNyZWF0ZSB0YWJsZSB3b3JrX2FjdGl2aXR5X2ludGVydmFsX2V2aWRlbmNlICgKICBpbnRlcnZhbF9pZCB1dWlkIG5vdCBudWxsLAogIHNjcmVlbnNob3Rfc3VtbWFyeV9pZCB1dWlkLAogIGNhcHR1cmVkX2F0IHRpbWVzdGFtcHR6LAogIG9yZGluYWwgaW50LAogIHVzZWRfaW5fbW9kZWwgYm9vbGVhbiwKICByYXdfaW1hZ2Vfc2hvd24gYm9vbGVhbiwKICBzZWxlY3Rpb25fcmVhc29uIHRleHQsCiAgdmlzaWJsZV9hcHBfc25hcHNob3QgdGV4dCwKICBmcmFtZV9zdW1tYXJ5X3NuYXBzaG90IHRleHQKKTsKY3JlYXRlIHRhYmxlIHdvcmtfc2NyZWVuc2hvdF9zdW1tYXJpZXMgKAogIGlkIHV1aWQgcHJpbWFyeSBrZXksCiAgc3RvcmFnZV9wYXRoIHRleHQsCiAgZXhwaXJlc19hdCB0aW1lc3RhbXB0eiwKICBkZWxldGVkX2F0IHRpbWVzdGFtcHR6Cik7Cmluc2VydCBpbnRvIHdvcmtfb3JnYW5pemF0aW9ucyAoaWQpIHZhbHVlcyAoJyR7b3JnfScpLCAoJyR7b3RoZXJPcmd9Jyk7Cmluc2VydCBpbnRvIHdvcmtfb3JnX21lbWJlcnMgKGlkLCBvcmdhbml6YXRpb25faWQsIHVzZXJfaWQsIHJvbGUsIGZlYXR1cmVfZmxhZ3MsIGFjdGl2ZSkgdmFsdWVzCiAgKCcke2FkbWluTWVtYmVyc2hpcH0nLCAnJHtvcmd9JywgJyR7YWRtaW5Vc2VyfScsICdhZG1pbicsICd7fScsIHRydWUpLAogICgnJHtvdGhlckFkbWluTWVtYmVyc2hpcH0nLCAnJHtvdGhlck9yZ30nLCAnNDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDEzJywgJ2FkbWluJywgJ3t9JywgdHJ1ZSk7CmA7CgpleHBvcnQgY29uc3QgbWlncmF0aW9uID0gYXN5bmMgKCkgPT4gKGF3YWl0IFByb21pc2UuYWxsKFsKICByZWFkRmlsZShuZXcgVVJMKCIuLi8uLi9zdXBhYmFzZS9taWdyYXRpb25zLzAwNjVfd29ya19hZG1pbl9vdHRvLnNxbCIsIGltcG9ydC5tZXRhLnVybCksICJ1dGY4IiksCiAgcmVhZEZpbGUobmV3IFVSTCgiLi4vLi4vc3VwYWJhc2UvbWlncmF0aW9ucy8wMDcyX3dvcmtfYWRtaW5fb3R0b193b3JrZmxvd3Muc3FsIiwgaW1wb3J0Lm1ldGEudXJsKSwgInV0ZjgiKSwKICByZWFkRmlsZShuZXcgVVJMKCIuLi8uLi9zdXBhYmFzZS9taWdyYXRpb25zLzAwNzlfd29ya19wYXlyb2xsX3JlY2FwX3Byb3ZlbmFuY2Uuc3FsIiwgaW1wb3J0Lm1ldGEudXJsKSwgInV0ZjgiKSwKXSkpLmpvaW4oIlxuIik7CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gZml4dHVyZSgpIHsKICBjb25zdCBkYiA9IG5ldyBQR2xpdGUoKTsKICBhd2FpdCBkYi5leGVjKHByZXJlcXVpc2l0ZXMpOwogIGF3YWl0IGRiLmV4ZWMoYXdhaXQgbWlncmF0aW9uKCkpOwogIGdsb2JhbFRoaXMuX193b3JrT3NQZ1Bvb2wgPSB7CiAgICBxdWVyeTogKHNxbDogc3RyaW5nLCB2YWx1ZXM/OiB1bmtub3duW10pID0+IGRiLnF1ZXJ5KHNxbCwgdmFsdWVzKSwKICAgIGNvbm5lY3Q6IGFzeW5jICgpID0+ICh7IHF1ZXJ5OiAoc3FsOiBzdHJpbmcsIHZhbHVlcz86IHVua25vd25bXSkgPT4gZGIucXVlcnkoc3FsLCB2YWx1ZXMpLCByZWxlYXNlOiAoKSA9PiB1bmRlZmluZWQgfSksCiAgfSBhcyB1bmtub3duIGFzIFBvb2w7CiAgcmV0dXJuIHsKICAgIGRiLAogICAgY2xvc2U6IGFzeW5jICgpID0+IHsKICAgICAgZ2xvYmFsVGhpcy5fX3dvcmtPc1BnUG9vbCA9IHVuZGVmaW5lZDsKICAgICAgYXdhaXQgZGIuY2xvc2UoKTsKICAgIH0sCiAgfTsKfQo=
+import { readFile } from "node:fs/promises";
+import { PGlite } from "@electric-sql/pglite";
+import type { Pool } from "pg";
+import type { WorkOsAccess } from "../../src/lib/work-os-api";
+
+export const org = "10000000-0000-4000-8000-000000000001";
+export const otherOrg = "10000000-0000-4000-8000-000000000002";
+export const adminUser = "40000000-0000-4000-8000-000000000011";
+export const adminMembership = "50000000-0000-4000-8000-000000000001";
+export const otherAdminMembership = "50000000-0000-4000-8000-000000000003";
+export const personA = "20000000-0000-4000-8000-000000000001";
+export const personB = "20000000-0000-4000-8000-000000000002";
+export const personC = "20000000-0000-4000-8000-000000000003";
+export const otherPerson = "20000000-0000-4000-8000-000000000004";
+export const intervalA = "30000000-0000-4000-8000-000000000001";
+export const intervalB = "30000000-0000-4000-8000-000000000002";
+
+const admin = (organizationId: string, membershipId: string, userId: string) => ({
+  organizationId, personId: null, membershipId, role: "admin",
+  ctx: { user: { id: userId }, profile: { id: userId } },
+  featureFlags: { employee_companion: true }, organizationOwnerId: null,
+}) as unknown as WorkOsAccess;
+
+export const adminAccess = admin(org, adminMembership, adminUser);
+export const otherOrgAdminAccess = admin(otherOrg, otherAdminMembership, "40000000-0000-4000-8000-000000000013");
+
+export const prerequisites = `
+create table work_organizations (
+  id uuid primary key,
+  feature_flags jsonb not null default '{"employee_companion":true}'::jsonb
+);
+create table work_org_members (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  user_id uuid not null,
+  person_id uuid,
+  role text not null check (role in ('employee','manager','admin')),
+  feature_flags jsonb not null default '{}'::jsonb,
+  active boolean not null default true,
+  ui_state jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, user_id)
+);
+create table work_people (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  user_id uuid not null,
+  display_name text not null,
+  active boolean not null default true,
+  nifty_member_id text,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index work_people_org_id_key on work_people (organization_id, id);
+create table work_employee_onboarding (
+  organization_id uuid not null,
+  person_id uuid not null,
+  timezone text,
+  primary key (organization_id, person_id)
+);
+create table work_tasks (
+  id uuid primary key,
+  user_id uuid not null,
+  organization_id uuid not null references work_organizations(id),
+  provider text not null default 'nifty',
+  provider_task_id text not null default '',
+  provider_project_id text,
+  project_id uuid,
+  title text not null,
+  description text,
+  status text not null default 'open',
+  completed boolean not null default false,
+  assignee_provider_ids text[] not null default '{}'::text[],
+  assignee_person_ids uuid[] not null default '{}'::uuid[],
+  due_date date,
+  start_date date,
+  completed_at timestamptz,
+  assigned_by_person_id uuid,
+  parent_task_id uuid,
+  parent_provider_task_id text,
+  provider_created_at timestamptz,
+  provider_updated_at timestamptz,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- The admin task page joins these tables in the same snapshot as its task rows.
+create table work_projects (
+  id uuid primary key,
+  user_id uuid not null,
+  organization_id uuid not null references work_organizations(id),
+  name text not null
+);
+create table work_evidence (
+  id uuid primary key,
+  user_id uuid not null,
+  organization_id uuid not null references work_organizations(id),
+  task_id uuid references work_tasks(id),
+  source text not null,
+  title text not null,
+  evidence_date date not null default current_date
+);
+create table work_check_ins (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid not null,
+  kind text not null default 'catch_up',
+  input_text text not null default '',
+  substantive boolean not null default false,
+  occurred_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create table work_reports (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid not null,
+  report_date date not null,
+  kind text not null default 'eod',
+  status text not null default 'draft',
+  title text not null default '',
+  markdown text not null default '',
+  submitted_markdown text,
+  submitted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table work_sessions (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid not null,
+  shift_date date not null,
+  state text not null default 'scheduled',
+  timezone text not null default 'UTC',
+  scheduled_starts_at timestamptz,
+  scheduled_ends_at timestamptz,
+  clocked_in_at timestamptz,
+  clocked_out_at timestamptz,
+  paused_seconds integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table work_task_day_events (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid,
+  task_id uuid not null,
+  provider text not null default 'nifty',
+  provider_task_id text not null default '',
+  local_date date not null,
+  event_type text not null,
+  provenance text not null default 'employee_explicit',
+  exact_at timestamptz,
+  observed_at timestamptz not null default now(),
+  task_snapshot jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  idempotency_key text not null,
+  created_at timestamptz not null default now(),
+  unique (organization_id, idempotency_key)
+);
+create table work_activity_intervals (
+  id uuid primary key,
+  organization_id uuid not null references work_organizations(id),
+  person_id uuid not null references work_people(id),
+  generation_status text default 'ready',
+  review_status text default 'inferred',
+  headline text,
+  ai_detail text,
+  final_detail text,
+  employee_feedback text,
+  structured_summary jsonb default '{}'::jsonb,
+  coverage jsonb default '{}'::jsonb,
+  source_hash text,
+  revision int default 1,
+  local_date text default '2026-10-21',
+  prompt_kind text default 'hourly_fallback',
+  failure_reason text,
+  evidence_expired_at timestamptz,
+  window_start timestamptz,
+  window_end timestamptz,
+  timezone text default 'UTC',
+  generated_at timestamptz,
+  reviewed_at timestamptz,
+  updated_at timestamptz,
+  next_steps_status text default 'not_requested'
+);
+create unique index work_activity_intervals_org_person_id_key
+  on work_activity_intervals (organization_id, person_id, id);
+create table work_audit_log (
+  id bigint generated always as identity primary key,
+  organization_id uuid not null references work_organizations(id),
+  actor_user_id uuid,
+  action text not null,
+  target_type text not null,
+  target_id text,
+  metadata jsonb default '{}'
+);
+create table work_activity_interval_evidence (
+  interval_id uuid not null,
+  screenshot_summary_id uuid,
+  captured_at timestamptz,
+  ordinal int,
+  used_in_model boolean,
+  raw_image_shown boolean,
+  selection_reason text,
+  visible_app_snapshot text,
+  frame_summary_snapshot text
+);
+create table work_screenshot_summaries (
+  id uuid primary key,
+  storage_path text,
+  expires_at timestamptz,
+  deleted_at timestamptz
+);
+insert into work_organizations (id) values ('${org}'), ('${otherOrg}');
+insert into work_org_members (id, organization_id, user_id, role, feature_flags, active) values
+  ('${adminMembership}', '${org}', '${adminUser}', 'admin', '{}', true),
+  ('${otherAdminMembership}', '${otherOrg}', '40000000-0000-4000-8000-000000000013', 'admin', '{}', true);
+`;
+
+export const migration = async () => (await Promise.all([
+  readFile(new URL("../../supabase/migrations/0065_work_admin_otto.sql", import.meta.url), "utf8"),
+  readFile(new URL("../../supabase/migrations/0072_work_admin_otto_workflows.sql", import.meta.url), "utf8"),
+  readFile(new URL("../../supabase/migrations/0079_work_payroll_recap_provenance.sql", import.meta.url), "utf8"),
+])).join("\n");
+
+export async function fixture() {
+  const db = new PGlite();
+  await db.exec(prerequisites);
+  await db.exec(await migration());
+  globalThis.__workOsPgPool = {
+    query: (sql: string, values?: unknown[]) => db.query(sql, values),
+    connect: async () => ({ query: (sql: string, values?: unknown[]) => db.query(sql, values), release: () => undefined }),
+  } as unknown as Pool;
+  return {
+    db,
+    close: async () => {
+      globalThis.__workOsPgPool = undefined;
+      await db.close();
+    },
+  };
+}
