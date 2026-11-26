@@ -313,20 +313,16 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     ? personResult.data.nifty_member_id.trim() || null
     : personResult.data?.nifty_member_id as string | null | undefined;
   if (opts.order === "created_desc" && opts.organizationId && opts.includeLedgerHistory === true &&
-    !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false) {
+    !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false &&
+    !opts.taskIds && !opts.rawCreatedBy && !opts.rawSubscriber && !opts.providerAssignee && !opts.assignedByPersonId) {
     const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
-    const { rows: page } = await getPool().query<{ id: string; delegated_only: boolean }>(adminPersonTaskPageSql, [
+    const { rows: page } = await getPool().query<Record<string, any> & { delegated_only: boolean }>(adminPersonTaskPageSql, [
       opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit,
     ]);
-    if (!page.length) return [];
-    const tasks = await listTasks(userId, { ...opts, offset: 0, limit, taskIds: page.map(({ id }) => id) });
-    const byId = new Map((tasks ?? []).map((task) => [String(task.id), task]));
-    // Mapping in page order also keeps the results stable if hydration omits
-    // a row that changed between the two reads.
-    const selected = page.flatMap(({ id, delegated_only }) => {
-      const task = byId.get(id);
-      return task ? [delegated_only ? { ...task, attribution: "assigned_by" } : task] : [];
-    });
+    // Membership and base task details come from the same statement snapshot.
+    // The remaining hydration only decorates rows, so it can't shorten a page.
+    const selected = page.map(({ delegated_only, ...task }) =>
+      delegated_only ? { ...task, attribution: "assigned_by" } : task);
     return hydratePersonTaskPage(userId, selected, opts.organizationId);
   }
   // The Tasks workspace's All / Completed history is the only paginated path

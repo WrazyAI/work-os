@@ -22,9 +22,24 @@ WITH person AS (
     AND t.status NOT IN ('archived', 'deleted')
     AND ($4::boolean IS NULL OR t.completed = $4)
     AND ($5::uuid IS NULL OR t.project_id = $5)
+), page AS (
+  SELECT id, created_at, NOT directly_attributed AS delegated_only
+  FROM candidates WHERE directly_attributed OR delegated
+  ORDER BY created_at DESC, id ASC
+  OFFSET $6 LIMIT $7
+), page_evidence AS (
+  SELECT e.task_id, jsonb_agg(jsonb_build_object(
+    'id', e.id, 'source', e.source, 'title', e.title, 'evidence_date', e.evidence_date
+  ) ORDER BY e.id) AS evidence
+  FROM work_evidence e JOIN page ON page.id = e.task_id
+  WHERE e.organization_id = $1 AND e.user_id = $2
+  GROUP BY e.task_id
 )
-SELECT id, NOT directly_attributed AS delegated_only
-FROM candidates WHERE directly_attributed OR delegated
-ORDER BY created_at DESC, id ASC
-OFFSET $6 LIMIT $7
+SELECT t.*, page.delegated_only, to_jsonb(p) AS project,
+  COALESCE(page_evidence.evidence, '[]'::jsonb) AS evidence
+FROM page JOIN work_tasks t ON t.id = page.id
+LEFT JOIN work_projects p ON p.id = t.project_id
+  AND p.organization_id = t.organization_id AND p.user_id = t.user_id
+LEFT JOIN page_evidence ON page_evidence.task_id = t.id
+ORDER BY page.created_at DESC, page.id ASC
 `;
