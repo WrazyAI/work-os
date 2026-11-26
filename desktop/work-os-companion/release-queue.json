@@ -582,6 +582,24 @@
       "type": "fix",
       "summary": "In desktop Admin Tasks, use Show more to browse past the first 100 tasks.",
       "verification": "77 focused companion tests, including mounted retry coverage, focused TypeScript, and PostgreSQL-compatible person paging beyond 1,000 passed. Chromium checked 245 tasks at wide and narrow widths."
+    },
+    {
+      "id": "employee-tasks-live-workday",
+      "type": "fix",
+      "summary": "Employee Tasks follows the live workday after midnight or a relaunch, so the task tabs, Add task, and sorting header stay available.",
+      "verification": "Focused 51 Vitest tests passed (taskWorkspace, TasksWorkspace render, App source guards); work-os:typecheck and desktop-static passed. Rendered 1008 light/dark and 420/390 narrow with tabs, Add task and Name sort; historical navigation still behaves as designed. Companion suite 246/247 files / 2,150 tests passed with one pre-existing happy-dom environment error from the shared dependency link."
+    },
+    {
+      "id": "onboarding-specialty-required",
+      "type": "fix",
+      "summary": "Onboarding requires at least one specialty for a predefined role, so the next step always has suggestions; Something else stays exempt.",
+      "verification": "Onboarding focused node tests 31 passed and layout Vitest 8 passed; work-os:typecheck passed. Rendered all eight predefined roles: no specialty blocked with a focused inline error, one specialty advanced, and Something else advanced. Shared/server final submission enforces the same rule while drafts remain permissive."
+    },
+    {
+      "id": "onboarding-scrollbar-edge",
+      "type": "fix",
+      "summary": "The onboarding scrollbar now sits at the right edge of the window when the workspace is narrow.",
+      "verification": "Moved scrolling to a full-width phase-scroll region; measured scroller right edge 1007.98/1008 at 1008px, 1000/1000 at 1000px, and 900/900 at 900px, with the form column still inset. Narrow layout uses the document scrollbar at the edge; layout Vitest 8 passed and typecheck passed."
     }
   ],
   "emergency": null,
