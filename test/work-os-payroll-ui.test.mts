@@ -71,13 +71,29 @@ test("attention findings stay actionable on a ready review and expose linked fra
     citations: [], frameSummaryIds: ["90000000-0000-4000-8000-000000000010"],
   };
   const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, findings: [finding], onDecide: async () => {} }));
-  assert.match(markup, /Keep payable/);
-  assert.match(markup, /Exclude time/);
+  assert.match(markup, />Approve</);
+  assert.match(markup, />Reject</);
   assert.match(markup, /1 frame/);
   assert.ok(markup.indexOf("Needs attention") < markup.indexOf("Excluded by rule"), "decisions come before the excluded ledger");
   assert.ok(markup.indexOf("Excluded by rule") < markup.indexOf("Daily evidence"), "daily evidence follows the review queue");
   assert.ok(markup.indexOf("Daily evidence") < markup.indexOf("Weekly briefs"), "briefs are supporting context");
   assert.ok(markup.indexOf("Weekly briefs") < markup.indexOf("Apps and sites"), "apps are context after the review");
+});
+
+test("pay-affecting acknowledgement findings offer approve or reject, not a bare acknowledgement", () => {
+  const review = payrollReviewFixture();
+  const finding = {
+    id: "f-gap", key: "unverified_gap:1", scope: review.scope, dayId: "d1", date: "2026-11-04",
+    kind: "unverified_gap" as const, status: "needs_review" as const, effect: "acknowledge" as const,
+    span: { startMs: 0, endMs: 360_000 }, durationMs: 360_000, minutes: 6,
+    sourceHash: "s", blocksApproval: true, requiredAction: "acknowledge" as const,
+    reason: "Tracked time has no valid activity coverage. Approve to keep it payable, or reject to exclude it.",
+    citations: [], frameSummaryIds: ["90000000-0000-4000-8000-000000000010"],
+  };
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, findings: [finding], onDecide: async () => {} }));
+  assert.match(markup, />Approve</);
+  assert.match(markup, />Reject</);
+  assert.doesNotMatch(markup, />Acknowledge</);
 });
 
 test("a running analysis offers cancel and cannot record a decision", () => {
@@ -93,7 +109,7 @@ test("a running analysis offers cancel and cannot record a decision", () => {
   });
   const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, onCancel() {}, onDecide: async () => {} }));
   assert.match(markup, /Cancel analysis/);
-  assert.doesNotMatch(markup, /Keep payable/);
+  assert.doesNotMatch(markup, />Approve</);
 });
 
 test("new audit windows default to the available days in the current period", () => {

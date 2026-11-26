@@ -104,6 +104,8 @@
 .payroll-attention-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .payroll-attention-actions button{border:1px solid var(--border);border-radius:7px;min-height:30px;padding:0 9px;background:transparent;color:var(--text-secondary);font-size:10.5px;cursor:pointer;white-space:nowrap}
 .payroll-attention-actions button:hover{color:var(--text-primary);border-color:var(--text-tertiary)}
+.payroll-attention-actions .payroll-approve{font-weight:650;color:var(--payroll-green)}
+.payroll-attention-actions .payroll-reject{font-weight:650;color:var(--payroll-amber)}
 .payroll-rule{padding:14px 0;border-top:1px solid var(--border)}
 .payroll-rule:first-child{padding-top:0;border-top:0}
 .payroll-rule:last-child{padding-bottom:0}

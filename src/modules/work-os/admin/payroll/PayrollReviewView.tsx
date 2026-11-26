@@ -42,6 +42,12 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
       setDecisionNotice("The review changed while this decision was open. Close and reopen the finding to try again.");
     }
   }, [decision, onDecide]);
+  const chooseDecision = (finding: PayrollFinding, action: Decision["action"]) => {
+    setDecisionNotice(null);
+    setDecision({ finding, action });
+  };
+  const binaryDecision = (finding: PayrollFinding) => finding.requiredAction === "decide"
+    || (finding.requiredAction === "acknowledge" && (finding.minutes > 0 || finding.durationMs > 0));
   const running = review.run?.progress.status === "queued" || review.run?.progress.status === "running";
   const attention = findings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
   const excluded = findings.filter((finding) => finding.status === "auto_excluded");
@@ -154,15 +160,16 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
               <div className="payroll-finding-title"><h3>{FINDING_LABELS[finding.kind]}</h3><span className="payroll-pill" data-tone={finding.requiredAction === "correct" ? "err" : "warn"}>{label(finding.status)}</span></div>
               <p className="payroll-quiet">{fullDate(finding.date)} · {span(finding)} · {amount(finding)}</p>
               <p>{finding.reason}</p>
+              {binaryDecision(finding) ? <p className="payroll-quiet">Approve keeps this time payable; reject excludes it.</p> : null}
               <Sources citations={finding.citations} />
             </div>
             <div className="payroll-attention-actions">
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : null}
               {finding.requiredAction === "correct" ? <span className="payroll-quiet">Correct the source, then re-analyze.</span>
-                : onDecide && !busy ? (finding.requiredAction === "decide" ? <>
-                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "payable" }); }}>Keep payable</button>
-                  <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "excluded" }); }}>Exclude time</button>
-                </> : <button type="button" onClick={() => { setDecisionNotice(null); setDecision({ finding, action: "acknowledged" }); }}>Acknowledge</button>) : null}
+                : onDecide && !busy ? (binaryDecision(finding) ? <>
+                  <button type="button" className="payroll-approve" onClick={() => chooseDecision(finding, "payable")}>Approve</button>
+                  <button type="button" className="payroll-reject" onClick={() => chooseDecision(finding, "excluded")}>Reject</button>
+                </> : <button type="button" onClick={() => chooseDecision(finding, "acknowledged")}>Acknowledge</button>) : null}
             </div>
           </section>)}</div>
         </section> : null}
@@ -263,12 +270,15 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
   const [error, setError] = useState<string | null>(null);
   const [urls, setUrls] = useState<string[]>([]);
   useEffect(() => () => { urls.forEach((url) => URL.revokeObjectURL(url)); }, [urls]);
-  const load = async () => {
-    if (!reason.trim() || busy) return;
+  const count = finding.frameSummaryIds?.length ?? 0;
+  const load = async (value = reason) => {
+    const trimmed = value.trim();
+    if (!trimmed || busy) return;
+    setReason(trimmed);
     setBusy(true); setError(null);
     const next: string[] = [];
     try {
-      for (const summaryId of finding.frameSummaryIds ?? []) next.push(URL.createObjectURL(await payrollApi.previewFrame(review.id, finding.key, summaryId, reason.trim())));
+      for (const summaryId of finding.frameSummaryIds ?? []) next.push(URL.createObjectURL(await payrollApi.previewFrame(review.id, finding.key, summaryId, trimmed)));
       setUrls(next);
     } catch (issue) {
       next.forEach((url) => URL.revokeObjectURL(url));
@@ -277,15 +287,19 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
     } finally { setBusy(false); }
   };
   return <>
-    <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{(finding.frameSummaryIds?.length ?? 0)} {(finding.frameSummaryIds?.length ?? 0) === 1 ? "frame" : "frames"}</button>
+    <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{count} {count === 1 ? "frame" : "frames"}</button>
     {open ? <div className="payroll-overlay" role="dialog" aria-modal="true" aria-label="Evidence frames" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="payroll-dialog">
         <div className="payroll-dialog-head"><h3>Evidence · {FINDING_LABELS[finding.kind]}</h3><button type="button" onClick={() => setOpen(false)}>Close</button></div>
         <p className="payroll-quiet">{fullDate(finding.date)}. These frames were captured on the same day as this finding. Access is recorded and limited to reviewable payroll evidence.</p>
-        {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
-        <label className="payroll-field"><span>Reason</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
+        <p className="payroll-quiet">Enter a reason to unlock the frames. The reason is written to the access log.</p>
+        <label className="payroll-field"><span>Reason (required)</span><input autoFocus value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
+        <div className="payroll-actions">
+          <button type="button" className="primary" disabled={busy || !reason.trim()} onClick={() => void load()}>{busy ? "Opening…" : urls.length ? "Reload frames" : `View ${count} ${count === 1 ? "frame" : "frames"}`}</button>
+          <button type="button" className="payroll-link" disabled={busy} onClick={() => void load("Reviewing payroll evidence")}>Use “Reviewing payroll evidence”</button>
+        </div>
         {error ? <p className="payroll-blocker">{error}</p> : null}
-        <div className="payroll-actions"><button type="button" disabled={busy || !reason.trim()} onClick={() => void load()}>{busy ? "Opening…" : urls.length ? "Reload frames" : "Open frames"}</button></div>
+        {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
       </div>
     </div> : null}
   </>;
@@ -296,17 +310,26 @@ function DecisionDialog({ decision, busy, onClose, onConfirm }: {
 }) {
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const title = decision.action === "payable" ? "Keep payable" : decision.action === "excluded" ? "Exclude time" : "Acknowledge finding";
+  const title = decision.action === "payable" ? "Approve finding" : decision.action === "excluded" ? "Reject finding" : "Acknowledge finding";
+  const confirm = decision.action === "payable" ? "Approve" : decision.action === "excluded" ? "Reject" : "Acknowledge";
+  const hasAmount = decision.finding.minutes > 0 || decision.finding.durationMs > 0;
+  const amount = decision.finding.minutes === 0 && decision.finding.durationMs > 0 ? "under 1 minute" : hours(decision.finding.minutes);
+  const consequence = decision.action === "payable"
+    ? (hasAmount ? `Approving keeps ${amount} payable.` : "Approving records your review without changing payable hours.")
+    : decision.action === "excluded"
+      ? (hasAmount ? `Rejecting removes ${amount} from payable hours.` : "Rejecting records your review without changing payable hours.")
+      : "Acknowledging records your review without changing payable hours.";
   return <div className="payroll-overlay" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="payroll-dialog">
       <div className="payroll-dialog-head"><h3>{title}</h3><button type="button" onClick={onClose}>Cancel</button></div>
       <p>{decision.finding.reason}</p>
-      <label className="payroll-field"><span>Reason</span><input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} /></label>
+      <p className="payroll-quiet">{consequence}</p>
+      <label className="payroll-field"><span>Reason (required)</span><input autoFocus value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} /></label>
       {error ? <p className="payroll-blocker">{error}</p> : null}
       <div className="payroll-actions"><button type="button" className="primary" disabled={busy || !note.trim()} onClick={() => {
         setError(null);
         void onConfirm(note.trim()).catch((issue: Error) => setError(issue.message));
-      }}>{busy ? "Saving…" : title}</button></div>
+      }}>{busy ? "Saving…" : confirm}</button></div>
     </div>
   </div>;
 }

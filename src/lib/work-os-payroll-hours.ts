@@ -177,7 +177,7 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   if (input.pauseResidualMs > 0) {
     const key = nextKey("break_mismatch", null);
     findings.push(finding(input, key, "break_mismatch", "needs_review", "acknowledge", null, input.pauseResidualMs,
-      "An unlocated provider/manual break residual cannot be placed on the timeline; reconcile it before approval.", true, "acknowledge"));
+      "An unlocated provider/manual break residual cannot be placed on the timeline. Approve to keep the remaining pay, or reject to exclude the residual.", true, "acknowledge"));
   }
   const blockers = [...new Set([...input.blockers, ...derivedBlockers])];
 
@@ -264,13 +264,13 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
     const key = nextKey("unverified_gap", span);
     parts = tagZone(parts, span, key, (part) => part.findingKey === null);
     findings.push(finding(input, key, "unverified_gap", "needs_review", "acknowledge", span, gapMs,
-      "Tracked time has no valid activity coverage; it stays payable and requires acknowledgement.", true, "acknowledge"));
+      "Tracked time has no valid activity coverage. Approve to keep it payable, or reject to exclude it.", true, "acknowledge"));
   }
   const trackedMs = duration(tracked);
   if (gapTotal > 0 && (gapTotal / Math.max(1, trackedMs) > LOW_EVIDENCE_RATIO || gapSpans.some((span) => span.endMs - span.startMs > LOW_EVIDENCE_CONTINUOUS_MS))) {
     const key = nextKey("low_evidence", null);
     findings.push(finding(input, key, "low_evidence", "needs_review", "acknowledge", null, gapTotal,
-      "More than 20% of tracked time is unverified, or a single gap exceeds 30 minutes.", true, "acknowledge"));
+      "More than 20% of tracked time is unverified, or a single gap exceeds 30 minutes. Approve to keep it payable, or reject to exclude it.", true, "acknowledge"));
   }
 
   for (const span of outside) {
