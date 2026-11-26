@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Archive, ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Clock3, ListChecks, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { apiRequestBlob } from "../api";
 import { TaskEvidenceList } from "../CompletionEvidence";
@@ -18,7 +18,6 @@ import {
   fetchPeople,
   fetchProjects,
   normalizeAdminTaskDetails,
-  normalizeAdminTaskList,
   normalizePeople,
   normalizeProjects,
   relativeTime,
@@ -395,13 +394,26 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
   // The stated day drives both the server's exact overdue count and the rows'
   // effective-due status, so the summary and the pills cannot disagree.
   const today = todayIso();
-  const taskFilters: Record<string, string> = { filter, personId, projectId, limit: "200", completed: completedParam, date: today };
-  const tasks = useQuery({
+  const taskFilters: Record<string, string> = { filter, personId, projectId, limit: "100", completed: completedParam, date: today };
+  const tasks = useInfiniteQuery({
     queryKey: adminKeys.tasks(taskFilters),
-    queryFn: () => fetchAdminTasks(taskFilters),
-    select: normalizeAdminTaskList,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => fetchAdminTasks({ ...taskFilters, offset: String(pageParam) }),
+    getNextPageParam: (page, _pages, offset) =>
+      page.nextOffset !== null && page.nextOffset > offset ? page.nextOffset : undefined,
     staleTime: 30_000,
   });
+  const loadedTasks = useMemo(() => {
+    // An insert during offset paging can move a row across the page boundary.
+    const byId = new Map<string, AdminTaskRow>();
+    for (const page of tasks.data?.pages ?? []) {
+      for (const task of page.tasks) {
+        const id = String(task.id);
+        if (!byId.has(id)) byId.set(id, task);
+      }
+    }
+    return [...byId.values()];
+  }, [tasks.data]);
   const detail = useQuery({
     queryKey: adminKeys.taskDetails(selectedId ?? ""),
     queryFn: () => fetchAdminTaskDetails(selectedId!),
@@ -416,7 +428,7 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
     if (taskId) void queryClient.invalidateQueries({ queryKey: adminKeys.taskDetails(taskId) });
   };
   const rowTitle = (taskId: string) => {
-    const row = (tasks.data?.tasks ?? []).find((entry) => String(entry.id) === taskId);
+    const row = loadedTasks.find((entry) => String(entry.id) === taskId);
     const open = detail.data?.task;
     return taskTitle(row ?? (String(open?.id) === taskId ? open : null), "The task");
   };
@@ -543,15 +555,14 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
     const needle = search.trim().toLowerCase();
     // The record returns assignee ids; resolve them against the roster so the
     // cell and its sort see the same names the employee lists do.
-    const list = attachAdminAssigneeNames(tasks.data?.tasks ?? [], people.data?.people ?? []);
+    const list = attachAdminAssigneeNames(loadedTasks, people.data?.people ?? []);
     if (!needle) return list;
     return list.filter((task) => [task.name, task.title, task.project?.name].some((value) => String(value ?? "").toLowerCase().includes(needle)));
-  }, [tasks.data, search, people.data]);
-  // No column active means the record's default order — newest created first,
-  // updated as the tiebreak; client-side sorting is honest here because the
-  // page holds the full normalized list.
+  }, [loadedTasks, search, people.data]);
+  // Column sorting and text search apply to the loaded pages, including any
+  // rows added by Show more. The server pages in its default recency order.
   const sortedRows = useMemo(() => sortTaskRows(rows, sort, today), [rows, sort, today]);
-  const summary = tasks.data?.summary;
+  const summary = tasks.data?.pages[0]?.summary;
   const drawerTask = detail.data?.task ?? null;
   const drawerEvidence = drawerTask?.completion_evidence ?? [];
   // The drawer and the row menu read the same derived status record, so an
@@ -641,8 +652,8 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
       >
         {tasks.isLoading ? (
           <div className="admin-card-body is-padded"><div className="admin-grid"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div></div>
-        ) : tasks.error ? (
-          <div className="admin-card-body is-padded"><Notice tone="err">{(tasks.error as Error).message}</Notice></div>
+        ) : tasks.isLoadingError ? (
+          <div className="admin-card-body is-padded"><Notice tone="err" action={<AdminButton onClick={() => void tasks.refetch()}>Retry</AdminButton>}>Couldn’t load tasks.</Notice></div>
         ) : rows.length ? (
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -740,8 +751,25 @@ export default function TasksPage({ initialTaskId, initialPersonId, initialFilte
             </table>
           </div>
         ) : (
-          <div className="admin-card-body is-padded"><p className="admin-empty-note">No tasks match these filters.</p></div>
+          <div className="admin-card-body is-padded"><p className="admin-empty-note">{tasks.hasNextPage && search.trim() ? "No matches in loaded tasks." : "No tasks match these filters."}</p></div>
         )}
+        {tasks.data ? (
+          <div className="admin-card-body is-padded">
+            <div className="admin-inline-fields">
+              <span className="admin-quiet" role="status">
+                {loadedTasks.length} {loadedTasks.length === 1 ? "task" : "tasks"} loaded.
+                {tasks.hasNextPage ? " Search and sorting apply to loaded tasks." : ""}
+              </span>
+              {tasks.hasNextPage ? (
+                <AdminButton disabled={tasks.isFetching} onClick={() => void tasks.fetchNextPage({ cancelRefetch: false })}>
+                  {tasks.isFetchingNextPage ? "Loading…" : tasks.isFetchNextPageError ? "Retry" : "Show more"}
+                </AdminButton>
+              ) : null}
+            </div>
+            {tasks.isFetchNextPageError ? <Notice tone="err">Couldn’t load more tasks.</Notice> : null}
+            {tasks.isRefetchError ? <Notice tone="warn" action={<AdminButton disabled={tasks.isFetching} onClick={() => void tasks.refetch()}>Refresh</AdminButton>}>Couldn’t refresh the loaded tasks.</Notice> : null}
+          </div>
+        ) : null}
       </AdminCard>
 
       {complete.error ? <Notice tone="err">{(complete.error as Error).message}</Notice> : null}

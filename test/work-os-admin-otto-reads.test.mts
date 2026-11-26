@@ -7,6 +7,8 @@ import test from "node:test";
 import ts from "typescript";
 import type { PGlite } from "@electric-sql/pglite";
 import * as taskFinder from "../src/modules/work-os/task-finder.ts";
+import * as pool from "../src/lib/db/pool.ts";
+import * as adminTaskPagination from "../src/lib/work-os-admin-task-pagination.ts";
 import {
   adminAccess, adminUser, fixture, intervalA, intervalB, org, otherOrg, otherOrgAdminAccess,
   otherPerson, personA, personB, personC,
@@ -38,8 +40,8 @@ async function seedPerson(db: Db, input: {
   id: string; name: string; timezone?: string; active?: boolean; nifty?: string | null; organizationId?: string;
 }) {
   const organizationId = input.organizationId ?? org;
-  await db.query(`insert into work_people (id, organization_id, display_name, active, nifty_member_id)
-    values ($1,$2,$3,$4,$5)`, [input.id, organizationId, input.name, input.active ?? true, input.nifty ?? null]);
+  await db.query(`insert into work_people (id, organization_id, user_id, display_name, active, nifty_member_id)
+    values ($1,$2,$3,$4,$5,$6)`, [input.id, organizationId, adminUser, input.name, input.active ?? true, input.nifty ?? null]);
   await db.query(`insert into work_employee_onboarding (organization_id, person_id, timezone)
     values ($1,$2,$3)`, [organizationId, input.id, input.timezone ?? "UTC"]);
 }
@@ -969,8 +971,8 @@ test("amended_reviewed_records_keep_labelled_correction", async () => {
 
 // ---------------------------------------------------------------------------
 // General task service parity: execute listTasks/listPersonTasks against a
-// focused query fake that records every filter, then compare with the real
-// PGlite organization-qualified count.
+// focused query fake that records every filter. Admin person pagination and
+// the organization-qualified count both execute production SQL in PGlite.
 
 function loadTaskService(rows: Array<Record<string, any>>, people: Array<Record<string, any>>) {
   const calls: Array<{ table: string; filters: Array<[string, unknown]> }> = [];
@@ -1035,6 +1037,8 @@ function loadTaskService(rows: Array<Record<string, any>>, people: Array<Record<
   }
   const db = () => ({ from: query, rpc: async () => [] });
   const stubs: Record<string, unknown> = {
+    "@/lib/db/pool": pool,
+    "@/lib/work-os-admin-task-pagination": adminTaskPagination,
     "@/lib/work-os-internal": {
       db,
       ensureNoError: async (promise: Promise<{ data: unknown; error: unknown }>, label: string) => {

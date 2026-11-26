@@ -576,6 +576,12 @@
       "type": "fix",
       "summary": "Clocking out before the daily target now confirms Worktivity's early Clock out prompt in the same action, so you only click Clock out once.",
       "verification": "Extracted the controller's exact action expression and ran it against live Worktivity 2.6.7 with a synthetic early-clock-out modal: both the already-open modal and active-page-to-modal flows returned clicked and confirmed the modal button. Companion suite 245 files / 2,145 tests passed; work-os:typecheck and desktop-static checks passed; live Worktivity clock-out showed Not clocked in after confirmation."
+    },
+    {
+      "id": "desktop-admin-task-pagination",
+      "type": "fix",
+      "summary": "In desktop Admin Tasks, use Show more to browse past the first 100 tasks.",
+      "verification": "77 focused companion tests, including mounted retry coverage, focused TypeScript, and PostgreSQL-compatible person paging beyond 1,000 passed. Chromium checked 245 tasks at wide and narrow widths."
     }
   ],
   "emergency": null,

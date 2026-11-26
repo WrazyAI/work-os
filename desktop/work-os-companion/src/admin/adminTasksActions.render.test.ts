@@ -7,14 +7,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
 import { NotificationProvider } from "../NotificationFlyouts";
-import { seedAdminFixtures } from "./adminFixtures";
+import { seedAdminFixtures, seedAdminTaskPage } from "./adminFixtures";
 import { adminKeys, isoDaysAgo, shortDate, todayIso, type AdminTaskRow } from "./data";
 import TasksPage, { AdminTaskMenuItems, adminTaskEditPatch, adminTaskStatusRecord } from "./TasksPage";
 
 const noop = () => undefined;
 const TODAY = todayIso();
 const ADMIN = { role: "admin" as const, personId: "p-1" };
-const OPEN_FILTERS = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
 const EMPTY_FORM = { name: "", description: "", dueDate: "", priority: "", assignee: "" };
 const tasksPageSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "TasksPage.tsx"), "utf8");
 
@@ -87,7 +86,7 @@ function multiAssigneeRow(overrides: Record<string, unknown> = {}): AdminTaskRow
 
 /** Seed the open record and one detail so a single-row page can render. */
 function seedSingleRow(client: QueryClient, row: AdminTaskRow) {
-  client.setQueryData(adminKeys.tasks(OPEN_FILTERS), { tasks: [row], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } });
+  seedAdminTaskPage(client, { tasks: [row], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } }, TODAY);
   client.setQueryData(adminKeys.taskDetails(String(row.id)), { task: row, subtasks: [] });
 }
 
@@ -275,7 +274,7 @@ describe("administration effective due date", () => {
   it("locks the row menu and the drawer on that same effective date", () => {
     const row = rowWithDerivedOnly();
     const markup = renderWith("dense", { initialTaskId: "t-late" }, (client) => {
-      client.setQueryData(adminKeys.tasks(OPEN_FILTERS), { tasks: [row], nextOffset: null, summary: { open: 1, overdue: 1, completedWeek: 0 } });
+      seedAdminTaskPage(client, { tasks: [row], nextOffset: null, summary: { open: 1, overdue: 1, completedWeek: 0 } }, TODAY);
       client.setQueryData(adminKeys.taskDetails("t-late"), { task: row, subtasks: [] });
     });
     // The row reads Overdue from the effective date.

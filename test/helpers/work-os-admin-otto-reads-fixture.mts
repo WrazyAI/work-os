@@ -45,6 +45,7 @@ create table work_org_members (
 create table work_people (
   id uuid primary key,
   organization_id uuid not null references work_organizations(id),
+  user_id uuid not null,
   display_name text not null,
   active boolean not null default true,
   nifty_member_id text,

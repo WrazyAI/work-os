@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { NotificationProvider } from "../NotificationFlyouts";
-import { seedAdminFixtures } from "./adminFixtures";
+import { seedAdminFixtures, seedAdminTaskPage } from "./adminFixtures";
 import { adminKeys, todayIso } from "./data";
 import TasksPage from "./TasksPage";
 import { taskCapabilities } from "@wrazy/work-os-shared/task-permissions";
@@ -52,10 +52,7 @@ function renderTaskWithEvidence() {
     completion_evidence: evidence,
   };
   const withCaps = { ...task, capabilities: taskCapabilities(task, { role: "admin", personId: "p-1" }, today) };
-  client.setQueryData(
-    adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }),
-    { tasks: [withCaps], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } },
-  );
+  seedAdminTaskPage(client, { tasks: [withCaps], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } }, today);
   client.setQueryData(adminKeys.taskDetails("t-attach"), { task: withCaps, subtasks: [] });
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client },
@@ -80,10 +77,7 @@ function renderTaskWithGhl() {
     updated_at: `${today}T08:00:00.000Z`,
   };
   const withCaps = { ...task, capabilities: taskCapabilities(task, { role: "admin", personId: "p-1" }, today) };
-  client.setQueryData(
-    adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: today }),
-    { tasks: [withCaps], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } },
-  );
+  seedAdminTaskPage(client, { tasks: [withCaps], nextOffset: null, summary: { open: 1, overdue: 0, completedWeek: 0 } }, today);
   client.setQueryData(adminKeys.taskDetails("t-ghl"), {
     task: withCaps,
     subtasks: [],

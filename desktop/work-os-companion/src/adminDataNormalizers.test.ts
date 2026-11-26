@@ -326,7 +326,7 @@ describe("administration response normalizers", () => {
 describe("preview fixture states", () => {
   const evidenceFilters = { personId: "", unattributed: "", source: "", from: isoDaysAgo(13), to: todayIso(), correction: "", q: "", kind: "all", summary: "1", limit: "500" };
   const reportFilters = { status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() };
-  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false", date: todayIso() };
+  const taskFilters = { filter: "open", personId: "", projectId: "", limit: "100", completed: "false", date: todayIso() };
 
   it("seeds every section for dense and sparse, and insights for empty", () => {
     const keys = [
@@ -370,7 +370,7 @@ describe("preview fixture states", () => {
       normalizeEvidence(client.getQueryData(adminKeys.reportEvidence("p-2", todayIso()))),
       normalizeIntervals(client.getQueryData(adminKeys.intervals({ personId: "", from: isoDaysAgo(13), to: todayIso(), limit: "60" }))),
       normalizeIntervals(client.getQueryData(adminKeys.reportIntervals("p-2", todayIso()))),
-      normalizeAdminTaskList(client.getQueryData(adminKeys.tasks(taskFilters))),
+      normalizeAdminTaskList(client.getQueryData<{ pages: unknown[] }>(adminKeys.tasks(taskFilters))?.pages[0]),
       normalizeAdminTaskDetails(client.getQueryData(adminKeys.taskDetails("t-s1"))),
       normalizeProjects(client.getQueryData(adminKeys.projects())),
       normalizeOrganization(client.getQueryData(adminKeys.organization())),
