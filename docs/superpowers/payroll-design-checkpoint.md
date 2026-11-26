@@ -104,9 +104,8 @@ Verification:
   **247 files / 2,152 tests** pass. The preview harness rendered at 1558px and
   375px with actionable findings, frame buttons, the partial-window default,
   and the reordered surface.
-- Full Work OS suite on the pre-CodeRabbit-fix commit: **1,694 tests / 1,678
-  passed / 0 failed / 16 skipped**; a final run on `c2201ad2` is the remaining
-  gate.
+- Final full Work OS suite: **1,696 tests / 1,680 passed / 0 failed / 16
+  opt-in PostgreSQL skips**. Work OS PR **#233** carries the batch.
 - CodeRabbit review completed with 14 findings. Fixed: window-aware candidate
   rosters and request keys, unmatched review IDs, explicit custom windows with
   no stored review, missing-vs-policy frame labels, cancel/publication fencing,
