@@ -1670,7 +1670,11 @@
 @media (max-width: 720px) {
   .ovp {
     gap: 18px;
-    padding-bottom: 64px;
+    padding-bottom: 120px;
+  }
+
+  .ovp-switcher {
+    bottom: 68px;
   }
 
   .ovp-axis-month {
