@@ -40,7 +40,7 @@ export default async function PayrollReviewPage({ params, searchParams }: {
     WHERE p.organization_id=$1 AND p.id=$2`,
   [access.access.organizationId, personId, reviewFilter, windowKey, reviewFilter || windowKey ? null : (isPayrollPayDate(payDate) ? payDate : null)]);
   const entry = rows[0];
-  if (!entry || ((reviewFilter || windowKey) && !entry.id)) notFound();
+  if (!entry || (reviewFilter && !entry.id)) notFound();
   const chosenPayDate = entry.pay_date ?? (isPayrollPayDate(payDate) ? payDate : undefined) ?? currentPayDate();
   return <PayrollReview
     key={`${personId}:${entry.id ?? `${chosenPayDate}:${fromDate ?? ""}:${throughDate ?? ""}`}`}
