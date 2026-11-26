@@ -46,8 +46,9 @@ Coverage is provider-confirmed attendance context, never a productivity signal.
 
 **Observed time.** The stacked bar chart of session minutes per workday by
 teammate: clock-in to clock-out minus pauses. It is the workspace's observed-time
-chart, placed once here in the board. The total is the last seven workdays. Observed time is distinct from app/site tracking and evidence row
-counts, and it is never a score.
+chart, placed once here in the board. The total is the last seven workdays.
+Observed time is distinct from app/site tracking and evidence row counts, and it
+is never a score.
 
 **Today, by person.** The six most active records with status, role, and today's
 outcomes, updates, and evidence. Every row opens the person record. The section

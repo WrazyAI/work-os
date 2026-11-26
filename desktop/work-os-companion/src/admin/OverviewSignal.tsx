@@ -391,10 +391,10 @@ function Meter({ value, total }: { value: number; total: number }) {
   );
 }
 
-function Delta({ current, previous, unit = "" }: { current: number; previous: number; unit?: string }) {
+function Delta({ current, previous }: { current: number; previous: number }) {
   const delta = deltaPercent(current, previous);
   if (delta === null) return <span className="ovp-delta is-flat">no prior record</span>;
-  if (delta === 0) return <span className="ovp-delta is-flat"><Minus size={12} aria-hidden />{unit}level with prior 7</span>;
+  if (delta === 0) return <span className="ovp-delta is-flat"><Minus size={12} aria-hidden />level with prior 7</span>;
   const Icon = delta > 0 ? ArrowUpRight : ArrowDownRight;
   return (
     <span className={`ovp-delta ${delta > 0 ? "is-up" : "is-down"}`}>

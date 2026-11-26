@@ -26,7 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - In desktop Payroll, review any window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.
-- Admin Overview is now a signal board: a seven-workday pulse, a switchable trend, live coverage, and the people and decisions that need you.
+- In Admin Overview, compare the last two weeks of work, see who is on shift, and open the reports or evidence that need a decision.
 
 ## 0.5.45 — 2026-11-26
 
