@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, dayTaskGroups, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, dayTaskGroups, filterWorkspaceTasks, isOverdueTask, mergeDayTasks, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, resolveTaskHistoryDate, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -33,6 +33,17 @@ describe("unified Tasks workspace", () => {
     const next = [{ id: "real", title: "New title" }, { id: "other", title: "Other" }];
     expect(mergeDayTasks(current, next).map((task) => task.id)).toEqual(["pending-1", "real", "other"]);
     expect(mergeDayTasks([{ id: "pending-1", pending_status: "failed" }], [{ id: "pending-1", title: "Adopted" }]).map((task) => task.id)).toEqual(["pending-1"]);
+  });
+
+  it("follows the live workday unless the employee explicitly opened a historical day", () => {
+    // A cached snapshot or a midnight rollover must not pin yesterday's date:
+    // that silently lands Tasks in read-only history and hides its header.
+    expect(resolveTaskHistoryDate("2026-09-21", "2026-09-22", false)).toBe("2026-09-22");
+    expect(resolveTaskHistoryDate("2026-09-22", "2026-09-22", false)).toBe("2026-09-22");
+    // An explicit historical navigation stays put across day refreshes.
+    expect(resolveTaskHistoryDate("2026-09-21", "2026-09-22", true)).toBe("2026-09-21");
+    // Before the live workday arrives, keep whatever date is already known.
+    expect(resolveTaskHistoryDate("2026-09-21", "", false)).toBe("2026-09-21");
   });
 
   it("keeps subtasks nested beneath parent cards", () => {

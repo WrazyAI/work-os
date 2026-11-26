@@ -40,7 +40,7 @@ import type { RecapNextStepState } from "./RecapNextStepsCard";
 import { MASCOT } from "./mascot";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
-import { dayScopedTasks, isOverdueTask, mergeDayTasks, parentTasks, readTaskSort, safeTaskText, suggestDailyGoal, taskKind, unfinishedBefore, uniqueTasks, writeTaskSort, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSort } from "./taskWorkspace";
+import { dayScopedTasks, isOverdueTask, mergeDayTasks, parentTasks, readTaskSort, resolveTaskHistoryDate, safeTaskText, suggestDailyGoal, taskKind, unfinishedBefore, uniqueTasks, writeTaskSort, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { filterFinderTasks } from "./taskFinderFilters";
 import { useLatestActivityIntervalQuery } from "./workOsQueries";
 import { prefersReducedMotion, useListShift } from "./listShift";
@@ -405,6 +405,9 @@ export default function App() {
   /** Goal text handed from the dock Focus panel to the planning modal. */
   const [planningSeed, setPlanningSeed] = useState<string | null>(null);
   const [planHistoryDate, setPlanHistoryDate] = useState("");
+  // True only when the employee explicitly opened a historical Tasks day. A
+  // cached snapshot or a workday rollover must not pin the list to yesterday.
+  const taskDatePinnedRef = useRef(false);
   const [historicalPlan, setHistoricalPlan] = useState<DailyPlan | null>(null);
   const [historicalTasks, setHistoricalTasks] = useState<Array<Record<string, any>>>([]);
   const [taskView, setTaskView] = useState<TaskView>("today");
@@ -1361,7 +1364,7 @@ export default function App() {
       setPlanItems([...(plan?.items ?? [])].sort((a, b) => a.rank - b.rank));
       setPlanDirty(false); setPlanSaveState("saved");
     }
-    setPlanHistoryDate((current) => current || nextDay.shiftDate);
+    setPlanHistoryDate((current) => resolveTaskHistoryDate(current, nextDay.shiftDate, taskDatePinnedRef.current));
   }, []);
 
   useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
@@ -2587,9 +2590,10 @@ export default function App() {
     const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); setThemeSettingsLoaded(true); confirmedThemeRef.current = appearance.theme; rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
-      // paint; the live query revalidates it in the background.
+      // paint; the live query revalidates it in the background. The snapshot
+      // must not choose the Tasks date: it can describe yesterday after a
+      // rollover, and the tasks header then hides its views and Add action.
       queryClient.setQueryData(workOsKeys.day("compact"), snapshot);
-      setPlanHistoryDate(snapshot.shiftDate);
     }
     if (current) void refresh({ refreshAttendance: true, source: "vault" }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     if (!launchUpdateCheckRef.current && shouldAutoCheckUpdate({ supported: isTauri(), debugEnabled: debugRef.current.enabled, hasSession: !!current, autoCheckUpdates: settings.autoCheckUpdates })) {
@@ -2836,6 +2840,7 @@ export default function App() {
     // Restore the current workday and drop active filters — including the
     // visible search text — so the overdue section is actually visible
     // wherever the employee navigates from.
+    taskDatePinnedRef.current = false;
     setPlanHistoryDate("");
     setTaskSearch("");
     setTaskSearchQuery("");
@@ -4174,6 +4179,9 @@ export default function App() {
   function openPlanningSession() { planningAutoOpenedRef.current = false; setPlanningSeed(null); setPlanningSessionOpen(true); }
 
   async function loadPlanHistory(date: string) {
+    // Only an explicit navigation may keep the list off the live workday; the
+    // day payload then leaves that historical choice alone.
+    taskDatePinnedRef.current = !!date && date !== (visibleDay?.shiftDate ?? "");
     setPlanHistoryDate(date);
     if (syncBypassRef.current) return;
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }

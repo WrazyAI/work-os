@@ -84,6 +84,17 @@ export const TASKS_WORKSPACE_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; lab
   { key: "status", label: "Status", initialDirection: "asc" },
 ];
 
+/**
+ * The Tasks workspace follows the live workday unless the employee explicitly
+ * opened a historical day. A cached day snapshot or a midnight rollover must
+ * never leave the page silently in the read-only history state, where the view
+ * tabs and Add task are intentionally absent.
+ */
+export function resolveTaskHistoryDate(current: string, workday: string, pinned: boolean): string {
+  if (pinned && current) return current;
+  return workday || current;
+}
+
 const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
 
 /** Read a persisted task sort, migrating retired defaults to the canonical order. */
