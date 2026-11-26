@@ -138,6 +138,18 @@
 .payroll-shot-meta b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 600; }
 .payroll-frame-grid { display: grid; gap: 10px; }
 .payroll-frame-grid img { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+.payroll-frame-stage { position: relative; height: min(52vh, 520px); display: grid; place-items: center; background: #0b0f0c; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.payroll-frame-stage img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.payroll-frame-state { color: #aab3a8; font-size: 12px; padding: 20px; text-align: center; }
+.payroll-frame-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,14,10,.72); color: #fff; font-size: 20px; line-height: 1; display: grid; place-items: center; cursor: pointer; }
+.payroll-frame-nav.prev { left: 10px; }
+.payroll-frame-nav.next { right: 10px; }
+.payroll-frame-counter { position: absolute; right: 12px; bottom: 10px; padding: 3px 8px; border-radius: 999px; background: rgba(10,14,10,.72); color: #fff; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.payroll-frame-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
+.payroll-frame-thumb { width: 88px; height: 56px; padding: 0; border: 2px solid transparent; border-radius: 7px; overflow: hidden; background: #111; cursor: pointer; flex: none; opacity: .65; }
+.payroll-frame-thumb.is-current { border-color: var(--signal, #a8f15b); opacity: 1; }
+.payroll-frame-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 640px) { .payroll-frame-stage { height: min(46vh, 360px); } .payroll-frame-thumb { width: 72px; height: 46px; } }
 .payroll-askbar { position: fixed; left: 0; right: 0; bottom: 18px; z-index: 40; display: flex; justify-content: center; padding: 0 24px; pointer-events: none; }
 .payroll-askpill { pointer-events: auto; width: min(660px, 100%); min-height: 54px; border-radius: 999px; border: 1px solid var(--line-strong, var(--border)); background: var(--paper); box-shadow: 0 10px 30px rgba(0, 0, 0, .12); display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 20px; color: var(--muted); }
 .payroll-askpill > span:first-child { flex: 1; min-width: 0; font-size: 12px; }
