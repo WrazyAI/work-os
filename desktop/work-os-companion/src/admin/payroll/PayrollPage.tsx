@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
+import { currentPayrollWindowForDate, payrollPayDateForThrough, payrollStandardWindow, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
 import { formatWorkOsFullDate } from "../../dateFormat";
 import { ADMIN_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Empty, Notice, Pill, Segmented, SelectField, TextField } from "../ui";
@@ -11,14 +12,19 @@ type Tab = "records" | "audits";
 
 export function defaultPayDate() {
   const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getDate() >= 16 ? "16" : "01"}`;
+  const today = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return currentPayrollWindowForDate(today).payDate;
 }
 
 /** A retry after a transport failure must not queue a second audit. The key is
- * reused only for the same employee until the server accepts the submission;
- * changing the employee starts a fresh request. */
-export function auditRequestKey(previous: { personId: string; key: string } | null, personId: string) {
-  return previous?.personId === personId ? previous : { personId, key: crypto.randomUUID() };
+ * reused only for the same employee and the same window until the server
+ * accepts the submission; changing either starts a fresh request. */
+export function auditRequestKey(previous: { personId: string; from: string; through: string; key: string } | null, input: {
+  personId: string; from: string; through: string;
+}) {
+  return previous?.personId === input.personId && previous.from === input.from && previous.through === input.through
+    ? previous
+    : { ...input, key: crypto.randomUUID() };
 }
 
 export default function PayrollPage({ organizationId, userId }: { organizationId: string; userId: string }) {
@@ -125,25 +131,38 @@ function NewPayrollAudit({ organizationId, userId, payDate, onClose, onStarted }
   organizationId: string; userId: string; payDate: string; onClose: () => void;
   onStarted: (record: { reviewId: string; personId: string; name: string }) => void;
 }) {
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const standard = payrollStandardWindow(payDate);
   const [personId, setPersonId] = useState("");
+  const [from, setFrom] = useState(standard.from);
+  const [through, setThrough] = useState(standard.through < todayKey ? standard.through : todayKey);
   const [pages, setPages] = useState<(string | null)[]>([null]);
-  const request = useRef<{ personId: string; key: string } | null>(null);
+  const windowError = !from || !through ? "Choose a start and end date."
+    : from > through ? "The end date must not precede the start date."
+      : through > todayKey ? "The end date cannot be in the future."
+        : from > todayKey ? "The start date cannot be in the future."
+          : payrollWindowDayCount(from, through) > 31 ? "Choose a window of 31 days or fewer."
+            : null;
+  const request = useRef<{ personId: string; from: string; through: string; key: string } | null>(null);
   const cache = useQueryClient();
   const api = desktopPayroll(organizationId);
   const keys = desktopPayrollKey(organizationId, userId);
+  const effectivePayDate = /^\d{4}-\d{2}-\d{2}$/.test(through) ? payrollPayDateForThrough(through) : payDate;
   const cursor = pages.at(-1) ?? null;
   const roster = useQuery({
-    queryKey: [...keys, "candidates", payDate, cursor],
-    queryFn: ({ signal }) => api.roster(payDate, cursor, false, signal),
+    queryKey: [...keys, "candidates", effectivePayDate, cursor],
+    queryFn: ({ signal }) => api.roster(effectivePayDate, cursor, false, signal),
     staleTime: ADMIN_STALE_MS,
     retry: false,
   });
   const candidates = roster.data?.items.filter((row) => row.active && row.mapped && row.status !== "approved") ?? [];
   const selected = candidates.find((person) => personId === person.personId);
+  useEffect(() => { setPages([null]); setPersonId(""); }, [effectivePayDate]);
   const start = useMutation({
     mutationFn: async (person: { personId: string; displayName: string }) => {
-      request.current = auditRequestKey(request.current, person.personId);
-      const run = await api.start({ personId: person.personId, payDate, requestKey: request.current.key });
+      request.current = auditRequestKey(request.current, { personId: person.personId, from, through });
+      const run = await api.start({ personId: person.personId, payDate: effectivePayDate, from, through, requestKey: request.current.key });
       return { reviewId: run.reviewId, personId: person.personId, name: person.displayName };
     },
     onSuccess: (record) => {
@@ -153,21 +172,27 @@ function NewPayrollAudit({ organizationId, userId, payDate, onClose, onStarted }
     },
   });
   return (
-    <Drawer open onClose={() => { if (!start.isPending) onClose(); }} title="New audit" subtitle={`Pay date ${formatWorkOsFullDate(payDate)}`}
+    <Drawer open onClose={() => { if (!start.isPending) onClose(); }} title="New audit" subtitle={through ? `Pay date ${formatWorkOsFullDate(effectivePayDate)}` : "Choose a review window"}
       footer={<>
         <AdminButton onClick={onClose} disabled={start.isPending}>Cancel</AdminButton>
-        <AdminButton variant="primary" disabled={!selected || start.isPending} onClick={() => { if (selected) start.mutate(selected); }}>
-          {start.isPending ? "Queueing audit…" : "Run audit"}
+        <AdminButton variant="primary" disabled={!selected || start.isPending || Boolean(windowError)} onClick={() => { if (selected) start.mutate(selected); }}>
+          {start.isPending ? "Starting audit…" : "Run audit"}
         </AdminButton>
       </>}>
       <div className="admin-grid">
-        <p className="admin-quiet">Review evidence for this pay period. Running an audit does not approve hours.</p>
+        <p className="admin-quiet">Choose the window to review. It defaults to this pay period through today when the period is incomplete. Running an audit does not approve hours.</p>
         {roster.isPending ? <p role="status">Loading eligible employees…</p> : null}
         {roster.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void roster.refetch()}>Retry</AdminButton>}>{roster.error.message}</Notice> : null}
         {roster.data && !candidates.length ? <Empty title="No eligible employees on this page" body="The employee needs an active, verified mapping and an unapproved period." /> : null}
         {candidates.length ? <fieldset disabled={start.isPending}>
           <SelectField label="Employee" placeholder="Choose an employee" value={personId} onChange={setPersonId} options={candidates.map((person) => ({ value: person.personId, label: person.displayName }))} />
         </fieldset> : null}
+        <div className="admin-inline-fields">
+          <TextField label="From" type="date" value={from} onChange={setFrom} />
+          <TextField label="Through" type="date" value={through} onChange={setThrough} />
+        </div>
+        <p className="admin-quiet">Reviewing {from || "…"} to {through || "…"}. Pay date {through ? payrollPayDateForThrough(through) : "…"}.</p>
+        {windowError ? <Notice tone="warn">{windowError}</Notice> : null}
         {roster.data && (pages.length > 1 || roster.data.nextCursor) ? <AdminControls>
           <span className="admin-quiet" role="status">Showing {candidates.length} of {roster.data.total} employees</span>
           <AdminButton disabled={start.isPending || pages.length === 1} onClick={() => { setPersonId(""); setPages((current) => current.slice(0, -1)); }}>Previous</AdminButton>

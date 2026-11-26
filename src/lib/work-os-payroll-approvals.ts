@@ -13,7 +13,9 @@ import type {
 } from "@/lib/db/rows/payroll";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { buildStoredPayrollPeriod } from "@/lib/work-os-payroll-period";
+import { payrollIsStandardWindow, payrollPeriodHasEnded } from "@wrazy/work-os-shared/payroll/window";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 import { payrollProviderDeps, refreshPayrollProviderEvidence, type PayrollProviderVerification } from "@/lib/work-os-payroll-provider";
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import {
@@ -48,12 +50,27 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
   requireAdmin(access);
   if (!input.requestKey.trim()) throw new WorkOsValidationError("An approval request key is required.");
   const scope = await reviewScope(access, reviewId);
-  const preflight = await queryOne<Pick<WorkPayrollReviewRow, "pay_date" | "timezone">>(
+  const preflight = await queryOne<Pick<WorkPayrollReviewRow, "pay_date" | "period_start" | "period_end" | "timezone">>(
     getPool(),
-    `SELECT pay_date,timezone FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 AND person_id=$3`,
+    `SELECT pay_date,period_start,period_end,timezone FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 AND person_id=$3`,
     [scope.organizationId, reviewId, scope.personId],
   );
   if (!preflight) throw new WorkOsValidationError("Payroll review not found");
+  if (!payrollIsStandardWindow(
+    payrollDateKey(preflight.pay_date)!, payrollDateKey(preflight.period_start)!, payrollDateKey(preflight.period_end)!,
+  )) {
+    throw new WorkOsConflictError(
+      "A partial payroll window can be analyzed but not approved. Choose the full pay period before approval.",
+      "payroll_partial_window",
+    );
+  }
+  const employeeToday = localDateForTimezone(new Date(), String(preflight.timezone ?? "UTC"));
+  if (!payrollPeriodHasEnded(payrollDateKey(preflight.period_end)!, employeeToday)) {
+    throw new WorkOsConflictError(
+      "This payroll period has not ended. Analysis is available now; approval is available after the period ends.",
+      "payroll_period_incomplete",
+    );
+  }
   const duplicateRequest = await queryOne<{ "?column?": number }>(
     getPool(),
     `SELECT 1 FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND request_key=$3`,
@@ -61,7 +78,10 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
   );
   let refreshed: PayrollProviderVerification | null = null;
   if (!duplicateRequest) {
-    const period = resolvePayrollPeriod(payrollDateKey(preflight.pay_date)!, String(preflight.timezone ?? "UTC"));
+    const period = buildStoredPayrollPeriod(
+      payrollDateKey(preflight.period_start)!, payrollDateKey(preflight.period_end)!,
+      payrollDateKey(preflight.pay_date)!, String(preflight.timezone ?? "UTC"),
+    );
     try {
       const consent = await employeeTrackingConsent(scope.organizationId, scope.personId);
       if (!consent.tracking) throw new Error("Tracking consent is required");
@@ -257,9 +277,11 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
   return result;
 }
 
-async function periodOf(client: import("pg").PoolClient, review: Row): Promise<PayrollReview["period"]> {
-  const { resolvePayrollPeriod } = await import("@/lib/work-os-payroll-period");
-  return resolvePayrollPeriod(payrollDateKey(review.pay_date)!, String(review.timezone));
+async function periodOf(_client: import("pg").PoolClient, review: Row): Promise<PayrollReview["period"]> {
+  return buildStoredPayrollPeriod(
+    payrollDateKey(review.period_start)!, payrollDateKey(review.period_end)!,
+    payrollDateKey(review.pay_date)!, String(review.timezone),
+  );
 }
 
 export async function reopenPayrollReview(access: WorkOsAccess, reviewId: string, input: PayrollCommand & { reason: string }): Promise<PayrollReview> {

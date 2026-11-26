@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PayrollOverviewView } from "../src/modules/work-os/admin/payroll/PayrollOverviewView";
 import { PayrollReviewView } from "../src/modules/work-os/admin/payroll/PayrollReviewView";
+import { payrollDefaultWindow } from "../src/modules/work-os/admin/payroll/paths";
 import pageModule from "../src/app/work-os/admin/payroll/page";
 import { payrollRosterFixture, payrollReviewFixture, staleReview } from "./fixtures/work-os-payroll";
 
@@ -57,6 +58,48 @@ test("audit presents saved themes, open work, limitations and source revisions",
   for (const text of ["Release checks", "Confirm the staging result.", "Friday capture coverage is incomplete.", "recap-42"]) {
     assert.ok(markup.includes(text), text);
   }
+});
+
+test("attention findings stay actionable on a ready review and expose linked frames", () => {
+  const review = payrollReviewFixture();
+  const finding = {
+    id: "f-action", key: "inactivity:action", scope: review.scope, dayId: "d1", date: "2026-11-04",
+    kind: "inactivity" as const, status: "needs_review" as const, effect: "hold" as const,
+    span: { startMs: 0, endMs: 240_000 }, durationMs: 240_000, minutes: 4,
+    sourceHash: "s", blocksApproval: true, requiredAction: "decide" as const,
+    reason: "Continuous verified zero activity for 3 minutes or more is excluded from pay.",
+    citations: [], frameSummaryIds: ["90000000-0000-4000-8000-000000000010"],
+  };
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, findings: [finding], onDecide: async () => {} }));
+  assert.match(markup, /Keep payable/);
+  assert.match(markup, /Exclude time/);
+  assert.match(markup, /1 frame/);
+  assert.ok(markup.indexOf("Needs attention") < markup.indexOf("Excluded by rule"), "decisions come before the excluded ledger");
+  assert.ok(markup.indexOf("Excluded by rule") < markup.indexOf("Daily evidence"), "daily evidence follows the review queue");
+  assert.ok(markup.indexOf("Daily evidence") < markup.indexOf("Weekly briefs"), "briefs are supporting context");
+  assert.ok(markup.indexOf("Weekly briefs") < markup.indexOf("Apps and sites"), "apps are context after the review");
+});
+
+test("a running analysis offers cancel and cannot record a decision", () => {
+  const review = payrollReviewFixture({
+    status: "analyzing",
+    run: {
+      id: "run-1", reviewId: "95000000-0000-4000-8000-000000000001",
+      scope: { organizationId: "10000000-0000-4000-8000-000000000001", personId: "20000000-0000-4000-8000-000000000001" },
+      targetRevision: 2, asOf: "2026-11-16T06:05:00Z",
+      progress: { phase: "evidence", message: "Reading provider evidence.", daysDone: 0, days: 10, framesClassified: 0, framesReused: 0, findings: 0, remaining: 10, status: "running", nextAttemptAt: null },
+      rowVersion: "0",
+    },
+  });
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, onCancel() {}, onDecide: async () => {} }));
+  assert.match(markup, /Cancel analysis/);
+  assert.doesNotMatch(markup, /Keep payable/);
+});
+
+test("new audit windows default to the available days in the current period", () => {
+  assert.deepEqual(payrollDefaultWindow("2026-11-16", "2026-11-03"), { from: "2026-11-01", through: "2026-11-03", future: false });
+  assert.deepEqual(payrollDefaultWindow("2026-11-16", "2026-12-01"), { from: "2026-11-01", through: "2026-11-15", future: false });
+  assert.deepEqual(payrollDefaultWindow("2027-01-01", "2026-12-01"), { from: "2026-12-16", through: "2026-12-31", future: true });
 });
 
 test("excluded inactivity intervals are shown with frames and breaks carry no frames", () => {

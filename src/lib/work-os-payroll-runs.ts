@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/pool";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
-import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { buildStoredPayrollPeriod, resolvePayrollPeriod, resolvePayrollWindow } from "@/lib/work-os-payroll-period";
+import { payrollWindowKey } from "@wrazy/work-os-shared/payroll/window";
 import { localDayBounds } from "@/modules/work-os/companion";
 import { ensurePayrollRecapApproval } from "@/lib/work-os-payroll-recap-approval";
 import { fetchPayrollProviderPage, payrollProviderDeps, payrollProviderFingerprint, resolvePayrollProviderConnection } from "@/lib/work-os-payroll-provider";
@@ -116,24 +117,31 @@ async function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<
   } finally { client.release(); }
 }
 
-export async function startPayrollRun(access: WorkOsAccess, input: { personId: string; payDate: string; requestKey: string }): Promise<PayrollRun> {
+export async function startPayrollRun(access: WorkOsAccess, input: {
+  personId: string; payDate?: string; from?: string; through?: string; requestKey: string;
+}): Promise<PayrollRun> {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll analysis is admin-only.");
   if (!input.requestKey.trim()) throw new WorkOsValidationError("requestKey is required");
+  if (Boolean(input.from) !== Boolean(input.through)) throw new WorkOsValidationError("from and through are required together");
+  if (!input.from && !input.payDate) throw new WorkOsValidationError("payDate or a from/through window is required");
   const person = await getPool().query(`SELECT coalesce((SELECT max(o.timezone) FROM work_employee_onboarding o
       WHERE o.organization_id=p.organization_id AND o.person_id=p.id), to_jsonb(p)->>'timezone', 'UTC') AS timezone
     FROM work_people p WHERE p.organization_id=$1 AND p.id=$2`, [access.organizationId, input.personId]);
   if (!person.rows.length) throw new WorkOsValidationError("Payroll person not found");
   const timezone = String(person.rows[0].timezone ?? "UTC");
-  const period = resolvePayrollPeriod(input.payDate, timezone);
-  if (await payrollPeriodExpired(access.organizationId, input.personId, input.payDate)) {
+  const period = input.from && input.through
+    ? resolvePayrollWindow(input.from, input.through, timezone)
+    : resolvePayrollPeriod(input.payDate!, timezone);
+  if (await payrollPeriodExpired(access.organizationId, input.personId, period.payDate)) {
     throw new WorkOsConflictError("This payroll period expired and cannot be regenerated.", "payroll_period_expired");
   }
+  const windowKey = payrollWindowKey(period.from, period.through);
   return transaction(async (client) => {
     const review = await client.query(`INSERT INTO work_payroll_reviews
-      (organization_id,person_id,period_start,period_end,pay_date,timezone,status,retention_expires_at)
-      VALUES ($1,$2,$3::date,$4::date,$5::date,$6,'draft',$5::date + interval '30 days')
-      ON CONFLICT (organization_id,person_id,pay_date) DO UPDATE SET updated_at=now()
-      RETURNING *`, [access.organizationId, input.personId, period.from, period.through, input.payDate, timezone]);
+      (organization_id,person_id,period_start,period_end,pay_date,timezone,status,retention_expires_at,window_key)
+      VALUES ($1,$2,$3::date,$4::date,$5::date,$6,'draft',$5::date + interval '30 days',$7)
+      ON CONFLICT (organization_id,person_id,window_key) DO UPDATE SET updated_at=now()
+      RETURNING *`, [access.organizationId, input.personId, period.from, period.through, period.payDate, timezone, windowKey]);
     const reviewRow = review.rows[0];
     if (String(reviewRow.status) === "approved") throw new WorkOsConflictError("Reopen the approved payroll review before analyzing it again.", "payroll_approved");
     const active = await client.query(`SELECT * FROM work_payroll_runs WHERE organization_id=$1 AND review_id=$2 AND status IN ('queued','running') ORDER BY created_at LIMIT 1`, [access.organizationId, reviewRow.id]);
@@ -160,6 +168,11 @@ export async function cancelPayrollRun(access: WorkOsAccess, runId: string, comm
       WHERE r.organization_id=$1 AND r.id=$2 FOR UPDATE`, [access.organizationId, runId]);
     if (!run.rows.length) throw new WorkOsValidationError("Payroll run not found");
     if (String(run.rows[0].review_row_version) !== command.rowVersion) throw new WorkOsConflictError("The payroll review changed. Reload it before cancelling.", "review_version_conflict");
+    const status = String(run.rows[0].status);
+    if (status === "canceled") return mapRun(run.rows[0]);
+    if (status !== "queued" && status !== "running") {
+      throw new WorkOsConflictError("This payroll analysis already finished and cannot be cancelled.", "payroll_run_finished");
+    }
     const updated = await client.query(`UPDATE work_payroll_runs SET status='canceled', cancel_requested_at=now(),
       lease_token=NULL, lease_until=NULL, updated_at=now()
       WHERE organization_id=$1 AND id=$2 RETURNING *`, [access.organizationId, runId]);
@@ -206,7 +219,10 @@ async function release(scope: PayrollScope, runId: string, token: string): Promi
 }
 
 function periodOf(review: RunRow): PayrollPeriod {
-  return resolvePayrollPeriod(dateKey(review.pay_date)!, String(review.timezone ?? "UTC"));
+  return buildStoredPayrollPeriod(
+    dateKey(review.period_start)!, dateKey(review.period_end)!, dateKey(review.pay_date)!,
+    String(review.timezone ?? "UTC"),
+  );
 }
 
 function dayTotals(days: PayrollDayResult[]) {
@@ -319,10 +335,19 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       const connection = await resolve(scope);
       const manifest = run.input_manifest as unknown as PayrollSourceManifest;
       const pages = object(run.fetch_cursor);
+      const cursor = typeof pages.cursor === "string" ? pages.cursor : null;
       const page = await deps.fetchProviderPage({
         scope, employeeId: connection.employeeId, bounds: providerBounds(period),
-        cursor: typeof pages.cursor === "string" ? pages.cursor : null, connectionId: connection.connectionId,
+        cursor, connectionId: connection.connectionId,
       }, deps.providerDeps ?? payrollProviderDeps(scope));
+      if (!page.complete && (!page.nextCursor || page.nextCursor === cursor)) {
+        await persistRun(scope, runId, token, at, {
+          status: "failed", error: "provider_pagination_incomplete",
+          progress: { message: "The provider did not return the next evidence page. Re-analyze when it is available.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0 },
+        });
+        await release(scope, runId, token);
+        return { phase: "done", message: "Provider evidence pagination is incomplete.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null };
+      }
       const logs = Array.isArray(artifact.logs) ? artifact.logs as NormalizedActivity[] : [];
       const combinedLogs = [...logs, ...page.logs];
       const previousProvider = object(artifact.provider);
@@ -453,6 +478,11 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
       });
     } else if (phase === "done") {
       await transaction(async (client) => {
+        const currentRun = await client.query(`SELECT status,cancel_requested_at,lease_token
+          FROM work_payroll_runs WHERE organization_id=$1 AND id=$2 FOR UPDATE`, [scope.organizationId, runId]);
+        const current = currentRun.rows[0];
+        if (!current || String(current.status) !== "running" || current.cancel_requested_at
+          || String(current.lease_token ?? "") !== token) throw new PayrollLeaseLostError();
         await verifyPayrollSourceToken(client, scope, String(run.source_hash ?? ""));
         const days = await client.query(`SELECT * FROM work_payroll_days WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3 ORDER BY local_date`, [scope.organizationId, run.review_id, run.target_revision]);
         const results = days.rows.map((row) => object(row.result) as unknown as PayrollDayResult);
@@ -482,6 +512,8 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
           JSON.stringify({ message: "Payroll analysis is ready.", daysDone: results.length, days: results.length, framesClassified: 0, framesReused: 0, findings: results.reduce((sum, day) => sum + day.findings.length, 0), remaining: 0 })]);
       });
       return { phase: "done", message: "Payroll analysis is ready.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "done", nextAttemptAt: null };
+    } else {
+      throw new Error(`Unknown payroll run phase: ${phase}`);
     }
     await release(scope, runId, token);
     const current = await getPool().query(`SELECT * FROM work_payroll_runs WHERE organization_id=$1 AND id=$2`, [scope.organizationId, runId]);
@@ -490,20 +522,66 @@ export async function advancePayrollRun(scope: PayrollScope, runId: string, deps
     await release(scope, runId, token);
     if (error instanceof PayrollLeaseLostError) throw error;
     const message = error instanceof Error ? error.message : "Payroll analysis failed.";
-    await getPool().query(`UPDATE work_payroll_runs SET status='failed', error=$3, lease_token=NULL, lease_until=NULL, updated_at=now()
+    await getPool().query(`UPDATE work_payroll_runs SET status='failed', error=$3,
+        progress=jsonb_set(coalesce(progress,'{}'::jsonb),'{message}',to_jsonb($3::text)),
+        lease_token=NULL, lease_until=NULL, updated_at=now()
       WHERE organization_id=$1 AND id=$2`, [scope.organizationId, runId, message.slice(0, 300)]).catch(() => undefined);
     return { phase: "done", message, daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null };
   }
 }
 
-export async function advanceDuePayrollRuns(at: Date, limit = 2): Promise<PayrollProgress[]> {
+async function runStateKey(scope: PayrollScope, runId: string): Promise<string> {
+  const { rows } = await getPool().query(`SELECT status,phase,progress,cursor,fetch_cursor,
+      md5(coalesce(input_artifact::text,'')) AS artifact_digest
+    FROM work_payroll_runs WHERE organization_id=$1 AND id=$2`, [scope.organizationId, runId]);
+  return rows[0] ? JSON.stringify(rows[0]) : "";
+}
+
+/** Advance one run until it settles or the budget runs out. A single step is
+ * not enough: provider paging, frame classification, daily calculation and two
+ * briefs can each take a turn, and a five-minute cron is not reliable enough to
+ * deliver them one at a time. Repeated identical states stop the drain so a
+ * losing lease or a provider that stopped moving cannot spin forever. */
+export async function drainPayrollRun(scope: PayrollScope, runId: string, deps: PayrollRunDeps, options: {
+  budgetMs?: number; maxSteps?: number; now?: () => Date;
+} = {}): Promise<PayrollProgress> {
+  const budgetMs = Math.max(1_000, Math.min(180_000, Math.trunc(options.budgetMs ?? 45_000)));
+  const maxSteps = Math.max(1, Math.min(240, Math.trunc(options.maxSteps ?? 80)));
+  const now = options.now ?? (() => new Date());
+  const startedAt = Date.now();
+  let latest: PayrollProgress | null = null;
+  let previous = "";
+  let unchanged = 0;
+  for (let step = 0; step < maxSteps; step += 1) {
+    try {
+      latest = await advancePayrollRun(scope, runId, deps, now());
+    } catch (error) {
+      if (!(error instanceof PayrollLeaseLostError)) throw error;
+      const current = await getPool().query(`SELECT * FROM work_payroll_runs WHERE organization_id=$1 AND id=$2`, [scope.organizationId, runId]);
+      if (current.rows[0]) return progress(current.rows[0]);
+      throw error;
+    }
+    if (latest.status === "done" || latest.status === "failed" || latest.status === "canceled") return latest;
+    if (Date.now() - startedAt >= budgetMs) return latest;
+    const state = await runStateKey(scope, runId);
+    unchanged = state && state === previous ? unchanged + 1 : 0;
+    previous = state;
+    if (unchanged >= 1) return latest;
+  }
+  if (!latest) throw new Error("Payroll run could not be advanced.");
+  return latest;
+}
+
+export async function advanceDuePayrollRuns(at: Date, limit = 2, options: {
+  budgetMs?: number; maxSteps?: number;
+} = {}): Promise<PayrollProgress[]> {
   const rows = await getPool().query(`SELECT organization_id, person_id, id FROM work_payroll_runs
     WHERE status IN ('queued','running') AND (lease_until IS NULL OR lease_until <= $1)
       AND cancel_requested_at IS NULL ORDER BY created_at LIMIT $2`, [at.toISOString(), Math.max(1, Math.min(10, limit))]);
   const out: PayrollProgress[] = [];
   for (const row of rows.rows as RunRow[]) {
     const scope = { organizationId: String(row.organization_id), personId: String(row.person_id) };
-    try { out.push(await advancePayrollRun(scope, String(row.id), payrollRunDeps(scope), at)); }
+    try { out.push(await drainPayrollRun(scope, String(row.id), payrollRunDeps(scope), options)); }
     catch (error) { out.push({ phase: "done", message: error instanceof Error ? error.message : "Payroll advance failed.", daysDone: 0, days: 0, framesClassified: 0, framesReused: 0, findings: 0, remaining: 0, status: "failed", nextAttemptAt: null }); }
   }
   return out;

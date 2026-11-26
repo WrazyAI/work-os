@@ -4,6 +4,8 @@ export { org, otherOrg, person, otherPerson };
 export const payrollMigration = async () => [
   await readFile(new URL("../../supabase/migrations/0078_work_payroll_review.sql", import.meta.url), "utf8"),
   await readFile(new URL("../../supabase/migrations/0084_work_payroll_app_usage.sql", import.meta.url), "utf8"),
+  await readFile(new URL("../../supabase/migrations/0085_work_payroll_screenshot_person_scope.sql", import.meta.url), "utf8"),
+  await readFile(new URL("../../supabase/migrations/0086_work_payroll_analysis_windows.sql", import.meta.url), "utf8"),
 ].join("\n");
 
 /** Real SQL, isolated memory DB. This fixture cannot prove row-lock races. */

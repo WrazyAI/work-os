@@ -1778,3 +1778,32 @@ wiring are engineering verification gates, not product questions. Until proven,
 the implementation must fail closed or expose explicit review/degraded states,
 not invent evidence or a worker guarantee. All other previously open behavioral
 choices are fixed above; no locked product decision has been intentionally changed.
+
+## 20. 2026-11-26 amendment — arbitrary analysis windows and live review actions
+
+The owner extended the review so analysis is not limited to a completed
+semimonthly period:
+
+- A review may store any bounded window of 1–31 days. Its pay date is the next
+  pay-date anchor after the window ends (the 16th for a window ending on or
+  before the 15th; the 1st of the next month otherwise). The stored
+  `period_start`/`period_end` are authoritative for runs, reads, briefs and
+  exports. The fixed 1st/16th window remains the default and the only shape
+  that can be approved.
+- Partial or arbitrary windows are analysis-only. They may be started before a
+  pay date and reviewed with evidence, but approval requires the full standard
+  semimonthly period, because a partial receipt would understate payable time.
+- The workspace defaults to the current window through the employee's available
+  day (capped at today), and prior pay periods remain selectable. Changing the
+  window does not change the pay-date anchor of an existing review.
+- Findings remain actionable on the last published revision unless the review
+  is approved, stale, or actively analyzing. Break time still never receives a
+  finding decision. Evidence frames remain restricted to unresolved findings
+  and excluded inactivity, with the existing reason, consent, expiry and
+  sensitive-content checks.
+- Analysis drains in bounded batches from the start route, the run route, the
+  admin page poll and the five-minute cron. An active run can be cancelled; a
+  failed run leaves the last published revision reviewable.
+- Screenshot summaries must be owned by their evidence person. Migration 0085
+  backfills the relationship and keeps it consistent on write; without it,
+  payroll frame linkage could never match a review.

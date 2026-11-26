@@ -4,7 +4,7 @@ import { payrollFixture, org, person } from "./helpers/work-os-payroll-fixture.m
 import { adminAccess } from "./helpers/work-os-admin-otto-fixture.mts";
 import { resolvePayrollPeriod } from "../src/lib/work-os-payroll-period";
 import { loadPayrollSourceToken } from "../src/lib/work-os-payroll-freshness";
-import type { PayrollDayResult, PayrollScope, PayrollSourceManifest } from "../src/modules/work-os/payroll/contracts";
+import type { PayrollDayResult, PayrollPeriod, PayrollScope, PayrollSourceManifest } from "../src/modules/work-os/payroll/contracts";
 import type { PayrollRunDeps } from "../src/lib/work-os-payroll-runs";
 import type { PoolClient } from "pg";
 
@@ -24,32 +24,37 @@ const dayResult = (date: string): PayrollDayResult => ({
   findings: [], blockers: [], sourceHash: "day-source", decisionKeys: [], decisionState: {}, decisionAmounts: {},
 });
 
-async function deps(f: Awaited<ReturnType<typeof payrollFixture>>): Promise<PayrollRunDeps> {
+async function deps(f: Awaited<ReturnType<typeof payrollFixture>>, requestedPeriod = period): Promise<PayrollRunDeps> {
   const token = await loadPayrollSourceToken(f.db as unknown as PoolClient, scope);
-  const manifest: PayrollSourceManifest = {
-    scope, period, asOf: "2026-11-16T06:05:00.000Z", sourceToken: token, policyVersion: "payroll-sources-v1",
-    days: [{
+  const manifestFor = (selected: PayrollPeriod): PayrollSourceManifest => ({
+    scope, period: selected, asOf: "2026-11-16T06:05:00.000Z", sourceToken: token, policyVersion: "payroll-sources-v1",
+    days: selected.from <= "2026-11-05" && selected.through >= "2026-11-05" ? [{
       scope, date: "2026-11-05", week: 1, timezone: "UTC", sessions: [], breaks: [], pauseResidualMs: 0,
       captures: [], exceptions: [], frameSignals: [], frameCandidates: [], blockers: [], sourceHash: "day-source",
-    }],
+    }] : [],
     weekSources: [
-      { scope, week: 1, from: period.weeks[0].from, through: period.weeks[0].through, sourceHash: "week-1", recaps: [], outcomes: [], gaps: [] },
-      { scope, week: 2, from: period.weeks[1].from, through: period.weeks[1].through, sourceHash: "week-2", recaps: [], outcomes: [], gaps: [] },
+      { scope, week: 1, from: selected.weeks[0].from, through: selected.weeks[0].through, sourceHash: "week-1", recaps: [], outcomes: [], gaps: [] },
+      { scope, week: 2, from: selected.weeks[1].from, through: selected.weeks[1].through, sourceHash: "week-2", recaps: [], outcomes: [], gaps: [] },
     ],
-    hash: "manifest-hash", rawImageExpiry: {},
-  };
+    hash: `manifest-${selected.from}-${selected.through}`, rawImageExpiry: {},
+  });
   return {
     now: () => new Date("2026-11-16T06:05:00Z"),
     ensureRecaps: async () => ({ approved: 0, pending: 0, skipped: 0, complete: true }),
     fetchProviderPage: async () => ({ logs: [], nextCursor: null, complete: true, watermark: "" }),
     fetchApps: async () => [],
-    loadSources: async () => manifest,
+    loadSources: async (_scope, selected) => manifestFor(selected ?? requestedPeriod),
     classifyFrame: async (_scope, frame) => ({ category: "unclear", confidence: 0, reason: "No image in fixture.", app: frame.app, sourceHash: frame.sourceHash, model: "fixture", promptVersion: "v1", classificationKey: "key" }),
     calculateDay: () => dayResult("2026-11-05"),
-    advanceBrief: async (_scope, sources) => ({
-      brief: { week: sources.week, status: "ready", title: `Week ${sources.week}`, summary: "Reviewed the supplied work.", summaryCitations: [], themes: [], openItems: [], gaps: [], sourceHash: sources.sourceHash },
-      checkpoint: { sourceHash: sources.sourceHash, nextBatch: 0, drafts: [], phase: "done" }, complete: true,
-    }),
+    advanceBrief: async (_scope, sources) => sources.from > sources.through
+      ? {
+        brief: { week: sources.week, status: "missing", title: "", summary: "No recaps recorded for these dates", summaryCitations: [], themes: [], openItems: [], gaps: [], sourceHash: sources.sourceHash },
+        checkpoint: { sourceHash: sources.sourceHash, nextBatch: 0, drafts: [], phase: "done" }, complete: true,
+      }
+      : {
+        brief: { week: sources.week, status: "ready", title: `Week ${sources.week}`, summary: "Reviewed the supplied work.", summaryCitations: [], themes: [], openItems: [], gaps: [], sourceHash: sources.sourceHash },
+        checkpoint: { sourceHash: sources.sourceHash, nextBatch: 0, drafts: [], phase: "done" }, complete: true,
+      },
     resolveConnection: async () => ({ connectionId: "connection", employeeId: "employee" }),
     providerDeps: { post: async () => { throw new Error("unused"); }, now: () => new Date(), reserve: async () => undefined },
     policy: { textModel: "deepseek/deepseek-v4.1-flash-1017", visionModel: "openai/gpt-6-luna", effort: "high", version: "payroll-ai-v1" },
@@ -87,6 +92,102 @@ test("a resumable run publishes one deterministic revision and two briefs", asyn
     assert.equal(((await f.db.query("select status from work_payroll_runs where id=$1", [run.id])).rows[0] as { status: string }).status, "done");
     const again = await advancePayrollRun(scope, run.id, await deps(f), new Date("2026-11-16T06:06:00Z"));
     assert.equal(again.status, "done");
+  } finally { await f.close(); }
+});
+
+test("draining a run publishes the revision and briefs without one cron tick per phase", async () => {
+  const { startPayrollRun, drainPayrollRun } = await runs();
+  const f = await payrollFixture();
+  try {
+    const run = await startPayrollRun(adminAccess, { personId: person, payDate: "2026-11-16", requestKey: "run-drain" });
+    const progress = await drainPayrollRun(scope, run.id, await deps(f), {
+      budgetMs: 30_000, now: () => new Date("2026-11-16T06:05:00Z"),
+    });
+    assert.equal(progress.status, "done");
+    assert.equal(progress.message, "Payroll analysis is ready.");
+    const row = (await f.db.query("select status,phase,lease_token,lease_until from work_payroll_runs where id=$1", [run.id])).rows[0] as Record<string, unknown>;
+    assert.equal(row.status, "done");
+    assert.equal(row.phase, "done");
+    assert.equal(row.lease_token, null);
+    assert.equal(row.lease_until, null);
+  } finally { await f.close(); }
+});
+
+test("a partial window publishes only the stored period", async () => {
+  const { startPayrollRun, drainPayrollRun } = await runs();
+  const f = await payrollFixture();
+  try {
+    const run = await startPayrollRun(adminAccess, {
+      personId: person, from: "2026-11-01", through: "2026-11-10", requestKey: "run-partial",
+    });
+    const progress = await drainPayrollRun(scope, run.id, await deps(f), {
+      budgetMs: 30_000, now: () => new Date("2026-11-12T06:05:00Z"),
+    });
+    assert.equal(progress.status, "done");
+    const review = (await f.db.query(`select period_start::text,period_end::text,pay_date::text,window_key
+      from work_payroll_reviews where id=$1`, [run.reviewId])).rows[0] as Record<string, unknown>;
+    assert.deepEqual(review, {
+      period_start: "2026-11-01", period_end: "2026-11-10", pay_date: "2026-11-16",
+      window_key: "2026-11-01_2026-11-10",
+    });
+    const days = (await f.db.query("select local_date::text from work_payroll_days where review_id=$1 and analysis_revision=$2 order by local_date",
+      [run.reviewId, run.targetRevision])).rows as Array<{ local_date: string }>;
+    assert.deepEqual(days.map((day) => day.local_date), ["2026-11-05"]);
+  } finally { await f.close(); }
+});
+
+test("a single-day window completes with an empty second week", async () => {
+  const { startPayrollRun, drainPayrollRun } = await runs();
+  const f = await payrollFixture();
+  try {
+    const run = await startPayrollRun(adminAccess, {
+      personId: person, from: "2026-11-05", through: "2026-11-05", requestKey: "run-single-day",
+    });
+    const progress = await drainPayrollRun(scope, run.id, await deps(f), {
+      budgetMs: 30_000, now: () => new Date("2026-11-12T06:05:00Z"),
+    });
+    assert.equal(progress.status, "done");
+    const review = (await f.db.query("select period_start::text,period_end::text,pay_date::text,window_key from work_payroll_reviews where id=$1",
+      [run.reviewId])).rows[0] as Record<string, unknown>;
+    assert.deepEqual(review, {
+      period_start: "2026-11-05", period_end: "2026-11-05", pay_date: "2026-11-16",
+      window_key: "2026-11-05_2026-11-05",
+    });
+    const briefs = (await f.db.query("select week from work_payroll_week_briefs where review_id=$1 and analysis_revision=$2 order by week",
+      [run.reviewId, run.targetRevision])).rows as Array<{ week: number }>;
+    assert.deepEqual(briefs.map((brief) => brief.week), [1]);
+  } finally { await f.close(); }
+});
+
+test("a provider page that cannot advance fails instead of looping", async () => {
+  const { startPayrollRun, drainPayrollRun } = await runs();
+  const f = await payrollFixture();
+  try {
+    const run = await startPayrollRun(adminAccess, { personId: person, payDate: "2026-11-16", requestKey: "run-stall" });
+    const stalled = { ...(await deps(f)), fetchProviderPage: async () => ({ logs: [], nextCursor: null, complete: false, watermark: "" }) };
+    const progress = await drainPayrollRun(scope, run.id, stalled, {
+      budgetMs: 30_000, now: () => new Date("2026-11-16T06:05:00Z"),
+    });
+    assert.equal(progress.status, "failed");
+    assert.match(progress.message, /pagination|next evidence page/i);
+    const row = (await f.db.query("select status,error from work_payroll_runs where id=$1", [run.id])).rows[0] as Record<string, unknown>;
+    assert.equal(row.status, "failed");
+    assert.equal(row.error, "provider_pagination_incomplete");
+  } finally { await f.close(); }
+});
+
+test("a finished run cannot be cancelled over its published revision", async () => {
+  const { startPayrollRun, drainPayrollRun, cancelPayrollRun } = await runs();
+  const f = await payrollFixture();
+  try {
+    const run = await startPayrollRun(adminAccess, { personId: person, payDate: "2026-11-16", requestKey: "run-finished" });
+    const progress = await drainPayrollRun(scope, run.id, await deps(f), {
+      budgetMs: 30_000, now: () => new Date("2026-11-16T06:05:00Z"),
+    });
+    assert.equal(progress.status, "done");
+    const review = (await f.db.query("select row_version from work_payroll_reviews where id=$1", [run.reviewId])).rows[0] as { row_version: string | number };
+    await assert.rejects(cancelPayrollRun(adminAccess, run.id, { rowVersion: String(review.row_version) }), /finished/i);
+    assert.equal(((await f.db.query("select status from work_payroll_runs where id=$1", [run.id])).rows[0] as { status: string }).status, "done");
   } finally { await f.close(); }
 });
 

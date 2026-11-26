@@ -27,10 +27,15 @@ test("payroll_schema_is_idempotent_scoped_and_immutable", async () => {
       values($1,$2,$3,1,'b','v1',now(),'{}','{}')`,[org,reviewId,person]), /unique/i);
     for (const values of [
       ['2026-11-02','2026-10-16','2026-10-31'],
-      ['2026-11-16','2026-11-02','2026-11-15'],
-      ['2027-03-01','2027-02-16','2027-02-27'],
+      ['2026-11-16','2026-11-10','2026-11-01'],
+      ['2026-11-16','2026-11-01','2026-11-16'],
+      ['2027-02-16','2027-01-01','2027-02-01'],
     ]) await assert.rejects(f.db.query(`insert into work_payroll_reviews(organization_id,person_id,pay_date,period_start,period_end,timezone,retention_expires_at)
       values($1,$2,$3,$4,$5,'UTC',now()+interval '30 days')`,[org,person,...values]), /check/i);
+    await f.db.query(`insert into work_payroll_reviews(organization_id,person_id,pay_date,period_start,period_end,timezone,retention_expires_at)
+      values($1,$2,'2026-11-16','2026-11-01','2026-11-10','UTC',now()+interval '30 days')`,[org,person]);
+    await assert.rejects(f.db.query(`insert into work_payroll_reviews(organization_id,person_id,pay_date,period_start,period_end,timezone,retention_expires_at)
+      values($1,$2,'2026-11-16','2026-11-01','2026-11-10','UTC',now()+interval '30 days')`,[org,person]), /unique/i);
     await f.db.query(`insert into work_payroll_runs(organization_id,review_id,person_id,target_revision,request_key) values($1,$2,$3,2,'run-1')`,[org,reviewId,person]);
     await assert.rejects(f.db.query(`insert into work_payroll_runs(organization_id,review_id,person_id,target_revision,request_key) values($1,$2,$3,2,'run-2')`,[org,reviewId,person]), /unique/i);
     for (const role of ['anon','authenticated']) {
@@ -97,6 +102,20 @@ test("payroll PostgreSQL helper refuses non-disposable and remote database targe
   assert.throws(() => disposablePayrollTarget({WORK_OS_TEST_POSTGRES_URL:'postgres://localhost/production',WORK_OS_TEST_POSTGRES_DISPOSABLE:'1'}),/disposable.*name/i);
   assert.equal(disposablePayrollTarget({WORK_OS_TEST_POSTGRES_URL:'postgres://localhost/work_os_test',WORK_OS_TEST_POSTGRES_DISPOSABLE:'1'}).hostname,'localhost');
   assert.throws(() => disposablePayrollTarget({WORK_OS_TEST_POSTGRES_URL:'postgres://localhost/work_os_test?host=remote.example',WORK_OS_TEST_POSTGRES_DISPOSABLE:'1'}),/option/i);
+});
+
+test("screenshot summaries inherit and cannot contradict their evidence owner", async () => {
+  const f = await payrollFixture();
+  try {
+    const event = "80000000-0000-4000-8000-000000000010";
+    const summary = "80000000-0000-4000-8000-000000000011";
+    await f.db.query("insert into work_evidence_events(id,organization_id,person_id) values($1,$2,$3)", [event, org, person]);
+    await f.db.query("insert into work_screenshot_summaries(id,organization_id,evidence_event_id) values($1,$2,$3)", [summary, org, event]);
+    const scoped = (await f.db.query("select person_id from work_screenshot_summaries where id=$1", [summary])).rows[0] as { person_id: string };
+    assert.equal(scoped.person_id, person);
+    await assert.rejects(f.db.query("insert into work_screenshot_summaries(id,organization_id,person_id,evidence_event_id) values($1,$2,$3,$4)",
+      ["80000000-0000-4000-8000-000000000012", org, otherPerson, event]), /person does not match/i);
+  } finally { await f.close(); }
 });
 
 test("payroll rows reject invalid spans, negative durations and foreign screenshot ownership", async () => {

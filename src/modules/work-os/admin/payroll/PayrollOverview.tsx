@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { currentPayrollWindowForDate, payrollPayDateForThrough, payrollWindowDayCount } from "@wrazy/work-os-shared/payroll/window";
 import { payrollApi, payrollKeys } from "./api";
 import { PayrollOverviewView } from "./PayrollOverviewView";
-import { isPayrollPayDate, payrollReviewHref, payrollWorkspaceHref } from "./paths";
+import { isPayrollDate, isPayrollPayDate, payrollDefaultWindow, payrollReviewHref, payrollWorkspaceHref } from "./paths";
 
 function duePayDate(now = new Date()): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${now.getUTCDate() >= 16 ? "16" : "01"}`;
+  return currentPayrollWindowForDate(now.toISOString().slice(0, 10)).payDate;
 }
 
 export default function PayrollOverview({ tab, newAudit, initialPayDate }: {
@@ -18,15 +19,22 @@ export default function PayrollOverview({ tab, newAudit, initialPayDate }: {
   const router = useRouter();
   const cache = useQueryClient();
   const payDate = initialPayDate ?? duePayDate();
+  const today = new Date().toISOString().slice(0, 10);
+  const windowDefault = payrollDefaultWindow(payDate, today);
   const [dateInput, setDateInput] = useState(payDate);
+  const [fromInput, setFromInput] = useState(windowDefault.from);
+  const [throughInput, setThroughInput] = useState(windowDefault.through);
   const [search, setSearch] = useState("");
   const [personId, setPersonId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const request = useRef<{ personId: string; key: string } | null>(null);
+  const request = useRef<{ personId: string; from: string; through: string; key: string } | null>(null);
+  const effectivePayDate = isPayrollDate(throughInput) ? payrollPayDateForThrough(throughInput) : payDate;
+  const rosterPayDate = newAudit ? effectivePayDate : payDate;
+  useEffect(() => { setPersonId(""); }, [rosterPayDate]);
   const roster = useInfiniteQuery({
-    queryKey: payrollKeys.rosterPages(payDate, !newAudit),
-    queryFn: ({ pageParam }) => payrollApi.roster(payDate, pageParam, !newAudit),
+    queryKey: payrollKeys.rosterPages(rosterPayDate, !newAudit),
+    queryFn: ({ pageParam }) => payrollApi.roster(rosterPayDate, pageParam, !newAudit),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     staleTime: 45_000,
@@ -36,19 +44,28 @@ export default function PayrollOverview({ tab, newAudit, initialPayDate }: {
   const candidates = people.filter((person) => person.active && person.mapped && person.status !== "approved");
   const selected = candidates.find((person) => person.personId === personId);
   const items = people.filter((person) => person.reviewId && person.displayName.toLowerCase().includes(search.trim().toLowerCase()));
+  const windowError = !fromInput || !throughInput ? "Choose a start and end date."
+    : fromInput > throughInput ? "The end date must not precede the start date."
+      : throughInput > today ? "The end date cannot be in the future."
+        : fromInput > today ? "The start date cannot be in the future."
+          : payrollWindowDayCount(fromInput, throughInput) > 31 ? "Choose a window of 31 days or fewer."
+            : null;
 
   async function startAudit(event: FormEvent) {
     event.preventDefault();
-    if (!selected || busy) return;
-    if (request.current?.personId !== selected.personId) {
-      request.current = { personId: selected.personId, key: crypto.randomUUID() };
+    if (!selected || busy || windowError) return;
+    const identity = { personId: selected.personId, from: fromInput, through: throughInput };
+    if (!request.current || request.current.personId !== identity.personId
+      || request.current.from !== identity.from || request.current.through !== identity.through) {
+      request.current = { ...identity, key: crypto.randomUUID() };
     }
     setBusy(true);
     setError(null);
     try {
-      await payrollApi.start(selected.personId, payDate, request.current.key);
+      const run = await payrollApi.start(selected.personId, effectivePayDate, request.current.key, fromInput, throughInput);
+      request.current = null;
       void cache.invalidateQueries({ queryKey: ["work-os", "admin", "payroll"] });
-      router.push(payrollReviewHref(selected.personId, payDate));
+      router.push(payrollReviewHref(selected.personId, effectivePayDate, run.reviewId));
     } catch (issue) {
       setError((issue as Error).message);
       setBusy(false);
@@ -74,15 +91,21 @@ export default function PayrollOverview({ tab, newAudit, initialPayDate }: {
       {page && newAudit ? (
         <form className="payroll-panel payroll-audit-form" onSubmit={(event) => void startAudit(event)}>
           <h2>New audit</h2>
-          <p>Review recorded evidence for {page.period.from} — {page.period.through}. Running an audit does not approve hours.</p>
+          <p>Choose the window to review. It defaults to this pay period through today when the period is incomplete. Running an audit does not approve hours.</p>
           {error ? <p className="payroll-blocker" role="alert">{error}</p> : null}
           <label>Employee <select value={personId} onChange={(event) => setPersonId(event.target.value)} disabled={busy} required>
             <option value="">Choose an employee</option>
             {candidates.map((person) => <option key={person.personId} value={person.personId}>{person.displayName}</option>)}
           </select></label>
+          <div className="payroll-window-fields">
+            <label>From <input type="date" value={fromInput} max={today} onChange={(event) => setFromInput(event.target.value)} disabled={busy} required /></label>
+            <label>Through <input type="date" value={throughInput} max={today} onChange={(event) => setThroughInput(event.target.value)} disabled={busy} required /></label>
+          </div>
+          <p className="payroll-footnote">Reviewing {fromInput || "…"} — {throughInput || "…"}{throughInput ? ` · pay date ${payrollPayDateForThrough(throughInput)}` : ""}</p>
+          {windowError ? <p className="payroll-blocker" role="alert">{windowError}</p> : null}
           {!candidates.length && !roster.hasNextPage ? <p className="payroll-empty">No eligible employees with a verified mapping for this period.</p> : null}
           <div className="payroll-actions">
-            <button type="submit" className="primary" disabled={!selected || busy}>{busy ? "Queueing audit…" : "Run audit"}</button>
+            <button type="submit" className="primary" disabled={!selected || busy || Boolean(windowError)}>{busy ? "Starting audit…" : "Run audit"}</button>
             <Link href={payrollWorkspaceHref("audits", payDate)}>Back to audits</Link>
           </div>
         </form>

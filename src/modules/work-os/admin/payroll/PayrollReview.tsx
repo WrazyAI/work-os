@@ -1,17 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { payrollPayDateForThrough } from "@wrazy/work-os-shared/payroll/window";
 import { Notice, Skeleton } from "../ui";
 import { payrollApi, payrollKeys } from "./api";
 import { PayrollReviewView } from "./PayrollReviewView";
-import { payrollWorkspaceHref } from "./paths";
+import { payrollReviewHref, payrollWorkspaceHref } from "./paths";
 import type { PayrollReview as Review } from "@/modules/work-os/payroll/contracts";
 
-export default function PayrollReview({ personId, payDate, reviewId, displayName }: {
+export default function PayrollReview({ personId, payDate, reviewId, displayName, initialFrom, initialThrough }: {
   personId: string; payDate: string; reviewId: string | null; displayName: string;
+  initialFrom?: string; initialThrough?: string;
 }) {
+  const router = useRouter();
   const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +27,9 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
     refetchInterval: (query) => isRunning(query.state.data) ? 3000 : false,
   });
   const record = review.data;
+  const running = isRunning(record);
+  const runId = record?.run?.id;
+  const refetchReview = review.refetch;
   const revision = record?.token.analysisRevision ?? 0;
   const days = useQuery({
     queryKey: [...payrollKeys.days(record?.id ?? "none"), revision],
@@ -35,16 +42,39 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
     enabled: Boolean(record) && revision > 0,
   });
   const refresh = () => cache.invalidateQueries({ queryKey: ["work-os", "admin", "payroll"] });
-  async function start() {
+  useEffect(() => {
+    if (!runId || !running) return;
+    let stopped = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        await payrollApi.advance(runId);
+        await refetchReview();
+      } catch {
+        // The cron or another tab may own the lease; the next poll retries.
+      } finally { inFlight = false; }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5_000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [runId, running, refetchReview]);
+  async function launch(from?: string, through?: string) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
       startKey.current ??= crypto.randomUUID();
-      const run = await payrollApi.start(personId, payDate, startKey.current);
-      if (record) cache.setQueryData(payrollKeys.review(run.reviewId), { ...record, run });
+      const periodPayDate = from && through ? payrollPayDateForThrough(through) : record?.period.payDate ?? payDate;
+      const run = await payrollApi.start(personId, periodPayDate, startKey.current, from, through);
       startKey.current = null;
-      await refresh();
+      if (record) {
+        cache.setQueryData(payrollKeys.review(run.reviewId), { ...record, run });
+        await refresh();
+      } else {
+        router.replace(payrollReviewHref(personId, periodPayDate, run.reviewId));
+      }
     } catch (issue) { setError((issue as Error).message); }
     finally { setBusy(false); }
   }
@@ -64,8 +94,17 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
   if (!record) return <section className="payroll-shell">
     {back}
     <h2>{displayName}</h2>
-    <p>No audit exists for this pay date.</p>
-    <Link href={payrollWorkspaceHref("audits", payDate, true)}>New audit</Link>
+    {initialFrom && initialThrough ? <>
+      <p>No audit exists for {initialFrom} — {initialThrough}.</p>
+      {error ? <Notice tone="warn">{error}</Notice> : null}
+      <div className="payroll-actions">
+        <button type="button" className="primary" disabled={busy} onClick={() => void launch(initialFrom, initialThrough)}>{busy ? "Starting…" : "Run audit for this window"}</button>
+        <Link href={payrollWorkspaceHref("audits", payDate, true)}>New audit</Link>
+      </div>
+    </> : <>
+      <p>No audit exists for this pay date.</p>
+      <Link href={payrollWorkspaceHref("audits", payDate, true)}>New audit</Link>
+    </>}
   </section>;
 
   return (
@@ -78,7 +117,7 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
         daysLoading={days.isPending} findingsLoading={findings.isPending}
         daysError={days.error?.message} findingsError={findings.error?.message}
         onRetryEvidence={() => void Promise.all([days.refetch(), findings.refetch()])}
-        onAdvance={() => void start()}
+        onAdvance={() => void launch(record.period.from, record.period.through)}
         onApprove={() => {
           if (window.confirm(`Approve ${record.totals.recommended} minutes? This creates an immutable payroll record.`)) {
             void save(() => payrollApi.approve(record.id, { ...command(), note: "Payroll approved" }));
@@ -88,7 +127,13 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
           const reason = window.prompt("Reason for reopening this payroll approval?")?.trim();
           if (reason) void save(() => payrollApi.reopen(record.id, { ...command(), reason }));
         }}
-        onDecide={!isRunning(record) && !record.approval && record.status === "needs_review" ? async (key, action, note) => {
+        onCancel={() => {
+          if (!record.run) return;
+          if (window.confirm("Cancel this analysis? The last published revision stays reviewable.")) {
+            void save(() => payrollApi.cancel(record.run!.id, record.token.rowVersion));
+          }
+        }}
+        onDecide={!running && !record.approval && !record.evidenceChangedSinceApproval && record.status !== "approved" && record.status !== "stale" ? async (key, action, note) => {
           if (busy) return;
           setBusy(true);
           try {

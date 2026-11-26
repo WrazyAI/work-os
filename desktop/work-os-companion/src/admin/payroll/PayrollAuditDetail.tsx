@@ -48,10 +48,34 @@ export function PayrollAuditDetail({ organizationId, userId, reviewId, personId,
     refetchIntervalInBackground: false,
     retry: false,
   });
+  const runId = review.data?.run?.id;
+  const running = isRunning(review.data);
+  useEffect(() => {
+    if (!runId || !running) return;
+    let stopped = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        await desktopPayroll(organizationId).advance(runId);
+        await review.refetch();
+      } catch {
+        // The cron or another window may own the lease; retry on the next poll.
+      } finally { inFlight = false; }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5_000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [organizationId, runId, running, review.refetch]);
   const restart = useMutation({
     mutationFn: async () => {
       request.current ??= crypto.randomUUID();
-      const run = await api.start({ personId, payDate, requestKey: request.current });
+      const period = review.data?.period;
+      const run = await api.start({
+        personId, payDate: period?.payDate ?? payDate,
+        from: period?.from, through: period?.through, requestKey: request.current,
+      });
       request.current = null;
       return run;
     },
@@ -90,7 +114,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   const running = isRunning(record);
   const failed = record.run?.progress.status === "failed" || record.status === "failed";
   const stale = record.status === "stale" || record.evidenceChangedSinceApproval;
-  const mutable = !writesDisabled && !running && !failed && !stale && !record.approval;
+  const mutable = !writesDisabled && !running && !stale && !record.approval;
   const canApprove = mutable && record.status === "ready" && !record.totals.held && !record.recapStats?.pending && !record.blockers.length;
   const days = useQuery({
     queryKey: [...keys, "days", record.id, revision],
@@ -102,6 +126,10 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
     queryFn: ({ signal }) => api.findingsAll(record.id, signal), enabled: revision > 0,
     staleTime: ADMIN_DETAIL_STALE_MS, retry: false,
   });
+  const cancel = useMutation({
+    mutationFn: () => api.cancel(record.run!.id, record.token.rowVersion),
+    onSuccess: async () => { await cache.invalidateQueries({ queryKey: keys }); },
+  });
   const time = (ms: number) => Number.isFinite(ms)
     ? formatWorkOsTime(new Date(ms).toISOString(), record.period.timezone)
     : "Unavailable";
@@ -111,6 +139,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
   const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
+  const otherExcluded = excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
   const excludedCount = inactivity.length + breaks.length + outside.length
     + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
@@ -138,7 +167,9 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
 
   return <>
     <AdminCard title={name} detail={`${formatWorkOsFullDate(record.period.from)} to ${formatWorkOsFullDate(record.period.through)}`}
-      action={!running && !record.approval ? <AdminButton disabled={writesDisabled} onClick={onRestart}>Re-analyze</AdminButton> : undefined}>
+      action={running && record.run
+        ? <AdminButton disabled={writesDisabled || cancel.isPending} onClick={() => cancel.mutate()}>{cancel.isPending ? "Cancelling…" : "Cancel analysis"}</AdminButton>
+        : !record.approval ? <AdminButton disabled={writesDisabled} onClick={onRestart}>{revision > 0 ? "Re-analyze" : "Run audit"}</AdminButton> : undefined}>
       <div className="admin-grid">
         <AdminControls>
           <div className="payroll-native-meta">
@@ -151,7 +182,10 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         {running && record.run ? <p role="status">{record.run.progress.message}
           {record.run.progress.days ? ` · ${record.run.progress.daysDone}/${record.run.progress.days} days` : ""}
         </p> : null}
-        {failed ? <Notice tone="warn">This audit did not finish. Re-analyze to try again.</Notice> : null}
+        {failed ? <Notice tone="warn">{record.status === "ready"
+          ? `The latest re-analysis did not finish. The published analysis is unchanged. ${record.run?.progress.message}`
+          : `This audit did not finish. Re-analyze to try again. ${record.run?.progress.message}`}</Notice> : null}
+        {cancel.error ? <Notice tone="err">{cancel.error.message}</Notice> : null}
         {stale ? <Notice tone="warn">{record.approval ? "The approved receipt is unchanged. Evidence changed after approval." : "Evidence changed. Re-analyze before recording decisions."}</Notice> : null}
         {restartError ? <Notice tone="err">{restartError}</Notice> : null}
         {revision > 0 && record.recapStats ? <>
@@ -202,25 +236,6 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         </div> : null}
       </AdminCard>
 
-      <AdminCard title="Apps and sites" detail={appTotal ? `${formatMinutes(Math.round(appTotal / 60_000))} observed · Worktivity` : "App usage unavailable for this period"}>
-        {appItems.length ? <div className="payroll-apps">
-          {topApps.map((app, index) => {
-            const minutes = Math.round(app.durationMs / 60_000);
-            return <div className="payroll-app-row" key={`${app.name}-${index}`}>
-              <span className="payroll-app-name"><b style={{ background: `var(--chart-${(index % 8) + 1})` }} />{app.name}</span>
-              <span className="payroll-track"><i style={{ width: `${Math.max(2, (app.durationMs / appMax) * 100)}%`, background: `var(--chart-${(index % 8) + 1})` }} /></span>
-              <span className="payroll-app-time">{formatMinutes(minutes)} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
-            </div>;
-          })}
-          {otherApps.length ? <div className="payroll-app-row">
-            <span className="payroll-app-name"><b style={{ background: "var(--chart-8)" }} />Other ({otherApps.length} apps)</span>
-            <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--chart-8)" }} /></span>
-            <span className="payroll-app-time">{formatMinutes(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
-          </div> : null}
-        </div> : <p className="admin-quiet">No app distribution was captured. This does not change payable hours.</p>}
-        {record.apps && !record.apps.complete ? <p className="admin-quiet">App coverage is incomplete for this period.</p> : null}
-      </AdminCard>
-
       {!findings.error ? <><AdminCard title="Needs attention" detail={`${attention.length} of ${allFindings.length} flags require a person`}>
         {attention.length ? <div className="payroll-attention">
           {attention.map((finding) => <section className="payroll-attention-row" key={finding.id}>
@@ -235,7 +250,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             <div className="payroll-attention-actions">
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds?.length ?? 0} frame{(finding.frameSummaryIds?.length ?? 0) === 1 ? "" : "s"}</AdminButton> : null}
               {finding.requiredAction === "correct" ? <span className="admin-quiet">Correct the source, then re-analyze.</span>
-                : mutable && record.status === "needs_review" && finding.status === "needs_review" ? (
+                : mutable && (finding.status === "needs_review" || finding.status === "needs_correction") ? (
                   finding.requiredAction === "decide" ? <>
                     <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "payable" })}>Keep payable</AdminButton>
                     <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "excluded" })}>Exclude time</AdminButton>
@@ -256,6 +271,9 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         <ExcludedGroup title="Outside the eligible window"
           detail="Recorded time before the shift or after its grace end is never payable."
           findings={outside} onFrame={setFrameFinding} formatTime={time} empty="No outside-window intervals were excluded." />
+        {otherExcluded.length ? <ExcludedGroup title="Other rule exclusions"
+          detail="These intervals were removed by a payroll rule and do not need a decision."
+          findings={otherExcluded} onFrame={setFrameFinding} formatTime={time} empty="No other rule exclusions." /> : null}
       </AdminCard></> : null}
 
       {framed.length ? <AdminCard title="Evidence frames" detail="Linked to excluded inactivity intervals. Access is guarded.">
@@ -267,19 +285,6 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
         </div>
         <p className="admin-quiet">Opening frames records a reason and rechecks consent, expiry, and sensitive-content policy.</p>
       </AdminCard> : null}
-
-      <AdminCard title="Weekly briefs" detail="Observed evidence, not a productivity score">
-        {record.briefs.length ? <div className="payroll-native-stack">{record.briefs.map((brief) => (
-          <section key={brief.week} className="payroll-native-row">
-            <h3>Week {brief.week}: {brief.title || "Progress brief"}</h3>
-            <p>{brief.summary || "No grounded summary is available."}</p>
-            <Sources citations={brief.summaryCitations} />
-            {brief.themes.length ? <ul className="payroll-native-list">{brief.themes.map((theme, i) => <li key={i}><strong>{theme.heading}</strong><p>{theme.detail}</p><Sources citations={theme.citations} /></li>)}</ul> : null}
-            {brief.openItems.length ? <><h4>Open items</h4><ul className="payroll-native-list">{brief.openItems.map((item, i) => <li key={i}>{item.text}<Sources citations={item.citations} /></li>)}</ul></> : null}
-            {brief.gaps.length ? <><h4>Evidence gaps</h4><ul className="payroll-native-list">{brief.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></> : null}
-          </section>
-        ))}</div> : <p className="admin-quiet">No recap brief was recorded for this period.</p>}
-      </AdminCard>
 
       <AdminCard title="Daily evidence" detail={`Times in ${record.period.timezone}`}>
         {days.isPending ? <p role="status">Loading daily evidence…</p> : null}
@@ -301,6 +306,38 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
           ))}</ul> : null}
           {day.blockers.length ? <ul className="payroll-native-list">{day.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
         </details>)}
+      </AdminCard>
+
+      <AdminCard title="Weekly briefs" detail="Grounded in recaps and evidence. This is not a productivity score.">
+        {record.briefs.length ? <div className="payroll-native-stack">{record.briefs.map((brief) => (
+          <section key={brief.week} className="payroll-native-row">
+            <h3>Week {brief.week}: {brief.title || "Progress brief"}</h3>
+            <p>{brief.summary || "No grounded summary is available."}</p>
+            <Sources citations={brief.summaryCitations} />
+            {brief.themes.length ? <ul className="payroll-native-list">{brief.themes.map((theme, i) => <li key={i}><strong>{theme.heading}</strong><p>{theme.detail}</p><Sources citations={theme.citations} /></li>)}</ul> : null}
+            {brief.openItems.length ? <><h4>Open items</h4><ul className="payroll-native-list">{brief.openItems.map((item, i) => <li key={i}>{item.text}<Sources citations={item.citations} /></li>)}</ul></> : null}
+            {brief.gaps.length ? <><h4>Evidence gaps</h4><ul className="payroll-native-list">{brief.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></> : null}
+          </section>
+        ))}</div> : <p className="admin-quiet">No recap brief was recorded for this period.</p>}
+      </AdminCard>
+
+      <AdminCard title="Apps and sites" detail={appTotal ? `${formatMinutes(Math.round(appTotal / 60_000))} observed · Worktivity · context only` : "App usage unavailable for this period"}>
+        {appItems.length ? <div className="payroll-apps">
+          {topApps.map((app, index) => {
+            const minutes = Math.round(app.durationMs / 60_000);
+            return <div className="payroll-app-row" key={`${app.name}-${index}`}>
+              <span className="payroll-app-name"><b style={{ background: `var(--chart-${(index % 8) + 1})` }} />{app.name}</span>
+              <span className="payroll-track"><i style={{ width: `${Math.max(2, (app.durationMs / appMax) * 100)}%`, background: `var(--chart-${(index % 8) + 1})` }} /></span>
+              <span className="payroll-app-time">{formatMinutes(minutes)} · {Math.round((app.durationMs / Math.max(1, appTotal)) * 100)}%</span>
+            </div>;
+          })}
+          {otherApps.length ? <div className="payroll-app-row">
+            <span className="payroll-app-name"><b style={{ background: "var(--chart-8)" }} />Other ({otherApps.length} apps)</span>
+            <span className="payroll-track"><i style={{ width: `${Math.max(2, (otherMs / appMax) * 100)}%`, background: "var(--chart-8)" }} /></span>
+            <span className="payroll-app-time">{formatMinutes(Math.round(otherMs / 60_000))} · {Math.round((otherMs / Math.max(1, appTotal)) * 100)}%</span>
+          </div> : null}
+        </div> : <p className="admin-quiet">No app distribution was captured. This does not change payable hours.</p>}
+        {record.apps && !record.apps.complete ? <p className="admin-quiet">App coverage is incomplete for this period.</p> : null}
       </AdminCard>
     </> : null}
 
@@ -333,7 +370,9 @@ function ExcludedGroup({ title, detail, findings, onFrame, formatTime, empty, co
         <span>{formatWorkOsFullDate(finding.date)}</span>
         <span>{finding.span ? `${formatTime(finding.span.startMs)}–${formatTime(finding.span.endMs)}` : "—"}</span>
         <span>{finding.minutes === 0 && finding.durationMs > 0 ? "Under 1 min" : formatMinutes(finding.minutes)}</span>
-        <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity" && frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames"}</span>
+        <span>{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity"
+          ? (frames.length ? <button type="button" className="admin-record-open" onClick={() => onFrame(finding)}>{frames.length} frame{frames.length === 1 ? "" : "s"}</button> : "No linked frames")
+          : "Not reviewable by policy"}</span>
       </div>;
     })}</div> : <p className="admin-quiet">{empty}</p>;
   return collapsed ? <details className="payroll-rule"><summary>{head}</summary>{body}</details> : <section className="payroll-rule">{head}{body}</section>;

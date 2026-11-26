@@ -121,9 +121,17 @@
 .payroll-pill[data-tone="err"]{background:#f9e5e1;color:#8f352b}
 .payroll-quiet{color:var(--text-tertiary);font-size:10.5px}
 .payroll-section-title{font-size:15px;margin:22px 0 8px;font-weight:650}
+.payroll-fold > summary{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;cursor:pointer;min-height:32px}
+.payroll-fold > summary span{display:grid;gap:2px}
+.payroll-fold > summary strong{font-size:13px}
+.payroll-fold > summary small{color:var(--text-tertiary);font-size:10.5px;font-weight:400;line-height:1.45}
+.payroll-fold[open] > summary{margin-bottom:12px}
+.payroll-window-fields{display:grid;grid-template-columns:repeat(2,minmax(0,180px));gap:12px}
+.payroll-window-fields label{display:grid;gap:5px;font-size:10.5px;color:var(--text-secondary)}
+.payroll-window-fields input{min-height:36px;border:1px solid var(--border);border-radius:7px;background:var(--bg-card);color:var(--text-primary);padding:6px 8px}
 .payroll-daily summary{cursor:pointer;font-size:12px;font-weight:650}
 .payroll-daily-list{margin-top:10px;border-top:1px solid var(--border)}
-.payroll-daily-row{display:grid;grid-template-columns:140px repeat(4,minmax(0,1fr));gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.payroll-daily-row{display:grid;grid-template-columns:140px repeat(5,minmax(0,1fr));gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
 .payroll-daily-row:last-child{border-bottom:0}
 .payroll-daily-row strong{color:var(--text-primary)}
 .payroll-receipt h3{font-size:12.5px;margin:0 0 5px}
@@ -146,7 +154,7 @@
 .payroll-sources summary{cursor:pointer}
 .payroll-sources ul{padding-left:17px;list-style:disc}
 @media(max-width:980px){.payroll-hours{grid-template-columns:minmax(0,1fr)}.payroll-apps{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:640px){.payroll-big{font-size:28px}.payroll-askbar{padding:0 12px;bottom:12px}.payroll-rule-row{grid-template-columns:1fr auto}.payroll-rule-row > :nth-child(2),.payroll-rule-row > :nth-child(3){display:none}.payroll-attention-row{flex-direction:column}.payroll-attention-actions{justify-content:flex-start}.payroll-daily-row{grid-template-columns:1fr auto}}
+@media(max-width:640px){.payroll-big{font-size:28px}.payroll-askbar{padding:0 12px;bottom:12px}.payroll-rule-row{grid-template-columns:1fr auto}.payroll-rule-row > :nth-child(2),.payroll-rule-row > :nth-child(3){display:none}.payroll-attention-row{flex-direction:column}.payroll-attention-actions{justify-content:flex-start}.payroll-daily-row{grid-template-columns:1fr auto}.payroll-daily-row > :nth-child(n+4){display:none}.payroll-window-fields{grid-template-columns:1fr}}
 
 details.payroll-rule > summary { cursor: pointer; list-style-position: outside; padding-block: 2px; }
 details.payroll-rule > summary .payroll-rule-head { margin: 0; }
