@@ -156,6 +156,8 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
     ? `${time(finding.span.startMs)}–${time(finding.span.endMs)}`
     : "All day";
   const amount = (finding: PayrollFinding) => finding.minutes === 0 && finding.durationMs > 0 ? "Under 1 min" : formatMinutes(finding.minutes);
+  const binaryDecision = (finding: PayrollFinding) => finding.requiredAction === "decide"
+    || (finding.requiredAction === "acknowledge" && (finding.minutes > 0 || finding.durationMs > 0));
   const stack = [
     { key: "payable", label: "Payable", minutes: record.totals.recommended, color: "var(--chart-1)" },
     { key: "break", label: "Break", minutes: record.totals.break, color: "var(--chart-3)" },
@@ -245,15 +247,16 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
               </div>
               <p className="admin-quiet">{formatWorkOsFullDate(finding.date)} · {range(finding)} · {amount(finding)}</p>
               <p>{finding.reason}</p>
+              {binaryDecision(finding) ? <p className="admin-quiet">Approve keeps this time payable; reject excludes it.</p> : null}
               <Sources citations={finding.citations} />
             </div>
             <div className="payroll-attention-actions">
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds?.length ?? 0} frame{(finding.frameSummaryIds?.length ?? 0) === 1 ? "" : "s"}</AdminButton> : null}
               {finding.requiredAction === "correct" ? <span className="admin-quiet">Correct the source, then re-analyze.</span>
                 : mutable && (finding.status === "needs_review" || finding.status === "needs_correction") ? (
-                  finding.requiredAction === "decide" ? <>
-                    <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "payable" })}>Keep payable</AdminButton>
-                    <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "excluded" })}>Exclude time</AdminButton>
+                  binaryDecision(finding) ? <>
+                    <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "payable" })}>Approve</AdminButton>
+                    <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "excluded" })}>Reject</AdminButton>
                   </> : <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "acknowledged" })}>Acknowledge</AdminButton>
                 ) : null}
             </div>
@@ -386,13 +389,15 @@ function PayrollFrameDialog({ record, finding, onClose }: { record: PayrollRevie
   const api = desktopPayroll(record.scope.organizationId);
   const summaries = finding.frameSummaryIds ?? [];
   useEffect(() => () => { urls.forEach((url) => URL.revokeObjectURL(url)); }, [urls]);
-  const load = async () => {
-    if (!reason.trim() || busy) return;
+  const load = async (value = reason) => {
+    const trimmed = value.trim();
+    if (!trimmed || busy) return;
+    setReason(trimmed);
     setBusy(true); setError(null);
     const next: string[] = [];
     try {
       for (const summaryId of summaries) {
-        next.push(URL.createObjectURL(await api.previewFrame(record.id, finding.key, summaryId, reason.trim())));
+        next.push(URL.createObjectURL(await api.previewFrame(record.id, finding.key, summaryId, trimmed)));
       }
       setUrls(next);
     } catch (issue) {
@@ -404,14 +409,15 @@ function PayrollFrameDialog({ record, finding, onClose }: { record: PayrollRevie
   return <Drawer open onClose={onClose} title={`Evidence · ${FINDING_LABELS[finding.kind]}`}
     footer={<>
       <AdminButton onClick={onClose} disabled={busy}>Close</AdminButton>
-      <AdminButton variant="primary" onClick={() => void load()} disabled={busy || !reason.trim()}>{busy ? "Opening…" : urls.length ? "Reload frames" : "Open frames"}</AdminButton>
+      <AdminButton variant="primary" onClick={() => void load()} disabled={busy || !reason.trim()}>{busy ? "Opening…" : urls.length ? "Reload frames" : `View ${summaries.length} frame${summaries.length === 1 ? "" : "s"}`}</AdminButton>
     </>}>
     <div className="admin-grid">
       <p className="admin-quiet">{formatWorkOsFullDate(finding.date)} · {finding.span ? `${formatMinutes(finding.minutes)} excluded` : "Excluded interval"}. These are frames captured on the same day; access is recorded.</p>
-      {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div>
-        : <p className="admin-quiet">A reason is required before any image is fetched.</p>}
-      <label className="admin-field"><span>Reason</span><input value={reason} maxLength={500} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
+      <p className="admin-quiet">Enter a reason to unlock the frames. The reason is written to the access log.</p>
+      <label className="admin-field"><span>Reason (required)</span><input autoFocus value={reason} maxLength={500} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
+      <div><AdminButton onClick={() => void load("Reviewing payroll evidence")} disabled={busy}>Use “Reviewing payroll evidence”</AdminButton></div>
       {error ? <Notice tone="err">{error}</Notice> : null}
+      {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
     </div>
   </Drawer>;
 }
@@ -435,7 +441,20 @@ function PayrollDecision({ record, userId, intent, onClose }: { record: PayrollR
   const cache = useQueryClient();
   const changed = token.rowVersion !== record.token.rowVersion || token.sourceHash !== record.token.sourceHash;
   const title = intent.kind === "approve" ? "Approve payable hours" : intent.kind === "reopen" ? "Reopen payroll review"
-    : intent.action === "payable" ? "Keep payable" : intent.action === "excluded" ? "Exclude time" : "Acknowledge finding";
+    : intent.action === "payable" ? "Approve finding" : intent.action === "excluded" ? "Reject finding" : "Acknowledge finding";
+  const confirm = intent.kind === "finding"
+    ? (intent.action === "payable" ? "Approve" : intent.action === "excluded" ? "Reject" : "Acknowledge")
+    : title;
+  const hasAmount = intent.kind === "finding" && (intent.finding.minutes > 0 || intent.finding.durationMs > 0);
+  const amount = intent.kind === "finding"
+    ? (intent.finding.minutes === 0 && intent.finding.durationMs > 0 ? "under 1 minute" : formatMinutes(intent.finding.minutes))
+    : "";
+  const consequence = intent.kind !== "finding" ? null
+    : intent.action === "payable"
+      ? (hasAmount ? `Approving keeps ${amount} payable.` : "Approving records your review without changing payable hours.")
+      : intent.action === "excluded"
+        ? (hasAmount ? `Rejecting removes ${amount} from payable hours.` : "Rejecting records your review without changing payable hours.")
+        : "Acknowledging records your review without changing payable hours.";
   const decision = useMutation({
     mutationFn: async (reason: string) => {
       if (request.current?.note !== reason) request.current = { note: reason, key: crypto.randomUUID() };
@@ -449,12 +468,13 @@ function PayrollDecision({ record, userId, intent, onClose }: { record: PayrollR
   return <Drawer open onClose={() => { if (!decision.isPending) onClose(); }} title={title}
     footer={<>
       <AdminButton disabled={decision.isPending} onClick={onClose}>Cancel</AdminButton>
-      <AdminButton variant="primary" disabled={decision.isPending || changed || !note.trim()} onClick={() => decision.mutate(note.trim())}>{decision.isPending ? "Saving…" : title}</AdminButton>
+      <AdminButton variant="primary" disabled={decision.isPending || changed || !note.trim()} onClick={() => decision.mutate(note.trim())}>{decision.isPending ? "Saving…" : confirm}</AdminButton>
     </>}>
     <div className="admin-grid">
       <p>{intent.kind === "approve" ? `Approve ${formatMinutes(record.totals.recommended)} and create an immutable receipt.`
         : intent.kind === "reopen" ? "The existing receipt is kept. The review will need a new approval."
           : intent.finding.reason}</p>
+      {consequence ? <p className="admin-quiet">{consequence}</p> : null}
       {changed ? <Notice tone="warn">The review changed. Close this dialog and check the latest record before trying again.</Notice> : null}
       <label className="admin-field"><span>Reason</span><input value={note} maxLength={500} disabled={decision.isPending} onChange={(event) => setNote(event.target.value)} /></label>
       {decision.error ? <Notice tone="err">{decision.error.message}</Notice> : null}
