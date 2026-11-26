@@ -20,6 +20,7 @@ describe("setup panel column", () => {
   const shellRule = styles.match(/\.guided-onboarding \{[\s\S]*?\n\}/)?.[0] ?? "";
   const workspaceRule = styles.match(/\.onboarding-workspace \{[\s\S]*?\n\}/)?.[0] ?? "";
   const headerRule = formStyles.match(/\.onboarding-workspace > header \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const scrollRule = styles.match(/\.phase-scroll \{[\s\S]*?\n\}/)?.[0] ?? "";
   const contentRule = formStyles.match(/\.phase-content \{[\s\S]*?\n\}/)?.[0] ?? "";
   const actionsRule = formStyles.match(/\.phase-actions \{[\s\S]*?\n\}/)?.[0] ?? "";
 
@@ -40,14 +41,26 @@ describe("setup panel column", () => {
     expect(actionsRule).toMatch(/flex:\s*0 0 auto;/);
   });
 
-  it("makes the step body the one child that grows, shrinks, and scrolls", () => {
-    expect(contentRule).toMatch(/flex:\s*1 1 auto;/);
+  it("makes the scroll region the one child that grows, shrinks, and scrolls", () => {
+    expect(scrollRule).toMatch(/flex:\s*1 1 auto;/);
     // Without this a flex child refuses to shrink below its content, so a tall
     // step would still push the footer out instead of scrolling.
-    expect(contentRule).toMatch(/min-height:\s*0;/);
-    // The overflow declaration itself stays in styles.css, where the narrow
-    // layout flips it to `visible`; this file must not pin it back to `auto`.
+    expect(scrollRule).toMatch(/min-height:\s*0;/);
+    expect(scrollRule).toMatch(/overflow-y:\s*auto;/);
+    // The scrolling element spans the panel, so its scrollbar sits at the
+    // window edge. The measured form column inside it must not scroll again.
+    expect(scrollRule).toMatch(/width:\s*100%;/);
     expect(contentRule).not.toMatch(/overflow:\s*auto;/);
+    expect(contentRule).toMatch(/min-height:\s*100%;/);
+  });
+
+  it("keeps the scrollbar at the panel edge while the form column stays inset", () => {
+    // A centred, narrower scroller put the scrollbar 28px inside the window and
+    // left a dead strip beside it. The region now owns the full edge; only the
+    // content column below it keeps the measured width and auto margins.
+    expect(scrollRule).not.toMatch(/margin:\s*0 auto;/);
+    expect(contentRule).toMatch(/margin:\s*0 auto;/);
+    expect(contentRule).toMatch(/width:\s*min\(680px, calc\(100% - 56px\)\);/);
   });
 
   it("anchors narrow actions to the viewport and reserves their content clearance", () => {

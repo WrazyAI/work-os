@@ -133,7 +133,7 @@ export default function EmployeeSettings() {
   const catalog = onboarding.data?.catalog as { archetypes?: WorkArchetype[] } | undefined;
   const archetypes = catalog?.archetypes ?? [];
   const selectedArchetype = archetypes.find((candidate) => candidate.id === archetypeId) ?? null;
-  const profileIssue = profileSetupIssue({ archetypeId, customRoleTitle, items: profileItems });
+  const profileIssue = profileSetupIssue({ archetypeId, specialtyIds, customRoleTitle, items: profileItems });
   const selectedProfileItems = (kind: ProfileItemKind) => profileItems.filter((item) => item.kind === kind);
   const suggestedProfileItems = (kind: ProfileItemKind) => (selectedArchetype?.items ?? []).filter((item) => item.kind === kind && !profileItems.some((selected) => selected.kind === item.kind && selected.label.trim().toLowerCase() === item.label.trim().toLowerCase()));
   const selectArchetype = (next: string) => {
@@ -289,7 +289,7 @@ export default function EmployeeSettings() {
                   </div>
                   {selectedArchetype && selectedArchetype.specialties.length > 0 ? (
                     <div className={styles.signalGroup}>
-                      <span className={styles.signalLabel}>Specialties <em>optional</em></span>
+                      <span className={styles.signalLabel}>Specialties <em>required</em></span>
                       <div className={styles.signalChips}>
                         {selectedArchetype.specialties.map((specialty) => {
                           const selected = specialtyIds.includes(specialty.id);

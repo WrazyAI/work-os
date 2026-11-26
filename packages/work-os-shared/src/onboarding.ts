@@ -77,12 +77,32 @@ export function inferArchetype(title: string | null | undefined): string | null 
   return best?.id ?? null;
 }
 
-export function validateArchetypeSelection(archetypeId: unknown, specialtyIds: unknown) {
+/** A reviewed role carries specialties, and picking the role without one
+ *  leaves the next step with nothing to suggest. "Something else" has no
+ *  reviewed specialties, so it is exempt: its own title is the signal. */
+export function specialtySelectionIssue(archetype: WorkArchetype, specialtyIds: unknown) {
+  if (!archetype.specialties.length) return null;
+  const requested = Array.isArray(specialtyIds) ? [...new Set(specialtyIds.map(String))] : [];
+  const valid = new Set(archetype.specialties.map((specialty) => specialty.id));
+  return requested.some((id) => valid.has(id)) ? null : "Choose at least one specialty for the selected role.";
+}
+
+export function validateArchetypeSelection(
+  archetypeId: unknown,
+  specialtyIds: unknown,
+  options: { requireSpecialty?: boolean } = {},
+) {
   const archetype = [...WORK_ARCHETYPES, CUSTOM_ARCHETYPE].find((candidate) => candidate.id === archetypeId);
   if (!archetype) throw new Error("Select a valid work archetype.");
   const requested = Array.isArray(specialtyIds) ? [...new Set(specialtyIds.map(String))] : [];
   const valid = new Set(archetype.specialties.map((specialty) => specialty.id));
   if (requested.some((id) => !valid.has(id))) throw new Error("One or more specialties do not belong to the selected archetype.");
+  // Draft saves opt out: clearing a role deliberately clears its specialties,
+  // and an unfinished draft may sit in that state until the employee picks one.
+  if (options.requireSpecialty) {
+    const issue = specialtySelectionIssue(archetype, requested);
+    if (issue) throw new Error(issue);
+  }
   return { archetype, specialtyIds: requested.slice(0, 12) };
 }
 

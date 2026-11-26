@@ -4,6 +4,7 @@ export {
   CUSTOM_ARCHETYPE,
   workProfileCatalog,
   inferArchetype,
+  specialtySelectionIssue,
   validateArchetypeSelection,
   normalizeProfileItems,
 } from "@wrazy/work-os-shared/onboarding";

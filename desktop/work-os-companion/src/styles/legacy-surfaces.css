@@ -2028,11 +2028,20 @@ summary {
   width: 34px;
   padding: 0;
   justify-content: center;
+}/* The panel edge owns the scrollbar, not the measured form column: the
+   scroll region spans the full workspace so a visible scrollbar sits flush at
+   the window's right edge, while the form column below keeps its own inset. */
+.phase-scroll {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }.phase-content {
   width: min(720px, calc(100% - 48px));
   margin: 0 auto;
+  min-height: 100%;
   padding: clamp(26px, 5vh, 54px) 0 22px;
-  overflow: auto;
 }.phase-intro {
   max-width: 570px;
   margin-bottom: 26px;
@@ -2439,7 +2448,8 @@ summary {
        completion screen reachable above it when the document is scrolled. */
     padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
-  .phase-content {
+  .phase-scroll {
+    flex: 0 0 auto;
     overflow: visible;
   }
   .identity-grid,

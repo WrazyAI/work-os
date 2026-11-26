@@ -41,10 +41,10 @@
   display: grid;
   align-content: safe center;
   width: min(680px, calc(100% - 56px));
-  /* Let the step body be the flex child that shrinks and scrolls; `overflow`
-     itself stays in styles.css, where the narrow layout flips it to visible. */
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Fills the scroll region so a short step still composes at the optical
+     centre; the scrollbar belongs to `.phase-scroll`, which spans the panel. */
+  min-height: 100%;
+  margin: 0 auto;
 }
 
 .phase-intro {
