@@ -23,6 +23,7 @@ import { getAdminOttoRecap } from "../src/lib/work-os-admin-otto-reads.ts";
 import { proxy } from "../src/proxy.ts";
 import {
   adminAccess,
+  adminUser,
   fixture,
   intervalA,
   migration,
@@ -77,8 +78,8 @@ function reviewedRecap(overrides: Partial<ReviewedRecap> = {}): ReviewedRecap {
 
 async function seedPerson(db: Db, input: { id: string; name: string; active?: boolean; organizationId?: string }) {
   const organizationId = input.organizationId ?? org;
-  await db.query(`insert into work_people (id, organization_id, display_name, active, nifty_member_id)
-    values ($1,$2,$3,$4,null)`, [input.id, organizationId, input.name, input.active ?? true]);
+  await db.query(`insert into work_people (id, organization_id, user_id, display_name, active, nifty_member_id)
+    values ($1,$2,$3,$4,$5,null)`, [input.id, organizationId, adminUser, input.name, input.active ?? true]);
   await db.query(`insert into work_employee_onboarding (organization_id, person_id, timezone)
     values ($1,$2,'UTC')`, [organizationId, input.id]);
 }
