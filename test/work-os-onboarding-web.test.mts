@@ -14,13 +14,19 @@ const item = (kind: WorkProfileItem["kind"], label: string, source: WorkProfileI
 });
 
 test("web onboarding requires at least one work-profile signal", () => {
-  assert.equal(profileSetupIssue({ archetypeId: "engineering", customRoleTitle: "", items: [] }), "Choose at least one responsibility, output, or evidence source.");
-  assert.equal(profileSetupIssue({ archetypeId: "engineering", customRoleTitle: "", items: [item("responsibility", "Review code")] }), null);
+  assert.equal(profileSetupIssue({ archetypeId: "engineering", specialtyIds: ["engineering:frontend"], customRoleTitle: "", items: [] }), "Choose at least one responsibility, output, or evidence source.");
+  assert.equal(profileSetupIssue({ archetypeId: "engineering", specialtyIds: ["engineering:frontend"], customRoleTitle: "", items: [item("responsibility", "Review code")] }), null);
+});
+
+test("a reviewed role needs a specialty but a custom role does not", () => {
+  assert.equal(profileSetupIssue({ archetypeId: "engineering", specialtyIds: [], customRoleTitle: "", items: [item("responsibility", "Review code")] }), "Choose at least one specialty for the selected role.");
+  assert.equal(profileSetupIssue({ archetypeId: "engineering", specialtyIds: ["engineering:frontend"], customRoleTitle: "", items: [item("responsibility", "Review code")] }), null);
+  assert.equal(profileSetupIssue({ archetypeId: "custom", specialtyIds: [], customRoleTitle: "Producer", items: [item("responsibility", "Own the studio")] }), null);
 });
 
 test("a custom role needs its title before submission", () => {
-  assert.equal(profileSetupIssue({ archetypeId: "custom", customRoleTitle: "", items: [item("responsibility", "Own the studio")] }), "Describe your role.");
-  assert.equal(profileSetupIssue({ archetypeId: "custom", customRoleTitle: "Producer", items: [item("responsibility", "Own the studio")] }), null);
+  assert.equal(profileSetupIssue({ archetypeId: "custom", specialtyIds: [], customRoleTitle: "", items: [item("responsibility", "Own the studio")] }), "Describe your role.");
+  assert.equal(profileSetupIssue({ archetypeId: "custom", specialtyIds: [], customRoleTitle: "Producer", items: [item("responsibility", "Own the studio")] }), null);
 });
 
 test("the payload splits work-profile items and preserves the saved preferences", () => {

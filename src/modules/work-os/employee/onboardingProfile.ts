@@ -1,4 +1,4 @@
-import { normalizeProfileItems, type ProfileItemKind, type WorkProfileItem } from "../onboarding";
+import { WORK_ARCHETYPES, normalizeProfileItems, specialtySelectionIssue, type ProfileItemKind, type WorkProfileItem } from "../onboarding";
 
 /** The three peer work-profile groups the onboarding form and the companion
  * both use. The web form renders them as one compact picker so a new employee
@@ -31,14 +31,21 @@ export interface WorkPreferencesPayload {
 }
 
 /** The one local rule the server enforces at submit time: a work profile needs
- * at least one concrete signal, and a custom role needs its name. */
+ * at least one concrete signal, a reviewed role needs a specialty, and a custom
+ * role needs its name. */
 export function profileSetupIssue(input: {
   archetypeId: string;
+  specialtyIds: string[];
   customRoleTitle: string;
   items: WorkProfileItem[];
 }): string | null {
   if (!normalizeProfileItems(input.items).length) return "Choose at least one responsibility, output, or evidence source.";
   if (input.archetypeId === "custom" && !input.customRoleTitle.trim()) return "Describe your role.";
+  const archetype = WORK_ARCHETYPES.find((entry) => entry.id === input.archetypeId);
+  if (archetype) {
+    const specialtyIssue = specialtySelectionIssue(archetype, input.specialtyIds);
+    if (specialtyIssue) return specialtyIssue;
+  }
   return null;
 }
 

@@ -624,7 +624,7 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
   const notificationsInput = body.notifications && typeof body.notifications === "object" ? body.notifications as Json : {};
   if (typeof notificationsInput.desktopEnabled !== "boolean") throw new Error("desktop notification preference is required");
   const workInput = body.workPreferences && typeof body.workPreferences === "object" ? body.workPreferences as Json : {};
-  const selection = validateArchetypeSelection(workInput.archetypeId, workInput.specialtyIds);
+  const selection = validateArchetypeSelection(workInput.archetypeId, workInput.specialtyIds, { requireSpecialty: true });
   const profileItems = normalizeProfileItems(workInput.items, {
     responsibility: workInput.responsibilities,
     deliverable: workInput.outputTypes,

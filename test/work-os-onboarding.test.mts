@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { inferArchetype, normalizeProfileItems, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
+import { CUSTOM_ARCHETYPE, inferArchetype, normalizeProfileItems, specialtySelectionIssue, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
 import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } from "../src/modules/work-os/attendance";
 import { deriveWorktivityBreakSeconds, deriveWorktivityLastActivityAt, deriveWorktivitySessionStart, deriveWorktivitySessionWindow, normalizeWorktivityActivityLogs, worktivityLocalDayBounds } from "../src/lib/work-os-attendance";
 import { FALLBACK_TIMEZONES, supportedTimezones, timezoneLabel } from "../src/modules/work-os/timezones";
@@ -50,6 +50,38 @@ test("role inference is deterministic and leaves unmatched titles unassigned", (
 test("specialties must belong to the selected archetype", () => {
   assert.throws(() => validateArchetypeSelection("engineering", ["support:onboarding"]), /do not belong/);
   assert.deepEqual(validateArchetypeSelection("engineering", ["engineering:frontend"]).specialtyIds, ["engineering:frontend"]);
+});
+
+test("a predefined role blocks an empty specialty list while custom roles may skip it", () => {
+  for (const archetype of WORK_ARCHETYPES) {
+    const specialty = archetype.specialties[0];
+    assert.ok(specialty, `${archetype.id} carries a specialty`);
+    assert.equal(specialtySelectionIssue(archetype, []), "Choose at least one specialty for the selected role.");
+    assert.equal(specialtySelectionIssue(archetype, [specialty.id]), null);
+    assert.throws(
+      () => validateArchetypeSelection(archetype.id, [], { requireSpecialty: true }),
+      /Choose at least one specialty/,
+      `${archetype.id} requires a specialty at submit time`,
+    );
+    assert.deepEqual(
+      validateArchetypeSelection(archetype.id, [specialty.id], { requireSpecialty: true }).specialtyIds,
+      [specialty.id],
+      `${archetype.id} accepts a valid specialty`,
+    );
+    // Draft saves stay permissive: a role change deliberately clears the
+    // specialty list until the employee chooses the new one.
+    assert.deepEqual(validateArchetypeSelection(archetype.id, []).specialtyIds, []);
+  }
+  assert.equal(specialtySelectionIssue(CUSTOM_ARCHETYPE, []), null);
+  assert.deepEqual(validateArchetypeSelection("custom", [], { requireSpecialty: true }).specialtyIds, []);
+});
+
+test("final onboarding submission requires a specialty without changing draft saves", () => {
+  const source = readFileSync(new URL("../src/lib/work-os-onboarding.ts", import.meta.url), "utf8");
+  const submit = source.slice(source.indexOf("export async function submitEmployeeOnboarding"));
+  assert.match(submit, /validateArchetypeSelection\(workInput\.archetypeId, workInput\.specialtyIds, \{ requireSpecialty: true \}\)/);
+  const draft = source.slice(source.indexOf("export async function saveEmployeeOnboardingDraft"), source.indexOf("export async function submitEmployeeOnboarding"));
+  assert.doesNotMatch(draft, /requireSpecialty/);
 });
 
 test("legacy profile strings become user-owned structured items", () => {
