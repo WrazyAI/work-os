@@ -50,7 +50,10 @@ needs a paper ground: charts, bounded tables, and the KPI record. There is one
 KPI record per page at most, a single bounded band with hairline separators,
 never a wall of equal-weight tiles. Radius tops out at 16px on those grounds;
 controls use 8–9px; there is no resting shadow. Signal green stays on state and
-the one forward action.
+the one forward action. **Overview is the deliberate instrument exception:** one
+board with internal hairlines carries the pulse, trend, live shape, observed
+time, people, and decisions; it keeps the masthead quiet and never becomes a
+card wall.
 
 ## Page refresh
 

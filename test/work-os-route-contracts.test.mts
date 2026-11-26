@@ -625,13 +625,20 @@ test("github admin integration routes stay admin-scoped and token-safe", async (
   assert.doesNotMatch(integration, /console\.log/);
 });
 
-test("the administration pages read as label/content groups, not a card wall", async () => {
-  const pages = ["AdminOverview", "AdminPeople", "AdminTasks", "AdminReview", "AdminInsights", "AdminEvidence", "AdminSettings"];
+test("the administration pages keep their index or instrument, never a card wall", async () => {
+  const pages = ["AdminPeople", "AdminTasks", "AdminReview", "AdminInsights", "AdminEvidence", "AdminSettings"];
   for (const page of pages) {
     const src = await source(`src/modules/work-os/admin/${page}.tsx`);
     assert.match(src, /\bGroup\b/, `${page} uses the index gutter`);
     assert.doesNotMatch(src, /AdminCard/, `${page} does not fall back to a card per section`);
   }
+  const overview = await source("src/modules/work-os/admin/AdminOverview.tsx");
+  assert.match(overview, /AdminOverviewSignal/, "the overview renders the signal board");
+  assert.doesNotMatch(overview, /AdminCard/, "the overview does not fall back to a card per section");
+  const overviewSignal = await source("src/modules/work-os/admin/AdminOverviewSignal.tsx");
+  assert.match(overviewSignal, /Observed time/, "the board keeps the observed-time record");
+  assert.match(overviewSignal, /Setup and sources/, "the board keeps setup and freshness");
+  assert.doesNotMatch(overviewSignal, /AdminCard/, "the signal board stays one instrument");
   const tasks = await source("src/modules/work-os/admin/AdminTasks.tsx");
   assert.match(tasks, /overdueRecorded/, "the task headline separates recorded from default due dates");
   assert.match(tasks, /role="columnheader"/, "sortable headers expose their column role");

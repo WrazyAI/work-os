@@ -13,7 +13,7 @@ measures.
 - Changing observed-time charts: [Insights and analytical charts](../areas/insights.md).
 - Changing person destinations: [Administration people and person record](people.md).
 
-**Implementation starting points:** [OverviewPage.tsx](../../../desktop/work-os-companion/src/admin/OverviewPage.tsx), [OverviewSignal.tsx](../../../desktop/work-os-companion/src/admin/OverviewSignal.tsx).
+**Implementation starting points:** [OverviewPage.tsx](../../../desktop/work-os-companion/src/admin/OverviewPage.tsx), [OverviewSignal.tsx](../../../desktop/work-os-companion/src/admin/OverviewSignal.tsx), [AdminOverview.tsx](../../../src/modules/work-os/admin/AdminOverview.tsx), [AdminOverviewSignal.tsx](../../../src/modules/work-os/admin/AdminOverviewSignal.tsx).
 
 ## The signal board
 
@@ -62,6 +62,12 @@ Every row opens the record that can resolve it.
 **Sources and freshness.** A closed disclosure lists Tasks, Worktivity, GitHub,
 Plans, and EOD freshness with the day's counts. The snapshot time stays in the
 header; the disclosure carries the source detail without becoming a card.
+
+**Web parity.** The web administration renders the same composition from the
+same read model. Its pulse controls link to the web records, person rows
+deep-link to the roster's person drawer, and the **Setup and sources**
+disclosure carries readiness and freshness together so the web surface does not
+lose the setup detail the desktop keeps behind its decision queue.
 
 **States.** Loading reserves the board's geometry. Empty names the absence of a
 record and never invents activity. The stale snapshot remains a standing

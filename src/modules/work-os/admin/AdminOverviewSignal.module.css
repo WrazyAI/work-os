@@ -1,0 +1,246 @@
+/* The web Overview signal board's chart layer.
+ *
+ * Scoped module: bars, mean references, the day readout, sparklines, and the
+ * one entrance sequence. Layout and type stay in Tailwind so the page inherits
+ * the administration shell's rhythm. */
+
+.rise {
+  --signal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  animation: rise 240ms var(--signal-ease) both;
+}
+
+.chart {
+  --signal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.plot {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  touch-action: pan-y;
+}
+
+.plot:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+
+.grid {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gridLine {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--border-subtle);
+  opacity: 0.7;
+}
+
+.ref {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  height: 0;
+  pointer-events: none;
+  transition: bottom 180ms var(--signal-ease);
+}
+
+.refLine {
+  display: block;
+  border-top: 1px dashed var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.refLabel {
+  position: absolute;
+  top: -15px;
+  right: 0;
+  padding: 0 3px;
+  background: var(--color-paper);
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.refRecent .refLine {
+  border-top-color: var(--status-observed);
+  opacity: 0.9;
+}
+
+.refRecent .refLabel {
+  color: var(--status-observed);
+}
+
+.refPrior .refLabel {
+  right: auto;
+  left: 0;
+}
+
+.bars {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  align-items: end;
+  gap: 6px;
+}
+
+.slot {
+  display: flex;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.bar {
+  display: block;
+  width: min(100%, 28px);
+  border-radius: 3px 3px 1px 1px;
+  background: var(--color-ink, var(--text-primary));
+  opacity: 0.86;
+  transform-origin: bottom center;
+  animation: barGrow 340ms var(--signal-ease) both;
+  transition: height 180ms var(--signal-ease), background-color 120ms var(--signal-ease), opacity 120ms var(--signal-ease);
+}
+
+.slotActive .bar {
+  background: var(--status-observed);
+  opacity: 1;
+}
+
+.axis {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.axisLabel {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-style: normal;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.axisLabel:first-child {
+  text-align: left;
+}
+
+.axisLabel:last-child {
+  text-align: right;
+}
+
+.caption {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.caption strong {
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+.readout {
+  position: absolute;
+  top: 6px;
+  z-index: 3;
+  display: grid;
+  min-width: 150px;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  box-shadow: var(--shadow-md);
+  font-size: 10px;
+  line-height: 1.3;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: readoutIn 120ms ease-out both;
+}
+
+.readoutStart,
+.readoutEnd {
+  transform: none;
+}
+
+.readoutTitle {
+  margin-bottom: 2px;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.readoutRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.readoutRow em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.readoutDot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.spark {
+  width: 76px;
+  height: 24px;
+  flex: none;
+  overflow: visible;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes barGrow {
+  from { opacity: 0.35; transform: scaleY(0); }
+  to { opacity: 0.86; transform: scaleY(1); }
+}
+
+@keyframes readoutIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .axisMonth {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .bar,
+  .readout,
+  .ref {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}
