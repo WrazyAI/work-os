@@ -23,6 +23,10 @@ flight, collect entries under `## 0.5.45 — 2026-11-26`; when cutting a release
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
+## Unreleased
+
+- In desktop Payroll, review any window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.
+
 ## 0.5.45 — 2026-11-26
 
 - Exception, late, and clock-out confirmations now give you room to explain what happened, and the confirm button is clear about when it is ready.

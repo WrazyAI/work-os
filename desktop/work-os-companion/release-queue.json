@@ -46,7 +46,7 @@
     {
       "id": "voice-upload-failure-copy",
       "type": "fix",
-      "summary": "A failed voice note now explains what happened instead of showing \u201cFailed to fetch.\u201d",
+      "summary": "A failed voice note now explains what happened instead of showing “Failed to fetch.”",
       "verification": "bd78a517: npm test -- src/voiceInput.test.ts (3 passed, including transport, timeout and workspace-error copy)."
     },
     {
@@ -233,7 +233,7 @@
       "id": "admin-otto-motion-eod-document",
       "type": "feature",
       "summary": "Admin Otto shows what it is doing while it works, streams the reply, and renders submitted EOD reports as readable documents.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion \u2192 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; `npx vitest run` in desktop/work-os-companion → 205 files / 1843 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440/390 EOD document, thinking trace, streamed reply and composer sweep with no overflow."
     },
     {
       "id": "employee-inapp-otto-view-switch",
@@ -251,7 +251,7 @@
       "id": "admin-record-time-and-evidence-frames",
       "type": "fix",
       "summary": "A teammate's admin record shows recorded time and update counts again, Worktivity evidence shows its retained frame, and reports read as one tidy list.",
-      "verification": "`npm run work-os:test` \u2192 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` \u2192 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
+      "verification": "`npm run work-os:test` → 1284 tests / 1273 pass / 0 fail / 11 skipped; companion `npx vitest run` → 206 files / 1849 tests pass; `npm run work-os:typecheck`; companion `npm run build`; rendered 1440 and 460 admin People report rows and Worktivity evidence thumbnails; the live authenticated preview returned image/webp for the administrator's own retained frame."
     },
     {
       "id": "insights-loads-after-pg-date-normalization",
@@ -263,7 +263,7 @@
       "id": "scroll-past-lists-and-tool-tables",
       "type": "fix",
       "summary": "The mouse wheel keeps moving the page when the pointer is over a task table, list, or Otto tool card.",
-      "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0\u2192400px, the in-app Otto approval card 0\u2192300px, the plan review body 200\u2192500px, and the Tasks page to its limit."
+      "verification": "Worktree codex/scroll-lists: companion suite 1853 passed; focused visualizations suite 49 passed; rendered wheel probes moved the Today dashboard 0→400px, the in-app Otto approval card 0→300px, the plan review body 200→500px, and the Tasks page to its limit."
     },
     {
       "id": "plan-build-refine-spinners-and-single-delete-check",
@@ -281,7 +281,7 @@
       "id": "employee-unified-task-finder",
       "type": "feature",
       "summary": "Find tasks across all views with search, status pills and dates in one window; compact search, calendar and add controls keep column labels clear.",
-      "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED\u2192GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search\u2192status\u2192dates\u2192drawer. Server migration0073 and API deployment remain pending before installer publication."
+      "verification": "Ledger 84758657-f2b8-4e3d-bdb6-5b4a23c62e92; branch codex/employee-task-finder through 7b532123: companion 208 files/1863 tests pass; route/PGlite state-text-date intersection and tenant checks pass; optimistic membership/local reopen cache regressions RED→GREEN; rendered 1440/1024/720/390 plus short/reduced-motion/medium-text/keyboard/IME/wheel/drawer checks, axe0; TestSprite86fb1f04 run5adad21a passed search→status→dates→drawer. Server migration0073 and API deployment remain pending before installer publication."
     },
     {
       "id": "focus-plan-hierarchy-and-motion",
@@ -364,19 +364,19 @@
     {
       "id": "admin-panel-quieter-header-and-task-record",
       "type": "fix",
-      "summary": "Administration pages drop the repeated \u201cWork OS \u00b7 Administration\u201d line, and the organization task list gives titles more room with quieter row rules.",
-      "verification": "Rendered ?preview-admin and ?preview-admin&section=tasks at 1004 and 1280 in Light and Dark: no eyebrow text remains on any section, the Task column grows 170\u2192224px at 1004px, and the header rule is the only strong table line. Companion typecheck clean; companion 222 files/1962 tests pass."
+      "summary": "Administration pages drop the repeated “Work OS · Administration” line, and the organization task list gives titles more room with quieter row rules.",
+      "verification": "Rendered ?preview-admin and ?preview-admin&section=tasks at 1004 and 1280 in Light and Dark: no eyebrow text remains on any section, the Task column grows 170→224px at 1004px, and the header rule is the only strong table line. Companion typecheck clean; companion 222 files/1962 tests pass."
     },
     {
       "id": "focus-plan-dialog-grouped-list",
       "type": "fix",
-      "summary": "The Today\u2019s focus dialog\u2019s plan reads as one grouped list with a thin scrollbar at the dialog edge instead of a stack of rules.",
+      "summary": "The Today’s focus dialog’s plan reads as one grouped list with a thin scrollbar at the dialog edge instead of a stack of rules.",
       "verification": "Rendered ?preview-tasks&many at 1280x900, 1004x430, and 560x820 in Light and Dark: no per-row borders, symmetric 39px/39px content insets with a 10px edge scrollbar, expanded subtasks and keyboard focus intact. Companion typecheck clean; companion 222 files/1962 tests pass."
     },
     {
       "id": "floating-eod-action-contrast",
       "type": "fix",
-      "summary": "The floating companion\u2019s EOD shortcut stays dark-on-green in every theme, so it remains readable in dark mode.",
+      "summary": "The floating companion’s EOD shortcut stays dark-on-green in every theme, so it remains readable in dark mode.",
       "verification": "Dark-theme render of ?window=avatar&avatar-fixture=eod-bubble: .avatar-prompt-action contrast 1.20:1 before, 11.27:1 after (ink-on-signal #1d2815 on signal #a8f15b); bubble 15.54:1, body 10.62:1, elapsed pill 15.36:1. themeSurfaceContrast 14/14; AvatarPromptBubble 3/3."
     },
     {
@@ -407,7 +407,7 @@
       "id": "guide-split-view-and-settings-film",
       "type": "feature",
       "summary": "Page guides open as a split view with the film on the left and the steps beside it; narrow windows stack them, and the Settings guides show the new Settings rail and inline profile.",
-      "verification": "Re-shot the Settings and administration Settings films from the offline film build at 1000\u00d7500 H.264 (settings 7.67/7.80/11.17s; admin 5.07/4.27/5.90s). Guide assets total 7.91 MiB, inside the 8 MiB budget. Companion 225 files/1998 tests, typecheck, and production build pass; Work OS suite 1352 tests with 1341 pass, 0 fail, 11 skipped. Rendering: split modal at 1440\u00d7900, 900\u00d7800, 420\u00d7820, and 420\u00d7600, light and dark; reduced-motion still with Play this step; tour split with its page rail; arrow-key chapters and Escape focus restore checked through the real modal."
+      "verification": "Re-shot the Settings and administration Settings films from the offline film build at 1000×500 H.264 (settings 7.67/7.80/11.17s; admin 5.07/4.27/5.90s). Guide assets total 7.91 MiB, inside the 8 MiB budget. Companion 225 files/1998 tests, typecheck, and production build pass; Work OS suite 1352 tests with 1341 pass, 0 fail, 11 skipped. Rendering: split modal at 1440×900, 900×800, 420×820, and 420×600, light and dark; reduced-motion still with Play this step; tour split with its page rail; arrow-key chapters and Escape focus restore checked through the real modal."
     },
     {
       "id": "dismissible-recap-eod-goal-prompts",
@@ -425,7 +425,7 @@
       "id": "admin-otto-arrivals",
       "type": "feature",
       "summary": "Admin Otto now tells you when someone submits an EOD report or sends a reviewed recap, in the bubble, the expanded card, and an OS toast while hidden.",
-      "verification": "Companion 227 files/2026 tests and typecheck pass. Playwright at 380\u00d7620: compact admin bubble and alert pose in light and dark; dismissal persists across reload; expanded card renders above Chat and Recaps. Pure tests cover the first-read baseline, offline catch-up, grouped EOD copy, recap group ids, per-event dismissal, and auto-switch decisions."
+      "verification": "Companion 227 files/2026 tests and typecheck pass. Playwright at 380×620: compact admin bubble and alert pose in light and dark; dismissal persists across reload; expanded card renders above Chat and Recaps. Pure tests cover the first-read baseline, offline catch-up, grouped EOD copy, recap group ids, per-event dismissal, and auto-switch decisions."
     },
     {
       "id": "mode-scoped-otto-state",
@@ -461,7 +461,7 @@
       "id": "shared-vault-single-initialization",
       "type": "fix",
       "summary": "Work OS opens its local data once and shares it between both windows instead of repeating the same unlock.",
-      "verification": "Branch codex/companion-shared-vault-startup rebased on 0.5.40: core7; transport9 (queued-settings, failed-save, resumable sign-out RED\u2192GREEN); companion 232 files/2063 tests, typecheck, contracts, Windows GNU check and production build; committed native Windows harness 6 pass (legacy/shared init/writers/restart/theme/reset, wrong-key recovery, corrupt snapshot and salt preservation). Installed 0.5.33 showed duplicated Stronghold initialization in both windows; one init is verified. Synthetic timing was too variable to claim a speedup; installed gain unmeasured. TestSprite blocked by billing; no installer published."
+      "verification": "Branch codex/companion-shared-vault-startup rebased on 0.5.40: core7; transport9 (queued-settings, failed-save, resumable sign-out RED→GREEN); companion 232 files/2063 tests, typecheck, contracts, Windows GNU check and production build; committed native Windows harness 6 pass (legacy/shared init/writers/restart/theme/reset, wrong-key recovery, corrupt snapshot and salt preservation). Installed 0.5.33 showed duplicated Stronghold initialization in both windows; one init is verified. Synthetic timing was too variable to claim a speedup; installed gain unmeasured. TestSprite blocked by billing; no installer published."
     },
     {
       "id": "evidence-older-rows",
@@ -600,6 +600,12 @@
       "type": "fix",
       "summary": "The onboarding scrollbar now sits at the right edge of the window when the workspace is narrow.",
       "verification": "Moved scrolling to a full-width phase-scroll region; measured scroller right edge 1007.98/1008 at 1008px, 1000/1000 at 1000px, and 900/900 at 900px, with the form column still inset. Narrow layout uses the document scrollbar at the edge; layout Vitest 8 passed and typecheck passed."
+    },
+    {
+      "id": "payroll-analysis-windows-and-actions",
+      "type": "feature",
+      "summary": "Administrators can review any payroll window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.",
+      "verification": "c2201ad2: payroll suite 145 tests / 140 passed / 5 opt-in PostgreSQL skipped; work-os:typecheck; web and companion builds; companion suite 247 files / 2,152 tests; rendered Companion preview at 1558px and 375px with actionable findings, guarded frames, partial-window defaults, and the reordered review surface."
     }
   ],
   "emergency": null,

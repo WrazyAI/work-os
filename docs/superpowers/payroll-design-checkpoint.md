@@ -50,6 +50,8 @@ Composition: navigation | employee + period / hours reconciliation / Week 1 + We
 
 Critique: removed generic donut/KPI-tile dashboard and decorative confidence scores. The distinctive instrument is a transparent tracked-to-recommended reconciliation, with uncertain minutes separate and unapproved state explicit. Existing Work OS palette overrides the reference's suggestion to invent a new brand.
 
+> 2026-11-26: This next-action record is historical. See the functional pass at the end of this file.
+
 ## Next action
 Implementation tasks 1–18 are complete and merged to `origin/main` at `135204e2`. Final verification: full `work-os:test` **1,419 passed / 0 failed / 11 opt-in PostgreSQL skips**, including the previously flaky inbox and admin-overview performance tests; the payroll post-suite **117 passed / 0 failed / 5 opt-in PostgreSQL skips**; typecheck and production webpack builds pass; migration replay passes with `0078`–`0081`. CodeRabbit completed with zero findings. Production Neon migrations `0078_work_payroll_review.sql`, `0079_work_payroll_recap_provenance.sql`, `0080_work_payroll_mapping_inheritance.sql`, and `0081_work_payroll_source_token_scope.sql` are applied. The Agent OS production checkout is deployed at `6144c100` with the payroll routes present.
 
@@ -59,3 +61,60 @@ Production activation is live for Wrazy Default Workspace at settings revision 2
 Focused tests, full suite, migration replay, builds, live provider/model probes, cron dispatch and pilot activation are complete. Rendered browser/TestSprite acceptance and real multi-connection PostgreSQL races remain. The post-merge hardening pass now resolves the independent review findings: the source manifest reads its token inside a `FOR SHARE` transaction before the source rows, provider consent is rechecked at ingestion/classification/calculation, provider bounds use employee-local day edges, provider pages and a canonical fingerprint are persisted through the run into `provider_watermark`/`provider_verified_at`, approval requires a complete bounded provider refresh and rejects a changed fingerprint, break sources union scheduled/session/provider/paused observations without a second deduction, unscheduled and leave-day activity is materialized and blocked, representative frames are revalidated and persisted against the current review/revision/day for restricted preview, Q&A cites only the pinned approval snapshot, daily CSV rows carry per-day schedule/session/minutes, and migration grants cover the service runtime role. These fixes now pass the full suite, build, live provider/model probes and production activation. Real multi-connection PostgreSQL races and rendered browser acceptance remain the only verification gaps.
 
 At execution: verify Worktivity capture start/end semantics and complete paging read-only; verify selected OpenRouter model/provider/high effort using minimal non-sensitive calls; exercise multi-connection PostgreSQL locks; render desktop/narrow/Light/Dark states and TestSprite flows. Do not enable payroll auto-approval until supported employee clients show system provenance and notice. Export/retention changes never erase the employee recap ledger. Installed companion release cadence remains mandatory.
+
+## 2026-11-26 functional pass
+
+Commit `c2201ad2` makes the review usable rather than observational:
+
+- **Root cause of missing frames:** every `work_screenshot_summaries.person_id`
+  was null, so the payroll source query, guarded preview and vision checks could
+  never match a review. `0085_work_payroll_screenshot_person_scope.sql`
+  backfills from the evidence event and keeps the owner consistent on write;
+  screenshot analysis writes now include the person explicitly. Live evidence
+  has 571 processed, unexpired frames across the Nov 1–15 period.
+- **Analysis windows:** `0086_work_payroll_analysis_windows.sql` adds a derived
+  `window_key` and replaces the fixed-period uniqueness/checks. Runs and reads
+  use the stored `period_start`/`period_end`; the pay date remains the anchor.
+  The workspace defaults to the current window through today (Nov 16–26, pay
+  date Dec 1 on the live date), prior pay dates stay selectable, and any 1–31
+  day window ending today or earlier can be analyzed. Partial/current windows
+  are analysis-only; approval requires the ended standard period, enforced in
+  the server transaction as well as the UI.
+- **Immediate analysis:** start schedules a bounded drain via `after()`, the run
+  endpoint and admin poll drain in bounded batches, and the five-minute cron
+  resumes long runs. A provider page that cannot advance fails honestly instead
+  of looping. A failed re-analysis leaves the last published revision reviewable
+  and approvable when its source token is unchanged. Cancellation fences
+  publication by locking the run row before the final transaction; a finished
+  run cannot be cancelled over its receipt.
+- **Actions and evidence:** attention findings expose Keep payable/Exclude/
+  Acknowledge whenever the published revision is mutable (including after a
+  failed re-analysis), excluded inactivity exposes guarded frames, breaks stay
+  “No frames by policy,” and missing/policy-denied frames are distinct. The
+  lower report now reads Hours → Needs attention → Excluded by rule → Evidence
+  frames → Daily evidence → Weekly briefs → Apps (context only).
+- **Companion parity:** window-aware candidate rosters and request identities,
+  the same action availability, cancel, guarded frames, and the reordered
+  surface. Release queue: one pending outcome; not eligible for a release.
+
+Verification:
+
+- Payroll suite: **145 tests / 140 passed / 0 failed / 5 opt-in PostgreSQL
+  skips**. Typecheck, web production build, Companion build and Companion suite
+  **247 files / 2,152 tests** pass. The preview harness rendered at 1558px and
+  375px with actionable findings, frame buttons, the partial-window default,
+  and the reordered surface.
+- Full Work OS suite on the pre-CodeRabbit-fix commit: **1,694 tests / 1,678
+  passed / 0 failed / 16 skipped**; a final run on `c2201ad2` is the remaining
+  gate.
+- CodeRabbit review completed with 14 findings. Fixed: window-aware candidate
+  rosters and request keys, unmatched review IDs, explicit custom windows with
+  no stored review, missing-vs-policy frame labels, cancel/publication fencing,
+  failed-run copy, and a single-day run test. Refuted with evidence: the 0085
+  backfill for historical frame ownership, two-week coverage for 1–31 day
+  windows, and the server partial-window approval guard.
+
+Pending production gates: apply `0085`/`0086`, deploy the code, reset the
+in-flight revision 8 to `activity` (or cancel and re-analyze) so it rebuilds
+its manifest with the newly linked frames, and verify a signed-in finding,
+frame, immediate run, partial window and prior window.
