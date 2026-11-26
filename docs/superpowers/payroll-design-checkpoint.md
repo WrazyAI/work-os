@@ -112,6 +112,13 @@ Verification:
   failed-run copy, and a single-day run test. Refuted with evidence: the 0085
   backfill for historical frame ownership, two-week coverage for 1–31 day
   windows, and the server partial-window approval guard.
+- Second CodeRabbit pass completed with 7 findings. Fixed: an approved standard
+  period no longer hides the employee from a different custom window sharing
+  its pay date, and an open decision dialog now closes with an explanation
+  instead of silently discarding the note when the review becomes unavailable.
+  Refuted: decisions on a failed-run retained revision (the server accepts them
+  against the unchanged published revision), the production empty-week brief
+  path, 31-day two-week coverage, and the “Show period” remount question.
 
 Pending production gates: apply `0085`/`0086`, deploy the code, reset the
 in-flight revision 8 to `activity` (or cancel and re-analyze) so it rebuilds
