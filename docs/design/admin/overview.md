@@ -1,8 +1,10 @@
 # Administration overview
 
-**Use when:** Changing the operator overview, decision queue, measures, or grouped activity.
+**Use when:** Changing the operator signal board, workday pulse, trend, live
+coverage, people, decisions, observed time, or source freshness.
 
-**Owns:** The overview reading order and actionable measures.
+**Owns:** The overview's reading order, chart contracts, and actionable
+measures.
 
 **Requires:** [Shared foundations](../foundations.md); [Administration shell and shared contracts](shell.md) (read each once per task).
 
@@ -11,31 +13,58 @@
 - Changing observed-time charts: [Insights and analytical charts](../areas/insights.md).
 - Changing person destinations: [Administration people and person record](people.md).
 
-**Implementation starting points:** [OverviewPage.tsx](../../../desktop/work-os-companion/src/admin/OverviewPage.tsx).
+**Implementation starting points:** [OverviewPage.tsx](../../../desktop/work-os-companion/src/admin/OverviewPage.tsx), [OverviewSignal.tsx](../../../desktop/work-os-companion/src/admin/OverviewSignal.tsx).
 
-## Overview record
+## The signal board
 
-**Overview** reads in the operator's order as six gutter groups: **Now**
-(only the people on shift, then a quiet line for everyone else), **Decisions**
-(one ranked queue with the verb inline — Review, Open queue, Open tasks,
-Inspect, Fix setup), **Today** (one four-fact record: completed outcomes,
-recaps, evidence, and EOD submitted), **Record** (activity grouped by person,
-with a count line and an expandable list of every record), **Time** (observed
-minutes per day), and **Setup** (configuration gaps beside source freshness).
-The stream never repeats a dozen near-identical rows: one person's CI runs and
-pushes are one line with counts, and expanding it still shows each record.
-Readiness is context, never the lead.
+**Overview** is one instrument, not a card wall. The masthead keeps the page
+title; the board opens with **Last seven workdays against the seven before**, one
+sentence naming the highest-consequence condition, and the snapshot time. The
+reading order is Pulse, Daily shape, Right now, Observed time, People, Decisions,
+and Sources.
 
-**Overview measures.** The companion's Overview opens with one strip of five
-measures: On shift now, Recaps today, Outcomes today, Awaiting review, and
-Evidence today. Each is a real control that opens the record it measures —
-On shift now scrolls to the Right now table and moves focus there, Recaps
-opens Admin Otto on its Recaps tab, Outcomes opens Tasks, Awaiting review
-opens EOD Review, and Evidence opens Evidence — so a measure is never a tile
-without a destination. Recaps today counts every finished interval recap
-generated that day, reviewed or not; its detail separates the recaps the
-employee confirmed or corrected from the ones still waiting, so a generated
-recap is never mistaken for a reviewed one. The Right now table reports each
-person's generated recap count and latest recap time, not their check-in
-count, and every card keeps hover and focus-visible states without shifting
-its geometry.
+**Pulse.** Four controls: **Outcomes**, **Updates**, **Recaps**, and
+**Evidence**. Each is the seven-workday total, a fourteen-workday sparkline
+whose midpoint rule separates the two weeks, the change against the prior seven
+(never a drop against zero), and the per-day mean. Every control opens its
+destination: Outcomes opens Tasks, Updates opens People, Recaps opens Admin Otto
+recaps, and Evidence opens Evidence. The values are counts, never a score.
+
+**Daily shape.** One trend with a four-way measure switch (Outcomes, Updates,
+Recaps, Evidence). Bars are the workday values, and the prior and current
+seven-day means are reference lines. The strip beneath states the best day, the
+fourteen-day mean, days above the mean, and the prior seven-day total. Hover or
+focus gives the full day regardless of the selected measure — outcomes,
+updates, recaps, evidence, and observed minutes — with exact values in the
+visually hidden table. Arrow keys walk the workdays; `Home` and `End` jump to
+the edges.
+
+**Right now.** The live coverage bar (on shift, paused, off shift, not observed),
+the oldest waiting report in hours or days, and the day-close record: EOD
+submitted, recaps reviewed, and disputed evidence. The icon action opens People.
+Coverage is provider-confirmed attendance context, never a productivity signal.
+
+**Observed time.** The stacked bar chart of session minutes per workday by
+teammate: clock-in to clock-out minus pauses. It is the workspace's observed-time
+chart, placed once here in the board. The total is the last seven workdays. Observed time is distinct from app/site tracking and evidence row
+counts, and it is never a score.
+
+**Today, by person.** The six most active records with status, role, and today's
+outcomes, updates, and evidence. Every row opens the person record. The section
+action is **Open People**.
+
+**Needs a decision.** The ranked attention queue with the verb inline (Review,
+Open review, Open tasks, Inspect, Fix setup). Readiness blockers join the queue
+here with their local checking/retry state; readiness is context, never the lead.
+Every row opens the record that can resolve it.
+
+**Sources and freshness.** A closed disclosure lists Tasks, Worktivity, GitHub,
+Plans, and EOD freshness with the day's counts. The snapshot time stays in the
+header; the disclosure carries the source detail without becoming a card.
+
+**States.** Loading reserves the board's geometry. Empty names the absence of a
+record and never invents activity. The stale snapshot remains a standing
+notification under a stable key. Errors stay local with a retry. Dark, narrow,
+zoom, keyboard focus, exact-value fallbacks, and reduced motion follow the
+shared contracts. The board is quiet meta only at the masthead: no filter row or
+toolbar lives above the instrument.

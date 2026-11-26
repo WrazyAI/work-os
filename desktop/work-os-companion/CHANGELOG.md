@@ -19,13 +19,14 @@ the padded display form `0.3.09`); the UI pads the patch segment for display.
 **Updating this file is a hard release requirement: the release workflow fails
 when the released version has no matching section with at least one bullet**,
 and the GitHub release notes are built from that section. While work is in
-flight, collect entries under `## 0.5.45 — 2026-11-26`; when cutting a release, move
+flight, collect entries under `## Unreleased`; when cutting a release, move
 them under the new `## <version> — <ship-date>` heading. Omit refactors,
 chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
 - In desktop Payroll, review any window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.
+- Admin Overview is now a signal board: a seven-workday pulse, a switchable trend, live coverage, and the people and decisions that need you.
 
 ## 0.5.45 — 2026-11-26
 
