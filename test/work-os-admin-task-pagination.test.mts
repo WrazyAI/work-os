@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { listPersonTasks } from "../src/lib/work-os-tasks";
+import { adminUser, fixture, org, personA } from "./helpers/work-os-admin-agent-fixture.mts";
 import { adminPersonTaskPageSql } from "../src/lib/work-os-admin-task-pagination";
 
 const taskId = (id: number) => "10000000-0000-4000-8000-" + String(id).padStart(12, "0");
@@ -75,5 +77,26 @@ test("admin person task pages extend past 1,000 without duplicate or cross-organ
     assert.deepEqual((await pg.query(adminPersonTaskPageSql, [...args, 0, 100, []])).rows, []);
   } finally {
     await pg.close();
+  }
+});
+
+test("fallback person task scans retain an explicit creator filter", async () => {
+  const f = await fixture();
+  const explicitCreatorTask = taskId(3001), ownerCreatorTask = taskId(3002);
+  try {
+    await f.seedDirectory();
+    await f.db.query("UPDATE work_people SET nifty_member_id = $1 WHERE id = $2", ["provider-ada", personA]);
+    await f.db.query(`
+      INSERT INTO work_tasks (id, user_id, organization_id, title, assignee_person_ids, raw)
+      VALUES ($1, $3, $4, 'Assigned by another creator', ARRAY[$5::uuid], '{"created_by":"provider-bob"}'),
+             ($2, $3, $4, 'Only attributed through creator', '{}'::uuid[], '{"created_by":"provider-ada"}')
+    `, [explicitCreatorTask, ownerCreatorTask, adminUser, org, personA]);
+    const options = { organizationId: org, includeLedgerHistory: true, order: "created_desc" } as const;
+    const filtered = await listPersonTasks(adminUser, personA, { ...options, rawCreatedBy: "provider-bob" });
+    assert.deepEqual(filtered.map((task) => task.id), [explicitCreatorTask]);
+    const sameCreator = await listPersonTasks(adminUser, personA, { ...options, rawCreatedBy: "provider-ada" });
+    assert.deepEqual(sameCreator.map((task) => task.id), [ownerCreatorTask]);
+  } finally {
+    await f.close();
   }
 });

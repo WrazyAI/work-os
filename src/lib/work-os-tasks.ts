@@ -370,13 +370,16 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     metadataOptions.toDate = next.toISOString().slice(0, 10);
     if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
+  // The creator scan attributes only the person's provider ID, so it cannot
+  // match a different explicit creator filter. Other scans keep that filter.
+  const scanCreator = niftyMemberId && (!opts.rawCreatedBy || opts.rawCreatedBy === niftyMemberId);
   const [assigned, assignedBy, providerAssigned, createdBy, subscriber] = await Promise.all([
     listTasks(userId, { ...baseOptions, personId }),
     opts.includeAssignedBy === false
       ? Promise.resolve([])
       : listTasks(userId, { ...baseOptions, assignedByPersonId: personId }),
     niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
+    scanCreator ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
