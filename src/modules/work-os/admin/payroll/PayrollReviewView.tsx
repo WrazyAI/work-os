@@ -263,14 +263,28 @@ function ExcludedGroup({ title, detail, findings, review, empty, collapsed = fal
   return collapsed ? <details className="payroll-rule"><summary>{head}</summary>{body}</details> : <section className="payroll-rule">{head}{body}</section>;
 }
 
+const FRAME_REASON = "Reviewing payroll evidence";
+
 function PayrollFrameButton({ review, finding }: { review: PayrollReview; finding: PayrollFinding }) {
   const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(FRAME_REASON);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [urls, setUrls] = useState<string[]>([]);
-  useEffect(() => () => { urls.forEach((url) => URL.revokeObjectURL(url)); }, [urls]);
+  const [index, setIndex] = useState(0);
   const count = finding.frameSummaryIds?.length ?? 0;
+  useEffect(() => () => { urls.forEach((url) => URL.revokeObjectURL(url)); }, [urls]);
+  useEffect(() => { if (index >= urls.length) setIndex(0); }, [index, urls.length]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+      if (event.key === "ArrowRight" && urls.length > 1) setIndex((current) => (current + 1) % urls.length);
+      if (event.key === "ArrowLeft" && urls.length > 1) setIndex((current) => (current - 1 + urls.length) % urls.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, urls.length]);
   const load = async (value = reason) => {
     const trimmed = value.trim();
     if (!trimmed || busy) return;
@@ -280,26 +294,46 @@ function PayrollFrameButton({ review, finding }: { review: PayrollReview; findin
     try {
       for (const summaryId of finding.frameSummaryIds ?? []) next.push(URL.createObjectURL(await payrollApi.previewFrame(review.id, finding.key, summaryId, trimmed)));
       setUrls(next);
+      setIndex(0);
     } catch (issue) {
       next.forEach((url) => URL.revokeObjectURL(url));
       setUrls([]);
       setError((issue as Error).message);
     } finally { setBusy(false); }
   };
+  const openDialog = () => {
+    setOpen(true);
+    if (!urls.length) void load(FRAME_REASON);
+  };
   return <>
-    <button type="button" className="payroll-link" onClick={() => setOpen(true)}>{count} {count === 1 ? "frame" : "frames"}</button>
+    <button type="button" className="payroll-link" onClick={openDialog}>{count} {count === 1 ? "frame" : "frames"}</button>
     {open ? <div className="payroll-overlay" role="dialog" aria-modal="true" aria-label="Evidence frames" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-      <div className="payroll-dialog">
-        <div className="payroll-dialog-head"><h3>Evidence · {FINDING_LABELS[finding.kind]}</h3><button type="button" onClick={() => setOpen(false)}>Close</button></div>
-        <p className="payroll-quiet">{fullDate(finding.date)}. These frames were captured on the same day as this finding. Access is recorded and limited to reviewable payroll evidence.</p>
-        <p className="payroll-quiet">Enter a reason to unlock the frames. The reason is written to the access log.</p>
-        <label className="payroll-field"><span>Reason (required)</span><input autoFocus value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
-        <div className="payroll-actions">
-          <button type="button" className="primary" disabled={busy || !reason.trim()} onClick={() => void load()}>{busy ? "Opening…" : urls.length ? "Reload frames" : `View ${count} ${count === 1 ? "frame" : "frames"}`}</button>
-          <button type="button" className="payroll-link" disabled={busy} onClick={() => void load("Reviewing payroll evidence")}>Use “Reviewing payroll evidence”</button>
+      <div className="payroll-dialog payroll-frame-dialog">
+        <div className="payroll-dialog-head">
+          <div><h3>Evidence · {FINDING_LABELS[finding.kind]}</h3><p className="payroll-quiet">{fullDate(finding.date)} · {count} same-day {count === 1 ? "frame" : "frames"}</p></div>
+          <button type="button" onClick={() => setOpen(false)}>Close</button>
         </div>
-        {error ? <p className="payroll-blocker">{error}</p> : null}
-        {urls.length ? <div className="payroll-frame-grid">{urls.map((url, index) => <img key={url} src={url} alt={`Evidence frame ${index + 1}`} />)}</div> : null}
+        <div className="payroll-frame-stage">
+          {urls.length
+            ? <img src={urls[index]} alt={`Evidence frame ${index + 1} of ${urls.length}`} />
+            : <p className="payroll-frame-state">{busy ? "Opening frames…" : error ? "Frames could not be opened." : "No frames linked."}</p>}
+          {urls.length > 1 ? <>
+            <button type="button" className="payroll-frame-nav prev" aria-label="Previous frame" onClick={() => setIndex((current) => (current - 1 + urls.length) % urls.length)}>‹</button>
+            <button type="button" className="payroll-frame-nav next" aria-label="Next frame" onClick={() => setIndex((current) => (current + 1) % urls.length)}>›</button>
+            <span className="payroll-frame-counter">{index + 1} / {urls.length}</span>
+          </> : null}
+        </div>
+        {urls.length > 1 ? <div className="payroll-frame-thumbs" aria-label="Evidence frames">
+          {urls.map((url, thumb) => <button key={url} type="button" className={`payroll-frame-thumb${thumb === index ? " is-current" : ""}`} aria-label={`Show frame ${thumb + 1}`} aria-pressed={thumb === index} onClick={() => setIndex(thumb)}><img src={url} alt="" /></button>)}
+        </div> : null}
+        <div className="payroll-frame-meta">
+          <p className="payroll-quiet">These are representative frames captured on the same day as this finding; they are not a complete gallery of the period. Access is logged.</p>
+          <div className="payroll-frame-reason">
+            <label className="payroll-field"><span>Access reason</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Why are you reviewing this evidence?" /></label>
+            <button type="button" className="primary" disabled={busy || !reason.trim()} onClick={() => void load()}>{busy ? "Opening…" : "Reload with this reason"}</button>
+          </div>
+          {error ? <p className="payroll-blocker">{error}</p> : null}
+        </div>
       </div>
     </div> : null}
   </>;
