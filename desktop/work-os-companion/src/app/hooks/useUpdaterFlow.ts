@@ -42,7 +42,7 @@ export function useUpdaterFlow({
 }) {
   const [updateFlow, setUpdateFlow] = useState<UpdateFlow>({ status: "idle" });
   const updateFlowRef = useRef<UpdateFlow>({ status: "idle" });
-  const updateCheckInFlightRef = useRef(false);
+  const activeCheckEpochRef = useRef<number | null>(null);
   const updatePaintRef = useRef<number | null>(null);
   const launchUpdateCheckRef = useRef(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
@@ -191,22 +191,30 @@ export function useUpdaterFlow({
   }
 
   async function checkForUpdates({ silent = false, channel }: { silent?: boolean; channel?: UpdateChannel } = {}) {
-    if (updateCheckInFlightRef.current || channelSaveInFlightRef.current > 0) return;
+    const checkEpoch = channelEpochRef.current;
+    if (activeCheckEpochRef.current === checkEpoch || channelSaveInFlightRef.current > 0) return;
     const previous = updateFlowRef.current;
     if (!canRunBackgroundUpdateCheck(previous.status)) return;
     const activeChannel = channel ?? updateChannelRef.current;
-    const checkEpoch = channelEpochRef.current;
-    updateCheckInFlightRef.current = true;
-    setUpdateFlow({ status: "checking" });
+    activeCheckEpochRef.current = checkEpoch;
+    const checkingFlow: UpdateFlow = { status: "checking" };
+    updateFlowRef.current = checkingFlow;
+    setUpdateFlow(checkingFlow);
     try {
       const saved = await secureState.session();
       if (channelEpochRef.current !== checkEpoch) {
         discardUpdateEntry(previous);
-        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
-        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        if (activeCheckEpochRef.current === checkEpoch) {
+          notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+          if (updateFlowRef.current.status === "checking") {
+            updateFlowRef.current = { status: "idle" };
+            setUpdateFlow({ status: "idle" });
+          }
+        }
         return;
       }
       if (!saved) {
+        updateFlowRef.current = previous;
         setUpdateFlow(previous);
         if (!silent) notifications.info("Sign in first, then check for updates.", "Not signed in");
         return;
@@ -215,17 +223,24 @@ export function useUpdaterFlow({
       if (channelEpochRef.current !== checkEpoch) {
         discardUpdateEntry(previous);
         if (result.status === "available") void result.update.close().catch(() => undefined);
-        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
-        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        if (activeCheckEpochRef.current === checkEpoch) {
+          notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+          if (updateFlowRef.current.status === "checking") {
+            updateFlowRef.current = { status: "idle" };
+            setUpdateFlow({ status: "idle" });
+          }
+        }
         return;
       }
       if (result.status === "managed") {
+        updateFlowRef.current = previous;
         setUpdateFlow(previous);
         if (!silent) notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
         return;
       }
       if (result.status === "current") {
         if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") discardUpdateEntry(previous);
+        updateFlowRef.current = { status: "idle" };
         setUpdateFlow({ status: "idle" });
         if (!silent) {
           notifications.success(
@@ -241,13 +256,16 @@ export function useUpdaterFlow({
         const resolution = resolvePendingUpdate({ status: previous.status, version: previous.update.version }, result.update.version);
         if (resolution !== "replace") {
           void result.update.close().catch(() => undefined);
+          updateFlowRef.current = previous;
           setUpdateFlow(previous);
           if (resolution === "re-raise") raiseDownloadedUpdateNotification(previous.update.version);
           return;
         }
         discardUpdateEntry(previous);
       }
-      setUpdateFlow({ status: "available", update: result.update, headers: result.headers });
+      const availableFlow: UpdateFlow = { status: "available", update: result.update, headers: result.headers };
+      updateFlowRef.current = availableFlow;
+      setUpdateFlow(availableFlow);
       const copy = updateAvailableCopy(result.update.version);
       notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
         action: { label: copy.actionLabel, onClick: () => void beginUpdateDownload() },
@@ -255,17 +273,24 @@ export function useUpdaterFlow({
     } catch (value) {
       if (channelEpochRef.current !== checkEpoch) {
         discardUpdateEntry(previous);
-        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
-        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        if (activeCheckEpochRef.current === checkEpoch) {
+          notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+          if (updateFlowRef.current.status === "checking") {
+            updateFlowRef.current = { status: "idle" };
+            setUpdateFlow({ status: "idle" });
+          }
+        }
         return;
       }
       const message = errorMessage(value, "The update catalog could not be checked.");
       diagnostics.warn("updater.check_failed", message);
       const keepPrevious = previous.status === "available" || previous.status === "failed" || previous.status === "downloaded";
-      setUpdateFlow(keepPrevious ? previous : { status: "idle" });
+      const nextFlow = keepPrevious ? previous : { status: "idle" as const };
+      updateFlowRef.current = nextFlow;
+      setUpdateFlow(nextFlow);
       if (!silent) showError(message, message, "Update failed");
     } finally {
-      updateCheckInFlightRef.current = false;
+      if (activeCheckEpochRef.current === checkEpoch) activeCheckEpochRef.current = null;
     }
   }
 
@@ -286,8 +311,10 @@ export function useUpdaterFlow({
     if (pending.status === "available" || pending.status === "failed" || pending.status === "downloaded") {
       discardUpdateEntry(pending);
       notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+      updateFlowRef.current = { status: "idle" };
       setUpdateFlow({ status: "idle" });
     } else if (pending.status === "checking") {
+      updateFlowRef.current = { status: "idle" };
       setUpdateFlow({ status: "idle" });
     }
   }
@@ -300,13 +327,15 @@ export function useUpdaterFlow({
     channelSaveInFlightRef.current += 1;
     applyUpdateChannel(channel);
     clearChannelPendingUpdate();
+    let saved = false;
     try {
       await secureState.saveSettings({ apiBase, updateChannel: channel });
       savedUpdateChannelRef.current = channel;
+      saved = true;
       if (channelOpRef.current !== opId) return;
       notifications.success(
         channel === "nightly"
-          ? "Switched to Nightly updates. You will receive developer test builds ahead of Stable promotion."
+          ? "Switched to Nightly updates. Checking for the latest developer build…"
           : "Switched to Stable updates. You will receive tested Stable builds.",
         "Release channel saved",
       );
@@ -318,6 +347,9 @@ export function useUpdaterFlow({
       }
     } finally {
       channelSaveInFlightRef.current = Math.max(0, channelSaveInFlightRef.current - 1);
+    }
+    if (saved && channelOpRef.current === opId && isTauri() && session) {
+      void checkForUpdates({ silent: true, channel });
     }
   }
 

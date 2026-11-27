@@ -628,5 +628,11 @@
     }
   ],
   "emergency": null,
-  "operatorOverride": null
+  "operatorOverride": {
+    "version": "0.5.46",
+    "updateId": "release-channel-selector",
+    "approvedBy": "operator",
+    "reason": "Operator requested an immediate Nightly 0.5.46 build ahead of the five-update threshold to test the Release channel toggle and Nightly workflow.",
+    "approvedAt": "2026-11-27"
+  }
 }
