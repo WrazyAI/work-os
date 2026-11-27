@@ -1,4 +1,4 @@
-const CITATION = /\[[^\]]*(?:interval|finding|approval|report|task):[^\]]*@\d+[^\]]*\]/gi;
+const CITATION = /\[[^\]]*(?:interval|finding|approval|report|task):[^\]]*@\d+[^\]]*(?:\]|$)/gi;
 
 /** Removes model citation plumbing from prose. Structured citations remain in
  * the Sources disclosure; the inline tokens are not readable content. */
