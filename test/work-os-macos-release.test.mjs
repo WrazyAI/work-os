@@ -16,11 +16,13 @@ import {
   macUpdater,
   parseReleaseTag,
   preparePromotionStage,
+  releaseAssetNames,
   releaseAssets,
   releaseTagName,
   stageMacRelease,
   verifyWindowsOnlyRelease,
   windowsAssets,
+  windowsInstaller,
 } from "../desktop/work-os-companion/scripts/macos-release.mjs";
 
 test("finds an unpublished draft in the paginated catalog without a Git tag", () => {
@@ -87,16 +89,16 @@ test("refuses a different Mac version even with valid checksums", (t) => {
 
 test("rejects mismatched signature or release URL in the manifest", (t) => {
   const { stage, bundle } = fixture(t);
-  stageMacRelease(bundle, stage, "1.2.3", "wrong-tag", "WrazyAI/work-os");
+  stageMacRelease(bundle, stage, "1.2.3", "work-os-companion-internal-v1.2.04", "WrazyAI/work-os");
   assert.throws(() => combineRelease(stage, "1.2.3", "work-os-companion-internal-v1.2.03", "WrazyAI/work-os"), /Invalid updater entry/);
 });
 
 test("refuses ambiguous and empty updater artifacts", (t) => {
   const { stage, bundle } = fixture(t);
   writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz.sig"), "\n");
-  assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "tag", "repo"), /Empty Mac updater signature/);
+  assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "work-os-companion-internal-v1.2.03", "repo"), /Empty Mac updater signature/);
   writeFileSync(join(bundle, "macos", macUpdater), "extra");
-  assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "tag", "repo"), /Expected one/);
+  assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "work-os-companion-internal-v1.2.03", "repo"), /Expected one/);
 });
 
 
@@ -115,13 +117,182 @@ test("padded release tags resolve canonical versions and reject invalid inputs",
   assert.equal(releaseTagName("0.5.7", "stable"), "work-os-companion-internal-v0.5.07");
 });
 
+test("Nightly downloads carry Nightly names while Stable keeps the website contract", () => {
+  const nightly = releaseAssetNames("nightly");
+  const stable = releaseAssetNames("stable");
+  assert.match(nightly.windowsInstaller, /Nightly-Setup/);
+  assert.match(nightly.windowsMsi, /Nightly-UNSIGNED\.msi$/);
+  assert.match(nightly.windowsPortable, /Nightly-Portable/);
+  assert.match(nightly.macInstaller, /Nightly-macOS-Universal/);
+  assert.match(nightly.macUpdater, /Nightly-macOS-Universal/);
+  assert.equal(nightly.windowsPortableExe, stable.windowsPortableExe);
+  assert.equal(stable.windowsInstaller, windowsInstaller);
+  assert.deepEqual(stable.releaseAssets, releaseAssets);
+  assert.equal(nightly.releaseAssets.filter((file) => file.includes("Nightly")).length, 8);
+  assert.throws(() => releaseAssetNames("beta"), /Unsupported release channel/);
+});
+
+test("stages Mac assets under the Nightly names", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-mac-nightly-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bundle = join(root, "bundle");
+  const stage = join(root, "stage");
+  mkdirSync(join(bundle, "macos"), { recursive: true });
+  mkdirSync(join(bundle, "dmg"));
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz"), "mac-archive");
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz.sig"), "mac-signature\n");
+  writeFileSync(join(bundle, "dmg", "Work OS Companion.dmg"), "mac-dmg");
+  const tag = "work-os-companion-nightly-v1.2.03";
+  stageMacRelease(bundle, stage, "1.2.3", tag, "WrazyAI/work-os");
+  const nightly = releaseAssetNames("nightly");
+  const stable = releaseAssetNames("stable");
+  assert.equal(existsSync(join(stage, nightly.macInstaller)), true);
+  assert.equal(existsSync(join(stage, nightly.macUpdater)), true);
+  assert.equal(existsSync(join(stage, stable.macInstaller)), false);
+  const manifest = JSON.parse(readFileSync(join(stage, "macos-updater.json"), "utf8"));
+  assert.equal(manifest.platforms["darwin-aarch64"].url, `https://github.com/WrazyAI/work-os/releases/download/${tag}/${nightly.macUpdater}`);
+});
+
+test("finalizes a Nightly release under the Nightly asset names", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-nightly-combine-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bundle = join(root, "bundle");
+  const stage = join(root, "stage");
+  mkdirSync(join(bundle, "macos"), { recursive: true });
+  mkdirSync(join(bundle, "dmg"));
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz"), "mac-archive");
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz.sig"), "mac-signature\n");
+  writeFileSync(join(bundle, "dmg", "Work OS Companion.dmg"), "mac-dmg");
+  const tag = "work-os-companion-nightly-v1.2.03";
+  const names = releaseAssetNames("nightly");
+  stageMacRelease(bundle, stage, "1.2.3", tag, "WrazyAI/work-os");
+  for (const file of names.windowsAssets) {
+    writeFileSync(join(stage, file), file.endsWith(".sig") ? "windows-signature\n" : `windows-${file}`);
+  }
+  writeFileSync(join(stage, "latest-internal.json"), JSON.stringify({ version: "1.2.3", platforms: {
+    "windows-x86_64": { signature: "windows-signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${names.windowsInstaller}` },
+  } }));
+  const windowsFiles = [...names.windowsAssets, "latest-internal.json"];
+  writeFileSync(
+    join(stage, "SHA256SUMS.txt"),
+    windowsFiles.map((file) => `${createHash("sha256").update(readFileSync(join(stage, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+
+  combineRelease(stage, "1.2.3", tag, "WrazyAI/work-os");
+  const manifest = JSON.parse(readFileSync(join(stage, "latest-internal.json"), "utf8"));
+  assert.match(manifest.notes, /^NIGHTLY \(UNSIGNED\)/);
+  assert.equal(manifest.platforms["darwin-aarch64"].url, `https://github.com/WrazyAI/work-os/releases/download/${tag}/${names.macUpdater}`);
+  const checksumNames = readFileSync(join(stage, "SHA256SUMS.txt"), "utf8").trim().split("\n").map((line) => line.split("  ")[1]).sort();
+  assert.deepEqual(checksumNames, [...names.releaseAssets].sort());
+});
+
+test("renames Nightly Mac assets to Stable names during promotion", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-promote-mac-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const nightly = join(root, "nightly");
+  const promoted = join(root, "promoted");
+  mkdirSync(nightly, { recursive: true });
+  const nightlyNames = releaseAssetNames("nightly");
+  const stableNames = releaseAssetNames("stable");
+  const tag = "work-os-companion-nightly-v1.2.03";
+  for (const file of [...nightlyNames.windowsAssets, ...nightlyNames.macosAssets]) {
+    writeFileSync(join(nightly, file), file.endsWith(".sig") ? "signature\n" : `bytes-${file}`);
+  }
+  const macEntry = { signature: "signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${nightlyNames.macUpdater}` };
+  writeFileSync(join(nightly, "latest-internal.json"), JSON.stringify({
+    version: "1.2.3",
+    platforms: {
+      "windows-x86_64": { signature: "signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${nightlyNames.windowsInstaller}` },
+      "darwin-aarch64": macEntry,
+      "darwin-x86_64": macEntry,
+    },
+  }));
+  writeFileSync(join(nightly, "macos-updater.json"), JSON.stringify({ version: "1.2.3", platforms: {
+    "darwin-aarch64": macEntry,
+    "darwin-x86_64": macEntry,
+  } }));
+  const files = [...nightlyNames.windowsAssets, ...nightlyNames.macosAssets, "latest-internal.json"];
+  writeFileSync(
+    join(nightly, "SHA256SUMS.txt"),
+    files.map((file) => `${createHash("sha256").update(readFileSync(join(nightly, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+  const macChecksums = files.filter((file) => file.startsWith("Work-OS-Companion-Nightly-macOS"));
+  writeFileSync(
+    join(nightly, "SHA256SUMS-macos.txt"),
+    macChecksums.map((file) => `${createHash("sha256").update(readFileSync(join(nightly, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+
+  const result = preparePromotionStage(nightly, promoted, "1.2.3", "work-os-companion-internal-v1.2.03", "WrazyAI/work-os");
+  assert.equal(result.hasMacos, true);
+  assert.equal(existsSync(join(promoted, stableNames.macInstaller)), true);
+  assert.equal(existsSync(join(promoted, stableNames.macUpdater)), true);
+  assert.equal(existsSync(join(promoted, nightlyNames.macInstaller)), false);
+  const macManifest = JSON.parse(readFileSync(join(promoted, "macos-updater.json"), "utf8"));
+  assert.equal(macManifest.platforms["darwin-aarch64"].url, `https://github.com/WrazyAI/work-os/releases/download/work-os-companion-internal-v1.2.03/${stableNames.macUpdater}`);
+});
+
+test("finalizes a legacy-Windows Nightly with Nightly macOS assets", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-nightly-mixed-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bundle = join(root, "bundle");
+  const stage = join(root, "stage");
+  mkdirSync(join(bundle, "macos"), { recursive: true });
+  mkdirSync(join(bundle, "dmg"));
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz"), "mac-archive");
+  writeFileSync(join(bundle, "macos", "Work OS Companion.app.tar.gz.sig"), "mac-signature\n");
+  writeFileSync(join(bundle, "dmg", "Work OS Companion.dmg"), "mac-dmg");
+  const tag = "work-os-companion-nightly-v1.2.03";
+  const nightly = releaseAssetNames("nightly");
+  stageMacRelease(bundle, stage, "1.2.3", tag, "WrazyAI/work-os");
+  for (const file of windowsAssets) {
+    writeFileSync(join(stage, file), file.endsWith(".sig") ? "windows-signature\n" : `windows-${file}`);
+  }
+  const macEntry = { signature: "mac-signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${nightly.macUpdater}` };
+  writeFileSync(join(stage, "latest-internal.json"), JSON.stringify({ version: "1.2.3", platforms: {
+    "windows-x86_64": { signature: "windows-signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${windowsInstaller}` },
+    "darwin-aarch64": macEntry,
+    "darwin-x86_64": macEntry,
+  } }));
+  const releaseFiles = [...windowsAssets, ...nightly.macosAssets, "latest-internal.json"];
+  writeFileSync(
+    join(stage, "SHA256SUMS.txt"),
+    releaseFiles.map((file) => `${createHash("sha256").update(readFileSync(join(stage, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+
+  assert.doesNotThrow(() => combineRelease(stage, "1.2.3", tag, "WrazyAI/work-os"));
+  const checksumNames = readFileSync(join(stage, "SHA256SUMS.txt"), "utf8").trim().split("\n").map((line) => line.split("  ")[1]).sort();
+  assert.deepEqual(checksumNames, [...releaseFiles].sort());
+});
+
+test("rejects a stray Nightly macOS asset in a legacy Windows-only Nightly", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-legacy-mac-stray-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const stage = join(root, "stage");
+  mkdirSync(stage, { recursive: true });
+  for (const file of windowsAssets) {
+    writeFileSync(join(stage, file), file.endsWith(".sig") ? "windows-signature\n" : `windows-${file}`);
+  }
+  const tag = "work-os-companion-nightly-v1.2.03";
+  writeFileSync(join(stage, "latest-internal.json"), JSON.stringify({ version: "1.2.3", platforms: {
+    "windows-x86_64": { signature: "windows-signature", url: `https://github.com/WrazyAI/work-os/releases/download/${tag}/${windowsInstaller}` },
+  } }));
+  const releaseFiles = [...windowsAssets, "latest-internal.json"];
+  writeFileSync(
+    join(stage, "SHA256SUMS.txt"),
+    releaseFiles.map((file) => `${createHash("sha256").update(readFileSync(join(stage, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+  writeFileSync(join(stage, releaseAssetNames("nightly").macInstaller), "stray-nightly-dmg");
+  assert.throws(() => verifyWindowsOnlyRelease(stage, "1.2.3", tag, "WrazyAI/work-os"), /unexpected macOS assets/);
+});
+
 test("verifies Windows-only Nightlies and promotes verified Nightly assets to Stable without Windows rebuild", (t) => {
   const root = mkdtempSync(join(tmpdir(), "work-os-promote-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const nightly = join(root, "nightly");
   const promoted = join(root, "promoted");
   mkdirSync(nightly, { recursive: true });
-  for (const file of windowsAssets) {
+  const nightlyNames = releaseAssetNames("nightly");
+  for (const file of nightlyNames.windowsAssets) {
     writeFileSync(join(nightly, file), file.endsWith(".sig") ? "win-sig\n" : `bytes-${file}`);
   }
   const nightlyTag = "work-os-companion-nightly-v0.5.53";
@@ -131,7 +302,65 @@ test("verifies Windows-only Nightlies and promotes verified Nightly assets to St
     pub_date: "2026-11-26T00:00:00Z",
     platforms: {
       "windows-x86_64": {
-        url: `https://github.com/WrazyAI/work-os/releases/download/${nightlyTag}/Work-OS-Companion-Setup-UNSIGNED.exe`,
+        url: `https://github.com/WrazyAI/work-os/releases/download/${nightlyTag}/${nightlyNames.windowsInstaller}`,
+        signature: "win-sig",
+      },
+    },
+  }));
+  const files = [...nightlyNames.windowsAssets, "latest-internal.json"];
+  writeFileSync(
+    join(nightly, "SHA256SUMS.txt"),
+    files.map((file) => `${createHash("sha256").update(readFileSync(join(nightly, file))).digest("hex")}  ${file}\n`).join(""),
+  );
+
+  assert.doesNotThrow(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"));
+  // Retained macOS assets in a Windows-only draft must fail closed before publication.
+  writeFileSync(join(nightly, nightlyNames.macInstaller), "stale-mac-dmg");
+  assert.throws(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"), /unexpected macOS assets/);
+  rmSync(join(nightly, nightlyNames.macInstaller));
+  const result = preparePromotionStage(nightly, promoted, "0.5.53", stableTag, "WrazyAI/work-os");
+  assert.equal(result.hasMacos, false);
+  const stableManifest = JSON.parse(readFileSync(join(promoted, "latest-internal.json"), "utf8"));
+  assert.equal(stableManifest.version, "0.5.53");
+  assert.equal(
+    stableManifest.platforms["windows-x86_64"].url,
+    `https://github.com/WrazyAI/work-os/releases/download/${stableTag}/${windowsInstaller}`,
+  );
+  assert.equal(stableManifest.platforms["windows-x86_64"].signature, "win-sig");
+  assert.equal(
+    readFileSync(join(promoted, windowsInstaller), "utf8"),
+    readFileSync(join(nightly, nightlyNames.windowsInstaller), "utf8"),
+  );
+
+  // Tampered Nightly asset must fail closed before promotion.
+  writeFileSync(join(nightly, nightlyNames.windowsInstaller), "tampered");
+  assert.throws(() => preparePromotionStage(nightly, join(root, "bad"), "0.5.53", stableTag, "WrazyAI/work-os"), /mismatched/);
+
+  const cumulative = extractCumulativeChangelog(
+    "# Changelog\n\n## Unreleased\n\n- Pending.\n\n## 0.5.53 — 2026-11-26\n\n- Feature B.\n\n## 0.5.52 — 2026-11-25\n\n- Feature A.\n\n## 0.5.51 — 2026-11-20\n\n- Already stable.\n",
+    "0.5.51",
+    "0.5.53",
+  );
+  assert.match(cumulative, /### 0\.5\.53[\s\S]*Feature B[\s\S]*### 0\.5\.52[\s\S]*Feature A/);
+  assert.doesNotMatch(cumulative, /Already stable|Pending/);
+});
+
+test("promotes a pre-rename Nightly that still uses Stable asset names", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-promote-legacy-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const nightly = join(root, "nightly");
+  const promoted = join(root, "promoted");
+  mkdirSync(nightly, { recursive: true });
+  for (const file of windowsAssets) {
+    writeFileSync(join(nightly, file), file.endsWith(".sig") ? "win-sig\n" : `legacy-${file}`);
+  }
+  const nightlyTag = "work-os-companion-nightly-v0.5.53";
+  const stableTag = "work-os-companion-internal-v0.5.53";
+  writeFileSync(join(nightly, "latest-internal.json"), JSON.stringify({
+    version: "0.5.53",
+    platforms: {
+      "windows-x86_64": {
+        url: `https://github.com/WrazyAI/work-os/releases/download/${nightlyTag}/${windowsInstaller}`,
         signature: "win-sig",
       },
     },
@@ -143,35 +372,12 @@ test("verifies Windows-only Nightlies and promotes verified Nightly assets to St
   );
 
   assert.doesNotThrow(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"));
-  // Retained macOS assets in a Windows-only draft must fail closed before publication.
-  writeFileSync(join(nightly, macInstaller), "stale-mac-dmg");
-  assert.throws(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"), /unexpected macOS assets/);
-  rmSync(join(nightly, macInstaller));
   const result = preparePromotionStage(nightly, promoted, "0.5.53", stableTag, "WrazyAI/work-os");
   assert.equal(result.hasMacos, false);
-  const stableManifest = JSON.parse(readFileSync(join(promoted, "latest-internal.json"), "utf8"));
-  assert.equal(stableManifest.version, "0.5.53");
   assert.equal(
-    stableManifest.platforms["windows-x86_64"].url,
-    `https://github.com/WrazyAI/work-os/releases/download/${stableTag}/Work-OS-Companion-Setup-UNSIGNED.exe`,
+    readFileSync(join(promoted, windowsInstaller), "utf8"),
+    readFileSync(join(nightly, windowsInstaller), "utf8"),
   );
-  assert.equal(stableManifest.platforms["windows-x86_64"].signature, "win-sig");
-  assert.equal(
-    readFileSync(join(promoted, "Work-OS-Companion-Setup-UNSIGNED.exe"), "utf8"),
-    readFileSync(join(nightly, "Work-OS-Companion-Setup-UNSIGNED.exe"), "utf8"),
-  );
-
-  // Tampered Nightly asset must fail closed before promotion.
-  writeFileSync(join(nightly, "Work-OS-Companion-Setup-UNSIGNED.exe"), "tampered");
-  assert.throws(() => preparePromotionStage(nightly, join(root, "bad"), "0.5.53", stableTag, "WrazyAI/work-os"), /mismatched/);
-
-  const cumulative = extractCumulativeChangelog(
-    "# Changelog\n\n## Unreleased\n\n- Pending.\n\n## 0.5.53 — 2026-11-26\n\n- Feature B.\n\n## 0.5.52 — 2026-11-25\n\n- Feature A.\n\n## 0.5.51 — 2026-11-20\n\n- Already stable.\n",
-    "0.5.51",
-    "0.5.53",
-  );
-  assert.match(cumulative, /### 0\.5\.53[\s\S]*Feature B[\s\S]*### 0\.5\.52[\s\S]*Feature A/);
-  assert.doesNotMatch(cumulative, /Already stable|Pending/);
 });
 
 test("release mutations serialize across refs and publication checks packaged startup", () => {

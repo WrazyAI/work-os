@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { checksumsHref, downloadHref, type DownloadGuidePlatform } from "./download-guides";
+import { checksumsHref, downloadGuide, downloadHref, type DownloadGuidePlatform } from "./download-guides";
 import styles from "./downloads.module.css";
 
 const subscribe = () => () => {};
@@ -22,6 +22,13 @@ export function ChannelDownloadAgainLink({ platform, defaultHref }: { platform: 
 export function ChannelChecksumsLink({ platform, defaultHref }: { platform: DownloadGuidePlatform; defaultHref: string }) {
   const isNightly = useIsNightlyChannel();
   return <a href={isNightly ? checksumsHref(platform, "nightly") : defaultHref}>published checksums</a>;
+}
+
+export function ChannelFileVerification({ platform, fileNameClassName }: { platform: DownloadGuidePlatform; fileNameClassName: string }) {
+  const isNightly = useIsNightlyChannel();
+  const guide = downloadGuide(platform, isNightly ? "nightly" : "stable");
+  if (!guide) return null;
+  return <><p className={fileNameClassName}>{guide.fileName}</p><code>{guide.checksumCommand}</code></>;
 }
 
 export default function NightlyGuideNotice({ platform, label }: { platform: DownloadGuidePlatform; label: string }) {

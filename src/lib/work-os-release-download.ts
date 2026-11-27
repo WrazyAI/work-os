@@ -2,14 +2,24 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   MACOS_INSTALLER_ASSET,
   MACOS_UPDATER_ASSET,
+  macosUpdaterAsset,
+  NIGHTLY_MACOS_INSTALLER_ASSET,
+  NIGHTLY_MACOS_UPDATER_ASSET,
+  NIGHTLY_WINDOWS_INSTALLER_ASSET,
+  NIGHTLY_WINDOWS_INSTALLER_SIGNATURE_ASSET,
   WINDOWS_CHECKSUM_ASSET,
   WINDOWS_INSTALLER_ASSET,
   WINDOWS_INSTALLER_SIGNATURE_ASSET,
+  windowsInstallerAsset,
 } from "./work-os-installer-assets";
 
 export {
   MACOS_INSTALLER_ASSET,
   MACOS_UPDATER_ASSET,
+  NIGHTLY_MACOS_INSTALLER_ASSET,
+  NIGHTLY_MACOS_UPDATER_ASSET,
+  NIGHTLY_WINDOWS_INSTALLER_ASSET,
+  NIGHTLY_WINDOWS_INSTALLER_SIGNATURE_ASSET,
   WINDOWS_CHECKSUM_ASSET,
   WINDOWS_INSTALLER_ASSET,
   WINDOWS_INSTALLER_SIGNATURE_ASSET,
@@ -22,7 +32,6 @@ const NIGHTLY_TAG_PREFIX = "work-os-companion-nightly-v";
 const DOWNLOAD_GRANT_TTL_SECONDS = 10 * 60;
 export type InternalReleasePlatform = "windows-x86_64" | "darwin-aarch64" | "darwin-x86_64";
 export type ReleaseChannel = "stable" | "nightly";
-type UpdaterAsset = typeof WINDOWS_INSTALLER_ASSET | typeof MACOS_UPDATER_ASSET;
 
 export function normalizeReleaseChannel(value: string | null | undefined): ReleaseChannel {
   return value?.trim().toLowerCase() === "nightly" ? "nightly" : "stable";
@@ -34,8 +43,11 @@ export function internalReleasePlatform(target: string, arch: string): InternalR
   return null;
 }
 
-export function internalReleaseUpdaterAsset(platform: InternalReleasePlatform): UpdaterAsset {
-  return platform === "windows-x86_64" ? WINDOWS_INSTALLER_ASSET : MACOS_UPDATER_ASSET;
+export function internalReleaseUpdaterAsset(
+  platform: InternalReleasePlatform,
+  channel: ReleaseChannel = "stable",
+): string {
+  return platform === "windows-x86_64" ? windowsInstallerAsset(channel) : macosUpdaterAsset(channel);
 }
 
 interface GitHubAsset {
@@ -265,10 +277,29 @@ function hasSingleAsset(release: GitHubRelease, assetName: string): boolean {
   return release.assets.filter((asset) => asset.name === assetName).length === 1;
 }
 
+/** Nightlies published before the channel-specific names used the Stable asset
+ * names. Accept that layout so existing installs and pending downloads keep
+ * resolving while the rename rolls out. */
+function legacyNightlyAssetName(assetName: string): string | null {
+  return assetName.startsWith("Work-OS-Companion-Nightly-")
+    ? assetName.replace("Work-OS-Companion-Nightly-", "Work-OS-Companion-")
+    : null;
+}
+
+function assetNameCandidates(assetName: string, channel: ReleaseChannel): string[] {
+  const candidates = [assetName];
+  if (channel === "nightly") {
+    const legacy = legacyNightlyAssetName(assetName);
+    if (legacy) candidates.push(legacy);
+  }
+  return candidates;
+}
+
 function findRelease(
   releases: GitHubRelease[],
   version?: string,
   requiredAssetName?: string,
+  channel: ReleaseChannel = "stable",
 ): GitHubRelease {
   const candidates = releases
     .map((candidate) => {
@@ -293,7 +324,7 @@ function findRelease(
   const release = version
     ? candidates.find((item) => item.version === canonicalInternalVersion(version))?.candidate
     : (requiredAssetName
-      ? candidates.find((item) => hasSingleAsset(item.candidate, requiredAssetName))?.candidate
+      ? candidates.find((item) => assetNameCandidates(requiredAssetName, channel).some((name) => hasSingleAsset(item.candidate, name)))?.candidate
       : candidates[0]?.candidate);
 
   if (!release) {
@@ -302,12 +333,22 @@ function findRelease(
   return release;
 }
 
-function findAsset(release: GitHubRelease, assetName: string): GitHubAsset {
-  const matchingAssets = release.assets.filter((asset) => asset.name === assetName);
-  if (matchingAssets.length !== 1) {
+function findAsset(release: GitHubRelease, assetName: string, channel: ReleaseChannel = "stable"): GitHubAsset {
+  const exact = release.assets.filter((asset) => asset.name === assetName);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) {
     throw new ReleaseDownloadError("The approved release does not contain one unambiguous download asset.", 404);
   }
-  return matchingAssets[0];
+  // A release can briefly carry both names during a publication retry or
+  // backfill. Use the legacy Nightly name only when the requested one is absent.
+  if (channel === "nightly") {
+    const legacy = legacyNightlyAssetName(assetName);
+    if (legacy) {
+      const legacyMatches = release.assets.filter((asset) => asset.name === legacy);
+      if (legacyMatches.length === 1) return legacyMatches[0];
+    }
+  }
+  throw new ReleaseDownloadError("The approved release does not contain one unambiguous download asset.", 404);
 }
 
 async function downloadAsset(
@@ -328,11 +369,11 @@ async function downloadAsset(
 }
 
 export async function downloadLatestInternalAsset(
-  assetName: typeof WINDOWS_INSTALLER_ASSET | typeof WINDOWS_CHECKSUM_ASSET | typeof MACOS_INSTALLER_ASSET,
+  assetName: string,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   fetchImpl: typeof fetch = fetch,
   channel: ReleaseChannel = "stable",
-  requiredPlatformAsset?: typeof WINDOWS_INSTALLER_ASSET | typeof MACOS_INSTALLER_ASSET,
+  requiredPlatformAsset?: string,
 ): Promise<ReleaseAssetDownload> {
   const releases = await listApprovedInternalReleases(token, fetchImpl, channel);
   // For Nightly macOS downloads (or checksums matching a macOS download), pick
@@ -340,20 +381,20 @@ export async function downloadLatestInternalAsset(
   const requiredAsset = channel === "nightly"
     ? (requiredPlatformAsset ?? (assetName === WINDOWS_CHECKSUM_ASSET ? undefined : assetName))
     : undefined;
-  const release = findRelease(releases, undefined, requiredAsset);
-  return downloadAsset(findAsset(release, assetName), release.tag_name, token!, fetchImpl);
+  const release = findRelease(releases, undefined, requiredAsset, channel);
+  return downloadAsset(findAsset(release, assetName, channel), release.tag_name, token!, fetchImpl);
 }
 
 export async function downloadInternalReleaseAsset(
   version: string,
-  assetName: UpdaterAsset,
+  assetName: string,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   fetchImpl: typeof fetch = fetch,
   channel: ReleaseChannel = "stable",
 ): Promise<ReleaseAssetDownload> {
   const releases = await listApprovedInternalReleases(token, fetchImpl, channel);
-  const release = findRelease(releases, version);
-  return downloadAsset(findAsset(release, assetName), release.tag_name, token!, fetchImpl);
+  const release = findRelease(releases, version, undefined, channel);
+  return downloadAsset(findAsset(release, assetName, channel), release.tag_name, token!, fetchImpl);
 }
 
 export async function getLatestInternalReleaseUpdate(
@@ -363,13 +404,13 @@ export async function getLatestInternalReleaseUpdate(
   channel: ReleaseChannel = "stable",
 ): Promise<InternalReleaseUpdate> {
   const releases = await listApprovedInternalReleases(token, fetchImpl, channel);
-  const updaterAsset = internalReleaseUpdaterAsset(platform);
+  const updaterAsset = internalReleaseUpdaterAsset(platform, channel);
   // Nightly builds are Windows-only unless macOS-specific changes are queued,
   // so macOS Nightly clients look for the newest release that carries macOS.
-  const release = findRelease(releases, undefined, channel === "nightly" ? updaterAsset : undefined);
-  findAsset(release, updaterAsset);
+  const release = findRelease(releases, undefined, channel === "nightly" ? updaterAsset : undefined, channel);
+  findAsset(release, updaterAsset, channel);
   const signatureDownload = await downloadAsset(
-    findAsset(release, `${updaterAsset}.sig`),
+    findAsset(release, `${updaterAsset}.sig`, channel),
     release.tag_name,
     token!,
     fetchImpl,
@@ -402,7 +443,7 @@ export function releaseDownloadResponse(download: ReleaseAssetDownload): Respons
   if (download.asset.digest?.startsWith("sha256:")) {
     headers.set("X-Checksum-SHA256", download.asset.digest.slice("sha256:".length));
   }
-  if (download.asset.name === WINDOWS_INSTALLER_ASSET) {
+  if (download.asset.name === WINDOWS_INSTALLER_ASSET || download.asset.name === NIGHTLY_WINDOWS_INSTALLER_ASSET) {
     headers.set("X-Work-OS-Authenticode", "unsigned-internal");
   }
   return new Response(download.response.body, { status: 200, headers });

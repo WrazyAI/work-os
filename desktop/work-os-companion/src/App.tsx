@@ -5475,6 +5475,7 @@ export default function App() {
         menuGroups={groups}
         onQuit={quitApp}
         variant={macChrome ? "mac" : "windows"}
+        nightly={updateChannel === "nightly"}
       />
       <NativeAppMenu groups={groups} />
       <div className="window-chrome-content">{content}</div>

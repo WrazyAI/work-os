@@ -51,6 +51,7 @@ fn main() {
             "finish_worktivity_control",
             "voice_hotkey_status",
             "set_voice_hotkey",
+            "set_update_channel_icon",
             "open_debug_window",
             "diagnostics_emit",
             "diagnostics_page",

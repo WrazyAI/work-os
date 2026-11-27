@@ -518,16 +518,21 @@ test("macosSpecific flag controls whether Nightly includes a macOS CI build", ()
 
 test("channel catalog tracks Stable and Nightly parity and evaluates Stable promotion", async () => {
   const { formatFridayCheckinBody } = await import("../scripts/work-os-friday-checkin.mjs");
-  const macAssets = [
+  const stableMacAssets = [
     { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg" },
     { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz" },
     { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz.sig" },
   ];
+  const nightlyMacAssets = [
+    { name: "Work-OS-Companion-Nightly-macOS-Universal-UNSIGNED.dmg" },
+    { name: "Work-OS-Companion-Nightly-macOS-Universal-UNSIGNED.app.tar.gz" },
+    { name: "Work-OS-Companion-Nightly-macOS-Universal-UNSIGNED.app.tar.gz.sig" },
+  ];
   const pages = [[
-    { tag_name: "work-os-companion-internal-v0.5.45", draft: false, published_at: "2026-11-20T00:00:00Z", assets: macAssets },
+    { tag_name: "work-os-companion-internal-v0.5.45", draft: false, published_at: "2026-11-20T00:00:00Z", assets: stableMacAssets },
     { tag_name: "work-os-companion-nightly-v0.5.45", draft: false, published_at: "2026-11-19T00:00:00Z", assets: [] },
     { tag_name: "work-os-companion-nightly-v0.5.46", draft: false, published_at: "2026-11-22T00:00:00Z", target_commitish: "a".repeat(40), assets: [] },
-    { tag_name: "work-os-companion-nightly-v0.5.47", draft: false, published_at: "2026-11-24T00:00:00Z", target_commitish: "b".repeat(40), assets: macAssets },
+    { tag_name: "work-os-companion-nightly-v0.5.47", draft: false, published_at: "2026-11-24T00:00:00Z", target_commitish: "b".repeat(40), assets: nightlyMacAssets },
   ]];
   const catalog = gate.latestPublishedByChannel(pages);
   assert.equal(catalog.latestStable.version, "0.5.45");
@@ -545,6 +550,13 @@ test("channel catalog tracks Stable and Nightly parity and evaluates Stable prom
 
   const promoWithMac = gate.evaluatePromotion({ pages, version: "0.5.47" });
   assert.equal(promoWithMac.needsMacosBuild, false);
+
+  // Nightlies published before the channel-specific names used the Stable
+  // macOS asset names; promotion must still recognize them.
+  assert.equal(gate.hasMacosReleaseAssets({
+    tag_name: "work-os-companion-nightly-v0.5.48",
+    assets: stableMacAssets,
+  }), true);
 
   assert.throws(() => gate.evaluatePromotion({ pages, version: "0.5.45" }), /already published/i);
   assert.throws(() => gate.evaluatePromotion({ pages, version: "0.5.99" }), /No published Nightly/i);

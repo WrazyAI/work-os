@@ -17,7 +17,7 @@ export async function downloadPublicInstaller(
   platform: PublicInstallerPlatform,
   channel: ReleaseChannel = "stable",
 ): Promise<Response> {
-  const asset = publicInstallerAsset(platform);
+  const asset = publicInstallerAsset(platform, channel);
   const download = await downloadLatestInternalAsset(asset, undefined, undefined, channel, asset);
   const response = releaseDownloadResponse(download);
   response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300");
@@ -36,7 +36,7 @@ export async function downloadPublicChecksums(
     undefined,
     undefined,
     channel,
-    publicInstallerAsset(platform),
+    publicInstallerAsset(platform, channel),
   );
   const response = releaseDownloadResponse(download);
   response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300");

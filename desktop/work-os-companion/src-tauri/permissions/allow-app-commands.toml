@@ -22,5 +22,6 @@ commands.allow = [
   "diagnostics_export",
   "open_logs_dir",
   "hide_avatar",
-  "show_avatar"
+  "show_avatar",
+  "set_update_channel_icon"
 ]

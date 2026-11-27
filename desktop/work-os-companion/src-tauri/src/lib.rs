@@ -18,6 +18,29 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
+/// Runtime icons for the release channel. The bundle keeps the stable icon so
+/// Stable promotion can reuse the Windows installer verbatim; the running app
+/// swaps to the Nightly tag when the employee selects Nightly updates.
+const STABLE_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+const NIGHTLY_ICON_PNG: &[u8] = include_bytes!("../icons/nightly-runtime.png");
+const NIGHTLY_TRAY_PNG: &[u8] = include_bytes!("../icons/nightly-tray.png");
+
+fn channel_icon_bytes(channel: &str) -> &'static [u8] {
+    if channel == "nightly" {
+        NIGHTLY_ICON_PNG
+    } else {
+        STABLE_ICON_PNG
+    }
+}
+
+fn channel_tray_icon_bytes(channel: &str) -> &'static [u8] {
+    if channel == "nightly" {
+        NIGHTLY_TRAY_PNG
+    } else {
+        STABLE_ICON_PNG
+    }
+}
+
 // Zig's MinGW libc omits this symbol, while Stronghold's libsodium build uses it.
 #[cfg(all(target_os = "windows", target_env = "gnu"))]
 #[no_mangle]
@@ -195,6 +218,43 @@ fn show_avatar(app: tauri::AppHandle) {
         false
     };
     announce_companion_visibility(&app, shown);
+}
+
+#[tauri::command]
+fn set_update_channel_icon(app: tauri::AppHandle, channel: String) -> Result<(), String> {
+    let app_bytes = channel_icon_bytes(&channel);
+    let app_icon = tauri::image::Image::from_bytes(app_bytes).map_err(|error| error.to_string())?;
+    for label in ["main", "avatar"] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.set_icon(app_icon.clone());
+        }
+    }
+    let tray_icon = tauri::image::Image::from_bytes(channel_tray_icon_bytes(&channel))
+        .map_err(|error| error.to_string())?;
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_icon(Some(tray_icon));
+    }
+    #[cfg(target_os = "macos")]
+    set_macos_dock_icon(&app, app_bytes)?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_dock_icon(app: &tauri::AppHandle, bytes: &'static [u8]) -> Result<(), String> {
+    app.run_on_main_thread(move || {
+        use objc2::{AllocAnyThread, MainThreadMarker};
+        use objc2_app_kit::{NSApplication, NSImage};
+        use objc2_foundation::NSData;
+
+        let marker = unsafe { MainThreadMarker::new_unchecked() };
+        let application = NSApplication::sharedApplication(marker);
+        let data = NSData::with_bytes(bytes);
+        let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) else {
+            return;
+        };
+        unsafe { application.setApplicationIconImage(Some(&image)) };
+    })
+    .map_err(|error| error.to_string())
 }
 
 fn toggle_companion(app: &tauri::AppHandle) {
@@ -692,6 +752,7 @@ pub fn run() {
             finish_worktivity_control,
             voice_hotkey_status,
             set_voice_hotkey,
+            set_update_channel_icon,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,
             diagnostics::diagnostics_page,
@@ -789,7 +850,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &companion, &capture, &quit])?;
             app.manage(CompanionTrayItem(std::sync::Mutex::new(Some(companion.clone()))));
-            let mut tray = TrayIconBuilder::new()
+            let mut tray = TrayIconBuilder::with_id("main")
                 .menu(&menu)
                 .tooltip("Work OS Companion");
             if let Some(icon) = app.default_window_icon() {
@@ -863,7 +924,36 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::allowed_desktop_connect_url;
+    use super::{
+        allowed_desktop_connect_url, channel_icon_bytes, channel_tray_icon_bytes, NIGHTLY_ICON_PNG,
+        NIGHTLY_TRAY_PNG, STABLE_ICON_PNG,
+    };
+
+    #[test]
+    fn release_channel_selects_the_runtime_icon() {
+        assert!(NIGHTLY_ICON_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(NIGHTLY_TRAY_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert_eq!(
+            channel_icon_bytes("nightly").as_ptr(),
+            NIGHTLY_ICON_PNG.as_ptr()
+        );
+        assert_eq!(
+            channel_icon_bytes("stable").as_ptr(),
+            STABLE_ICON_PNG.as_ptr()
+        );
+        assert_eq!(
+            channel_icon_bytes("unknown").as_ptr(),
+            STABLE_ICON_PNG.as_ptr()
+        );
+        assert_eq!(
+            channel_tray_icon_bytes("nightly").as_ptr(),
+            NIGHTLY_TRAY_PNG.as_ptr()
+        );
+        assert_eq!(
+            channel_tray_icon_bytes("stable").as_ptr(),
+            STABLE_ICON_PNG.as_ptr()
+        );
+    }
 
     #[test]
     fn allows_an_https_workspace_host() {

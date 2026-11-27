@@ -41,6 +41,18 @@ The release job produces fixed asset names so website and updater links do not c
 | `*.sig` | Tauri updater signatures |
 | `SHA256SUMS.txt` | SHA-256 checksums for every download |
 
+Nightly releases keep the same layout but add `-Nightly` to every download name
+(for example `Work-OS-Companion-Nightly-Setup-UNSIGNED.exe` and
+`Work-OS-Companion-Nightly-macOS-Universal-UNSIGNED.dmg`) so testers can tell a
+Nightly download from a Stable one. The portable executable inside the ZIP keeps
+its channel-neutral name, and Stable promotion renames the reused Windows assets
+back to the names above. The Windows installers carry the Work OS icon and
+branded setup screens; the macOS DMG uses a branded install window. While the
+app is on the Nightly update channel, its window and Dock icon switch to the
+Nightly pill at runtime, the menu bar shows a violet crescent, and the app's
+caption bar carries the same moon. The installed executable and installer keep
+the stable icon so Stable promotion can reuse the Windows installer verbatim.
+
 Before release upload, CI verifies that the executable, NSIS installer, and MSI are actually unsigned; that updater signatures exist; and that the portable ZIP, updater manifest, and checksums are coherent. Every filename, release title, release note, and workflow artifact says `UNSIGNED` or `unsigned-internal`. A published release is never overwritten. Protect the GitHub environment with required reviewers if the organization needs two-person control.
 
 Clean `main` currently omits `@types/node` from the companion package even though its test files import `node:*`. CI installs the exact type-only package `@types/node@22.18.3` without lifecycle scripts or lockfile changes before running the existing build gate. Remove that CI-only bootstrap after the desktop package declares the dependency in its own lockfile; changing the package files is intentionally outside this release-automation change.

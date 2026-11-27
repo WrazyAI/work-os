@@ -1,7 +1,8 @@
 import {
-  MACOS_INSTALLER_ASSET,
-  WINDOWS_INSTALLER_ASSET,
+  macosInstallerAsset,
+  windowsInstallerAsset,
   WINDOWS_CHECKSUM_ASSET,
+  type InstallerChannel,
 } from "./work-os-installer-assets";
 
 /** The public install surface. Only published installer files are exposed;
@@ -14,8 +15,11 @@ export function publicInstallerPlatform(value: string): PublicInstallerPlatform 
   return null;
 }
 
-export function publicInstallerAsset(platform: PublicInstallerPlatform): typeof WINDOWS_INSTALLER_ASSET | typeof MACOS_INSTALLER_ASSET {
-  return platform === "windows-x86_64" ? WINDOWS_INSTALLER_ASSET : MACOS_INSTALLER_ASSET;
+export function publicInstallerAsset(
+  platform: PublicInstallerPlatform,
+  channel: InstallerChannel = "stable",
+): string {
+  return platform === "windows-x86_64" ? windowsInstallerAsset(channel) : macosInstallerAsset(channel);
 }
 
 export function publicChecksumAsset(): typeof WINDOWS_CHECKSUM_ASSET {

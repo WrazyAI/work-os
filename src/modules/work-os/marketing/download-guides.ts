@@ -1,3 +1,8 @@
+import {
+  macosInstallerAsset,
+  windowsInstallerAsset,
+} from "../../../lib/work-os-installer-assets";
+
 /** Platform-specific instructions for unsigned internal installers. Reputation
  * prompts are not malware verdicts: quarantine/damage always stops at IT. */
 export type DownloadGuidePlatform = "windows" | "macos";
@@ -28,7 +33,7 @@ export const DOWNLOAD_GUIDES: readonly DownloadGuide[] = [
   {
     platform: "windows",
     label: "Windows",
-    fileName: "Work-OS-Companion-Setup-UNSIGNED.exe",
+    fileName: windowsInstallerAsset("stable"),
     securityNote: "This internal build has no recognized publisher signature. Check the file before allowing it to run.",
     warnings: [
       { title: "Antivirus may pause or block installation", body: "Wait for the scan to finish. If it removes or quarantines the file, stop and ask your IT admin." },
@@ -45,12 +50,12 @@ export const DOWNLOAD_GUIDES: readonly DownloadGuide[] = [
       { title: "The publisher is Unknown", body: "This build is not Authenticode-signed. If the file name or SHA-256 differs, do not run it. Ask your admin." },
       { title: "No file arrived", body: "Check your browser’s Downloads list and antivirus history. If the build is unavailable, try again later or ask your admin." },
     ],
-    checksumCommand: 'Get-FileHash "$HOME\\Downloads\\Work-OS-Companion-Setup-UNSIGNED.exe" -Algorithm SHA256',
+    checksumCommand: `Get-FileHash "$HOME\\Downloads\\${windowsInstallerAsset("stable")}" -Algorithm SHA256`,
   },
   {
     platform: "macos",
     label: "macOS",
-    fileName: "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg",
+    fileName: macosInstallerAsset("stable"),
     securityNote: "This internal build is not notarized by Apple. Check the file before allowing it to open.",
     warnings: [
       { title: "“Apple could not verify”", action: "Done → Privacy & Security → Open Anyway", body: "For a verified download, choose Done, not Move to Bin. Find Privacy & Security in System Settings." },
@@ -67,12 +72,21 @@ export const DOWNLOAD_GUIDES: readonly DownloadGuide[] = [
       { title: "The app is damaged", body: "Download it again and compare the SHA-256. If it matches and the warning remains, stop and ask your admin." },
       { title: "Downloaded from the Internet", body: "Click Open only for the verified Work OS download. If unsure, stop and ask your admin." },
     ],
-    checksumCommand: "shasum -a 256 ~/Downloads/Work-OS-Companion-macOS-Universal-UNSIGNED.dmg",
+    checksumCommand: `shasum -a 256 ~/Downloads/${macosInstallerAsset("stable")}`,
   },
 ];
 
-export function downloadGuide(platform: string): DownloadGuide | null {
-  return DOWNLOAD_GUIDES.find((guide) => guide.platform === platform) ?? null;
+export function downloadGuide(platform: string, channel: DownloadChannel = "stable"): DownloadGuide | null {
+  const guide = DOWNLOAD_GUIDES.find((entry) => entry.platform === platform);
+  if (!guide || channel === "stable") return guide ?? null;
+  const fileName = platform === "windows" ? windowsInstallerAsset("nightly") : macosInstallerAsset("nightly");
+  return {
+    ...guide,
+    fileName,
+    checksumCommand: platform === "windows"
+      ? `Get-FileHash "$HOME\\Downloads\\${fileName}" -Algorithm SHA256`
+      : `shasum -a 256 ~/Downloads/${fileName}`,
+  };
 }
 
 export function downloadGuidePath(platform: DownloadGuidePlatform, channel: DownloadChannel = "stable"): string {

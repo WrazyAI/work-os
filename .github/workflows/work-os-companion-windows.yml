@@ -128,12 +128,13 @@ jobs:
           $nightlyPrefix = "work-os-companion-nightly-v"
           $stablePrefix = "work-os-companion-internal-v"
           $tagPrefix = $nightlyPrefix
+          $channel = "nightly"
           if ($env:GITHUB_EVENT_NAME -eq "push") {
             if ($env:GITHUB_REF.StartsWith("refs/tags/$nightlyPrefix") -or $env:GITHUB_REF.StartsWith("refs/tags/$stablePrefix")) {
               $version = node scripts/macos-release.mjs tag-version $env:GITHUB_REF_NAME
               if ($LASTEXITCODE -ne 0) { throw "Invalid internal release tag" }
               $publish = "false"
-              if ($env:GITHUB_REF.StartsWith("refs/tags/$stablePrefix")) { $tagPrefix = $stablePrefix }
+              if ($env:GITHUB_REF.StartsWith("refs/tags/$stablePrefix")) { $tagPrefix = $stablePrefix; $channel = "stable" }
             } elseif ($env:GITHUB_REF -eq "refs/heads/main") {
               $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
               $publish = "true"
@@ -170,6 +171,7 @@ jobs:
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "display_version=$displayVersion" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "tag=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "channel=$channel" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publish=$publish" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Require changelog entry for the release
@@ -233,6 +235,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
         run: |
           $ErrorActionPreference = "Stop"
           $bundle = Resolve-Path "src-tauri/target/release/bundle"
@@ -269,25 +272,29 @@ jobs:
 
           $stage = Join-Path $env:RUNNER_TEMP "work-os-release"
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item $nsis[0].FullName "$stage/Work-OS-Companion-Setup-UNSIGNED.exe"
-          Copy-Item $nsisSig.FullName "$stage/Work-OS-Companion-Setup-UNSIGNED.exe.sig"
-          Copy-Item $msi[0].FullName "$stage/Work-OS-Companion-UNSIGNED.msi"
-          Copy-Item $msiSig.FullName "$stage/Work-OS-Companion-UNSIGNED.msi.sig"
+          $namesJson = node scripts/macos-release.mjs asset-names $env:RELEASE_CHANNEL
+          if ($LASTEXITCODE -ne 0) { throw "Could not resolve release asset names" }
+          $names = $namesJson | ConvertFrom-Json
+          Copy-Item $nsis[0].FullName "$stage/$($names.windowsInstaller)"
+          Copy-Item $nsisSig.FullName "$stage/$($names.windowsInstallerSignature)"
+          Copy-Item $msi[0].FullName "$stage/$($names.windowsMsi)"
+          Copy-Item $msiSig.FullName "$stage/$($names.windowsMsiSignature)"
           $portableDir = Join-Path $env:RUNNER_TEMP "work-os-portable"
           New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
-          Copy-Item $releaseExe.Path "$portableDir/Work-OS-Companion-UNSIGNED.exe"
-          Compress-Archive -Path "$portableDir/Work-OS-Companion-UNSIGNED.exe" -DestinationPath "$stage/Work-OS-Companion-Portable-UNSIGNED.zip"
+          Copy-Item $releaseExe.Path "$portableDir/$($names.windowsPortableExe)"
+          Compress-Archive -Path "$portableDir/$($names.windowsPortableExe)" -DestinationPath "$stage/$($names.windowsPortable)"
 
           $updaterSignature = (Get-Content $nsisSig.FullName -Raw).Trim()
-          $assetUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/Work-OS-Companion-Setup-UNSIGNED.exe"
+          $assetUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/$($names.windowsInstaller)"
+          $channelLabel = if ($env:RELEASE_CHANNEL -eq "nightly") { "NIGHTLY (UNSIGNED)" } else { "UNSIGNED INTERNAL" }
           $manifest = @{
             version = $env:RELEASE_VERSION
-            notes = "NIGHTLY (UNSIGNED) Work OS Companion $env:RELEASE_VERSION. The updater artifact is cryptographically signed, but the Windows executable is not Authenticode-signed."
+            notes = "$channelLabel Work OS Companion $env:RELEASE_VERSION. The updater artifact is cryptographically signed, but the Windows executable is not Authenticode-signed."
             pub_date = (Get-Date).ToUniversalTime().ToString("o")
             platforms = @{ "windows-x86_64" = @{ url = $assetUrl; signature = $updaterSignature } }
           }
           $manifest | ConvertTo-Json -Depth 6 | Set-Content "$stage/latest-internal.json" -Encoding utf8
-          $checksumTargets = @("Work-OS-Companion-Setup-UNSIGNED.exe", "Work-OS-Companion-Setup-UNSIGNED.exe.sig", "Work-OS-Companion-UNSIGNED.msi", "Work-OS-Companion-UNSIGNED.msi.sig", "Work-OS-Companion-Portable-UNSIGNED.zip", "latest-internal.json")
+          $checksumTargets = @($names.windowsAssets) + @("latest-internal.json")
           $checksumLines = foreach ($name in $checksumTargets) {
             $hash = (Get-FileHash "$stage/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $name"
@@ -298,10 +305,10 @@ jobs:
             [Text.UTF8Encoding]::new($false)
           )
 
-          $zipList = tar -tf "$stage/Work-OS-Companion-Portable-UNSIGNED.zip"
-          if ($LASTEXITCODE -ne 0 -or $zipList -notcontains "Work-OS-Companion-UNSIGNED.exe") { throw "Portable archive validation failed" }
+          $zipList = tar -tf "$stage/$($names.windowsPortable)"
+          if ($LASTEXITCODE -ne 0 -or $zipList -notcontains $names.windowsPortableExe) { throw "Portable archive validation failed" }
           $parsedManifest = Get-Content "$stage/latest-internal.json" -Raw | ConvertFrom-Json
-          if ($parsedManifest.version -ne $env:RELEASE_VERSION -or [string]::IsNullOrWhiteSpace($parsedManifest.platforms.'windows-x86_64'.signature) -or $parsedManifest.platforms.'windows-x86_64'.url -notmatch 'UNSIGNED\.exe$') { throw "Updater manifest validation failed" }
+          if ($parsedManifest.version -ne $env:RELEASE_VERSION -or [string]::IsNullOrWhiteSpace($parsedManifest.platforms.'windows-x86_64'.signature) -or $parsedManifest.platforms.'windows-x86_64'.url -notmatch ([regex]::Escape($names.windowsInstaller) + '$')) { throw "Updater manifest validation failed" }
           "stage=$stage" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload verified internal workflow artifact
@@ -311,7 +318,7 @@ jobs:
         if: inputs.skip_workflow_artifact_upload != true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: work-os-companion-${{ steps.release.outputs.version }}-nightly-unsigned
+          name: work-os-companion-${{ steps.release.outputs.version }}-${{ steps.release.outputs.channel }}-unsigned
           path: ${{ steps.assets.outputs.stage }}/*
           if-no-files-found: error
           retention-days: 14
@@ -323,21 +330,34 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_DISPLAY: ${{ steps.release.outputs.display_version }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
           RELEASE_STAGE: ${{ steps.assets.outputs.stage }}
           INCLUDE_MACOS: ${{ needs.release-gate.outputs.include_macos }}
         run: |
           $ErrorActionPreference = "Stop"
-          $title = "NIGHTLY (UNSIGNED) - Work OS Companion $env:RELEASE_DISPLAY"
-          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
-          $platformNote = if ($env:INCLUDE_MACOS -eq "true") {
-            "This Nightly release includes both **Windows** and **universal macOS** packages because at least one queued update is macOS-specific."
+          $title = if ($env:RELEASE_CHANNEL -eq "nightly") {
+            "NIGHTLY (UNSIGNED) - Work OS Companion $env:RELEASE_DISPLAY"
           } else {
+            "UNSIGNED INTERNAL - Work OS Companion $env:RELEASE_DISPLAY"
+          }
+          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          $notesHeading = if ($env:RELEASE_CHANNEL -eq "nightly") { "## Nightly developer build (unsigned)" } else { "## Unsigned internal build" }
+          $notesBody = if ($env:RELEASE_CHANNEL -eq "nightly") {
+            "This Nightly channel build is intended for developer testing ahead of weekly Stable promotion. It is **not Authenticode-signed**; Windows SmartScreen may warn during installation."
+          } else {
+            "This internal Stable build is **not Authenticode-signed**; Windows SmartScreen may warn during installation."
+          }
+          $platformNote = if ($env:RELEASE_CHANNEL -eq "nightly" -and $env:INCLUDE_MACOS -eq "true") {
+            "This Nightly release includes both **Windows** and **universal macOS** packages because at least one queued update is macOS-specific."
+          } elseif ($env:RELEASE_CHANNEL -eq "nightly") {
             "This Nightly release is **Windows-only** (no macOS-specific update was queued). Promoting this version to Stable will automatically build and attach the universal macOS package from this exact commit."
+          } else {
+            ""
           }
           @"
-          ## Nightly developer build (unsigned)
+          $notesHeading
 
-          This Nightly channel build is intended for developer testing ahead of weekly Stable promotion. It is **not Authenticode-signed**; Windows SmartScreen may warn during installation.
+          $notesBody
 
           $platformNote
 
@@ -391,7 +411,10 @@ jobs:
           $assets = Get-ChildItem $env:RELEASE_STAGE -File | ForEach-Object { $_.FullName }
           gh release upload $env:RELEASE_TAG $assets --repo "${{ github.repository }}" --clobber
           if ($LASTEXITCODE -ne 0) { throw "Release asset upload failed" }
-          $required = @("Work-OS-Companion-Setup-UNSIGNED.exe", "Work-OS-Companion-Setup-UNSIGNED.exe.sig", "Work-OS-Companion-UNSIGNED.msi", "Work-OS-Companion-UNSIGNED.msi.sig", "Work-OS-Companion-Portable-UNSIGNED.zip", "latest-internal.json", "SHA256SUMS.txt")
+          $namesJson = node scripts/macos-release.mjs asset-names $env:RELEASE_CHANNEL
+          if ($LASTEXITCODE -ne 0) { throw "Could not resolve release asset names" }
+          $names = $namesJson | ConvertFrom-Json
+          $required = @($names.windowsAssets) + @("latest-internal.json", "SHA256SUMS.txt")
           $uploaded = @(gh release view $env:RELEASE_TAG --repo "${{ github.repository }}" --json assets --jq '.assets[].name')
           $missing = @($required | Where-Object { $_ -notin $uploaded })
           if ($missing.Count -gt 0) { throw "Release is missing assets: $($missing -join ', ')" }
