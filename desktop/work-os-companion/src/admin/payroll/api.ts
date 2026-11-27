@@ -19,25 +19,29 @@ export function desktopPayroll(organizationId: string) {
     { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : undefined }, { organizationId });
   const post = <T>(path: string, body: object, timeoutMs = 20_000) => apiRequest<T>(path,
     { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) }, { organizationId });
-  const findingsPage = (id: string, status: string, cursor: string | null, signal?: AbortSignal) =>
-    get<Page<PayrollFinding>>(pathWith(`${reviewPath(id)}/findings`, { status, cursor, limit: "100" }), signal);
+  const findingsPage = (id: string, status: string, cursor: string | null, signal?: AbortSignal, revision?: number) =>
+    get<Page<PayrollFinding>>(pathWith(`${reviewPath(id)}/findings`, {
+      status, cursor, limit: "100", revision: revision === undefined ? null : String(revision),
+    }), signal);
   return {
     roster: (payDate: string, cursor: string | null, recordsOnly: boolean, signal?: AbortSignal) =>
       get<PayrollRosterPage>(pathWith(base, { payDate, cursor, view: recordsOnly ? "records" : null }), signal),
     review: (id: string, signal?: AbortSignal) => get<PayrollReview>(reviewPath(id), signal),
     days: (id: string, signal?: AbortSignal) => get<Page<PayrollDayResult>>(`${reviewPath(id)}/days`, signal),
     findings: findingsPage,
-    findingsAll: async (id: string, signal?: AbortSignal) => {
+    findingsAll: async (id: string, signal?: AbortSignal, revision?: number) => {
       const items: PayrollFinding[] = [];
       let cursor: string | null = null;
       let total = 0;
-      for (let page = 0; page < 10; page += 1) {
-        const result = await findingsPage(id, "", cursor, signal);
+      const seen = new Set<string>();
+      do {
+        const result = await findingsPage(id, "", cursor, signal, revision);
         items.push(...result.items);
         total = result.total;
         cursor = result.nextCursor;
-        if (!cursor) break;
-      }
+        if (cursor && seen.has(cursor)) throw new Error("Findings could not be fully loaded. Retry the review.");
+        if (cursor) seen.add(cursor);
+      } while (cursor);
       return { items, total, nextCursor: cursor };
     },
     start: (input: { personId: string; payDate: string; requestKey: string; from?: string; through?: string }) => post<PayrollRun>(base, input),

@@ -105,6 +105,9 @@ test("an audit exposes its queued progress and pages findings without repeating 
     const roster = await listPayrollRoster(adminAccess, { payDate: "2026-11-16", cursor: null, limit: 50, recordsOnly: true });
     assert.equal(roster.items[0].auditStatus, "queued");
     const first = await listPayrollFindings(adminAccess, reviewId, { status: null, cursor: null, limit: 1 });
+    await assert.rejects(listPayrollFindings(adminAccess, reviewId, {
+      status: null, cursor: first.nextCursor, limit: 1, analysisRevision: 2,
+    }), /revision changed/i);
     assert.ok(first.nextCursor);
     const second = await listPayrollFindings(adminAccess, reviewId, { status: null, cursor: first.nextCursor, limit: 1 });
     assert.notEqual(first.items[0].id, second.items[0].id);

@@ -7,6 +7,25 @@ import { PayrollReviewView } from "../src/modules/work-os/admin/payroll/PayrollR
 import { payrollDefaultWindow } from "../src/modules/work-os/admin/payroll/paths";
 import pageModule from "../src/app/work-os/admin/payroll/page";
 import { payrollRosterFixture, payrollReviewFixture, staleReview } from "./fixtures/work-os-payroll";
+import { payrollApi } from "../src/modules/work-os/admin/payroll/api";
+
+test("web finding retrieval reaches the eleventh page", async (context) => {
+  let page = 0;
+  context.mock.method(payrollApi, "findings", async (_id: string, _status: string, cursor: string | null, revision: number) => {
+    assert.equal(cursor, page ? String(page) : null);
+    assert.equal(revision, 8);
+    page += 1;
+    return {
+      items: Array.from({ length: page === 11 ? 1 : 100 }, (_, index) => ({ key: `${page}:${index}` })),
+      total: 1001,
+      nextCursor: page === 11 ? null : String(page),
+    };
+  });
+  const result = await payrollApi.findingsAll("review", 8);
+  assert.equal(result.items.length, 1001);
+  assert.equal(result.items.at(-1)?.key, "11:0");
+  assert.equal(result.nextCursor, null);
+});
 
 test("stale review renders a re-analyze action and no approve action", () => {
   const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review: staleReview, onApprove() {}, onAdvance() {} }));
@@ -42,6 +61,53 @@ test("Payroll defaults to Records and New audit links to the Audits view", async
   const markup = renderToStaticMarkup(createElement(PayrollOverviewView, { page: payrollRosterFixture, payDate: "2026-11-16" }));
   assert.match(markup, /\/work-os\/admin\/payroll\?tab=audits&amp;new=1&amp;payDate=2026-11-16/);
   assert.match(markup, /New audit/);
+});
+
+test("weekly briefs read as structured memos with dates, sources and observation sections", () => {
+  const review = payrollReviewFixture();
+  const source = { type: "interval" as const, id: "recap-42", revision: 7 };
+  review.briefs = [{
+    ...review.briefs[0],
+    summaryCitations: [source],
+    themes: [{ heading: "Release checks", detail: "Documented the rollback checks.", citations: [source] }],
+    openItems: [{ text: "Confirm the staging result.", citations: [] }],
+    gaps: ["Friday capture coverage is incomplete."],
+  }];
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review }));
+  assert.match(markup, /class="payroll-brief-head"/);
+  assert.match(markup, /class="payroll-brief-week">Week 1</);
+  assert.match(markup, /class="payroll-brief-period">Nov 1 – Nov 7, 2026</);
+  assert.match(markup, /class="payroll-brief-state" data-tone="ok">Grounded in 1 source</);
+  assert.match(markup, /class="payroll-brief-summary"/);
+  assert.match(markup, /<h4>Work observed<\/h4>/);
+  assert.match(markup, /class="payroll-brief-observation"/);
+  assert.match(markup, /<h4>Open items<\/h4>/);
+  assert.match(markup, /class="payroll-brief-limit"/);
+  assert.match(markup, /Sources \(1\)/);
+});
+
+test("empty exclusion rules stay flat, compact and honest about zero removals", () => {
+  const review = payrollReviewFixture();
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review }));
+  assert.doesNotMatch(markup, /<details class="payroll-rule"/);
+  assert.match(markup, /No intervals removed from pay/);
+  assert.match(markup, /class="payroll-rule-count">None</);
+  assert.doesNotMatch(markup, /class="payroll-rule-empty"/);
+});
+
+test("excluded findings align to labelled columns on every rule", () => {
+  const review = payrollReviewFixture();
+  const finding = {
+    id: "break-1", key: "break:1", scope: review.scope, dayId: "d1", date: "2026-11-04",
+    kind: "break" as const, status: "auto_excluded" as const, effect: "exclude" as const,
+    span: { startMs: 0, endMs: 1_800_000 }, durationMs: 1_800_000, minutes: 30,
+    sourceHash: "s", blocksApproval: false, requiredAction: "none" as const,
+    reason: "Break time is unpaid.", citations: [], frameSummaryIds: [],
+  };
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, findings: [finding] }));
+  assert.match(markup, /class="payroll-rule-columns"/);
+  for (const label of ["Date", "Time", "Excluded", "Evidence"]) assert.match(markup, new RegExp(`>${label}<`));
+  assert.match(markup, /class="payroll-rule-evidence">No frames by policy/);
 });
 
 test("audit presents saved themes, open work, limitations and source revisions", () => {

@@ -20,7 +20,7 @@ import { payrollProviderDeps, refreshPayrollProviderEvidence, type PayrollProvid
 import { verifyPayrollSourceToken } from "@/lib/work-os-payroll-freshness";
 import {
   approvalFromRow, loadPayrollReview, loadPayrollReviewRow, payrollObject, reviewScope,
-  payrollTransaction, totalsFromJson, verifyCommand, payrollDateKey,
+  payrollTransaction, totalsFromJson, verifyCommand, payrollDateKey, payrollFindingBlockers, LEGACY_LOW_EVIDENCE_BLOCKER,
 } from "@/lib/work-os-payroll-decisions";
 import type {
   PayrollApproval, PayrollCommand, PayrollReview, PayrollScope, PayrollTotals,
@@ -97,7 +97,7 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     }
   }
   const result = await payrollTransaction(scope, async (client) => {
-    const review = await loadPayrollReviewRow(client, scope, reviewId);
+    const review = await loadPayrollReviewRow(client, scope, reviewId, true);
     const existing = await queryOne<WorkPayrollApprovalRow>(
       client,
       `SELECT * FROM work_payroll_approvals WHERE organization_id=$1 AND review_id=$2 AND request_key=$3`,
@@ -106,14 +106,7 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
     if (existing) return approvalFromRow(existing as unknown as Row, scope, await periodOf(client, review));
     verifyCommand(review, input);
     if (String(review.status) === "approved") throw new WorkOsConflictError("This payroll review is already approved.", "payroll_already_approved");
-    if (String(review.status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
-    const locked = await queryOne<WorkPayrollReviewRow>(
-      client,
-      `SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
-      [scope.organizationId, reviewId],
-    );
-    if (!locked || String(locked.status) !== "ready") throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
-    Object.assign(review, locked);
+    if (!["ready", "needs_review"].includes(String(review.status))) throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
     const expires = review.retention_expires_at instanceof Date ? review.retention_expires_at.getTime() : Date.parse(String(review.retention_expires_at ?? ""));
     if (Number.isFinite(expires) && expires <= Date.now()) throw new WorkOsConflictError("Payroll records for this period expired.", "payroll_expired");
     const priorRow = review.current_approval_id
@@ -129,14 +122,13 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       [scope.organizationId, scope.personId, review.period_start, review.period_end],
     );
     if (pendingRecaps) throw new WorkOsConflictError("Pending employee recaps must be settled before payroll approval.", "payroll_recaps_pending");
-    const blocking = await queryOne<Pick<WorkPayrollFindingRow, "finding_key">>(
-      client,
-      `SELECT finding_key FROM work_payroll_findings
-      WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
-        AND blocks_approval AND status IN ('needs_review','needs_correction') LIMIT 1`,
-      [scope.organizationId, reviewId, review.analysis_revision],
-    );
-    if (blocking) throw new WorkOsConflictError("A held or correction-required payroll finding blocks approval.", "payroll_findings_unresolved");
+    const blockers = await payrollFindingBlockers(client, scope, review);
+    if (blockers.legacyDeduction) throw new WorkOsConflictError(LEGACY_LOW_EVIDENCE_BLOCKER, "payroll_legacy_low_evidence");
+    if (blockers.unresolved) throw new WorkOsConflictError("A held or correction-required payroll finding blocks approval.", "payroll_findings_unresolved");
+    if (blockers.dayBlocked) throw new WorkOsConflictError("A daily source correction blocks approval.", "payroll_findings_unresolved");
+    if (review.status === "needs_review" && !blockers.legacyWarning) {
+      throw new WorkOsConflictError("Re-analyze this payroll review before approval.", "payroll_not_ready");
+    }
     const revision = await queryOne<Pick<WorkPayrollAnalysisRevisionRow, "source_token" | "policy_version" | "as_of" | "provider_watermark" | "provider_verified_at" | "resolved_policy">>(
       client,
       `SELECT source_token,policy_version,as_of,provider_watermark,provider_verified_at,resolved_policy FROM work_payroll_analysis_revisions
@@ -159,6 +151,9 @@ export async function approvePayrollReview(access: WorkOsAccess, reviewId: strin
       [scope.organizationId, reviewId, review.analysis_revision],
     );
     if (!days.length) throw new WorkOsConflictError("Payroll analysis has no daily record.", "payroll_days_missing");
+    if (days.some((day) => Array.isArray(object(day.result).blockers) && (object(day.result).blockers as unknown[]).length > 0)) {
+      throw new WorkOsConflictError("A daily source correction blocks approval.", "payroll_findings_unresolved");
+    }
     const totals = totalsOfDays(days as unknown as Row[]);
     if (totals.held !== 0) throw new WorkOsConflictError("Held payroll minutes must be resolved before approval.", "payroll_held_minutes");
     const approvedTotals = { ...totals, approved: totals.recommended };

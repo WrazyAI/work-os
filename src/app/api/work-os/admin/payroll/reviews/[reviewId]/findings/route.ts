@@ -11,6 +11,13 @@ export async function GET(req: Request, context: { params: Promise<{ reviewId: s
   try {
     const { reviewId } = await context.params;
     const url = new URL(req.url);
-    return NextResponse.json(await listPayrollFindings(auth.access, reviewId, { status: url.searchParams.get("status"), cursor: payrollCursor(url), limit: payrollLimit(url) }));
+    const revision = url.searchParams.get("revision");
+    const analysisRevision = revision === null ? undefined : Number(revision);
+    if (analysisRevision !== undefined && (!Number.isSafeInteger(analysisRevision) || analysisRevision < 1)) {
+      return NextResponse.json({ error: "A valid analysis revision is required." }, { status: 400 });
+    }
+    return NextResponse.json(await listPayrollFindings(auth.access, reviewId, {
+      status: url.searchParams.get("status"), cursor: payrollCursor(url), limit: payrollLimit(url), analysisRevision,
+    }));
   } catch (error) { return payrollError(error); }
 }

@@ -38,7 +38,7 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
   });
   const findings = useQuery({
     queryKey: payrollKeys.findings(record?.id ?? "none", revision, "", null),
-    queryFn: () => payrollApi.findingsAll(record!.id),
+    queryFn: ({ signal }) => payrollApi.findingsAll(record!.id, revision, signal),
     enabled: Boolean(record) && revision > 0,
   });
   const refresh = () => cache.invalidateQueries({ queryKey: ["work-os", "admin", "payroll"] });
@@ -116,7 +116,7 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
         days={days.data?.items ?? []} findings={findings.data?.items ?? []}
         daysLoading={days.isPending} findingsLoading={findings.isPending}
         daysError={days.error?.message} findingsError={findings.error?.message}
-        onRetryEvidence={() => void Promise.all([days.refetch(), findings.refetch()])}
+        onRetryEvidence={() => void refresh()}
         onAdvance={() => void launch(record.period.from, record.period.through)}
         onApprove={() => {
           if (window.confirm(`Approve ${record.totals.recommended} minutes? This creates an immutable payroll record.`)) {
@@ -133,11 +133,12 @@ export default function PayrollReview({ personId, payDate, reviewId, displayName
             void save(() => payrollApi.cancel(record.run!.id, record.token.rowVersion));
           }
         }}
-        onDecide={!running && !record.approval && !record.evidenceChangedSinceApproval && record.status !== "approved" && record.status !== "stale" ? async (key, action, note) => {
+        onDecide={findings.isSuccess && !findings.isPlaceholderData && !running && !record.approval
+          && !record.evidenceChangedSinceApproval && record.status !== "approved" && record.status !== "stale" ? async (key, action, note, token) => {
           if (busy) return;
           setBusy(true);
           try {
-            const updated = await payrollApi.decide(record.id, { ...command(), findingIds: [key], action, note });
+            const updated = await payrollApi.decide(record.id, { ...token, requestKey: crypto.randomUUID(), findingIds: [key], action, note });
             cache.setQueryData(payrollKeys.review(record.id), updated);
             await refresh();
           } finally { setBusy(false); }
