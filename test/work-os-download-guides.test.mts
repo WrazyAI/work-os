@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   DOWNLOAD_GUIDES,
+  checksumsHref,
   downloadGuide,
   downloadGuidePath,
   downloadHref,
@@ -43,7 +44,10 @@ test("the Windows and macOS guides name the real files and their own recovery st
 
   assert.equal(downloadGuide("linux"), null);
   assert.equal(downloadGuidePath("windows"), "/work-os/downloads/thank-you/windows");
+  assert.equal(downloadGuidePath("windows", "nightly"), "/work-os/downloads/thank-you/windows?channel=nightly");
   assert.equal(downloadHref("macos"), "/downloads/work-os/macos");
+  assert.equal(downloadHref("windows", "nightly"), "/downloads/work-os/windows?channel=nightly");
+  assert.equal(checksumsHref("windows", "nightly"), "/downloads/work-os/windows/checksums?channel=nightly");
 
   const allPrompts = `${windowsPrompts} ${macPrompts}`;
   assert.doesNotMatch(allPrompts, /spctl --master-disable|--master-disable/);
@@ -53,15 +57,18 @@ test("the Windows and macOS guides name the real files and their own recovery st
 test("every download button goes through the guided download rather than a bare link", () => {
   const chooser = read("src/modules/work-os/marketing/DownloadChooser.tsx");
   const link = read("src/modules/work-os/marketing/DownloadLink.tsx");
+  const page = read("src/app/work-os/(site)/downloads/page.tsx");
   assert.match(chooser, /<DownloadLink/);
   assert.equal((chooser.match(/<DownloadLink/g) ?? []).length, 2, "primary and alternate platform");
   assert.doesNotMatch(chooser, /<a[^>]+download/);
-  assert.match(link, /downloadHref\(platform\)/);
+  assert.match(page, /Developer builds \(Nightly\)/);
+  assert.match(page, /channel="nightly"/);
+  assert.match(link, /downloadHref\(platform, channel\)/);
   assert.match(link, /const link = document\.createElement\("a"\)/);
-  assert.match(link, /link\.href = downloadHref\(platform\)/);
+  assert.match(link, /link\.href = downloadHref\(platform, channel\)/);
   assert.match(link, /link\.download = ""/);
   assert.match(link, /link\.click\(\)/);
-  assert.match(link, /router\.push\(downloadGuidePath\(platform\)\)/);
+  assert.match(link, /router\.push\(downloadGuidePath\(platform, channel\)\)/);
   assert.match(link, /event\.preventDefault\(\)/);
   assert.match(link, /event\.metaKey/);
 });

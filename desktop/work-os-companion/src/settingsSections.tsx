@@ -4,10 +4,11 @@ import { SessionSettings } from "./SessionSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { MemorySummary } from "./MemorySettings";
 import { Setting } from "./Setting";
+import { SettingsChoice } from "./SettingsChoice";
 import { VoicePicker } from "./VoicePicker";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { SuggestionReview } from "./SuggestionReview";
-import { UPDATE_CHECK_CADENCE_COPY } from "./updater";
+import { UPDATE_CHECK_CADENCE_COPY, type UpdateChannel } from "./updater";
 import type { PersonalSettingsProps } from "./PersonalSettings";
 
 /** One page in the settings workspace. `blocks` are the existing settings
@@ -53,7 +54,7 @@ export const SETTINGS_PAGES: SettingsPageMeta[] = [
   {
     id: "general", label: "General", group: "App", icon: SlidersHorizontal,
     description: "Startup, voice input, and updates on this device.",
-    keywords: ["start with windows", "startup", "hold to talk", "shortcut", "updates", "automatic", "version"],
+    keywords: ["start with windows", "startup", "hold to talk", "shortcut", "updates", "automatic", "version", "channel", "nightly", "stable"],
     blocks: ["general"],
   },
   {
@@ -131,6 +132,23 @@ export function SettingsBlock({ block, ...props }: { block: SettingsBlockId } & 
           </Setting>
           <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}. We'll let you know when a new build is ready.`}>
             <SettingsSwitch label="Automatic update checks" checked={props.autoCheckUpdates} onChange={props.onAutoCheckUpdates} />
+          </Setting>
+          <Setting
+            title="Release channel"
+            detail={(props.updateChannel ?? "stable") === "nightly"
+              ? "Nightly receives frequent developer builds (Windows-first) before weekly Friday Stable promotion."
+              : "Stable receives weekly tested builds for Windows and macOS."}
+          >
+            <SettingsChoice<UpdateChannel>
+              label="Release channel"
+              value={props.updateChannel ?? "stable"}
+              disabled={props.updateStatus === "downloading" || props.updateStatus === "installing"}
+              onChange={(value) => props.onUpdateChannel?.(value)}
+              options={[
+                { value: "stable", label: "Stable", accessibleLabel: "Stable weekly builds" },
+                { value: "nightly", label: "Nightly", accessibleLabel: "Nightly developer builds" },
+              ]}
+            />
           </Setting>
           <Setting title="Desktop updates" detail={props.updateDetail}>
             <span className="setting-controls">

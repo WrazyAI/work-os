@@ -618,6 +618,13 @@
       "type": "fix",
       "summary": "All eight Admin pages use content-shaped loading placeholders with the employee workspace's shimmer.",
       "verification": "Full companion suite: 2,160 passed; companion and Work OS typechecks passed. Chromium checked all eight Admin pages at 1280px and 480px, staggered shimmer, static dark reduced-motion fills, and populated, empty, and error states."
+    },
+    {
+      "id": "release-channel-selector",
+      "type": "feature",
+      "summary": "Choose between Stable and Nightly desktop update channels in Settings → General.",
+      "verification": "Ledger e4644d0e-8b06-4256-b69c-e352255d0505: full companion Vitest 247 files passed; full Work OS suite passed with 0 failures; site suite 61/61 passed; release gate/macOS/policy 47/47 passed; release download/installers/guides passed; work-os:typecheck, ESLint, companion Vite build, and Next.js webpack build passed; Playwright verified /work-os/downloads (1440/390, keyboard, reduced motion), Nightly thank-you guide, and Companion Settings Release channel (1280 dark/light, 420 narrow, Arrow-key switch); CodeRabbit review findings fixed.",
+      "macosSpecific": false
     }
   ],
   "emergency": null,

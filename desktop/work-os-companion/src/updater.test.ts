@@ -9,6 +9,7 @@ import {
   displayUpdateVersion,
   formatMegabytes,
   isManagedUpdateChannel,
+  normalizeUpdateChannel,
   resolvePendingUpdate,
   shouldAutoCheckUpdate,
   updateAuthHeaders,
@@ -46,6 +47,21 @@ describe("updateAuthHeaders", () => {
       Authorization: "Bearer t-1",
       "X-Work-OS-Organization-Id": "org-1",
     });
+  });
+
+  it("adds the Nightly update channel header only when Nightly is selected", () => {
+    expect(updateAuthHeaders({ token: "t-1", organizationId: "org-1", updateChannel: "stable" })).toEqual({
+      Authorization: "Bearer t-1",
+      "X-Work-OS-Organization-Id": "org-1",
+    });
+    expect(updateAuthHeaders({ token: "t-1", organizationId: "org-1", updateChannel: "nightly" })).toEqual({
+      Authorization: "Bearer t-1",
+      "X-Work-OS-Organization-Id": "org-1",
+      "X-Work-OS-Update-Channel": "nightly",
+    });
+    expect(normalizeUpdateChannel("nightly")).toBe("nightly");
+    expect(normalizeUpdateChannel("stable")).toBe("stable");
+    expect(normalizeUpdateChannel(undefined)).toBe("stable");
   });
 });
 

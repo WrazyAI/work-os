@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { SettingsBlock, FLAT_SETTINGS_BLOCKS } from "./settingsSections";
 import type { MascotSize, TextSize, ThemePreference } from "./appearance";
 import type { MemoryFact } from "./types";
+import type { UpdateChannel } from "./updater";
 
 /** The account's own settings — the groups the employee Settings page carries.
  * One component renders them on every surface that shows them, so the
@@ -35,6 +36,8 @@ export type PersonalSettingsProps = {
   onRecapVoice: (value: string) => void;
   autoCheckUpdates: boolean;
   onAutoCheckUpdates: (value: boolean) => void;
+  updateChannel?: UpdateChannel;
+  onUpdateChannel?: (value: UpdateChannel) => void;
   /** The desktop updates row's plain-language state line. */
   updateDetail: string;
   updateStatus: "idle" | "available" | "downloaded" | "failed" | "checking" | "downloading" | "installing";

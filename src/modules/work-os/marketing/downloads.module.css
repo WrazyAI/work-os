@@ -48,7 +48,8 @@
 .toggle { width: 56px; flex-shrink: 0; padding: 12px; border-radius: 0 10px 10px 0; box-shadow: inset 1px 0 #18201830; }
 .action:hover, .toggle:hover { background: var(--accent-hover); }
 .action:active, .toggle:active { background: #c3dda8; }
-.action:focus-visible, .toggle:focus-visible, .dropdown a:focus-visible, .tutorial a:focus-visible {
+.action:focus-visible, .toggle:focus-visible, .dropdown a:focus-visible, .tutorial a:focus-visible,
+.devPrimary:focus-visible, .devSecondary:focus-visible, .nightlyBanner a:focus-visible {
   position: relative;
   z-index: 2;
   outline: 2px solid var(--focus);
@@ -81,9 +82,131 @@
 .tutorial a { color: var(--ink); text-underline-offset: 4px; }
 .tutorial a:hover { color: var(--accent-ink); }
 
+.developer {
+  margin-top: 56px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+
+.developerCard {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+}
+
+.developerHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.developerHead h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.channelTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.developerBody {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+.developerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.devPrimary, .devSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.devPrimary {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: white;
+}
+
+.devPrimary:hover { opacity: 0.9; }
+
+.devSecondary {
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.devSecondary:hover { background: #e8e6e0; }
+
+.developerNote {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.developerNote strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.nightlyBanner {
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.nightlyBanner p { margin: 0; }
+.nightlyBanner a { color: var(--ink); font-weight: 600; text-underline-offset: 4px; }
+.nightlyBanner a:hover { color: var(--accent-ink); }
+
 @media (max-width: 760px) {
   .main { width: calc(100% - 40px); padding: 40px 0 24px; }
   .intro h1 { font-size: 48px; }
+}
+
+@media (max-width: 480px) {
+  .developerCard { padding: 20px; }
+  .developerActions { flex-direction: column; align-items: stretch; }
 }
 
 @media (max-width: 420px) {

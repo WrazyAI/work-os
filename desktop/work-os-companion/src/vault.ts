@@ -8,6 +8,7 @@ import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { mergeConversationTurns } from "./avatarLogic";
 import { sessionStateFrom, type SessionState } from "./sessionState";
 import { APPEARANCE_DEFAULTS, normalizeAppearance, type MascotSize, type TextSize, type ThemePreference } from "./appearance";
+import { normalizeUpdateChannel, type UpdateChannel } from "./updater";
 import type { CachedGuideState, GuideState } from "./guideState";
 
 export interface WorkOsSettings {
@@ -16,6 +17,8 @@ export interface WorkOsSettings {
   recapVoice?: string;
   /** Launch update check. Absent historically means on. */
   autoCheckUpdates: boolean;
+  /** Desktop release channel: Stable (weekly) or Nightly (developer testing). */
+  updateChannel: UpdateChannel;
   /** Hold-to-talk shortcut (`Ctrl + M`). Absent historically means on. */
   voiceHotkey: boolean;
   /** Accessibility appearance, per device; see `appearance.ts`. */
@@ -34,6 +37,7 @@ export function mergeWorkOsSettings(current: WorkOsSettings | null, next: Partia
   const base: WorkOsSettings = current ?? {
     apiBase: httpsOrigin(defaultApiBase),
     autoCheckUpdates: true,
+    updateChannel: "stable",
     voiceHotkey: true,
     ...APPEARANCE_DEFAULTS,
     themePromptSeen: false,
@@ -47,6 +51,7 @@ export function mergeWorkOsSettings(current: WorkOsSettings | null, next: Partia
   return {
     apiBase: next.apiBase === undefined ? base.apiBase : httpsOrigin(next.apiBase),
     autoCheckUpdates: next.autoCheckUpdates ?? base.autoCheckUpdates,
+    updateChannel: normalizeUpdateChannel(next.updateChannel ?? base.updateChannel),
     voiceHotkey: next.voiceHotkey ?? base.voiceHotkey,
     ...appearance,
     ...(recapVoice === undefined ? {} : { recapVoice }),
@@ -380,14 +385,16 @@ export const secureState = {
     if (!isTauri()) return {
       apiBase: httpsOrigin(defaultApiBase),
       autoCheckUpdates: true,
+      updateChannel: "stable",
       voiceHotkey: true,
       ...APPEARANCE_DEFAULTS,
       themePromptSeen: true,
     };
     const lease = vault();
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; updateChannel?: unknown; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
     const stored = mergeWorkOsSettings(null, {
       autoCheckUpdates: settings?.autoCheckUpdates !== false,
+      updateChannel: normalizeUpdateChannel(settings?.updateChannel),
       voiceHotkey: settings?.voiceHotkey !== false,
       ...normalizeAppearance(settings),
       themePromptSeen: settings?.themePromptSeen === true,
@@ -402,9 +409,10 @@ export const secureState = {
         // A queued write starts after earlier work may have retired the lease.
         // Acquire when the task runs, then keep its read and write together.
         const queuedLease = vault();
-        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", queuedLease);
+        const latest = await get<{ apiBase?: string; autoCheckUpdates?: boolean; updateChannel?: unknown; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", queuedLease);
         const currentRecord = mergeWorkOsSettings(null, {
           autoCheckUpdates: latest?.autoCheckUpdates !== false,
+          updateChannel: normalizeUpdateChannel(latest?.updateChannel),
           voiceHotkey: latest?.voiceHotkey !== false,
           ...normalizeAppearance(latest),
           themePromptSeen: latest?.themePromptSeen === true,
@@ -425,17 +433,18 @@ export const secureState = {
       return recovery;
     }
   },
-  saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
+  saveSettings: (settings: { apiBase?: string; autoCheckUpdates?: boolean; updateChannel?: UpdateChannel; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; theme?: ThemePreference; themePromptSeen?: boolean; recapVoice?: string }) => {
     if (!isTauri()) return Promise.resolve();
     const write = settingsWriteQueue.then(async () => {
       // Acquire only when this queued save begins. A preceding failure or reset
       // may have retired the lease while this save was waiting; the save has not
       // read anything yet, so it can safely attach to the current vault.
       const lease = vault();
-      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
+      const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; updateChannel?: unknown; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; theme?: unknown; themePromptSeen?: unknown; recapVoice?: unknown }>("settings", lease);
       const stored = mergeWorkOsSettings(null, {
         apiBase: settings.apiBase === undefined && typeof current?.apiBase === "string" ? current.apiBase : undefined,
         autoCheckUpdates: current?.autoCheckUpdates !== false,
+        updateChannel: normalizeUpdateChannel(current?.updateChannel),
         voiceHotkey: current?.voiceHotkey !== false,
         ...normalizeAppearance(current),
         themePromptSeen: current?.themePromptSeen === true,

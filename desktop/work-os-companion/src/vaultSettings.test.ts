@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mergeWorkOsSettings } from "./vault";
 
 const base = {
-  apiBase: "https://work-os.example", autoCheckUpdates: true, voiceHotkey: true,
+  apiBase: "https://work-os.example", autoCheckUpdates: true, updateChannel: "stable" as const, voiceHotkey: true,
   textSize: "small" as const, mascotSize: "large" as const,
   theme: "system" as const, themePromptSeen: false,
 };
@@ -34,5 +34,10 @@ describe("vault settings", () => {
   it("keeps the saved recap voice through unrelated saves and writes a new one", () => {
     expect(mergeWorkOsSettings({ ...base, recapVoice: "warm" }, { theme: "dark" }).recapVoice).toBe("warm");
     expect(mergeWorkOsSettings(base, { recapVoice: "calm" }).recapVoice).toBe("calm");
+  });
+
+  it("keeps the saved update channel through unrelated saves and normalizes unknown values to stable", () => {
+    expect(mergeWorkOsSettings({ ...base, updateChannel: "nightly" }, { theme: "dark" }).updateChannel).toBe("nightly");
+    expect(mergeWorkOsSettings({ ...base, updateChannel: "beta" as never }, {}).updateChannel).toBe("stable");
   });
 });

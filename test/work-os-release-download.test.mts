@@ -17,6 +17,7 @@ import {
   WINDOWS_INSTALLER_SIGNATURE_ASSET,
   MACOS_UPDATER_ASSET,
   internalReleasePlatform,
+  normalizeReleaseChannel,
 } from "../src/lib/work-os-release-download";
 
 const release = {
@@ -196,3 +197,77 @@ for (const platform of ["darwin-aarch64", "darwin-x86_64"] as const) {
 }
 await assert.rejects(getLatestInternalReleaseUpdate("secret-token", mockFetch, "darwin-aarch64"),
   (error: unknown) => error instanceof ReleaseDownloadError && error.status === 404);
+
+assert.equal(normalizeReleaseChannel("nightly"), "nightly");
+assert.equal(normalizeReleaseChannel("NIGHTLY"), "nightly");
+assert.equal(normalizeReleaseChannel("stable"), "stable");
+assert.equal(normalizeReleaseChannel(null), "stable");
+assert.equal(normalizeReleaseChannel("unknown"), "stable");
+
+const stableWithMac = {
+  ...release,
+  tag_name: "work-os-companion-internal-v0.5.45",
+  assets: [
+    ...release.assets,
+    { name: MACOS_UPDATER_ASSET, url: "https://api.github.test/assets/mac-45", size: 10, content_type: "application/gzip" },
+    { name: `${MACOS_UPDATER_ASSET}.sig`, url: "https://api.github.test/assets/mac-45-sig", size: 8, content_type: "text/plain" },
+  ],
+};
+const nightlyWinOnly = {
+  ...release,
+  tag_name: "work-os-companion-nightly-v0.5.46",
+  assets: release.assets.map((asset) => ({ ...asset, url: `${asset.url}-nightly` })),
+};
+const dualChannelFetch: typeof fetch = async (input) => {
+  const url = String(input);
+  if (url.includes("/releases?")) return Response.json([nightlyWinOnly, stableWithMac]);
+  if (url.endsWith("/assets/3")) return new Response("stable-win-sig");
+  if (url.endsWith("/assets/3-nightly")) return new Response("nightly-win-sig");
+  if (url.endsWith("/assets/mac-45-sig")) return new Response("stable-mac-sig");
+  if (url.endsWith("/assets/mac-45")) return new Response("stable-mac-archive");
+  throw new Error(`Unexpected URL: ${url}`);
+};
+
+const stableWin = await getLatestInternalReleaseUpdate("secret-token", dualChannelFetch, "windows-x86_64", "stable");
+assert.equal(stableWin.version, "0.5.45");
+assert.equal(stableWin.tag, "work-os-companion-internal-v0.5.45");
+
+const nightlyWin = await getLatestInternalReleaseUpdate("secret-token", dualChannelFetch, "windows-x86_64", "nightly");
+assert.equal(nightlyWin.version, "0.5.46");
+assert.equal(nightlyWin.tag, "work-os-companion-nightly-v0.5.46");
+
+// Nightly macOS falls back to the latest release carrying macOS assets when the newest Nightly is Windows-only,
+// and downloading that fallback version under channel=nightly succeeds cleanly.
+const nightlyMac = await getLatestInternalReleaseUpdate("secret-token", dualChannelFetch, "darwin-aarch64", "nightly");
+assert.equal(nightlyMac.version, "0.5.45");
+assert.equal(nightlyMac.signature, "stable-mac-sig");
+const nightlyMacFallbackDownload = await downloadInternalReleaseAsset("0.5.45", MACOS_UPDATER_ASSET, "secret-token", dualChannelFetch, "nightly");
+assert.equal(await nightlyMacFallbackDownload.response.text(), "stable-mac-archive");
+
+// When Nightly 0.5.47 is Windows-only and Nightly 0.5.46 has macOS, macOS Nightly selects 0.5.46 (skipping 0.5.47).
+const nightlyMac46 = {
+  ...stableWithMac,
+  tag_name: "work-os-companion-nightly-v0.5.46",
+  assets: [
+    ...release.assets,
+    { name: MACOS_UPDATER_ASSET, url: "https://api.github.test/assets/mac-46", size: 10, content_type: "application/gzip" },
+    { name: `${MACOS_UPDATER_ASSET}.sig`, url: "https://api.github.test/assets/mac-46-sig", size: 8, content_type: "text/plain" },
+  ],
+};
+const nightlyWin47 = { ...nightlyWinOnly, tag_name: "work-os-companion-nightly-v0.5.47" };
+const multiNightlyFetch: typeof fetch = async (input) => {
+  const url = String(input);
+  if (url.includes("/releases?")) return Response.json([nightlyWin47, nightlyMac46, stableWithMac]);
+  if (url.endsWith("/assets/mac-46-sig")) return new Response("nightly-mac-46-sig");
+  if (url.endsWith("/assets/mac-46")) return new Response("nightly-mac-46-archive");
+  throw new Error(`Unexpected URL: ${url}`);
+};
+const macNightlyUpdate = await getLatestInternalReleaseUpdate("secret-token", multiNightlyFetch, "darwin-aarch64", "nightly");
+assert.equal(macNightlyUpdate.version, "0.5.46");
+assert.equal(macNightlyUpdate.tag, "work-os-companion-nightly-v0.5.46");
+const macNightlyArchive = await downloadInternalReleaseAsset("0.5.46", MACOS_UPDATER_ASSET, "secret-token", multiNightlyFetch, "nightly");
+assert.equal(await macNightlyArchive.response.text(), "nightly-mac-46-archive");
+
+const nightlyGrant = createInternalReleaseDownloadGrant("0.5.46", "secret-token", 1_000_000, "windows-x86_64", "nightly");
+assert.equal(verifyInternalReleaseDownloadGrant("0.5.46", nightlyGrant, "secret-token", 1_000_001, "windows-x86_64", "nightly"), true);
+assert.equal(verifyInternalReleaseDownloadGrant("0.5.46", nightlyGrant, "secret-token", 1_000_001, "windows-x86_64", "stable"), false);

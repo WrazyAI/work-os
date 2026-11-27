@@ -21,6 +21,7 @@ import {
   updateDownloadedCopy,
   updateDownloadFailedCopy,
   updateProgressDetails,
+  type UpdateChannel,
   type UpdateDownloadProgress,
   type UpdateRowCopyInput,
 } from "../../updater";
@@ -45,7 +46,26 @@ export function useUpdaterFlow({
   const updatePaintRef = useRef<number | null>(null);
   const launchUpdateCheckRef = useRef(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [updateChannel, setUpdateChannelState] = useState<UpdateChannel>("stable");
+  const updateChannelRef = useRef<UpdateChannel>("stable");
+  const savedUpdateChannelRef = useRef<UpdateChannel>("stable");
+  const channelEpochRef = useRef(0);
+  const channelOpRef = useRef(0);
+  const channelSaveInFlightRef = useRef(0);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
+
+  const applyUpdateChannel = useCallback((channel: UpdateChannel) => {
+    if (updateChannelRef.current !== channel) {
+      channelEpochRef.current += 1;
+    }
+    updateChannelRef.current = channel;
+    setUpdateChannelState(channel);
+  }, []);
+
+  const setUpdateChannel = useCallback((channel: UpdateChannel) => {
+    savedUpdateChannelRef.current = channel;
+    applyUpdateChannel(channel);
+  }, [applyUpdateChannel]);
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
 
@@ -85,13 +105,16 @@ export function useUpdaterFlow({
   }
 
   async function beginUpdateDownload() {
+    if (channelSaveInFlightRef.current > 0) return;
     const flow = updateFlowRef.current;
     if (flow.status !== "available" && flow.status !== "failed") return;
+    const downloadEpoch = channelEpochRef.current;
     const { update, headers } = flow;
     const display = displayUpdateVersion(update.version);
     updatePaintRef.current = null;
     setUpdateFlow({ status: "downloading", update, headers, progress: INITIAL_UPDATE_DOWNLOAD_PROGRESS });
     const publishProgress = (progress: UpdateDownloadProgress, force = false) => {
+      if (channelEpochRef.current !== downloadEpoch) return;
       const details = updateProgressDetails(progress);
       const paintKey = details.percent ?? Math.floor(progress.receivedBytes / (256 * 1024));
       if (!force && updatePaintRef.current === paintKey) return;
@@ -105,11 +128,18 @@ export function useUpdaterFlow({
     let progress = INITIAL_UPDATE_DOWNLOAD_PROGRESS;
     try {
       await update.download((event) => {
+        if (channelEpochRef.current !== downloadEpoch) return;
         progress = applyDownloadEvent(progress, event);
         setUpdateFlow((current) => current.status === "downloading" ? { ...current, progress } : current);
         publishProgress(progress);
       }, { headers });
     } catch (value) {
+      if (channelEpochRef.current !== downloadEpoch) {
+        void update.close().catch(() => undefined);
+        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+        if (updateFlowRef.current.status === "downloading") setUpdateFlow({ status: "idle" });
+        return;
+      }
       const message = errorMessage(value, "The download did not finish.");
       diagnostics.warn("updater.download_failed", message);
       setUpdateFlow({ status: "failed", update, headers, message });
@@ -117,6 +147,12 @@ export function useUpdaterFlow({
       notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "error", {
         actions: [{ label: "Retry", kind: "primary", onClick: () => void beginUpdateDownload() }],
       });
+      return;
+    }
+    if (channelEpochRef.current !== downloadEpoch) {
+      void update.close().catch(() => undefined);
+      notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+      if (updateFlowRef.current.status === "downloading") setUpdateFlow({ status: "idle" });
       return;
     }
     setUpdateFlow({ status: "downloaded", update });
@@ -154,20 +190,35 @@ export function useUpdaterFlow({
     await relaunch();
   }
 
-  async function checkForUpdates({ silent = false }: { silent?: boolean } = {}) {
-    if (updateCheckInFlightRef.current) return;
+  async function checkForUpdates({ silent = false, channel }: { silent?: boolean; channel?: UpdateChannel } = {}) {
+    if (updateCheckInFlightRef.current || channelSaveInFlightRef.current > 0) return;
     const previous = updateFlowRef.current;
     if (!canRunBackgroundUpdateCheck(previous.status)) return;
+    const activeChannel = channel ?? updateChannelRef.current;
+    const checkEpoch = channelEpochRef.current;
     updateCheckInFlightRef.current = true;
     setUpdateFlow({ status: "checking" });
     try {
       const saved = await secureState.session();
+      if (channelEpochRef.current !== checkEpoch) {
+        discardUpdateEntry(previous);
+        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        return;
+      }
       if (!saved) {
         setUpdateFlow(previous);
         if (!silent) notifications.info("Sign in first, then check for updates.", "Not signed in");
         return;
       }
-      const result = await queryAvailableUpdate(saved);
+      const result = await queryAvailableUpdate({ ...saved, updateChannel: activeChannel });
+      if (channelEpochRef.current !== checkEpoch) {
+        discardUpdateEntry(previous);
+        if (result.status === "available") void result.update.close().catch(() => undefined);
+        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        return;
+      }
       if (result.status === "managed") {
         setUpdateFlow(previous);
         if (!silent) notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
@@ -176,7 +227,14 @@ export function useUpdaterFlow({
       if (result.status === "current") {
         if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") discardUpdateEntry(previous);
         setUpdateFlow({ status: "idle" });
-        if (!silent) notifications.success("You already have the latest internal build.", "Work OS is up to date");
+        if (!silent) {
+          notifications.success(
+            activeChannel === "nightly"
+              ? "You already have the latest Nightly build."
+              : "You already have the latest Stable build.",
+            "Work OS is up to date",
+          );
+        }
         return;
       }
       if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") {
@@ -195,6 +253,12 @@ export function useUpdaterFlow({
         action: { label: copy.actionLabel, onClick: () => void beginUpdateDownload() },
       });
     } catch (value) {
+      if (channelEpochRef.current !== checkEpoch) {
+        discardUpdateEntry(previous);
+        notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+        if (updateFlowRef.current.status === "checking") setUpdateFlow({ status: "idle" });
+        return;
+      }
       const message = errorMessage(value, "The update catalog could not be checked.");
       diagnostics.warn("updater.check_failed", message);
       const keepPrevious = previous.status === "available" || previous.status === "failed" || previous.status === "downloaded";
@@ -214,6 +278,46 @@ export function useUpdaterFlow({
     } catch (value) {
       setAutoCheckUpdates(previous);
       showError(errorMessage(value, "The update setting could not be saved."), "The update setting could not be saved.", "Setting not saved");
+    }
+  }
+
+  function clearChannelPendingUpdate() {
+    const pending = updateFlowRef.current;
+    if (pending.status === "available" || pending.status === "failed" || pending.status === "downloaded") {
+      discardUpdateEntry(pending);
+      notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+      setUpdateFlow({ status: "idle" });
+    } else if (pending.status === "checking") {
+      setUpdateFlow({ status: "idle" });
+    }
+  }
+
+  async function chooseUpdateChannel(channel: UpdateChannel) {
+    const pending = updateFlowRef.current;
+    if (pending.status === "downloading" || pending.status === "installing") return;
+    if (channel === updateChannelRef.current) return;
+    const opId = ++channelOpRef.current;
+    channelSaveInFlightRef.current += 1;
+    applyUpdateChannel(channel);
+    clearChannelPendingUpdate();
+    try {
+      await secureState.saveSettings({ apiBase, updateChannel: channel });
+      savedUpdateChannelRef.current = channel;
+      if (channelOpRef.current !== opId) return;
+      notifications.success(
+        channel === "nightly"
+          ? "Switched to Nightly updates. You will receive developer test builds ahead of Stable promotion."
+          : "Switched to Stable updates. You will receive tested Stable builds.",
+        "Release channel saved",
+      );
+    } catch (value) {
+      if (channelOpRef.current === opId) {
+        clearChannelPendingUpdate();
+        applyUpdateChannel(savedUpdateChannelRef.current);
+        showError(errorMessage(value, "The release channel could not be saved."), "The release channel could not be saved.", "Setting not saved");
+      }
+    } finally {
+      channelSaveInFlightRef.current = Math.max(0, channelSaveInFlightRef.current - 1);
     }
   }
 
@@ -254,6 +358,9 @@ export function useUpdaterFlow({
     updateRowSummary,
     autoCheckUpdates,
     setAutoCheckUpdates,
+    updateChannel,
+    setUpdateChannel,
+    chooseUpdateChannel,
     installedVersion,
     installedVersionRaw,
     whatsNew,

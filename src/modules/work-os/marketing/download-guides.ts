@@ -1,6 +1,7 @@
 /** Platform-specific instructions for unsigned internal installers. Reputation
  * prompts are not malware verdicts: quarantine/damage always stops at IT. */
 export type DownloadGuidePlatform = "windows" | "macos";
+export type DownloadChannel = "stable" | "nightly";
 
 export interface DownloadGuideStep {
   readonly title: string;
@@ -74,10 +75,20 @@ export function downloadGuide(platform: string): DownloadGuide | null {
   return DOWNLOAD_GUIDES.find((guide) => guide.platform === platform) ?? null;
 }
 
-export function downloadGuidePath(platform: DownloadGuidePlatform): string {
-  return `/work-os/downloads/thank-you/${platform}`;
+export function downloadGuidePath(platform: DownloadGuidePlatform, channel: DownloadChannel = "stable"): string {
+  return channel === "nightly"
+    ? `/work-os/downloads/thank-you/${platform}?channel=nightly`
+    : `/work-os/downloads/thank-you/${platform}`;
 }
 
-export function downloadHref(platform: DownloadGuidePlatform): string {
-  return `/downloads/work-os/${platform}`;
+export function downloadHref(platform: DownloadGuidePlatform, channel: DownloadChannel = "stable"): string {
+  return channel === "nightly"
+    ? `/downloads/work-os/${platform}?channel=nightly`
+    : `/downloads/work-os/${platform}`;
+}
+
+export function checksumsHref(platform: DownloadGuidePlatform, channel: DownloadChannel = "stable"): string {
+  return channel === "nightly"
+    ? `/downloads/work-os/${platform}/checksums?channel=nightly`
+    : `/downloads/work-os/${platform}/checksums`;
 }

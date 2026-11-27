@@ -89,6 +89,9 @@ describe("personal settings", () => {
     expect(markup).toContain("Start with Windows");
     expect(markup).toContain("Hold-to-talk (Ctrl + M)");
     expect(markup).toContain("Automatic update checks");
+    expect(markup).toContain("Release channel");
+    expect(markup).toContain("Stable");
+    expect(markup).toContain("Nightly");
     expect(markup).toContain("Desktop updates");
     expect(markup).toContain("Show page guides automatically");
     expect(markup).toContain("Replay the full tour");
@@ -133,6 +136,9 @@ describe("personal settings", () => {
     const downloading = render({ updateStatus: "downloading" });
     expect(downloading).toContain("Downloading");
     expect(downloading).not.toContain(">Download</button>");
+    expect(downloading).toMatch(/aria-label="Release channel"[\s\S]*data-value="nightly"[^>]*disabled/);
+    const installing = render({ updateStatus: "installing" });
+    expect(installing).toMatch(/aria-label="Release channel"[\s\S]*data-value="nightly"[^>]*disabled/);
   });
 
   it("keeps every group's content in the content column", () => {
