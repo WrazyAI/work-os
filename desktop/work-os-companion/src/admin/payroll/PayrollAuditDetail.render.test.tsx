@@ -29,4 +29,19 @@ describe("native payroll week brief", () => {
     expect(markup).toContain("Confirm staging.");
     expect(markup).toContain("Friday coverage is incomplete.");
   });
+
+  it("drops repeated week/date titles and inline citation plumbing", () => {
+    const markup = renderToStaticMarkup(createElement(PayrollWeekBriefCard, {
+      period,
+      brief: {
+        week: 1, status: "ready", title: "Week 1 progress brief — 2026-11-01 through 2026-11-07",
+        summary: "Reviewed the queue [interval:recap-7@3; interval:recap-8@2] and documented the result.",
+        summaryCitations: [], themes: [], openItems: [], gaps: ["Coverage is incomplete [interval:recap-9@1]."], sourceHash: "week-1",
+      },
+    }));
+    expect(markup).toContain("<h3>Progress brief</h3>");
+    expect(markup).not.toContain("[interval:");
+    expect(markup).toContain("Reviewed the queue and documented the result.");
+    expect(markup).toContain("Coverage is incomplete.");
+  });
 });

@@ -86,6 +86,37 @@ test("weekly briefs read as structured memos with dates, sources and observation
   assert.match(markup, /Sources \(1\)/);
 });
 
+test("brief titles and prose drop repeated week, date and citation plumbing", () => {
+  const review = payrollReviewFixture();
+  review.briefs = [{
+    ...review.briefs[0],
+    title: "Week 1 progress brief — 2026-11-01 through 2026-11-07",
+    summary: "Reviewed the queue [interval:recap-7@3; interval:recap-8@2] and documented the result.",
+    themes: [{ heading: "Release checks", detail: "Ran the rollback checklist [interval:recap-9@1].", citations: [] }],
+    gaps: ["Friday capture coverage is incomplete [interval:recap-10@1]."],
+  }];
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review }));
+  assert.match(markup, /<h3 id="payroll-brief-week-1">Progress brief<\/h3>/);
+  assert.doesNotMatch(markup, /\[interval:/);
+  assert.match(markup, /Reviewed the queue and documented the result\./);
+  assert.match(markup, /Ran the rollback checklist\./);
+  assert.match(markup, /Friday capture coverage is incomplete\./);
+});
+
+test("sub-minute exclusions read as under one minute, not zero", () => {
+  const review = payrollReviewFixture();
+  const finding = {
+    id: "outside-subminute", key: "outside:subminute", scope: review.scope, dayId: "d1", date: "2026-11-04",
+    kind: "outside_window" as const, status: "auto_excluded" as const, effect: "exclude" as const,
+    span: { startMs: 0, endMs: 30_000 }, durationMs: 30_000, minutes: 0,
+    sourceHash: "s", blocksApproval: false, requiredAction: "none" as const,
+    reason: "Outside the window.", citations: [], frameSummaryIds: [],
+  };
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review, findings: [finding] }));
+  assert.match(markup, /class="payroll-rule-minutes">&lt;1m</);
+  assert.doesNotMatch(markup, /class="payroll-rule-minutes">0m</);
+});
+
 test("empty exclusion rules stay flat, compact and honest about zero removals", () => {
   const review = payrollReviewFixture();
   const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review }));
