@@ -67,6 +67,17 @@ describe("native Payroll navigation", () => {
   });
 });
 
+describe("administration loading states", () => {
+  it.each<AdminSection>(["overview", "people", "tasks", "review", "payroll", "insights", "evidence", "settings"])(
+    "uses the shared companion skeleton while %s loads",
+    (section) => {
+      const markup = render({ section });
+      expect(markup).toMatch(/class="skeleton /);
+      expect(markup).toContain('aria-busy="true"');
+    },
+  );
+});
+
 describe("administration Settings masthead", () => {
   it("does not repeat a purpose subtitle under the Settings title", () => {
     const markup = render({ section: "settings" });

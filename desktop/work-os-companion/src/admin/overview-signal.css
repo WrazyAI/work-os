@@ -1010,20 +1010,9 @@
 
 /* --- Loading and empty --------------------------------------------------- */
 
-.ovp-loading {
-  gap: 14px;
-}
-
-.ovp-skeleton {
-  display: block;
-  height: 128px;
-  border-radius: var(--ovp-radius);
-  background: var(--inset);
-  animation: ovp-skeleton 1.4s ease-in-out infinite;
-}
-
-.ovp-skeleton.is-tall {
+.ovp-loading-bars.skeleton-bars {
   height: 188px;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
 }
 
 .ovp-empty {
@@ -1057,10 +1046,6 @@
 @keyframes ovp-fade {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes ovp-skeleton {
-  50% { opacity: 0.55; }
 }
 
 /* --- Narrow -------------------------------------------------------------- */

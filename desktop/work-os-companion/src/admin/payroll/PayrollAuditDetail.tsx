@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { PayrollCitation, PayrollFinding, PayrollReview } from "@wrazy/work-os-shared/payroll/contracts";
 import { formatWorkOsDateTime, formatWorkOsFullDate, formatWorkOsTime } from "../../dateFormat";
 import { ADMIN_DETAIL_STALE_MS, formatMinutes, statusLabel } from "../data";
-import { AdminButton, AdminCard, AdminControls, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
+import { AdminButton, AdminCard, AdminControls, AdminRowsSkeleton, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
 import { desktopPayroll, desktopPayrollKey } from "./api";
 import { groupBreakFindings } from "@wrazy/work-os-shared/payroll/break-groups";
 import "./payroll.css";
@@ -88,7 +88,8 @@ export function PayrollAuditDetail({ organizationId, userId, reviewId, personId,
   const record = review.data;
   return <div className="admin-grid payroll-native">
     <div ref={back}><AdminButton icon={ArrowLeft} variant="ghost" onClick={onBack}>Back to payroll</AdminButton></div>
-    {review.isPending ? <p role="status">Loading payroll audit…</p> : null}
+    <span className="sr-only" role="status">{review.isPending ? "Loading payroll audit" : ""}</span>
+    {review.isPending ? <AdminRowsSkeleton label="Loading payroll audit" /> : null}
     {review.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void review.refetch()}>Retry</AdminButton>}>{review.error.message}</Notice> : null}
     {record && record.scope.organizationId === organizationId && record.scope.personId === personId ? (
       <AuditRecord key={`${record.id}:${record.token.analysisRevision}`} name={name} record={record} userId={userId}
@@ -290,7 +291,8 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
       </AdminCard> : null}
 
       <AdminCard title="Daily evidence" detail={`Times in ${record.period.timezone}`}>
-        {days.isPending ? <p role="status">Loading daily evidence…</p> : null}
+        <span className="sr-only" role="status">{days.isPending ? "Loading daily evidence" : ""}</span>
+        {days.isPending ? <AdminRowsSkeleton label="Loading daily evidence" rows={3} /> : null}
         {days.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void days.refetch()}>Retry</AdminButton>}>{days.error.message}</Notice> : null}
         {dayItems.length === 0 ? <p className="admin-quiet">No daily records were saved.</p> : null}
         {dayItems.map((day) => <details className="payroll-native-row" key={day.date}>

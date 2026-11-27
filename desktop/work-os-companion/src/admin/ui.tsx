@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { isTopDrawerLayer, pushDrawerLayer, removeDrawerLayer } from "./drawerStack";
 import { acquirePageScrollLock } from "./scrollLock";
+import { Skeleton } from "../LoadingUi";
 
 /** Administration workspace primitives.
  *
@@ -85,8 +86,25 @@ export function Notice({ tone = "info", children, action }: { tone?: "info" | "o
   return <div className={`admin-notice ${tone}`} role="status">{children}{action ? <span className="admin-notice-action">{action}</span> : null}</div>;
 }
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("admin-skeleton", className)} aria-hidden />;
+export function AdminRowsSkeleton({ label, rows = 4, leading = false }: {
+  label: string;
+  rows?: number;
+  leading?: boolean;
+}) {
+  return (
+    <div className="skeleton-task-list admin-loading-rows" role="group" aria-label={label} aria-busy="true">
+      {Array.from({ length: rows }, (_, index) => (
+        <div className={cx("skeleton-task-row admin-loading-row", leading && "has-leading")} key={index}>
+          {leading && <Skeleton className="skeleton-check" />}
+          <div className="skeleton-task-copy">
+            <Skeleton className="skeleton-line skeleton-task-title" style={{ width: `${48 + index % 3 * 12}%` }} />
+            <Skeleton className="skeleton-line skeleton-task-meta" style={{ width: `${28 + index % 3 * 8}%` }} />
+          </div>
+          <Skeleton className="skeleton-line skeleton-meta admin-loading-meta" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function Empty({ title, body }: { title: string; body: string }) {

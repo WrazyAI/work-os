@@ -2860,25 +2860,40 @@ body:has(.admin-workspace) .notifications-card {
   margin-left: auto;
 }
 
-.admin-skeleton {
-  position: relative;
-  height: 16px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #eef0e8;
+.admin-loading-rows {
+  padding-inline: 12px;
 }
 
-.admin-skeleton::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
-  animation: admin-shimmer 1.4s infinite;
+.admin-loading-row.skeleton-task-row {
+  grid-template-columns: minmax(0, 1fr) minmax(30px, 14%);
 }
 
-@keyframes admin-shimmer {
-  to { transform: translateX(100%); }
+.admin-loading-row.skeleton-task-row.has-leading {
+  grid-template-columns: 24px minmax(0, 1fr) minmax(30px, 14%);
+}
+
+.admin-loading-row .admin-loading-meta {
+  width: 100%;
+  max-width: 76px;
+  justify-self: end;
+}
+
+.admin-workspace .skeleton-task-row:nth-child(4n + 2) .skeleton,
+.admin-workspace .admin-loading-fields:nth-child(4n + 2) .skeleton { animation-delay: -120ms; }
+.admin-workspace .skeleton-task-row:nth-child(4n + 3) .skeleton,
+.admin-workspace .admin-loading-fields:nth-child(4n + 3) .skeleton { animation-delay: -240ms; }
+.admin-workspace .skeleton-task-row:nth-child(4n + 4) .skeleton,
+.admin-workspace .admin-loading-fields:nth-child(4n + 4) .skeleton { animation-delay: -360ms; }
+
+.admin-loading-fields {
+  display: grid;
+  gap: 12px;
+  padding-block: 12px;
+  min-width: 0;
+}
+
+.admin-loading-fields .skeleton {
+  max-width: 100%;
 }
 
 .admin-empty {
@@ -2910,10 +2925,6 @@ body:has(.admin-workspace) .notifications-card {
 
 @media (prefers-reduced-motion: reduce) {
   .admin-drawer {
-    animation: none;
-  }
-
-  .admin-skeleton::after {
     animation: none;
   }
 

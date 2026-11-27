@@ -28,7 +28,7 @@ import EodSectionIcon from "../EodSectionIcon";
 import { EodStructuredReadingView } from "../EodStructuredReadingView";
 import { eodStructuredFromReport } from "../eodStructured";
 import { ScreenshotImage } from "../ScreenshotGallery";
-import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, AdminRowsSkeleton, Avatar, Drawer, Notice, Pill, Segmented, SelectField, TextField } from "./ui";
 import { one, type EvidenceRow, type EvidenceResponse, type ReportsResponse, type WorkOsReportRow } from "./types";
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
@@ -314,7 +314,7 @@ export default function ReviewPage({ initialReportId, initialPersonId, onOpenEvi
         }
       >
         {reports.isLoading ? (
-          <div className="admin-card-body is-padded"><div className="admin-grid"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div></div>
+          <AdminRowsSkeleton label="Loading EOD reports" leading />
         ) : reports.error ? (
           <div className="admin-card-body is-padded"><Notice tone="err">{(reports.error as Error).message}</Notice></div>
         ) : list.length ? (
@@ -524,7 +524,7 @@ function ReportEvidencePanel({ personId, date }: { personId: string; date: strin
       <div className="admin-drawer-panel-head">
         <span>{evidence.isLoading ? "Loading evidence…" : `${rows.length} record${rows.length === 1 ? "" : "s"}`}</span>
       </div>
-      {evidence.isLoading ? <Skeleton className="h-20" /> : rows.length ? (
+      {evidence.isLoading ? <AdminRowsSkeleton label="Loading evidence" rows={2} /> : rows.length ? (
         <ul className="admin-evidence-list">
           {visible.map((row) => {
             const shot = screenshotOf(row);
@@ -580,7 +580,7 @@ function ReportRecapsPanel({ personId, date, onOpenRecaps }: { personId: string;
           <AdminButton variant="secondary" icon={ArrowUpRight} onClick={onOpenRecaps}>See all recaps</AdminButton>
         ) : null}
       </div>
-      {intervals.isLoading ? <Skeleton className="h-20" /> : rows.length ? (
+      {intervals.isLoading ? <AdminRowsSkeleton label="Loading recaps" rows={2} /> : rows.length ? (
         <div className="admin-recap-list">
           {visible.map((interval) => (
             <article key={interval.id} className="admin-recap-card">

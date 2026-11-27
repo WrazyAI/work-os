@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { ScreenshotImage } from "../ScreenshotGallery";
 import { formatWorkOsFullDate } from "../dateFormat";
-import { Notice, Skeleton } from "./ui";
+import { AdminRowsSkeleton, Notice } from "./ui";
 import {
   evidenceAssignee,
   evidenceContentLabel,
@@ -102,7 +102,7 @@ export default function EvidenceLedger({
   if (loading) {
     return (
       <div className="evidence-ledger" aria-busy="true">
-        <div className="evidence-loading"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
+        <AdminRowsSkeleton label="Loading evidence ledger" leading />
       </div>
     );
   }

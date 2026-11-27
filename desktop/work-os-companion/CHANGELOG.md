@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- All Admin pages now show content-shaped loading placeholders with the same gentle shimmer as the employee workspace.
 - In desktop Payroll, review any window through today, open linked evidence, and cancel or resume an audit without waiting for the pay date.
 - In Admin Overview, compare the last two weeks of work, see who is on shift, and open the reports or evidence that need a decision.
 
