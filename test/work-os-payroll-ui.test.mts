@@ -103,6 +103,18 @@ test("brief titles and prose drop repeated week, date and citation plumbing", ()
   assert.match(markup, /Friday capture coverage is incomplete\./);
 });
 
+test("truncated citation plumbing at the end of a brief gap is removed", () => {
+  const review = payrollReviewFixture();
+  review.briefs = [{
+    ...review.briefs[0],
+    summary: "Coverage is incomplete.",
+    gaps: ["Screenshots show review activity, not verified outcomes [interval:16d6d700-914e-4b52-aca2-d363eac64e6f@1; interval:08db38"],
+  }];
+  const markup = renderToStaticMarkup(createElement(PayrollReviewView, { review }));
+  assert.doesNotMatch(markup, /\[interval:/);
+  assert.match(markup, /Screenshots show review activity, not verified outcomes/);
+});
+
 test("sub-minute exclusions read as under one minute, not zero", () => {
   const review = payrollReviewFixture();
   const finding = {
