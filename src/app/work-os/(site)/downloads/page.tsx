@@ -34,7 +34,7 @@ export default function DownloadsPage() {
       <main id="main" className={styles.main}>
         <header className={styles.intro}>
           <h1>Get your <span className={styles.productName}>Work OS</span> companion.</h1>
-          <p>Your workday, right on your desktop. Weekly Stable releases for Windows and macOS.</p>
+          <p>Your workday, right on your desktop. Stable releases for Windows and macOS.</p>
         </header>
         <DownloadChooser />
         <aside className={styles.notice} aria-label="Installation warning">
@@ -50,7 +50,7 @@ export default function DownloadsPage() {
               <span className={styles.channelTag}>Testing channel</span>
             </div>
             <p className={styles.developerBody}>
-              Preview upcoming features before weekly Friday promotion to Stable. Nightly builds ship Windows-first; macOS packages are included when a batch carries macOS-specific changes.
+              Preview upcoming features before promotion to Stable. Nightly builds ship Windows-first; macOS packages are included when a batch carries macOS-specific changes.
             </p>
             <div className={styles.developerActions}>
               <DownloadLink className={styles.devPrimary} platform="windows" channel="nightly">

@@ -109,6 +109,10 @@ export function stageMacRelease(bundle, stage, version, tag, repository) {
 }
 
 export function verifyWindowsOnlyRelease(stage, version, tag, repository) {
+  const unexpectedMacFiles = [...macosAssets, "macos-updater.json", "SHA256SUMS-macos.txt"].filter((file) => existsSync(join(stage, file)));
+  if (unexpectedMacFiles.length > 0) {
+    throw new Error(`Windows-only Nightly draft contains unexpected macOS assets: ${unexpectedMacFiles.join(", ")}`);
+  }
   const windows = JSON.parse(readFileSync(join(stage, "latest-internal.json"), "utf8").replace(/^\uFEFF/, ""));
   const keys = Object.keys(windows.platforms ?? {}).sort().join();
   if (keys !== "windows-x86_64") throw new Error("Unexpected release platforms");

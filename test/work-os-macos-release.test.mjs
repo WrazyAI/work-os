@@ -143,6 +143,10 @@ test("verifies Windows-only Nightlies and promotes verified Nightly assets to St
   );
 
   assert.doesNotThrow(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"));
+  // Retained macOS assets in a Windows-only draft must fail closed before publication.
+  writeFileSync(join(nightly, macInstaller), "stale-mac-dmg");
+  assert.throws(() => verifyWindowsOnlyRelease(nightly, "0.5.53", nightlyTag, "WrazyAI/work-os"), /unexpected macOS assets/);
+  rmSync(join(nightly, macInstaller));
   const result = preparePromotionStage(nightly, promoted, "0.5.53", stableTag, "WrazyAI/work-os");
   assert.equal(result.hasMacos, false);
   const stableManifest = JSON.parse(readFileSync(join(promoted, "latest-internal.json"), "utf8"));
