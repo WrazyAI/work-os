@@ -48,17 +48,23 @@ export function useUpdaterFlow({
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [updateChannel, setUpdateChannelState] = useState<UpdateChannel>("stable");
   const updateChannelRef = useRef<UpdateChannel>("stable");
+  const savedUpdateChannelRef = useRef<UpdateChannel>("stable");
   const channelEpochRef = useRef(0);
   const channelOpRef = useRef(0);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
 
-  const setUpdateChannel = useCallback((channel: UpdateChannel) => {
+  const applyUpdateChannel = useCallback((channel: UpdateChannel) => {
     if (updateChannelRef.current !== channel) {
       channelEpochRef.current += 1;
     }
     updateChannelRef.current = channel;
     setUpdateChannelState(channel);
   }, []);
+
+  const setUpdateChannel = useCallback((channel: UpdateChannel) => {
+    savedUpdateChannelRef.current = channel;
+    applyUpdateChannel(channel);
+  }, [applyUpdateChannel]);
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
 
@@ -252,13 +258,8 @@ export function useUpdaterFlow({
     }
   }
 
-  async function chooseUpdateChannel(channel: UpdateChannel) {
+  function clearChannelPendingUpdate() {
     const pending = updateFlowRef.current;
-    if (pending.status === "downloading" || pending.status === "installing") return;
-    if (channel === updateChannelRef.current) return;
-    const previous = updateChannelRef.current;
-    const opId = ++channelOpRef.current;
-    setUpdateChannel(channel);
     if (pending.status === "available" || pending.status === "failed" || pending.status === "downloaded") {
       discardUpdateEntry(pending);
       notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
@@ -266,8 +267,18 @@ export function useUpdaterFlow({
     } else if (pending.status === "checking") {
       setUpdateFlow({ status: "idle" });
     }
+  }
+
+  async function chooseUpdateChannel(channel: UpdateChannel) {
+    const pending = updateFlowRef.current;
+    if (pending.status === "downloading" || pending.status === "installing") return;
+    if (channel === updateChannelRef.current) return;
+    const opId = ++channelOpRef.current;
+    applyUpdateChannel(channel);
+    clearChannelPendingUpdate();
     try {
       await secureState.saveSettings({ apiBase, updateChannel: channel });
+      savedUpdateChannelRef.current = channel;
       if (channelOpRef.current !== opId) return;
       notifications.success(
         channel === "nightly"
@@ -277,7 +288,8 @@ export function useUpdaterFlow({
       );
     } catch (value) {
       if (channelOpRef.current === opId) {
-        setUpdateChannel(previous);
+        clearChannelPendingUpdate();
+        applyUpdateChannel(savedUpdateChannelRef.current);
         showError(errorMessage(value, "The release channel could not be saved."), "The release channel could not be saved.", "Setting not saved");
       }
     }
