@@ -21,24 +21,27 @@ export const payrollApi = {
   review: (reviewId: string) => adminFetch<PayrollReview>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}`),
   days: (reviewId: string, cursor: string | null = null) =>
     adminFetch<Page<PayrollDayResult>>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/days${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
-  findings: (reviewId: string, status: string, cursor: string | null) => {
+  findings: (reviewId: string, status: string, cursor: string | null, revision?: number, signal?: AbortSignal) => {
     const query = new URLSearchParams();
     if (status) query.set("status", status);
     if (cursor) query.set("cursor", cursor);
+    if (revision !== undefined) query.set("revision", String(revision));
     query.set("limit", "100");
-    return adminFetch<Page<PayrollFinding>>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings?${query}`);
+    return adminFetch<Page<PayrollFinding>>(`/api/work-os/admin/payroll/reviews/${encodeURIComponent(reviewId)}/findings?${query}`, { signal });
   },
-  findingsAll: async (reviewId: string) => {
+  findingsAll: async (reviewId: string, revision?: number, signal?: AbortSignal) => {
     const items: PayrollFinding[] = [];
     let cursor: string | null = null;
     let total = 0;
-    for (let page = 0; page < 10; page += 1) {
-      const result = await payrollApi.findings(reviewId, "", cursor);
+    const seen = new Set<string>();
+    do {
+      const result = await payrollApi.findings(reviewId, "", cursor, revision, signal);
       items.push(...result.items);
       total = result.total;
       cursor = result.nextCursor;
-      if (!cursor) break;
-    }
+      if (cursor && seen.has(cursor)) throw new Error("Findings could not be fully loaded. Retry the review.");
+      if (cursor) seen.add(cursor);
+    } while (cursor);
     return { items, total, nextCursor: cursor };
   },
   decide: (reviewId: string, body: Record<string, unknown>) =>

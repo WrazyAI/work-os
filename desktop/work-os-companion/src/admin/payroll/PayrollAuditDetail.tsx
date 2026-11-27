@@ -8,6 +8,7 @@ import { ADMIN_DETAIL_STALE_MS, formatMinutes, statusLabel } from "../data";
 import { AdminButton, AdminCard, AdminControls, AdminRowsSkeleton, Drawer, Empty, Notice, Pill, SelectField } from "../ui";
 import { desktopPayroll, desktopPayrollKey } from "./api";
 import { groupBreakFindings } from "@wrazy/work-os-shared/payroll/break-groups";
+import { PayrollWeekBriefCard } from "./PayrollWeekBriefCard";
 import "./payroll.css";
 
 const FINDING_LABELS: Record<PayrollFinding["kind"], string> = {
@@ -105,7 +106,9 @@ function isRunning(record: PayrollReview | undefined) {
 function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartError }: {
   record: PayrollReview; name: string; userId: string; writesDisabled: boolean; onRestart: () => void; restartError?: string;
 }) {
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [pending, setPending] = useState<{ intent: Intent; reviewId: string; token: PayrollReview["token"] } | null>(null);
+  const [attentionPage, setAttentionPage] = useState(0);
+  const setIntent = (intent: Intent) => setPending({ intent, reviewId: record.id, token: record.token });
   const [frameFinding, setFrameFinding] = useState<PayrollFinding | null>(null);
   const org = record.scope.organizationId;
   const cache = useQueryClient();
@@ -124,9 +127,10 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
   });
   const findings = useQuery({
     queryKey: [...keys, "findings", record.id, revision],
-    queryFn: ({ signal }) => api.findingsAll(record.id, signal), enabled: revision > 0,
+    queryFn: ({ signal }) => api.findingsAll(record.id, signal, revision), enabled: revision > 0,
     staleTime: ADMIN_DETAIL_STALE_MS, retry: false,
   });
+  const canDecide = mutable && findings.isSuccess && !findings.isPlaceholderData;
   const cancel = useMutation({
     mutationFn: () => api.cancel(record.run!.id, record.token.rowVersion),
     onSuccess: async () => { await cache.invalidateQueries({ queryKey: keys }); },
@@ -135,7 +139,12 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
     ? formatWorkOsTime(new Date(ms).toISOString(), record.period.timezone)
     : "Unavailable";
   const allFindings = findings.data?.items ?? [];
-  const attention = allFindings.filter((finding) => finding.status === "needs_review" || finding.status === "needs_correction");
+  const attention = allFindings.filter((finding) => finding.kind !== "low_evidence"
+    && (finding.status === "needs_review" || finding.status === "needs_correction"));
+  const pageSize = 50;
+  const firstAttention = Math.min(attentionPage, Math.max(0, Math.ceil(attention.length / pageSize) - 1)) * pageSize;
+  const lastAttention = Math.min(firstAttention + pageSize, attention.length);
+  const lowEvidence = allFindings.filter((finding) => finding.kind === "low_evidence");
   const excluded = allFindings.filter((finding) => finding.status === "auto_excluded");
   const inactivity = excluded.filter((finding) => finding.kind === "inactivity");
   const breaks = groupBreakFindings(excluded.filter((finding) => finding.kind === "break"));
@@ -195,7 +204,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
           <p className="admin-quiet">{record.recapStats.employeeReviewed} employee reviewed, {record.recapStats.autoApproved} system reviewed, {record.recapStats.pending} pending.</p>
           {!record.approval && record.recapStats.pending ? <Notice tone="warn">Pending recaps must be settled before approval.</Notice> : null}
         </> : null}
-        {findings.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void findings.refetch()}>Retry</AdminButton>}>Findings could not be loaded. {findings.error.message}</Notice> : null}
+        {findings.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void cache.invalidateQueries({ queryKey: keys })}>Retry</AdminButton>}>Findings could not be loaded. {findings.error.message}</Notice> : null}
         {days.error ? <Notice tone="err" action={<AdminButton variant="ghost" onClick={() => void days.refetch()}>Retry</AdminButton>}>Daily evidence could not be loaded. {days.error.message}</Notice> : null}
         {record.blockers.length ? <ul className="payroll-native-list">{record.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
         {canApprove ? <div><AdminButton variant="primary" onClick={() => setIntent({ kind: "approve" })}>Approve payable hours</AdminButton></div> : null}
@@ -241,7 +250,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
 
       {!findings.error ? <><AdminCard title="Needs attention" detail={`${attention.length} of ${allFindings.length} flags require a person`}>
         {attention.length ? <div className="payroll-attention">
-          {attention.map((finding) => <section className="payroll-attention-row" key={finding.id}>
+          {attention.slice(firstAttention, lastAttention).map((finding) => <section className="payroll-attention-row" key={finding.id}>
             <div>
               <div className="payroll-finding-title"><h3>{FINDING_LABELS[finding.kind]}</h3>
                 <Pill tone={finding.requiredAction === "correct" ? "err" : "warn"}>{statusLabel(finding.status)}</Pill>
@@ -254,7 +263,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             <div className="payroll-attention-actions">
               {finding.kind !== "break" && (finding.frameSummaryIds?.length ?? 0) ? <AdminButton onClick={() => setFrameFinding(finding)}>{finding.frameSummaryIds?.length ?? 0} frame{(finding.frameSummaryIds?.length ?? 0) === 1 ? "" : "s"}</AdminButton> : null}
               {finding.requiredAction === "correct" ? <span className="admin-quiet">Correct the source, then re-analyze.</span>
-                : mutable && (finding.status === "needs_review" || finding.status === "needs_correction") ? (
+                : canDecide ? (
                   binaryDecision(finding) ? <>
                     <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "payable" })}>Approve</AdminButton>
                     <AdminButton onClick={() => setIntent({ kind: "finding", finding, action: "excluded" })}>Reject</AdminButton>
@@ -263,6 +272,12 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
             </div>
           </section>)}
         </div> : <p className="admin-quiet">Nothing needs a decision on this page.</p>}
+        {attention.length > pageSize ? <div className="admin-row">
+          <AdminButton disabled={firstAttention === 0} onClick={() => setAttentionPage(firstAttention / pageSize - 1)}>Previous findings</AdminButton>
+          <span role="status">Showing {firstAttention + 1}–{lastAttention} of {attention.length} findings needing attention</span>
+          <AdminButton disabled={lastAttention === attention.length} onClick={() => setAttentionPage(firstAttention / pageSize + 1)}>Next findings</AdminButton>
+        </div> : null}
+        {lowEvidence.length ? <p className="admin-quiet">Low evidence on {lowEvidence.length} {lowEvidence.length === 1 ? "day" : "days"}: {lowEvidence.map((finding) => formatWorkOsFullDate(finding.date)).join(", ")}. Review the individual gaps to change payable time.</p> : null}
       </AdminCard>
 
       <AdminCard title="Excluded by rule" detail={`${excludedCount} intervals · ${formatMinutes(excludedMinutes)} removed from pay`}>
@@ -315,14 +330,7 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
 
       <AdminCard title="Weekly briefs" detail="Grounded in recaps and evidence. This is not a productivity score.">
         {record.briefs.length ? <div className="payroll-native-stack">{record.briefs.map((brief) => (
-          <section key={brief.week} className="payroll-native-row">
-            <h3>Week {brief.week}: {brief.title || "Progress brief"}</h3>
-            <p>{brief.summary || "No grounded summary is available."}</p>
-            <Sources citations={brief.summaryCitations} />
-            {brief.themes.length ? <ul className="payroll-native-list">{brief.themes.map((theme, i) => <li key={i}><strong>{theme.heading}</strong><p>{theme.detail}</p><Sources citations={theme.citations} /></li>)}</ul> : null}
-            {brief.openItems.length ? <><h4>Open items</h4><ul className="payroll-native-list">{brief.openItems.map((item, i) => <li key={i}>{item.text}<Sources citations={item.citations} /></li>)}</ul></> : null}
-            {brief.gaps.length ? <><h4>Evidence gaps</h4><ul className="payroll-native-list">{brief.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></> : null}
-          </section>
+          <PayrollWeekBriefCard key={brief.week} brief={brief} period={record.period} />
         ))}</div> : <p className="admin-quiet">No recap brief was recorded for this period.</p>}
       </AdminCard>
 
@@ -357,8 +365,8 @@ function AuditRecord({ record, name, userId, writesDisabled, onRestart, restartE
 
     {frameFinding ? <PayrollFrameDialog record={record} finding={frameFinding} onClose={() => setFrameFinding(null)} /> : null}
 
-    {intent && (intent.kind === "reopen" ? !writesDisabled && Boolean(record.approval) : intent.kind === "approve" ? canApprove : mutable) ? (
-      <PayrollDecision record={record} userId={userId} intent={intent} onClose={() => setIntent(null)} />
+    {pending && pending.reviewId === record.id && (pending.intent.kind === "reopen" ? !writesDisabled && Boolean(record.approval) : pending.intent.kind === "approve" ? canApprove : canDecide) ? (
+      <PayrollDecision record={record} userId={userId} intent={pending.intent} token={pending.token} onClose={() => setPending(null)} />
     ) : null}
   </>;
 }
@@ -456,14 +464,14 @@ function Sources({ citations }: { citations: PayrollCitation[] }) {
   </details>;
 }
 
-function PayrollDecision({ record, userId, intent, onClose }: { record: PayrollReview; userId: string; intent: Intent; onClose: () => void }) {
+function PayrollDecision({ record, userId, intent, token, onClose }: { record: PayrollReview; userId: string; intent: Intent; token: PayrollReview["token"]; onClose: () => void }) {
   const [note, setNote] = useState("");
   const request = useRef<{ note: string; key: string } | null>(null);
-  const [token] = useState(record.token);
   const api = desktopPayroll(record.scope.organizationId);
   const keys = desktopPayrollKey(record.scope.organizationId, userId);
   const cache = useQueryClient();
-  const changed = token.rowVersion !== record.token.rowVersion || token.sourceHash !== record.token.sourceHash;
+  const changed = token.rowVersion !== record.token.rowVersion || token.sourceHash !== record.token.sourceHash
+    || token.analysisRevision !== record.token.analysisRevision;
   const title = intent.kind === "approve" ? "Approve payable hours" : intent.kind === "reopen" ? "Reopen payroll review"
     : intent.action === "payable" ? "Approve finding" : intent.action === "excluded" ? "Reject finding" : "Acknowledge finding";
   const confirm = intent.kind === "finding"

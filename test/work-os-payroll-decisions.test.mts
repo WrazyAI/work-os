@@ -103,6 +103,79 @@ test("incompatible batch effects fail without a partial decision", async () => {
   } finally { await f.close(); }
 });
 
+test("a daily source blocker keeps a legacy-warning review unready", async () => {
+  const { resolvePayrollFindings, loadPayrollReview } = await decisions();
+  const { approvePayrollReview } = await approvals();
+  const f = await payrollFixture();
+  try {
+    const { dayId } = await seed(f);
+    await resolvePayrollFindings(adminAccess, reviewId, {
+      ...command(), findingIds: [heldKey], action: "payable", note: "Reviewed",
+    });
+    await f.db.query(`insert into work_payroll_findings
+      (organization_id,review_id,person_id,analysis_revision,day_id,finding_key,kind,status,effect,blocks_approval,required_action,reason,source_hash)
+      values ($1,$2,$3,1,$4,'low-evidence','low_evidence','needs_review','acknowledge',true,'acknowledge','Coverage was incomplete','hash')`,
+    [org, reviewId, person, dayId]);
+    await f.db.query(`update work_payroll_days set result=jsonb_set(result,'{blockers}','["No eligible schedule is available for recorded work"]'::jsonb) where id=$1`, [dayId]);
+    await f.db.query("update work_payroll_reviews set status='needs_review' where id=$1", [reviewId]);
+    const review = await loadPayrollReview(adminAccess, reviewId);
+    assert.equal(review.status, "needs_review");
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, {
+      ...review.token, requestKey: "daily-blocker", note: "Reviewed",
+    }, approvalDeps), /daily source correction/i);
+  } finally { await f.close(); }
+});
+
+test("a low-evidence correction finding still blocks approval", async () => {
+  const { resolvePayrollFindings, loadPayrollReview } = await decisions();
+  const { approvePayrollReview } = await approvals();
+  const f = await payrollFixture();
+  try {
+    const { dayId } = await seed(f);
+    await resolvePayrollFindings(adminAccess, reviewId, {
+      ...command(), findingIds: [heldKey], action: "payable", note: "Reviewed",
+    });
+    await f.db.query(`insert into work_payroll_findings
+      (organization_id,review_id,person_id,analysis_revision,day_id,finding_key,kind,status,effect,blocks_approval,required_action,reason,source_hash)
+      values ($1,$2,$3,1,$4,'low-evidence','low_evidence','needs_correction','acknowledge',true,'correct','Coverage could not be reconciled','hash')`,
+    [org, reviewId, person, dayId]);
+    await f.db.query("update work_payroll_reviews set status='needs_review' where id=$1", [reviewId]);
+    const review = await loadPayrollReview(adminAccess, reviewId);
+    assert.equal(review.status, "needs_review");
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, {
+      ...review.token, requestKey: "low-correction", note: "Reviewed",
+    }, approvalDeps), /correction-required payroll finding/i);
+  } finally { await f.close(); }
+});
+
+test("a legacy low-evidence warning does not block an otherwise ready approval", async () => {
+  const { resolvePayrollFindings, loadPayrollReview } = await decisions();
+  const { approvePayrollReview } = await approvals();
+  const f = await payrollFixture();
+  try {
+    const { dayId } = await seed(f);
+    await resolvePayrollFindings(adminAccess, reviewId, {
+      ...command(), findingIds: [heldKey], action: "payable", note: "Reviewed",
+    });
+    await f.db.query(`insert into work_payroll_findings
+      (organization_id,review_id,person_id,analysis_revision,day_id,finding_key,kind,status,effect,blocks_approval,required_action,reason,source_hash)
+      values ($1,$2,$3,1,$4,'low-evidence','low_evidence','needs_review','acknowledge',true,'acknowledge','Coverage was incomplete','hash')`,
+    [org, reviewId, person, dayId]);
+    await f.db.query("update work_payroll_reviews set status='needs_review' where id=$1", [reviewId]);
+    const review = await loadPayrollReview(adminAccess, reviewId);
+    assert.equal(review.status, "ready");
+    await f.db.query("update work_payroll_findings set status='resolved_excluded' where finding_key='low-evidence'");
+    await assert.rejects(approvePayrollReview(adminAccess, reviewId, {
+      ...review.token, requestKey: "legacy-deduction", note: "Reviewed",
+    }, approvalDeps), /earlier low-evidence decision deducted time/i);
+    await f.db.query("update work_payroll_findings set status='needs_review' where finding_key='low-evidence'");
+    const approval = await approvePayrollReview(adminAccess, reviewId, {
+      ...review.token, requestKey: "legacy-warning", note: "Reviewed",
+    }, approvalDeps);
+    assert.equal(approval.totals.approved, 305);
+  } finally { await f.close(); }
+});
+
 test("approval_retry_preserves_the_same_receipt", async () => {
   const { resolvePayrollFindings, loadPayrollReview } = await decisions();
   const { approvePayrollReview } = await approvals();

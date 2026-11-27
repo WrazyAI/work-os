@@ -15,6 +15,28 @@ import type {
 type Row = Record<string, unknown>;
 type Action = "payable" | "excluded" | "acknowledged";
 
+export async function payrollFindingBlockers(client: PoolClient, scope: PayrollScope, review: Row) {
+  const { rows: [row] } = await client.query(`SELECT
+      coalesce(bool_or(blocks_approval AND status IN ('needs_review','needs_correction')
+        AND (kind <> 'low_evidence' OR status = 'needs_correction')), false) AS unresolved,
+      coalesce(bool_or(kind = 'low_evidence' AND status = 'needs_review'), false) AS legacy_warning,
+      coalesce(bool_or(kind = 'low_evidence' AND status = 'resolved_excluded'), false) AS legacy_deduction
+    FROM work_payroll_findings
+    WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3`,
+  [scope.organizationId, review.id, review.analysis_revision]);
+  const day = await client.query(`SELECT EXISTS (
+      SELECT 1 FROM work_payroll_days
+      WHERE organization_id=$1 AND review_id=$2 AND analysis_revision=$3
+        AND jsonb_array_length(coalesce(result->'blockers','[]'::jsonb)) > 0
+    ) AS blocked`, [scope.organizationId, review.id, review.analysis_revision]);
+  return {
+    unresolved: row.unresolved === true, legacyWarning: row.legacy_warning === true,
+    legacyDeduction: row.legacy_deduction === true, dayBlocked: day.rows[0]?.blocked === true,
+  };
+}
+
+export const LEGACY_LOW_EVIDENCE_BLOCKER = "An earlier low-evidence decision deducted time. Re-analyze and review the individual gaps before approving.";
+
 function requireAdmin(access: WorkOsAccess): void {
   if (access.role !== "admin") throw new WorkOsValidationError("Payroll review is admin-only.");
 }
@@ -55,8 +77,8 @@ export async function payrollTransaction<T>(scope: PayrollScope, run: (client: P
   } finally { client.release(); }
 }
 
-export async function loadPayrollReviewRow(client: PoolClient, scope: PayrollScope, reviewId: string): Promise<Row> {
-  const { rows } = await client.query(`SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 AND person_id=$3`, [scope.organizationId, reviewId, scope.personId]);
+export async function loadPayrollReviewRow(client: PoolClient, scope: PayrollScope, reviewId: string, lock = false): Promise<Row> {
+  const { rows } = await client.query(`SELECT * FROM work_payroll_reviews WHERE organization_id=$1 AND id=$2 AND person_id=$3${lock ? " FOR UPDATE" : ""}`, [scope.organizationId, reviewId, scope.personId]);
   if (!rows.length) throw new WorkOsValidationError("Payroll review not found");
   return rows[0];
 }
@@ -118,15 +140,23 @@ export async function loadPayrollReview(access: WorkOsAccess, reviewId: string):
       dateKey(review.period_start)!, dateKey(review.period_end)!, dateKey(review.pay_date)!,
       String(review.timezone),
     );
+    const findingBlockers = !approval && Number(review.analysis_revision) > 0
+      ? await payrollFindingBlockers(client, scope, review) : null;
+    const blockers = payrollIsStandardWindow(period.payDate, period.from, period.through)
+      ? (payrollPeriodHasEnded(period.through, localDateForTimezone(new Date(), String(review.timezone)))
+        ? []
+        : [`This payroll period has not ended (${period.through}). Approval is available after it ends.`])
+      : [payrollPartialWindowBlocker(period.from, period.through)];
+    if (findingBlockers?.legacyDeduction) blockers.push(LEGACY_LOW_EVIDENCE_BLOCKER);
+    let status = review.status;
+    if (findingBlockers?.legacyDeduction) status = "stale";
+    else if (findingBlockers?.dayBlocked) status = "needs_review";
+    else if (status === "needs_review" && findingBlockers?.legacyWarning && !findingBlockers.unresolved) status = "ready";
     return {
       id: String(review.id), scope, period,
       token: { rowVersion: String(review.row_version), analysisRevision: Number(review.analysis_revision), sourceHash: String(review.source_hash ?? "") },
-      status: String(review.status) as PayrollReview["status"], totals: totalsFromJson(review.totals),
-      blockers: payrollIsStandardWindow(period.payDate, period.from, period.through)
-        ? (payrollPeriodHasEnded(period.through, localDateForTimezone(new Date(), String(review.timezone)))
-          ? []
-          : [`This payroll period has not ended (${period.through}). Approval is available after it ends.`])
-        : [payrollPartialWindowBlocker(period.from, period.through)],
+      status: String(status) as PayrollReview["status"], totals: totalsFromJson(review.totals),
+      blockers,
       briefs: briefs.map((brief: Row) => ({
         week: Number(brief.week) as 1 | 2, status: String(brief.status) as PayrollReview["briefs"][number]["status"],
         title: String(brief.title ?? ""), summary: String(brief.summary_markdown ?? ""),
@@ -167,6 +197,7 @@ async function applyCommand(client: PoolClient, scope: PayrollScope, review: Row
     [scope.organizationId, review.id, review.analysis_revision])).rows as Row[];
   const decisionsByDay = new Map<string, FindingDecision[]>();
   for (const finding of findings) {
+    if (finding.kind === "low_evidence" && action !== "acknowledged") throw new WorkOsConflictError("Low evidence is informational; decide the individual gaps instead.");
     if (finding.kind === "break" || finding.kind === "outside_window") throw new WorkOsConflictError("Break and outside-window time require a manual adjustment, not a finding decision.");
     if (finding.required_action === "correct") throw new WorkOsConflictError("Structural payroll findings require source correction.");
     if (action === "acknowledged" && finding.effect !== "acknowledge") throw new WorkOsConflictError("A held interval cannot only be acknowledged.");
@@ -187,7 +218,7 @@ async function applyCommand(client: PoolClient, scope: PayrollScope, review: Row
         tracked_minutes=$6, break_minutes=$7, inactivity_minutes=$8, outside_minutes=$9, held_minutes=$10,
         recommended_minutes=$11, manual_excluded_minutes=$12, result=$13::jsonb, updated_at=now()
       WHERE organization_id=$1 AND id=$2`,
-    [scope.organizationId, day.id, JSON.stringify(next.exactMs), JSON.stringify(next.partition), next.findings.some((finding) => finding.blocksApproval) ? "needs_review" : "resolved",
+    [scope.organizationId, day.id, JSON.stringify(next.exactMs), JSON.stringify(next.partition), dayNeedsReview(next) ? "needs_review" : "resolved",
       next.minutes.eligibleTracked, next.minutes.break, next.minutes.inactivity, next.minutes.outside, next.minutes.held,
       next.minutes.recommended, next.minutes.manualExcluded, JSON.stringify(next)]);
     for (const finding of findings.filter((item) => item.day_id === day.id)) {
@@ -212,17 +243,19 @@ async function applyCommand(client: PoolClient, scope: PayrollScope, review: Row
     const minutes = (object(row.result).minutes ?? {}) as Row;
     for (const key of Object.keys(totals) as Array<keyof typeof totals>) totals[key] += Number(minutes[key] ?? 0);
   }
-  const blocked = updatedDays.some((row) => {
-    const result = object(row.result);
-    const findings = Array.isArray(result.findings) ? result.findings as PayrollFinding[] : [];
-    return (Array.isArray(result.blockers) && result.blockers.length > 0)
-      || findings.some((finding) => finding.blocksApproval && !["acknowledged", "resolved_payable", "resolved_excluded"].includes(finding.status));
-  });
+  const blocked = updatedDays.some((row) => dayNeedsReview(object(row.result) as Partial<PayrollDayResult>));
   await client.query(`UPDATE work_payroll_reviews SET totals=$3::jsonb, status=$4, row_version=row_version+1, updated_at=now()
     WHERE organization_id=$1 AND id=$2`, [scope.organizationId, review.id, JSON.stringify(totals), blocked ? "needs_review" : "ready"]);
   await client.query(`INSERT INTO work_audit_log (organization_id,actor_user_id,action,target_type,target_id,metadata)
     VALUES ($1,$2,$3,'payroll_review',$4,$5::jsonb)`,
   [scope.organizationId, actor, `payroll.finding_${decisionKind}`, review.id, JSON.stringify({ findings: findingKeys, requestKey })]);
+}
+
+function dayNeedsReview(day: Partial<PayrollDayResult>): boolean {
+  return (Array.isArray(day.blockers) && day.blockers.length > 0)
+    || (Array.isArray(day.findings) && day.findings.some((finding) => finding.kind === "low_evidence"
+      ? finding.status === "resolved_excluded"
+      : finding.blocksApproval && ["needs_review", "needs_correction"].includes(finding.status)));
 }
 
 export async function resolvePayrollFindings(access: WorkOsAccess, reviewId: string, input: PayrollCommand & {
@@ -233,7 +266,7 @@ export async function resolvePayrollFindings(access: WorkOsAccess, reviewId: str
   if (!input.findingIds.length) throw new WorkOsValidationError("At least one finding is required.");
   if (!input.note.trim()) throw new WorkOsValidationError("A decision reason is required.");
   await payrollTransaction(scope, async (client) => {
-    const review = await loadPayrollReviewRow(client, scope, reviewId);
+    const review = await loadPayrollReviewRow(client, scope, reviewId, true);
     if (String(review.status) === "approved" || review.current_approval_id) {
       throw new WorkOsConflictError("Reopen the approved payroll review before changing findings.", "payroll_approved");
     }
@@ -246,7 +279,11 @@ export async function resolvePayrollFindings(access: WorkOsAccess, reviewId: str
       WHERE organization_id=$1 AND review_id=$2 AND person_id=$3 AND analysis_revision=$4`,
     [scope.organizationId, reviewId, scope.personId, review.analysis_revision]);
     if (!revision.rows.length || !revision.rows[0].source_token) throw new WorkOsConflictError("Payroll sources are not frozen.", "payroll_sources_missing");
-    await verifyPayrollSourceToken(client, scope, String(revision.rows[0].source_token));    await applyCommand(client, scope, review, input.findingIds, input.action, input.note.trim(), input.requestKey, access.ctx.user.id, input.action);
+    await verifyPayrollSourceToken(client, scope, String(revision.rows[0].source_token));
+    if ((await payrollFindingBlockers(client, scope, review)).legacyDeduction) {
+      throw new WorkOsConflictError(LEGACY_LOW_EVIDENCE_BLOCKER, "payroll_legacy_low_evidence");
+    }
+    await applyCommand(client, scope, review, input.findingIds, input.action, input.note.trim(), input.requestKey, access.ctx.user.id, input.action);
   });
   return loadPayrollReview(access, reviewId);
 }

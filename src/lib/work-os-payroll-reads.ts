@@ -10,6 +10,7 @@ import type {
 } from "@/lib/db/rows/payroll";
 import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
 import { resolvePayrollPeriod } from "@/lib/work-os-payroll-period";
+import { LOW_EVIDENCE_REASON } from "@/lib/work-os-payroll-hours";
 export { loadPayrollReview } from "@/lib/work-os-payroll-decisions";
 import type {
   Page, PayrollDayResult, PayrollFinding, PayrollRosterPage, PayrollRunStatus, PayrollTotals, Span,
@@ -163,8 +164,13 @@ export async function listPayrollDays(access: WorkOsAccess, reviewId: string, fi
   };
 }
 
-export async function listPayrollFindings(access: WorkOsAccess, reviewId: string, filters: { status: string | null; cursor: string | null; limit: number }): Promise<Page<PayrollFinding>> {
+export async function listPayrollFindings(access: WorkOsAccess, reviewId: string, filters: {
+  status: string | null; cursor: string | null; limit: number; analysisRevision?: number;
+}): Promise<Page<PayrollFinding>> {
   const review = await assertLiveReview(access, reviewId);
+  if (filters.analysisRevision !== undefined && Number(review.analysis_revision) !== filters.analysisRevision) {
+    throw new WorkOsConflictError("The payroll analysis revision changed. Reload the review.", "analysis_revision_conflict");
+  }
   const limit = Math.max(1, Math.min(100, filters.limit || 50));
   const values: unknown[] = [access.organizationId, reviewId, review.analysis_revision];
   let status = "";
@@ -219,6 +225,8 @@ export async function listPayrollFindings(access: WorkOsAccess, reviewId: string
       blocksApproval: row.blocks_approval === true, requiredAction: row.required_action as PayrollFinding["requiredAction"],
       reason: String(row.reason), citations: Array.isArray(row.citations) ? row.citations as PayrollFinding["citations"] : [],
       frameSummaryIds: row.kind === "break" ? [] : framesByDay.get(String(row.day_id)) ?? [],
+      ...(row.kind === "low_evidence" && row.status !== "resolved_excluded"
+        ? { requiredAction: "none" as const, blocksApproval: false, reason: LOW_EVIDENCE_REASON } : {}),
     })),
     total: Number(total?.n ?? 0),
     nextCursor: rows.length > limit && last ? encodeCursor({ date: last.local_date, key: last.finding_key }) : null,

@@ -44,6 +44,38 @@
 .payroll-native-sources { color: var(--text-secondary); font-size: 12px; }
 .payroll-native-list { padding-inline-start: 20px; list-style: disc; }
 
+.payroll-brief-card { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--paper); overflow-wrap: anywhere; }
+.payroll-brief-card + .payroll-brief-card { margin-top: 10px; }
+.payroll-brief-head { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.payroll-brief-week { margin: 0; color: var(--chart-1); font-size: 11px; font-weight: 650; line-height: 1.3; }
+.payroll-brief-head h3 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.3; letter-spacing: -.008em; }
+.payroll-brief-period { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; margin: 4px 0 0; color: var(--faint); font-size: 10.5px; line-height: 1.4; }
+.payroll-brief-state { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); white-space: nowrap; }
+.payroll-brief-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
+.payroll-brief-state[data-tone="ok"]::before { background: var(--chart-1); }
+.payroll-brief-state[data-tone="warn"]::before { background: var(--warning); }
+.payroll-brief-card .payroll-brief-summary { margin: 10px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ink); max-width: 68ch; }
+.payroll-brief-card > .payroll-native-sources { margin-top: 3px; }
+.payroll-brief-section { display: grid; gap: 6px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--border); }
+.payroll-brief-section h4 { margin: 0; font-size: 10.5px; font-weight: 650; color: var(--muted); letter-spacing: .005em; }
+.payroll-brief-card .payroll-brief-observations,
+.payroll-brief-card .payroll-brief-open ul,
+.payroll-brief-card .payroll-brief-limits ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.payroll-brief-card .payroll-brief-open ul { gap: 6px; }
+.payroll-brief-card .payroll-brief-limits ul { gap: 5px; }
+.payroll-brief-observation { padding: 8px 0 1px; border-top: 1px solid var(--border); }
+.payroll-brief-observation:first-child { padding-top: 0; border-top: 0; }
+.payroll-brief-observation strong { display: block; font-size: 11.5px; font-weight: 650; line-height: 1.4; }
+.payroll-brief-observation p { margin: 2px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--muted); max-width: 70ch; }
+.payroll-brief-open li { position: relative; padding-inline-start: 14px; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.payroll-brief-open li::before { content: ""; position: absolute; inset-inline-start: 2px; top: .55em; width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
+.payroll-brief-limits { padding: 10px; border-top: 0; border-radius: 8px; background: var(--inset); }
+.payroll-brief-limit { font-size: 11px; line-height: 1.5; color: var(--muted); }
+@media (max-width: 640px) {
+  .payroll-brief-card { padding: 12px; }
+  .payroll-brief-head h3 { font-size: 14.5px; }
+}
+
 .payroll-native-finding-title {
   display: flex;
   align-items: center;

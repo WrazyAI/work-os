@@ -15,6 +15,7 @@ const LOW_EVIDENCE_CONTINUOUS_MS = 30 * MINUTE;
 const INACTIVITY_THRESHOLD_MS = 180_000;
 const CONFIDENCE_FLOOR = 0.6;
 const MINUTE_ORDER: Category[] = ["payable", "break", "inactivity", "held", "manual", "outside"];
+export const LOW_EVIDENCE_REASON = "More than 20% of tracked time is unverified, or a single gap exceeds 30 minutes. Review the individual gaps to change payable time.";
 
 type Part = { span: Span; category: Category; findingKey: string | null };
 
@@ -269,8 +270,8 @@ export function calculatePayrollDay(input: PayrollDayInput): PayrollDayResult {
   const trackedMs = duration(tracked);
   if (gapTotal > 0 && (gapTotal / Math.max(1, trackedMs) > LOW_EVIDENCE_RATIO || gapSpans.some((span) => span.endMs - span.startMs > LOW_EVIDENCE_CONTINUOUS_MS))) {
     const key = nextKey("low_evidence", null);
-    findings.push(finding(input, key, "low_evidence", "needs_review", "acknowledge", null, gapTotal,
-      "More than 20% of tracked time is unverified, or a single gap exceeds 30 minutes. Approve to keep it payable, or reject to exclude it.", true, "acknowledge"));
+    findings.push(finding(input, key, "low_evidence", "auto_payable", "acknowledge", null, gapTotal,
+      LOW_EVIDENCE_REASON, false, "none"));
   }
 
   for (const span of outside) {
@@ -323,6 +324,7 @@ export function applyPayrollDecisions(day: PayrollDayResult, decisions: FindingD
     if (!finding) throw new Error("Unknown payroll finding");
     if (!decision.note?.trim()) throw new Error("A payroll decision requires a reason");
     if (finding.sourceHash !== decision.sourceHash) throw new Error("Stale payroll decision: the source evidence changed");
+    if (finding.kind === "low_evidence" && decision.action !== "acknowledged") throw new Error("Low evidence is informational; decide the individual gaps instead");
     if (finding.kind === "break") throw new Error("Break time is already excluded; use a manual adjustment to pay it");
     if (finding.kind === "outside_window") throw new Error("Outside-window time requires a schedule or session correction");
     if (finding.requiredAction === "correct") throw new Error("Structural payroll findings require source correction");

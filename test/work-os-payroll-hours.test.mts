@@ -280,7 +280,26 @@ test("gaps stay payable but require acknowledgement; low evidence is called out 
   assert.equal(gap.blocksApproval, true);
   assert.equal(gap.requiredAction, "acknowledge");
   const low = calculatePayrollDay(input({ sessions: [session(sp("15:00", "16:00"), sp("15:00", "16:00"))], captures: everyMinute("15:00", "15:10", 30) }));
-  assert.ok(low.findings.some((finding) => finding.kind === "low_evidence" && finding.blocksApproval));
+  const warning = low.findings.find((finding) => finding.kind === "low_evidence")!;
+  assert.equal(warning.blocksApproval, false);
+  assert.equal(warning.requiredAction, "none");
+});
+
+test("rejecting a legacy low-evidence summary cannot deduct a timed gap twice", async () => {
+  const { calculatePayrollDay, applyPayrollDecisions } = await hours();
+  const day = calculatePayrollDay(input({
+    sessions: [session(sp("15:00", "16:00"), sp("15:00", "16:00"))],
+    captures: [...everyMinute("15:00", "15:10", 30), ...everyMinute("15:30", "16:00", 30)],
+  }));
+  const gap = day.findings.find((finding) => finding.kind === "unverified_gap")!;
+  const summary = day.findings.find((finding) => finding.kind === "low_evidence")!;
+  Object.assign(summary, { status: "needs_review", requiredAction: "acknowledge", blocksApproval: true });
+  const exclude = (findingKey: string): FindingDecision => ({
+    findingKey, sourceHash: day.sourceHash, action: "excluded", requestKey: findingKey, note: "Reviewed evidence",
+  });
+  const afterGap = applyPayrollDecisions(day, [exclude(gap.key)]);
+  assert.equal(afterGap.minutes.recommended, 40);
+  assert.throws(() => applyPayrollDecisions(afterGap, [exclude(summary.key)]), /informational/i);
 });
 
 test("no schedule, open sessions, leave work and no work are explicit blockers", async () => {
