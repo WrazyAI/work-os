@@ -23,6 +23,7 @@
     "./work-arrangement": "./src/work-arrangement.ts",
     "./payroll/contracts": "./src/payroll/contracts.ts",
     "./payroll/break-groups": "./src/payroll/break-groups.ts",
+    "./payroll/briefs": "./src/payroll/briefs.ts",
     "./ui/WorkArrangementFields": "./src/ui/WorkArrangementFields.tsx",
     "./ui/ArrangementReview": "./src/ui/ArrangementReview.tsx",
     "./eod-structured": "./src/eod-structured.ts"

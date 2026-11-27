@@ -1,4 +1,5 @@
 import type { PayrollCitation, PayrollPeriod, PayrollWeekBrief } from "@/modules/work-os/payroll/contracts";
+import { payrollBriefText, payrollBriefTitle } from "@wrazy/work-os-shared/payroll/briefs";
 
 export function PayrollSources({ citations }: { citations: PayrollCitation[] }) {
   if (!citations.length) return null;
@@ -58,24 +59,26 @@ const EMPTY_SUMMARY: Record<PayrollWeekBrief["status"], string> = {
 export function PayrollBrief({ brief, period }: { brief: PayrollWeekBrief; period: PayrollPeriod }) {
   const dates = period.weeks.find((week) => week.week === brief.week);
   const state = briefState(brief);
+  const title = payrollBriefTitle(brief.title, brief.week);
+  const summary = payrollBriefText(brief.summary);
   return (
     <section className="payroll-panel payroll-brief" aria-labelledby={`payroll-brief-week-${brief.week}`}>
       <header className="payroll-brief-head">
         <p className="payroll-brief-week">Week {brief.week}</p>
-        <h3 id={`payroll-brief-week-${brief.week}`}>{brief.title || "Progress brief"}</h3>
+        <h3 id={`payroll-brief-week-${brief.week}`}>{title}</h3>
         <p className="payroll-brief-period">
           {dates ? briefRange(dates.from, dates.through) : "Dates unavailable"}
           <span className="payroll-brief-state" data-tone={state.tone}>{state.label}</span>
         </p>
       </header>
-      <p className="payroll-brief-summary">{brief.summary || EMPTY_SUMMARY[brief.status]}</p>
+      <p className="payroll-brief-summary">{summary || EMPTY_SUMMARY[brief.status]}</p>
       <PayrollSources citations={brief.summaryCitations} />
       {brief.themes.length ? <section className="payroll-brief-section">
         <h4>Work observed</h4>
         <ul className="payroll-brief-observations">{brief.themes.map((theme, index) => (
           <li className="payroll-brief-observation" key={index}>
-            <strong>{theme.heading}</strong>
-            <p>{theme.detail}</p>
+            <strong>{payrollBriefText(theme.heading)}</strong>
+            <p>{payrollBriefText(theme.detail)}</p>
             <PayrollSources citations={theme.citations} />
           </li>
         ))}</ul>
@@ -83,12 +86,12 @@ export function PayrollBrief({ brief, period }: { brief: PayrollWeekBrief; perio
       {brief.openItems.length ? <section className="payroll-brief-section payroll-brief-open">
         <h4>Open items</h4>
         <ul>{brief.openItems.map((item, index) => (
-          <li key={index}>{item.text}<PayrollSources citations={item.citations} /></li>
+          <li key={index}>{payrollBriefText(item.text)}<PayrollSources citations={item.citations} /></li>
         ))}</ul>
       </section> : null}
       {brief.gaps.length ? <section className="payroll-brief-section payroll-brief-limits">
         <h4>Limits and evidence gaps</h4>
-        <ul>{brief.gaps.map((gap, index) => <li className="payroll-brief-limit" key={index}>{gap}</li>)}</ul>
+        <ul>{brief.gaps.map((gap, index) => <li className="payroll-brief-limit" key={index}>{payrollBriefText(gap)}</li>)}</ul>
       </section> : null}
     </section>
   );

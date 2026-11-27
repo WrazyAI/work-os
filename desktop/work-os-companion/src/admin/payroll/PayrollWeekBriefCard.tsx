@@ -1,4 +1,5 @@
 import type { PayrollCitation, PayrollPeriod, PayrollWeekBrief } from "@wrazy/work-os-shared/payroll/contracts";
+import { payrollBriefText, payrollBriefTitle } from "@wrazy/work-os-shared/payroll/briefs";
 import { formatWorkOsFullDate } from "../../dateFormat";
 import "./payroll.css";
 
@@ -45,30 +46,32 @@ const EMPTY_BRIEF_SUMMARY: Record<PayrollWeekBrief["status"], string> = {
 export function PayrollWeekBriefCard({ brief, period }: { brief: PayrollWeekBrief; period: PayrollPeriod }) {
   const dates = period.weeks.find((week) => week.week === brief.week);
   const state = briefState(brief);
+  const title = payrollBriefTitle(brief.title, brief.week);
+  const summary = payrollBriefText(brief.summary);
   return <section className="payroll-brief-card">
     <header className="payroll-brief-head">
       <p className="payroll-brief-week">Week {brief.week}</p>
-      <h3>{brief.title || "Progress brief"}</h3>
+      <h3>{title}</h3>
       <p className="payroll-brief-period">
         {dates ? `${formatWorkOsFullDate(dates.from)} – ${formatWorkOsFullDate(dates.through)}` : "Dates unavailable"}
         <span className="payroll-brief-state" data-tone={state.tone}>{state.label}</span>
       </p>
     </header>
-    <p className="payroll-brief-summary">{brief.summary || EMPTY_BRIEF_SUMMARY[brief.status]}</p>
+    <p className="payroll-brief-summary">{summary || EMPTY_BRIEF_SUMMARY[brief.status]}</p>
     <BriefSources citations={brief.summaryCitations} />
     {brief.themes.length ? <section className="payroll-brief-section">
       <h4>Work observed</h4>
       <ul className="payroll-brief-observations">{brief.themes.map((theme, i) => (
-        <li className="payroll-brief-observation" key={i}><strong>{theme.heading}</strong><p>{theme.detail}</p><BriefSources citations={theme.citations} /></li>
+        <li className="payroll-brief-observation" key={i}><strong>{payrollBriefText(theme.heading)}</strong><p>{payrollBriefText(theme.detail)}</p><BriefSources citations={theme.citations} /></li>
       ))}</ul>
     </section> : null}
     {brief.openItems.length ? <section className="payroll-brief-section payroll-brief-open">
       <h4>Open items</h4>
-      <ul>{brief.openItems.map((item, i) => <li key={i}>{item.text}<BriefSources citations={item.citations} /></li>)}</ul>
+      <ul>{brief.openItems.map((item, i) => <li key={i}>{payrollBriefText(item.text)}<BriefSources citations={item.citations} /></li>)}</ul>
     </section> : null}
     {brief.gaps.length ? <section className="payroll-brief-section payroll-brief-limits">
       <h4>Limits and evidence gaps</h4>
-      <ul>{brief.gaps.map((gap, i) => <li className="payroll-brief-limit" key={i}>{gap}</li>)}</ul>
+      <ul>{brief.gaps.map((gap, i) => <li className="payroll-brief-limit" key={i}>{payrollBriefText(gap)}</li>)}</ul>
     </section> : null}
   </section>;
 }

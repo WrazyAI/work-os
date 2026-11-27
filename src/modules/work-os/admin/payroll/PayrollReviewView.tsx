@@ -67,6 +67,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
   const outside = excluded.filter((finding) => finding.kind === "outside_window");
   const otherExcluded = excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window");
   const excludedMinutes = excluded.reduce((sum, finding) => sum + finding.minutes, 0);
+  const excludedAmount = excludedMinutes === 0 && excluded.some((finding) => finding.durationMs > 0) ? "<1m" : hours(excludedMinutes);
   const excludedCount = inactivity.length + breaks.length + outside.length
     + excluded.filter((finding) => finding.kind !== "break" && finding.kind !== "inactivity" && finding.kind !== "outside_window").length;
   const apps = review.apps?.items ?? [];
@@ -192,7 +193,7 @@ export function PayrollReviewView({ review, displayName, busy, days = [], findin
         </section> : null}
 
         {!findingsError ? <section className="payroll-panel" aria-labelledby="excluded-title">
-          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excludedCount ? `${excludedCount} interval${excludedCount === 1 ? "" : "s"} · ${hours(excludedMinutes)} removed from pay.` : "No intervals removed from pay."}</p></div>
+          <div className="payroll-report-head"><h2 id="excluded-title">Excluded by rule</h2><p>{excludedCount ? `${excludedCount} interval${excludedCount === 1 ? "" : "s"} · ${excludedAmount} removed from pay.` : "No intervals removed from pay."}</p></div>
           <ExcludedGroup title="Continuous inactivity · 3 minutes or more" detail="Zero activity for 3 minutes or more is excluded unless meeting, training, reading, or work evidence covers it." findings={inactivity} review={review} />
           <ExcludedGroup title="Unpaid break" detail="Break time never counts as work. Worktivity captures no screenshots during a break." findings={breaks} review={review} collapsed />
           <ExcludedGroup title="Outside the eligible window" detail="Recorded time before the shift or after its grace end is never payable." findings={outside} review={review} />
@@ -272,13 +273,14 @@ function ExcludedGroup({ title, detail, findings, review, collapsed = false }: {
   title: string; detail: string; findings: PayrollFinding[]; review: PayrollReview; collapsed?: boolean;
 }) {
   const total = findings.reduce((sum, finding) => sum + finding.minutes, 0);
-  const head = <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><span className="payroll-rule-count">{findings.length ? `${findings.length} · ${hours(total)}` : "None"}</span></div>;
+  const amount = total === 0 && findings.some((finding) => finding.durationMs > 0) ? "<1m" : hours(total);
+  const head = <div className="payroll-rule-head"><div><h3>{title}</h3><p>{detail}</p></div><span className="payroll-rule-count">{findings.length ? `${findings.length} · ${amount}` : "None"}</span></div>;
   const body = findings.length ? <div className="payroll-rule-table">
     <div className="payroll-rule-columns"><span>Date</span><span>Time</span><span>Excluded</span><span>Evidence</span></div>
     {findings.map((finding) => <div className="payroll-rule-row" key={finding.id}>
       <span className="payroll-rule-date">{fullDate(finding.date)}</span>
       <span className="payroll-rule-time">{finding.span ? `${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.startMs))}–${new Intl.DateTimeFormat("en-US", { timeZone: review.period.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(finding.span.endMs))}` : "—"}</span>
-      <span className="payroll-rule-minutes">{hours(finding.minutes)}</span>
+      <span className="payroll-rule-minutes">{finding.minutes === 0 && finding.durationMs > 0 ? "<1m" : hours(finding.minutes)}</span>
       <span className="payroll-rule-evidence">{finding.kind === "break" ? "No frames by policy" : finding.kind === "inactivity"
         ? ((finding.frameSummaryIds?.length ?? 0) ? <PayrollFrameButton review={review} finding={finding} /> : "No linked frames")
         : "Not reviewable by policy"}</span>
