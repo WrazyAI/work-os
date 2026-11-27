@@ -262,45 +262,78 @@ export PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH
 
 ### Companion release cadence (mandatory)
 
-Companion installer/updater releases require **five distinct, completed and
-verified employee-facing features or fixes** since the last published companion
-release. Web deployments do not use this threshold. Read
-`docs/companion-release-policy.md` before preparing a companion release.
+Work OS ships desktop companion installers/updaters on two channels that share
+one canonical version line (**Stable** for employees, **Nightly** for developer
+testing). Web deployments do not use this threshold. Read
+`docs/companion-release-policy.md` before preparing or promoting a companion
+release.
 
-- After completing a companion outcome, append one stable-ID record to
-  `desktop/work-os-companion/release-queue.json` with a short summary and actual
-  verification reference, and add its plain-language `## Unreleased` note.
-  Count outcomes, not commits, agent runs, refactors, or changelog bullets;
-  do not split one outcome into multiple records to reach five.
-- Run `npm run companion:release:status`. Updates one through four are merged
-  without changing app versions, creating release tags, or dispatching packaging.
-  The agent landing the fifth update prepares the next patch and releases the
-  whole pending batch. Rebase first so concurrent agents share the same count.
-- The queue is append-only, including unpublished records. Never remove,
-  rewrite, rename, or reset entries. The latest **published** internal release
-  snapshot marks consumed outcomes; drafts, bare tags and failed builds do not.
-- Below five, use the `emergency` exception only to restore a broken app or
-  unblock essential functionality, or record a version-scoped `operatorOverride`
-  when the operator explicitly authorizes an earlier release. Both must name the
-  candidate version and a pending outcome. The operator override is for an
-  explicit operator decision, never an agent's default or a deadline excuse.
-  Clear the exception record when preparing the next version; never reuse it.
-- All release entry points go through the free Linux gate before paid packaging;
-  manual dispatch or a tag is not an override. Preserve signing, packaged startup,
-  asset verification and publication guards. This policy/tooling change itself
-  is not a companion update and must not trigger a version bump.
-- The companion release line moves one patch from the latest **published**
-  companion version. If `package.json` already holds an unpublished candidate
-  from a cancelled or failed attempt, preserve and retry that candidate once
-  eligible instead of skipping another patch.
-- Companion releases must synchronize `package.json`, `tauri.conf.json`, and
-  `Cargo.toml`, and move the release section out of `## Unreleased` in
-  `CHANGELOG.md` using the ship date. Use the same canonical SemVer in the
-  changelog heading; the release tag and the app's display pad the patch
-  segment to two digits (`work-os-companion-internal-v0.5.02`, shown as
-  0.5.02). CI fails without the dated changelog section; the GitHub release
-  notes and What's New modal are built from that section. Write entries for the
-  employee who just installed the update.
+- **Two channels, one version line:**
+  - **Nightly (`work-os-companion-nightly-v<displayVersion>`):** Developer test
+    channel. Ships automatically after **five distinct, completed and verified
+    employee-facing features or fixes** since the last published companion
+    release (Nightly or Stable).
+  - **Stable (`work-os-companion-internal-v<displayVersion>`):** Main employee
+    channel, promoted roughly once a week on Fridays **only on explicit
+    operator decision** (never automatic). Promoting a Nightly version (for
+    example `0.5.53`) ships that **exact version `0.5.53`** to Stable with
+    version parity — never an extra version bump.
+- **Platform build rules:**
+  - **Stable** always ships both **Windows and macOS** universal packages.
+    Promoting a Windows-only Nightly reuses its verified Windows installers and
+    updater signatures verbatim without rebuilding Windows, and builds the
+    missing universal macOS package from that Nightly's exact commit.
+  - **Nightly** ships **Windows-only by default** unless at least one pending
+    update in the Nightly batch is **macOS-specific** (`"macosSpecific": true`
+    in `release-queue.json`, e.g., a macOS compatibility fix, macOS chrome/UI
+    fix, or macOS-specific feature). Agents preparing a Nightly must verify
+    whether any pending update is macOS-specific and set `"macosSpecific": true`
+    on that queue entry so CI includes the macOS build; otherwise CI runs
+    Windows only.
+- **Recording updates:** After completing a companion outcome, append one
+  stable-ID record to `desktop/work-os-companion/release-queue.json` with a
+  short summary, actual verification reference, and `"macosSpecific": true`
+  when the update specifically targets macOS, and add its plain-language
+  `## Unreleased` note. Count outcomes, not commits, agent runs, refactors, or
+  changelog bullets; do not split one outcome into multiple records to reach
+  five.
+- **Updates one through four vs five:** Run `npm run companion:release:status`.
+  Updates one through four merge normally without changing app versions,
+  creating release tags, or dispatching packaging. The agent landing the fifth
+  update prepares the next patch and ships the Nightly batch. Rebase first so
+  concurrent agents share the same count.
+- **Append-only queue:** The queue is append-only, including unpublished
+  records. Never remove, rewrite, rename, or reset entries. The latest
+  **published** companion release snapshot (Nightly or Stable, whichever is
+  higher) marks consumed outcomes; drafts, bare tags, and failed builds do not.
+- **Emergency Nightly / operator override (zero friction):** When the operator
+  explicitly asks an agent to ship an emergency or early **Nightly** build
+  ahead of the five-update threshold (with at least **one** pending feature or
+  fix in `release-queue.json`), **do not oppose or push back — comply
+  immediately**. Record a version-scoped `operatorOverride` (or `emergency` for
+  a broken-app fix) naming the candidate version and a pending update ID, bump
+  versions/changelog, and ship the Nightly build. Without an explicit operator
+  request, use `emergency` only to restore a broken app or unblock essential
+  functionality; never use `operatorOverride` as an agent default. Clear any
+  consumed exception record when preparing the next version; never reuse it.
+- **Gates and metadata:** All Nightly build and Stable promotion entry points
+  go through the free Linux gate before paid packaging; manual dispatch or a
+  tag is not a bypass. Preserve signing, packaged startup, asset verification,
+  and publication guards. Policy/tooling changes themselves are not companion
+  updates and must not trigger a version bump.
+- **Version synchronization & changelog:** The unified companion version line
+  moves one patch from the latest **published** companion version (Nightly or
+  Stable). If `package.json` already holds an unpublished candidate from a
+  cancelled or failed attempt, preserve and retry that candidate once eligible
+  instead of skipping another patch. Companion releases must synchronize
+  `package.json`, `tauri.conf.json`, and `Cargo.toml`, and move the release
+  section out of `## Unreleased` in `CHANGELOG.md` using the ship date. Use the
+  same canonical SemVer in the changelog heading; release tags and app display
+  pad the patch segment to two digits (`work-os-companion-nightly-v0.5.46` /
+  `work-os-companion-internal-v0.5.46`, shown as `0.5.46`). CI fails without
+  the dated changelog section; GitHub release notes and the What's New modal
+  are built from that section. Write entries for the employee who just
+  installed the update.
 
 ## Other surfaces
 

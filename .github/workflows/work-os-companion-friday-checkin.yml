@@ -1,0 +1,70 @@
+name: Work OS Companion Friday Stable Check-in
+
+on:
+  schedule:
+    # Every Friday at 16:00 UTC (4:00 PM GMT). Never auto-releases.
+    - cron: "0 16 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  friday-checkin:
+    name: Summarize Nightly builds for weekly Stable promotion decision
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Post or update the Friday Stable release check-in issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          summary_json="$RUNNER_TEMP/friday-checkin.json"
+          node scripts/work-os-friday-checkin.mjs > "$summary_json"
+          has_candidates=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).hasCandidates)' "$summary_json")
+          title=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).title)' "$summary_json")
+          body_file="$RUNNER_TEMP/friday-checkin.md"
+          node -e 'require("node:fs").writeFileSync(process.argv[2], JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).body)' "$summary_json" "$body_file"
+
+          cat "$body_file" >> "$GITHUB_STEP_SUMMARY"
+
+          # Ensure the tracking label exists.
+          gh label create "stable-release-checkin" \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "A8F15B" \
+            --description "Weekly Friday Stable release check-in" 2>/dev/null || true
+
+          existing_number=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label "stable-release-checkin" \
+            --state open \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // ""')
+
+          if [ "$has_candidates" != "true" ]; then
+            if [ -n "$existing_number" ]; then
+              gh issue edit "$existing_number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body_file"
+            fi
+            exit 0
+          fi
+
+          if [ -n "$existing_number" ]; then
+            gh issue edit "$existing_number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body_file"
+            gh issue comment "$existing_number" --repo "$GITHUB_REPOSITORY" --body "Friday check-in refreshed — reply or run the promotion workflow if you are ready to promote a Nightly build to Stable."
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --label "stable-release-checkin" \
+              --body-file "$body_file"
+          fi

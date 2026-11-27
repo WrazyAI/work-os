@@ -442,19 +442,146 @@ test("retries require a fresh dispatch instead of reuse of an old successful pre
   assert.equal(retry.output, "");
 });
 
+function evalJobIf(rawCondition, context) {
+  const stripped = String(rawCondition).replace(/^\$\{\{\s*([\s\S]*?)\s*\}\}$/, "$1");
+  const hasStatusFunc = /\b(?:always|success|failure|cancelled)\s*\(/.test(stripped);
+  const expression = stripped
+    .replaceAll("needs.release-gate", 'needs["release-gate"]')
+    .replaceAll("needs.unsigned-windows-release", 'needs["unsigned-windows-release"]')
+    .replaceAll("needs.unsigned-macos-release", 'needs["unsigned-macos-release"]')
+    .replaceAll("needs.prepare-stable-draft", 'needs["prepare-stable-draft"]')
+    .replaceAll("needs.build-missing-macos", 'needs["build-missing-macos"]');
+  const upstreamOk = Object.values(context.needs ?? {}).every((dep) => !dep.result || dep.result === "success");
+  const implicitSuccess = hasStatusFunc ? true : (!context._cancelled && upstreamOk);
+  return implicitSuccess && Boolean(runInNewContext(expression, {
+    ...context,
+    cancelled: () => Boolean(context._cancelled),
+    success: () => !context._cancelled && upstreamOk,
+    always: () => true,
+  }));
+}
+
 test("cached successful preflight cannot allocate paid jobs on a failed-job rerun", () => {
   const yaml = createRequire(import.meta.url)("js-yaml");
   const workflow = yaml.load(readFileSync(new URL("../.github/workflows/work-os-companion-windows.yml", import.meta.url), "utf8"));
   for (const name of ["unsigned-windows-release", "unsigned-macos-release", "finalize-release"]) {
     const condition = workflow.jobs[name].if ?? "true";
-    const context = { github: { run_attempt: 2 }, needs: { "release-gate": { outputs: { eligible: "true" } } } };
-    // GitHub job conditions here use the same boolean/comparison operators.
-    // Even when a successful gate is cached, no paid retry job may allocate.
-    const expression = condition.replaceAll("needs.release-gate", 'needs["release-gate"]');
-    assert.equal(runInNewContext(expression, context), false, `${name} must reject cached eligibility on attempt two`);
+    const context = {
+      github: { run_attempt: 2 },
+      needs: {
+        "release-gate": { outputs: { eligible: "true", include_macos: "true" } },
+        "unsigned-windows-release": { result: "success" },
+        "unsigned-macos-release": { result: "success" },
+      },
+    };
+    assert.equal(evalJobIf(condition, context), false, `${name} must reject cached eligibility on attempt two`);
     context.github.run_attempt = 1;
-    assert.equal(runInNewContext(expression, context), true, `${name} must allow a fresh eligible attempt`);
+    assert.equal(evalJobIf(condition, context), true, `${name} must allow a fresh eligible attempt`);
   }
+  // When no pending update is macOS-specific, Nightly skips macOS and finalize-release still runs
+  // (requires an explicit status function like !cancelled() to override Actions' implicit success()).
+  const macCondition = workflow.jobs["unsigned-macos-release"].if;
+  const finalizeCondition = workflow.jobs["finalize-release"].if;
+  assert.match(finalizeCondition, /!cancelled\(\)/);
+  assert.equal(evalJobIf(macCondition, { github: { run_attempt: 1 }, needs: { "release-gate": { outputs: { include_macos: "false" } } } }), false);
+  assert.equal(evalJobIf(finalizeCondition, {
+    github: { run_attempt: 1 },
+    needs: { "unsigned-windows-release": { result: "success" }, "unsigned-macos-release": { result: "skipped" } },
+  }), true);
+  assert.equal(evalJobIf(finalizeCondition, {
+    github: { run_attempt: 1 },
+    needs: { "unsigned-windows-release": { result: "failure" }, "unsigned-macos-release": { result: "skipped" } },
+  }), false);
+  assert.equal(evalJobIf(finalizeCondition, {
+    github: { run_attempt: 1 },
+    _cancelled: true,
+    needs: { "unsigned-windows-release": { result: "success" }, "unsigned-macos-release": { result: "skipped" } },
+  }), false);
+});
+
+test("macosSpecific flag controls whether Nightly includes a macOS CI build", () => {
+  const windowsOnly = queue(5);
+  assert.equal(evaluate(windowsOnly).includeMacos, false);
+  const withMac = queue(5);
+  withMac.updates[2].macosSpecific = true;
+  assert.equal(evaluate(withMac).includeMacos, true);
+  // Consumed macOS-specific updates do not force macOS on the next batch.
+  const nextBatch = queue(6);
+  nextBatch.updates[2].macosSpecific = true;
+  const nextResult = evaluate(nextBatch, { publishedQueue: withMac, version: "0.5.18", publishedVersion: "0.5.17" });
+  assert.equal(nextResult.includeMacos, false);
+  // Invalid non-boolean macosSpecific fails closed.
+  const malformed = queue(5);
+  malformed.updates[0].macosSpecific = "yes";
+  assert.throws(() => evaluate(malformed), /macosSpecific/i);
+});
+
+test("channel catalog tracks Stable and Nightly parity and evaluates Stable promotion", async () => {
+  const { formatFridayCheckinBody } = await import("../scripts/work-os-friday-checkin.mjs");
+  const macAssets = [
+    { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg" },
+    { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz" },
+    { name: "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz.sig" },
+  ];
+  const pages = [[
+    { tag_name: "work-os-companion-internal-v0.5.45", draft: false, published_at: "2026-11-20T00:00:00Z", assets: macAssets },
+    { tag_name: "work-os-companion-nightly-v0.5.45", draft: false, published_at: "2026-11-19T00:00:00Z", assets: [] },
+    { tag_name: "work-os-companion-nightly-v0.5.46", draft: false, published_at: "2026-11-22T00:00:00Z", target_commitish: "a".repeat(40), assets: [] },
+    { tag_name: "work-os-companion-nightly-v0.5.47", draft: false, published_at: "2026-11-24T00:00:00Z", target_commitish: "b".repeat(40), assets: macAssets },
+  ]];
+  const catalog = gate.latestPublishedByChannel(pages);
+  assert.equal(catalog.latestStable.version, "0.5.45");
+  assert.equal(catalog.latestNightly.version, "0.5.47");
+  assert.equal(catalog.latest.version, "0.5.47");
+  assert.deepEqual(catalog.unpromotedNightlies.map((item) => [item.version, item.hasMacos]), [
+    ["0.5.47", true],
+    ["0.5.46", false],
+  ]);
+
+  const promoWinOnly = gate.evaluatePromotion({ pages, version: "0.5.46" });
+  assert.equal(promoWinOnly.stableTag, "work-os-companion-internal-v0.5.46");
+  assert.equal(promoWinOnly.nightlyTag, "work-os-companion-nightly-v0.5.46");
+  assert.equal(promoWinOnly.needsMacosBuild, true);
+
+  const promoWithMac = gate.evaluatePromotion({ pages, version: "0.5.47" });
+  assert.equal(promoWithMac.needsMacosBuild, false);
+
+  assert.throws(() => gate.evaluatePromotion({ pages, version: "0.5.45" }), /already published/i);
+  assert.throws(() => gate.evaluatePromotion({ pages, version: "0.5.99" }), /No published Nightly/i);
+
+  const summary = formatFridayCheckinBody({
+    catalog,
+    changelogMarkdown: "# Changelog\n\n## 0.5.47 — 2026-11-24\n\n- Mac fix.\n\n## 0.5.46 — 2026-11-22\n\n- Win fix.\n\n## 0.5.45 — 2026-11-20\n\n- Old.\n",
+    dateIso: "2026-11-27",
+  });
+  assert.equal(summary.hasCandidates, true);
+  assert.match(summary.body, /0\.5\.47/);
+  assert.match(summary.body, /0\.5\.46/);
+  assert.match(summary.body, /work-os-companion-promote-stable\.yml/);
+  assert.doesNotMatch(summary.body, /Old\./);
+});
+
+test("Stable promotion workflow is manual-only and checks promotion gate before building", () => {
+  const yaml = createRequire(import.meta.url)("js-yaml");
+  const promote = yaml.load(readFileSync(new URL("../.github/workflows/work-os-companion-promote-stable.yml", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(promote.on), ["workflow_dispatch"]);
+  assert.equal(promote.concurrency.group, "work-os-companion-internal-release");
+  assert.equal(promote.jobs["promotion-gate"]["runs-on"], "ubuntu-24.04");
+  assert.ok(promote.jobs["build-missing-macos"].if.includes("needs.promotion-gate.outputs.needs_macos_build == 'true'"));
+  const finalizeJob = promote.jobs["finalize-stable-release"];
+  assert.match(finalizeJob.if, /!cancelled\(\)/);
+  assert.equal(evalJobIf(finalizeJob.if, {
+    github: { run_attempt: 1 },
+    needs: { "prepare-stable-draft": { result: "success" }, "build-missing-macos": { result: "skipped" } },
+  }), true);
+  assert.equal(evalJobIf(finalizeJob.if, {
+    github: { run_attempt: 1 },
+    needs: { "prepare-stable-draft": { result: "success" }, "build-missing-macos": { result: "failure" } },
+  }), false);
+  const finalize = finalizeJob.steps;
+  const verifyIndex = finalize.findIndex((step) => step.run?.includes("work-os-companion-release-gate.mjs verify-promote"));
+  const publishIndex = finalize.findIndex((step) => step.run?.includes("--draft=false"));
+  assert.ok(verifyIndex >= 0 && verifyIndex < publishIndex);
 });
 
 test("paid packaging depends on the Linux gate and publication rechecks eligibility", () => {

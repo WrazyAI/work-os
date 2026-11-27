@@ -20,13 +20,21 @@ export function isManagedUpdateChannel(apiBase: string): boolean {
   }
 }
 
+export type UpdateChannel = "stable" | "nightly";
+
+export function normalizeUpdateChannel(value: unknown): UpdateChannel {
+  return value === "nightly" ? "nightly" : "stable";
+}
+
 export function updateAuthHeaders(session: {
   token: string;
   organizationId: string;
+  updateChannel?: UpdateChannel;
 }): Record<string, string> {
   return {
     Authorization: `Bearer ${session.token}`,
     "X-Work-OS-Organization-Id": session.organizationId,
+    ...(session.updateChannel === "nightly" ? { "X-Work-OS-Update-Channel": "nightly" } : {}),
   };
 }
 
@@ -39,6 +47,7 @@ export async function queryAvailableUpdate(session: {
   apiBase: string;
   token: string;
   organizationId: string;
+  updateChannel?: UpdateChannel;
 }): Promise<UpdateQuery> {
   if (isManagedUpdateChannel(session.apiBase)) return { status: "managed" };
   const headers = updateAuthHeaders(session);

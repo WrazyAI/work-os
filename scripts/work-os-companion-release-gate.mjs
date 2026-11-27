@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-import { canonicalTagVersion, releaseDisplayVersion } from "../desktop/work-os-companion/scripts/macos-release.mjs";
+import {
+  NIGHTLY_TAG_PREFIX,
+  STABLE_TAG_PREFIX,
+  canonicalTagVersion,
+  macosAssets,
+  parseReleaseTag,
+  releaseDisplayVersion,
+  releaseTagName,
+} from "../desktop/work-os-companion/scripts/macos-release.mjs";
 import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -61,6 +69,9 @@ function validateQueue(queue) {
       || !["feature", "fix"].includes(entry.type) || !text(entry.summary, 200) || !text(entry.verification, MAX_VERIFICATION)) {
       throw new Error("Each update needs a stable ID, feature/fix type, outcome summary and verification");
     }
+    if (entry.macosSpecific !== undefined && typeof entry.macosSpecific !== "boolean") {
+      throw new Error("Each update macosSpecific flag must be a boolean when provided");
+    }
     const summary = entry.summary.trim().toLowerCase();
     if (ids.has(entry.id) || summaries.has(summary)) throw new Error("Duplicate update ID or outcome summary");
     ids.add(entry.id);
@@ -71,7 +82,9 @@ function validateQueue(queue) {
 }
 
 function identity(entry) {
-  return JSON.stringify([entry.id, entry.type, entry.summary, entry.verification]);
+  return entry.macosSpecific === true
+    ? JSON.stringify([entry.id, entry.type, entry.summary, entry.verification, true])
+    : JSON.stringify([entry.id, entry.type, entry.summary, entry.verification]);
 }
 
 export function evaluateRelease({ queue, publishedQueue, version, publishedVersion }) {
@@ -87,8 +100,13 @@ export function evaluateRelease({ queue, publishedQueue, version, publishedVersi
   }
   const consumed = new Set(publishedQueue.updates.map((entry) => entry.id));
   const pending = queue.updates.filter((entry) => !consumed.has(entry.id));
-  if (version === publishedVersion) return { eligible: false, pending, emergency: false };
-  if (version !== `${previous[0]}.${previous[1]}.${previous[2] + 1}`) throw new Error("Release version must be the next patch after the latest published release");
+  const includeMacos = pending.some((entry) => entry.macosSpecific === true);
+  if (version === publishedVersion) {
+    return { eligible: false, pending, emergency: false, operatorOverride: false, includeMacos };
+  }
+  if (version !== `${previous[0]}.${previous[1]}.${previous[2] + 1}`) {
+    throw new Error("Release version must be the next patch after the latest published release");
+  }
 
   let operatorOverride = false;
   const override = queue.operatorOverride;
@@ -108,26 +126,99 @@ export function evaluateRelease({ queue, publishedQueue, version, publishedVersi
     }
     emergency = true;
   }
-  return { eligible: pending.length >= THRESHOLD || emergency || operatorOverride, pending, emergency, operatorOverride };
+  return {
+    eligible: pending.length >= THRESHOLD || emergency || operatorOverride,
+    pending,
+    emergency,
+    operatorOverride,
+    includeMacos,
+  };
+}
+
+export function hasMacosReleaseAssets(release) {
+  const names = new Set((Array.isArray(release?.assets) ? release.assets : []).map((asset) => asset?.name));
+  return macosAssets.every((file) => names.has(file));
+}
+
+export function latestPublishedByChannel(pages) {
+  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) {
+    throw new Error("Invalid release catalog pages");
+  }
+  const stable = [];
+  const nightly = [];
+  for (const release of pages.flat()) {
+    if (!release || release.draft !== false || !release.published_at || typeof release.tag_name !== "string") continue;
+    if (!release.tag_name.startsWith(STABLE_TAG_PREFIX) && !release.tag_name.startsWith(NIGHTLY_TAG_PREFIX)) continue;
+    let parsed;
+    try {
+      parsed = parseReleaseTag(release.tag_name);
+      parts(parsed.version);
+    } catch { continue; }
+    const item = { ...release, channel: parsed.channel, version: parsed.version };
+    if (parsed.channel === "stable") stable.push(item);
+    else nightly.push(item);
+  }
+  const sortDesc = (list) => {
+    list.sort((a, b) => compare(b.version, a.version));
+    for (let i = 1; i < list.length; i += 1) {
+      if (list[i].version === list[i - 1].version) throw new Error("Ambiguous published release version");
+    }
+    return list;
+  };
+  sortDesc(stable);
+  sortDesc(nightly);
+  const latestStable = stable[0] ?? null;
+  const latestNightly = nightly[0] ?? null;
+  let latest = null;
+  if (latestStable && latestNightly) {
+    latest = compare(latestNightly.version, latestStable.version) > 0 ? latestNightly : latestStable;
+  } else {
+    latest = latestStable ?? latestNightly;
+  }
+  if (!latest) throw new Error("No published internal companion release found");
+
+  const unpromotedNightlies = nightly
+    .filter((item) => !latestStable || compare(item.version, latestStable.version) > 0)
+    .map((item) => ({
+      version: item.version,
+      displayVersion: releaseDisplayVersion(item.version),
+      tag: item.tag_name,
+      publishedAt: item.published_at,
+      hasMacos: hasMacosReleaseAssets(item),
+    }));
+
+  return { latest, latestStable, latestNightly, stable, nightly, unpromotedNightlies };
 }
 
 export function latestPublishedRelease(pages) {
-  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) throw new Error("Invalid release catalog pages");
-  const releases = [];
-  for (const release of pages.flat()) {
-    if (!release || release.draft !== false || !release.published_at || !release.tag_name?.startsWith("work-os-companion-internal-v")) continue;
-    // Historical pre-release SemVers are not the stable companion release line.
-    let version;
-    try {
-      version = canonicalTagVersion(release.tag_name);
-      parts(version);
-    } catch { continue; }
-    releases.push({ ...release, version });
+  return latestPublishedByChannel(pages).latest;
+}
+
+export function evaluatePromotion({ pages, version }) {
+  parts(version);
+  const catalog = latestPublishedByChannel(pages);
+  const nightly = catalog.nightly.find((item) => item.version === version);
+  if (!nightly) {
+    throw new Error(`No published Nightly release found for version ${version}`);
   }
-  releases.sort((a, b) => compare(b.version, a.version));
-  if (!releases.length) throw new Error("No published internal companion release found");
-  if (releases[1]?.version === releases[0].version) throw new Error("Ambiguous published release version");
-  return releases[0];
+  if (catalog.stable.some((item) => item.version === version)) {
+    throw new Error(`Version ${version} is already published on the Stable channel`);
+  }
+  if (catalog.latestStable && compare(version, catalog.latestStable.version) <= 0) {
+    throw new Error(`Promotion target ${version} must be newer than current Stable ${catalog.latestStable.version}`);
+  }
+  const hasMacos = hasMacosReleaseAssets(nightly);
+  return {
+    eligible: true,
+    version,
+    displayVersion: releaseDisplayVersion(version),
+    nightlyTag: nightly.tag_name,
+    stableTag: releaseTagName(version, "stable"),
+    previousStableVersion: catalog.latestStable?.version ?? null,
+    targetCommitish: nightly.target_commitish ?? null,
+    hasMacos,
+    needsMacosBuild: !hasMacos,
+  };
 }
 
 function command(binary, args) {
@@ -215,7 +306,7 @@ function checkSource(version) {
       throw new Error("Manual releases must use main and the committed version");
     }
   } else if (event === "push") {
-    if (ref?.startsWith("refs/tags/work-os-companion-internal-v")) {
+    if (ref?.startsWith(`refs/tags/${STABLE_TAG_PREFIX}`) || ref?.startsWith(`refs/tags/${NIGHTLY_TAG_PREFIX}`)) {
       if (canonicalTagVersion(ref.slice("refs/tags/".length)) !== version) throw new Error("Release tag version disagrees with metadata");
     } else if (ref !== "refs/heads/main") {
       throw new Error("Release push must originate from main or its internal release tag");
@@ -233,12 +324,26 @@ function checkSource(version) {
 }
 
 function checkCandidateTag(version) {
-  const tag = `refs/tags/work-os-companion-internal-v${releaseDisplayVersion(version)}`;
+  const head = command("git", ["rev-parse", "HEAD"]);
+  const display = releaseDisplayVersion(version);
+  for (const prefix of [NIGHTLY_TAG_PREFIX, STABLE_TAG_PREFIX]) {
+    const tag = `refs/tags/${prefix}${display}`;
+    const refs = command("git", ["ls-remote", "--tags", "origin", tag, `${tag}^{}`])
+      .split("\n").filter(Boolean).map((line) => line.split(/\s+/));
+    const target = refs.find(([, ref]) => ref === `${tag}^{}`) ?? refs.find(([, ref]) => ref === tag);
+    if (target && target[0] !== head) {
+      throw new Error("Existing candidate release tag points to a different commit; reconcile it before packaging or publication");
+    }
+  }
+}
+
+function checkPromotionTag(stableTag, expectedCommit) {
+  const tag = `refs/tags/${stableTag}`;
   const refs = command("git", ["ls-remote", "--tags", "origin", tag, `${tag}^{}`])
     .split("\n").filter(Boolean).map((line) => line.split(/\s+/));
   const target = refs.find(([, ref]) => ref === `${tag}^{}`) ?? refs.find(([, ref]) => ref === tag);
-  if (target && target[0] !== command("git", ["rev-parse", "HEAD"])) {
-    throw new Error("Existing candidate release tag points to a different commit; reconcile it before packaging or publication");
+  if (target && target[0] !== expectedCommit) {
+    throw new Error("Existing Stable release tag points to a different commit than the Nightly release; reconcile it before promotion");
   }
 }
 
@@ -264,30 +369,102 @@ function publishedSnapshot(repository, release) {
   return validateQueue(JSON.parse(Buffer.from(response.content, "base64").toString("utf8")));
 }
 
+function runPromotionGate(mode, repository) {
+  if (process.env.GITHUB_RUN_ATTEMPT && process.env.GITHUB_RUN_ATTEMPT !== "1") {
+    throw new Error("Promotion retries require a fresh workflow dispatch, not re-run jobs with cached eligibility");
+  }
+  if (process.env.GITHUB_EVENT_NAME !== "workflow_dispatch" || process.env.GITHUB_REF !== "refs/heads/main") {
+    throw new Error("Stable promotion must run via manual workflow_dispatch on main");
+  }
+  const promoteVersion = process.env.PROMOTE_VERSION?.trim() ?? "";
+  parts(promoteVersion);
+  const pages = JSON.parse(command("gh", ["api", `repos/${repository}/releases?per_page=100`, "--paginate", "--slurp"]));
+  const promotion = evaluatePromotion({ pages, version: promoteVersion });
+  const tagCommit = JSON.parse(command("gh", ["api", `repos/${repository}/commits/${encodeURIComponent(promotion.nightlyTag)}`]));
+  const sourceCommit = tagCommit?.sha;
+  if (!sourceCommit || !/^[a-f0-9]{40}$/.test(sourceCommit)) {
+    throw new Error(`Could not resolve source commit for Nightly tag ${promotion.nightlyTag}`);
+  }
+  checkPromotionTag(promotion.stableTag, sourceCommit);
+  const output = { ...promotion, sourceCommit };
+  if (mode === "check-promote" && process.env.GITHUB_OUTPUT) {
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      [
+        `eligible=${output.eligible}`,
+        `version=${output.version}`,
+        `display_version=${output.displayVersion}`,
+        `nightly_tag=${output.nightlyTag}`,
+        `stable_tag=${output.stableTag}`,
+        `previous_stable_version=${output.previousStableVersion ?? ""}`,
+        `source_commit=${output.sourceCommit}`,
+        `needs_macos_build=${output.needsMacosBuild}`,
+      ].join("\n") + "\n",
+    );
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `## Stable promotion gate\n\nPromoting Nightly **${output.displayVersion}** (\`${output.nightlyTag}\`) to Stable (\`${output.stableTag}\`) from commit \`${output.sourceCommit.slice(0, 8)}\`. Previous Stable: **${output.previousStableVersion ?? "none"}**. Needs macOS build: **${output.needsMacosBuild}**.\n`,
+    );
+  }
+  console.log(JSON.stringify(output, null, 2));
+}
+
 function main() {
   const mode = process.argv[2];
-  if (!["status", "check", "verify"].includes(mode) || process.argv.length !== 3) throw new Error("Usage: node scripts/work-os-companion-release-gate.mjs status|check|verify");
+  if (!["status", "check", "verify", "check-promote", "verify-promote"].includes(mode) || process.argv.length !== 3) {
+    throw new Error("Usage: node scripts/work-os-companion-release-gate.mjs status|check|verify|check-promote|verify-promote");
+  }
   const repository = process.env.GITHUB_REPOSITORY || command("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]);
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error("Invalid GitHub repository");
+  if (mode === "check-promote" || mode === "verify-promote") {
+    runPromotionGate(mode, repository);
+    return;
+  }
   const version = metadataVersion();
   if (mode !== "status") checkSource(version);
   const pages = JSON.parse(command("gh", ["api", `repos/${repository}/releases?per_page=100`, "--paginate", "--slurp"]));
-  const published = latestPublishedRelease(pages);
+  const catalog = latestPublishedByChannel(pages);
+  const published = catalog.latest;
   const queue = readJson(QUEUE_PATH);
   checkHistory(queue);
   const result = evaluateRelease({ queue, publishedQueue: publishedSnapshot(repository, published), version, publishedVersion: published.version });
+  const forcedMacos = process.env.DISPATCH_INCLUDE_MACOS?.trim().toLowerCase() === "true";
+  const includeMacos = result.includeMacos || forcedMacos;
   if (mode !== "status" && version !== published.version) {
     checkChangelog(version);
     checkCandidateTag(version);
   }
-  if (mode === "verify" && !result.eligible) throw new Error("Release is no longer eligible: already published or fewer than five pending updates without an emergency fix");
-  const output = { version, publishedVersion: published.version, pendingCount: result.pending.length, requiredUpdates: THRESHOLD,
-    eligible: result.eligible, emergency: result.emergency, operatorOverride: result.operatorOverride, pending: result.pending };
+  if (mode === "verify" && !result.eligible) {
+    throw new Error("Release is no longer eligible: already published or fewer than five pending updates without an emergency fix or operator override");
+  }
+  const output = {
+    version,
+    publishedVersion: published.version,
+    publishedChannel: published.channel,
+    latestStableVersion: catalog.latestStable?.version ?? null,
+    latestNightlyVersion: catalog.latestNightly?.version ?? null,
+    pendingCount: result.pending.length,
+    requiredUpdates: THRESHOLD,
+    eligible: result.eligible,
+    includeMacos,
+    emergency: result.emergency,
+    operatorOverride: result.operatorOverride,
+    pending: result.pending,
+    unpromotedNightlies: catalog.unpromotedNightlies,
+  };
   if (mode === "check" && process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `eligible=${result.eligible}\nversion=${version}\n`);
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `eligible=${result.eligible}\nversion=${version}\ninclude_macos=${includeMacos}\ntag=${releaseTagName(version, "nightly")}\n`,
+    );
   }
   if (mode !== "status" && process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Companion release gate\n\nPending updates: **${result.pending.length}/${THRESHOLD}**. Eligible: **${result.eligible}**. Emergency: **${result.emergency}**. Operator override: **${result.operatorOverride}**.\n`);
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `## Companion Nightly release gate\n\nPending updates: **${result.pending.length}/${THRESHOLD}**. Eligible: **${result.eligible}**. Include macOS: **${includeMacos}**. Emergency: **${result.emergency}**. Operator override: **${result.operatorOverride}**.\n`,
+    );
   }
   console.log(JSON.stringify(output, null, 2));
 }

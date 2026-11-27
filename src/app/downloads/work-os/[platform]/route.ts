@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { publicInstallerPlatform } from "@/lib/work-os-installers";
 import { downloadPublicInstaller, installerError } from "@/lib/work-os-installer-downloads";
+import { normalizeReleaseChannel } from "@/lib/work-os-release-download";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ platform: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ platform: string }> }) {
   const { platform: raw } = await params;
   const platform = publicInstallerPlatform(raw);
   if (!platform) {
@@ -14,8 +15,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pla
       { status: 404, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const channel = normalizeReleaseChannel(new URL(request.url).searchParams.get("channel"));
   try {
-    return await downloadPublicInstaller(platform);
+    return await downloadPublicInstaller(platform, channel);
   } catch (error) {
     return installerError(error);
   }

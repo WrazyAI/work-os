@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import DownloadChooser from "@/modules/work-os/marketing/DownloadChooser";
+import DownloadLink from "@/modules/work-os/marketing/DownloadLink";
 import WarningMark from "@/modules/work-os/marketing/WarningMark";
 import { SiteFooter, SiteHeader } from "@/modules/work-os/marketing/SiteChrome";
 import styles from "@/modules/work-os/marketing/downloads.module.css";
@@ -33,7 +34,7 @@ export default function DownloadsPage() {
       <main id="main" className={styles.main}>
         <header className={styles.intro}>
           <h1>Get your <span className={styles.productName}>Work OS</span> companion.</h1>
-          <p>Your workday, right on your desktop.</p>
+          <p>Your workday, right on your desktop. Weekly Stable releases for Windows and macOS.</p>
         </header>
         <DownloadChooser />
         <aside className={styles.notice} aria-label="Installation warning">
@@ -41,6 +42,29 @@ export default function DownloadsPage() {
           <p><strong>Expect a security warning.</strong> This internal build is unsigned. Antivirus may pause or block installation. We’ll show the steps after you download.</p>
         </aside>
         <p className={styles.tutorial}>First time here? <Link href="/work-os/tutorials/getting-set-up">Watch the setup guide</Link></p>
+
+        <section className={styles.developer} aria-labelledby="developer-builds-title">
+          <div className={styles.developerCard}>
+            <div className={styles.developerHead}>
+              <h2 id="developer-builds-title">Developer builds (Nightly)</h2>
+              <span className={styles.channelTag}>Testing channel</span>
+            </div>
+            <p className={styles.developerBody}>
+              Preview upcoming features before weekly Friday promotion to Stable. Nightly builds ship Windows-first; macOS packages are included when a batch carries macOS-specific changes.
+            </p>
+            <div className={styles.developerActions}>
+              <DownloadLink className={styles.devPrimary} platform="windows" channel="nightly">
+                Download Nightly for Windows
+              </DownloadLink>
+              <DownloadLink className={styles.devSecondary} platform="macos" channel="nightly">
+                Download Nightly for macOS
+              </DownloadLink>
+            </div>
+            <p className={styles.developerNote}>
+              To receive automatic Nightly updates after installing, open <strong>Settings → General → Release channel</strong> and switch to <strong>Nightly</strong>.
+            </p>
+          </div>
+        </section>
       </main>
       <SiteFooter />
     </>

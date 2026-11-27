@@ -6,12 +6,14 @@ import { SettingsContent } from "./SettingsContent";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { useSettingsNavigation } from "./settingsNavigation";
 import { applyAppearance, type ThemePreference } from "./appearance";
+import type { UpdateChannel } from "./updater";
 
 /** DEV-only review surface for the Settings sidebar takeover. The Work OS
  * sidebar is replaced by the Settings rail; the selected page renders in the
  * stage. Nothing here is shipped. */
 export default function SettingsWorkspacePreview() {
   const [theme, setTheme] = useState<ThemePreference>("dark");
+  const [updateChannel, setUpdateChannel] = useState<UpdateChannel>("stable");
   const [busy, setBusy] = useState(false);
   const nav = useSettingsNavigation(true);
   const profileData = useMemo(() => profilePreviewData(), []);
@@ -65,6 +67,8 @@ export default function SettingsWorkspacePreview() {
           onRecapVoice={() => undefined}
           autoCheckUpdates
           onAutoCheckUpdates={() => undefined}
+          updateChannel={updateChannel}
+          onUpdateChannel={setUpdateChannel}
           updateDetail="Installed version 0.5.34 · up to date"
           updateStatus="idle"
           installedVersion="0.5.34"

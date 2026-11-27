@@ -1,0 +1,259 @@
+name: Work OS Companion Promote Nightly to Stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact published Nightly SemVer to promote to Stable (for example 0.5.53)"
+        required: true
+        type: string
+      unsigned_acknowledgement:
+        description: "Enter exactly: UNSIGNED INTERNAL"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize with Nightly mutations against the same release catalog.
+  group: work-os-companion-internal-release
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  promotion-gate:
+    name: Validate Nightly version for Stable promotion
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      eligible: ${{ steps.gate.outputs.eligible }}
+      version: ${{ steps.gate.outputs.version }}
+      display_version: ${{ steps.gate.outputs.display_version }}
+      nightly_tag: ${{ steps.gate.outputs.nightly_tag }}
+      stable_tag: ${{ steps.gate.outputs.stable_tag }}
+      previous_stable_version: ${{ steps.gate.outputs.previous_stable_version }}
+      source_commit: ${{ steps.gate.outputs.source_commit }}
+      needs_macos_build: ${{ steps.gate.outputs.needs_macos_build }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Require explicit unsigned acknowledgement
+        env:
+          ACKNOWLEDGEMENT: ${{ inputs.unsigned_acknowledgement }}
+        run: |
+          if [ "$ACKNOWLEDGEMENT" != "UNSIGNED INTERNAL" ]; then
+            echo "Stable promotion requires the exact acknowledgement: UNSIGNED INTERNAL" >&2
+            exit 1
+          fi
+      - name: Validate Nightly release and promotion target
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTE_VERSION: ${{ inputs.version }}
+        run: node scripts/work-os-companion-release-gate.mjs check-promote
+
+  prepare-stable-draft:
+    name: Reuse verified Nightly Windows assets in Stable draft
+    needs: promotion-gate
+    if: github.run_attempt == 1 && needs.promotion-gate.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+      RELEASE_VERSION: ${{ needs.promotion-gate.outputs.version }}
+      RELEASE_DISPLAY: ${{ needs.promotion-gate.outputs.display_version }}
+      NIGHTLY_TAG: ${{ needs.promotion-gate.outputs.nightly_tag }}
+      STABLE_TAG: ${{ needs.promotion-gate.outputs.stable_tag }}
+      PREVIOUS_STABLE: ${{ needs.promotion-gate.outputs.previous_stable_version }}
+      SOURCE_COMMIT: ${{ needs.promotion-gate.outputs.source_commit }}
+    steps:
+      - name: Check out exact Nightly source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.promotion-gate.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Download verified Nightly assets and create Stable draft
+        run: |
+          set -euo pipefail
+          nightly_dir="$RUNNER_TEMP/nightly-assets"
+          stage="$RUNNER_TEMP/stable-stage"
+          gh release download "$NIGHTLY_TAG" --repo "$RELEASE_REPOSITORY" --dir "$nightly_dir"
+          node desktop/work-os-companion/scripts/macos-release.mjs prepare-promotion \
+            "$nightly_dir" "$stage" "$RELEASE_VERSION" "$STABLE_TAG" "$RELEASE_REPOSITORY"
+
+          notes_path="$RUNNER_TEMP/stable-release-notes.md"
+          cat > "$notes_path" <<EOF
+          ## Unsigned internal Stable release
+
+          Promoted verbatim from Nightly \`$NIGHTLY_TAG\` (exact version parity: **$RELEASE_DISPLAY**).
+
+          This free-distribution build is **not Authenticode-signed**. Windows SmartScreen may warn during installation. The macOS package supports Intel and Apple Silicon on macOS 12 or newer; it is ad-hoc signed and not notarized.
+
+          The attached Tauri updater artifacts are cryptographically signed. Verify browser downloads against \`SHA256SUMS.txt\` before running them.
+          EOF
+
+          cumulative=$(node desktop/work-os-companion/scripts/macos-release.mjs cumulative-notes \
+            desktop/work-os-companion/CHANGELOG.md "$PREVIOUS_STABLE" "$RELEASE_VERSION")
+          if [ -n "$cumulative" ]; then
+            printf "\n## What's new in %s\n\n%s\n" "$RELEASE_DISPLAY" "$cumulative" >> "$notes_path"
+          fi
+
+          catalog_path="$RUNNER_TEMP/release-catalog.json"
+          gh api "repos/$RELEASE_REPOSITORY/releases?per_page=100" --paginate --slurp > "$catalog_path"
+          existing=$(node desktop/work-os-companion/scripts/macos-release.mjs select-draft "$catalog_path" "$STABLE_TAG")
+          title="UNSIGNED INTERNAL - Work OS Companion $RELEASE_DISPLAY"
+          if [ "$existing" = "null" ]; then
+            gh release create "$STABLE_TAG" --repo "$RELEASE_REPOSITORY" --target "$SOURCE_COMMIT" --draft --prerelease --title "$title" --notes-file "$notes_path"
+          else
+            existing_target=$(node -e 'console.log(JSON.parse(process.argv[1]).target_commitish || "")' "$existing")
+            if [ "$existing_target" != "$SOURCE_COMMIT" ]; then
+              echo "Existing Stable draft targets a different commit ($existing_target vs $SOURCE_COMMIT)" >&2
+              exit 1
+            fi
+            gh release edit "$STABLE_TAG" --repo "$RELEASE_REPOSITORY" --title "$title" --notes-file "$notes_path" --prerelease
+          fi
+          gh release upload "$STABLE_TAG" "$stage"/* --repo "$RELEASE_REPOSITORY" --clobber
+
+  build-missing-macos:
+    name: Build universal macOS package from promoted Nightly commit
+    needs: [promotion-gate, prepare-stable-draft]
+    if: github.run_attempt == 1 && needs.promotion-gate.outputs.needs_macos_build == 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    environment: windows-production-release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop/work-os-companion
+    env:
+      VITE_WORK_OS_API_URL: https://app.wrazyos.com
+      VITE_WORK_OS_UPDATE_ORIGIN: https://app.wrazyos.com
+    steps:
+      - name: Check out exact Nightly source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.promotion-gate.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/work-os-companion/package-lock.json
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # pinned
+        with:
+          toolchain: 1.99.1
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: desktop/work-os-companion/src-tauri -> target
+          shared-key: work-os-companion-macos-universal-release
+      - name: Require updater signing credentials
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          for (const key of ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD', 'TAURI_UPDATER_PUBLIC_KEY']) {
+            if (!process.env[key]?.trim()) throw new Error(`Missing GitHub environment secrets: ${key}`);
+          }
+          const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          if (config.plugins.updater.pubkey.trim() !== process.env.TAURI_UPDATER_PUBLIC_KEY.trim()) throw new Error('Updater public key mismatch');
+          NODE
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test packaged frontend
+        run: npm test
+      - name: Clear cached installer outputs
+        run: rm -rf src-tauri/target/universal-apple-darwin/release/bundle
+      - name: Build universal app, DMG, and signed updater archive
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri:build:macos
+      - name: Verify universal binary and Mac bundle
+        run: |
+          set -euo pipefail
+          app="src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app"
+          lipo "$app/Contents/MacOS/work-os-companion" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict "$app"
+          codesign -dv "$app" 2>&1 | grep -q 'Signature=adhoc'
+          /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$app/Contents/Info.plist"
+          tar -tzf "${app}.tar.gz" | grep 'Contents/MacOS/work-os-companion' > /dev/null
+      - name: Check packaged Mac app starts
+        run: bash scripts/check-macos-startup.sh
+      - name: Upload Mac startup diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-promote-startup-${{ github.run_id }}
+          path: ${{ runner.temp }}/companion-startup.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stage and upload Mac assets to the Stable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.promotion-gate.outputs.stable_tag }}
+          RELEASE_VERSION: ${{ needs.promotion-gate.outputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/work-os-macos-release"
+          node scripts/macos-release.mjs stage src-tauri/target/universal-apple-darwin/release/bundle "$stage" "$RELEASE_VERSION" "$RELEASE_TAG" "$RELEASE_REPOSITORY"
+          test "$(gh release view "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --json isDraft --jq '.isDraft')" = true
+          gh release upload "$RELEASE_TAG" "$stage"/* --repo "$RELEASE_REPOSITORY" --clobber
+
+  finalize-stable-release:
+    name: Verify combined Windows + macOS assets and publish Stable release
+    needs: [promotion-gate, prepare-stable-draft, build-missing-macos]
+    if: ${{ !cancelled() && github.run_attempt == 1 && needs.prepare-stable-draft.result == 'success' && (needs.build-missing-macos.result == 'success' || needs.build-missing-macos.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.promotion-gate.outputs.stable_tag }}
+      RELEASE_VERSION: ${{ needs.promotion-gate.outputs.version }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+      PROMOTE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Verify combined Windows + macOS assets and updater manifest
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --json isDraft --jq '.isDraft')" = true
+          stage="$RUNNER_TEMP/work-os-stable-combined"
+          gh release download "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --dir "$stage"
+          node desktop/work-os-companion/scripts/macos-release.mjs combine "$stage" "$RELEASE_VERSION" "$RELEASE_TAG" "$RELEASE_REPOSITORY"
+          gh release upload "$RELEASE_TAG" "$stage/latest-internal.json" "$stage/SHA256SUMS.txt" --repo "$RELEASE_REPOSITORY" --clobber
+          verify="$RUNNER_TEMP/work-os-stable-readback"
+          gh release download "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --dir "$verify"
+          cd "$verify"
+          sha256sum --check SHA256SUMS.txt
+      - name: Recheck promotion eligibility immediately before publication
+        run: node scripts/work-os-companion-release-gate.mjs verify-promote
+      - name: Publish Stable internal release
+        run: gh release edit "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --draft=false --prerelease

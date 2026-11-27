@@ -486,7 +486,7 @@ assert.match(app, /requestTaskRemoval/);
 assert.match(taskSurfaces, /Move to/);
 assert.match(app, /method: "PATCH"/);
 assert.match(app, /MoreHorizontal/);
-assert.match(app, /queryAvailableUpdate\(saved\)/);
+assert.match(app, /queryAvailableUpdate\(\{ \.\.\.saved, updateChannel: activeChannel \}\)/);
 assert.match(app, /result\.headers/);
 assert.match(app, /failures\?: Array<\{ client_operation_index: number; error: string \}>/);
 assert.match(app, /partialFilingMessage/);

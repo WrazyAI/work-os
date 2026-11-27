@@ -6,6 +6,7 @@ import {
   getWorkOsPublicRequestOrigin,
   isNewerInternalReleaseVersion,
   internalReleasePlatform,
+  normalizeReleaseChannel,
   ReleaseDownloadError,
 } from "@/lib/work-os-release-download";
 
@@ -35,21 +36,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ target: 
     const values = await params;
     const platform = internalReleasePlatform(values.target, values.arch);
     if (!platform) return noUpdate();
-    const update = await getLatestInternalReleaseUpdate(undefined, undefined, platform);
+    const channel = normalizeReleaseChannel(req.headers.get("x-work-os-update-channel"));
+    const update = await getLatestInternalReleaseUpdate(undefined, undefined, platform, channel);
     if (!isNewerInternalReleaseVersion(update.version, values.version)) return noUpdate();
     const downloadUrl = new URL(
       `/api/work-os/desktop/updates/${encodeURIComponent(update.version)}/download`,
       getWorkOsPublicRequestOrigin(req.url, req.headers),
     );
     downloadUrl.searchParams.set("platform", platform);
-    downloadUrl.searchParams.set("grant", createInternalReleaseDownloadGrant(update.version, undefined, undefined, platform));
+    if (channel === "nightly") downloadUrl.searchParams.set("channel", "nightly");
+    downloadUrl.searchParams.set("grant", createInternalReleaseDownloadGrant(update.version, undefined, undefined, platform, channel));
     return NextResponse.json({
       version: update.version,
       notes: update.notes,
       pub_date: update.publishedAt,
       url: downloadUrl.toString(),
       signature: update.signature,
-    }, { headers: { "Cache-Control": "no-store" } });
+    }, { headers: { "Cache-Control": "no-store", "X-Work-OS-Channel": channel } });
   } catch (error) {
     if (error instanceof ReleaseDownloadError) {
       // Tauri treats an error JSON body as a malformed update manifest. Until an

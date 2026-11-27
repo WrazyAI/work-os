@@ -5,19 +5,21 @@ import { useRouter } from "next/navigation";
 import {
   downloadGuidePath,
   downloadHref,
+  type DownloadChannel,
   type DownloadGuidePlatform,
 } from "./download-guides";
 
 type Props = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "download"> & {
   ref?: Ref<HTMLAnchorElement>;
   platform: DownloadGuidePlatform;
+  channel?: DownloadChannel;
   children: ReactNode;
 };
 
 /** Starts the real installer download, then immediately opens its install
  * guide. A modified click keeps the browser's own behaviour so a visitor can
  * still open the file in a new tab. */
-export default function DownloadLink({ platform, children, onClick, ...rest }: Props) {
+export default function DownloadLink({ platform, channel = "stable", children, onClick, ...rest }: Props) {
   const router = useRouter();
 
   function startGuidedDownload(event: MouseEvent<HTMLAnchorElement>) {
@@ -35,19 +37,19 @@ export default function DownloadLink({ platform, children, onClick, ...rest }: P
     // Keep the download independent of the route change: the temporary anchor
     // is a real user-gesture download, and removing it does not cancel it.
     const link = document.createElement("a");
-    link.href = downloadHref(platform);
+    link.href = downloadHref(platform, channel);
     link.download = "";
     link.style.display = "none";
     document.body.append(link);
     link.click();
     link.remove();
-    router.push(downloadGuidePath(platform));
+    router.push(downloadGuidePath(platform, channel));
   }
 
   return (
     <a
       {...rest}
-      href={downloadHref(platform)}
+      href={downloadHref(platform, channel)}
       download
       onClick={startGuidedDownload}
     >

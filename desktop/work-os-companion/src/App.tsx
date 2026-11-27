@@ -451,6 +451,9 @@ export default function App() {
     updateRowSummary,
     autoCheckUpdates,
     setAutoCheckUpdates,
+    updateChannel,
+    setUpdateChannel,
+    chooseUpdateChannel,
     installedVersion,
     installedVersionRaw,
     whatsNew,
@@ -2584,7 +2587,7 @@ export default function App() {
       diagnostics.warn("auth.session.dropped", "This device's stored session is no longer usable", { reason: stored.reason });
       await secureState.clearSession().catch(() => undefined);
     }
-    setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
+    setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setUpdateChannel(settings.updateChannel); setVoiceHotkeyEnabled(settings.voiceHotkey);
     if (!authResolutionHandledRef.current) setAwaitingApproval(Boolean(pendingAuth));
     void applyVoiceHotkey(settings.voiceHotkey);
     const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); setTheme(appearance.theme); setThemePreview(appearance.theme); setThemePromptSeen(settings.themePromptSeen === true); setThemeSettingsLoaded(true); confirmedThemeRef.current = appearance.theme; rememberTheme(appearance.theme); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
@@ -2598,7 +2601,7 @@ export default function App() {
     if (current) void refresh({ refreshAttendance: true, source: "vault" }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     if (!launchUpdateCheckRef.current && shouldAutoCheckUpdate({ supported: isTauri(), debugEnabled: debugRef.current.enabled, hasSession: !!current, autoCheckUpdates: settings.autoCheckUpdates })) {
       launchUpdateCheckRef.current = true;
-      void checkForUpdates({ silent: true });
+      void checkForUpdates({ silent: true, channel: settings.updateChannel });
     }
   }, [queryClient, refresh, showError]);
 
@@ -5392,6 +5395,8 @@ export default function App() {
       onRecapVoice: (next: string) => void chooseRecapVoice(next),
       autoCheckUpdates,
       onAutoCheckUpdates: (value: boolean) => void toggleAutoCheckUpdates(value),
+      updateChannel,
+      onUpdateChannel: (value: typeof updateChannel) => void chooseUpdateChannel(value),
       updateDetail: updateRowCopy(updateRowSummary, installedVersion),
       updateStatus: updateFlow.status,
       installedVersion: installedVersionRaw,
