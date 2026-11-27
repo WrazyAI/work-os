@@ -25,8 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.47 — 2026-11-27
+
 - Windows and Mac installers now carry Work OS branding, and Nightly downloads are labeled Nightly so they stand out from Stable.
 - When you switch to Nightly updates, the app icon gets a violet NIGHTLY tag and the menu bar shows a purple moon.
+
 ## 0.5.46 — 2026-11-27
 
 - Choose between Stable (weekly) and Nightly (developer testing) desktop updates from Settings → General.
