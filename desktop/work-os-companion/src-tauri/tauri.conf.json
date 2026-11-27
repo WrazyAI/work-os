@@ -67,7 +67,16 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
       "nsis": {
-        "installerHooks": "installer-hooks.nsh"
+        "installerHooks": "installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer-art/nsis-header.bmp",
+        "uninstallerHeaderImage": "installer-art/nsis-header.bmp",
+        "sidebarImage": "installer-art/nsis-sidebar.bmp"
+      },
+      "wix": {
+        "bannerPath": "installer-art/wix-banner.bmp",
+        "dialogImagePath": "installer-art/wix-dialog.bmp"
       }
     }
   },

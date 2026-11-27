@@ -41,7 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ target: 
       });
     }
     return releaseDownloadResponse(
-      await downloadInternalReleaseAsset(version, internalReleaseUpdaterAsset(platform), undefined, undefined, channel),
+      await downloadInternalReleaseAsset(version, internalReleaseUpdaterAsset(platform, channel), undefined, undefined, channel),
     );
   } catch (error) {
     const status = error instanceof ReleaseDownloadError ? error.status : 502;

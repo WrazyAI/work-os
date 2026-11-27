@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"
+     role="img" aria-labelledby="title description">
+  <title id="title">Work OS Companion Nightly — wordmark tag</title>
+  <desc id="description">The cream Work OS W and lime dot on a dark tile, with a violet Nightly label below.</desc>
+  <defs>
+    <radialGradient id="pill-halo">
+      <stop stop-color="#7C3AED" stop-opacity=".36"/>
+      <stop offset=".58" stop-color="#7C3AED" stop-opacity=".17"/>
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="pill-face" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#7043CA"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Original app mark, redrawn from icon.png. -->
+  <rect x="24" y="24" width="464" height="464" rx="136" fill="#151713"/>
+  <path fill="#F2F0E8" d="M136 168h51l32 108 36-108h44l37 108 30-108h58l-57 176h-52l-32.5-93-33 93h-51z"/>
+  <circle cx="388" cy="132" r="44" fill="#B8FF5A"/>
+
+  <ellipse cx="256" cy="400" rx="165" ry="56" fill="url(#pill-halo)"/>
+  <rect x="146" y="370" width="220" height="60" rx="30" fill="url(#pill-face)"
+        stroke="#C4B5FD" stroke-opacity=".62" stroke-width="4"/>
+
+  <!-- NIGHTLY outlined from the product's Inter Variable, weight 780. -->
+  <g fill="#F3ECFF">
+    <path d="M160.63 413.78V386.22H167.64L175.52 398.97Q176.26 400.17 176.97 401.49Q177.68 402.8 178.38 404.39Q179.09 405.99 179.8 408.04H179.2Q179.08 406.52 178.96 404.69Q178.84 402.87 178.76 401.15Q178.67 399.43 178.67 398.25V386.22H185.18V413.78H178.17L170.94 402.12Q170.01 400.58 169.25 399.18Q168.49 397.79 167.71 396.15Q166.94 394.51 165.89 392.28H166.63Q166.76 394.26 166.88 396.13Q167 398 167.07 399.55Q167.15 401.09 167.15 402.11V413.78Z"/>
+    <path d="M199.62 386.22V413.78H193.27V386.22Z"/>
+    <path d="M220.23 414.15Q216.31 414.15 213.34 412.44Q210.37 410.72 208.71 407.56Q207.05 404.39 207.05 400.04Q207.05 395.54 208.8 392.37Q210.54 389.2 213.51 387.52Q216.47 385.85 220.14 385.85Q222.5 385.85 224.55 386.53Q226.59 387.21 228.18 388.46Q229.77 389.72 230.76 391.43Q231.75 393.14 232.01 395.19H225.58Q225.34 394.31 224.87 393.61Q224.4 392.91 223.72 392.43Q223.04 391.94 222.17 391.69Q221.3 391.43 220.25 391.43Q218.22 391.43 216.7 392.43Q215.19 393.43 214.36 395.34Q213.53 397.25 213.53 399.97Q213.53 402.7 214.34 404.62Q215.15 406.54 216.66 407.55Q218.17 408.57 220.28 408.57Q222.16 408.57 223.48 407.93Q224.8 407.29 225.48 406.11Q226.17 404.94 226.17 403.35L227.39 403.51H220.56V398.83H232.31V402.41Q232.31 406.09 230.76 408.71Q229.2 411.34 226.47 412.75Q223.74 414.15 220.23 414.15Z"/>
+    <path d="M239.84 413.78V386.22H246.19V397.1H257.4V386.22H263.75V413.78H257.4V402.3H246.19V413.78Z"/>
+    <path d="M270.88 391.42V386.22H293.93V391.42H285.58V413.78H279.23V391.42Z"/>
+    <path d="M301.06 413.78V386.22H307.41V408.58H319V413.78Z"/>
+    <path d="M335.02 413.78V403.72L324.79 386.22H332.24L336.64 394.71Q337.29 395.94 337.79 397.18Q338.3 398.42 338.83 400.09H337.65Q338.16 398.41 338.64 397.16Q339.13 395.92 339.74 394.71L343.95 386.22H351.37L341.35 403.72V413.78Z"/>
+  </g>
+</svg>

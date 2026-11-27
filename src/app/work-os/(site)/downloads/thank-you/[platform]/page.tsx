@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DOWNLOAD_GUIDES, downloadGuide, downloadHref } from "@/modules/work-os/marketing/download-guides";
-import NightlyGuideNotice, { ChannelChecksumsLink, ChannelDownloadAgainLink } from "@/modules/work-os/marketing/NightlyGuideNotice";
+import NightlyGuideNotice, { ChannelChecksumsLink, ChannelDownloadAgainLink, ChannelFileVerification } from "@/modules/work-os/marketing/NightlyGuideNotice";
 import { SiteFooter, SiteHeader } from "@/modules/work-os/marketing/SiteChrome";
 import WarningMark from "@/modules/work-os/marketing/WarningMark";
 import styles from "@/modules/work-os/marketing/download-guide.module.css";
@@ -60,8 +60,7 @@ export default async function DownloadGuidePage({ params }: { params: Promise<{ 
           <summary>Verify this download (SHA-256)</summary>
           <div>
             <p>Run this command in {guide.platform === "windows" ? "PowerShell" : "Terminal"}, then compare the result with the <ChannelChecksumsLink platform={guide.platform} defaultHref={`/downloads/work-os/${guide.platform}/checksums`} />. A match confirms the file, not that a malware alert is safe to ignore.</p>
-            <p className={styles.fileName}>{guide.fileName}</p>
-            <code>{guide.checksumCommand}</code>
+            <ChannelFileVerification platform={guide.platform} fileNameClassName={styles.fileName} />
             <p>If it differs, do not install. Ask your admin.</p>
           </div>
         </details>

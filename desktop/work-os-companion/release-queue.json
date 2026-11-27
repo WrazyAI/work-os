@@ -625,6 +625,13 @@
       "summary": "Choose between Stable and Nightly desktop update channels in Settings → General.",
       "verification": "Ledger e4644d0e-8b06-4256-b69c-e352255d0505: full companion Vitest 247 files passed; full Work OS suite passed with 0 failures; site suite 61/61 passed; release gate/macOS/policy 47/47 passed; release download/installers/guides passed; work-os:typecheck, ESLint, companion Vite build, and Next.js webpack build passed; Playwright verified /work-os/downloads (1440/390, keyboard, reduced motion), Nightly thank-you guide, and Companion Settings Release channel (1280 dark/light, 420 narrow, Arrow-key switch); CodeRabbit review findings fixed.",
       "macosSpecific": false
+    },
+    {
+      "id": "branded-installers-nightly-download-labels",
+      "type": "fix",
+      "summary": "Windows and Mac installers carry Work OS branding, Nightly downloads are labeled Nightly, and the app icon and menu bar show a Nightly mark on the Nightly channel.",
+      "verification": "npm run work-os:test: 1,712 tests, 1,696 passed, 0 failed, 16 opt-in PostgreSQL skipped. npm run work-os:typecheck and npm run build passed. node --test test/work-os-macos-release.test.mjs test/work-os-companion-release-gate.test.mjs test/work-os-release-policy.test.mjs: 52 passed, 1 Windows-only skipped. node --import tsx --test test/work-os-companion-installer-art.test.mts: 2 passed (BMP/PNG dimensions and config paths). node --import tsx --test test/work-os-release-download.test.mts test/work-os-installer-downloads.test.mts test/work-os-download-guides.test.mts: 9 passed. Mocked end-to-end Nightly public download returned the Nightly installer and checksums; rendered Nightly and Stable guide pages showed the matching filenames. PowerShell 7.4.6 parsed every Windows release step; js-yaml parsed the workflows. Installer art and Nightly pill/moon icons visually reviewed at native sizes. Companion Vitest: 249 files / 2,171 tests passed; companion tsc and Vite build passed; Companion ACL guard passed; cargo metadata resolved the image-png/objc2 deps; local cargo check is blocked by missing WebKitGTK libs (release/macOS CI compiles the crate).",
+      "macosSpecific": true
     }
   ],
   "emergency": null,

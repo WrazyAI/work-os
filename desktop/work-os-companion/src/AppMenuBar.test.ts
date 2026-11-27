@@ -71,4 +71,22 @@ describe("app menu bar", () => {
     expect(markup).toContain("wc-mac-state is-admin");
     expect(markup).not.toContain("On shift");
   });
+
+  it("marks the Nightly channel with the violet moon", () => {
+    const nightly = renderToStaticMarkup(createElement(AppMenuBar, {
+      pageLabel: "My Day",
+      menuGroups: groups,
+      onQuit: () => undefined,
+      nightly: true,
+    }));
+    expect(nightly).toContain("wc-nightly-tag");
+    expect(nightly).toContain('aria-label="Nightly channel"');
+
+    const stable = renderToStaticMarkup(createElement(AppMenuBar, {
+      pageLabel: "My Day",
+      menuGroups: groups,
+      onQuit: () => undefined,
+    }));
+    expect(stable).not.toContain("wc-nightly-tag");
+  });
 });

@@ -12,6 +12,8 @@ test("only Windows and macOS have public installers", () => {
   assert.equal(publicInstallerPlatform("android"), null);
   assert.match(publicInstallerAsset("windows-x86_64"), /Setup-UNSIGNED\.exe$/);
   assert.match(publicInstallerAsset("darwin-universal"), /Universal-UNSIGNED\.dmg$/);
+  assert.match(publicInstallerAsset("windows-x86_64", "nightly"), /Nightly-Setup-UNSIGNED\.exe$/);
+  assert.match(publicInstallerAsset("darwin-universal", "nightly"), /Nightly-macOS-Universal-UNSIGNED\.dmg$/);
 });
 
 test("platform detection is explicit about Linux and unknown devices", () => {

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Check, ChevronDown, Copy, Minus, Square, X } from "lucide-react";
 import { isMacOS } from "./platform";
 import { isEditableTarget, isQuitShortcut, isSidebarShortcut, SIDEBAR_TOGGLE_EVENT, shortcutLabel } from "./windowChrome";
+import NightlyMoon from "./NightlyMoon";
 
 export type AppMenuItem = {
   /** Stable across menu rebuilds; the native menu maps clicks by this, never
@@ -53,6 +54,7 @@ export default function AppMenuBar({
   quitLabel = "Quit Work OS",
   variant: requestedVariant,
   showTrafficLights = !isTauri(),
+  nightly = false,
 }: {
   pageLabel: string;
   statusLabel?: string | null;
@@ -64,6 +66,8 @@ export default function AppMenuBar({
   quitLabel?: string;
   variant?: AppMenuBarVariant;
   showTrafficLights?: boolean;
+  /** The update channel, not the build channel, drives the moon. */
+  nightly?: boolean;
 }) {
   const variant = requestedVariant ?? (isMacOS() ? "mac" : "windows");
   const mac = variant === "mac";
@@ -194,6 +198,7 @@ export default function AppMenuBar({
         onClick={() => setOpen((current) => !current)}
         onKeyDown={onTriggerKeyDown}
       >Work OS <ChevronDown size={11} aria-hidden="true" /></button>
+      {nightly ? <span className="wc-nightly-tag" role="img" aria-label="Nightly channel" title="Nightly channel"><NightlyMoon /></span> : null}
     </div>
     <div className="wc-drag" data-tauri-drag-region="deep">
       <span className="wc-page" title={pageLabel}>{pageLabel}</span>

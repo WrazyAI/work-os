@@ -119,6 +119,23 @@ html.modal-open .window-chrome-content {
   outline-offset: 1px;
 }
 
+/* Nightly is a release-channel state, not a warning: a quiet violet moon
+ * beside the wordmark, matching the menu-bar tray mark. */
+.wc-nightly-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.5));
+}
+
+.wc-nightly-tag .nightly-moon {
+  display: block;
+}
+
 .wc-drag {
   min-width: 0;
   flex: 1 1 auto;

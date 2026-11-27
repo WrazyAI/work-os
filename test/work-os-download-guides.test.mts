@@ -43,6 +43,14 @@ test("the Windows and macOS guides name the real files and their own recovery st
   assert.doesNotMatch(macPrompts, /Run anyway/);
 
   assert.equal(downloadGuide("linux"), null);
+  const nightlyWindows = downloadGuide("windows", "nightly");
+  const nightlyMacos = downloadGuide("macos", "nightly");
+  assert.ok(nightlyWindows);
+  assert.ok(nightlyMacos);
+  assert.equal(nightlyWindows.fileName, "Work-OS-Companion-Nightly-Setup-UNSIGNED.exe");
+  assert.equal(nightlyMacos.fileName, "Work-OS-Companion-Nightly-macOS-Universal-UNSIGNED.dmg");
+  assert.match(nightlyWindows.checksumCommand, /Nightly-Setup-UNSIGNED\.exe/);
+  assert.match(nightlyMacos.checksumCommand, /Nightly-macOS-Universal-UNSIGNED\.dmg/);
   assert.equal(downloadGuidePath("windows"), "/work-os/downloads/thank-you/windows");
   assert.equal(downloadGuidePath("windows", "nightly"), "/work-os/downloads/thank-you/windows?channel=nightly");
   assert.equal(downloadHref("macos"), "/downloads/work-os/macos");
@@ -79,6 +87,7 @@ test("the install guide is static for the two real platforms and fails closed fo
   assert.match(page, /generateStaticParams/);
   assert.match(page, /if \(!guide\) notFound\(\)/);
   assert.match(page, /downloadHref\(guide\.platform\)/);
+  assert.match(page, /ChannelFileVerification/);
   assert.match(page, /Verify this download \(SHA-256\)/);
   assert.match(page, /Then install in three steps/);
   assert.match(page, /Read this before installing/);

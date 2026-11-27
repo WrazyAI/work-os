@@ -54,6 +54,13 @@ export function useUpdaterFlow({
   const channelSaveInFlightRef = useRef(0);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    // The bundle keeps the stable icon so Stable promotion can reuse the
+    // Windows installer verbatim; swap the live window/tray/Dock icon instead.
+    void invoke("set_update_channel_icon", { channel: updateChannel }).catch(() => undefined);
+  }, [updateChannel]);
+
   const applyUpdateChannel = useCallback((channel: UpdateChannel) => {
     if (updateChannelRef.current !== channel) {
       channelEpochRef.current += 1;

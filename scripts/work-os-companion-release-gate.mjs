@@ -3,8 +3,8 @@ import {
   NIGHTLY_TAG_PREFIX,
   STABLE_TAG_PREFIX,
   canonicalTagVersion,
-  macosAssets,
   parseReleaseTag,
+  releaseAssetNames,
   releaseDisplayVersion,
   releaseTagName,
 } from "../desktop/work-os-companion/scripts/macos-release.mjs";
@@ -137,7 +137,12 @@ export function evaluateRelease({ queue, publishedQueue, version, publishedVersi
 
 export function hasMacosReleaseAssets(release) {
   const names = new Set((Array.isArray(release?.assets) ? release.assets : []).map((asset) => asset?.name));
-  return macosAssets.every((file) => names.has(file));
+  const { channel } = parseReleaseTag(release.tag_name);
+  // Nightlies created before the channel-specific asset names used the Stable
+  // names; accept either layout when deciding whether macOS already exists.
+  const layouts = [releaseAssetNames(channel)];
+  if (channel === "nightly") layouts.push(releaseAssetNames("stable"));
+  return layouts.some((layout) => layout.macosAssets.every((file) => names.has(file)));
 }
 
 export function latestPublishedByChannel(pages) {
