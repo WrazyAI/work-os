@@ -987,7 +987,7 @@ mod tests {
     #[test]
     fn release_channel_selects_the_runtime_icon() {
         assert!(NIGHTLY_ICON_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
-        assert!(NIGHTLY_ICON_ICO.starts_with(b"\0\0\1\0"));
+        assert!(NIGHTLY_ICON_ICO.starts_with(b"\x00\x00\x01\x00"));
         assert!(NIGHTLY_TRAY_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
         assert_eq!(
             channel_icon_bytes("nightly").as_ptr(),
