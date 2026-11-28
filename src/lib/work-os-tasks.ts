@@ -313,20 +313,16 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     ? personResult.data.nifty_member_id.trim() || null
     : personResult.data?.nifty_member_id as string | null | undefined;
   if (opts.order === "created_desc" && opts.organizationId && opts.includeLedgerHistory === true &&
-    !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false) {
+    !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId && opts.includeAssignedBy !== false &&
+    !opts.rawCreatedBy && !opts.rawSubscriber && !opts.providerAssignee && !opts.assignedByPersonId) {
     const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
-    const { rows: page } = await getPool().query<{ id: string; delegated_only: boolean }>(adminPersonTaskPageSql, [
-      opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit,
+    const { rows: page } = await getPool().query<Record<string, any> & { delegated_only: boolean }>(adminPersonTaskPageSql, [
+      opts.organizationId, userId, personId, completed, opts.projectId ?? null, offset, limit, opts.taskIds ?? null,
     ]);
-    if (!page.length) return [];
-    const tasks = await listTasks(userId, { ...opts, offset: 0, limit, taskIds: page.map(({ id }) => id) });
-    const byId = new Map((tasks ?? []).map((task) => [String(task.id), task]));
-    // Mapping in page order also keeps the results stable if hydration omits
-    // a row that changed between the two reads.
-    const selected = page.flatMap(({ id, delegated_only }) => {
-      const task = byId.get(id);
-      return task ? [delegated_only ? { ...task, attribution: "assigned_by" } : task] : [];
-    });
+    // Membership and base task details come from the same statement snapshot.
+    // The remaining hydration only decorates rows, so it can't shorten a page.
+    const selected = page.map(({ delegated_only, ...task }) =>
+      delegated_only ? { ...task, attribution: "assigned_by" } : task);
     return hydratePersonTaskPage(userId, selected, opts.organizationId);
   }
   // The Tasks workspace's All / Completed history is the only paginated path
@@ -374,13 +370,16 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     metadataOptions.toDate = next.toISOString().slice(0, 10);
     if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
+  // The creator scan attributes only the person's provider ID, so it cannot
+  // match a different explicit creator filter. Other scans keep that filter.
+  const scanCreator = niftyMemberId && (!opts.rawCreatedBy || opts.rawCreatedBy === niftyMemberId);
   const [assigned, assignedBy, providerAssigned, createdBy, subscriber] = await Promise.all([
     listTasks(userId, { ...baseOptions, personId }),
     opts.includeAssignedBy === false
       ? Promise.resolve([])
       : listTasks(userId, { ...baseOptions, assignedByPersonId: personId }),
     niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
+    scanCreator ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
     niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();

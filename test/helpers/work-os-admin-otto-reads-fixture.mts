@@ -86,6 +86,22 @@ create table work_tasks (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- The admin task page joins these tables in the same snapshot as its task rows.
+create table work_projects (
+  id uuid primary key,
+  user_id uuid not null,
+  organization_id uuid not null references work_organizations(id),
+  name text not null
+);
+create table work_evidence (
+  id uuid primary key,
+  user_id uuid not null,
+  organization_id uuid not null references work_organizations(id),
+  task_id uuid references work_tasks(id),
+  source text not null,
+  title text not null,
+  evidence_date date not null default current_date
+);
 create table work_check_ins (
   id uuid primary key,
   organization_id uuid not null references work_organizations(id),
