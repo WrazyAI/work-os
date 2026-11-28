@@ -643,10 +643,10 @@
   ],
   "emergency": null,
   "operatorOverride": {
-    "version": "0.5.47",
-    "updateId": "branded-installers-nightly-download-labels",
+    "version": "0.5.48",
+    "updateId": "windows-taskbar-nightly-icon",
     "approvedBy": "operator",
-    "reason": "Operator requested an immediate Nightly 0.5.47 build to test the branded installers, Nightly download labels, app pill, and menu-bar moon.",
-    "approvedAt": "2026-11-27"
+    "reason": "Operator requested an immediate Nightly 0.5.48 build to test the Windows taskbar Nightly icon fix.",
+    "approvedAt": "2026-11-28"
   }
 }

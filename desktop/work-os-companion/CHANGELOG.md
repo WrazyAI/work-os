@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.5.48 — 2026-11-28
+
 - The Windows taskbar icon now switches to the Nightly pill when you choose Nightly updates.
 
 ## 0.5.47 — 2026-11-27
