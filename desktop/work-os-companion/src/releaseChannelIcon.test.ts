@@ -58,4 +58,17 @@ describe("release-channel app icon", () => {
     expect(rust).toContain("NIGHTLY_TRAY_PNG");
     expect(rust).toContain("channel_tray_icon_bytes");
   });
+
+  it("switches the Windows taskbar big icon separately from the small window icon", () => {
+    const ico = readFileSync(resolve(root, "src-tauri/icons/nightly-runtime.ico"));
+    expect(ico.subarray(0, 4).toString("hex")).toBe("00000100");
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    expect(rust).toContain("NIGHTLY_ICON_ICO");
+    expect(rust).toContain("channel_taskbar_icon_ico");
+    expect(rust).toContain("set_windows_taskbar_icon");
+    expect(rust).toContain("WM_SETICON");
+    expect(rust).toContain("ICON_BIG");
+    const cargo = readFileSync(resolve(root, "src-tauri/Cargo.toml"), "utf8");
+    expect(cargo).toContain("Win32_UI_WindowsAndMessaging");
+  });
 });

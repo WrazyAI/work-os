@@ -22,7 +22,9 @@ use tauri_plugin_opener::OpenerExt;
 /// Stable promotion can reuse the Windows installer verbatim; the running app
 /// swaps to the Nightly tag when the employee selects Nightly updates.
 const STABLE_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+const STABLE_ICON_ICO: &[u8] = include_bytes!("../icons/icon.ico");
 const NIGHTLY_ICON_PNG: &[u8] = include_bytes!("../icons/nightly-runtime.png");
+const NIGHTLY_ICON_ICO: &[u8] = include_bytes!("../icons/nightly-runtime.ico");
 const NIGHTLY_TRAY_PNG: &[u8] = include_bytes!("../icons/nightly-tray.png");
 
 fn channel_icon_bytes(channel: &str) -> &'static [u8] {
@@ -30,6 +32,14 @@ fn channel_icon_bytes(channel: &str) -> &'static [u8] {
         NIGHTLY_ICON_PNG
     } else {
         STABLE_ICON_PNG
+    }
+}
+
+fn channel_taskbar_icon_ico(channel: &str) -> &'static [u8] {
+    if channel == "nightly" {
+        NIGHTLY_ICON_ICO
+    } else {
+        STABLE_ICON_ICO
     }
 }
 
@@ -222,20 +232,64 @@ fn show_avatar(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn set_update_channel_icon(app: tauri::AppHandle, channel: String) -> Result<(), String> {
-    let app_bytes = channel_icon_bytes(&channel);
+    let channel = if channel == "nightly" { "nightly" } else { "stable" };
+    let app_bytes = channel_icon_bytes(channel);
     let app_icon = tauri::image::Image::from_bytes(app_bytes).map_err(|error| error.to_string())?;
     for label in ["main", "avatar"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.set_icon(app_icon.clone());
         }
     }
-    let tray_icon = tauri::image::Image::from_bytes(channel_tray_icon_bytes(&channel))
+    let tray_icon = tauri::image::Image::from_bytes(channel_tray_icon_bytes(channel))
         .map_err(|error| error.to_string())?;
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_icon(Some(tray_icon));
     }
+    #[cfg(windows)]
+    set_windows_taskbar_icon(&app, channel)?;
     #[cfg(target_os = "macos")]
     set_macos_dock_icon(&app, app_bytes)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn set_windows_taskbar_icon(app: &tauri::AppHandle, channel: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        LoadImageW, SendMessageW, ICON_BIG, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE, WM_SETICON,
+    };
+
+    let path = std::env::temp_dir().join(format!("work-os-{channel}-taskbar.ico"));
+    std::fs::write(&path, channel_taskbar_icon_ico(channel)).map_err(|error| error.to_string())?;
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let icon = unsafe {
+        LoadImageW(
+            std::ptr::null_mut(),
+            wide.as_ptr(),
+            IMAGE_ICON,
+            0,
+            0,
+            LR_LOADFROMFILE | LR_DEFAULTSIZE,
+        )
+    };
+    if icon.is_null() {
+        return Err("Could not load the release-channel taskbar icon".into());
+    }
+    for label in ["main", "avatar"] {
+        if let Some(window) = app.get_webview_window(label) {
+            if let Ok(hwnd) = window.hwnd() {
+                // Tauri's set_icon updates only ICON_SMALL. The taskbar reads
+                // ICON_BIG, so send that one explicitly as well.
+                unsafe {
+                    SendMessageW(hwnd.0, WM_SETICON, ICON_BIG as usize, icon as isize);
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -925,13 +979,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_desktop_connect_url, channel_icon_bytes, channel_tray_icon_bytes, NIGHTLY_ICON_PNG,
-        NIGHTLY_TRAY_PNG, STABLE_ICON_PNG,
+        allowed_desktop_connect_url, channel_icon_bytes, channel_taskbar_icon_ico,
+        channel_tray_icon_bytes, NIGHTLY_ICON_ICO, NIGHTLY_ICON_PNG, NIGHTLY_TRAY_PNG,
+        STABLE_ICON_ICO, STABLE_ICON_PNG,
     };
 
     #[test]
     fn release_channel_selects_the_runtime_icon() {
         assert!(NIGHTLY_ICON_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(NIGHTLY_ICON_ICO.starts_with(b"\0\0\1\0"));
         assert!(NIGHTLY_TRAY_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
         assert_eq!(
             channel_icon_bytes("nightly").as_ptr(),
@@ -944,6 +1000,14 @@ mod tests {
         assert_eq!(
             channel_icon_bytes("unknown").as_ptr(),
             STABLE_ICON_PNG.as_ptr()
+        );
+        assert_eq!(
+            channel_taskbar_icon_ico("nightly").as_ptr(),
+            NIGHTLY_ICON_ICO.as_ptr()
+        );
+        assert_eq!(
+            channel_taskbar_icon_ico("stable").as_ptr(),
+            STABLE_ICON_ICO.as_ptr()
         );
         assert_eq!(
             channel_tray_icon_bytes("nightly").as_ptr(),

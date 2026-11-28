@@ -632,6 +632,13 @@
       "summary": "Windows and Mac installers carry Work OS branding, Nightly downloads are labeled Nightly, and the app icon and menu bar show a Nightly mark on the Nightly channel.",
       "verification": "npm run work-os:test: 1,712 tests, 1,696 passed, 0 failed, 16 opt-in PostgreSQL skipped. npm run work-os:typecheck and npm run build passed. node --test test/work-os-macos-release.test.mjs test/work-os-companion-release-gate.test.mjs test/work-os-release-policy.test.mjs: 52 passed, 1 Windows-only skipped. node --import tsx --test test/work-os-companion-installer-art.test.mts: 2 passed (BMP/PNG dimensions and config paths). node --import tsx --test test/work-os-release-download.test.mts test/work-os-installer-downloads.test.mts test/work-os-download-guides.test.mts: 9 passed. Mocked end-to-end Nightly public download returned the Nightly installer and checksums; rendered Nightly and Stable guide pages showed the matching filenames. PowerShell 7.4.6 parsed every Windows release step; js-yaml parsed the workflows. Installer art and Nightly pill/moon icons visually reviewed at native sizes. Companion Vitest: 249 files / 2,171 tests passed; companion tsc and Vite build passed; Companion ACL guard passed; cargo metadata resolved the image-png/objc2 deps; local cargo check is blocked by missing WebKitGTK libs (release/macOS CI compiles the crate).",
       "macosSpecific": true
+    },
+    {
+      "id": "windows-taskbar-nightly-icon",
+      "type": "fix",
+      "summary": "The Windows taskbar icon switches to the Nightly pill when Nightly updates are selected.",
+      "verification": "Full companion suite: 249 files / 2,172 tests passed; releaseChannelIcon: 7 passed; companion tsc and Vite build passed; the Windows WM_SETICON/ICON_BIG path compiled for x86_64-pc-windows-gnu against windows-sys 0.60; the next Windows release build exercises it in the packaged app.",
+      "macosSpecific": false
     }
   ],
   "emergency": null,

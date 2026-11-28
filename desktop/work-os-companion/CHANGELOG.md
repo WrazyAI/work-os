@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The Windows taskbar icon now switches to the Nightly pill when you choose Nightly updates.
+
 ## 0.5.47 — 2026-11-27
 
 - Windows and Mac installers now carry Work OS branding, and Nightly downloads are labeled Nightly so they stand out from Stable.
