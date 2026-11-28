@@ -28,12 +28,13 @@ function pageFilters(overrides: Record<string, string> = {}) {
 describe("admin evidence record", () => {
   it("shows a retained Worktivity frame and the provider occurrence time", () => {
     const { markup } = renderEvidence();
-    const today = todayIso();
 
     // The email is an individual row with its provider occurrence time, not
-    // the mirror write that copied it into Work OS.
+    // the mirror write that copied it into Work OS. The fixture's latest
+    // workday is Friday on weekends, so assert the recorded time rather than
+    // assuming today is the last workday.
     expect(markup).toContain('class="evidence-time"');
-    expect(markup).toContain(`dateTime="${today}T13:05:00.000Z"`);
+    expect(markup).toMatch(/dateTime="\d{4}-\d{2}-\d{2}T13:05:00\.000Z"/);
     expect(markup).toContain("Email sent");
     // Worktivity rows reserve a real frame tile; the server render is the
     // skeleton, never a broken image.
